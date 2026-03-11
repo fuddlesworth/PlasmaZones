@@ -82,8 +82,8 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Last used zone UUID or empty string."/>
             </arg>
         </method>
-        <method name="storePreSnapGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Store window geometry before snapping (for unsnap restore). Only stores on first snap."/>
+        <method name="storePreTileGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Store window geometry before tiling (snap or autotile). If overwrite is false (snap mode), skips if entry exists."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -99,18 +99,21 @@
             <arg name="height" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window height."/>
             </arg>
+            <arg name="overwrite" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="If false, skip if entry exists (snap). If true, always overwrite (autotile)."/>
+            </arg>
         </method>
-        <method name="hasPreSnapGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Return true if pre-snap geometry is stored for the window."/>
+        <method name="hasPreTileGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Return true if pre-tile geometry is stored for the window."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
             <arg name="hasGeometry" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if pre-snap geometry exists."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True if pre-tile geometry exists."/>
             </arg>
         </method>
-        <method name="getValidatedPreSnapGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Return pre-snap geometry validated against current screen bounds (adjusts off-screen). Returns found, x, y, width, height."/>
+        <method name="getValidatedPreTileGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Return pre-tile geometry (pre-snap or pre-autotile) validated against current screen bounds (adjusts off-screen). Returns found, x, y, width, height."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -130,8 +133,8 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Height (if found)."/>
             </arg>
         </method>
-        <method name="clearPreSnapGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Clear stored pre-snap geometry for the window."/>
+        <method name="clearPreTileGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Clear stored pre-tile geometry for a window."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -325,6 +328,33 @@
                 <annotation name="org.gtk.GDBus.DocString" value="True if caller should apply the geometry."/>
             </arg>
         </method>
+        <method name="resolveWindowRestore">
+            <annotation name="org.gtk.GDBus.DocString" value="Run the full 4-level snap-restore fallback chain server-side in one call: appRule → persisted → emptyZone → lastZone. Returns geometry and shouldSnap on first match."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to restore."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen (e.g. DP-1)."/>
+            </arg>
+            <arg name="sticky" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
+            </arg>
+            <arg name="snapX" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap X (if shouldSnap)."/>
+            </arg>
+            <arg name="snapY" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap Y (if shouldSnap)."/>
+            </arg>
+            <arg name="snapWidth" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap width (if shouldSnap)."/>
+            </arg>
+            <arg name="snapHeight" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap height (if shouldSnap)."/>
+            </arg>
+            <arg name="shouldSnap" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if any strategy matched and window should be snapped."/>
+            </arg>
+        </method>
         <method name="getUpdatedWindowGeometries">
             <annotation name="org.gtk.GDBus.DocString" value="Return updated window geometries after resolution change (respects keepWindowsInZonesOnResolutionChange)."/>
             <arg name="geometriesJson" type="s" direction="out">
@@ -408,8 +438,47 @@
             <arg name="isFloating" type="b">
                 <annotation name="org.gtk.GDBus.DocString" value="New floating state."/>
             </arg>
+            <arg name="screenName" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where the window is located."/>
+            </arg>
         </signal>
 
+        <method name="toggleFloatForWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven float toggle. KWin calls this with the active window; daemon does the logic and emits applyGeometryRequested."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier (from KWin)."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
+            </arg>
+        </method>
+        <method name="setWindowFloatingForScreen">
+            <annotation name="org.gtk.GDBus.DocString" value="Set a window's floating state explicitly (directional, not toggle). Routes to autotile engine for autotile screens, handles snap mode locally. Used by minimize/unminimize, drag-to-float, and monocle unmaximize."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier (from KWin)."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
+            </arg>
+            <arg name="floating" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True to float, false to unfloat."/>
+            </arg>
+        </method>
+        <signal name="applyGeometryRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to apply geometry. zoneId empty = float restore only; zoneId set = apply and call windowSnapped."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to apply geometry to."/>
+            </arg>
+            <arg name="geometryJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON {x, y, width, height}."/>
+            </arg>
+            <arg name="zoneId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone to snap to (empty for float restore)."/>
+            </arg>
+            <arg name="screenName" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen for OSD placement."/>
+            </arg>
+        </signal>
         <method name="recordSnapIntent">
             <annotation name="org.gtk.GDBus.DocString" value="Record whether the last snap was user-initiated (for snap-to-last-zone filtering)."/>
             <arg name="windowId" type="s" direction="in">
@@ -468,6 +537,67 @@
             </arg>
             <arg name="snapData" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON array [{windowId, targetZoneId, x, y, width, height}, ...]"/>
+            </arg>
+        </method>
+        <method name="getMoveTargetForWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven move: get target zone and geometry for moving a window in a direction."/>
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="direction" type="s" direction="in"/>
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="resultJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {success, reason, zoneId, geometryJson, sourceZoneId, screenName}"/>
+            </arg>
+        </method>
+        <method name="getFocusTargetForWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven focus: get window ID to activate in adjacent zone."/>
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="direction" type="s" direction="in"/>
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="resultJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {success, reason, windowIdToActivate, sourceZoneId, targetZoneId, screenName}"/>
+            </arg>
+        </method>
+        <method name="getRestoreForWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven restore: get pre-snap geometry for restoring a snapped window."/>
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="resultJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {success, found, x, y, width, height}"/>
+            </arg>
+        </method>
+        <method name="getCycleTargetForWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven cycle: get next/prev window in same zone to activate."/>
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="forward" type="b" direction="in"/>
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="resultJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {success, reason, windowIdToActivate, zoneId, screenName}"/>
+            </arg>
+        </method>
+        <method name="getSwapTargetForWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven swap: get geometries and zone IDs for swapping with adjacent zone."/>
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="direction" type="s" direction="in"/>
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="resultJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {success, reason, windowId1, x1, y1, w1, h1, zoneId1, windowId2, x2, y2, w2, h2, zoneId2, screenName, sourceZoneId, targetZoneId}"/>
+            </arg>
+        </method>
+        <method name="getPushTargetForWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven push: get empty zone and geometry for pushing window."/>
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="resultJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {success, reason, zoneId, geometryJson, sourceZoneId, screenName}"/>
+            </arg>
+        </method>
+        <method name="getSnapToZoneByNumberTarget">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven snap: get zone and geometry for snapping to zone by number (1-9)."/>
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="zoneNumber" type="i" direction="in"/>
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="resultJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {success, reason, zoneId, geometryJson, sourceZoneId, screenName}"/>
             </arg>
         </method>
         <signal name="snapAllWindowsRequested">

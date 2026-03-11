@@ -150,6 +150,19 @@ Q_SIGNALS:
      */
     void layoutPickerRequested();
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Autotile Shortcuts
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void toggleAutotileRequested();
+    void focusMasterRequested();
+    void swapWithMasterRequested();
+    void increaseMasterRatioRequested();
+    void decreaseMasterRatioRequested();
+    void increaseMasterCountRequested();
+    void decreaseMasterCountRequested();
+    void retileRequested();
+
     /**
      * @brief Emitted when deferred shortcut registration completes
      */
@@ -231,6 +244,26 @@ private Q_SLOTS:
     void onLayoutPicker();
     void updateLayoutPickerShortcut();
 
+    // Autotile shortcuts
+    void onToggleAutotile();
+    void onFocusMaster();
+    void onSwapWithMaster();
+    void onIncreaseMasterRatio();
+    void onDecreaseMasterRatio();
+    void onIncreaseMasterCount();
+    void onDecreaseMasterCount();
+    void onRetile();
+
+    // Update autotile shortcuts from settings
+    void updateToggleAutotileShortcut();
+    void updateFocusMasterShortcut();
+    void updateSwapMasterShortcut();
+    void updateIncMasterRatioShortcut();
+    void updateDecMasterRatioShortcut();
+    void updateIncMasterCountShortcut();
+    void updateDecMasterCountShortcut();
+    void updateRetileShortcut();
+
 private:
     void setupEditorShortcut();
     void setupCyclingShortcuts();
@@ -243,6 +276,7 @@ private:
     void setupResnapToNewLayoutShortcut();
     void setupSnapAllWindowsShortcut();
     void setupLayoutPickerShortcut();
+    void setupAutotileShortcuts();
     void queueGlobalShortcut(QAction* action, const QKeySequence& shortcut);
     void activateKeyGrabs();
     void onKeyGrabReply();
@@ -294,8 +328,19 @@ private:
     // Layout Picker action
     QAction* m_layoutPickerAction = nullptr;
 
+    // Autotile actions
+    QAction* m_toggleAutotileAction = nullptr;
+    QAction* m_focusMasterAction = nullptr;
+    QAction* m_swapMasterAction = nullptr;
+    QAction* m_incMasterRatioAction = nullptr;
+    QAction* m_decMasterRatioAction = nullptr;
+    QAction* m_incMasterCountAction = nullptr;
+    QAction* m_decMasterCountAction = nullptr;
+    QAction* m_retileAction = nullptr;
+
     // Deferred registration state
-    struct DeferredShortcut {
+    struct DeferredShortcut
+    {
         QPointer<QAction> action;
         QKeySequence shortcut;
     };

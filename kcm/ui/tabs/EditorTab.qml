@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import ".."
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import ".."
 
 /**
  * @brief Editor tab - Keyboard shortcuts and snapping settings for the layout editor
@@ -34,6 +34,7 @@ ScrollView {
 
             Kirigami.Card {
                 id: shortcutsCard
+
                 anchors.fill: parent
 
                 header: Kirigami.Heading {
@@ -45,12 +46,13 @@ ScrollView {
                 contentItem: Kirigami.FormLayout {
                     PlasmaZonesKeySequenceInput {
                         id: editorDuplicateShortcutField
+
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Duplicate zone:")
                         keySequence: kcm.editorDuplicateShortcut
                         defaultKeySequence: kcm.defaultEditorDuplicateShortcut
                         onKeySequenceModified: (sequence) => {
-                            kcm.editorDuplicateShortcut = sequence
+                            kcm.editorDuplicateShortcut = sequence;
                         }
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Keyboard shortcut to duplicate the selected zone")
@@ -58,12 +60,13 @@ ScrollView {
 
                     PlasmaZonesKeySequenceInput {
                         id: editorSplitHorizontalShortcutField
+
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Split horizontally:")
                         keySequence: kcm.editorSplitHorizontalShortcut
                         defaultKeySequence: kcm.defaultEditorSplitHorizontalShortcut
                         onKeySequenceModified: (sequence) => {
-                            kcm.editorSplitHorizontalShortcut = sequence
+                            kcm.editorSplitHorizontalShortcut = sequence;
                         }
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Keyboard shortcut to split selected zone horizontally")
@@ -71,12 +74,13 @@ ScrollView {
 
                     PlasmaZonesKeySequenceInput {
                         id: editorSplitVerticalShortcutField
+
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Split vertically:")
                         keySequence: kcm.editorSplitVerticalShortcut
                         defaultKeySequence: kcm.defaultEditorSplitVerticalShortcut
                         onKeySequenceModified: (sequence) => {
-                            kcm.editorSplitVerticalShortcut = sequence
+                            kcm.editorSplitVerticalShortcut = sequence;
                         }
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Keyboard shortcut to split selected zone vertically")
@@ -84,12 +88,13 @@ ScrollView {
 
                     PlasmaZonesKeySequenceInput {
                         id: editorFillShortcutField
+
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Fill space:")
                         keySequence: kcm.editorFillShortcut
                         defaultKeySequence: kcm.defaultEditorFillShortcut
                         onKeySequenceModified: (sequence) => {
-                            kcm.editorFillShortcut = sequence
+                            kcm.editorFillShortcut = sequence;
                         }
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Keyboard shortcut to expand selected zone to fill available space")
@@ -97,14 +102,17 @@ ScrollView {
 
                     Button {
                         Kirigami.FormData.label: i18n("Reset:")
-                        text: i18n("Reset to Defaults")
+                        text: i18n("Reset to defaults")
                         icon.name: "edit-reset"
                         onClicked: kcm.resetEditorShortcuts()
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Reset all editor shortcuts to their default values")
                     }
+
                 }
+
             }
+
         }
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -116,6 +124,7 @@ ScrollView {
 
             Kirigami.Card {
                 id: snappingCard
+
                 anchors.fill: parent
 
                 header: Kirigami.Heading {
@@ -153,6 +162,7 @@ ScrollView {
 
                         Slider {
                             id: snapIntervalXSlider
+
                             Layout.preferredWidth: root.constants.sliderPreferredWidth
                             from: 0.01
                             to: 0.5
@@ -165,6 +175,7 @@ ScrollView {
                             text: Math.round(snapIntervalXSlider.value * 100) + "%"
                             Layout.preferredWidth: root.constants.sliderValueLabelWidth
                         }
+
                     }
 
                     RowLayout {
@@ -173,6 +184,7 @@ ScrollView {
 
                         Slider {
                             id: snapIntervalYSlider
+
                             Layout.preferredWidth: root.constants.sliderPreferredWidth
                             from: 0.01
                             to: 0.5
@@ -185,6 +197,7 @@ ScrollView {
                             text: Math.round(snapIntervalYSlider.value * 100) + "%"
                             Layout.preferredWidth: root.constants.sliderValueLabelWidth
                         }
+
                     }
 
                     Kirigami.Separator {
@@ -193,6 +206,7 @@ ScrollView {
 
                     ModifierAndMouseCheckBoxes {
                         id: snapOverrideInput
+
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Override modifier:")
                         acceptMode: ModifierAndMouseCheckBoxes.acceptModeMetaOnly
@@ -200,11 +214,14 @@ ScrollView {
                         defaultModifierValue: kcm.defaultEditorSnapOverrideModifier
                         tooltipEnabled: true
                         onValueModified: (value) => {
-                            kcm.editorSnapOverrideModifier = value
+                            kcm.editorSnapOverrideModifier = value;
                         }
                     }
+
                 }
+
             }
+
         }
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -216,6 +233,7 @@ ScrollView {
 
             Kirigami.Card {
                 id: fillOnDropCard
+
                 anchors.fill: parent
 
                 header: Kirigami.Heading {
@@ -227,6 +245,7 @@ ScrollView {
                 contentItem: Kirigami.FormLayout {
                     CheckBox {
                         id: fillOnDropEnabledCheck
+
                         Kirigami.FormData.label: i18n("Enable:")
                         text: i18n("Fill zone on drop with modifier key")
                         checked: kcm.fillOnDropEnabled
@@ -237,6 +256,7 @@ ScrollView {
 
                     ModifierAndMouseCheckBoxes {
                         id: fillOnDropInput
+
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Modifier:")
                         acceptMode: ModifierAndMouseCheckBoxes.acceptModeMetaOnly
@@ -245,46 +265,57 @@ ScrollView {
                         defaultModifierValue: kcm.defaultFillOnDropModifier
                         tooltipEnabled: true
                         onValueModified: (value) => {
-                            kcm.fillOnDropModifier = value
+                            kcm.fillOnDropModifier = value;
                         }
                     }
+
                 }
+
             }
+
         }
+
     }
 
     // Keep inputs in sync with KCM properties
     Connections {
-        target: kcm
         function onEditorDuplicateShortcutChanged() {
-            if (!editorDuplicateShortcutField.capturing) {
-                editorDuplicateShortcutField.keySequence = kcm.editorDuplicateShortcut
-            }
+            if (!editorDuplicateShortcutField.capturing)
+                editorDuplicateShortcutField.keySequence = kcm.editorDuplicateShortcut;
+
         }
+
         function onEditorSplitHorizontalShortcutChanged() {
-            if (!editorSplitHorizontalShortcutField.capturing) {
-                editorSplitHorizontalShortcutField.keySequence = kcm.editorSplitHorizontalShortcut
-            }
+            if (!editorSplitHorizontalShortcutField.capturing)
+                editorSplitHorizontalShortcutField.keySequence = kcm.editorSplitHorizontalShortcut;
+
         }
+
         function onEditorSplitVerticalShortcutChanged() {
-            if (!editorSplitVerticalShortcutField.capturing) {
-                editorSplitVerticalShortcutField.keySequence = kcm.editorSplitVerticalShortcut
-            }
+            if (!editorSplitVerticalShortcutField.capturing)
+                editorSplitVerticalShortcutField.keySequence = kcm.editorSplitVerticalShortcut;
+
         }
+
         function onEditorFillShortcutChanged() {
-            if (!editorFillShortcutField.capturing) {
-                editorFillShortcutField.keySequence = kcm.editorFillShortcut
-            }
+            if (!editorFillShortcutField.capturing)
+                editorFillShortcutField.keySequence = kcm.editorFillShortcut;
+
         }
+
         function onEditorSnapIntervalXChanged() {
-            if (!snapIntervalXSlider.pressed) {
-                snapIntervalXSlider.value = kcm.editorSnapIntervalX
-            }
+            if (!snapIntervalXSlider.pressed)
+                snapIntervalXSlider.value = kcm.editorSnapIntervalX;
+
         }
+
         function onEditorSnapIntervalYChanged() {
-            if (!snapIntervalYSlider.pressed) {
-                snapIntervalYSlider.value = kcm.editorSnapIntervalY
-            }
+            if (!snapIntervalYSlider.pressed)
+                snapIntervalYSlider.value = kcm.editorSnapIntervalY;
+
         }
+
+        target: kcm
     }
+
 }

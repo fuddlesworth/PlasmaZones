@@ -34,22 +34,23 @@ QDBusInterface* DBusLayoutService::getInterface()
     if (m_interface && m_interface->isValid()) {
         return m_interface;
     }
-    
+
     // Clean up invalid interface
-    delete m_interface;
-    m_interface = nullptr;
-    
+    if (m_interface) {
+        m_interface->deleteLater();
+        m_interface = nullptr;
+    }
+
     // Create new interface
     m_interface = new QDBusInterface(m_serviceName, m_objectPath, m_interfaceName, QDBusConnection::sessionBus(), this);
-    
+
     if (!m_interface->isValid()) {
-        qCWarning(lcDbus) << "Cannot connect to PlasmaZones daemon - service:" << m_serviceName
-                          << "path:" << m_objectPath;
-        delete m_interface;
+        qCWarning(lcDbus) << "D-Bus connection: failed, service:" << m_serviceName << "path:" << m_objectPath;
+        m_interface->deleteLater();
         m_interface = nullptr;
         return nullptr;
     }
-    
+
     return m_interface;
 }
 
@@ -71,7 +72,7 @@ QString DBusLayoutService::loadLayout(const QString& layoutId)
     if (!reply.isValid()) {
         QString error =
             QCoreApplication::translate("DBusLayoutService", "Failed to load layout: %1").arg(reply.error().message());
-        qCWarning(lcDbus) << "Failed to load layout" << layoutId << "-" << reply.error().message();
+        qCWarning(lcDbus) << "loadLayout: failed for" << layoutId << reply.error().message();
         Q_EMIT errorOccurred(error);
         return QString();
     }
@@ -142,19 +143,19 @@ bool DBusLayoutService::updateLayout(const QString& jsonLayout)
 QString DBusLayoutService::getLayoutIdForScreen(const QString& screenName)
 {
     if (screenName.isEmpty()) {
-        qCWarning(lcDbus) << "getLayoutIdForScreen called with empty screenName";
+        qCWarning(lcDbus) << "getLayoutIdForScreen: empty screenName";
         return QString();
     }
 
     QDBusInterface* layoutManager = getInterface();
     if (!layoutManager) {
-        qCWarning(lcDbus) << "Cannot connect for getLayoutIdForScreen(" << screenName << ")";
+        qCWarning(lcDbus) << "getLayoutIdForScreen: D-Bus connection failed, screen=" << screenName;
         return QString();
     }
 
     QDBusReply<QString> reply = layoutManager->call(QStringLiteral("getLayoutForScreen"), screenName);
     if (!reply.isValid()) {
-        qCWarning(lcDbus) << "Failed to get layout for screen" << screenName << "-" << reply.error().message();
+        qCWarning(lcDbus) << "getLayoutForScreen: failed, screen=" << screenName << reply.error().message();
         return QString();
     }
 
@@ -164,8 +165,7 @@ QString DBusLayoutService::getLayoutIdForScreen(const QString& screenName)
 void DBusLayoutService::assignLayoutToScreen(const QString& screenName, const QString& layoutId)
 {
     if (screenName.isEmpty() || layoutId.isEmpty()) {
-        qCWarning(lcDbus) << "assignLayoutToScreen called with empty parameters - screen:" << screenName
-                          << "layoutId:" << layoutId;
+        qCWarning(lcDbus) << "assignLayoutToScreen: empty parameters, screen=" << screenName << "layoutId=" << layoutId;
         return;
     }
 
@@ -180,7 +180,7 @@ void DBusLayoutService::assignLayoutToScreen(const QString& screenName, const QS
     if (!reply.isValid()) {
         QString error = QCoreApplication::translate("DBusLayoutService", "Failed to assign layout to screen: %1")
                             .arg(reply.error().message());
-        qCWarning(lcDbus) << "Failed to assign layout" << layoutId << "to screen" << screenName << "-"
+        qCWarning(lcDbus) << "assignLayoutToScreen: failed for layout" << layoutId << "to screen" << screenName
                           << reply.error().message();
         Q_EMIT errorOccurred(error);
     }

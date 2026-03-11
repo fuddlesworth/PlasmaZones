@@ -25,10 +25,13 @@ namespace PlasmaZones {
 static const QUuid ShaderNamespaceUuid = QUuid::fromString(QStringLiteral("{a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d}"));
 
 // Uniform name components for slot mapping
-static const char* const UniformVecNames[] = {"customParams1", "customParams2", "customParams3", "customParams4"};
+static const char* const UniformVecNames[] = {"customParams1", "customParams2", "customParams3", "customParams4",
+                                              "customParams5", "customParams6", "customParams7", "customParams8"};
 static const char* const UniformComponents[] = {"_x", "_y", "_z", "_w"};
-static const char* const UniformColorNames[] = {"customColor1", "customColor2", "customColor3", "customColor4",
-                                                "customColor5", "customColor6", "customColor7", "customColor8"};
+static const char* const UniformColorNames[] = {"customColor1",  "customColor2",  "customColor3",  "customColor4",
+                                                "customColor5",  "customColor6",  "customColor7",  "customColor8",
+                                                "customColor9",  "customColor10", "customColor11", "customColor12",
+                                                "customColor13", "customColor14", "customColor15", "customColor16"};
 
 QString ShaderRegistry::ParameterInfo::uniformName() const
 {
@@ -37,8 +40,8 @@ QString ShaderRegistry::ParameterInfo::uniformName() const
     }
 
     if (type == QLatin1String("color")) {
-        // Color slots 0-7 → customColor1-8
-        if (slot >= 0 && slot < 8) {
+        // Color slots 0-15 → customColor1-16
+        if (slot >= 0 && slot < 16) {
             return QString::fromLatin1(UniformColorNames[slot]);
         }
         return QString();
@@ -52,8 +55,8 @@ QString ShaderRegistry::ParameterInfo::uniformName() const
         return QString();
     }
 
-    // Float/int/bool slots 0-15 → customParams1_x through customParams4_w
-    if (slot >= 0 && slot < 16) {
+    // Float/int/bool slots 0-31 → customParams1_x through customParams8_w
+    if (slot >= 0 && slot < 32) {
         const int vecIndex = slot / 4;
         const int compIndex = slot % 4;
         return QString::fromLatin1(UniformVecNames[vecIndex]) + QString::fromLatin1(UniformComponents[compIndex]);
@@ -152,7 +155,7 @@ void ShaderRegistry::setupFileWatcher()
     const QString userDir = userShaderDir();
     if (QDir(userDir).exists()) {
         m_watcher->addPath(userDir);
-        qCDebug(lcCore) << "Watching user shader directory= " << userDir;
+        qCDebug(lcCore) << "Watching user shader directory=" << userDir;
     }
 
     connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, &ShaderRegistry::onUserShaderDirChanged);
@@ -192,7 +195,7 @@ void ShaderRegistry::refresh()
         loadUserShaders();
     }
 
-    qCInfo(lcCore) << "Total shaders= " << m_shaders.size();
+    qCInfo(lcCore) << "Total shaders=" << m_shaders.size();
     Q_EMIT shadersChanged();
 }
 
@@ -237,7 +240,7 @@ void ShaderRegistry::loadSystemShaders()
             loadShaderFromDir(dir.filePath(entry), false);
         }
 
-        qCInfo(lcCore) << "Loaded shaders= " << (m_shaders.size() - beforeCount) << " from= " << shaderDir;
+        qCInfo(lcCore) << "Loaded shaders=" << (m_shaders.size() - beforeCount) << "from=" << shaderDir;
     }
 }
 
@@ -260,7 +263,7 @@ void ShaderRegistry::loadUserShaders()
     }
 
     if (m_shaders.size() != beforeCount) {
-        qCInfo(lcCore) << "Loaded shaders= " << (m_shaders.size() - beforeCount) << " from= " << userDir;
+        qCInfo(lcCore) << "Loaded shaders=" << (m_shaders.size() - beforeCount) << "from=" << userDir;
     }
 }
 
@@ -271,7 +274,7 @@ void ShaderRegistry::loadShaderFromDir(const QString& shaderDir, bool isUserShad
 
     // Metadata is required
     if (!QFile::exists(metadataPath)) {
-        qCDebug(lcCore) << "Skipping shader path= " << shaderDir << " reason= no metadata.json";
+        qCDebug(lcCore) << "Skipping shader path=" << shaderDir << "reason=no metadata.json";
         return;
     }
 
@@ -293,8 +296,8 @@ void ShaderRegistry::loadShaderFromDir(const QString& shaderDir, bool isUserShad
     // shaderUrl points directly to the raw GLSL fragment shader
     info.shaderUrl = QUrl::fromLocalFile(info.sourcePath);
 
-    qCDebug(lcCore) << "  Loaded shader name= " << info.name << " id= " << info.id
-                    << " source= " << (isUserShader ? "user" : "system") << " from= " << shaderDir;
+    qCDebug(lcCore) << "Loaded shader name=" << info.name << "id=" << info.id
+                    << "source=" << (isUserShader ? "user" : "system") << "from=" << shaderDir;
 
     // Check for preview image
     const QString previewPath = dir.filePath(QStringLiteral("preview.png"));
@@ -357,7 +360,8 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
         }
     }
     if (info.bufferShaderPaths.isEmpty()) {
-        const QString bufferShaderName = root.value(QLatin1String("bufferShader")).toString(QStringLiteral("buffer.frag"));
+        const QString bufferShaderName =
+            root.value(QLatin1String("bufferShader")).toString(QStringLiteral("buffer.frag"));
         info.bufferShaderPath = dir.filePath(bufferShaderName);
         info.bufferShaderPaths.append(info.bufferShaderPath);
     } else {
@@ -377,6 +381,9 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
             info.bufferShaderPath.clear();
         }
     }
+    // Desktop wallpaper subscription: shader opts in to receive wallpaper at binding 11
+    info.useWallpaper = root.value(QLatin1String("wallpaper")).toBool(false);
+
     info.bufferFeedback = root.value(QLatin1String("bufferFeedback")).toBool(false);
     qreal scale = root.value(QLatin1String("bufferScale")).toDouble(1.0);
     info.bufferScale = qBound(0.125, scale, 1.0);
@@ -434,77 +441,6 @@ QVariantMap ShaderRegistry::shaderInfo(const QString& id) const
     return shaderInfoToVariantMap(m_shaders.value(id));
 }
 
-QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo& info) const
-{
-    QVariantMap map;
-    // Required fields (always set to non-empty strings)
-    map[QStringLiteral("id")] = info.id.isEmpty() ? QStringLiteral("unknown") : info.id;
-    map[QStringLiteral("name")] = info.name.isEmpty() ? info.id : info.name;
-    map[QStringLiteral("description")] = info.description; // Empty string is OK
-    map[QStringLiteral("author")] = info.author;
-    map[QStringLiteral("version")] = info.version;
-    map[QStringLiteral("isUserShader")] = info.isUserShader;
-    map[QStringLiteral("isValid")] = info.isValid();
-
-    // Optional fields - only include if non-empty (avoids D-Bus issues with empty URLs)
-    if (info.shaderUrl.isValid()) {
-        map[QStringLiteral("shaderUrl")] = info.shaderUrl.toString();
-    } else {
-        map[QStringLiteral("shaderUrl")] = QString(); // Empty string, not null
-    }
-
-    if (!info.previewPath.isEmpty()) {
-        map[QStringLiteral("previewPath")] = info.previewPath;
-    } else {
-        map[QStringLiteral("previewPath")] = QString(); // Empty string, not null
-    }
-
-    // Multipass shader metadata (for editor preview)
-    map[QStringLiteral("bufferShaderPaths")] = info.bufferShaderPaths;
-    map[QStringLiteral("bufferFeedback")] = info.bufferFeedback;
-    map[QStringLiteral("bufferScale")] = info.bufferScale;
-    map[QStringLiteral("bufferWrap")] = info.bufferWrap;
-
-    // Parameters list (empty list is OK for D-Bus)
-    QVariantList params;
-    for (const ParameterInfo& param : info.parameters) {
-        params.append(parameterInfoToVariantMap(param));
-    }
-    map[QStringLiteral("parameters")] = params;
-
-    return map;
-}
-
-QVariantMap ShaderRegistry::parameterInfoToVariantMap(const ParameterInfo& param) const
-{
-    QVariantMap map;
-    map[QStringLiteral("id")] = param.id;
-    map[QStringLiteral("name")] = param.name;
-    map[QStringLiteral("type")] = param.type;
-    map[QStringLiteral("slot")] = param.slot;
-    map[QStringLiteral("mapsTo")] = param.uniformName(); // Computed from slot for compatibility
-    map[QStringLiteral("useZoneColor")] = param.useZoneColor;
-    if (!param.wrap.isEmpty()) {
-        map[QStringLiteral("wrap")] = param.wrap;
-    }
-
-    // Only include optional values if they are valid (D-Bus can't marshal null QVariants)
-    if (!param.group.isEmpty()) {
-        map[QStringLiteral("group")] = param.group;
-    }
-    if (param.defaultValue.isValid()) {
-        map[QStringLiteral("default")] = param.defaultValue;
-    }
-    if (param.minValue.isValid()) {
-        map[QStringLiteral("min")] = param.minValue;
-    }
-    if (param.maxValue.isValid()) {
-        map[QStringLiteral("max")] = param.maxValue;
-    }
-
-    return map;
-}
-
 QUrl ShaderRegistry::shaderUrl(const QString& id) const
 {
     if (isNoneShader(id) || !m_shaders.contains(id)) {
@@ -533,146 +469,6 @@ void ShaderRegistry::openUserShaderDirectory() const
 {
     ensureUserShaderDirExists();
     QDesktopServices::openUrl(QUrl::fromLocalFile(userShaderDir()));
-}
-
-bool ShaderRegistry::validateParams(const QString& id, const QVariantMap& params) const
-{
-    const ShaderInfo info = shader(id);
-    if (!info.isValid()) {
-        return false;
-    }
-
-    for (const ParameterInfo& param : info.parameters) {
-        if (params.contains(param.id)) {
-            if (!validateParameterValue(param, params.value(param.id))) {
-                qCWarning(lcCore) << "Invalid shader parameter:" << param.id << "for shader:" << id;
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-bool ShaderRegistry::validateParameterValue(const ParameterInfo& param, const QVariant& value) const
-{
-    if (param.type == QLatin1String("float")) {
-        bool ok = false;
-        double v = value.toDouble(&ok);
-        if (!ok)
-            return false;
-        if (param.minValue.isValid() && v < param.minValue.toDouble())
-            return false;
-        if (param.maxValue.isValid() && v > param.maxValue.toDouble())
-            return false;
-    } else if (param.type == QLatin1String("int")) {
-        bool ok = false;
-        int v = value.toInt(&ok);
-        if (!ok)
-            return false;
-        if (param.minValue.isValid() && v < param.minValue.toInt())
-            return false;
-        if (param.maxValue.isValid() && v > param.maxValue.toInt())
-            return false;
-    } else if (param.type == QLatin1String("color")) {
-        QColor c(value.toString());
-        if (!c.isValid())
-            return false;
-    } else if (param.type == QLatin1String("bool")) {
-        if (!value.canConvert<bool>())
-            return false;
-    } else if (param.type == QLatin1String("image")) {
-        if (!value.canConvert<QString>())
-            return false;
-    }
-    return true;
-}
-
-QVariantMap ShaderRegistry::validateAndCoerceParams(const QString& id, const QVariantMap& params) const
-{
-    QVariantMap result;
-    const ShaderInfo info = shader(id);
-    if (!info.isValid()) {
-        return result;
-    }
-
-    for (const ParameterInfo& param : info.parameters) {
-        if (params.contains(param.id) && validateParameterValue(param, params.value(param.id))) {
-            result[param.id] = params.value(param.id);
-        } else {
-            result[param.id] = param.defaultValue;
-        }
-    }
-    return result;
-}
-
-QVariantMap ShaderRegistry::defaultParams(const QString& id) const
-{
-    QVariantMap result;
-    const ShaderInfo info = shader(id);
-    for (const ParameterInfo& param : info.parameters) {
-        result[param.id] = param.defaultValue;
-    }
-    return result;
-}
-
-QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, const QVariantMap& storedParams) const
-{
-    QVariantMap result;
-    const ShaderInfo info = shader(shaderId);
-
-    if (!info.isValid() || isNoneShader(shaderId)) {
-        return result;
-    }
-
-    // Build translation map from parameter definitions
-    // Also start with default values for uniforms that aren't in storedParams
-    for (const ParameterInfo& param : info.parameters) {
-        const QString uniformName = param.uniformName();
-        if (uniformName.isEmpty()) {
-            continue; // Parameter doesn't map to a uniform
-        }
-
-        // Check if stored params has this parameter (by ID)
-        if (storedParams.contains(param.id)) {
-            QVariant value = storedParams.value(param.id);
-
-            // Handle color type - keep as QString for D-Bus compatibility (QColor is not
-            // registered with D-Bus and causes marshalling crash when returned over D-Bus)
-            if (param.type == QLatin1String("color") && value.typeId() == QMetaType::QString) {
-                QColor color(value.toString());
-                if (color.isValid()) {
-                    result[uniformName] = color.name(QColor::HexArgb);
-                } else {
-                    result[uniformName] = param.defaultValue;
-                }
-            } else {
-                result[uniformName] = value;
-            }
-        } else {
-            // Use default value for missing parameters
-            if (param.type == QLatin1String("color")) {
-                QColor color(param.defaultValue.toString());
-                result[uniformName] = color.isValid() ? color.name(QColor::HexArgb) : param.defaultValue;
-            } else {
-                result[uniformName] = param.defaultValue;
-            }
-        }
-
-        // For image parameters: resolve relative paths against shader directory, emit wrap mode
-        if (param.type == QLatin1String("image") && !uniformName.isEmpty()) {
-            const QString imgPath = result.value(uniformName).toString();
-            if (!imgPath.isEmpty() && QFileInfo(imgPath).isRelative()) {
-                const QDir shaderDir = QFileInfo(info.sourcePath).absoluteDir();
-                const QString resolved = shaderDir.absoluteFilePath(imgPath);
-                if (QFile::exists(resolved)) {
-                    result[uniformName] = resolved;
-                }
-            }
-            result[uniformName + QStringLiteral("_wrap")] = param.wrap.isEmpty() ? QStringLiteral("clamp") : param.wrap;
-        }
-    }
-
-    return result;
 }
 
 } // namespace PlasmaZones

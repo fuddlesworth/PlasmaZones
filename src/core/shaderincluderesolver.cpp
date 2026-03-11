@@ -15,33 +15,27 @@ namespace PlasmaZones {
 namespace {
 
 // Match #include "path" or #include <path> (optional whitespace)
-static const QRegularExpression includeRegex(
-    QStringLiteral("^\\s*#include\\s+([\"<])([^\">]+)[\">]\\s*$"));
+static const QRegularExpression includeRegex(QStringLiteral("^\\s*#include\\s+([\"<])([^\">]+)[\">]\\s*$"));
 
 QString tryReadFile(const QString& path, QString* outError)
 {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    if (outError) {
-            *outError = QStringLiteral("Cannot open include: ") + path + QStringLiteral(" (")
-                + file.errorString() + QLatin1Char(')');
+        if (outError) {
+            *outError = QStringLiteral("Cannot open include: ") + path + QStringLiteral(" (") + file.errorString()
+                + QLatin1Char(')');
         }
         return QString();
     }
     return QTextStream(&file).readAll();
 }
 
-QString expandIncludesRecursive(const QString& source,
-                                const QString& currentFileDir,
-                                const QStringList& includePaths,
-                                int depth,
-                                QSet<QString>& seenCanonical,
-                                QString* outError)
+QString expandIncludesRecursive(const QString& source, const QString& currentFileDir, const QStringList& includePaths,
+                                int depth, QSet<QString>& seenCanonical, QString* outError)
 {
     if (depth > ShaderIncludeResolver::MaxIncludeDepth) {
         if (outError) {
-            *outError = QStringLiteral("Include depth exceeded (max %1)")
-                            .arg(ShaderIncludeResolver::MaxIncludeDepth);
+            *outError = QStringLiteral("Include depth exceeded (max %1)").arg(ShaderIncludeResolver::MaxIncludeDepth);
         }
         return QString();
     }
@@ -104,8 +98,8 @@ QString expandIncludesRecursive(const QString& source,
         }
 
         QString newCurrentDir = QFileInfo(resolvedPath).absolutePath();
-        QString expanded = expandIncludesRecursive(included, newCurrentDir, includePaths,
-                                                   depth + 1, seenCanonical, outError);
+        QString expanded =
+            expandIncludesRecursive(included, newCurrentDir, includePaths, depth + 1, seenCanonical, outError);
         if (expanded.isNull()) {
             return QString();
         }
@@ -122,10 +116,8 @@ QString expandIncludesRecursive(const QString& source,
 
 } // namespace
 
-QString ShaderIncludeResolver::expandIncludes(const QString& source,
-                                              const QString& currentFileDir,
-                                              const QStringList& includePaths,
-                                              QString* outError)
+QString ShaderIncludeResolver::expandIncludes(const QString& source, const QString& currentFileDir,
+                                              const QStringList& includePaths, QString* outError)
 {
     if (outError) {
         outError->clear();

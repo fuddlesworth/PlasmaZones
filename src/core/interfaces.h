@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "enums.h"
 #include "settings_interfaces.h"
 #include <QObject>
 #include <QColor>
@@ -21,81 +22,6 @@ namespace PlasmaZones {
 
 class Zone;
 class Layout;
-
-/**
- * @brief Keyboard modifier options for drag activation
- *
- * On Wayland, modifier detection may not work reliably because background daemons
- * can't query global keyboard state. If modifiers aren't detected, use AlwaysActive
- * as a workaround.
- */
-enum class DragModifier {
-    Disabled = 0, ///< Disabled - zone overlay never shows on drag
-    Shift = 1, ///< Hold Shift while dragging
-    Ctrl = 2, ///< Hold Ctrl while dragging
-    Alt = 3, ///< Hold Alt while dragging
-    Meta = 4, ///< Hold Meta/Super while dragging
-    CtrlAlt = 5, ///< Hold Ctrl+Alt while dragging
-    CtrlShift = 6, ///< Hold Ctrl+Shift while dragging
-    AltShift = 7, ///< Hold Alt+Shift while dragging
-    AlwaysActive = 8, ///< Always show zones on any drag (no modifier needed)
-    AltMeta = 9, ///< Hold Alt+Meta while dragging
-    CtrlAltMeta = 10 ///< Hold Ctrl+Alt+Meta while dragging
-};
-
-/**
- * @brief Position options for the zone selector bar
- * Values correspond to 3x3 grid cell indices:
- *   0=TopLeft,    1=Top,    2=TopRight
- *   3=Left,       4=Center, 5=Right
- *   6=BottomLeft, 7=Bottom, 8=BottomRight
- */
-enum class ZoneSelectorPosition {
-    TopLeft = 0,
-    Top = 1,
-    TopRight = 2,
-    Left = 3,
-    // Center = 4 is invalid
-    Right = 5,
-    BottomLeft = 6,
-    Bottom = 7,
-    BottomRight = 8
-};
-
-/**
- * @brief Layout mode options for the zone selector
- */
-enum class ZoneSelectorLayoutMode {
-    Grid = 0, ///< Grid layout with configurable columns
-    Horizontal = 1, ///< Single row layout
-    Vertical = 2 ///< Single column layout
-};
-
-/**
- * @brief Size mode options for the zone selector
- */
-enum class ZoneSelectorSizeMode {
-    Auto = 0, ///< Auto-calculate preview size from screen dimensions and layout count
-    Manual = 1 ///< Use explicit previewWidth/previewHeight settings
-};
-
-/**
- * @brief Sticky window handling options
- */
-enum class StickyWindowHandling {
-    TreatAsNormal = 0, ///< Sticky windows follow per-desktop behavior
-    RestoreOnly = 1, ///< Allow restore, disable auto-snap
-    IgnoreAll = 2 ///< Disable restore and auto-snap
-};
-
-/**
- * @brief OSD style options for layout switch notifications
- */
-enum class OsdStyle {
-    None = 0, ///< No OSD shown on layout switch
-    Text = 1, ///< Text-only Plasma OSD (layout name)
-    Preview = 2 ///< Visual layout preview OSD (default)
-};
 
 /**
  * @brief Abstract interface for settings management
@@ -135,6 +61,32 @@ public:
     // See settings_interfaces.h for the full API.
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Animation settings (global — applies to snapping and autotiling)
+    virtual bool animationsEnabled() const = 0;
+    virtual void setAnimationsEnabled(bool enabled) = 0;
+    virtual int animationDuration() const = 0;
+    virtual void setAnimationDuration(int duration) = 0;
+    virtual QString animationEasingCurve() const = 0;
+    virtual void setAnimationEasingCurve(const QString& curve) = 0;
+    virtual int animationMinDistance() const = 0;
+    virtual void setAnimationMinDistance(int distance) = 0;
+    virtual int animationSequenceMode() const = 0;
+    virtual void setAnimationSequenceMode(int mode) = 0;
+    virtual int animationStaggerInterval() const = 0;
+    virtual void setAnimationStaggerInterval(int ms) = 0;
+
+    // Autotile decoration settings (fetched by KWin effect via D-Bus)
+    virtual bool autotileFocusFollowsMouse() const = 0;
+    virtual void setAutotileFocusFollowsMouse(bool enabled) = 0;
+    virtual bool autotileHideTitleBars() const = 0;
+    virtual void setAutotileHideTitleBars(bool hide) = 0;
+    virtual int autotileBorderWidth() const = 0;
+    virtual void setAutotileBorderWidth(int width) = 0;
+    virtual QColor autotileBorderColor() const = 0;
+    virtual void setAutotileBorderColor(const QColor& color) = 0;
+    virtual bool autotileUseSystemBorderColors() const = 0;
+    virtual void setAutotileUseSystemBorderColors(bool use) = 0;
+
     // Persistence (unique to ISettings)
     virtual void load() = 0;
     virtual void save() = 0;
@@ -148,6 +100,7 @@ Q_SIGNALS:
     void zoneSpanModifierChanged();
     void zoneSpanTriggersChanged();
     void toggleActivationChanged();
+    void snappingEnabledChanged();
     void showZonesOnAllMonitorsChanged();
     void disabledMonitorsChanged();
     void showZoneNumbersChanged();
@@ -155,6 +108,7 @@ Q_SIGNALS:
     void showOsdOnLayoutSwitchChanged();
     void showNavigationOsdChanged();
     void osdStyleChanged();
+    void overlayDisplayModeChanged();
     void useSystemColorsChanged();
     void highlightColorChanged();
     void inactiveColorChanged();
@@ -207,6 +161,8 @@ Q_SIGNALS:
     void zoneSelectorSizeModeChanged();
     void zoneSelectorMaxRowsChanged();
     void perScreenZoneSelectorSettingsChanged();
+    void perScreenAutotileSettingsChanged();
+    void perScreenSnappingSettingsChanged();
     // Shader effects
     void enableShaderEffectsChanged();
     void shaderFrameRateChanged();
@@ -272,6 +228,48 @@ Q_SIGNALS:
 
     // Layout Picker Shortcut
     void layoutPickerShortcutChanged();
+
+    // Autotile settings
+    void autotileEnabledChanged();
+    void autotileAlgorithmChanged();
+    void autotileSplitRatioChanged();
+    void autotileMasterCountChanged();
+    void autotileCenteredMasterSplitRatioChanged();
+    void autotileCenteredMasterMasterCountChanged();
+    void autotileInnerGapChanged();
+    void autotileOuterGapChanged();
+    void autotileUsePerSideOuterGapChanged();
+    void autotileOuterGapTopChanged();
+    void autotileOuterGapBottomChanged();
+    void autotileOuterGapLeftChanged();
+    void autotileOuterGapRightChanged();
+    void autotileSmartGapsChanged();
+    void autotileMaxWindowsChanged();
+    void autotileFocusNewWindowsChanged();
+    void autotileInsertPositionChanged();
+    void autotileRespectMinimumSizeChanged();
+    void autotileFocusFollowsMouseChanged();
+    void autotileHideTitleBarsChanged();
+    void autotileBorderWidthChanged();
+    void autotileBorderColorChanged();
+    void autotileUseSystemBorderColorsChanged();
+    // Animation settings (general)
+    void animationsEnabledChanged();
+    void animationDurationChanged();
+    void animationEasingCurveChanged();
+    void animationMinDistanceChanged();
+    void animationSequenceModeChanged();
+    void animationStaggerIntervalChanged();
+
+    // Autotile shortcuts
+    void autotileToggleShortcutChanged();
+    void autotileRetileShortcutChanged();
+    void autotileFocusMasterShortcutChanged();
+    void autotileSwapMasterShortcutChanged();
+    void autotileIncMasterCountShortcutChanged();
+    void autotileDecMasterCountShortcutChanged();
+    void autotileIncMasterRatioShortcutChanged();
+    void autotileDecMasterRatioShortcutChanged();
 };
 
 /**
@@ -339,26 +337,25 @@ public:
     // Layout assignments (screenId: stable EDID-based identifier or connector name fallback)
     virtual Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                     const QString& activity = QString()) const = 0;
-    virtual void assignLayout(const QString& screenId, int virtualDesktop, const QString& activity,
-                              Layout* layout) = 0;
+    virtual void assignLayout(const QString& screenId, int virtualDesktop, const QString& activity, Layout* layout) = 0;
     virtual void assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
-                                  const QUuid& layoutId) = 0;
+                                  const QString& layoutId) = 0;
     virtual void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                  const QString& activity = QString()) = 0;
     virtual bool hasExplicitAssignment(const QString& screenId, int virtualDesktop = 0,
                                        const QString& activity = QString()) const = 0;
-    virtual void setAllScreenAssignments(const QHash<QString, QUuid>& assignments) = 0; // Batch set - saves once
+    virtual void setAllScreenAssignments(const QHash<QString, QString>& assignments) = 0; // Batch set - saves once
     virtual void
-    setAllDesktopAssignments(const QHash<QPair<QString, int>, QUuid>& assignments) = 0; // Batch per-desktop
+    setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments) = 0; // Batch per-desktop
     virtual void
-    setAllActivityAssignments(const QHash<QPair<QString, QString>, QUuid>& assignments) = 0; // Batch per-activity
+    setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments) = 0; // Batch per-activity
 
     // Quick layout switch
     virtual Layout* layoutForShortcut(int number) const = 0;
     virtual void applyQuickLayout(int number, const QString& screenId) = 0;
-    virtual void setQuickLayoutSlot(int number, const QUuid& layoutId) = 0;
-    virtual void setAllQuickLayoutSlots(const QHash<int, QUuid>& slots) = 0; // Batch set - saves once
-    virtual QHash<int, QUuid> quickLayoutSlots() const = 0;
+    virtual void setQuickLayoutSlot(int number, const QString& layoutId) = 0;
+    virtual void setAllQuickLayoutSlots(const QHash<int, QString>& slots) = 0; // Batch set - saves once
+    virtual QHash<int, QString> quickLayoutSlots() const = 0;
 
     // Built-in layouts
     virtual void createBuiltInLayouts() = 0;
@@ -467,6 +464,9 @@ public:
     // Mouse position for shader effects (updated during window drag)
     virtual void updateMousePosition(int cursorX, int cursorY) = 0;
 
+    // Filtered layout count (matches what the zone selector actually displays)
+    virtual int visibleLayoutCount(const QString& screenName) const = 0;
+
     // Zone selector selection tracking
     virtual bool hasSelectedZone() const = 0;
     virtual QString selectedLayoutId() const = 0;
@@ -529,6 +529,13 @@ Q_SIGNALS:
      * @param layoutId The UUID of the selected layout
      */
     void layoutPickerSelected(const QString& layoutId);
+
+    /**
+     * @brief Emitted when an autotile algorithm layout is selected from the zone selector
+     * @param algorithmId The algorithm identifier (e.g. "master-stack")
+     * @param screenName The screen where the selection was made
+     */
+    void autotileLayoutSelected(const QString& algorithmId, const QString& screenName);
 };
 
 } // namespace PlasmaZones

@@ -1,9 +1,10 @@
 {
     "id": "{1c85ee9a-25f6-4109-a074-b0bc7072418c}",
     "name": "BSP",
+    "defaultOrder": 0,
     "description": "Binary space partitioning - recursive split layout",
     "type": 5,
-    "builtIn": true,
+    "isBuiltIn": true,
     "showZoneNumbers": true,
     "zones": [
         {

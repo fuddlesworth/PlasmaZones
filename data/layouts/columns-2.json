@@ -3,7 +3,7 @@
     "name": "Columns (2)",
     "description": "Two equal vertical columns",
     "type": 1,
-    "defaultOrder": 0,
+    "defaultOrder": 1,
     "isBuiltIn": true,
     "showZoneNumbers": true,
     "zones": [

@@ -181,12 +181,14 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 
     float particleCount = customParams[1].x >= 0.0 ? customParams[1].x : 30.0;
     float particleSize = customParams[1].y >= 0.0 ? customParams[1].y : 1.5;
-    float trailLength = customParams[1].z >= 0.0 ? customParams[1].z : 0.5;
     float distortionAmount = customParams[1].w >= 0.0 ? customParams[1].w : 0.4;
     float audioReactivity  = customParams[2].x >= 0.0 ? customParams[2].x : 1.0;
     float nebulaIntensity  = customParams[2].y >= 0.0 ? customParams[2].y : 0.15;
     float shockwaveStr     = customParams[2].z >= 0.0 ? customParams[2].z : 1.0;
     float fillOpacity      = customParams[2].w >= 0.0 ? customParams[2].w : 0.85;
+
+    float arcThick = customParams[3].w >= 0.0 ? customParams[3].w : 0.006;
+    float gridFreq = customParams[4].x >= 0.0 ? customParams[4].x : 20.0;
 
     // ── Identity-native audio: electromagnetic field behavior ─────
 
@@ -210,7 +212,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 
     // Overall = Field density/visibility (NOT a simple multiplier)
     // Affects rendering thresholds and particle visibility
-    float fieldDensity = hasAudio ? 0.3 + overall * 1.4 * audioReactivity : 1.0;
+    float fieldDensity = hasAudio ? 0.4 + overall * 0.9 * audioReactivity : 1.0;
     float visibleParticleCount = particleCount * fieldDensity;
     float fieldLineThreshold = mix(0.6, 0.15, fieldDensity); // lower = more lines visible
 
@@ -224,10 +226,6 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
     vec2 mouseGlobal = iMouse.xy / max(iResolution, vec2(1.0));
 
-    // Mouse position relative to zone (for in-zone checks only)
-    vec2 mouseNorm = iMouse.zw;  // Already normalized 0-1
-    vec2 mouseLocal = zoneLocalUV(iMouse.xy, rectPos, rectSize);  // Mouse relative to this zone
-
     float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
 
     // Colors
@@ -237,11 +235,13 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     vec3 highlightColor = customColors[1].rgb;
     if (length(highlightColor) < 0.01) highlightColor = vec3(0.98, 0.8, 0.082);  // Yellow #facc15
 
-    if (isHighlighted) {
-        fieldColor = mix(fieldColor, highlightColor, 0.5);
-        fieldStrength *= 1.5;
-        glowIntensity *= 1.3;
-    }
+    float vitality = zoneVitality(isHighlighted);
+    fieldColor = vitalityDesaturate(fieldColor, vitality);
+    highlightColor = vitalityDesaturate(highlightColor, vitality);
+    fieldStrength *= vitalityScale(0.6, 1.5, vitality);
+    glowIntensity *= vitalityScale(0.4, 1.3, vitality);
+    particleCount *= vitalityScale(0.5, 1.0, vitality);
+    distortionAmount *= vitalityScale(0.5, 1.0, vitality);
 
     float t = iTime * waveSpeed;
 
@@ -311,7 +311,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
                 float arcBulge = sin(h * PI) * pairDist * 0.3;
                 lineDist = max(lineDist - arcBulge, 0.0);
 
-                float arc = smoothstep(0.006, 0.0, lineDist);
+                float arc = smoothstep(arcThick, 0.0, lineDist);
                 float proximity = 1.0 - pairDist / 0.15;
                 connections += arc * proximity * 0.07;
             }
@@ -347,8 +347,8 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         fx += deformColor;
 
         // Subtle grid for depth - distorted by vertex displacement
-        vec2 gridUV = globalUV + vDisplacement * 2.0;
-        vec2 grid = abs(fract(gridUV * 20.0) - 0.5);
+        vec2 gridUV = globalUV + vDisplacement * 0.08;
+        vec2 grid = abs(fract(gridUV * gridFreq) - 0.5);
         float gridLine = smoothstep(0.48, 0.5, max(grid.x, grid.y)) * 0.05;
         fx += fieldColor * gridLine * (1.0 - mouseDist) * fieldDensity;
 
@@ -372,11 +372,13 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
             fx += shockColor * ring2 * shockwaveStrength * 0.4;
         }
 
-        // ── MIDS: EM Interference Bands ─────────────────────────────
+        // ── MIDS: EM Interference Bands (field-aligned) ───────────────
         if (hasAudio && emBandIntensity > 0.01) {
-            // Diagonal sweep bands moving through the zone
-            float bandAngle = 0.3; // slight diagonal
-            float bandCoord = globalUV.y * cos(bandAngle) + globalUV.x * sin(bandAngle);
+            // Compute field direction at this fragment to align bands with field lines
+            vec2 localField = fieldVector(globalUV, mouseGlobal, fieldStrength * 0.5, t, polarityFlip);
+            float fieldAngle = atan(localField.y, localField.x);
+            // Project UV perpendicular to the field direction so bands run along field lines
+            float bandCoord = globalUV.x * cos(fieldAngle) - globalUV.y * sin(fieldAngle);
             // Multiple band frequencies for EM interference look
             float sweep = iTime * emBandSpeed * 0.3;
             float band1 = sin(bandCoord * 25.0 - sweep) * 0.5 + 0.5;
@@ -385,16 +387,9 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
             // Combine for interference pattern
             float emBand = band1 * band2 * 0.7 + band3 * 0.3;
             emBand = pow(emBand, 2.0); // sharpen the bands
-            // Chromatic aberration: offset R and B channels for color fringing
-            float bandR = sin((bandCoord - 0.003) * 25.0 - sweep) * 0.5 + 0.5;
-            float bandB = sin((bandCoord + 0.003) * 25.0 - sweep) * 0.5 + 0.5;
-            vec3 fringedBand = vec3(
-                bandR * band2 * 0.7 + band3 * 0.3,
-                emBand,
-                bandB * band2 * 0.7 + band3 * 0.3
-            );
-            fringedBand = pow(fringedBand, vec3(2.0));
-            fx += fringedBand * emBandIntensity * 0.35;
+            // Color the bands with the field's polarity color (no chromatic split)
+            vec3 polarityColor = mix(fieldColor, highlightColor, smoothstep(-0.5, 0.5, polarityFlip) * 0.6);
+            fx += polarityColor * emBand * emBandIntensity * 0.35;
         }
 
         // ── TREBLE: Corona Discharge Arcs at zone edges ─────────────
@@ -407,9 +402,9 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
                 float angle = atan(fromCenter.y, fromCenter.x);
 
                 // Multi-scale angular noise creates branching arc structure
-                float arcNoise1 = noise(vec2(angle * 3.0, iTime * 4.0)) * 0.5;
-                float arcNoise2 = noise(vec2(angle * 8.0, iTime * 6.0 + 10.0)) * 0.3;
-                float arcNoise3 = noise(vec2(angle * 20.0, iTime * 8.0 + 25.0)) * 0.2;
+                float arcNoise1 = angularNoise(angle, 3.0, iTime * 4.0) * 0.5;
+                float arcNoise2 = angularNoise(angle, 8.0, iTime * 6.0 + 10.0) * 0.3;
+                float arcNoise3 = angularNoise(angle, 20.0, iTime * 8.0 + 25.0) * 0.2;
                 float arcPattern = arcNoise1 + arcNoise2 + arcNoise3;
 
                 // Arcs are strongest near the edge, branch inward
@@ -473,6 +468,69 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     return result;
 }
 
+// ─── Custom Label Composite ───────────────────────────────────────
+
+vec4 compositeMagneticLabels(vec4 color, vec2 fragCoord,
+                             float bass, float treble, bool hasAudio) {
+    vec2 uv = labelsUv(fragCoord);
+    vec2 px = 1.0 / max(iResolution, vec2(1.0));
+    vec4 labels = texture(uZoneLabels, uv);
+
+    vec3 fieldColor = customColors[0].rgb;
+    if (length(fieldColor) < 0.01) fieldColor = vec3(0.545, 0.361, 0.965);
+    vec3 highlightColor = customColors[1].rgb;
+    if (length(highlightColor) < 0.01) highlightColor = vec3(0.98, 0.8, 0.082);
+
+    float labelGlowSpread = customParams[3].x >= 0.0 ? customParams[3].x : 3.5;
+    float labelBrightness = customParams[3].y >= 0.0 ? customParams[3].y : 2.2;
+    float labelAudioReact = customParams[3].z >= 0.0 ? customParams[3].z : 1.0;
+
+    // Gaussian halo with EM field tint
+    float halo = 0.0;
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            float w = exp(-float(dx * dx + dy * dy) * 0.25);
+            halo += texture(uZoneLabels, uv + vec2(float(dx), float(dy)) * px * labelGlowSpread).a * w;
+        }
+    }
+    halo /= 16.0;
+
+    if (halo > 0.003) {
+        float haloEdge = halo * (1.0 - labels.a);
+
+        // Corona arcs: angular noise creates spiky aura
+        float angle = atan(uv.y - 0.5, uv.x - 0.5);
+        float arc = angularNoise(angle, 8.0, iTime * 0.5);
+        arc = pow(arc, 2.0) * 1.5;
+
+        // Polarity shift: top/bottom of label gets different tint
+        float polarity = sin(angle) * 0.5 + 0.5;
+        vec3 coronaCol = mix(fieldColor, highlightColor, polarity);
+
+        float arcBright = haloEdge * (0.4 + arc * 0.6) * (hasAudio ? 1.0 + bass * 0.2 * labelAudioReact : 1.0);
+        color.rgb += coronaCol * arcBright;
+
+        // Mouse proximity: labels near cursor glow brighter
+        vec2 mouseUV = iMouse.xy / max(iResolution, vec2(1.0));
+        float mouseDist = length(uv - mouseUV);
+        float mouseBoost = exp(-mouseDist * 5.0) * 0.4;
+        color.rgb += fieldColor * haloEdge * mouseBoost;
+
+        color.a = max(color.a, haloEdge * 0.5);
+    }
+
+    // Core: amplified field view through the label
+    if (labels.a > 0.01) {
+        vec3 core = color.rgb * labelBrightness + fieldColor * 0.15;
+        float bassPulse = hasAudio ? 1.0 + bass * 0.6 : 1.0;
+        core *= bassPulse;
+        color.rgb = mix(color.rgb, core, labels.a);
+        color.a = max(color.a, labels.a);
+    }
+
+    return color;
+}
+
 void main() {
     vec2 fragCoord = vFragCoord;
     vec4 color = vec4(0.0);
@@ -484,10 +542,10 @@ void main() {
     
     // Audio analysis (computed once for all zones)
     bool  hasAudio = iAudioSpectrumSize > 0;
-    float bass    = getBass();
-    float mids    = getMids();
-    float treble  = getTreble();
-    float overall = getOverall();
+    float bass    = getBassSoft();
+    float mids    = getMidsSoft();
+    float treble  = getTrebleSoft();
+    float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
@@ -499,7 +557,8 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeLabelsWithUv(color, fragCoord);
+    if (customParams[4].y > 0.5)
+        color = compositeMagneticLabels(color, fragCoord, bass, treble, hasAudio);
 
     fragColor = clampFragColor(color);
 }

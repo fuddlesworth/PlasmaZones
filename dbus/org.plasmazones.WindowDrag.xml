@@ -117,7 +117,7 @@
             </arg>
         </signal>
         <signal name="zoneGeometryDuringDragChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the zone geometry under the cursor changes during drag. KWin effect applies the geometry immediately for FancyZones-style snap-on-hover behavior."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the zone geometry under the cursor changes during drag. KWin effect applies the geometry immediately for snap-on-hover behavior."/>
             <arg name="windowId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>

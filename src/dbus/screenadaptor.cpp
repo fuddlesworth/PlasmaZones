@@ -48,7 +48,7 @@ QStringList ScreenAdaptor::getScreens()
 QString ScreenAdaptor::getScreenInfo(const QString& screenName)
 {
     if (screenName.isEmpty()) {
-        qCWarning(lcDbus) << "Cannot get screen info - empty screen name";
+        qCWarning(lcDbus) << "getScreenInfo: empty screen name";
         return QString();
     }
 
@@ -68,7 +68,7 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenName)
             info[JsonKeys::RefreshRate] = screen->refreshRate();
             info[JsonKeys::Depth] = screen->depth();
             info[JsonKeys::ScreenId] = Utils::screenIdentifier(screen);
-            info[QStringLiteral("serialNumber")] = screen->serialNumber();
+            info[QLatin1String("serialNumber")] = screen->serialNumber();
 
             return QString::fromUtf8(QJsonDocument(info).toJson());
         }

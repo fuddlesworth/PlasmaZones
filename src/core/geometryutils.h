@@ -5,10 +5,13 @@
 
 #include "constants.h"
 #include "plasmazones_export.h"
+#include "types.h"
 #include <QRectF>
 #include <QScreen>
 #include <QVariantMap>
 #include <functional>
+#include <QVector>
+#include <QSize>
 
 namespace PlasmaZones {
 
@@ -36,21 +39,6 @@ namespace GeometryUtils {
 PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, QScreen* screen);
 
 /**
- * @brief Get zone geometry with differentiated inner/outer gaps
- * @param zone Zone to get geometry for
- * @param screen Screen to calculate relative to
- * @param innerGap Gap between adjacent zones (zonePadding)
- * @param outerGap Gap at screen boundaries
- * @param useAvailableGeometry If true, calculate relative to available area (excluding panels/taskbars)
- * @return Geometry with appropriate gaps applied
- *
- * This version applies outerGap to zone edges that touch screen boundaries
- * (relative position 0 or 1), and innerGap/2 to edges between zones.
- */
-PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, int outerGap,
-                                                   bool useAvailableGeometry = true);
-
-/**
  * @brief Get zone geometry with per-side outer gaps
  * @param zone Zone to get geometry for
  * @param screen Screen to calculate relative to
@@ -60,43 +48,43 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, i
  * @return Geometry with appropriate gaps applied
  */
 PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps,
-                                                   bool useAvailableGeometry = true);
+                                                  bool useAvailableGeometry = true);
 
 /**
  * @brief Get effective zone padding for a layout
  * @param layout Layout to get padding for (may have per-layout override)
  * @param settings Global settings (used if layout has no override)
+ * @param screenName Optional screen identifier for per-screen override lookup
  * @return Effective zone padding in pixels
  *
- * Returns layout-specific zonePadding if set (>= 0), otherwise falls back
- * to global settings->zonePadding(), or default of 8 if settings is null.
+ * Resolution cascade: per-screen override → layout override → global settings → default (8px)
  */
-PLASMAZONES_EXPORT int getEffectiveZonePadding(Layout* layout, ISettings* settings);
+PLASMAZONES_EXPORT int getEffectiveZonePadding(Layout* layout, ISettings* settings, const QString& screenName = {});
 
 /**
- * @brief Get effective outer gap for a layout
- * @param layout Layout to get outer gap for (may have per-layout override)
- * @param settings Global settings (used if layout has no override)
- * @return Effective outer gap in pixels
+ * @brief Convert QRectF to QRect with edge-consistent rounding
+ * @param rf Source floating-point rectangle
+ * @return Integer rectangle with consistent edge rounding
  *
- * Returns layout-specific outerGap if set (>= 0), otherwise falls back
- * to global settings->outerGap(), or default of 8.
- *
- * Outer gap is applied to zone edges at screen boundaries (positions 0 or 1),
- * while zonePadding is applied between adjacent zones. Use getZoneGeometryWithGaps()
- * to apply differentiated gaps.
+ * Unlike QRectF::toRect() which rounds x, y, width, height independently,
+ * this rounds the edges (left, top, right, bottom) and derives width/height
+ * from the rounded edges. This ensures adjacent zones sharing an edge always
+ * produce exactly the configured gap between them, even when fractional
+ * scaling (e.g. 1.2x) produces non-integer zone boundaries.
  */
-PLASMAZONES_EXPORT int getEffectiveOuterGap(Layout* layout, ISettings* settings);
+PLASMAZONES_EXPORT QRect snapToRect(const QRectF& rf);
 
 /**
  * @brief Get effective per-side outer gaps for a layout
  * @param layout Layout to get gaps for (may have per-layout overrides)
  * @param settings Global settings (used if layout has no override)
+ * @param screenName Optional screen identifier for per-screen override lookup
  * @return Effective per-side edge gaps
  *
- * Resolution cascade: layout per-side → layout uniform → global per-side → global uniform → default
+ * Resolution cascade: per-screen per-side → per-screen uniform → layout per-side →
+ * layout uniform → global per-side → global uniform → default
  */
-PLASMAZONES_EXPORT EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings);
+PLASMAZONES_EXPORT EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QString& screenName = {});
 
 /**
  * @brief Get the effective screen geometry for a layout
@@ -139,9 +127,58 @@ PLASMAZONES_EXPORT void setZoneGeometry(QVariantMap& zone, const QRectF& rect);
  * Used by WindowTrackingService::getEmptyZonesJson and WindowDragAdaptor::dragStopped
  * to avoid duplicating the empty-zones JSON building logic.
  */
-PLASMAZONES_EXPORT QString buildEmptyZonesJson(
-    Layout* layout, QScreen* screen, ISettings* settings,
-    const std::function<bool(const Zone*)>& isZoneEmpty);
+PLASMAZONES_EXPORT QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings,
+                                               const std::function<bool(const Zone*)>& isZoneEmpty);
+
+/**
+ * @brief Enforce minimum size constraints on zones by borrowing space from neighbors
+ * @param zones List of zone geometries to adjust (in-place)
+ * @param minSizes List of minimum sizes for each zone (same index as zones)
+ * @param gapThreshold Threshold for considering zones effectively adjacent
+ * @param innerGap Desired gap between adjacent zones (preserved during overlap resolution)
+ *
+ * Checks if any zone is smaller than its minimum size. If so, attempts to
+ * expand it by shrinking adjacent neighbors proportionally. When multiple
+ * windows have minimum size, overlaps can occur; a final pass removes them.
+ */
+PLASMAZONES_EXPORT void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes, int gapThreshold,
+                                              int innerGap = 0);
+
+/**
+ * @brief Remove overlapping zone rectangles so no two zones intersect
+ * @param zones List of zone geometries to adjust (in-place)
+ * @param minSizes Per-zone minimum sizes (optional); when resolving overlaps,
+ *        prefer shrinking the zone with more surplus above its minimum
+ * @param innerGap Desired gap between adjacent zones; when resolving overlaps,
+ *        the boundary is offset so zones maintain this gap instead of being flush
+ *
+ * When multiple zones have minimum size constraints, steal logic can leave
+ * boundaries inconsistent. This fixes horizontal and vertical overlaps by
+ * shifting the shared edge toward the zone with more surplus, respecting
+ * minimum sizes so enforcement is not undone.
+ */
+PLASMAZONES_EXPORT void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes = {},
+                                           int innerGap = 0);
+
+/**
+ * @brief Convert QRect to compact JSON string {x, y, width, height}
+ * @param rect Rectangle to serialize
+ * @return JSON string suitable for D-Bus geometry exchange
+ *
+ * Shared utility for all components that need to serialize zone/window
+ * geometry for D-Bus signals (SnapEngine, WindowTrackingAdaptor, etc.).
+ */
+PLASMAZONES_EXPORT QString rectToJson(const QRect& rect);
+
+/**
+ * @brief Serialize rotation/resnap entries to compact JSON array
+ * @param entries Vector of rotation entries (window moves with source/target zones)
+ * @return JSON array string suitable for D-Bus signals
+ *
+ * Shared by SnapEngine navigation (rotate, resnap) and any future code
+ * that needs to serialize RotationEntry vectors for D-Bus exchange.
+ */
+PLASMAZONES_EXPORT QString serializeRotationEntries(const QVector<RotationEntry>& entries);
 
 } // namespace GeometryUtils
 

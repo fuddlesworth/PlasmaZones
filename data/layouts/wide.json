@@ -3,7 +3,7 @@
     "name": "Wide",
     "description": "Large top area with row of smaller areas below",
     "type": 5,
-    "builtIn": true,
+    "isBuiltIn": true,
     "showZoneNumbers": true,
     "zones": [
         {

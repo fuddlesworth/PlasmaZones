@@ -3,7 +3,7 @@
     "name": "Split Focus",
     "description": "50% main column with 2 stacked zones on the right",
     "type": 5,
-    "builtIn": true,
+    "isBuiltIn": true,
     "showZoneNumbers": true,
     "zones": [
         {

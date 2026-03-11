@@ -1,0 +1,475 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "autotilehandler.h"
+#include "plasmazoneseffect.h"
+#include "windowanimator.h"
+#include "navigationhandler.h"
+#include "dbus_constants.h"
+
+#include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
+#include <window.h>
+#include <workspace.h>
+
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QLoggingCategory>
+#include <QtMath>
+
+namespace PlasmaZones {
+
+Q_DECLARE_LOGGING_CATEGORY(lcEffect)
+
+AutotileHandler::AutotileHandler(PlasmaZonesEffect* effect, QObject* parent)
+    : QObject(parent)
+    , m_effect(effect)
+{
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Static utility methods
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QString AutotileHandler::findSavedGeometryKey(const QHash<QString, QRectF>& savedGeometries, const QString& windowId)
+{
+    // Exact windowId match only — no appId fallback.
+    // A window opened during autotile has no pre-autotile geometry and must NOT
+    // inherit another instance's geometry (e.g., 2 Ghostty windows: one snapped,
+    // one opened during autotile — the unsnapped one would briefly jump to the
+    // snapped one's zone position before being corrected by the daemon).
+    auto it = savedGeometries.constFind(windowId);
+    if (it != savedGeometries.constEnd()) {
+        return it.key();
+    }
+    return QString();
+}
+
+bool AutotileHandler::hasSavedGeometryForWindow(const QHash<QString, QRectF>& savedGeometries, const QString& windowId)
+{
+    return !findSavedGeometryKey(savedGeometries, windowId).isEmpty();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Monocle helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void AutotileHandler::unmaximizeMonocleWindow(const QString& windowId)
+{
+    if (!m_monocleMaximizedWindows.remove(windowId)) {
+        return;
+    }
+    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+    if (!w) {
+        return;
+    }
+    KWin::Window* kw = w->window();
+    if (!kw) {
+        return;
+    }
+    ++m_suppressMaximizeChanged;
+    kw->maximize(KWin::MaximizeRestore);
+    --m_suppressMaximizeChanged;
+}
+
+void AutotileHandler::restoreAllMonocleMaximized()
+{
+    if (m_monocleMaximizedWindows.isEmpty()) {
+        return;
+    }
+    ++m_suppressMaximizeChanged;
+    for (const QString& wid : std::as_const(m_monocleMaximizedWindows)) {
+        KWin::EffectWindow* w = m_effect->findWindowById(wid);
+        if (w) {
+            KWin::Window* kw = w->window();
+            if (kw) {
+                kw->maximize(KWin::MaximizeRestore);
+            }
+        }
+    }
+    --m_suppressMaximizeChanged;
+    m_monocleMaximizedWindows.clear();
+}
+
+void AutotileHandler::restoreAllBorderless()
+{
+    if (m_border.borderlessWindows.isEmpty()) {
+        return;
+    }
+    const QSet<QString> toRestore = m_border.borderlessWindows;
+    for (const QString& windowId : toRestore) {
+        KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+        if (w) {
+            setWindowBorderless(w, windowId, false);
+        }
+    }
+    // Clear any orphan entries where findWindowById returned null
+    m_border.borderlessWindows.clear();
+    m_border.zoneGeometries.clear();
+}
+
+std::optional<QRect> AutotileHandler::borderZoneGeometry(const QString& windowId) const
+{
+    auto it = m_border.zoneGeometries.constFind(windowId);
+    if (it != m_border.zoneGeometries.constEnd()) {
+        return it.value();
+    }
+    return std::nullopt;
+}
+
+QVector<QRect> AutotileHandler::allBorderZoneGeometries() const
+{
+    QVector<QRect> result;
+    result.reserve(m_border.zoneGeometries.size());
+    for (auto it = m_border.zoneGeometries.constBegin(); it != m_border.zoneGeometries.constEnd(); ++it) {
+        result.append(it.value());
+    }
+    return result;
+}
+
+bool AutotileHandler::shouldApplyBorderInset(const QString& windowId) const
+{
+    return m_border.hideTitleBars && m_border.width > 0 && m_border.borderlessWindows.contains(windowId);
+}
+
+void AutotileHandler::updateHideTitleBarsSetting(bool enabled)
+{
+    const bool wasEnabled = m_border.hideTitleBars;
+    m_border.hideTitleBars = enabled;
+    if (wasEnabled && !enabled) {
+        m_border.zoneGeometries.clear();
+        const QSet<QString> toRestore = m_border.borderlessWindows;
+        for (const QString& windowId : toRestore) {
+            KWin::EffectWindow* win = m_effect->findWindowById(windowId);
+            if (win) {
+                setWindowBorderless(win, windowId, false);
+            }
+        }
+    }
+}
+
+void AutotileHandler::setFocusFollowsMouse(bool enabled)
+{
+    m_focusFollowsMouse = enabled;
+    if (!enabled) {
+        m_lastFocusFollowsMouseWindowId.clear();
+    }
+}
+
+void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& screenName)
+{
+    if (!m_focusFollowsMouse || m_autotileScreens.isEmpty()) {
+        return;
+    }
+
+    // Only act on autotile screens (screenName already resolved by caller)
+    if (screenName.isEmpty() || !m_autotileScreens.contains(screenName)) {
+        return;
+    }
+
+    // Find the topmost autotile-managed window under the cursor.
+    // Iterate stacking order in reverse (top → bottom).
+    const auto windows = KWin::effects->stackingOrder();
+    for (int i = windows.size() - 1; i >= 0; --i) {
+        KWin::EffectWindow* w = windows[i];
+        if (!w || !m_effect->shouldHandleWindow(w) || w->isMinimized() || !w->isOnCurrentDesktop()
+            || !w->isOnCurrentActivity()) {
+            continue;
+        }
+        if (!w->frameGeometry().contains(pos)) {
+            continue;
+        }
+        const QString windowId = m_effect->getWindowId(w);
+        if (windowId == m_lastFocusFollowsMouseWindowId) {
+            return; // Already focused — no-op
+        }
+        // Only focus windows on autotile screens
+        if (!m_autotileScreens.contains(m_effect->getWindowScreenName(w))) {
+            return;
+        }
+        m_lastFocusFollowsMouseWindowId = windowId;
+        KWin::effects->activateWindow(w);
+        return;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Geometry persistence
+// ═══════════════════════════════════════════════════════════════════════════════
+
+bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenName,
+                                                       const QRectF& frame)
+{
+    if (windowId.isEmpty() || screenName.isEmpty()) {
+        return false;
+    }
+    if (!frame.isValid() || frame.width() <= 0 || frame.height() <= 0) {
+        return false;
+    }
+    auto& screenGeometries = m_preAutotileGeometries[screenName];
+    // Use EXACT windowId match only — NOT stableId fallback.
+    // Multiple instances of the same app (e.g., 3 Dolphin windows) share a stableId.
+    // hasSavedGeometryForWindow's stableId fallback would return true after the first
+    // instance is saved, preventing all other instances from saving their own geometry.
+    // On restore, all instances would get the first instance's geometry — scrambling
+    // window positions on every autotile ↔ snapping toggle.
+    if (screenGeometries.contains(windowId)) {
+        return false;
+    }
+    screenGeometries[windowId] = frame;
+    qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenName << ":" << frame;
+    if (m_effect->m_daemonServiceRegistered) {
+        // Use overwrite=false so a pre-existing snap geometry is preserved when
+        // autotile activates on a screen with already-snapped windows. The effect-
+        // local cache (screenGeometries) already guards against redundant stores
+        // within an autotile session; overwrite=false prevents cross-mode clobbering.
+        m_effect->fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
+                                        {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()),
+                                         static_cast<int>(frame.width()), static_cast<int>(frame.height()), false},
+                                        QStringLiteral("storePreTileGeometry"));
+    }
+    return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Borderless / title bar management
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void AutotileHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless)
+{
+    if (!w) {
+        return;
+    }
+    KWin::Window* kw = w->window();
+    if (!kw) {
+        return;
+    }
+    const bool isActive = (w == KWin::effects->activeWindow());
+    if (borderless) {
+        // Skip CSD windows (GTK/Electron) — hasDecoration() is false for them.
+        if (!w->hasDecoration()) {
+            return;
+        }
+        if (!m_border.borderlessWindows.contains(windowId)) {
+            kw->setNoBorder(true);
+            m_border.borderlessWindows.insert(windowId);
+            qCDebug(lcEffect) << "Autotile: hid title bar for" << windowId;
+            if (isActive) {
+                m_effect->updateActiveBorder();
+            }
+        }
+    } else {
+        if (m_border.borderlessWindows.remove(windowId)) {
+            m_border.zoneGeometries.remove(windowId);
+            kw->setNoBorder(false);
+            qCDebug(lcEffect) << "Autotile: restored title bar for" << windowId;
+            if (isActive) {
+                m_effect->updateActiveBorder();
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Screen accessors
+// ═══════════════════════════════════════════════════════════════════════════════
+
+bool AutotileHandler::isAutotileScreen(const QString& screenName) const
+{
+    return m_autotileScreens.contains(screenName);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Integration points
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
+{
+    if (!w || !m_effect->shouldHandleWindow(w)) {
+        return;
+    }
+
+    if (!m_effect->isTileableWindow(w)) {
+        return;
+    }
+
+    if (w->isMinimized()) {
+        return;
+    }
+
+    const QString windowId = m_effect->getWindowId(w);
+
+    // Window was already closed before we could notify open — skip (D-Bus ordering race)
+    if (m_pendingCloses.remove(windowId)) {
+        return;
+    }
+
+    if (m_notifiedWindows.contains(windowId)) {
+        return;
+    }
+    m_notifiedWindows.insert(windowId);
+
+    QString screenName = m_effect->getWindowScreenName(w);
+
+    // Only notify autotile daemon for windows on autotile screens
+    if (m_autotileScreens.contains(screenName)) {
+        // Save pre-autotile geometry BEFORE the daemon tiles the window.
+        // Without this, a window launched directly into autotile has no saved
+        // geometry — floating it would leave it at its tiled position instead
+        // of restoring to its original free-floating size.
+        saveAndRecordPreAutotileGeometry(windowId, screenName, w->frameGeometry());
+
+        int minWidth = 0;
+        int minHeight = 0;
+        KWin::Window* kw = w->window();
+        if (kw) {
+            const QSizeF minSize = kw->minSize();
+            if (minSize.isValid()) {
+                minWidth = qCeil(minSize.width());
+                minHeight = qCeil(minSize.height());
+            }
+        }
+
+        QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath,
+                                                          DBus::Interface::Autotile, QStringLiteral("windowOpened"));
+        msg << windowId;
+        msg << screenName;
+        msg << minWidth;
+        msg << minHeight;
+
+        QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            if (w->isError()) {
+                qCWarning(lcEffect) << "windowOpened D-Bus call failed for" << windowId << ":" << w->error().message();
+                m_notifiedWindows.remove(windowId);
+            }
+        });
+        qCDebug(lcEffect) << "Notified autotile: windowOpened" << windowId << "on screen" << screenName
+                          << "minSize:" << minWidth << "x" << minHeight;
+    }
+}
+
+void AutotileHandler::onWindowClosed(const QString& windowId, const QString& screenName)
+{
+    // If we haven't notified the daemon about this window yet, record the close
+    // so we can suppress the open if it arrives late (D-Bus ordering race)
+    if (!m_notifiedWindows.contains(windowId) && m_autotileScreens.contains(screenName)) {
+        m_pendingCloses.insert(windowId);
+    }
+
+    // Remove from autotile tracking sets so re-opened windows get re-notified.
+    m_notifiedWindows.remove(windowId);
+    m_minimizeFloatedWindows.remove(windowId);
+
+    // Clean up borderless, monocle-maximize, deferred-centering, border zone, focus-follows-mouse,
+    // and pre-autotile tracking
+    m_border.borderlessWindows.remove(windowId);
+    m_border.zoneGeometries.remove(windowId);
+    m_monocleMaximizedWindows.remove(windowId);
+    m_autotileTargetZones.remove(windowId);
+    m_centeredWaylandZones.remove(windowId);
+    if (m_lastFocusFollowsMouseWindowId == windowId) {
+        m_lastFocusFollowsMouseWindowId.clear();
+    }
+    if (m_preAutotileGeometries.contains(screenName)) {
+        m_preAutotileGeometries[screenName].remove(windowId);
+    }
+    // Remove from saved stacking orders so stale IDs don't accumulate
+    if (m_savedSnapStackingOrder.contains(screenName)) {
+        m_savedSnapStackingOrder[screenName].removeAll(windowId);
+    }
+    if (m_savedAutotileStackingOrder.contains(screenName)) {
+        m_savedAutotileStackingOrder[screenName].removeAll(windowId);
+    }
+
+    // Notify autotile daemon
+    if (m_autotileScreens.contains(screenName)) {
+        m_effect->fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("windowClosed"), {windowId},
+                                        QStringLiteral("windowClosed"));
+        qCDebug(lcEffect) << "Notified autotile: windowClosed" << windowId << "on screen" << screenName;
+    }
+}
+
+void AutotileHandler::onDaemonReady()
+{
+    loadSettings();
+    connectSignals();
+    m_notifiedWindows.clear();
+    m_pendingCloses.clear();
+}
+
+// handleAutotileFloatToggle removed: float toggle is now routed through
+// the unified WTA toggleFloatForWindow method via slotToggleWindowFloatRequested.
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// D-Bus signal connections and settings
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void AutotileHandler::connectSignals()
+{
+    QDBusConnection bus = QDBusConnection::sessionBus();
+
+    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("windowsTileRequested"),
+                this, SLOT(slotWindowsTileRequested(QString)));
+
+    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("focusWindowRequested"),
+                this, SLOT(slotFocusWindowRequested(QString)));
+
+    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("enabledChanged"), this,
+                SLOT(slotEnabledChanged(bool)));
+
+    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+                QStringLiteral("autotileScreensChanged"), this, SLOT(slotScreensChanged(QStringList)));
+
+    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("windowFloatingChanged"),
+                this, SLOT(slotWindowFloatingChanged(QString, bool, QString)));
+
+    qCInfo(lcEffect) << "Connected to autotile D-Bus signals";
+}
+
+void AutotileHandler::loadSettings()
+{
+    // Query initial autotile screen set from daemon asynchronously.
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        DBus::ServiceName, DBus::ObjectPath, QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+    msg << DBus::Interface::Autotile << QStringLiteral("autotileScreens");
+
+    QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg);
+    auto* watcher = new QDBusPendingCallWatcher(call, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QDBusVariant> reply = *w;
+        if (reply.isValid()) {
+            QStringList screens = reply.value().variant().toStringList();
+            const QSet<QString> added(screens.begin(), screens.end());
+            m_autotileScreens = added;
+            qCInfo(lcEffect) << "Loaded autotile screens:" << m_autotileScreens;
+
+            if (!added.isEmpty()) {
+                const auto windows = KWin::effects->stackingOrder();
+                for (KWin::EffectWindow* win : windows) {
+                    if (win && m_effect->shouldHandleWindow(win)) {
+                        const QString screenName = m_effect->getWindowScreenName(win);
+                        if (added.contains(screenName)) {
+                            const QString windowId = m_effect->getWindowId(win);
+                            saveAndRecordPreAutotileGeometry(windowId, screenName, win->frameGeometry());
+                            if (!win->isMinimized()) {
+                                m_notifiedWindows.remove(windowId);
+                                notifyWindowAdded(win);
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            qCDebug(lcEffect) << "Autotile screens: query failed, daemon may not be running";
+        }
+    });
+}
+
+} // namespace PlasmaZones

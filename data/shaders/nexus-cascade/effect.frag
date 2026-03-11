@@ -72,13 +72,20 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     // Vitality system: highlighted = vivid/energetic, dormant = desaturated/dim
     float vitality = isHighlighted ? 1.0 : 0.3;
 
-    // ── Bass = Chromatic EXPLOSION ────────────────────────────────────
-    // Bass hits spike chromatic aberration to 3-4x, then rapid decay (~0.3s).
-    // Smoothed bass envelope using a fast-cycling sine that peaks on hits.
+    // ── Bass = Cascade Chain-Reaction Chromatic ────────────────────────
+    // Bass triggers a signal that propagates from zone center outward along
+    // a radial "network" — chromatic aberration intensifies in a traveling
+    // wavefront rather than spiking uniformly. Pixels near center react
+    // first, outer edges react with delay, creating a cascade ripple.
     float audioReact = getAudioReact();
     float bassChromaMul = getBassChromaMul();
     float bassEnvelope = hasAudio ? bass * bass : 0.0; // squared for punch
-    float chromaSpike = 1.0 + bassEnvelope * bassChromaMul * audioReact; // 1x normal → 4x on full bass
+    float radialPos = length(localUV - 0.5) * 2.0; // 0 at center, ~1 at edges
+    float cascadeSignal = hasAudio
+        ? smoothstep(radialPos - 0.15, radialPos, fract(iTime * 1.8))
+          * exp(-fract(iTime * 1.8) * 2.5) * bassEnvelope
+        : 0.0;
+    float chromaSpike = 1.0 + cascadeSignal * bassChromaMul * audioReact * 3.0;
     float chromaMod = chroma * chromaSpike;
 
     if (d < 0.0) {
@@ -107,9 +114,15 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         float radialDist = length(localUV - 0.5) * 2.0;
         float innerGlow = max(0.0, (1.0 - radialDist)) * pulseBase * glowStrength;
 
-        // Bass expands the glow outward with the chromatic punch
-        float glowExpand = hasAudio ? bassEnvelope * 0.4 : 0.0;
-        innerGlow *= (1.0 + glowExpand);
+        // Bass triggers node resonance — each zone has a resonant frequency
+        // based on its position hash. Bass makes zones whose frequency is close
+        // to the bass level glow brightly; others stay dim. This creates a
+        // selective "lighting up" across the network rather than uniform glow.
+        float nodeFreq = hash21(rectPos * 0.01); // unique frequency per zone
+        float resonance = hasAudio
+            ? max(0.0, 1.0 - abs(nodeFreq - bass * 2.0) * 3.0) * bassEnvelope
+            : 0.0;
+        innerGlow *= (1.0 + resonance * 1.5);
 
         // ── Mids = Glow Color Cycling ────────────────────────────────
         // Mids drive visible color cycling in the inner glow:
@@ -146,8 +159,12 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         float flowRange = mix(0.1, 0.4, vitality);
         float flow = angularNoise(angle, 8.0, -iTime * flowSpeed) * flowRange + (1.0 - flowRange * 0.5);
 
-        // Audio pulses the flow intensity
-        float borderEnergy = 1.0 + (hasAudio ? bass * 0.4 : 0.0);
+        // Pulse propagation along border — bass sends a visible signal pulse
+        // that races around the perimeter rather than uniformly brightening it.
+        // The pulse position is tied to time so it visibly travels.
+        float pulsePos = hasAudio ? fract(iTime * 2.0) * TAU : 0.0;
+        float angularDist = 1.0 - abs(mod(angle - pulsePos + PI, TAU) - PI) / PI;
+        float borderEnergy = 1.0 + (hasAudio ? angularDist * bass * 0.8 : 0.0);
         float borderAlpha = border * mix(0.85, 0.95, vitality);
 
         vec3 flowColor = borderClr * flow * borderEnergy;
@@ -166,10 +183,15 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     if (d > 0.0 && d < 22.0) {
         float glowRadius = mix(5.0, 9.0, vitality);
         float glowFalloff = mix(0.3, 0.6, vitality);
-        // Bass expands outer glow (tied to eruption energy)
+        // Cascade wavefront glow — bass sends expanding rings outward from
+        // the zone edge, like a network signal radiating to neighbors.
+        // The ring expands and fades rather than uniform glow growth.
         if (hasAudio) {
-            glowRadius += bassEnvelope * 6.0;
-            glowFalloff += bass * 0.2;
+            float waveCycle = fract(iTime * 1.2);
+            float waveRadius = waveCycle * 18.0; // ring expands up to 18px
+            float waveBand = exp(-abs(d - waveRadius) * 0.5) * (1.0 - waveCycle);
+            glowRadius += waveBand * bassEnvelope * 8.0;
+            glowFalloff += waveBand * bass * 0.4;
         }
         float glow = expGlow(d, glowRadius, glowFalloff);
 
@@ -180,14 +202,82 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         result.a = max(result.a, glow * 0.65);
     }
 
-    // ── Treble = Edge Brightness ──────────────────────────────────
-    // High treble subtly brightens the inner edge of the zone.
+    // ── Treble = Network Spark Traces ──────────────────────────────
+    // Treble creates bright sparks that travel along the inner edge like data
+    // packets racing through network traces. Multiple sparks at different speeds
+    // create a flickering circuit-board look along the zone perimeter.
     if (hasAudio && treble > 0.06 && d > -borderWidth * 3.0 && d < 0.0) {
         float edgeProx = smoothstep(-borderWidth * 3.0, 0.0, d);
-        result.rgb += borderClr * edgeProx * treble * 0.5;
+        // Three spark traces at different angular speeds
+        float spark = 0.0;
+        for (int si = 0; si < 3; si++) {
+            float sparkSpeed = 3.0 + float(si) * 1.7;
+            float sparkPos = fract(iTime * sparkSpeed * 0.3 + float(si) * 0.333);
+            float sparkAngle = sparkPos * TAU;
+            float aDist = abs(mod(angle - sparkAngle + PI, TAU) - PI);
+            spark += exp(-aDist * 8.0) * (0.5 + 0.5 * sin(iTime * sparkSpeed));
+        }
+        spark = min(spark, 1.0);
+        result.rgb += borderClr * edgeProx * spark * treble * 0.6;
     }
 
     return result;
+}
+
+// ─── Custom Label Composite ───────────────────────────────────────
+
+vec4 compositeNexusLabels(vec4 color, vec2 fragCoord,
+                          float bass, float treble, bool hasAudio) {
+    vec2 uv = labelsUv(fragCoord);
+    vec2 px = 1.0 / max(iResolution, vec2(1.0));
+    vec4 labels = texture(uZoneLabels, uv);
+
+    float labelGlowSpread = customParams[4].x >= 0.0 ? customParams[4].x : 3.0;
+    float labelBrightness = customParams[4].y >= 0.0 ? customParams[4].y : 2.0;
+    float labelAudioReact = customParams[4].z >= 0.0 ? customParams[4].z : 1.0;
+    float signalSpeed     = customParams[4].w >= 0.0 ? customParams[4].w : 6.0;
+
+    // Chromatic aberration direction rotates over time
+    float caAngle = iTime * 0.7;
+    vec2 caDir = vec2(cos(caAngle), sin(caAngle));
+    float caAmount = (hasAudio ? 2.0 + bass * 3.0 * labelAudioReact : 2.0) * px.x * iResolution.x * 0.003;
+
+    // Sample RGB channels at offset positions
+    float rCh = texture(uZoneLabels, uv + caDir * caAmount).a;
+    float gCh = labels.a;
+    float bCh = texture(uZoneLabels, uv - caDir * caAmount).a;
+
+    // Gaussian halo for smooth signal trace outline
+    float halo = 0.0;
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            float w = exp(-float(dx * dx + dy * dy) * 0.3);
+            halo += texture(uZoneLabels, uv + vec2(float(dx), float(dy)) * px * labelGlowSpread).a * w;
+        }
+    }
+    halo /= 16.5;
+    float outline = halo * (1.0 - max(max(rCh, gCh), bCh));
+
+    // Signal traces: pulses traveling along the outline
+    if (outline > 0.01) {
+        float angle = atan(uv.y - 0.5, uv.x - 0.5);
+        float signal = smoothstep(0.8, 1.0, sin(angle * 12.0 - iTime * signalSpeed));
+        vec3 traceCol = colorWithFallback(customColors[0].rgb, vec3(0.5, 0.6, 1.0));
+        float traceBright = outline * (0.3 + signal * 0.7) * (hasAudio ? 1.0 + treble * labelAudioReact : 1.0);
+        color.rgb += traceCol * traceBright;
+        color.a = max(color.a, outline * 0.5);
+    }
+
+    // Chromatic split core
+    float maxCh = max(max(rCh, gCh), bCh);
+    if (maxCh > 0.01) {
+        vec3 chromaticLabel = vec3(rCh, gCh, bCh);
+        vec3 boosted = color.rgb * labelBrightness + chromaticLabel * 0.5;
+        color.rgb = mix(color.rgb, boosted, maxCh);
+        color.a = max(color.a, maxCh);
+    }
+
+    return color;
 }
 
 void main() {
@@ -201,9 +291,9 @@ void main() {
 
     // Audio analysis (computed once for all zones)
     bool  hasAudio = iAudioSpectrumSize > 0;
-    float bass    = getBass();
-    float mids    = getMids();
-    float treble  = getTreble();
+    float bass    = getBassSoft();
+    float mids    = getMidsSoft();
+    float treble  = getTrebleSoft();
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0)
@@ -215,6 +305,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeLabelsWithUv(color, fragCoord);
+    if (customParams[5].x > 0.5)
+        color = compositeNexusLabels(color, fragCoord, bass, treble, hasAudio);
     fragColor = clampFragColor(color);
 }

@@ -42,6 +42,8 @@ class PLASMAZONES_EXPORT Zone : public QObject
     Q_PROPERTY(int borderRadius READ borderRadius WRITE setBorderRadius NOTIFY borderRadiusChanged)
     Q_PROPERTY(bool isHighlighted READ isHighlighted WRITE setHighlighted NOTIFY highlightedChanged)
     Q_PROPERTY(bool useCustomColors READ useCustomColors WRITE setUseCustomColors NOTIFY useCustomColorsChanged)
+    Q_PROPERTY(
+        int overlayDisplayMode READ overlayDisplayMode WRITE setOverlayDisplayMode NOTIFY overlayDisplayModeChanged)
     Q_PROPERTY(int geometryMode READ geometryModeInt WRITE setGeometryModeInt NOTIFY geometryModeChanged)
     Q_PROPERTY(QRectF fixedGeometry READ fixedGeometry WRITE setFixedGeometry NOTIFY fixedGeometryChanged)
 
@@ -156,6 +158,12 @@ public:
     }
     void setUseCustomColors(bool useCustom);
 
+    int overlayDisplayMode() const
+    {
+        return m_overlayDisplayMode;
+    }
+    void setOverlayDisplayMode(int mode);
+
     // Per-zone geometry mode
     ZoneGeometryMode geometryMode() const
     {
@@ -212,6 +220,7 @@ Q_SIGNALS:
     void borderRadiusChanged();
     void highlightedChanged();
     void useCustomColorsChanged();
+    void overlayDisplayModeChanged();
     void geometryModeChanged();
     void fixedGeometryChanged();
 
@@ -232,6 +241,7 @@ private:
     int m_borderRadius = Defaults::BorderRadius;
     bool m_isHighlighted = false;
     bool m_useCustomColors = false;
+    int m_overlayDisplayMode = -1; // -1 = use layout/global setting
 
     // Per-zone geometry mode
     ZoneGeometryMode m_geometryMode = ZoneGeometryMode::Relative;

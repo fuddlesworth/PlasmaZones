@@ -4,7 +4,7 @@
 
 <img src="icons/hicolor/scalable/apps/plasmazones.svg" alt="PlasmaZones" width="96">
 
-**Advanced window zone management for KDE Plasma 6**
+**Window zone management for KDE Plasma 6**
 
 Define zones on your screen. Drag windows into them. Done.
 
@@ -24,6 +24,9 @@ Define zones on your screen. Drag windows into them. Done.
 
 - [How It Works](#how-it-works)
 - [Features](#features)
+  - [Window Snapping](#window-snapping)
+  - [Autotiling](#autotiling)
+  - [Shader Effects](#shader-effects)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
@@ -52,11 +55,12 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 
 **Snapping**
 - Drag with modifier key or mouse button to snap windows to zones
-- Always-active mode: zones activate on every drag without a modifier key
+- Always-active mode: zones activate on every drag without a modifier
+- Enable/disable snapping globally
 - Snap all visible windows to zones at once
 - Auto-assign windows to first empty zone per layout
-- Multi-zone snapping support
-- App-to-zone rules: auto-snap specific applications to designated zones
+- Snap to multiple zones at once
+- App-to-zone rules: auto-snap apps to specific zones on launch
 
 **Movement**
 - Move windows between zones with keyboard shortcuts
@@ -65,10 +69,11 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 - Push window to first empty zone
 - Restore original size on unsnap
 - Per-window floating toggle
+- Staggered animations with elastic and bounce easing curves
 
 **Focus & Cycling**
 - Focus adjacent zones without mouse
-- Cycle through windows stacked in the same zone (monocle-style)
+- Cycle through windows stacked in the same zone
 
 <p align="center">
   <img src="docs/media/videos/keyboard-nav.gif" alt="Keyboard Navigation" />
@@ -84,29 +89,72 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 - Fill available space / auto-expand
 - Fullscreen editing mode
 - Per-zone colors and styling
-- Layout visibility filtering: restrict layouts to specific screens, desktops, or activities
+- Restrict layouts to specific screens, desktops, or activities
 
 <p align="center">
   <img src="docs/media/videos/editor.gif" alt="Layout Editor" />
 </p>
 
+### Autotiling
+
+Enable autotiling per-screen and windows arrange themselves using one of 11 algorithms:
+
+| Algorithm | Description |
+|-----------|-------------|
+| Master+Stack | Main window with a stack beside it |
+| Centered Master | Main window centered, stacks on both sides |
+| Three Column | Even three-column split |
+| Columns | Equal vertical columns |
+| Rows | Equal horizontal rows |
+| Grid | Automatic grid arrangement |
+| Dwindle | Recursive halving, alternating direction |
+| Spiral | Recursive halving in a spiral |
+| BSP | Binary space partitioning |
+| Wide | Horizontal main area with stacked columns below |
+| Monocle | One window at a time, cycle between them |
+
+- Per-screen algorithm selection with independent settings
+- Configurable master ratio and master count (separate settings for Centered Master vs Master+Stack)
+- Inner and outer gaps with per-side control (top/bottom/left/right)
+- Smart gaps — no gaps when only one window is tiled
+- Max windows cap — overflow windows float automatically
+- Hide title bars on tiled windows, with colored borders
+- Window insertion position: end, after focused, or as master
+- Focus follows mouse and focus new windows
+- Minimized windows float, unminimized windows rejoin tiling
+- Per-window floating toggle
+- Staggered tiling animations
+- Respect window minimum sizes (toggleable) — tiles expand to honor size hints reported by the application
+
+> **Tip:** Some apps enforce a minimum size that prevents tiles from reaching their intended geometry. To fix this, create a KWin Window Rule:
+> **System Settings → Window Management → Window Rules** → add a rule matching the window class, set **Minimum Size** to **Force** `0×0` under the **Size & Position** tab. This removes the constraint so PlasmaZones can tile the window at any size.
+
+<p align="center">
+  <img src="docs/media/videos/autotiling.gif" alt="PlasmaZones Autotiling" width="800">
+</p>
+
 ### Shader Effects
 
-GPU-accelerated zone overlays with 9 built-in effects, including multipass shaders and audio-reactive visuals:
+14 built-in GLSL shader effects for zone overlays, including audio-reactive visuals:
 
 | Effect | Description |
 |--------|-------------|
-| Aretha Shell | Cyberpunk effect with color grading, hex grid, and data streams |
-| Cosmic Flow | Flowing fractal noise with animated color palette |
-| Magnetic Field | Mouse-reactive magnetic field with orbiting particles |
-| Nexus Cascade | Multi-pass plasma with distortion, bloom, and chromatic aberration |
-| Prismata | Crystalline prismatic facets and caustics with audio-reactive chromatic fracture |
-| Sonic Ripple | Audio-reactive concentric rings with bass shockwaves and spectrum visualization |
-| Spectrum Bloom | Polar spectrum contour with frequency-driven shape morphing and aurora effects |
-| Spectrum Pulse | Audio-reactive neon energy with bass glow, spectrum aurora, and CAVA integration |
-| Toxic Circuit | Glowing circuit traces with toxic drip and digital corruption |
+| Aretha Shell | Cyberpunk hex grid with data streams |
+| Berry Drift | Metaball blobs in berry and violet tones |
+| CachyOS Drift | Crystalline drift with domain-warped FBM and iridescent glow |
+| Cosmic Flow | Fractal noise with animated colors |
+| Liquid Canvas | Wallpaper as a liquid painting with flow distortion |
+| Magnetic Field | Mouse-reactive field with orbiting particles |
+| Mosaic Pulse | Audio-reactive stained glass mosaic |
+| Nexus Cascade | Plasma with distortion, bloom, and chromatic aberration |
+| Prismata | Prismatic facets with audio-reactive chromatic fracture |
+| Sonic Ripple | Audio-reactive concentric rings with bass shockwaves |
+| Spectrum Bloom | Polar contour with frequency-driven shape morphing |
+| Spectrum Pulse | Audio-reactive neon energy with CAVA integration |
+| Toxic Circuit | Glowing circuit traces with digital corruption |
+| Voxel Terrain | Infinite 3D voxel world with neon edges and audio-reactive glow |
 
-Shaders support up to 4 user-supplied image textures with configurable wrap modes.
+Up to 4 custom image textures per shader, plus desktop wallpaper sampling.
 
 <p align="center">
   <img src="docs/media/videos/shaders.gif" alt="Shader effects showcase" />
@@ -116,13 +164,15 @@ Custom shaders supported — see the [Shader Guide](https://github.com/fuddleswo
 
 ### Snap Assist
 
-After snapping a window, a Snap Assist overlay shows remaining empty zones with window candidates. Click any window thumbnail to snap it into a zone without dragging.
+After snapping a window, an overlay shows the remaining empty zones with thumbnails of other windows. Click a thumbnail to snap it into a zone.
 
-<!-- TODO: screenshot or gif of Snap Assist overlay -->
+<p align="center">
+  <img src="docs/media/videos/snap-assist.gif" alt="PlasmaZones Snap Assist" width="800">
+</p>
 
 ### Zone Selector
 
-Drag to screen edge to reveal a layout picker. Choose any layout and zone without cycling.
+Drag to screen edge to reveal a layout picker. Jump straight to any layout and zone.
 
 <p align="center">
   <img src="docs/media/videos/zone-selector.gif" alt="Zone Selector" />
@@ -130,9 +180,11 @@ Drag to screen edge to reveal a layout picker. Choose any layout and zone withou
 
 ### Layout Picker
 
-Press `Meta+Alt+Space` to open a fullscreen layout picker overlay. Browse all layouts visually and switch with a single click.
+Press `Meta+Alt+Space` to open a fullscreen layout picker. Click any layout to switch.
 
-<!-- TODO: screenshot or gif of Layout Picker overlay -->
+<p align="center">
+  <img src="docs/media/screenshots/layout-popup.png" alt="Layout Picker" />
+</p>
 
 ### Visual Layout OSD
 
@@ -144,9 +196,11 @@ See a preview of the layout when switching, not just text.
 
 ### Navigation OSD
 
-Keyboard navigation actions (move, focus, swap, rotate, push) show brief feedback overlays with zone numbers and directional context.
+Move, focus, swap, rotate, and push actions show a brief overlay with the affected zone numbers.
 
-<!-- TODO: screenshot or gif of Navigation OSD -->
+<p align="center">
+  <img src="docs/media/videos/navigation-osd.gif" alt="PlasmaZones Navigation OSD" width="800">
+</p>
 
 ### Multi-Monitor & Virtual Desktops
 
@@ -159,41 +213,20 @@ Keyboard navigation actions (move, focus, swap, rotate, push) show brief feedbac
 
 ### System Settings Integration
 
-Full KCM module with 7 tabs — no config file editing required. Includes built-in update checker with GitHub release notifications.
+Full KCM module with 8 tabs:
 
-<details>
-<summary>Screenshots</summary>
+- **Layouts** — Create, duplicate, import/export zone layouts with 12 built-in templates
+- **Editor** — Keyboard shortcuts for zone operations, grid/edge snapping, snap modifier keys
+- **Assignments** — Per-monitor, virtual desktop, and activity layout assignments; quick-switch slots; app-to-zone rules
+- **Snapping** — Zone appearance (colors, opacity, borders, blur, shaders), activation behavior, animations, zone selector
+- **Tiling** — Per-screen algorithm selection, master ratio/count, gaps, title bar hiding, insertion order, focus behavior
+- **General** — OSD style, layout switch notifications, global behavior settings
+- **Exclusions** — Window class exclusion lists with interactive picker, minimum size thresholds
+- **About** — Version info, update checker with GitHub release notifications, links, credits
 
-#### Layouts
-Create, duplicate, and manage zone layouts with built-in templates, import/export, visibility filtering.
-
-![Layouts](docs/media/screenshots/kcm-settings.png)
-
-#### Editor
-Keyboard shortcuts for zone operations (duplicate, split, fill), grid/edge snapping, snap modifier keys.
-
-#### Assignments
-Per-monitor, virtual desktop, and activity layout assignments; quick-switch keyboard slots; app-to-zone auto-snap rules.
-
-#### Zones
-Colors, opacity, borders, blur, shader effects, zone numbers, OSD style, animations, activation modifiers, always-active mode, multi-zone selection, zone padding, per-side edge gaps, and window snap behavior.
-
-![Zones — Appearance](docs/media/screenshots/kcm-appearance.png)
-
-![Zones — Behavior](docs/media/screenshots/kcm-behavior.png)
-
-#### Display
-Zone selector popup configuration: enable/disable, screen position, trigger distance, grid/list mode, preview sizing, per-monitor overrides.
-
-![Display](docs/media/screenshots/kcm-zoneselector.png)
-
-#### Exclusions
-Window class exclusion lists with interactive window picker, minimum size thresholds.
-
-#### About
-Version info, update checker with GitHub release notifications, repository/wiki/bug report links, license, credits.
-
-</details>
+<p align="center">
+  <img src="docs/media/videos/settings.gif" alt="PlasmaZones Settings" width="800">
+</p>
 
 ---
 
@@ -298,7 +331,7 @@ cd plasmazones-linux-x86_64
 ./install.sh
 ```
 
-The script will install PlasmaZones to `~/.local` and help you configure your environment variables.
+The script installs PlasmaZones to `~/.local` and sets up your environment variables.
 
 **Or use the one-liner:**
 
@@ -381,6 +414,23 @@ All configurable in **System Settings → Shortcuts → PlasmaZones**.
 </details>
 
 <details>
+<summary>Autotiling</summary>
+
+| Action | Default Shortcut |
+|--------|------------------|
+| Toggle autotile | `Meta+Shift+T` |
+| Toggle float | `Meta+F` |
+| Focus master window | `Meta+Shift+M` |
+| Swap with master | `Meta+Shift+Return` |
+| Increase master ratio | `Meta+Shift+L` |
+| Decrease master ratio | `Meta+Shift+H` |
+| Increase master count | `Meta+Shift+]` |
+| Decrease master count | `Meta+Shift+[` |
+| Retile windows | `Meta+Shift+R` |
+
+</details>
+
+<details>
 <summary>Other</summary>
 
 | Action | Default Shortcut |
@@ -389,7 +439,7 @@ All configurable in **System Settings → Shortcuts → PlasmaZones**.
 
 </details>
 
-**Shortcut pattern:** Designed to avoid conflicts with KDE defaults:
+**Shortcut pattern** (avoids conflicts with KDE defaults):
 - `Meta+Alt+{key}` — Layout operations and actions
 - `Meta+Alt+Shift+Arrow` — Zone movement (avoids KDE's `Meta+Shift+Arrow` screen movement)
 - `Meta+Ctrl+Alt+Arrow` — Swap windows (avoids KDE's `Meta+Ctrl+Arrow` desktop switching)
@@ -472,10 +522,11 @@ systemctl --user restart plasmazones.service
 
 ## D-Bus API
 
-PlasmaZones exposes 6 D-Bus interfaces for scripting and integration:
+PlasmaZones exposes 7 D-Bus interfaces for scripting and integration:
 
 | Interface | Purpose |
 |-----------|---------|
+| `Autotile` | Autotiling engine control, algorithm selection, window float/unfloat |
 | `LayoutManager` | Layout CRUD, screen/desktop/activity assignment, quick slots |
 | `Overlay` | Zone overlay visibility, highlighting, zone detection, Zone Selector |
 | `Screen` | Screen enumeration, geometry, scale, add/remove notifications |
@@ -509,37 +560,50 @@ Full API documentation: [wiki — D-Bus API](https://github.com/fuddlesworth/Pla
 
 ```
 src/
-├── core/           # Zone, Layout, LayoutManager, ShaderRegistry
-├── daemon/         # Background service, overlay windows
-│   └── rendering/  # GPU rendering (QRhi), label texture builder
-├── editor/         # Visual layout editor
-│   ├── qml/        # Editor QML UI
-│   ├── helpers/    # D-Bus queries, serialization, batch operations
-│   ├── services/   # Editor services (snapping, templates, zone manager)
-│   └── undo/       # Undo/redo command system
-├── dbus/           # D-Bus adaptors (6 interfaces)
-├── config/         # Settings (KConfig), update checker
-├── ui/             # QML components (OSD, overlays, zone selector)
-└── shared/         # Shared QML components and plugins
-kcm/                # System Settings module (KCM)
-└── ui/             # KCM QML pages
-    └── tabs/       # Tab components (7 tabs)
-kwin-effect/        # KWin effect plugin (modifier detection, window tracking)
+├── autotile/           # Autotiling engine, per-screen config
+│   └── algorithms/     # 14 tiling algorithms (master-stack, dwindle, bsp, etc.)
+├── snap/               # Snap engine (zone matching, multi-zone selection)
+├── core/               # Zone, Layout, LayoutManager, ShaderRegistry
+│   ├── geometryutils/  # Geometry math helpers
+│   ├── layout/         # Layout model and serialization
+│   ├── layoutmanager/  # Layout lifecycle and assignment
+│   ├── screenmanager/  # Screen tracking and resolution
+│   ├── shaderregistry/ # Shader discovery and loading
+│   └── windowtrackingservice/  # Window-to-zone tracking
+├── daemon/             # Background service, overlay windows
+│   ├── daemon/         # Startup, signals, navigation handlers
+│   ├── overlayservice/ # Overlay window lifecycle
+│   ├── rendering/      # GPU rendering (QRhi), label textures
+│   └── shortcutmanager/  # Global shortcut handlers
+├── editor/             # Visual layout editor
+│   ├── qml/            # Editor QML UI
+│   ├── controller/     # Editor operations (gaps, layout, selection, etc.)
+│   ├── helpers/        # D-Bus queries, serialization, batch operations
+│   ├── services/       # Snapping, templates, zone manager
+│   └── undo/           # Undo/redo command system
+├── dbus/               # D-Bus adaptors (7 interfaces)
+├── config/             # Settings (KConfig), update checker
+├── ui/                 # QML components (OSD, overlays, zone selector)
+└── shared/             # Shared QML components and plugins
+kcm/                    # System Settings module (KCM)
+└── ui/tabs/            # 8 tab components
+kwin-effect/            # KWin effect plugin
+└── autotilehandler/    # Autotile event handling from KWin
 data/
-├── layouts/        # Default layout templates (12)
-├── shaders/        # Built-in GLSL shader effects (9) + shared utilities
-└── shader-presets/ # Bundled shader preset configurations
+├── layouts/            # Default layout templates (12)
+└── shaders/            # Built-in GLSL shader effects (13) + shared utilities
 packaging/
-├── arch/           # AUR PKGBUILD (source, binary, git)
-├── debian/         # Debian packaging (control, changelog, triggers)
-├── nix/            # Nix flake package
-└── rpm/            # RPM spec
-cmake/              # CMake helpers (extract-pot, format-qml, uninstall)
-tests/              # Unit and integration tests
-dbus/               # D-Bus XML interface definitions
-icons/              # Application icons (hicolor + hicolor-light)
-po/                 # Translations (KI18n/Gettext)
-docs/               # Documentation and media
+├── arch/               # AUR PKGBUILD (source, binary, git)
+├── debian/             # Debian packaging
+├── local-install/      # Portable tarball installer
+├── nix/                # Nix flake package
+└── rpm/                # RPM spec
+cmake/                  # CMake helpers (extract-pot, format-qml, uninstall)
+tests/unit/             # Unit tests (autotile, config, core, helpers, ui)
+dbus/                   # D-Bus XML interface definitions (7 interfaces)
+icons/                  # Application icons (hicolor + hicolor-light)
+po/                     # Translations (KI18n/Gettext)
+docs/                   # Documentation and media
 ```
 
 ---

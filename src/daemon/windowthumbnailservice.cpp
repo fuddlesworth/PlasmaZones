@@ -27,8 +27,8 @@ namespace PlasmaZones {
 static constexpr int THUMBNAIL_MAX_SIZE = 256;
 
 static const QString kScreenShot2Service = QStringLiteral("org.kde.KWin.ScreenShot2");
-static const QString kScreenShot2Path    = QStringLiteral("/org/kde/KWin/ScreenShot2");
-static const QString kScreenShot2Iface   = QStringLiteral("org.kde.KWin.ScreenShot2");
+static const QString kScreenShot2Path = QStringLiteral("/org/kde/KWin/ScreenShot2");
+static const QString kScreenShot2Iface = QStringLiteral("org.kde.KWin.ScreenShot2");
 
 // KWin ScreenShot2 protocol: metadata in D-Bus reply; raw QImage bytes in pipe.
 // See: KWin screenshotdbusinterface2.cpp, Spectacle ImagePlatformKWin.cpp
@@ -106,9 +106,8 @@ void WindowThumbnailService::captureWindowAsync(const QString& kwinHandle, int m
     QDBusUnixFileDescriptor fd(pipeFds[1]);
     close(pipeFds[1]);
 
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        kScreenShot2Service, kScreenShot2Path, kScreenShot2Iface,
-        QStringLiteral("CaptureWindow"));
+    QDBusMessage msg = QDBusMessage::createMethodCall(kScreenShot2Service, kScreenShot2Path, kScreenShot2Iface,
+                                                      QStringLiteral("CaptureWindow"));
     msg << kwinHandle << QVariantMap() << QVariant::fromValue(fd);
 
     QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg);
@@ -125,11 +124,10 @@ void WindowThumbnailService::captureWindowAsync(const QString& kwinHandle, int m
                     const QString errMsg = reply.error().message();
                     // Invalid window requested (closed before capture) is expected; log at debug level
                     if (errMsg.contains(QLatin1String("Invalid window requested"))) {
-                        qCDebug(lcOverlay) << "captureWindowAsync:" << kwinHandle
-                                           << "window invalid (closed?):" << errMsg;
+                        qCDebug(lcOverlay)
+                            << "captureWindowAsync:" << kwinHandle << "window invalid (closed?):" << errMsg;
                     } else {
-                        qCInfo(lcOverlay) << "captureWindowAsync:" << kwinHandle
-                                          << "DBus error:" << errMsg;
+                        qCInfo(lcOverlay) << "captureWindowAsync:" << kwinHandle << "DBus error:" << errMsg;
                     }
                     close(readFd);
                     Q_EMIT captureFinished(kwinHandle, QString());
@@ -137,38 +135,32 @@ void WindowThumbnailService::captureWindowAsync(const QString& kwinHandle, int m
                 }
 
                 const QVariantMap metadata = reply.value();
-                QFuture<QImage> future = QtConcurrent::run(
-                    [readFd, metadata, maxSize]() -> QImage {
-                        QImage image = readImageFromPipe(readFd, metadata);
-                        if (!image.isNull() && maxSize > 0
-                            && (image.width() > maxSize || image.height() > maxSize)) {
-                            image = image.scaled(maxSize, maxSize, Qt::KeepAspectRatio,
-                                                Qt::SmoothTransformation);
-                        }
-                        return image;
-                    });
+                QFuture<QImage> future = QtConcurrent::run([readFd, metadata, maxSize]() -> QImage {
+                    QImage image = readImageFromPipe(readFd, metadata);
+                    if (!image.isNull() && maxSize > 0 && (image.width() > maxSize || image.height() > maxSize)) {
+                        image = image.scaled(maxSize, maxSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                    }
+                    return image;
+                });
 
                 auto* futureWatcher = new QFutureWatcher<QImage>(this);
-                connect(futureWatcher, &QFutureWatcher<QImage>::finished, this,
-                        [this, futureWatcher, kwinHandle]() {
-                            futureWatcher->deleteLater();
-                            QImage image = futureWatcher->result();
-                            QString dataUrl;
-                            if (!image.isNull()) {
-                                QByteArray ba;
-                                QBuffer buffer(&ba);
-                                buffer.open(QIODevice::WriteOnly);
-                                if (image.save(&buffer, "PNG")) {
-                                    dataUrl = QStringLiteral("data:image/png;base64,")
-                                            + QString::fromUtf8(ba.toBase64());
-                                }
-                            }
-                            if (dataUrl.isEmpty()) {
-                                qCDebug(lcOverlay) << "captureWindowAsync:" << kwinHandle
-                                                   << "no thumbnail (auth/format/pipe?)";
-                            }
-                            Q_EMIT captureFinished(kwinHandle, dataUrl);
-                        });
+                connect(futureWatcher, &QFutureWatcher<QImage>::finished, this, [this, futureWatcher, kwinHandle]() {
+                    futureWatcher->deleteLater();
+                    QImage image = futureWatcher->result();
+                    QString dataUrl;
+                    if (!image.isNull()) {
+                        QByteArray ba;
+                        QBuffer buffer(&ba);
+                        buffer.open(QIODevice::WriteOnly);
+                        if (image.save(&buffer, "PNG")) {
+                            dataUrl = QStringLiteral("data:image/png;base64,") + QString::fromUtf8(ba.toBase64());
+                        }
+                    }
+                    if (dataUrl.isEmpty()) {
+                        qCDebug(lcOverlay) << "captureWindowAsync:" << kwinHandle << "no thumbnail (auth/format/pipe?)";
+                    }
+                    Q_EMIT captureFinished(kwinHandle, dataUrl);
+                });
                 futureWatcher->setFuture(future);
             });
 }

@@ -1,0 +1,211 @@
+{
+    "id": "liquid-canvas",
+    "name": "Liquid Canvas",
+    "description": "Desktop wallpaper becomes a living liquid painting: a procedural flow field distorts the image like paint on flowing water, with multipass bloom and audio-reactive ripples",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "multipass": true,
+    "wallpaper": true,
+    "bufferShaders": ["pass0.frag", "pass1.frag", "pass2.frag"],
+    "fragmentShader": "effect.frag",
+    "vertexShader": "zone.vert",
+    "parameters": [
+        {
+            "id": "flowSpeed",
+            "name": "Flow Speed",
+            "group": "Pass 0 - Flow Field",
+            "type": "float",
+            "slot": 0,
+            "default": 0.3,
+            "min": 0.02,
+            "max": 1.5
+        },
+        {
+            "id": "flowScale",
+            "name": "Flow Scale",
+            "group": "Pass 0 - Flow Field",
+            "type": "float",
+            "slot": 1,
+            "default": 3.0,
+            "min": 0.5,
+            "max": 10.0
+        },
+        {
+            "id": "flowComplexity",
+            "name": "Flow Complexity",
+            "group": "Pass 0 - Flow Field",
+            "type": "float",
+            "slot": 2,
+            "default": 5.0,
+            "min": 2.0,
+            "max": 8.0
+        },
+        {
+            "id": "audioReactivity",
+            "name": "Audio Reactivity",
+            "group": "Pass 0 - Flow Field",
+            "type": "float",
+            "slot": 3,
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "distortStrength",
+            "name": "Distortion Strength",
+            "group": "Pass 1 - Texture",
+            "type": "float",
+            "slot": 4,
+            "default": 0.04,
+            "min": 0.0,
+            "max": 0.15
+        },
+        {
+            "id": "paintBlend",
+            "name": "Paint Blend",
+            "group": "Pass 1 - Texture",
+            "type": "float",
+            "slot": 5,
+            "default": 0.3,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "chromaSplit",
+            "name": "Chromatic Split",
+            "group": "Pass 1 - Texture",
+            "type": "float",
+            "slot": 6,
+            "default": 0.008,
+            "min": 0.0,
+            "max": 0.04
+        },
+        {
+            "id": "textureFallback",
+            "name": "Fallback Pattern",
+            "group": "Pass 1 - Texture",
+            "type": "float",
+            "slot": 7,
+            "default": 1.0,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "bloomRadius",
+            "name": "Bloom Radius",
+            "group": "Pass 2 - Bloom",
+            "type": "float",
+            "slot": 8,
+            "default": 3.0,
+            "min": 0.5,
+            "max": 10.0
+        },
+        {
+            "id": "bloomStrength",
+            "name": "Bloom Strength",
+            "group": "Pass 2 - Bloom",
+            "type": "float",
+            "slot": 9,
+            "default": 0.3,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "edgeGlow",
+            "name": "Edge Glow",
+            "group": "Pass 2 - Bloom",
+            "type": "float",
+            "slot": 10,
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.5
+        },
+        {
+            "id": "fillOpacity",
+            "name": "Zone Fill Opacity",
+            "group": "Final Composite",
+            "type": "float",
+            "slot": 12,
+            "default": 0.92,
+            "min": 0.3,
+            "max": 1.0
+        },
+        {
+            "id": "zoneTint",
+            "name": "Zone Color Tint",
+            "group": "Final Composite",
+            "type": "float",
+            "slot": 13,
+            "default": 0.15,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "iridescence",
+            "name": "Iridescence",
+            "group": "Final Composite",
+            "type": "float",
+            "slot": 14,
+            "default": 0.2,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "channelMix",
+            "name": "Channel Mix",
+            "group": "Final Composite",
+            "type": "float",
+            "slot": 15,
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "labelGlowSpread",
+            "name": "Label Glow Spread",
+            "group": "Labels",
+            "type": "float",
+            "slot": 16,
+            "default": 3.0,
+            "min": 1.0,
+            "max": 6.0
+        },
+        {
+            "id": "labelBrightness",
+            "name": "Label Brightness",
+            "group": "Labels",
+            "type": "float",
+            "slot": 17,
+            "default": 2.0,
+            "min": 1.0,
+            "max": 4.0
+        },
+        {
+            "id": "labelAudioReact",
+            "name": "Label Audio Reactivity",
+            "group": "Labels",
+            "type": "float",
+            "slot": 18,
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "glowColor",
+            "name": "Glow Color",
+            "group": "Colors",
+            "type": "color",
+            "slot": 1,
+            "default": "#cc66aa"
+        },
+        {
+            "id": "edgeColor",
+            "name": "Edge Highlight Color",
+            "group": "Colors",
+            "type": "color",
+            "slot": 2,
+            "default": "#66ccbb"
+        },
+        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 19, "default": true}
+    ]
+}

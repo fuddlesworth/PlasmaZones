@@ -42,10 +42,13 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/usr \
-            -DBUILD_TESTING=OFF
+            -DBUILD_TESTING=ON
 
       - name: Build
         run: cmake --build build --parallel $(nproc)
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
 
       - name: Install (dry-run)
         run: DESTDIR="${PWD}/install" cmake --install build

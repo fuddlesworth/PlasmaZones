@@ -13,7 +13,6 @@
 #include <array>
 #include <memory>
 
-
 #include <plasmazones_rendering_export.h>
 #include <rhi/qrhi.h>
 
@@ -54,6 +53,10 @@ public:
     void setCustomParams2(const QVector4D& params) override;
     void setCustomParams3(const QVector4D& params) override;
     void setCustomParams4(const QVector4D& params) override;
+    void setCustomParams5(const QVector4D& params) override;
+    void setCustomParams6(const QVector4D& params) override;
+    void setCustomParams7(const QVector4D& params) override;
+    void setCustomParams8(const QVector4D& params) override;
     void setCustomColor1(const QColor& color) override;
     void setCustomColor2(const QColor& color) override;
     void setCustomColor3(const QColor& color) override;
@@ -62,10 +65,20 @@ public:
     void setCustomColor6(const QColor& color) override;
     void setCustomColor7(const QColor& color) override;
     void setCustomColor8(const QColor& color) override;
+    void setCustomColor9(const QColor& color) override;
+    void setCustomColor10(const QColor& color) override;
+    void setCustomColor11(const QColor& color) override;
+    void setCustomColor12(const QColor& color) override;
+    void setCustomColor13(const QColor& color) override;
+    void setCustomColor14(const QColor& color) override;
+    void setCustomColor15(const QColor& color) override;
+    void setCustomColor16(const QColor& color) override;
     void setLabelsTexture(const QImage& image) override;
     void setAudioSpectrum(const QVector<float>& spectrum) override;
     void setUserTexture(int slot, const QImage& image) override;
     void setUserTextureWrap(int slot, const QString& wrap) override;
+    void setWallpaperTexture(const QImage& image) override;
+    void setUseWallpaper(bool use) override;
     void setBufferShaderPath(const QString& path) override;
     void setBufferShaderPaths(const QStringList& paths) override;
     void setBufferFeedback(bool enable) override;
@@ -85,9 +98,12 @@ private:
     bool ensureBufferPipeline();
     bool ensureBufferTarget();
     void syncUniformsFromData();
+    void uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb);
     void releaseRhiResources();
     void appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
+    void appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
     void resetAllSrbs();
+    void bakeBufferShaders();
 
     QQuickItem* m_item = nullptr;
 
@@ -173,6 +189,10 @@ private:
     QVector4D m_customParams2;
     QVector4D m_customParams3;
     QVector4D m_customParams4;
+    QVector4D m_customParams5;
+    QVector4D m_customParams6;
+    QVector4D m_customParams7;
+    QVector4D m_customParams8;
     QColor m_customColor1 = Qt::white;
     QColor m_customColor2 = Qt::white;
     QColor m_customColor3 = Qt::white;
@@ -181,6 +201,14 @@ private:
     QColor m_customColor6 = Qt::white;
     QColor m_customColor7 = Qt::white;
     QColor m_customColor8 = Qt::white;
+    QColor m_customColor9 = Qt::white;
+    QColor m_customColor10 = Qt::white;
+    QColor m_customColor11 = Qt::white;
+    QColor m_customColor12 = Qt::white;
+    QColor m_customColor13 = Qt::white;
+    QColor m_customColor14 = Qt::white;
+    QColor m_customColor15 = Qt::white;
+    QColor m_customColor16 = Qt::white;
 
     // Labels texture (binding 1)
     QImage m_labelsImage;
@@ -202,10 +230,18 @@ private:
     std::array<std::unique_ptr<QRhiSampler>, kMaxUserTextures> m_userTextureSamplers;
     std::array<QString, kMaxUserTextures> m_userTextureWraps;
     std::array<bool, kMaxUserTextures> m_userTextureDirty = {};
+
+    // Desktop wallpaper texture (binding 11) — opt-in via metadata "wallpaper": true
+    bool m_useWallpaper = false;
+    QImage m_wallpaperImage;
+    std::unique_ptr<QRhiTexture> m_wallpaperTexture;
+    std::unique_ptr<QRhiSampler> m_wallpaperSampler;
+    bool m_wallpaperDirty = false;
 };
 
 /** Result of warmShaderBakeCacheForPaths for reporting to UI (e.g. shaderCompilationFinished). */
-struct WarmShaderBakeResult {
+struct WarmShaderBakeResult
+{
     bool success = false;
     QString errorMessage;
 };

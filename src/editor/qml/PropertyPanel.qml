@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import "ColorUtils.js" as ColorUtils
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Templates as T
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
-import "ColorUtils.js" as ColorUtils
 
 /**
  * @brief Properties panel component for zone editing
@@ -24,31 +26,38 @@ Rectangle {
     required property var selectedZone
     required property int selectionCount
     required property bool hasMultipleSelection
-
     // Panel mode: "hidden" (no selection), "single" (one zone), "multiple" (many zones)
     readonly property string panelMode: {
-        if (selectionCount === 0) return "hidden";
-        if (selectionCount === 1) return "single";
+        if (selectionCount === 0)
+            return "hidden";
+
+        if (selectionCount === 1)
+            return "single";
+
         return "multiple";
     }
-
     // Multi-select color preview properties (stored at panel level to avoid context issues)
     property color multiHighlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5)
     property color multiInactiveColor: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.25)
     property color multiBorderColor: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.8)
-
     // Computed property: true if ALL selected zones have useCustomColors enabled
     readonly property bool allSelectedUseCustomColors: {
-        if (!editorController || selectionCount < 2) return false;
-        var _ = editorController.zonesVersion;  // Dependency tracking
+        if (!editorController || selectionCount < 2)
+            return false;
+
+        var _ = editorController.zonesVersion; // Dependency tracking
         return editorController.allSelectedUseCustomColors();
     }
-
     // Appearance constants
     readonly property real defaultOpacity: 0.5
     readonly property real defaultInactiveOpacity: 0.3
     readonly property int defaultBorderWidth: 2
     readonly property int defaultBorderRadius: 8
+
+    // Helper functions for extracting zone colors
+    function getZoneColor(propertyName) {
+        return ColorUtils.extractZoneColor(selectedZone, propertyName, Qt.transparent);
+    }
 
     // Layout properties
     Layout.preferredWidth: visible ? 280 : 0
@@ -59,7 +68,6 @@ Rectangle {
     visible: panelMode !== "hidden"
     opacity: visible ? 1 : 0
     z: 50
-
     // Reset multi-select colors to defaults when entering multi-select mode
     onPanelModeChanged: {
         if (panelMode === "multiple") {
@@ -67,11 +75,6 @@ Rectangle {
             multiInactiveColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.25);
             multiBorderColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.8);
         }
-    }
-
-    // Helper functions for extracting zone colors
-    function getZoneColor(propertyName) {
-        return ColorUtils.extractZoneColor(selectedZone, propertyName, Qt.transparent);
     }
 
     ColumnLayout {
@@ -87,20 +90,23 @@ Rectangle {
 
             Label {
                 Layout.fillWidth: true
-                text: panelMode === "single"
-                    ? i18nc("@title", "Zone Properties")
-                    : i18ncp("@title", "1 Zone Selected", "%1 Zones Selected", selectionCount)
+                text: panelMode === "single" ? i18nc("@title", "Zone Properties") : i18ncp("@title", "1 Zone Selected", "%1 Zones Selected", selectionCount)
                 font.bold: true
                 font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.1
             }
 
             ToolButton {
                 icon.name: "window-close"
-                onClicked: { if (editorController) editorController.clearSelection(); }
+                onClicked: {
+                    if (editorController)
+                        editorController.clearSelection();
+
+                }
                 ToolTip.text: i18nc("@tooltip", "Close panel")
                 ToolTip.visible: hovered
                 Accessible.name: i18nc("@info:accessibility", "Close properties panel")
             }
+
         }
 
         ScrollView {
@@ -124,6 +130,7 @@ Rectangle {
 
                 CheckBox {
                     id: multiUseCustomColorsCheck
+
                     visible: panelMode === "multiple"
                     Kirigami.FormData.label: i18nc("@label", "Custom colors:")
                     text: i18nc("@option:check", "Enable for all selected")
@@ -133,6 +140,7 @@ Rectangle {
                     onToggled: {
                         if (editorController)
                             editorController.updateSelectedZonesAppearance("useCustomColors", checked);
+
                     }
                 }
 
@@ -183,6 +191,7 @@ Rectangle {
                 // Multi-select opacity sliders
                 OpacitySliderRow {
                     id: multiActiveOpacitySlider
+
                     Kirigami.FormData.label: i18nc("@label", "Active opacity:")
                     visible: panelMode === "multiple" && multiUseCustomColorsCheck.checked
                     opacityValue: propertyPanel.defaultOpacity
@@ -193,11 +202,13 @@ Rectangle {
                     onOpacityEdited: function(value) {
                         if (editorController)
                             editorController.updateSelectedZonesAppearance("activeOpacity", value);
+
                     }
                 }
 
                 OpacitySliderRow {
                     id: multiInactiveOpacitySlider
+
                     Kirigami.FormData.label: i18nc("@label", "Inactive opacity:")
                     visible: panelMode === "multiple" && multiUseCustomColorsCheck.checked
                     opacityValue: propertyPanel.defaultInactiveOpacity
@@ -208,6 +219,7 @@ Rectangle {
                     onOpacityEdited: function(value) {
                         if (editorController)
                             editorController.updateSelectedZonesAppearance("inactiveOpacity", value);
+
                     }
                 }
 
@@ -215,7 +227,8 @@ Rectangle {
                 AppearanceSpinBox {
                     Kirigami.FormData.label: i18nc("@label", "Border width:")
                     visible: panelMode === "multiple" && multiUseCustomColorsCheck.checked
-                    from: 0; to: 20
+                    from: 0
+                    to: 20
                     spinValue: propertyPanel.defaultBorderWidth
                     defaultValue: propertyPanel.defaultBorderWidth
                     spinEnabled: editorController !== null
@@ -224,13 +237,15 @@ Rectangle {
                     onSpinValueModified: function(newValue) {
                         if (editorController)
                             editorController.updateSelectedZonesAppearance("borderWidth", newValue);
+
                     }
                 }
 
                 AppearanceSpinBox {
                     Kirigami.FormData.label: i18nc("@label", "Border radius:")
                     visible: panelMode === "multiple" && multiUseCustomColorsCheck.checked
-                    from: 0; to: 50
+                    from: 0
+                    to: 50
                     spinValue: propertyPanel.defaultBorderRadius
                     defaultValue: propertyPanel.defaultBorderRadius
                     spinEnabled: editorController !== null
@@ -239,6 +254,7 @@ Rectangle {
                     onSpinValueModified: function(newValue) {
                         if (editorController)
                             editorController.updateSelectedZonesAppearance("borderRadius", newValue);
+
                     }
                 }
 
@@ -268,7 +284,11 @@ Rectangle {
                     enabled: editorController !== null
                     Accessible.name: text
                     Accessible.description: i18ncp("@info", "Delete 1 selected zone", "Delete %1 selected zones", selectionCount)
-                    onClicked: { if (editorController) editorController.deleteSelectedZones(); }
+                    onClicked: {
+                        if (editorController)
+                            editorController.deleteSelectedZones();
+
+                    }
                 }
 
                 // ═══════════════════════════════════════════════════════════════
@@ -276,6 +296,7 @@ Rectangle {
                 // ═══════════════════════════════════════════════════════════════
                 TextField {
                     id: zoneNameField
+
                     property string validationError: ""
                     property bool hasError: validationError !== ""
                     property Timer updateTimer
@@ -285,19 +306,23 @@ Rectangle {
                     text: selectedZone ? (selectedZone.name || "") : ""
                     enabled: editorController !== null
                     Accessible.name: i18nc("@label", "Zone name")
-
                     onTextChanged: {
-                        if (selectedZoneId && editorController) updateTimer.restart();
-                    }
+                        if (selectedZoneId && editorController)
+                            updateTimer.restart();
 
+                    }
                     onEditingFinished: {
                         updateTimer.stop();
                         validationError = "";
                         if (selectedZoneId && editorController) {
                             var error = editorController.validateZoneName(selectedZoneId, text);
-                            if (error !== "") { validationError = error; return; }
+                            if (error !== "") {
+                                validationError = error;
+                                return ;
+                            }
                             if (selectedZone && selectedZone.name !== text)
                                 editorController.updateZoneName(selectedZoneId, text);
+
                         }
                     }
 
@@ -307,23 +332,39 @@ Rectangle {
                             if (selectedZoneId && editorController) {
                                 zoneNameField.validationError = "";
                                 var error = editorController.validateZoneName(selectedZoneId, zoneNameField.text);
-                                if (error !== "") { zoneNameField.validationError = error; return; }
+                                if (error !== "") {
+                                    zoneNameField.validationError = error;
+                                    return ;
+                                }
                                 if (selectedZone && selectedZone.name !== zoneNameField.text)
                                     editorController.updateZoneName(selectedZoneId, zoneNameField.text);
+
                             }
                         }
                     }
 
                     background: Rectangle {
-                        color: zoneNameField.hasError
-                            ? Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.15)
-                            : zoneNameField.palette.base
+                        color: zoneNameField.hasError ? Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.15) : zoneNameField.palette.base
                         radius: Kirigami.Units.smallSpacing
                         border.color: zoneNameField.hasError ? Kirigami.Theme.negativeTextColor : zoneNameField.palette.shadow
                         border.width: zoneNameField.hasError ? 2 : 1
-                        Behavior on border.color { ColorAnimation { duration: 100 } }
-                        Behavior on border.width { NumberAnimation { duration: 100 } }
+
+                        Behavior on border.color {
+                            ColorAnimation {
+                                duration: 100
+                            }
+
+                        }
+
+                        Behavior on border.width {
+                            NumberAnimation {
+                                duration: 100
+                            }
+
+                        }
+
                     }
+
                 }
 
                 Label {
@@ -338,21 +379,27 @@ Rectangle {
 
                 SpinBox {
                     id: zoneNumberSpinBox
+
                     property string validationError: ""
                     property bool hasError: validationError !== ""
 
                     visible: panelMode === "single"
                     Kirigami.FormData.label: i18nc("@label", "Number:")
-                    from: 1; to: 99
+                    from: 1
+                    to: 99
                     value: selectedZone ? (selectedZone.zoneNumber || 1) : 1
                     enabled: editorController !== null
                     Accessible.name: i18nc("@label", "Zone number")
-
                     onValueModified: {
-                        if (!selectedZoneId || !editorController) return;
+                        if (!selectedZoneId || !editorController)
+                            return ;
+
                         validationError = "";
                         var error = editorController.validateZoneNumber(selectedZoneId, value);
-                        if (error !== "") { validationError = error; return; }
+                        if (error !== "") {
+                            validationError = error;
+                            return ;
+                        }
                         editorController.updateZoneNumber(selectedZoneId, value);
                     }
                 }
@@ -378,6 +425,7 @@ Rectangle {
 
                 CheckBox {
                     id: fixedGeometryCheck
+
                     visible: panelMode === "single"
                     Kirigami.FormData.label: i18nc("@label", "Mode:")
                     text: i18nc("@option:check", "Fixed pixel size")
@@ -388,81 +436,98 @@ Rectangle {
                     onToggled: {
                         if (selectedZoneId && editorController)
                             editorController.toggleZoneGeometryMode(selectedZoneId);
+
                     }
                 }
 
                 SpinBox {
                     id: fixedXSpin
+
                     visible: panelMode === "single" && fixedGeometryCheck.checked
                     Kirigami.FormData.label: i18nc("@label", "X:")
-                    from: 0; to: editorController ? editorController.targetScreenSize.width : 99999
+                    from: 0
+                    to: editorController ? editorController.targetScreenSize.width : 99999
                     value: selectedZone ? (selectedZone.fixedX !== undefined ? selectedZone.fixedX : 0) : 0
                     enabled: Boolean(selectedZone) && Boolean(editorController)
                     Accessible.name: i18nc("@label", "X position in pixels")
                     onValueModified: {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneFixedGeometry(selectedZoneId, value, fixedYSpin.value, fixedWidthSpin.value, fixedHeightSpin.value);
+
                     }
                 }
 
                 SpinBox {
                     id: fixedYSpin
+
                     visible: panelMode === "single" && fixedGeometryCheck.checked
                     Kirigami.FormData.label: i18nc("@label", "Y:")
-                    from: 0; to: editorController ? editorController.targetScreenSize.height : 99999
+                    from: 0
+                    to: editorController ? editorController.targetScreenSize.height : 99999
                     value: selectedZone ? (selectedZone.fixedY !== undefined ? selectedZone.fixedY : 0) : 0
                     enabled: Boolean(selectedZone) && Boolean(editorController)
                     Accessible.name: i18nc("@label", "Y position in pixels")
                     onValueModified: {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneFixedGeometry(selectedZoneId, fixedXSpin.value, value, fixedWidthSpin.value, fixedHeightSpin.value);
+
                     }
                 }
 
                 SpinBox {
                     id: fixedWidthSpin
+
                     visible: panelMode === "single" && fixedGeometryCheck.checked
                     Kirigami.FormData.label: i18nc("@label", "Width:")
-                    from: 50; to: editorController ? editorController.targetScreenSize.width : 99999
+                    from: 50
+                    to: editorController ? editorController.targetScreenSize.width : 99999
                     value: selectedZone ? (selectedZone.fixedWidth !== undefined ? selectedZone.fixedWidth : 50) : 50
                     enabled: Boolean(selectedZone) && Boolean(editorController)
                     Accessible.name: i18nc("@label", "Width in pixels")
                     onValueModified: {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneFixedGeometry(selectedZoneId, fixedXSpin.value, fixedYSpin.value, value, fixedHeightSpin.value);
+
                     }
                 }
 
                 SpinBox {
                     id: fixedHeightSpin
+
                     visible: panelMode === "single" && fixedGeometryCheck.checked
                     Kirigami.FormData.label: i18nc("@label", "Height:")
-                    from: 50; to: editorController ? editorController.targetScreenSize.height : 99999
+                    from: 50
+                    to: editorController ? editorController.targetScreenSize.height : 99999
                     value: selectedZone ? (selectedZone.fixedHeight !== undefined ? selectedZone.fixedHeight : 50) : 50
                     enabled: Boolean(selectedZone) && Boolean(editorController)
                     Accessible.name: i18nc("@label", "Height in pixels")
                     onValueModified: {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneFixedGeometry(selectedZoneId, fixedXSpin.value, fixedYSpin.value, fixedWidthSpin.value, value);
+
                     }
                 }
 
                 // Sync spinbox values when zone data changes (undo/redo, external updates)
                 Connections {
-                    target: editorController
-                    enabled: panelMode === "single" && fixedGeometryCheck.checked && editorController !== null
-
                     function onZonesChanged() {
-                        if (!selectedZone || !fixedGeometryCheck.checked) return;
+                        if (!selectedZone || !fixedGeometryCheck.checked)
+                            return ;
+
                         // Use Qt.callLater to avoid binding loops
                         Qt.callLater(function() {
-                            if (!selectedZone) return;
+                            if (!selectedZone)
+                                return ;
+
                             fixedXSpin.value = selectedZone.fixedX !== undefined ? selectedZone.fixedX : 0;
                             fixedYSpin.value = selectedZone.fixedY !== undefined ? selectedZone.fixedY : 0;
                             fixedWidthSpin.value = selectedZone.fixedWidth !== undefined ? selectedZone.fixedWidth : 50;
                             fixedHeightSpin.value = selectedZone.fixedHeight !== undefined ? selectedZone.fixedHeight : 50;
                         });
                     }
+
+                    target: editorController
+                    enabled: panelMode === "single" && fixedGeometryCheck.checked && editorController !== null
                 }
 
                 // ═══════════════════════════════════════════════════════════════
@@ -476,16 +541,18 @@ Rectangle {
 
                 CheckBox {
                     id: useCustomColorsCheck
+
                     visible: panelMode === "single"
                     Kirigami.FormData.label: i18nc("@label", "Custom colors:")
                     text: i18nc("@option:check", "Use custom colors")
-                    checked: selectedZone?.useCustomColors === true
+                    checked: selectedZone && selectedZone.useCustomColors === true
                     // Use explicit boolean to avoid binding loop from null coercion
                     enabled: Boolean(selectedZone) && Boolean(editorController)
                     Accessible.name: i18nc("@info:accessibility", "Enable custom colors for this zone")
                     onToggled: {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneAppearance(selectedZoneId, "useCustomColors", checked);
+
                     }
                 }
 
@@ -503,6 +570,7 @@ Rectangle {
                         var currentColor = getZoneColor("highlightColor");
                         if (currentColor.a === 0)
                             currentColor = Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5);
+
                         highlightColorDialog.selectedColor = currentColor;
                         highlightColorDialog.open();
                     }
@@ -521,6 +589,7 @@ Rectangle {
                         var currentColor = getZoneColor("inactiveColor");
                         if (currentColor.a === 0)
                             currentColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.25);
+
                         inactiveColorDialog.selectedColor = currentColor;
                         inactiveColorDialog.open();
                     }
@@ -537,6 +606,7 @@ Rectangle {
                         var currentColor = getZoneColor("borderColor");
                         if (currentColor.a === 0)
                             currentColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.8);
+
                         borderColorDialog.selectedColor = currentColor;
                         borderColorDialog.open();
                     }
@@ -545,9 +615,10 @@ Rectangle {
                 // Single zone opacity sliders
                 OpacitySliderRow {
                     id: activeOpacitySlider
+
                     Kirigami.FormData.label: i18nc("@label", "Active opacity:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
-                    opacityValue: selectedZone?.activeOpacity ?? propertyPanel.defaultOpacity
+                    opacityValue: selectedZone ? selectedZone.activeOpacity : propertyPanel.defaultOpacity
                     defaultOpacity: propertyPanel.defaultOpacity
                     sliderEnabled: selectedZone !== null && editorController !== null
                     accessibleName: i18nc("@label", "Zone active opacity")
@@ -555,14 +626,16 @@ Rectangle {
                     onOpacityEdited: function(value) {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneAppearance(selectedZoneId, "activeOpacity", value);
+
                     }
                 }
 
                 OpacitySliderRow {
                     id: inactiveOpacitySlider
+
                     Kirigami.FormData.label: i18nc("@label", "Inactive opacity:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
-                    opacityValue: selectedZone?.inactiveOpacity ?? propertyPanel.defaultInactiveOpacity
+                    opacityValue: selectedZone ? selectedZone.inactiveOpacity : propertyPanel.defaultInactiveOpacity
                     defaultOpacity: propertyPanel.defaultInactiveOpacity
                     sliderEnabled: selectedZone !== null && editorController !== null
                     accessibleName: i18nc("@label", "Zone inactive opacity")
@@ -570,6 +643,7 @@ Rectangle {
                     onOpacityEdited: function(value) {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneAppearance(selectedZoneId, "inactiveOpacity", value);
+
                     }
                 }
 
@@ -577,8 +651,9 @@ Rectangle {
                 AppearanceSpinBox {
                     Kirigami.FormData.label: i18nc("@label", "Border width:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
-                    from: 0; to: 20
-                    spinValue: selectedZone?.borderWidth ?? propertyPanel.defaultBorderWidth
+                    from: 0
+                    to: 20
+                    spinValue: selectedZone ? selectedZone.borderWidth : propertyPanel.defaultBorderWidth
                     defaultValue: propertyPanel.defaultBorderWidth
                     spinEnabled: Boolean(selectedZone) && Boolean(editorController)
                     accessibleName: i18nc("@label", "Border width in pixels")
@@ -586,14 +661,16 @@ Rectangle {
                     onSpinValueModified: function(newValue) {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneAppearance(selectedZoneId, "borderWidth", newValue);
+
                     }
                 }
 
                 AppearanceSpinBox {
                     Kirigami.FormData.label: i18nc("@label", "Border radius:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
-                    from: 0; to: 50
-                    spinValue: selectedZone?.borderRadius ?? propertyPanel.defaultBorderRadius
+                    from: 0
+                    to: 50
+                    spinValue: selectedZone ? selectedZone.borderRadius : propertyPanel.defaultBorderRadius
                     defaultValue: propertyPanel.defaultBorderRadius
                     spinEnabled: Boolean(selectedZone) && Boolean(editorController)
                     accessibleName: i18nc("@label", "Border radius in pixels")
@@ -601,7 +678,90 @@ Rectangle {
                     onSpinValueModified: function(newValue) {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneAppearance(selectedZoneId, "borderRadius", newValue);
+
                     }
+                }
+
+                // ═══════════════════════════════════════════════════════════════
+                // SINGLE ZONE OVERLAY STYLE
+                // ═══════════════════════════════════════════════════════════════
+                Kirigami.Separator {
+                    visible: panelMode === "single"
+                    Kirigami.FormData.isSection: true
+                    Kirigami.FormData.label: i18nc("@title", "Overlay")
+                }
+
+                ComboBox {
+                    id: zoneOverlayModeCombo
+
+                    visible: panelMode === "single"
+                    Layout.fillWidth: true
+                    Kirigami.FormData.label: i18nc("@label", "Style:")
+                    implicitContentWidthPolicy: ComboBox.WidestTextWhenCompleted
+                    model: [i18nc("@item:inlistbox overlay mode", "Use layout default"), i18nc("@item:inlistbox", "Full zone highlight"), i18nc("@item:inlistbox", "Compact preview")]
+                    currentIndex: {
+                        if (!selectedZone)
+                            return 0;
+
+                        let mode = selectedZone.overlayDisplayMode !== undefined ? selectedZone.overlayDisplayMode : -1;
+                        return Math.max(0, Math.min(mode + 1, 2)); // -1 -> 0 (default), 0 -> 1, 1 -> 2
+                    }
+                    enabled: Boolean(selectedZone) && Boolean(editorController)
+                    Accessible.name: i18nc("@label", "Zone overlay display mode")
+                    Accessible.description: i18nc("@info:accessibility", "Override the overlay style for this zone only")
+                    onActivated: (index) => {
+                        if (selectedZoneId && editorController)
+                            editorController.updateZoneAppearance(selectedZoneId, "overlayDisplayMode", index - 1);
+
+                    }
+
+                    popup: T.Popup {
+                        y: zoneOverlayModeCombo.height
+                        width: Math.max(zoneOverlayModeCombo.width, zoneOverlayModeCombo.implicitContentWidth + Kirigami.Units.gridUnit * 3)
+                        height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, (zoneOverlayModeCombo.Window.window ? zoneOverlayModeCombo.Window.window.height : 600) - topMargin - bottomMargin)
+                        topMargin: Kirigami.Units.smallSpacing
+                        bottomMargin: Kirigami.Units.smallSpacing
+                        padding: 1
+
+                        contentItem: ListView {
+                            clip: true
+                            implicitHeight: contentHeight
+                            model: zoneOverlayModeCombo.delegateModel
+                            currentIndex: zoneOverlayModeCombo.highlightedIndex
+                            highlightMoveDuration: 0
+                        }
+
+                        background: Rectangle {
+                            color: Kirigami.Theme.backgroundColor
+                            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                            border.width: 1
+                            radius: Kirigami.Units.smallSpacing
+                        }
+
+                    }
+
+                    delegate: ItemDelegate {
+                        required property var modelData
+                        required property int index
+                        readonly property bool isCurrentSelection: zoneOverlayModeCombo.currentIndex === index
+
+                        width: zoneOverlayModeCombo.popup.availableWidth
+                        highlighted: zoneOverlayModeCombo.highlightedIndex === index
+
+                        background: Rectangle {
+                            color: parent.highlighted ? Kirigami.Theme.highlightColor : parent.isCurrentSelection ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : Kirigami.Theme.backgroundColor
+                        }
+
+                        contentItem: Label {
+                            text: modelData
+                            color: parent.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                            font.bold: parent.highlighted || parent.isCurrentSelection
+                            elide: Text.ElideRight
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                    }
+
                 }
 
                 // ═══════════════════════════════════════════════════════════════
@@ -621,35 +781,47 @@ Rectangle {
                     enabled: selectedZoneId !== "" && editorController !== null
                     Accessible.name: text
                     Accessible.description: i18nc("@info", "Delete the selected zone")
-                    onClicked: { if (selectedZoneId && editorController) editorController.deleteZone(selectedZoneId); }
+                    onClicked: {
+                        if (selectedZoneId && editorController)
+                            editorController.deleteZone(selectedZoneId);
+
+                    }
                 }
 
                 // Handle validation errors and selection changes
                 Connections {
-                    target: editorController
-                    enabled: editorController !== null && selectedZoneId !== ""
-
                     function onSelectedZoneIdChanged() {
                         zoneNameField.updateTimer.stop();
                         zoneNameField.validationError = "";
                         zoneNumberSpinBox.validationError = "";
-                        if (selectedZone) zoneNumberSpinBox.value = selectedZone.zoneNumber || 1;
+                        if (selectedZone)
+                            zoneNumberSpinBox.value = selectedZone.zoneNumber || 1;
+
                     }
 
                     function onZoneNameValidationError(zoneId, error) {
                         if (zoneId === selectedZoneId) {
                             zoneNameField.validationError = error;
                             Qt.callLater(function() {
-                                if (selectedZone) zoneNameField.text = selectedZone.name || "";
+                                if (selectedZone)
+                                    zoneNameField.text = selectedZone.name || "";
+
                             });
                         }
                     }
 
                     function onZoneNumberValidationError(zoneId, error) {
-                        if (zoneId === selectedZoneId) zoneNumberSpinBox.validationError = error;
+                        if (zoneId === selectedZoneId)
+                            zoneNumberSpinBox.validationError = error;
+
                     }
+
+                    target: editorController
+                    enabled: editorController !== null && selectedZoneId !== ""
                 }
+
             }
+
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -657,6 +829,7 @@ Rectangle {
         // ═══════════════════════════════════════════════════════════════
         ZoneColorDialog {
             id: highlightColorDialog
+
             title: i18nc("@title:window", "Zone Highlight Color")
             editorController: propertyPanel.editorController
             selectedZoneId: propertyPanel.selectedZoneId
@@ -665,11 +838,13 @@ Rectangle {
             onColorAccepted: function(hexColor) {
                 if (selectedZoneId && editorController)
                     editorController.updateZoneColor(selectedZoneId, "highlightColor", hexColor);
+
             }
         }
 
         ZoneColorDialog {
             id: inactiveColorDialog
+
             title: i18nc("@title:window", "Zone Inactive Color")
             editorController: propertyPanel.editorController
             selectedZoneId: propertyPanel.selectedZoneId
@@ -678,11 +853,13 @@ Rectangle {
             onColorAccepted: function(hexColor) {
                 if (selectedZoneId && editorController)
                     editorController.updateZoneColor(selectedZoneId, "inactiveColor", hexColor);
+
             }
         }
 
         ZoneColorDialog {
             id: borderColorDialog
+
             title: i18nc("@title:window", "Zone Border Color")
             editorController: propertyPanel.editorController
             selectedZoneId: propertyPanel.selectedZoneId
@@ -691,6 +868,7 @@ Rectangle {
             onColorAccepted: function(hexColor) {
                 if (selectedZoneId && editorController)
                     editorController.updateZoneColor(selectedZoneId, "borderColor", hexColor);
+
             }
         }
 
@@ -699,6 +877,7 @@ Rectangle {
         // ═══════════════════════════════════════════════════════════════
         ZoneColorDialog {
             id: multiHighlightColorDialog
+
             title: i18nc("@title:window", "Highlight Color for All Selected Zones")
             isMultiMode: true
             onMultiColorAccepted: function(hexColor, selectedColor) {
@@ -711,6 +890,7 @@ Rectangle {
 
         ZoneColorDialog {
             id: multiInactiveColorDialog
+
             title: i18nc("@title:window", "Inactive Color for All Selected Zones")
             isMultiMode: true
             onMultiColorAccepted: function(hexColor, selectedColor) {
@@ -723,6 +903,7 @@ Rectangle {
 
         ZoneColorDialog {
             id: multiBorderColorDialog
+
             title: i18nc("@title:window", "Border Color for All Selected Zones")
             isMultiMode: true
             onMultiColorAccepted: function(hexColor, selectedColor) {
@@ -732,13 +913,23 @@ Rectangle {
                 }
             }
         }
+
     }
 
     Behavior on opacity {
-        NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+        NumberAnimation {
+            duration: 150
+            easing.type: Easing.OutCubic
+        }
+
     }
 
     Behavior on Layout.preferredWidth {
-        NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+        NumberAnimation {
+            duration: 150
+            easing.type: Easing.OutCubic
+        }
+
     }
+
 }

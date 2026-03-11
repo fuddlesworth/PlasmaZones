@@ -1,7 +1,7 @@
 {
     "KPlugin": {
         "Name": "PlasmaZones",
-        "Description": "Configure window zone snapping",
+        "Description": "Configure window zone snapping and autotiling",
         "Icon": "plasmazones",
         "Authors": [
             {

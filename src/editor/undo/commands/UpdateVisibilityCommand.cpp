@@ -14,7 +14,7 @@ UpdateVisibilityCommand::UpdateVisibilityCommand(QPointer<EditorController> edit
                                                  const QList<int>& oldDesktops, const QList<int>& newDesktops,
                                                  const QStringList& oldActivities, const QStringList& newActivities,
                                                  const QString& text, QUndoCommand* parent)
-    : QUndoCommand(text.isEmpty() ? i18nc("@action", "Change Visibility") : text, parent)
+    : QUndoCommand(text.isEmpty() ? i18nc("@action", "Change Zone Visibility") : text, parent)
     , m_editorController(editorController)
     , m_oldScreens(oldScreens)
     , m_newScreens(newScreens)

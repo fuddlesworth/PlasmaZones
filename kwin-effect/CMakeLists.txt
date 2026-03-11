@@ -1,7 +1,23 @@
+cmake_minimum_required(VERSION 3.22...4.2)
+project(PlasmaZonesEffect)
+
 # PlasmaZones KWin Effect (C++ Plugin)
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Requires KWin from Plasma 6.6+ (prePaintWindow(RenderView*,...), paintWindow(Region), no postPaintWindow).
+
+find_package(ECM REQUIRED NO_MODULE)
+set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
+include(KDEInstallDirs)
+include(KDECMakeSettings)
+include(KDECompilerSettings NO_POLICY_SCOPE)
+
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(Qt6 REQUIRED COMPONENTS Core Gui DBus Widgets)
+set(QT_DEFAULT_MAJOR_VERSION 6)
 
 # Find KWin for effect development
 find_package(KWin 6.6 REQUIRED)
@@ -23,8 +39,16 @@ list(APPEND CMAKE_AUTOMOC_MACRO_NAMES "KWIN_EFFECT_FACTORY_SUPPORTED")
 set(plasmazones_effect_SRCS
     plasmazoneseffect.cpp
     plasmazoneseffect.h
+    autotilehandler.cpp
+    autotilehandler.h
+    autotilehandler/signals.cpp
+    autotilehandler/tiling.cpp
     navigationhandler.cpp
     navigationhandler.h
+    screenchangehandler.cpp
+    screenchangehandler.h
+    snapassisthandler.cpp
+    snapassisthandler.h
     windowanimator.cpp
     windowanimator.h
     dragtracker.cpp

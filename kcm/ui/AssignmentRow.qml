@@ -21,22 +21,25 @@ RowLayout {
     required property var kcm
     required property string iconSource
     required property string labelText
-
     // Optional customization
     property string noneText: i18n("Default")
     property int comboWidth: Kirigami.Units.gridUnit * 16
-    property bool showPreview: true  // Default to true for unified layout model with previews
-    property real iconOpacity: 1.0
-
+    property bool showPreview: true // Default to true for unified layout model with previews
+    property real iconOpacity: 1
+    property int layoutFilter: -1 // -1 = all, 0 = manual/zone only, 1 = autotile only
     // The layout ID that "Default" resolves to (set by parent based on hierarchy)
-    property string resolvedDefaultId: kcm?.defaultLayoutId ?? ""
-
+    property string resolvedDefaultId: kcm ? kcm.defaultLayoutId : ""
     // Current assignment (set externally, component updates selection)
     property string currentLayoutId: ""
 
     // Signals for assignment changes
     signal assignmentSelected(string layoutId)
     signal assignmentCleared()
+
+    // Public function to clear selection programmatically
+    function clearSelection() {
+        layoutCombo.clearSelection();
+    }
 
     spacing: Kirigami.Units.smallSpacing
 
@@ -57,36 +60,32 @@ RowLayout {
 
     LayoutComboBox {
         id: layoutCombo
+
         Layout.preferredWidth: root.comboWidth
         kcm: root.kcm
         noneText: root.noneText
         showPreview: root.showPreview
+        layoutFilter: root.layoutFilter
         currentLayoutId: root.currentLayoutId
         resolvedDefaultId: root.resolvedDefaultId
-
         onActivated: {
-            let selectedValue = model[currentIndex].value
-            if (selectedValue === "") {
-                root.assignmentCleared()
-            } else {
-                root.assignmentSelected(selectedValue)
-            }
+            let selectedValue = model[currentIndex].value;
+            if (selectedValue === "")
+                root.assignmentCleared();
+            else
+                root.assignmentSelected(selectedValue);
         }
     }
 
     ToolButton {
         icon.name: "edit-clear"
         onClicked: {
-            root.assignmentCleared()
-            layoutCombo.clearSelection()
+            root.assignmentCleared();
+            layoutCombo.clearSelection();
         }
         ToolTip.visible: hovered
         ToolTip.text: i18n("Clear assignment")
         Accessible.name: i18n("Clear assignment for %1", root.labelText)
     }
 
-    // Public function to clear selection programmatically
-    function clearSelection() {
-        layoutCombo.clearSelection()
-    }
 }

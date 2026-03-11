@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import ".."
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import ".."
 
 /**
  * @brief Card for managing app-to-zone auto-snap rules per layout.
@@ -19,41 +19,108 @@ Kirigami.Card {
     required property var kcm
     required property QtObject constants
     required property WindowPickerDialog windowPickerDialog
-
+    // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
+    property int viewMode: 0
     // Current layout selection (populated from kcm.layouts)
     property string selectedLayoutId: ""
     property var currentRules: []
     property int selectedLayoutZoneCount: 99
     property bool pickerOpenedByUs: false
     // The effective layout ID: if "Default" is selected (empty), resolve to the global default
-    readonly property string effectiveLayoutId: selectedLayoutId !== ""
-        ? selectedLayoutId
-        : (kcm ? kcm.defaultLayoutId : "")
+    readonly property string effectiveLayoutId: selectedLayoutId !== "" ? selectedLayoutId : (kcm ? kcm.defaultLayoutId : "")
     readonly property bool hasSelectedLayout: effectiveLayoutId !== ""
 
-    Connections {
-        target: root.kcm
-        function onAppRulesRefreshed() {
-            root.refreshRules()
+    function updateSelectedLayoutZoneCount() {
+        let layoutId = effectiveLayoutId;
+        if (!kcm || !kcm.layouts || layoutId === "") {
+            selectedLayoutZoneCount = 99;
+            return ;
         }
+        for (let i = 0; i < kcm.layouts.length; ++i) {
+            if (kcm.layouts[i].id === layoutId) {
+                selectedLayoutZoneCount = kcm.layouts[i].zoneCount || 99;
+                return ;
+            }
+        }
+        selectedLayoutZoneCount = 99;
+    }
+
+    function refreshRules() {
+        let layoutId = effectiveLayoutId;
+        if (layoutId !== "" && kcm)
+            currentRules = kcm.getAppRulesForLayout(layoutId);
+        else
+            currentRules = [];
+    }
+
+    function addRule(pattern, zoneNumber, targetScreen) {
+        let trimmed = pattern.trim();
+        if (trimmed.length === 0)
+            return ;
+
+        let layoutId = effectiveLayoutId;
+        if (layoutId === "" || !kcm)
+            return ;
+
+        let screen = targetScreen || "";
+        // Check for duplicate: same pattern AND same targetScreen
+        let lowerPattern = trimmed.toLowerCase();
+        for (let i = 0; i < currentRules.length; ++i) {
+            let rule = currentRules[i];
+            if (rule.pattern.toLowerCase() === lowerPattern && (rule.targetScreen || "") === screen) {
+                duplicateWarning.visible = true;
+                duplicateTimer.restart();
+                return ;
+            }
+        }
+        kcm.addAppRuleToLayout(layoutId, trimmed, zoneNumber, screen);
+        screenCombo.reset();
+        refreshRules();
+    }
+
+    function removeRule(index) {
+        let layoutId = effectiveLayoutId;
+        if (layoutId !== "" && kcm) {
+            kcm.removeAppRuleFromLayout(layoutId, index);
+            refreshRules();
+        }
+    }
+
+    onViewModeChanged: {
+        selectedLayoutId = "";
+        if (layoutCombo)
+            layoutCombo.clearSelection();
+
+        updateSelectedLayoutZoneCount();
+        refreshRules();
+    }
+
+    Connections {
+        function onAppRulesRefreshed() {
+            root.refreshRules();
+        }
+
+        target: root.kcm
+    }
+
+    Connections {
+        function onPicked(value) {
+            patternField.text = value;
+            root.pickerOpenedByUs = false;
+        }
+
+        function onClosed() {
+            root.pickerOpenedByUs = false;
+        }
+
+        target: root.windowPickerDialog
+        enabled: root.pickerOpenedByUs
     }
 
     header: Kirigami.Heading {
         level: 3
-        text: i18n("App-to-Zone Rules")
+        text: root.viewMode === 1 ? i18n("App-to-Zone Tiling Rules") : i18n("App-to-Zone Rules")
         padding: Kirigami.Units.smallSpacing
-    }
-
-    Connections {
-        target: root.windowPickerDialog
-        enabled: root.pickerOpenedByUs
-        function onPicked(value) {
-            patternField.text = value
-            root.pickerOpenedByUs = false
-        }
-        function onClosed() {
-            root.pickerOpenedByUs = false
-        }
     }
 
     contentItem: ColumnLayout {
@@ -70,24 +137,25 @@ Kirigami.Card {
 
             LayoutComboBox {
                 id: layoutCombo
+
                 Layout.fillWidth: true
                 kcm: root.kcm
                 noneText: i18n("Default")
-                showPreview: true
+                layoutFilter: root.viewMode === 1 ? 1 : 0
+                showPreview: root.viewMode === 0
                 Accessible.name: i18n("Layout for app rules")
-
                 onActivated: {
-                    let selectedValue = model[currentIndex].value
-                    root.selectedLayoutId = selectedValue
-                    root.updateSelectedLayoutZoneCount()
-                    root.refreshRules()
+                    let selectedValue = model[currentIndex].value;
+                    root.selectedLayoutId = selectedValue;
+                    root.updateSelectedLayoutZoneCount();
+                    root.refreshRules();
                 }
-
                 Component.onCompleted: {
-                    root.updateSelectedLayoutZoneCount()
-                    root.refreshRules()
+                    root.updateSelectedLayoutZoneCount();
+                    root.refreshRules();
                 }
             }
+
         }
 
         Kirigami.Separator {
@@ -102,14 +170,14 @@ Kirigami.Card {
 
             TextField {
                 id: patternField
+
                 Layout.fillWidth: true
                 placeholderText: i18n("Window class pattern (e.g., firefox, org.kde.dolphin)")
                 Accessible.name: i18n("Window class pattern")
-
                 onAccepted: {
                     if (text.length > 0 && zoneSpinBox.value > 0) {
-                        root.addRule(text, zoneSpinBox.value, screenCombo.currentValue)
-                        text = ""
+                        root.addRule(text, zoneSpinBox.value, screenCombo.currentValue);
+                        text = "";
                     }
                 }
             }
@@ -120,6 +188,7 @@ Kirigami.Card {
 
             SpinBox {
                 id: zoneSpinBox
+
                 from: 1
                 to: Math.max(1, root.selectedLayoutZoneCount)
                 value: 1
@@ -129,6 +198,7 @@ Kirigami.Card {
 
             ScreenComboBox {
                 id: screenCombo
+
                 kcm: root.kcm
                 noneText: i18n("Any Screen")
                 implicitWidth: Kirigami.Units.gridUnit * 12
@@ -143,8 +213,8 @@ Kirigami.Card {
                 ToolTip.visible: hovered
                 Accessible.name: i18n("Add app-to-zone rule")
                 onClicked: {
-                    root.addRule(patternField.text, zoneSpinBox.value, screenCombo.currentValue)
-                    patternField.text = ""
+                    root.addRule(patternField.text, zoneSpinBox.value, screenCombo.currentValue);
+                    patternField.text = "";
                 }
             }
 
@@ -153,17 +223,18 @@ Kirigami.Card {
                 ToolTip.text: i18n("Pick from running windows")
                 ToolTip.visible: hovered
                 Accessible.name: i18n("Pick from running windows")
-
                 onClicked: {
-                    root.pickerOpenedByUs = true
-                    root.windowPickerDialog.openForClasses()
+                    root.pickerOpenedByUs = true;
+                    root.windowPickerDialog.openForClasses();
                 }
             }
+
         }
 
         // Rules list
         ListView {
             id: rulesListView
+
             Layout.fillWidth: true
             Layout.preferredHeight: Math.max(contentHeight, Kirigami.Units.gridUnit * 5)
             Layout.minimumHeight: Kirigami.Units.gridUnit * 5
@@ -171,12 +242,21 @@ Kirigami.Card {
             clip: true
             model: root.currentRules
             interactive: false
-            opacity: root.hasSelectedLayout ? 1.0 : 0.5
+            opacity: root.hasSelectedLayout ? 1 : 0.5
+
+            Kirigami.PlaceholderMessage {
+                anchors.centerIn: parent
+                width: parent.width - Kirigami.Units.gridUnit * 4
+                visible: rulesListView.count === 0
+                text: root.hasSelectedLayout ? i18n("No app rules defined") : i18n("No layouts available")
+                explanation: root.hasSelectedLayout ? i18n("Add rules above to auto-snap windows to specific zones when they open") : i18n("Create a layout first to define app-to-zone rules")
+            }
 
             delegate: ItemDelegate {
-                width: ListView.view.width
                 required property var modelData
                 required property int index
+
+                width: ListView.view.width
 
                 contentItem: RowLayout {
                     Kirigami.Icon {
@@ -194,38 +274,30 @@ Kirigami.Card {
                     }
 
                     Label {
-                        text: modelData.targetScreen
-                            ? i18n("→ Zone %1 on %2", modelData.zoneNumber, modelData.targetScreen)
-                            : i18n("→ Zone %1", modelData.zoneNumber)
+                        text: modelData.targetScreen ? i18n("→ Zone %1 on %2", modelData.zoneNumber, modelData.targetScreen) : i18n("→ Zone %1", modelData.zoneNumber)
                         opacity: 0.7
                         Layout.alignment: Qt.AlignVCenter
                     }
 
-                    Item { Layout.fillWidth: true }
+                    Item {
+                        Layout.fillWidth: true
+                    }
 
                     ToolButton {
                         icon.name: "edit-delete"
                         onClicked: root.removeRule(index)
                         Accessible.name: i18n("Remove rule for %1", modelData.pattern)
                     }
+
                 }
+
             }
 
-            Kirigami.PlaceholderMessage {
-                anchors.centerIn: parent
-                width: parent.width - Kirigami.Units.gridUnit * 4
-                visible: rulesListView.count === 0
-                text: root.hasSelectedLayout
-                    ? i18n("No app rules defined")
-                    : i18n("No layouts available")
-                explanation: root.hasSelectedLayout
-                    ? i18n("Add rules above to auto-snap windows to specific zones when they open")
-                    : i18n("Create a layout first to define app-to-zone rules")
-            }
         }
 
         Kirigami.InlineMessage {
             id: duplicateWarning
+
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.smallSpacing
             type: Kirigami.MessageType.Warning
@@ -234,76 +306,22 @@ Kirigami.Card {
 
             Timer {
                 id: duplicateTimer
+
                 interval: 3000
                 onTriggered: duplicateWarning.visible = false
             }
+
         }
 
         Label {
-            text: i18n("Rules are checked in order. The first matching pattern determines the zone. Patterns are case-insensitive substring matches.")
+            text: root.viewMode === 1 ? i18n("Rules are shared across modes. Zone numbers correspond to the algorithm's tile positions.") : i18n("Rules are checked in order. The first match wins. Patterns match any part of the window class name, ignoring case.")
             font.italic: true
             opacity: 0.7
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.smallSpacing
         }
+
     }
 
-    function updateSelectedLayoutZoneCount() {
-        let layoutId = effectiveLayoutId
-        if (!kcm || !kcm.layouts || layoutId === "") {
-            selectedLayoutZoneCount = 99
-            return
-        }
-        for (let i = 0; i < kcm.layouts.length; ++i) {
-            if (kcm.layouts[i].id === layoutId) {
-                selectedLayoutZoneCount = kcm.layouts[i].zoneCount || 99
-                return
-            }
-        }
-        selectedLayoutZoneCount = 99
-    }
-
-    function refreshRules() {
-        let layoutId = effectiveLayoutId
-        if (layoutId !== "" && kcm) {
-            currentRules = kcm.getAppRulesForLayout(layoutId)
-        } else {
-            currentRules = []
-        }
-    }
-
-    function addRule(pattern, zoneNumber, targetScreen) {
-        let trimmed = pattern.trim()
-        if (trimmed.length === 0) {
-            return
-        }
-        let layoutId = effectiveLayoutId
-        if (layoutId === "" || !kcm) {
-            return
-        }
-        let screen = targetScreen || ""
-        // Check for duplicate: same pattern AND same targetScreen
-        let lowerPattern = trimmed.toLowerCase()
-        for (let i = 0; i < currentRules.length; ++i) {
-            let rule = currentRules[i]
-            if (rule.pattern.toLowerCase() === lowerPattern
-                    && (rule.targetScreen || "") === screen) {
-                duplicateWarning.visible = true
-                duplicateTimer.restart()
-                return
-            }
-        }
-        kcm.addAppRuleToLayout(layoutId, trimmed, zoneNumber, screen)
-        screenCombo.reset()
-        refreshRules()
-    }
-
-    function removeRule(index) {
-        let layoutId = effectiveLayoutId
-        if (layoutId !== "" && kcm) {
-            kcm.removeAppRuleFromLayout(layoutId, index)
-            refreshRules()
-        }
-    }
 }

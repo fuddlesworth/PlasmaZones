@@ -19,7 +19,7 @@ Rectangle {
     property bool isSelected: false
     // Font properties for zone number labels
     property string fontFamily: ""
-    property real fontSizeScale: 1.0
+    property real fontSizeScale: 1
     property int fontWeight: Font.Bold
     property bool fontItalic: false
     property bool fontUnderline: false
@@ -33,8 +33,7 @@ Rectangle {
     readonly property real screenAspectRatio: primaryScreen ? (primaryScreen.width / primaryScreen.height) : (16 / 9) // Default to 16:9 if no screen
     // Calculate dimensions based on aspect ratio.
     // Use a base height and calculate width to match screen ratio.
-    readonly property real baseHeight: Kirigami.Units.gridUnit * 7
-    // 56px base height (compact)
+    readonly property real baseHeight: Kirigami.Units.gridUnit * 9
     readonly property real calculatedWidth: baseHeight * screenAspectRatio
     readonly property real minThumbnailWidth: Kirigami.Units.gridUnit * 10 // 80px minimum
     readonly property real maxThumbnailWidth: Kirigami.Units.gridUnit * 20 // 160px maximum
@@ -63,7 +62,7 @@ Rectangle {
         zones: root.layout && root.layout.zones ? root.layout.zones : []
         isActive: root.isSelected
         zonePadding: 1 // Minimal padding for thumbnail
-        edgeGap: 1     // Minimal edge gap for thumbnail
+        edgeGap: 1 // Minimal edge gap for thumbnail
         minZoneSize: 8
         showZoneNumbers: true
         fontFamily: root.fontFamily

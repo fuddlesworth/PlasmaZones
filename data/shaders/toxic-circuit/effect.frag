@@ -141,7 +141,8 @@ float toxicDrip(vec2 uv, float time, float intensity) {
     float drip = 0.0;
 
     // Multiple drip streams
-    for (int i = 0; i < 5; i++) {
+    int dripStreams = int(customParams[3].w >= 0.0 ? customParams[3].w : 5.0);
+    for (int i = 0; i < dripStreams && i < 10; i++) {
         float fi = float(i);
         float xOffset = hash11(fi * 17.3) * 0.8 + 0.1;
         float speed = 0.3 + hash11(fi * 23.7) * 0.4;
@@ -163,7 +164,7 @@ float toxicDrip(vec2 uv, float time, float intensity) {
         float dripHead = smoothstep(0.04, 0.0, dist);
         float trail = smoothstep(0.02, 0.0, abs(uv.x - dripX)) *
                       smoothstep(dripPos.y, dripPos.y + 0.3, uv.y) *
-                      smoothstep(1.0, dripPos.y + 0.1, uv.y);
+                      smoothstep(1.0, min(dripPos.y + 0.1, 0.999), uv.y);
 
         drip += (dripHead + trail * 0.5) * (0.5 + 0.5 * sin(time * 3.0 + phase));
     }
@@ -233,7 +234,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
 
     // Voltage level: overall energy is the circuit's operating voltage.
     // Low voltage = brownout (dim, flickery), high voltage = running hot.
-    float voltage = hasAudio ? clamp(overall * 2.0 * audioSensitivity, 0.0, 1.0) : 0.0;
+    float voltage = hasAudio ? clamp(overall * 1.4 * audioSensitivity, 0.0, 1.0) : 0.0;
     // Smoothed bass impulse for transient events (overload arcs, cascades)
     float bassHit = hasAudio ? smoothstep(0.35, 0.85, bass) : 0.0;
     // Mid-frequency signal density — drives packet propagation speed/count
@@ -255,10 +256,10 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         dripIntensity *= 1.0 + signalDensity * 0.3;
         // Smog: heat haze from overvoltage, clears slightly during brownout
         smogDensity *= (1.0 - brownout * 0.5) + overvoltage * 0.5;
-        // Glitch: short-circuit sparks from treble, plus instability during brownout
-        glitchAmount *= 1.0 + trebleSpike * 0.8 + brownout * 0.6;
-        // Glow: voltage directly controls trace luminance
-        glowStrength *= mix(0.4, 1.0, voltage) + overvoltage * 0.8;
+        // Glitch: instability during brownout (treble sparks handled spatially via static discharge)
+        glitchAmount *= 1.0 + brownout * 0.6;
+        // Glow: voltage sets baseline trace luminance (surge effect adds spatial bass response)
+        glowStrength *= mix(0.4, 1.0, voltage);
         // Chroma: overvoltage causes chromatic stress on the traces
         chromaShift *= 1.0 + overvoltage * 0.7;
     }
@@ -273,29 +274,29 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     // Colors - Toxic Circuit palette
     vec3 primaryColor = colorWithFallback(customColors[0].rgb, vec3(0.224, 1.0, 0.078));   // #39FF14
     vec3 secondaryColor = colorWithFallback(customColors[1].rgb, vec3(0.749, 0.0, 1.0)); // #BF00FF
-    vec3 bgColor = vec3(0.102, 0.0, 0.2);                                                // #1A0033
+    vec3 arcColorParam = colorWithFallback(customColors[2].rgb, vec3(0.0, 1.0, 0.533));   // #00ff88
+    vec3 smogColorParam = colorWithFallback(customColors[3].rgb, vec3(0.102, 0.0, 0.2));  // #1a0033
+    vec3 bgColor = smogColorParam;
     vec3 accentColor = vec3(1.0, 0.063, 0.941);                                          // #FF10F0
 
     float time = iTime * pulseSpeed;
 
-    // Highlighted state - dramatic color swap and intensity boost
-    float highlightBoost = 1.0;
-    if (isHighlighted) {
-        // Swap primary colors - purple becomes dominant, green becomes accent
-        vec3 temp = primaryColor;
-        primaryColor = accentColor;
-        secondaryColor = mix(temp, vec3(1.0, 1.0, 0.0), 0.3);  // Yellow-green accent
-        bgColor = vec3(0.15, 0.0, 0.25);  // Lighter purple base
+    // Vitality system: highlighted = vivid/energetic, dormant = desaturated/dim
+    float vitality = zoneVitality(isHighlighted);
 
-        // Dramatic parameter boosts
-        glowStrength *= 2.2;
-        chromaShift *= 1.8;
-        dripIntensity *= 2.0;
-        circuitDensity *= 0.8;  // Slightly larger circuits
-        pulseSpeed *= 1.5;  // Faster animation
-        fillOpacity = min(fillOpacity + 0.15, 0.95);
-        highlightBoost = 1.4;  // Overall brightness multiplier
-    }
+    // Highlighted: blend toward accent; dormant: desaturate
+    primaryColor = mix(primaryColor, accentColor, vitalityScale(0.0, 0.4, vitality));
+    primaryColor = vitalityDesaturate(primaryColor, vitality);
+    secondaryColor = vitalityDesaturate(secondaryColor, vitality);
+    bgColor = mix(bgColor, vec3(0.15, 0.0, 0.25), vitalityScale(0.0, 1.0, vitality));
+
+    glowStrength *= vitalityScale(0.5, 2.2, vitality);
+    chromaShift *= vitalityScale(0.6, 1.8, vitality);
+    dripIntensity *= vitalityScale(0.5, 2.0, vitality);
+    circuitDensity *= vitalityScale(0.8, 1.0, vitality);
+    pulseSpeed *= vitalityScale(0.7, 1.5, vitality);
+    fillOpacity = mix(fillOpacity, min(fillOpacity + 0.15, 0.95), vitality);
+    float highlightBoost = vitalityScale(0.75, 1.4, vitality);
 
     vec4 result = vec4(0.0);
     vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);  // zone-local for edge effects
@@ -368,22 +369,8 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         float colorMix = sin(mouseTime * 0.5 + globalUV.x * 3.0) * 0.5 + 0.5;
         vec3 circuitColor = mix(primaryColor, secondaryColor, colorMix);
 
-        // Chromatic aberration - approximate from single evaluation
-        // Instead of calling circuitPattern 3 times, shift the single result
-        // by sampling the UV gradient to fake the R/B channel offsets
-        float enhancedChroma = chromaShift * (1.0 + mouseInfluence * 2.5);
-        vec2 chromaDir = vec2(enhancedChroma / rectSize.x, 0.0);
-        // dFdx is technically UB in non-uniform flow per Vulkan spec, but the SDF
-        // branch is spatially coherent (adjacent fragments agree), so this is safe
-        // on all real GPU drivers.
-        float dCircuit = dFdx(circuit) * chromaDir.x * rectSize.x;
-        float circuitR = clamp(circuit + dCircuit, 0.0, 1.0);
-        float circuitB = clamp(circuit - dCircuit, 0.0, 1.0);
-
-        vec3 circuitRGB;
-        circuitRGB.r = circuitR * circuitColor.r;
-        circuitRGB.g = circuit * circuitColor.g;
-        circuitRGB.b = circuitB * circuitColor.b;
+        // Circuit traces glow in their voltage-aware trace color
+        vec3 circuitRGB = circuitColor * circuit;
 
         baseColor += circuitRGB * glowStrength;
 
@@ -399,7 +386,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         // Atmospheric smog layer - clears near cursor (screen-space)
         float smogMod = smogDensity * (1.0 - mouseInfluence * 0.6);  // Smog thins near cursor
         float smog = atmosphericSmog(globalUV, iTime, smogMod);
-        vec3 smogColor = mix(bgColor, secondaryColor * 0.3, smog);
+        vec3 smogColor = mix(smogColorParam, secondaryColor * 0.3, smog);
         baseColor = mix(baseColor, smogColor, smog * 0.5);
 
         // Iridescent shimmer (like toxic skin) - subtle (screen-space)
@@ -471,17 +458,20 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         // Individual trace segments light up in sequence, creating visible
         // signal flow rather than uniform brightening.
         if (hasAudio && signalDensity > 0.05) {
+            // Bass overclock: packets race faster when bass hits
+            float packetSpeedBoost = 1.0 + bass * 0.8 * audioSensitivity;
+
             // Horizontal trace signal packets
             float hTraceOn = smoothstep(0.02, 0.0, abs(fract(glitchedUV.y * circuitDensity) - 0.5));
             // Packet position along horizontal trace: sharp, localized pulses
-            float hPacketPhase = glitchedUV.x * circuitDensity * 3.0 - iTime * (4.0 + signalDensity * 8.0);
+            float hPacketPhase = glitchedUV.x * circuitDensity * 3.0 - iTime * packetSpeedBoost * (4.0 + signalDensity * 8.0);
             float hPacket = pow(max(sin(hPacketPhase) * 0.5 + 0.5, 0.0), 8.0);
             // Second packet stream at different speed for density
             float hPacket2 = pow(max(sin(hPacketPhase * 1.7 + 2.1) * 0.5 + 0.5, 0.0), 8.0);
 
             // Vertical trace signal packets
             float vTraceOn = smoothstep(0.02, 0.0, abs(fract(glitchedUV.x * circuitDensity) - 0.5));
-            float vPacketPhase = glitchedUV.y * circuitDensity * 3.0 + iTime * (3.5 + signalDensity * 7.0);
+            float vPacketPhase = glitchedUV.y * circuitDensity * 3.0 + iTime * packetSpeedBoost * (3.5 + signalDensity * 7.0);
             float vPacket = pow(max(sin(vPacketPhase) * 0.5 + 0.5, 0.0), 8.0);
             float vPacket2 = pow(max(sin(vPacketPhase * 1.4 + 3.7) * 0.5 + 0.5, 0.0), 8.0);
 
@@ -493,6 +483,22 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
             // Signal color: slightly different hue from static traces
             vec3 signalColor = mix(primaryColor, vec3(0.5, 1.0, 0.8), 0.3);
             baseColor += signalColor * signal * 0.5;
+        }
+
+        // STATIC DISCHARGE: treble spikes cause brief bright arcs/sparks between
+        // nearby nodes. Quick flash that fades rapidly for a snappy, electrical feel.
+        if (hasAudio && treble > 0.1) {
+            vec2 gridCell = floor(glitchedUV * circuitDensity);
+            float cellHash = hash21(gridCell);
+            // Arc trigger: only fires on treble spikes, per-cell random phase
+            float arc = step(0.7, treble) * exp(-fract(iTime * 6.0 + cellHash) * 4.0);
+            // Restrict to trace-adjacent pixels for arc-like appearance
+            float hTraceA = smoothstep(0.03, 0.0, abs(fract(glitchedUV.y * circuitDensity) - 0.5));
+            float vTraceA = smoothstep(0.03, 0.0, abs(fract(glitchedUV.x * circuitDensity) - 0.5));
+            float nearTrace = max(hTraceA, vTraceA);
+            // Spark color: white-hot with primary tint
+            vec3 arcColor = mix(vec3(1.0), arcColorParam, 0.3);
+            baseColor += arcColor * arc * nearTrace * sparkIntensity * audioSensitivity;
         }
 
         // Inner edge glow (fresnel-like) - toned down
@@ -536,61 +542,48 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         }
         baseColor *= max(flicker, 0.0);
 
-        // Apply highlight brightness boost
+        // Vitality brightness
         baseColor *= highlightBoost;
 
-        // Highlighted: add pulsing inner bloom
-        if (isHighlighted) {
-            float bloom = sin(iTime * 4.0) * 0.15 + 0.85;
+        // Pulsing inner bloom (vitality-modulated)
+        {
+            float bloom = sin(iTime * vitalityScale(2.0, 4.0, vitality)) * vitalityScale(0.03, 0.15, vitality) + vitalityScale(0.97, 0.85, vitality);
             baseColor *= bloom;
-            baseColor += accentColor * 0.15;
+            baseColor += accentColor * vitalityScale(0.02, 0.15, vitality);
         }
 
         result.rgb = baseColor;
         result.a = fillOpacity;
     }
 
-    // Neon toxic border with chromatic split
-    float effectiveBorderWidth = isHighlighted ? borderWidth * 1.5 : borderWidth;
+    // Neon toxic border with voltage-aware glow (vitality-modulated)
+    float effectiveBorderWidth = borderWidth * vitalityScale(1.0, 1.5, vitality);
     float border = softBorder(d, effectiveBorderWidth);
-    if (abs(d) < effectiveBorderWidth + chromaShift + 5.0) {
-        // Chromatic border split
-        float chromaAmount = isHighlighted ? chromaShift * 0.6 : chromaShift * 0.4;
-        float dR = sdRoundedBox(p + vec2(chromaAmount, 0.0), rectSize * 0.5, borderRadius);
-        float dB = sdRoundedBox(p - vec2(chromaAmount, 0.0), rectSize * 0.5, borderRadius);
-
-        float bR = softBorder(dR, effectiveBorderWidth);
-        float bG = border;
-        float bB = softBorder(dB, effectiveBorderWidth);
-
-        // Animated border color - faster and brighter when highlighted
-        float pulseRate = isHighlighted ? 5.0 : 3.0;
+    if (abs(d) < effectiveBorderWidth + 5.0) {
+        // Animated border color (vitality-modulated pulse rate)
+        float pulseRate = vitalityScale(3.0, 5.0, vitality);
         float borderPulse = sin(iTime * pulseSpeed * pulseRate) * 0.5 + 0.5;
         vec3 borderBase = mix(primaryColor, secondaryColor, borderPulse);
 
-        // Highlighted: use brighter, more saturated colors
-        if (isHighlighted) {
-            borderBase = mix(borderBase, accentColor, 0.4);
-            borderBase *= 1.3;
-        }
+        // Vitality-scaled accent blend and brightness
+        borderBase = mix(borderBase, accentColor, vitalityScale(0.0, 0.4, vitality));
+        borderBase *= vitalityScale(0.8, 1.3, vitality);
 
-        vec3 borderRGB;
-        float intensityMult = isHighlighted ? 2.8 : 2.0;
-        borderRGB.r = borderBase.r * bR * intensityMult;
-        borderRGB.g = borderBase.g * bG * intensityMult;
-        borderRGB.b = borderBase.b * bB * intensityMult;
+        // Border glows uniformly in its voltage-aware color
+        float intensityMult = vitalityScale(2.0, 2.8, vitality);
+        vec3 borderRGB = borderBase * border * intensityMult;
 
-        // White-hot core - brighter when highlighted
+        // White-hot core (vitality-modulated)
         float coreIntensity = pow(border, 2.0);
-        float whiteMix = isHighlighted ? 0.8 : 0.6;
+        float whiteMix = vitalityScale(0.6, 0.8, vitality);
         borderRGB = mix(borderRGB, vec3(1.0), coreIntensity * whiteMix);
 
-        // Traveling energy along border - faster when highlighted
+        // Traveling energy along border (vitality-modulated speed)
         float angle = atan(p.y, p.x);
-        float travelSpeed = isHighlighted ? 8.0 : 4.0;
+        float travelSpeed = vitalityScale(4.0, 8.0, vitality);
         float energyTravel = sin(angle * 8.0 - iTime * travelSpeed) * 0.5 + 0.5;
         energyTravel = pow(energyTravel, 3.0);
-        borderRGB += primaryColor * energyTravel * border * (isHighlighted ? 0.8 : 0.5);
+        borderRGB += primaryColor * energyTravel * border * vitalityScale(0.5, 0.8, vitality);
 
         // Mouse intensifies nearby border section
         if (mouseInfluence > 0.01) {
@@ -598,33 +591,33 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
             borderRGB *= 1.0 + mouseInfluence * 0.4;
         }
 
-        float borderAlpha = max(max(bR, bG), bB);
-        result.rgb = mix(result.rgb, borderRGB, borderAlpha);
-        result.a = max(result.a, borderAlpha * 0.98);
+        result.rgb = mix(result.rgb, borderRGB, border);
+        result.a = max(result.a, border * 0.98);
     }
 
-    // Outer toxic glow
-    float outerGlowRange = isHighlighted ? 60.0 : 25.0;
+    // Outer toxic glow (vitality-modulated)
+    float outerGlowRange = vitalityScale(25.0, 60.0, vitality);
     if (d > 0.0 && d < outerGlowRange) {
-        float glowFalloff1 = isHighlighted ? 20.0 : 10.0;
-        float glowFalloff2 = isHighlighted ? 40.0 : 20.0;
+        float glowFalloff1 = vitalityScale(10.0, 20.0, vitality);
+        float glowFalloff2 = vitalityScale(20.0, 40.0, vitality);
 
-        float glow1 = expGlow(d, glowFalloff1, isHighlighted ? 0.7 : 0.3);
-        float glow2 = expGlow(d, glowFalloff2, isHighlighted ? 0.4 : 0.15);
+        float glow1 = expGlow(d, glowFalloff1, vitalityScale(0.3, 0.7, vitality));
+        float glow2 = expGlow(d, glowFalloff2, vitalityScale(0.15, 0.4, vitality));
 
         float glowPulse = sin(iTime * pulseSpeed * 2.0) * 0.2 + 0.8;
         vec3 glowColor = mix(primaryColor, secondaryColor, glow1) * glowPulse;
 
-        // Highlighted: add pulsing ring effect
-        if (isHighlighted) {
+        // Pulsing ring effect (vitality-modulated)
+        float ringStr = vitalityScale(0.0, 1.0, vitality);
+        if (ringStr > 0.01) {
             float ringDist = mod(d - iTime * 25.0, 20.0);
             float ring = smoothstep(2.5, 0.0, ringDist) * smoothstep(0.0, 1.0, ringDist);
-            glowColor += accentColor * ring * 1.2;
-            glow1 += ring * 0.3;
+            glowColor += accentColor * ring * 1.2 * ringStr;
+            glow1 += ring * 0.3 * ringStr;
         }
 
-        result.rgb += glowColor * (glow1 + glow2) * glowStrength * (isHighlighted ? 0.7 : 0.4);
-        result.a = max(result.a, (glow1 + glow2 * 0.5) * (isHighlighted ? 0.6 : 0.25));
+        result.rgb += glowColor * (glow1 + glow2) * glowStrength * vitalityScale(0.4, 0.7, vitality);
+        result.a = max(result.a, (glow1 + glow2 * 0.5) * vitalityScale(0.25, 0.6, vitality));
     }
 
     // Corner corruption glitches + TREBLE SHORT-CIRCUIT SPARKS at junctions
@@ -670,10 +663,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
                     // red shifts one way, blue the other, creating a sharp split
                     float sparkChroma = trebleSpike * 4.0;
                     vec2 sparkOffset = vec2(sparkChroma / rectSize.x, 0.0);
-                    vec3 sparkColor;
-                    sparkColor.r = sparkBright * 1.2;  // Red channel overshoots
-                    sparkColor.g = sparkBright * 0.7;  // Green is dimmer
-                    sparkColor.b = sparkBright * 1.4;  // Blue channel overshoots more
+                    vec3 sparkColor = arcColorParam * sparkBright * 1.3 + vec3(0.15) * sparkBright;
                     // Slight spatial offset for R vs B to simulate chroma split
                     float rShift = smoothstep(0.06, 0.0, abs(cellFrac.x - 0.5 + sparkOffset.x * 20.0));
                     float bShift = smoothstep(0.06, 0.0, abs(cellFrac.x - 0.5 - sparkOffset.x * 20.0));
@@ -689,6 +679,72 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     return result;
 }
 
+// ─── Custom Label Composite ───────────────────────────────────────
+
+vec4 compositeToxicLabels(vec4 color, vec2 fragCoord,
+                          float bass, float treble, float overall, bool hasAudio) {
+    vec2 uv = labelsUv(fragCoord);
+    vec2 px = 1.0 / max(iResolution, vec2(1.0));
+    vec4 labels = texture(uZoneLabels, uv);
+
+    vec3 primaryColor = colorWithFallback(customColors[0].rgb, vec3(0.224, 1.0, 0.078));
+    vec3 secondaryColor = colorWithFallback(customColors[1].rgb, vec3(0.749, 0.0, 1.0));
+    float labelGlowSpread = customParams[3].x >= 0.0 ? customParams[3].x : 3.0;
+    float labelBrightness = customParams[3].y >= 0.0 ? customParams[3].y : 2.2;
+    float labelAudioReact = customParams[3].z >= 0.0 ? customParams[3].z : 1.0;
+    float arcFreq = customParams[4].x >= 0.0 ? customParams[4].x : 12.0;
+
+    // Gaussian halo with angular noise arcs
+    float halo = 0.0;
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            float w = exp(-float(dx * dx + dy * dy) * 0.3);
+            halo += texture(uZoneLabels, uv + vec2(float(dx), float(dy)) * px * labelGlowSpread).a * w;
+        }
+    }
+    halo /= 16.5;
+
+    if (halo > 0.003) {
+        float haloEdge = halo * (1.0 - labels.a);
+
+        // Electric arc: angular noise creates jagged discharge
+        float angle = atan(uv.y - 0.5, uv.x - 0.5);
+        float arc = angularNoise(angle, arcFreq, iTime * 1.5);
+        arc = pow(arc, 3.0) * 2.0;
+
+        // Voltage flicker
+        float voltage = 0.8 + 0.2 * sin(iTime * 30.0) * sin(iTime * 17.0);
+        vec3 arcCol = mix(primaryColor, secondaryColor, arc * 0.5);
+        float arcBright = haloEdge * (0.4 + arc * 0.6) * voltage * (hasAudio ? 1.0 + bass * labelAudioReact : 1.0);
+        color.rgb += arcCol * arcBright;
+
+        // Chromatic split on halo
+        float rH = texture(uZoneLabels, uv + vec2(px.x * 2.0, 0.0)).a;
+        float bH = texture(uZoneLabels, uv - vec2(px.x * 2.0, 0.0)).a;
+        color.rgb += vec3(rH, 0.0, bH) * (1.0 - labels.a) * primaryColor * 0.2;
+
+        color.a = max(color.a, haloEdge * 0.5);
+    }
+
+    // Core: toxic amplified view with glitch bands
+    if (labels.a > 0.01) {
+        vec3 core = color.rgb * labelBrightness + primaryColor * 0.2;
+
+        // Treble glitch bands
+        if (hasAudio && treble > 0.1) {
+            float band = step(0.85, fract(fragCoord.y * 0.15 + iTime * 5.0));
+            core = mix(core, secondaryColor * 2.0, band * treble * 0.4 * labelAudioReact);
+        }
+
+        float overallPulse = hasAudio ? 1.0 + overall * 0.5 * labelAudioReact : 1.0;
+        core *= overallPulse;
+        color.rgb = mix(color.rgb, core, labels.a);
+        color.a = max(color.a, labels.a);
+    }
+
+    return color;
+}
+
 void main() {
     vec2 fragCoord = vFragCoord;
     vec4 color = vec4(0.0);
@@ -700,10 +756,10 @@ void main() {
 
     // Audio analysis (computed once for all zones)
     bool  hasAudio = iAudioSpectrumSize > 0;
-    float bass    = getBass();
-    float mids    = getMids();
-    float treble  = getTreble();
-    float overall = getOverall();
+    float bass    = getBassSoft();
+    float mids    = getMidsSoft();
+    float treble  = getTrebleSoft();
+    float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
@@ -716,7 +772,8 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeLabelsWithUv(color, fragCoord);
+    if (customParams[4].y > 0.5)
+        color = compositeToxicLabels(color, fragCoord, bass, treble, overall, hasAudio);
 
     fragColor = clampFragColor(color);
 }

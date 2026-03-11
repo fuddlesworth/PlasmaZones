@@ -1,5 +1,5 @@
 # PlasmaZones RPM Spec File
-# FancyZones-style window tiling for KDE Plasma
+# Window tiling and autotiling for KDE Plasma
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6+).
@@ -14,7 +14,7 @@
 Name:           plasmazones
 Version:        0.0.0
 Release:        1%{?dist}
-Summary:        FancyZones-style window tiling for KDE Plasma
+Summary:        Window tiling and autotiling for KDE Plasma
 
 License:        GPL-3.0-or-later
 URL:            https://github.com/fuddlesworth/PlasmaZones
@@ -86,15 +86,16 @@ Requires:       kwin >= 6.6.0
 Requires:       hicolor-icon-theme
 
 %description
-PlasmaZones brings FancyZones-style window tiling to KDE Plasma 6.
+PlasmaZones is a window tiling and zone management tool for KDE Plasma 6.
 
 Features:
 - Drag windows to predefined zones
+- Automatic tiling with multiple layout algorithms
 - Custom zone layouts with visual editor
 - Modifier key activation (Shift, Ctrl, etc.)
 - Multi-monitor support
 - Keyboard navigation between zones
-- Activity-based layout switching
+- Activity and virtual desktop-based layout switching
 - Wayland-native using Layer Shell
 
 %prep

@@ -29,16 +29,9 @@ QColor outlineColorFor(const QColor& textColor, const QColor& backgroundColor)
 
 } // namespace
 
-QImage ZoneLabelTextureBuilder::build(const QVariantList& zones,
-                                      const QSize& size,
-                                      const QColor& labelFontColor,
-                                      bool showNumbers,
-                                      const QColor& backgroundColor,
-                                      const QString& fontFamily,
-                                      qreal fontSizeScale,
-                                      int fontWeight,
-                                      bool fontItalic,
-                                      bool fontUnderline,
+QImage ZoneLabelTextureBuilder::build(const QVariantList& zones, const QSize& size, const QColor& labelFontColor,
+                                      bool showNumbers, const QColor& backgroundColor, const QString& fontFamily,
+                                      qreal fontSizeScale, int fontWeight, bool fontItalic, bool fontUnderline,
                                       bool fontStrikeout)
 {
     if (!showNumbers || zones.isEmpty() || size.width() <= 0 || size.height() <= 0) {
@@ -111,8 +104,7 @@ QImage ZoneLabelTextureBuilder::build(const QVariantList& zones,
             const qreal lineWidth = textBounds.width();
 
             auto drawDecoration = [&](qreal yOffset) {
-                const QRectF lineRect(lineLeft, baselineY + yOffset - lineThickness / 2.0,
-                                      lineWidth, lineThickness);
+                const QRectF lineRect(lineLeft, baselineY + yOffset - lineThickness / 2.0, lineWidth, lineThickness);
                 QPainterPath lp;
                 lp.addRect(lineRect);
                 painter.setPen(outlinePen);

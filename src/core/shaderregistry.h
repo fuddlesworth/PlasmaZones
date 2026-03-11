@@ -6,10 +6,12 @@
 #include "plasmazones_export.h"
 #include <QObject>
 #include <QHash>
+#include <QImage>
 #include <QString>
 #include <QUrl>
 #include <QVariant>
 #include <QFileSystemWatcher>
+#include <QMutex>
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -66,6 +68,7 @@ public:
 
         bool isUserShader = false; ///< True for ~/.local/share shaders
         bool isMultipass = false; ///< True if multipass and bufferShader are set
+        bool useWallpaper = false; ///< True if shader subscribes to desktop wallpaper texture (binding 11)
         bool bufferFeedback = false; ///< True to enable ping-pong (buffer pass samples its own previous frame)
         qreal bufferScale = 1.0; ///< Buffer resolution scale (e.g. 0.5 = half size); clamped 0.125–1.0
         QString bufferWrap = QStringLiteral("clamp"); ///< "clamp" or "repeat" for iChannel0 sampler
@@ -116,7 +119,7 @@ public:
     Q_INVOKABLE QVariantMap shaderInfo(const QString& id) const;
 
     /**
-     * Get shader .qsb URL (returns empty if not found or "none")
+     * Get shader file:// URL to the fragment shader source (returns empty if not found or "none")
      */
     Q_INVOKABLE QUrl shaderUrl(const QString& id) const;
 
@@ -183,6 +186,25 @@ public:
      */
     void reportShaderBakeFinished(const QString& shaderId, bool success, const QString& error);
 
+    /**
+     * Resolve the current KDE Plasma desktop wallpaper image path.
+     * Reads from plasma-org.kde.plasma.desktop-appletsrc config file.
+     * Result is cached; returns empty string if no wallpaper found.
+     */
+    static QString plasmaWallpaperPath();
+
+    /**
+     * Load the current Plasma wallpaper as an RGBA8888 QImage.
+     * Caches the decoded image; invalidates if the file path or mtime changes.
+     * Returns a null QImage if no wallpaper is available.
+     */
+    static QImage loadWallpaperImage();
+
+    /**
+     * Clear cached wallpaper path and image so the next call re-reads from config.
+     */
+    static void invalidateWallpaperCache();
+
 Q_SIGNALS:
     void shadersChanged();
     void shaderCompilationStarted(const QString& shaderId);
@@ -211,6 +233,10 @@ private:
     static ShaderRegistry* s_instance;
     static QString systemShaderDir();
     static QString userShaderDir();
+    static QString s_cachedWallpaperPath;
+    static QImage s_cachedWallpaperImage;
+    static qint64 s_cachedWallpaperMtime;
+    static QMutex s_wallpaperCacheMutex;
 
     static constexpr int RefreshDebounceMs = 500;
 };

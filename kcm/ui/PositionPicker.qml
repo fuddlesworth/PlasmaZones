@@ -14,16 +14,16 @@ import org.kde.kirigami as Kirigami
  *   3=Left,       4=Center, 5=Right
  *   6=BottomLeft, 7=Bottom, 8=BottomRight
  *
- * Center (4) is disabled.
+ * All 9 positions are valid, including Center (4).
  */
 Item {
     id: root
 
-    // Selected cell index (0-8), center (4) is invalid
+    // Selected cell index (0-8)
     property int position: 1
     property bool enabled: true
     // Position labels for tooltips
-    readonly property var positionLabels: [i18n("Top-Left"), i18n("Top"), i18n("Top-Right"), i18n("Left"), "", i18n("Right"), i18n("Bottom-Left"), i18n("Bottom"), i18n("Bottom-Right")]
+    readonly property var positionLabels: [i18n("Top-Left"), i18n("Top"), i18n("Top-Right"), i18n("Left"), i18n("Center"), i18n("Right"), i18n("Bottom-Left"), i18n("Bottom"), i18n("Bottom-Right")]
 
     signal positionSelected(int newPosition)
 
@@ -82,9 +82,6 @@ Item {
                             height: (positionGrid.height - positionGrid.spacing * 2) / 3
                             radius: 3
                             color: {
-                                if (isCenter)
-                                    return "transparent";
-
                                 if (isSelected)
                                     return Kirigami.Theme.highlightColor;
 
@@ -94,9 +91,6 @@ Item {
                                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15);
                             }
                             border.color: {
-                                if (isCenter)
-                                    return "transparent";
-
                                 if (isSelected)
                                     return Kirigami.Theme.highlightColor;
 
@@ -128,6 +122,17 @@ Item {
                                 y: cell.isTopRow ? 2 : parent.height - height - 2
                             }
 
+                            // Center indicator (small rectangle for center position)
+                            Rectangle {
+                                visible: cell.isSelected && cell.isCenter
+                                color: Kirigami.Theme.backgroundColor
+                                opacity: 0.95
+                                radius: 2
+                                width: Math.min(parent.width * 0.5, 16)
+                                height: Math.min(parent.height * 0.4, 10)
+                                anchors.centerIn: parent
+                            }
+
                             // Vertical bar (left or right edge)
                             Rectangle {
                                 visible: cell.isSelected && !cell.isCenter && (cell.isLeftCol || cell.isRightCol)
@@ -153,13 +158,13 @@ Item {
 
                                 anchors.fill: parent
                                 hoverEnabled: true
-                                enabled: root.enabled && !cell.isCenter
+                                enabled: root.enabled
                                 cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                 onClicked: {
                                     root.position = cell.index;
                                     root.positionSelected(cell.index);
                                 }
-                                ToolTip.visible: containsMouse && !cell.isCenter && root.enabled
+                                ToolTip.visible: containsMouse && root.enabled
                                 ToolTip.delay: 500
                                 ToolTip.text: root.positionLabels[cell.index]
                             }

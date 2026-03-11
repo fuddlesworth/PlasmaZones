@@ -30,12 +30,30 @@ public:
     explicit UpdateChecker(QObject* parent = nullptr);
     ~UpdateChecker() override = default;
 
-    bool updateAvailable() const { return m_updateAvailable; }
-    QString latestVersion() const { return m_latestVersion; }
-    QString releaseUrl() const { return m_releaseUrl; }
-    QString releaseNotes() const { return m_releaseNotes; }
-    bool isChecking() const { return m_checking; }
-    QString errorMessage() const { return m_errorMessage; }
+    bool updateAvailable() const
+    {
+        return m_updateAvailable;
+    }
+    QString latestVersion() const
+    {
+        return m_latestVersion;
+    }
+    QString releaseUrl() const
+    {
+        return m_releaseUrl;
+    }
+    QString releaseNotes() const
+    {
+        return m_releaseNotes;
+    }
+    bool isChecking() const
+    {
+        return m_checking;
+    }
+    QString errorMessage() const
+    {
+        return m_errorMessage;
+    }
 
     /// Current installed version (from compile-time constant)
     static QString currentVersion();
@@ -76,10 +94,10 @@ private:
     QString m_releaseUrl;
     QString m_releaseNotes;
     QString m_errorMessage;
-    qint64 m_lastCheckTime = 0;  // Rate limiting: epoch ms of last check
+    qint64 m_lastCheckTime = 0; // Rate limiting: epoch ms of last check
 
-    static constexpr int CHECK_INTERVAL_MS = 5 * 60 * 1000;  // 5 minutes minimum between checks
-    static constexpr int REQUEST_TIMEOUT_MS = 15 * 1000;     // 15 second timeout
+    static constexpr int CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes minimum between checks
+    static constexpr int REQUEST_TIMEOUT_MS = 15 * 1000; // 15 second timeout
 };
 
 } // namespace PlasmaZones

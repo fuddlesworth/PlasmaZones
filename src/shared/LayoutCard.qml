@@ -17,24 +17,18 @@ import org.kde.kirigami as Kirigami
 Item {
     id: root
 
-    // Accessibility
-    Accessible.role: Accessible.Pane
-    Accessible.name: root.layoutData.name || ""
-
     // Data
-    property var layoutData: ({})
+    property var layoutData: ({
+    })
     property bool isActive: false
     property bool isSelected: false
     property bool isHovered: false
-
     // Dimensions (set by parent, no defaults)
     property real previewWidth
     property real previewHeight
-
     // Feature toggles
     property bool showCardBackground: false
     property bool showIndicatorBar: false
-
     // ZonePreview passthrough
     property bool interactive: false
     property int selectedZoneIndex: -1
@@ -47,81 +41,80 @@ Item {
     property color zoneHighlightColor: Kirigami.Theme.highlightColor
     property color zoneInactiveColor: Kirigami.Theme.textColor
     property color zoneBorderColor: Kirigami.Theme.textColor
-    property real hoverScale: 1.0
-
+    property real hoverScale: 1
     // Theme colors
     property color highlightColor: Kirigami.Theme.highlightColor
     property color textColor: Kirigami.Theme.textColor
     property color backgroundColor: Kirigami.Theme.backgroundColor
-
     // Font passthrough
     property string fontFamily: ""
-    property real fontSizeScale: 1.0
+    property real fontSizeScale: 1
     property int fontWeight: Font.Bold
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
-
     // Animation (defaults track Kirigami platform durations)
     property int animationDuration: Kirigami.Units.longDuration
     property int shortAnimationDuration: Kirigami.Units.shortDuration
-
     // Label
     property real labelTopMargin: Kirigami.Units.smallSpacing * 2
+    // Computed state colors — single source of truth for both rects
+    readonly property color stateHighlightFill: {
+        if (root.isActive)
+            return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, style.fillActive);
+
+        if (root.isSelected)
+            return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, style.fillSelected);
+
+        if (root.isHovered)
+            return Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, style.fillHovered);
+
+        return "transparent";
+    }
+    readonly property color stateBorderColor: {
+        if (root.isActive)
+            return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, style.borderActive);
+
+        if (root.isSelected)
+            return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, style.borderSelected);
+
+        return "transparent";
+    }
+    readonly property int stateBorderWidth: root.isActive ? style.borderWide : (root.isSelected ? style.borderNarrow : 0)
 
     // Signals
     signal zoneHovered(int zoneIndex)
 
-    // Visual constants — grouped per .cursorrules
+    // Accessibility
+    Accessible.role: Accessible.Pane
+    Accessible.name: root.layoutData.name || ""
+
+    // Visual constants
     QtObject {
         id: style
 
         // Unified state-based fill alphas (same palette for both modes)
         readonly property real fillActive: 0.12
-        readonly property real fillSelected: 0.10
+        readonly property real fillSelected: 0.1
         readonly property real fillHovered: 0.06
         readonly property real fillNeutral: 0.08
-
         // Unified state-based border alphas
         readonly property real borderActive: 0.5
         readonly property real borderSelected: 0.4
         // Border widths
         readonly property int borderWide: 2
         readonly property int borderNarrow: 1
-
         // Label
         readonly property real labelDimAlpha: 0.6
         readonly property real labelDimOpacity: 0.8
-
         // Badge ratios
         readonly property real checkmarkFontRatio: 0.6
-
         // Animation
         readonly property real badgeOvershoot: 1.5
-
         // Radii
         readonly property real cardRadius: Kirigami.Units.gridUnit
         readonly property real previewRadius: Kirigami.Units.smallSpacing * 1.5
     }
-
-    // Computed state colors — single source of truth for both rects
-    readonly property color stateHighlightFill: {
-        if (root.isActive)
-            return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, style.fillActive);
-        if (root.isSelected)
-            return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, style.fillSelected);
-        if (root.isHovered)
-            return Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, style.fillHovered);
-        return "transparent";
-    }
-    readonly property color stateBorderColor: {
-        if (root.isActive)
-            return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, style.borderActive);
-        if (root.isSelected)
-            return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, style.borderSelected);
-        return "transparent";
-    }
-    readonly property int stateBorderWidth: root.isActive ? style.borderWide : (root.isSelected ? style.borderNarrow : 0)
 
     // Card background (visible in card mode — tints whole card)
     Rectangle {
@@ -134,8 +127,20 @@ Item {
         border.color: root.stateBorderColor
         border.width: root.stateBorderWidth
 
-        Behavior on color { ColorAnimation { duration: root.animationDuration } }
-        Behavior on border.color { ColorAnimation { duration: root.animationDuration } }
+        Behavior on color {
+            ColorAnimation {
+                duration: root.animationDuration
+            }
+
+        }
+
+        Behavior on border.color {
+            ColorAnimation {
+                duration: root.animationDuration
+            }
+
+        }
+
     }
 
     // Preview area
@@ -154,21 +159,33 @@ Item {
 
             anchors.fill: parent
             radius: style.previewRadius
-            color: root.showCardBackground
-                ? Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, style.fillNeutral)
-                : root.stateHighlightFill
+            color: root.showCardBackground ? Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, style.fillNeutral) : root.stateHighlightFill
             border.color: root.showCardBackground ? "transparent" : root.stateBorderColor
             border.width: root.showCardBackground ? 0 : root.stateBorderWidth
 
             Behavior on color {
-                ColorAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic }
+                ColorAnimation {
+                    duration: root.animationDuration
+                    easing.type: Easing.OutCubic
+                }
+
             }
+
             Behavior on border.color {
-                ColorAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic }
+                ColorAnimation {
+                    duration: root.animationDuration
+                    easing.type: Easing.OutCubic
+                }
+
             }
+
             Behavior on border.width {
-                NumberAnimation { duration: root.shortAnimationDuration }
+                NumberAnimation {
+                    duration: root.shortAnimationDuration
+                }
+
             }
+
         }
 
         // Left accent bar (zone selector mode)
@@ -188,20 +205,28 @@ Item {
             opacity: root.isActive ? 1 : 0
 
             Behavior on width {
-                NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic }
+                NumberAnimation {
+                    duration: root.animationDuration
+                    easing.type: Easing.OutCubic
+                }
+
             }
+
             Behavior on opacity {
-                NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic }
+                NumberAnimation {
+                    duration: root.animationDuration
+                    easing.type: Easing.OutCubic
+                }
+
             }
+
         }
 
         // Active checkmark badge (top-right)
         Rectangle {
             id: activeBadge
 
-            readonly property int badgeSize: root.showCardBackground
-                ? Math.round(root.previewWidth * 0.14)
-                : Math.round(Kirigami.Units.gridUnit * 2.5)
+            readonly property int badgeSize: root.showCardBackground ? Math.round(root.previewWidth * 0.14) : Math.round(Kirigami.Units.gridUnit * 2.5)
 
             anchors.right: parent.right
             anchors.top: parent.top
@@ -229,17 +254,25 @@ Item {
                     easing.type: Easing.OutBack
                     easing.overshoot: style.badgeOvershoot
                 }
+
             }
+
             Behavior on height {
                 NumberAnimation {
                     duration: root.animationDuration
                     easing.type: Easing.OutBack
                     easing.overshoot: style.badgeOvershoot
                 }
+
             }
+
             Behavior on opacity {
-                NumberAnimation { duration: root.shortAnimationDuration }
+                NumberAnimation {
+                    duration: root.shortAnimationDuration
+                }
+
             }
+
         }
 
         // Zone rectangles
@@ -269,11 +302,11 @@ Item {
             fontUnderline: root.fontUnderline
             fontStrikeout: root.fontStrikeout
             animationDuration: root.animationDuration
-
             onZoneHovered: function(index) {
                 root.zoneHovered(index);
             }
         }
+
     }
 
     // Name label row
@@ -301,8 +334,10 @@ Item {
             color: {
                 if (root.isActive)
                     return root.highlightColor;
+
                 if (root.isSelected || root.isHovered)
                     return root.textColor;
+
                 return Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, style.labelDimAlpha);
             }
             opacity: (root.isSelected || root.isHovered || root.isActive) ? 1 : style.labelDimOpacity
@@ -311,11 +346,23 @@ Item {
             width: Math.min(implicitWidth, root.previewWidth - Kirigami.Units.gridUnit)
 
             Behavior on color {
-                ColorAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic }
+                ColorAnimation {
+                    duration: root.animationDuration
+                    easing.type: Easing.OutCubic
+                }
+
             }
+
             Behavior on opacity {
-                NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic }
+                NumberAnimation {
+                    duration: root.animationDuration
+                    easing.type: Easing.OutCubic
+                }
+
             }
+
         }
+
     }
+
 }

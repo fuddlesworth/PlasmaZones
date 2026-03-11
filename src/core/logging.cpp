@@ -28,6 +28,10 @@ Q_LOGGING_CATEGORY(lcEditorZone, "plasmazones.editor.zone", QtInfoMsg)
 Q_LOGGING_CATEGORY(lcEditorUndo, "plasmazones.editor.undo", QtInfoMsg)
 Q_LOGGING_CATEGORY(lcSnapping, "plasmazones.editor.snapping", QtInfoMsg)
 
+// Autotile module categories
+Q_LOGGING_CATEGORY(lcAutotile, "plasmazones.autotile", QtInfoMsg)
+Q_LOGGING_CATEGORY(lcDbusAutotile, "plasmazones.dbus.autotile", QtInfoMsg)
+
 // KWin effect module categories
 Q_LOGGING_CATEGORY(lcEffect, "plasmazones.effect", QtInfoMsg)
 

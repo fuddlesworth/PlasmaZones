@@ -1,4 +1,4 @@
-# Requires Plasma 6.4+ (KF6 6.6, Qt 6.6, LayerShellQt 6.4+, KWin 6.6). Built on KDE Neon.
+# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6). Built on KDE Neon.
 Source: plasmazones
 Section: kde
 Priority: optional
@@ -47,13 +47,14 @@ Recommends:
  systemd,
 Suggests:
  plasma-activities,
-Description: FancyZones-style window tiling for KDE Plasma
- PlasmaZones brings FancyZones-style window management to KDE Plasma 6.6+.
+Description: Window tiling and autotiling for KDE Plasma
+ PlasmaZones is a window tiling and zone management tool for KDE Plasma 6.6+.
  It allows users to create custom zone layouts and snap windows using
- drag-and-drop or keyboard shortcuts.
+ drag-and-drop or keyboard shortcuts, with automatic tiling support.
  .
  Features include:
   - Custom zone layout editor
+  - Automatic tiling with multiple layout algorithms
   - KWin effect for visual feedback during window dragging
   - Keyboard navigation between zones
   - Per-monitor and per-activity layouts

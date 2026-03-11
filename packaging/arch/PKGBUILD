@@ -6,7 +6,7 @@
 pkgname=plasmazones
 pkgver=0.0.0
 pkgrel=1
-pkgdesc='FancyZones-style window tiling for KDE Plasma'
+pkgdesc='Window tiling and autotiling for KDE Plasma'
 arch=('x86_64')
 url='https://github.com/fuddlesworth/PlasmaZones'
 license=('GPL-3.0-or-later')
@@ -29,6 +29,7 @@ depends=(
 makedepends=(
     'cmake'
     'extra-cmake-modules'
+    'ninja'
     'qt6-tools'
     'kwin'
 )

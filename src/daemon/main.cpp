@@ -48,7 +48,7 @@ int main(int argc, char* argv[])
 
     // Set up application metadata
     KAboutData aboutData(QStringLiteral("plasmazonesd"), i18n("PlasmaZones Daemon"), PlasmaZones::VERSION_STRING,
-                         i18n("FancyZones-style window snapping for KDE Plasma"), KAboutLicense::GPL_V3,
+                         i18n("Window tiling and zone management for KDE Plasma"), KAboutLicense::GPL_V3,
                          i18n("© 2026 fuddlesworth"));
     aboutData.addAuthor(i18n("fuddlesworth"));
     aboutData.setHomepage(QStringLiteral("https://github.com/plasmazones/plasmazones"));
@@ -90,13 +90,13 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    qCInfo(PlasmaZones::lcDaemon) << "Started successfully";
+    qCInfo(PlasmaZones::lcDaemon) << "Daemon started";
     daemon.start();
 
     // Handle activation requests (e.g., user launches plasmazonesd when already running)
     // Log the activation but don't take action - overlay activation is via drag+modifier
     QObject::connect(&service, &KDBusService::activateRequested, &daemon, []() {
-        qCInfo(PlasmaZones::lcDaemon) << "Already running - activation request ignored";
+        qCInfo(PlasmaZones::lcDaemon) << "Activation: already running, ignored";
     });
 
     int result = app.exec();

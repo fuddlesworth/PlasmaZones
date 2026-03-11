@@ -9,15 +9,16 @@
 
 using namespace PlasmaZones;
 
-UpdateGapOverrideCommand::UpdateGapOverrideCommand(QPointer<EditorController> editorController,
-                                                   GapType type, int oldValue, int newValue,
-                                                   const QString& text, QUndoCommand* parent)
+UpdateGapOverrideCommand::UpdateGapOverrideCommand(QPointer<EditorController> editorController, GapType type,
+                                                   int oldValue, int newValue, const QString& text,
+                                                   QUndoCommand* parent)
     : QUndoCommand(text.isEmpty()
                        ? (type == GapType::ZonePadding
                               ? i18nc("@action", "Change Zone Padding")
                               : (type == GapType::UsePerSideOuterGap
                                      ? i18nc("@action", "Toggle Per-Side Edge Gap")
-                                     : i18nc("@action", "Change Edge Gap")))
+                                     : (type == GapType::OverlayDisplayMode ? i18nc("@action", "Change Overlay Style")
+                                                                            : i18nc("@action", "Change Edge Gap"))))
                        : text,
                    parent)
     , m_editorController(editorController)
@@ -64,6 +65,9 @@ void UpdateGapOverrideCommand::applyValue(int value)
         break;
     case GapType::UsePerSideOuterGap:
         m_editorController->setUsePerSideOuterGapDirect(static_cast<bool>(value));
+        break;
+    case GapType::OverlayDisplayMode:
+        m_editorController->setOverlayDisplayModeDirect(value);
         break;
     }
 }

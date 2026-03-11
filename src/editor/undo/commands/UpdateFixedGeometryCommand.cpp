@@ -12,7 +12,7 @@ UpdateFixedGeometryCommand::UpdateFixedGeometryCommand(QPointer<ZoneManager> zon
                                                        const QRectF& oldFixed, const QRectF& newFixed,
                                                        const QRectF& oldRelative, const QRectF& newRelative,
                                                        QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, i18nc("@action", "Edit Fixed Geometry"), parent)
+    : BaseZoneCommand(zoneManager, i18nc("@action", "Change Zone Dimensions"), parent)
     , m_zoneId(zoneId)
     , m_oldFixed(oldFixed)
     , m_newFixed(newFixed)

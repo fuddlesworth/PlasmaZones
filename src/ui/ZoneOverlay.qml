@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as QFZCommon
 
 /**
  * Zone overlay window that displays zones during window drag
@@ -20,13 +21,14 @@ Window {
     property string highlightedZoneId: "" // Use zone ID instead of index for stable selection (single zone)
     property var highlightedZoneIds: [] // Array of zone IDs for multi-zone highlighting (set by C++ via QQmlProperty)
     property bool showNumbers: true
+    property var previewZones: [] // Full zone list with relative geometries for LayoutPreview mode
     // Ricer-friendly appearance properties - using theme colors
     property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
     property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
     property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
     property color labelFontColor: Kirigami.Theme.textColor
     property string fontFamily: ""
-    property real fontSizeScale: 1.0
+    property real fontSizeScale: 1
     property int fontWeight: Font.Bold
     property bool fontItalic: false
     property bool fontUnderline: false
@@ -53,6 +55,29 @@ Window {
     function clearHighlight() {
         highlightedZoneId = "";
         highlightedZoneIds = [];
+    }
+
+    function hasCustomColors(zoneData) {
+        var v = zoneData.useCustomColors;
+        return v === true || v === 1 || (typeof v === "string" && v.toLowerCase() === "true");
+    }
+
+    function isZoneHighlighted(zoneData) {
+        if (zoneData.isHighlighted)
+            return true;
+
+        if (!zoneData.id)
+            return false;
+
+        if (zoneData.id === highlightedZoneId)
+            return true;
+
+        for (var i = 0; i < highlightedZoneIds.length; i++) {
+            if (highlightedZoneIds[i] === zoneData.id)
+                return true;
+
+        }
+        return false;
     }
 
     // Window flags - LayerShellQt handles the overlay behavior on Wayland
@@ -87,41 +112,42 @@ Window {
 
         }
 
-        // Zone repeater
+        // Zone repeater — conditionally renders ZoneItem (mode 0) or LayoutPreview thumbnail (mode 1)
         Repeater {
-            // QML can parse hex color strings directly
-
             model: root.zones
 
-            delegate: ZoneItem {
+            delegate: Loader {
                 required property var modelData
                 required property int index
 
-                // Use exact geometry from C++ - this matches snap geometry exactly
+                // Position at the zone's exact geometry regardless of display mode
                 x: modelData.x
                 y: modelData.y
                 width: modelData.width
                 height: modelData.height
-                zoneNumber: modelData.zoneNumber || (index + 1)
+                // Switch component based on resolved overlayDisplayMode (0=Rectangles, 1=LayoutPreview)
+                sourceComponent: (modelData.overlayDisplayMode === 1) ? layoutPreviewComponent : zoneRectComponent
+            }
+
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // Mode 0: Standard zone rectangle (current behavior)
+        // ═══════════════════════════════════════════════════════════════════════
+        Component {
+            id: zoneRectComponent
+
+            ZoneItem {
+                // Access Loader's required properties (Loader is the parent)
+                property var modelData: parent ? parent.modelData : ({
+                })
+                property int zoneIndex: parent ? parent.index : 0
+                property bool useCustom: root.hasCustomColors(modelData)
+
+                anchors.fill: parent
+                zoneNumber: modelData.zoneNumber || (zoneIndex + 1)
                 zoneName: modelData.name || ""
-                isHighlighted: {
-                    if (modelData.isHighlighted)
-                        return true;
-
-                    if (!modelData.id)
-                        return false;
-
-                    if (modelData.id === root.highlightedZoneId)
-                        return true;
-
-                    // Check if zone ID is in multi-zone array
-                    for (var i = 0; i < root.highlightedZoneIds.length; i++) {
-                        if (root.highlightedZoneIds[i] === modelData.id)
-                            return true;
-
-                    }
-                    return false;
-                }
+                isHighlighted: root.isZoneHighlighted(modelData)
                 isMultiZone: {
                     if (root.highlightedZoneIds.length <= 1)
                         return false;
@@ -129,7 +155,6 @@ Window {
                     if (!modelData.id)
                         return false;
 
-                    // Check if zone ID is in multi-zone array
                     for (var i = 0; i < root.highlightedZoneIds.length; i++) {
                         if (root.highlightedZoneIds[i] === modelData.id)
                             return true;
@@ -138,30 +163,9 @@ Window {
                     return false;
                 }
                 showNumber: root.showNumbers
-                // Use custom colors if useCustomColors is true, otherwise use theme defaults
-                // Colors come as hex strings (ARGB format) from C++, QML can parse them directly
-                highlightColor: {
-                    // Check if useCustomColors is true (handle boolean, number, or string)
-                    var useCustom = modelData.useCustomColors === true || modelData.useCustomColors === 1 || (typeof modelData.useCustomColors === "string" && modelData.useCustomColors.toLowerCase() === "true");
-                    if (useCustom && modelData.highlightColor)
-                        return modelData.highlightColor;
-
-                    return root.highlightColor;
-                }
-                inactiveColor: {
-                    var useCustom = modelData.useCustomColors === true || modelData.useCustomColors === 1 || (typeof modelData.useCustomColors === "string" && modelData.useCustomColors.toLowerCase() === "true");
-                    if (useCustom && modelData.inactiveColor)
-                        return modelData.inactiveColor;
-
-                    return root.inactiveColor;
-                }
-                borderColor: {
-                    var useCustom = modelData.useCustomColors === true || modelData.useCustomColors === 1 || (typeof modelData.useCustomColors === "string" && modelData.useCustomColors.toLowerCase() === "true");
-                    if (useCustom && modelData.borderColor)
-                        return modelData.borderColor;
-
-                    return root.borderColor;
-                }
+                highlightColor: (useCustom && modelData.highlightColor) ? modelData.highlightColor : root.highlightColor
+                inactiveColor: (useCustom && modelData.inactiveColor) ? modelData.inactiveColor : root.inactiveColor
+                borderColor: (useCustom && modelData.borderColor) ? modelData.borderColor : root.borderColor
                 labelFontColor: root.labelFontColor
                 fontFamily: root.fontFamily
                 fontSizeScale: root.fontSizeScale
@@ -169,24 +173,76 @@ Window {
                 fontItalic: root.fontItalic
                 fontUnderline: root.fontUnderline
                 fontStrikeout: root.fontStrikeout
-                // Use custom opacity if useCustomColors is true - now uses separate active/inactive opacity
-                activeOpacity: {
-                    var useCustom = modelData.useCustomColors === true || modelData.useCustomColors === 1 || (typeof modelData.useCustomColors === "string" && modelData.useCustomColors.toLowerCase() === "true");
-                    return (useCustom && modelData.activeOpacity !== undefined) ? modelData.activeOpacity : root.activeOpacity;
+                activeOpacity: (useCustom && modelData.activeOpacity !== undefined) ? modelData.activeOpacity : root.activeOpacity
+                inactiveOpacity: (useCustom && modelData.inactiveOpacity !== undefined) ? modelData.inactiveOpacity : root.inactiveOpacity
+                borderWidth: (useCustom && modelData.borderWidth !== undefined) ? modelData.borderWidth : root.borderWidth
+                borderRadius: (useCustom && modelData.borderRadius !== undefined) ? modelData.borderRadius : root.borderRadius
+            }
+
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // Mode 1: Layout preview thumbnail (kZones-style)
+        // ═══════════════════════════════════════════════════════════════════════
+        Component {
+            id: layoutPreviewComponent
+
+            Item {
+                // Access Loader's required properties (Loader is the parent)
+                property var modelData: parent ? parent.modelData : ({
+                })
+                property int zoneIndex: parent ? parent.index : 0
+
+                anchors.fill: parent
+
+                // Centered preview thumbnail with themed card background
+                Item {
+                    id: previewContainer
+
+                    // Size: 60% of zone width capped at 200px, height from aspect ratio
+                    property real previewWidth: Math.min(parent.width * 0.6, 200)
+                    property real screenAspect: (root.width > 0 && root.height > 0) ? (root.width / root.height) : (16 / 9)
+                    property real previewHeight: previewWidth / screenAspect
+
+                    anchors.centerIn: parent
+                    width: previewWidth
+                    height: previewHeight
+
+                    // Card background
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: -Kirigami.Units.smallSpacing
+                        radius: Kirigami.Units.smallSpacing * 1.5
+                        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.85)
+                        border.color: Qt.rgba(root.borderColor.r, root.borderColor.g, root.borderColor.b, 0.15)
+                        border.width: 1
+                    }
+
+                    // Static ZonePreview — always shows this zone highlighted
+                    QFZCommon.ZonePreview {
+                        anchors.fill: parent
+                        zones: root.previewZones
+                        selectedZoneIndex: zoneIndex
+                        showZoneNumbers: root.showNumbers
+                        zonePadding: 1
+                        edgeGap: 1
+                        minZoneSize: 8
+                        activeOpacity: root.activeOpacity
+                        inactiveOpacity: root.inactiveOpacity
+                        highlightColor: root.highlightColor
+                        inactiveColor: root.inactiveColor
+                        borderColor: root.borderColor
+                        labelFontColor: root.labelFontColor
+                        fontFamily: root.fontFamily
+                        fontSizeScale: root.fontSizeScale
+                        fontWeight: root.fontWeight
+                        fontItalic: root.fontItalic
+                        fontUnderline: root.fontUnderline
+                        fontStrikeout: root.fontStrikeout
+                    }
+
                 }
-                inactiveOpacity: {
-                    var useCustom = modelData.useCustomColors === true || modelData.useCustomColors === 1 || (typeof modelData.useCustomColors === "string" && modelData.useCustomColors.toLowerCase() === "true");
-                    return (useCustom && modelData.inactiveOpacity !== undefined) ? modelData.inactiveOpacity : root.inactiveOpacity;
-                }
-                // Use custom border properties if useCustomColors is true
-                borderWidth: {
-                    var useCustom = modelData.useCustomColors === true || modelData.useCustomColors === 1 || (typeof modelData.useCustomColors === "string" && modelData.useCustomColors.toLowerCase() === "true");
-                    return (useCustom && modelData.borderWidth !== undefined) ? modelData.borderWidth : root.borderWidth;
-                }
-                borderRadius: {
-                    var useCustom = modelData.useCustomColors === true || modelData.useCustomColors === 1 || (typeof modelData.useCustomColors === "string" && modelData.useCustomColors.toLowerCase() === "true");
-                    return (useCustom && modelData.borderRadius !== undefined) ? modelData.borderRadius : root.borderRadius;
-                }
+
             }
 
         }

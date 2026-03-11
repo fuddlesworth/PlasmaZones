@@ -14,11 +14,8 @@ namespace SettingsDbusQueries {
 
 int queryIntSetting(const QString& settingKey, int defaultValue)
 {
-    QDBusInterface settingsIface(
-        QString::fromLatin1(DBus::ServiceName),
-        QString::fromLatin1(DBus::ObjectPath),
-        QString::fromLatin1(DBus::Interface::Settings),
-        QDBusConnection::sessionBus());
+    QDBusInterface settingsIface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+                                 QString::fromLatin1(DBus::Interface::Settings), QDBusConnection::sessionBus());
 
     if (!settingsIface.isValid()) {
         return defaultValue;
@@ -49,11 +46,8 @@ int queryGlobalOuterGap()
 
 bool queryBoolSetting(const QString& settingKey, bool defaultValue)
 {
-    QDBusInterface settingsIface(
-        QString::fromLatin1(DBus::ServiceName),
-        QString::fromLatin1(DBus::ObjectPath),
-        QString::fromLatin1(DBus::Interface::Settings),
-        QDBusConnection::sessionBus());
+    QDBusInterface settingsIface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+                                 QString::fromLatin1(DBus::Interface::Settings), QDBusConnection::sessionBus());
 
     if (!settingsIface.isValid()) {
         return defaultValue;
@@ -90,6 +84,11 @@ int queryGlobalOuterGapLeft()
 int queryGlobalOuterGapRight()
 {
     return queryIntSetting(QStringLiteral("outerGapRight"), Defaults::OuterGap);
+}
+
+int queryGlobalOverlayDisplayMode()
+{
+    return queryIntSetting(QStringLiteral("overlayDisplayMode"), 0);
 }
 
 } // namespace SettingsDbusQueries

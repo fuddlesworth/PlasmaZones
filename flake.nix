@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 {
-  description = "FancyZones-style window tiling for KDE Plasma 6.6+";
+  description = "Window tiling and autotiling for KDE Plasma 6.6+";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

@@ -20,10 +20,8 @@ class EditorController;
 class UpdateFullScreenGeometryCommand : public QUndoCommand
 {
 public:
-    explicit UpdateFullScreenGeometryCommand(QPointer<EditorController> editorController,
-                                              bool oldValue, bool newValue,
-                                              const QString& text = QString(),
-                                              QUndoCommand* parent = nullptr);
+    explicit UpdateFullScreenGeometryCommand(QPointer<EditorController> editorController, bool oldValue, bool newValue,
+                                             const QString& text = QString(), QUndoCommand* parent = nullptr);
 
     void undo() override;
     void redo() override;

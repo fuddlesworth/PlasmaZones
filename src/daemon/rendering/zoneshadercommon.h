@@ -7,6 +7,7 @@
 
 #include <QColor>
 #include <QRectF>
+#include <QVector>
 #include <QVector4D>
 
 namespace PlasmaZones {
@@ -56,11 +57,11 @@ struct alignas(16) ZoneShaderUniforms
     // Date/time: year, month (1-12), day (1-31), seconds since midnight
     float iDate[4]; // vec4: 16 bytes
 
-    // Custom shader parameters (16 float slots in 4 vec4s)
-    float customParams[4][4]; // vec4[4]: 64 bytes at offset 128
+    // Custom shader parameters (32 float slots in 8 vec4s)
+    float customParams[8][4]; // vec4[8]: 128 bytes at offset 128
 
-    // Custom colors (8 color slots)
-    float customColors[8][4]; // vec4[8]: 128 bytes at offset 192
+    // Custom colors (16 color slots)
+    float customColors[16][4]; // vec4[16]: 256 bytes at offset 256
 
     // Zone data arrays (each element is vec4)
     float zoneRects[MaxZones][4];
@@ -74,8 +75,9 @@ struct alignas(16) ZoneShaderUniforms
     // Audio spectrum (CAVA): number of bars; 0 = disabled. Texture at binding 6.
     int iAudioSpectrumSize;
 
-    // Padding to 16-byte boundary after iAudioSpectrumSize (std140 alignment for following array)
-    int _pad_after_audioSpectrum[3];
+    // 1 when rhi->isYUpInFramebuffer() (OpenGL): buffer texture sampling needs Y-flip
+    int iFlipBufferY;
+    int _pad_after_audioSpectrum[2];
 
     // User texture resolutions (bindings 7-10): [i][0]=width, [i][1]=height, [i][2..3]=padding
     float iTextureResolution[4][4];
@@ -117,6 +119,73 @@ struct ZoneData
     float borderWidth = 2.0f;
     bool isHighlighted = false;
     int zoneNumber = 0;
+};
+
+/**
+ * @brief Parsed zone rectangle data for shader rendering
+ *
+ * Stores zone geometry normalized to [0,1] coordinates for GPU processing.
+ * Safe to copy between threads.
+ */
+struct ZoneRect
+{
+    float x = 0.0f; ///< Left edge (0-1)
+    float y = 0.0f; ///< Top edge (0-1)
+    float width = 0.0f; ///< Width (0-1)
+    float height = 0.0f; ///< Height (0-1)
+    int zoneNumber = 0; ///< Zone number for display
+    bool highlighted = false; ///< Whether this zone is highlighted
+    float borderRadius = 8.0f; ///< Corner radius in pixels (for shader)
+    float borderWidth = 2.0f; ///< Border width in pixels (for shader)
+};
+
+/**
+ * @brief Parsed zone color data for shader rendering
+ *
+ * Stores RGBA colors normalized to [0,1] for GPU processing.
+ */
+struct ZoneColor
+{
+    float r = 0.0f; ///< Red component (0-1)
+    float g = 0.0f; ///< Green component (0-1)
+    float b = 0.0f; ///< Blue component (0-1)
+    float a = 1.0f; ///< Alpha component (0-1)
+
+    ZoneColor() = default;
+    ZoneColor(float red, float green, float blue, float alpha = 1.0f)
+        : r(red)
+        , g(green)
+        , b(blue)
+        , a(alpha)
+    {
+    }
+
+    static ZoneColor fromQColor(const QColor& color)
+    {
+        return ZoneColor(static_cast<float>(color.redF()), static_cast<float>(color.greenF()),
+                         static_cast<float>(color.blueF()), static_cast<float>(color.alphaF()));
+    }
+
+    QVector4D toVector4D() const
+    {
+        return QVector4D(r, g, b, a);
+    }
+};
+
+/**
+ * @brief Thread-safe zone data snapshot for render thread
+ *
+ * This structure holds a complete copy of zone state that can be
+ * safely read by the render thread while the main thread updates.
+ */
+struct ZoneDataSnapshot
+{
+    QVector<ZoneRect> rects;
+    QVector<ZoneColor> fillColors;
+    QVector<ZoneColor> borderColors;
+    int zoneCount = 0;
+    int highlightedCount = 0;
+    int version = 0; ///< Incremented on each update for change detection
 };
 
 } // namespace PlasmaZones

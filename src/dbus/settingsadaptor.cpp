@@ -26,7 +26,7 @@ SettingsAdaptor::SettingsAdaptor(ISettings* settings, QObject* parent)
     m_saveTimer->setInterval(SaveDebounceMs);
     connect(m_saveTimer, &QTimer::timeout, this, [this]() {
         m_settings->save();
-        qCInfo(lcDbusSettings) << "Debounced settings save completed";
+        qCInfo(lcDbusSettings) << "Settings save completed";
     });
 
     // Connect to interface signals (DIP)
@@ -40,7 +40,7 @@ SettingsAdaptor::~SettingsAdaptor()
     if (m_saveTimer->isActive()) {
         m_saveTimer->stop();
         m_settings->save();
-        qCInfo(lcDbusSettings) << "Flushed pending settings save on destruction";
+        qCInfo(lcDbusSettings) << "Flushed pending save on destruction";
     }
 }
 
@@ -153,6 +153,32 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("showZoneNumbers", showZoneNumbers, setShowZoneNumbers)
     REGISTER_BOOL_SETTING("flashZonesOnSwitch", flashZonesOnSwitch, setFlashZonesOnSwitch)
     REGISTER_BOOL_SETTING("showOsdOnLayoutSwitch", showOsdOnLayoutSwitch, setShowOsdOnLayoutSwitch)
+    REGISTER_BOOL_SETTING("showNavigationOsd", showNavigationOsd, setShowNavigationOsd)
+    // osdStyle: enum (0=None, 1=Text, 2=Preview) — use interface's OsdStyle
+    m_getters[QStringLiteral("osdStyle")] = [this]() {
+        return static_cast<int>(m_settings->osdStyle());
+    };
+    m_setters[QStringLiteral("osdStyle")] = [this](const QVariant& v) {
+        int val = v.toInt();
+        if (val >= 0 && val <= 2) {
+            m_settings->setOsdStyle(static_cast<OsdStyle>(val));
+            return true;
+        }
+        return false;
+    };
+    // overlayDisplayMode: enum (0=ZoneRectangles, 1=LayoutPreview)
+    m_getters[QStringLiteral("overlayDisplayMode")] = [this]() {
+        return static_cast<int>(m_settings->overlayDisplayMode());
+    };
+    m_setters[QStringLiteral("overlayDisplayMode")] = [this](const QVariant& v) {
+        int val = v.toInt();
+        if (val >= 0 && val <= 1) {
+            m_settings->setOverlayDisplayMode(static_cast<OverlayDisplayMode>(val));
+            return true;
+        }
+        return false;
+    };
+    REGISTER_STRINGLIST_SETTING("disabledMonitors", disabledMonitors, setDisabledMonitors)
 
     // Appearance settings
     REGISTER_BOOL_SETTING("useSystemColors", useSystemColors, setUseSystemColors)
@@ -185,6 +211,8 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("labelFontStrikeout", labelFontStrikeout, setLabelFontStrikeout)
     REGISTER_BOOL_SETTING("enableShaderEffects", enableShaderEffects, setEnableShaderEffects)
     REGISTER_INT_SETTING("shaderFrameRate", shaderFrameRate, setShaderFrameRate)
+    REGISTER_BOOL_SETTING("enableAudioVisualizer", enableAudioVisualizer, setEnableAudioVisualizer)
+    REGISTER_INT_SETTING("audioSpectrumBarCount", audioSpectrumBarCount, setAudioSpectrumBarCount)
 
     // Zone settings
     REGISTER_INT_SETTING("zonePadding", zonePadding, setZonePadding)
@@ -201,6 +229,7 @@ void SettingsAdaptor::initializeRegistry()
 
     // Activation
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
+    REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
 
     // Behavior settings
     REGISTER_BOOL_SETTING("keepWindowsInZonesOnResolutionChange", keepWindowsInZonesOnResolutionChange,
@@ -222,12 +251,29 @@ void SettingsAdaptor::initializeRegistry()
     // Zone selector
     REGISTER_BOOL_SETTING("zoneSelectorEnabled", zoneSelectorEnabled, setZoneSelectorEnabled)
 
+    // Animation settings (global — applies to snapping and autotiling)
+    REGISTER_BOOL_SETTING("animationsEnabled", animationsEnabled, setAnimationsEnabled)
+    REGISTER_INT_SETTING("animationDuration", animationDuration, setAnimationDuration)
+    REGISTER_STRING_SETTING("animationEasingCurve", animationEasingCurve, setAnimationEasingCurve)
+
+    REGISTER_INT_SETTING("animationMinDistance", animationMinDistance, setAnimationMinDistance)
+    REGISTER_INT_SETTING("animationSequenceMode", animationSequenceMode, setAnimationSequenceMode)
+    REGISTER_INT_SETTING("animationStaggerInterval", animationStaggerInterval, setAnimationStaggerInterval)
+
     // Exclusions
     REGISTER_STRINGLIST_SETTING("excludedApplications", excludedApplications, setExcludedApplications)
     REGISTER_STRINGLIST_SETTING("excludedWindowClasses", excludedWindowClasses, setExcludedWindowClasses)
     REGISTER_BOOL_SETTING("excludeTransientWindows", excludeTransientWindows, setExcludeTransientWindows)
     REGISTER_INT_SETTING("minimumWindowWidth", minimumWindowWidth, setMinimumWindowWidth)
     REGISTER_INT_SETTING("minimumWindowHeight", minimumWindowHeight, setMinimumWindowHeight)
+
+    // Autotile decoration settings
+    REGISTER_BOOL_SETTING("autotileHideTitleBars", autotileHideTitleBars, setAutotileHideTitleBars)
+    REGISTER_INT_SETTING("autotileBorderWidth", autotileBorderWidth, setAutotileBorderWidth)
+    REGISTER_COLOR_SETTING("autotileBorderColor", autotileBorderColor, setAutotileBorderColor)
+    REGISTER_BOOL_SETTING("autotileUseSystemBorderColors", autotileUseSystemBorderColors,
+                          setAutotileUseSystemBorderColors)
+    REGISTER_BOOL_SETTING("autotileFocusFollowsMouse", autotileFocusFollowsMouse, setAutotileFocusFollowsMouse)
 
 // Clean up macros (local scope)
 #undef REGISTER_STRING_SETTING
@@ -265,7 +311,7 @@ QString SettingsAdaptor::getAllSettings()
 QDBusVariant SettingsAdaptor::getSetting(const QString& key)
 {
     if (key.isEmpty()) {
-        qCWarning(lcDbusSettings) << "Cannot get setting - empty key";
+        qCWarning(lcDbusSettings) << "getSetting: empty key";
         // Return a valid but empty QDBusVariant to avoid marshalling errors
         // (QDBusVariant() with no argument creates an invalid variant that can't be sent)
         return QDBusVariant(QVariant(QString()));
@@ -291,7 +337,7 @@ QDBusVariant SettingsAdaptor::getSetting(const QString& key)
 bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
 {
     if (key.isEmpty()) {
-        qCWarning(lcDbusSettings) << "Cannot set setting - empty key";
+        qCWarning(lcDbusSettings) << "setSetting: empty key";
         return false;
     }
 
@@ -397,8 +443,12 @@ QString SettingsAdaptor::getRunningWindows()
     QEventLoop loop;
     m_windowListLoop = &loop;
 
-    // Timeout after 2 seconds if KWin effect doesn't respond
-    QTimer::singleShot(2000, &loop, &QEventLoop::quit);
+    // Blocking call: waits for KWin effect to respond via provideRunningWindows().
+    // The 2s timeout prevents indefinite blocking if the effect is unloaded or
+    // unresponsive. This is called from the KCM settings UI (not the daemon hot
+    // path), so briefly blocking the caller thread is acceptable.
+    constexpr int WindowListTimeoutMs = 2000;
+    QTimer::singleShot(WindowListTimeoutMs, &loop, &QEventLoop::quit);
 
     // Signal the KWin effect to enumerate windows
     Q_EMIT runningWindowsRequested();

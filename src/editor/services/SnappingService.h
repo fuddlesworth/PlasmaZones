@@ -126,6 +126,23 @@ private:
      */
     bool validateGeometry(qreal x, qreal y, qreal width, qreal height) const;
 
+    /**
+     * @brief Collected zone edge coordinates for snapping
+     */
+    struct EdgeLists
+    {
+        QList<qreal> vertical; // X coordinates (left/right edges)
+        QList<qreal> horizontal; // Y coordinates (top/bottom edges)
+    };
+
+    /**
+     * @brief Collect all zone edge coordinates (plus canvas boundaries)
+     * @param allZones All zones to collect edges from
+     * @param excludeZoneId Zone to exclude from edge collection
+     * @return EdgeLists with vertical (X) and horizontal (Y) edge coordinates
+     */
+    EdgeLists collectZoneEdges(const QVariantList& allZones, const QString& excludeZoneId) const;
+
     bool m_gridSnappingEnabled = true;
     bool m_edgeSnappingEnabled = true;
     qreal m_snapIntervalX = 0.1;

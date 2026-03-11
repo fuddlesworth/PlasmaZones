@@ -1,7 +1,7 @@
 {
     "id": "nexus-cascade",
     "name": "Nexus Cascade",
-    "description": "Multi-pass multi-channel wow shader: plasma base → distortion layer → bloom combine, with chromatic aberration and zone masking",
+    "description": "Layered plasma energy with distortion, chromatic aberration, bloom, and zone masking",
     "author": "PlasmaZones",
     "version": "1.0",
     "multipass": true,
@@ -192,6 +192,47 @@
             "type": "color",
             "slot": 2,
             "default": "#19ccb8"
-        }
+        },
+        {
+            "id": "traceSpread",
+            "name": "Signal Trace Spread",
+            "group": "Labels",
+            "type": "float",
+            "slot": 16,
+            "default": 3.0,
+            "min": 1.0,
+            "max": 6.0
+        },
+        {
+            "id": "signalBright",
+            "name": "Signal Core Brightness",
+            "group": "Labels",
+            "type": "float",
+            "slot": 17,
+            "default": 2.0,
+            "min": 1.0,
+            "max": 4.0
+        },
+        {
+            "id": "chromaReact",
+            "name": "Chroma Reactivity",
+            "group": "Labels",
+            "type": "float",
+            "slot": 18,
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "signalSpeed",
+            "name": "Signal Speed",
+            "group": "Animation",
+            "type": "float",
+            "slot": 19,
+            "default": 6.0,
+            "min": 2.0,
+            "max": 12.0
+        },
+        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 20, "default": true}
     ]
 }

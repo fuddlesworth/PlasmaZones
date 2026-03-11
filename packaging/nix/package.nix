@@ -130,7 +130,7 @@ stdenv.mkDerivation {
   # so it already resolves to $out/bin at build time — no post-install patching needed.
 
   meta = {
-    description = "FancyZones-style window tiling for KDE Plasma 6.6+";
+    description = "Window tiling and autotiling for KDE Plasma 6.6+";
     homepage = "https://github.com/fuddlesworth/PlasmaZones";
     changelog = "https://github.com/fuddlesworth/PlasmaZones/blob/main/CHANGELOG.md";
     license = lib.licenses.gpl3Plus;

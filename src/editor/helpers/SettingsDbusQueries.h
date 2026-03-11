@@ -65,6 +65,12 @@ int queryGlobalOuterGapBottom();
 int queryGlobalOuterGapLeft();
 int queryGlobalOuterGapRight();
 
+/**
+ * @brief Query the global overlay display mode
+ * @return Overlay display mode (0=ZoneRectangles, 1=LayoutPreview), or 0 if unavailable
+ */
+int queryGlobalOverlayDisplayMode();
+
 } // namespace SettingsDbusQueries
 
 } // namespace PlasmaZones

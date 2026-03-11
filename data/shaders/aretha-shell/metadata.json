@@ -101,11 +101,11 @@
             "id": "streamColumns",
             "name": "Stream Columns",
             "group": "Data Streams",
-            "type": "float",
+            "type": "int",
             "slot": 9,
-            "default": 35.0,
-            "min": 5.0,
-            "max": 100.0
+            "default": 35,
+            "min": 5,
+            "max": 100
         },
         {
             "id": "streamOpacity",
@@ -168,8 +168,73 @@
             "max": 3.0
         },
         {
+            "id": "triLineThickness",
+            "name": "Triangle Edge Width",
+            "group": "Tri-Hex",
+            "type": "float",
+            "slot": 16,
+            "default": 0.03,
+            "min": 0.01,
+            "max": 0.15
+        },
+        {
+            "id": "triLineOpacity",
+            "name": "Triangle Edge Opacity",
+            "group": "Tri-Hex",
+            "type": "float",
+            "slot": 17,
+            "default": 0.25,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "triFillOpacity",
+            "name": "Wedge Fill Opacity",
+            "group": "Tri-Hex",
+            "type": "float",
+            "slot": 18,
+            "default": 0.12,
+            "min": 0.0,
+            "max": 0.5
+        },
+        {
+            "id": "triPulseSpeed",
+            "name": "Wedge Pulse Speed",
+            "group": "Tri-Hex",
+            "type": "float",
+            "slot": 19,
+            "default": 2.0,
+            "min": 0.0,
+            "max": 8.0
+        },
+        {
+            "id": "triRotSpeed",
+            "name": "Wedge Rotation Speed",
+            "group": "Tri-Hex",
+            "type": "float",
+            "slot": 20,
+            "default": 0.4,
+            "min": 0.0,
+            "max": 3.0
+        },
+        {
+            "id": "triColorMix",
+            "name": "Wedge Color Mix",
+            "group": "Tri-Hex",
+            "type": "float",
+            "slot": 21,
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {"id": "glitchSpread", "name": "Glitch Outline Spread", "group": "Labels", "type": "float", "slot": 22, "default": 2.5, "min": 1.0, "max": 5.0},
+        {"id": "scanlineBright", "name": "Scanline Brightness", "group": "Labels", "type": "float", "slot": 23, "default": 2.0, "min": 1.0, "max": 4.0},
+        {"id": "surgeReact", "name": "Data Surge Reactivity", "group": "Labels", "type": "float", "slot": 24, "default": 1.0, "min": 0.0, "max": 2.0},
+        {"id": "glitchFrequency", "name": "Glitch Frequency", "group": "Animation", "type": "float", "slot": 25, "default": 0.5, "min": 0.1, "max": 2.0},
+        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 26, "default": true},
+        {
             "id": "arethaCyan",
-            "name": "Primary Cyan",
+            "name": "Edge & Glow",
             "group": "Colors",
             "type": "color",
             "slot": 0,
@@ -177,7 +242,7 @@
         },
         {
             "id": "arethaPink",
-            "name": "Magenta Accent",
+            "name": "Warm Accent",
             "group": "Colors",
             "type": "color",
             "slot": 1,
@@ -185,7 +250,7 @@
         },
         {
             "id": "arethaTeal",
-            "name": "Teal Accent",
+            "name": "Stream Color",
             "group": "Colors",
             "type": "color",
             "slot": 2,
@@ -193,7 +258,7 @@
         },
         {
             "id": "arethaPurple",
-            "name": "Purple Accent",
+            "name": "Cycle Accent",
             "group": "Colors",
             "type": "color",
             "slot": 3,
@@ -206,6 +271,30 @@
             "type": "color",
             "slot": 4,
             "default": "#192742"
+        },
+        {
+            "id": "triColor1",
+            "name": "Wedge Primary",
+            "group": "Tri-Hex",
+            "type": "color",
+            "slot": 5,
+            "default": "#ff3388"
+        },
+        {
+            "id": "triColor2",
+            "name": "Wedge Secondary",
+            "group": "Tri-Hex",
+            "type": "color",
+            "slot": 6,
+            "default": "#ff734d"
+        },
+        {
+            "id": "triLineColor",
+            "name": "Triangle Edge Color",
+            "group": "Tri-Hex",
+            "type": "color",
+            "slot": 7,
+            "default": "#e626b3"
         }
     ]
 }

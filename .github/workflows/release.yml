@@ -276,7 +276,7 @@ jobs:
           pkgname=plasmazones
           pkgver=${{ needs.version.outputs.version }}
           pkgrel=1
-          pkgdesc="FancyZones-style window tiling for KDE Plasma"
+          pkgdesc="Window tiling and autotiling for KDE Plasma"
           arch=('x86_64')
           url="https://github.com/fuddlesworth/PlasmaZones"
           license=('GPL-3.0-or-later')

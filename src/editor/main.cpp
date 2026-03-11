@@ -4,6 +4,7 @@
 #define TRANSLATION_DOMAIN "plasmazones-editor"
 
 #include "EditorController.h"
+#include "../core/constants.h"
 #include "../core/logging.h"
 #include "version.h"
 #include "../daemon/rendering/zoneshaderitem.h"
@@ -45,8 +46,8 @@ int main(int argc, char* argv[])
     KLocalizedString::setApplicationDomain("plasmazones-editor");
 
     KAboutData aboutData(QStringLiteral("plasmazones-editor"), i18n("PlasmaZones Layout Editor"),
-                         PlasmaZones::VERSION_STRING, i18n("Visual layout editor for PlasmaZones"), KAboutLicense::GPL_V3,
-                         i18n("(c) 2026 fuddlesworth"));
+                         PlasmaZones::VERSION_STRING, i18n("Visual layout editor for PlasmaZones"),
+                         KAboutLicense::GPL_V3, i18n("(c) 2026 fuddlesworth"));
     aboutData.addAuthor(i18n("fuddlesworth"));
     aboutData.setDesktopFileName(QStringLiteral("org.plasmazones.editor"));
     KAboutData::setApplicationData(aboutData);
@@ -61,8 +62,9 @@ int main(int argc, char* argv[])
                                     i18n("Target screen name"), QStringLiteral("name"));
     QCommandLineOption newLayoutOption(QStringList{QStringLiteral("n"), QStringLiteral("new")},
                                        i18n("Create new layout"));
+    QCommandLineOption previewOption(QStringLiteral("preview"), i18n("Open in read-only preview mode"));
 
-    parser.addOptions({layoutIdOption, screenOption, newLayoutOption});
+    parser.addOptions({layoutIdOption, screenOption, newLayoutOption, previewOption});
     parser.process(app);
     aboutData.processCommandLine(&parser);
 
@@ -92,6 +94,11 @@ int main(int argc, char* argv[])
         }
     }
 
+    // Warn about mutually exclusive flags
+    if (parser.isSet(previewOption) && parser.isSet(newLayoutOption)) {
+        qWarning() << "--preview and --new are mutually exclusive; ignoring --preview";
+    }
+
     // Handle layout loading based on mode
     if (parser.isSet(newLayoutOption)) {
         // Create new layout - set target screen first (without loading), then create new layout
@@ -100,8 +107,13 @@ int main(int argc, char* argv[])
         }
         controller.createNewLayout();
     } else if (parser.isSet(layoutIdOption)) {
-        // Edit specific layout - load it, then set target screen (without reloading)
-        controller.loadLayout(parser.value(layoutIdOption));
+        QString layoutId = parser.value(layoutIdOption);
+        // Auto-detect preview mode for autotile layouts, or explicit --preview flag
+        if (parser.isSet(previewOption) || LayoutId::isAutotile(layoutId)) {
+            controller.setPreviewMode(true);
+        }
+        // Edit/preview specific layout - load it, then set target screen (without reloading)
+        controller.loadLayout(layoutId);
         if (!targetScreen.isEmpty()) {
             controller.setTargetScreenDirect(targetScreen);
         }

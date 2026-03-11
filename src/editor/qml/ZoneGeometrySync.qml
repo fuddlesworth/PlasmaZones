@@ -22,7 +22,8 @@ Item {
     function syncFromZoneData() {
         // Guard: zone removed from Repeater - avoid use-after-free from pending Qt.callLater
         if (!zoneRoot || !zoneRoot.parent)
-            return;
+            return ;
+
         // Don't sync during active operations
         if (zoneRoot.operationState !== 0 || zoneRoot.isDividerOperation)
             return ;
@@ -34,24 +35,28 @@ Item {
             var x = 0, y = 0, w = 0.25, h = 0.25;
             var zd = zoneRoot.zoneData;
             var isFixed = zd.geometryMode === 1;
-
             if (isFixed) {
                 // Fixed mode: read pixel coords from fixedX/fixedY/fixedWidth/fixedHeight
                 x = (zd.fixedX !== undefined && zd.fixedX !== null && isFinite(zd.fixedX)) ? zd.fixedX : 0;
                 y = (zd.fixedY !== undefined && zd.fixedY !== null && isFinite(zd.fixedY)) ? zd.fixedY : 0;
                 w = (zd.fixedWidth !== undefined && zd.fixedWidth !== null && isFinite(zd.fixedWidth) && zd.fixedWidth > 0) ? zd.fixedWidth : 100;
                 h = (zd.fixedHeight !== undefined && zd.fixedHeight !== null && isFinite(zd.fixedHeight) && zd.fixedHeight > 0) ? zd.fixedHeight : 100;
-
                 // Validate
-                if (!isFinite(x) || isNaN(x)) x = 0;
-                if (!isFinite(y) || isNaN(y)) y = 0;
-                if (!isFinite(w) || isNaN(w) || w <= 0) w = 100;
-                if (!isFinite(h) || isNaN(h) || h <= 0) h = 100;
+                if (!isFinite(x) || isNaN(x))
+                    x = 0;
+
+                if (!isFinite(y) || isNaN(y))
+                    y = 0;
+
+                if (!isFinite(w) || isNaN(w) || w <= 0)
+                    w = 100;
+
+                if (!isFinite(h) || isNaN(h) || h <= 0)
+                    h = 100;
 
                 // Clamp position >= 0
                 x = Math.max(0, x);
                 y = Math.max(0, y);
-
                 // Convert pixel coords to canvas coords using screen dimensions
                 var sw = zoneRoot.screenWidth > 0 ? zoneRoot.screenWidth : 1920;
                 var sh = zoneRoot.screenHeight > 0 ? zoneRoot.screenHeight : 1080;
@@ -100,7 +105,6 @@ Item {
                 var newVisualWidth = w * zoneRoot.canvasWidth;
                 var newVisualHeight = h * zoneRoot.canvasHeight;
             }
-
             if (zoneRoot.visualWidth === 0 || zoneRoot.visualHeight === 0 || !isFinite(zoneRoot.visualWidth) || !isFinite(zoneRoot.visualHeight)) {
                 zoneRoot.visualX = newVisualX;
                 zoneRoot.visualY = newVisualY;
@@ -119,7 +123,8 @@ Item {
     function ensureDimensionsInitialized() {
         // Guard: zone removed from Repeater - avoid use-after-free from pending Qt.callLater
         if (!zoneRoot || !zoneRoot.parent)
-            return;
+            return ;
+
         if (zoneRoot.canvasWidth > 0 && zoneRoot.canvasHeight > 0 && isFinite(zoneRoot.canvasWidth) && isFinite(zoneRoot.canvasHeight)) {
             syncFromZoneData();
             if ((zoneRoot.visualWidth === 0 || zoneRoot.visualHeight === 0 || !isFinite(zoneRoot.visualWidth) || !isFinite(zoneRoot.visualHeight)) && zoneRoot.zoneData) {
@@ -202,7 +207,6 @@ Item {
 
                     var isFixed = updatedZone.geometryMode === 1;
                     var newVisualX, newVisualY, newVisualW, newVisualH;
-
                     if (isFixed) {
                         // Fixed mode: read pixel coords
                         var fx = (updatedZone.fixedX !== undefined && updatedZone.fixedX !== null) ? updatedZone.fixedX : 0;
@@ -221,10 +225,18 @@ Item {
                         var y = (updatedZone.y !== undefined && updatedZone.y !== null) ? updatedZone.y : 0;
                         var w = (updatedZone.width !== undefined && updatedZone.width !== null && updatedZone.width > 0) ? updatedZone.width : 0.25;
                         var h = (updatedZone.height !== undefined && updatedZone.height !== null && updatedZone.height > 0) ? updatedZone.height : 0.25;
-                        if (!isFinite(x) || isNaN(x)) x = 0;
-                        if (!isFinite(y) || isNaN(y)) y = 0;
-                        if (!isFinite(w) || isNaN(w) || w <= 0) w = 0.25;
-                        if (!isFinite(h) || isNaN(h) || h <= 0) h = 0.25;
+                        if (!isFinite(x) || isNaN(x))
+                            x = 0;
+
+                        if (!isFinite(y) || isNaN(y))
+                            y = 0;
+
+                        if (!isFinite(w) || isNaN(w) || w <= 0)
+                            w = 0.25;
+
+                        if (!isFinite(h) || isNaN(h) || h <= 0)
+                            h = 0.25;
+
                         newVisualX = isFinite(x) ? x * canvasW : 0;
                         newVisualY = isFinite(y) ? y * canvasH : 0;
                         newVisualW = (isFinite(w) && w > 0) ? w * canvasW : canvasW * 0.25;

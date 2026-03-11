@@ -10,7 +10,7 @@ import org.kde.kirigami as Kirigami
  * @brief Simple tooltip showing zone dimensions during drag/resize operations
  *
  * Displays position and size (percentage) in a clean, minimal format at the bottom of the zone.
- * Similar to Windows FancyZones behavior.
+ * Shows percentage-based dimensions for zone sizing feedback.
  */
 Rectangle {
     // 8px padding from bottom
@@ -59,9 +59,7 @@ Rectangle {
     border.width: constants.tooltipBorderWidth
     z: 250
     Accessible.name: i18nc("@info:accessibility", "Zone dimensions")
-    Accessible.description: isFixedMode
-        ? i18nc("@info:accessibility", "Position: %1px, %2px  Size: %3px × %4px", fixedPosX, fixedPosY, fixedSizeW, fixedSizeH)
-        : i18nc("@info:accessibility", "Position: %1%, %2%  Size: %3% × %4%", xPercent, yPercent, widthPercent, heightPercent)
+    Accessible.description: isFixedMode ? i18nc("@info:accessibility", "Position: %1px, %2px  Size: %3px × %4px", fixedPosX, fixedPosY, fixedSizeW, fixedSizeH) : i18nc("@info:accessibility", "Position: %1%, %2%  Size: %3% × %4%", xPercent, yPercent, widthPercent, heightPercent)
 
     // Constants for visual styling
     QtObject {
@@ -86,9 +84,7 @@ Rectangle {
         }
 
         Label {
-            text: isFixedMode
-                ? i18nc("@info Position in pixels", "%1px, %2px", fixedPosX, fixedPosY)
-                : i18nc("@info Position as percentages", "%1% × %2%", xPercent, yPercent)
+            text: isFixedMode ? i18nc("@info Position in pixels", "%1px, %2px", fixedPosX, fixedPosY) : i18nc("@info Position as percentages", "%1% × %2%", xPercent, yPercent)
             font.family: "monospace"
             font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
             color: Kirigami.Theme.textColor
@@ -102,9 +98,7 @@ Rectangle {
         }
 
         Label {
-            text: isFixedMode
-                ? i18nc("@info Size in pixels", "%1px × %2px", fixedSizeW, fixedSizeH)
-                : i18nc("@info Size as percentages", "%1% × %2%", widthPercent, heightPercent)
+            text: isFixedMode ? i18nc("@info Size in pixels", "%1px × %2px", fixedSizeW, fixedSizeH) : i18nc("@info Size as percentages", "%1% × %2%", widthPercent, heightPercent)
             font.family: "monospace"
             font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
             color: Kirigami.Theme.textColor

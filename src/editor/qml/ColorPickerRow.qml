@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import QtQuick
-import QtQuick.Layouts
-import QtQuick.Controls
-import org.kde.kirigami as Kirigami
 import "ColorUtils.js" as ColorUtils
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
 
 /**
  * @brief Reusable color picker row for zone appearance settings
@@ -20,27 +20,22 @@ RowLayout {
      * @brief The base color (without opacity multiplier applied)
      */
     property color baseColor: Qt.transparent
-
     /**
      * @brief Optional opacity multiplier (0-1) for preview display
      */
-    property real opacityMultiplier: 1.0
-
+    property real opacityMultiplier: 1
     /**
      * @brief Whether this is for multi-select mode (shows "Click to set" instead of hex)
      */
     property bool isMultiMode: false
-
     /**
      * @brief Accessibility name for the color button
      */
     property string accessibleName: ""
-
     /**
      * @brief Tooltip text for the color button
      */
     property string toolTipText: ""
-
     /**
      * @brief Size of the color button
      */
@@ -62,23 +57,20 @@ RowLayout {
         radius: Kirigami.Units.smallSpacing
         border.color: Kirigami.Theme.disabledTextColor
         border.width: 1
-        color: Qt.rgba(
-            colorPickerRow.baseColor.r,
-            colorPickerRow.baseColor.g,
-            colorPickerRow.baseColor.b,
-            colorPickerRow.baseColor.a * colorPickerRow.opacityMultiplier
-        )
+        color: Qt.rgba(colorPickerRow.baseColor.r, colorPickerRow.baseColor.g, colorPickerRow.baseColor.b, colorPickerRow.baseColor.a * colorPickerRow.opacityMultiplier)
         Accessible.name: colorPickerRow.accessibleName
         ToolTip.text: colorPickerRow.toolTipText
         ToolTip.visible: colorPreviewMouseArea.containsMouse && colorPickerRow.toolTipText !== ""
 
         MouseArea {
             id: colorPreviewMouseArea
+
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             hoverEnabled: true
             onClicked: colorPickerRow.colorButtonClicked()
         }
+
     }
 
     Label {
@@ -94,4 +86,5 @@ RowLayout {
         font: Kirigami.Theme.fixedWidthFont
         Accessible.name: i18nc("@info:accessibility", "Color hex code")
     }
+
 }

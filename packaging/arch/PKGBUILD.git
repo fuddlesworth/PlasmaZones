@@ -1,11 +1,11 @@
 # Maintainer: fuddlesworth
-# PlasmaZones (git version) - FancyZones-style window tiling for KDE Plasma
+# PlasmaZones (git version) - Window tiling and autotiling for KDE Plasma
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 pkgname=plasmazones-git
 pkgver=1.2.0.r0.g0000000
 pkgrel=1
-pkgdesc="FancyZones-style window tiling for KDE Plasma (git version)"
+pkgdesc="Window tiling and autotiling for KDE Plasma (git version)"
 arch=('x86_64')
 url="https://github.com/fuddlesworth/PlasmaZones"
 license=('GPL-3.0-or-later')

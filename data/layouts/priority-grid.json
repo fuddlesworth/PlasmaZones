@@ -1,7 +1,7 @@
 {
     "id": "{0c9585bc-ecae-4e87-a6b8-9d34e9b791f2}",
     "name": "Priority Grid",
-    "description": "Large center with smaller sides (like Windows FancyZones)",
+    "description": "Large center with smaller sides",
     "type": 4,
     "isBuiltIn": true,
     "showZoneNumbers": true,

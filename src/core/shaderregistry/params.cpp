@@ -1,0 +1,358 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Shader parameter validation, coercion, and uniform translation.
+// Part of ShaderRegistry — split from shaderregistry.cpp for SRP.
+
+#include "../shaderregistry.h"
+#include "../logging.h"
+#include <QColor>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QUrl>
+#include <QMutexLocker>
+#include <KSharedConfig>
+#include <KConfigGroup>
+
+namespace PlasmaZones {
+
+QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo& info) const
+{
+    QVariantMap map;
+    // Required fields (always set to non-empty strings)
+    map[QStringLiteral("id")] = info.id.isEmpty() ? QStringLiteral("unknown") : info.id;
+    map[QStringLiteral("name")] = info.name.isEmpty() ? info.id : info.name;
+    map[QStringLiteral("description")] = info.description; // Empty string is OK
+    map[QStringLiteral("author")] = info.author;
+    map[QStringLiteral("version")] = info.version;
+    map[QStringLiteral("isUserShader")] = info.isUserShader;
+    map[QStringLiteral("isValid")] = info.isValid();
+
+    // Optional fields - only include if non-empty (avoids D-Bus issues with empty URLs)
+    if (info.shaderUrl.isValid()) {
+        map[QStringLiteral("shaderUrl")] = info.shaderUrl.toString();
+    } else {
+        map[QStringLiteral("shaderUrl")] = QString(); // Empty string, not null
+    }
+
+    if (!info.previewPath.isEmpty()) {
+        map[QStringLiteral("previewPath")] = info.previewPath;
+    } else {
+        map[QStringLiteral("previewPath")] = QString(); // Empty string, not null
+    }
+
+    // Multipass shader metadata (for editor preview)
+    map[QStringLiteral("bufferShaderPaths")] = info.bufferShaderPaths;
+    map[QStringLiteral("bufferFeedback")] = info.bufferFeedback;
+    map[QStringLiteral("bufferScale")] = info.bufferScale;
+    map[QStringLiteral("bufferWrap")] = info.bufferWrap;
+    map[QStringLiteral("wallpaper")] = info.useWallpaper;
+
+    // Parameters list (empty list is OK for D-Bus)
+    QVariantList params;
+    for (const ParameterInfo& param : info.parameters) {
+        params.append(parameterInfoToVariantMap(param));
+    }
+    map[QStringLiteral("parameters")] = params;
+
+    return map;
+}
+
+QVariantMap ShaderRegistry::parameterInfoToVariantMap(const ParameterInfo& param) const
+{
+    QVariantMap map;
+    map[QStringLiteral("id")] = param.id;
+    map[QStringLiteral("name")] = param.name;
+    map[QStringLiteral("type")] = param.type;
+    map[QStringLiteral("slot")] = param.slot;
+    map[QStringLiteral("mapsTo")] = param.uniformName(); // Computed from slot for compatibility
+    map[QStringLiteral("useZoneColor")] = param.useZoneColor;
+    if (!param.wrap.isEmpty()) {
+        map[QStringLiteral("wrap")] = param.wrap;
+    }
+
+    // Only include optional values if they are valid (D-Bus can't marshal null QVariants)
+    if (!param.group.isEmpty()) {
+        map[QStringLiteral("group")] = param.group;
+    }
+    if (param.defaultValue.isValid()) {
+        map[QStringLiteral("default")] = param.defaultValue;
+    }
+    if (param.minValue.isValid()) {
+        map[QStringLiteral("min")] = param.minValue;
+    }
+    if (param.maxValue.isValid()) {
+        map[QStringLiteral("max")] = param.maxValue;
+    }
+
+    return map;
+}
+
+bool ShaderRegistry::validateParams(const QString& id, const QVariantMap& params) const
+{
+    const ShaderInfo info = shader(id);
+    if (!info.isValid()) {
+        return false;
+    }
+
+    for (const ParameterInfo& param : info.parameters) {
+        if (params.contains(param.id)) {
+            if (!validateParameterValue(param, params.value(param.id))) {
+                qCWarning(lcCore) << "Invalid shader parameter:" << param.id << "for shader:" << id;
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool ShaderRegistry::validateParameterValue(const ParameterInfo& param, const QVariant& value) const
+{
+    if (param.type == QLatin1String("float")) {
+        bool ok = false;
+        double v = value.toDouble(&ok);
+        if (!ok)
+            return false;
+        if (param.minValue.isValid() && v < param.minValue.toDouble())
+            return false;
+        if (param.maxValue.isValid() && v > param.maxValue.toDouble())
+            return false;
+    } else if (param.type == QLatin1String("int")) {
+        bool ok = false;
+        int v = value.toInt(&ok);
+        if (!ok)
+            return false;
+        if (param.minValue.isValid() && v < param.minValue.toInt())
+            return false;
+        if (param.maxValue.isValid() && v > param.maxValue.toInt())
+            return false;
+    } else if (param.type == QLatin1String("color")) {
+        QColor c(value.toString());
+        if (!c.isValid())
+            return false;
+    } else if (param.type == QLatin1String("bool")) {
+        if (!value.canConvert<bool>())
+            return false;
+    } else if (param.type == QLatin1String("image")) {
+        if (!value.canConvert<QString>())
+            return false;
+    }
+    return true;
+}
+
+QVariantMap ShaderRegistry::validateAndCoerceParams(const QString& id, const QVariantMap& params) const
+{
+    QVariantMap result;
+    const ShaderInfo info = shader(id);
+    if (!info.isValid()) {
+        return result;
+    }
+
+    for (const ParameterInfo& param : info.parameters) {
+        if (params.contains(param.id) && validateParameterValue(param, params.value(param.id))) {
+            result[param.id] = params.value(param.id);
+        } else {
+            result[param.id] = param.defaultValue;
+        }
+    }
+    return result;
+}
+
+QVariantMap ShaderRegistry::defaultParams(const QString& id) const
+{
+    QVariantMap result;
+    const ShaderInfo info = shader(id);
+    for (const ParameterInfo& param : info.parameters) {
+        result[param.id] = param.defaultValue;
+    }
+    return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Plasma Wallpaper Path Resolution
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QString ShaderRegistry::s_cachedWallpaperPath;
+QImage ShaderRegistry::s_cachedWallpaperImage;
+qint64 ShaderRegistry::s_cachedWallpaperMtime = 0;
+QMutex ShaderRegistry::s_wallpaperCacheMutex;
+
+QString ShaderRegistry::plasmaWallpaperPath()
+{
+    QMutexLocker lock(&s_wallpaperCacheMutex);
+
+    // Read from Plasma desktop config: [Containments][N][Wallpaper][org.kde.image][General] Image=file:///...
+    // Each containment with formfactor=0 (desktop) has a wallpaper section.
+    // We look for the first desktop containment with a wallpaper image set.
+    if (!s_cachedWallpaperPath.isEmpty() && QFile::exists(s_cachedWallpaperPath)) {
+        return s_cachedWallpaperPath;
+    }
+
+    auto config =
+        KSharedConfig::openConfig(QStringLiteral("plasma-org.kde.plasma.desktop-appletsrc"), KConfig::SimpleConfig);
+    // KConfig nested group format: [Containments][355] means group "355" inside "Containments".
+    // config->groupList() returns top-level groups like "Containments", not the numbered subgroups.
+    // We must iterate subgroups of the "Containments" group.
+    if (!config->hasGroup(QStringLiteral("Containments"))) {
+        qCDebug(lcCore) << "No Containments group in Plasma desktop config";
+        return {};
+    }
+    KConfigGroup containments = config->group(QStringLiteral("Containments"));
+    const QStringList containmentIds = containments.groupList();
+    for (const QString& id : containmentIds) {
+        KConfigGroup containment = containments.group(id);
+        // Desktop containments have formfactor=0
+        if (containment.readEntry("formfactor", -1) != 0) {
+            continue;
+        }
+        // Navigate to [Wallpaper][org.kde.image][General]
+        if (!containment.hasGroup(QStringLiteral("Wallpaper"))) {
+            continue;
+        }
+        KConfigGroup wallpaper = containment.group(QStringLiteral("Wallpaper"));
+        if (!wallpaper.hasGroup(QStringLiteral("org.kde.image"))) {
+            continue;
+        }
+        KConfigGroup imageGroup = wallpaper.group(QStringLiteral("org.kde.image"));
+        if (!imageGroup.hasGroup(QStringLiteral("General"))) {
+            continue;
+        }
+        KConfigGroup general = imageGroup.group(QStringLiteral("General"));
+        QString imagePath = general.readEntry("Image", QString());
+        if (imagePath.isEmpty()) {
+            continue;
+        }
+        // Strip file:// URL scheme if present
+        if (imagePath.startsWith(QLatin1String("file://"))) {
+            imagePath = QUrl(imagePath).toLocalFile();
+        }
+        if (QFile::exists(imagePath)) {
+            s_cachedWallpaperPath = imagePath;
+            qCDebug(lcCore) << "Resolved Plasma wallpaper:" << imagePath;
+            return imagePath;
+        }
+    }
+
+    qCDebug(lcCore) << "No Plasma wallpaper found in desktop config";
+    return {};
+}
+
+QImage ShaderRegistry::loadWallpaperImage()
+{
+    QMutexLocker lock(&s_wallpaperCacheMutex);
+
+    // Inline path resolution (avoid calling plasmaWallpaperPath which also locks)
+    QString path = s_cachedWallpaperPath;
+    if (path.isEmpty() || !QFile::exists(path)) {
+        // Need to resolve — unlock is not needed since we hold the lock
+        lock.unlock();
+        path = plasmaWallpaperPath(); // acquires lock internally
+        lock.relock();
+    }
+    if (path.isEmpty()) {
+        return {};
+    }
+    // Check if cached image is still valid (same path + same mtime)
+    const QFileInfo fi(path);
+    const qint64 mtime = fi.lastModified().toMSecsSinceEpoch();
+    if (!s_cachedWallpaperImage.isNull() && s_cachedWallpaperMtime == mtime) {
+        return s_cachedWallpaperImage;
+    }
+    // Load outside of lock scope is not possible since we write to static cache
+    QImage img(path);
+    if (img.isNull()) {
+        return {};
+    }
+    s_cachedWallpaperImage = img.convertToFormat(QImage::Format_RGBA8888);
+    s_cachedWallpaperMtime = mtime;
+    qCDebug(lcCore) << "Loaded and cached wallpaper image:" << path << s_cachedWallpaperImage.size();
+    return s_cachedWallpaperImage;
+}
+
+void ShaderRegistry::invalidateWallpaperCache()
+{
+    QMutexLocker lock(&s_wallpaperCacheMutex);
+    s_cachedWallpaperPath.clear();
+    s_cachedWallpaperImage = QImage();
+    s_cachedWallpaperMtime = 0;
+}
+
+QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, const QVariantMap& storedParams) const
+{
+    QVariantMap result;
+    const ShaderInfo info = shader(shaderId);
+
+    if (!info.isValid() || isNoneShader(shaderId)) {
+        return result;
+    }
+
+    // Build translation map from parameter definitions
+    // Also start with default values for uniforms that aren't in storedParams
+    for (const ParameterInfo& param : info.parameters) {
+        const QString uniformName = param.uniformName();
+        if (uniformName.isEmpty()) {
+            continue; // Parameter doesn't map to a uniform
+        }
+
+        // Check if stored params has this parameter (by ID)
+        if (storedParams.contains(param.id)) {
+            QVariant value = storedParams.value(param.id);
+
+            // Handle color type - keep as QString for D-Bus compatibility (QColor is not
+            // registered with D-Bus and causes marshalling crash when returned over D-Bus)
+            if (param.type == QLatin1String("color") && value.typeId() == QMetaType::QString) {
+                QColor color(value.toString());
+                if (color.isValid()) {
+                    result[uniformName] = color.name(QColor::HexArgb);
+                } else {
+                    // Fallback to default or transparent black (never null QVariant for D-Bus safety)
+                    QColor defColor(param.defaultValue.toString());
+                    result[uniformName] =
+                        defColor.isValid() ? defColor.name(QColor::HexArgb) : QStringLiteral("#00000000");
+                }
+            } else {
+                result[uniformName] = value;
+            }
+        } else {
+            // Use default value for missing parameters
+            // Guard against null QVariant which crashes D-Bus marshalling
+            if (param.type == QLatin1String("color")) {
+                QColor color(param.defaultValue.toString());
+                result[uniformName] = color.isValid() ? color.name(QColor::HexArgb) : QStringLiteral("#00000000");
+            } else if (!param.defaultValue.isValid() || param.defaultValue.isNull()) {
+                // Provide type-appropriate empty default to avoid null QVariant in D-Bus
+                if (param.type == QLatin1String("image")) {
+                    result[uniformName] = QString();
+                } else if (param.type == QLatin1String("bool")) {
+                    result[uniformName] = false;
+                } else {
+                    result[uniformName] = 0.0;
+                }
+            } else {
+                result[uniformName] = param.defaultValue;
+            }
+        }
+
+        // For image parameters: resolve relative paths against shader directory, emit wrap mode
+        if (param.type == QLatin1String("image") && !uniformName.isEmpty()) {
+            const QString imgPath = result.value(uniformName).toString();
+            if (!imgPath.isEmpty() && QFileInfo(imgPath).isRelative()) {
+                const QDir shaderDir = QFileInfo(info.sourcePath).absoluteDir();
+                const QString resolved = shaderDir.absoluteFilePath(imgPath);
+                if (QFile::exists(resolved)) {
+                    result[uniformName] = resolved;
+                }
+            }
+            // Ensure image params are never null QVariant (causes D-Bus marshalling crash)
+            if (!result.value(uniformName).isValid() || result.value(uniformName).isNull()) {
+                result[uniformName] = QString();
+            }
+            result[uniformName + QStringLiteral("_wrap")] = param.wrap.isEmpty() ? QStringLiteral("clamp") : param.wrap;
+        }
+    }
+
+    return result;
+}
+
+} // namespace PlasmaZones

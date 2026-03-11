@@ -257,7 +257,7 @@ QQC2.TextField {
             if (clearButton.visible && mouse.x >= root.width - clearButton.width - Kirigami.Units.smallSpacing * 2) {
                 root.keySequence = root.defaultKeySequence;
                 root.keySequenceModified(root.defaultKeySequence);
-                return;
+                return ;
             }
             if (!root.capturing) {
                 root.capturing = true;

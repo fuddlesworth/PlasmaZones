@@ -6,11 +6,13 @@
 #include <QObject>
 #include <QVariantList>
 #include <QFont>
+#include <QImage>
 #include <QRectF>
 #include <QUuid>
 #include <QScreen>
 #include <QQuickWindow>
 #include <QSize>
+#include <QVector>
 #include <KConfigGroup>
 #include "../core/constants.h"
 #include "../core/logging.h"
@@ -23,6 +25,7 @@ class ILayoutService;
 class ZoneManager;
 class SnappingService;
 class TemplateService;
+class CavaService;
 
 /**
  * @brief Controller for the layout editor
@@ -100,8 +103,15 @@ class EditorController : public QObject
     Q_PROPERTY(int globalOuterGapLeft READ globalOuterGapLeft NOTIFY globalOuterGapChanged)
     Q_PROPERTY(int globalOuterGapRight READ globalOuterGapRight NOTIFY globalOuterGapChanged)
 
+    // Overlay display mode override
+    Q_PROPERTY(
+        int overlayDisplayMode READ overlayDisplayMode WRITE setOverlayDisplayMode NOTIFY overlayDisplayModeChanged)
+    Q_PROPERTY(bool hasOverlayDisplayModeOverride READ hasOverlayDisplayModeOverride NOTIFY overlayDisplayModeChanged)
+    Q_PROPERTY(int globalOverlayDisplayMode READ globalOverlayDisplayMode NOTIFY globalOverlayDisplayModeChanged)
+
     // Full screen geometry mode
-    Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY useFullScreenGeometryChanged)
+    Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY
+                   useFullScreenGeometryChanged)
 
     // Target screen size (for fixed geometry coordinate conversion)
     Q_PROPERTY(QSize targetScreenSize READ targetScreenSize NOTIFY targetScreenSizeChanged)
@@ -123,10 +133,14 @@ class EditorController : public QObject
     Q_PROPERTY(bool shadersEnabled READ shadersEnabled NOTIFY shadersEnabledChanged)
     Q_PROPERTY(QString noneShaderUuid READ noneShaderUuid CONSTANT)
 
+    // Audio spectrum (CAVA) for shader preview
+    Q_PROPERTY(QVariant audioSpectrum READ audioSpectrumVariant NOTIFY audioSpectrumChanged)
+
     // Visibility filtering (Tier 2 per-context allow-lists)
     Q_PROPERTY(QStringList allowedScreens READ allowedScreens WRITE setAllowedScreens NOTIFY allowedScreensChanged)
     Q_PROPERTY(QVariantList allowedDesktops READ allowedDesktops WRITE setAllowedDesktops NOTIFY allowedDesktopsChanged)
-    Q_PROPERTY(QStringList allowedActivities READ allowedActivities WRITE setAllowedActivities NOTIFY allowedActivitiesChanged)
+    Q_PROPERTY(
+        QStringList allowedActivities READ allowedActivities WRITE setAllowedActivities NOTIFY allowedActivitiesChanged)
 
     // Context info for visibility UI
     Q_PROPERTY(QStringList availableScreenIds READ availableScreenIds NOTIFY availableScreenIdsChanged)
@@ -134,6 +148,9 @@ class EditorController : public QObject
     Q_PROPERTY(QStringList virtualDesktopNames READ virtualDesktopNames NOTIFY virtualDesktopNamesChanged)
     Q_PROPERTY(bool activitiesAvailable READ activitiesAvailable NOTIFY activitiesAvailableChanged)
     Q_PROPERTY(QVariantList availableActivities READ availableActivities NOTIFY availableActivitiesChanged)
+
+    // Preview mode (read-only view for autotile layouts)
+    Q_PROPERTY(bool previewMode READ previewMode NOTIFY previewModeChanged)
 
     // Clipboard operations
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY canPasteChanged)
@@ -143,11 +160,18 @@ public:
     explicit EditorController(QObject* parent = nullptr);
     ~EditorController() override;
 
+    // Preview mode
+    bool previewMode() const;
+    void setPreviewMode(bool preview);
+
     // Property getters
     QString layoutId() const;
     QString layoutName() const;
     QVariantList zones() const; // Delegates to ZoneManager
-    int zonesVersion() const { return m_zonesVersion; } // Lightweight change counter
+    int zonesVersion() const
+    {
+        return m_zonesVersion;
+    } // Lightweight change counter
     QString selectedZoneId() const;
     QStringList selectedZoneIds() const;
     int selectionCount() const;
@@ -185,28 +209,70 @@ public:
     int globalOuterGapBottom() const;
     int globalOuterGapLeft() const;
     int globalOuterGapRight() const;
+    int overlayDisplayMode() const;
+    bool hasOverlayDisplayModeOverride() const;
+    int globalOverlayDisplayMode() const;
     bool useFullScreenGeometry() const;
     QSize targetScreenSize() const;
     bool canPaste() const;
     UndoController* undoController() const;
 
     // Font settings getters
-    QString labelFontFamily() const { return m_labelFontFamily; }
-    qreal labelFontSizeScale() const { return m_labelFontSizeScale; }
-    int labelFontWeight() const { return m_labelFontWeight; }
-    bool labelFontItalic() const { return m_labelFontItalic; }
-    bool labelFontUnderline() const { return m_labelFontUnderline; }
-    bool labelFontStrikeout() const { return m_labelFontStrikeout; }
+    QString labelFontFamily() const
+    {
+        return m_labelFontFamily;
+    }
+    qreal labelFontSizeScale() const
+    {
+        return m_labelFontSizeScale;
+    }
+    int labelFontWeight() const
+    {
+        return m_labelFontWeight;
+    }
+    bool labelFontItalic() const
+    {
+        return m_labelFontItalic;
+    }
+    bool labelFontUnderline() const
+    {
+        return m_labelFontUnderline;
+    }
+    bool labelFontStrikeout() const
+    {
+        return m_labelFontStrikeout;
+    }
 
     // Visibility filtering getters
-    QStringList allowedScreens() const { return m_allowedScreens; }
+    QStringList allowedScreens() const
+    {
+        return m_allowedScreens;
+    }
     QVariantList allowedDesktops() const;
-    QStringList allowedActivities() const { return m_allowedActivities; }
-    QStringList availableScreenIds() const { return m_availableScreenIds; }
-    int virtualDesktopCount() const { return m_virtualDesktopCount; }
-    QStringList virtualDesktopNames() const { return m_virtualDesktopNames; }
-    bool activitiesAvailable() const { return m_activitiesAvailable; }
-    QVariantList availableActivities() const { return m_availableActivities; }
+    QStringList allowedActivities() const
+    {
+        return m_allowedActivities;
+    }
+    QStringList availableScreenIds() const
+    {
+        return m_availableScreenIds;
+    }
+    int virtualDesktopCount() const
+    {
+        return m_virtualDesktopCount;
+    }
+    QStringList virtualDesktopNames() const
+    {
+        return m_virtualDesktopNames;
+    }
+    bool activitiesAvailable() const
+    {
+        return m_activitiesAvailable;
+    }
+    QVariantList availableActivities() const
+    {
+        return m_availableActivities;
+    }
 
     // Visibility filtering setters
     void setAllowedScreens(const QStringList& screens);
@@ -264,8 +330,11 @@ public:
     void setOuterGapRight(int gap);
     Q_INVOKABLE void clearZonePaddingOverride();
     Q_INVOKABLE void clearOuterGapOverride();
+    Q_INVOKABLE void clearOverlayDisplayModeOverride();
     Q_INVOKABLE void refreshGlobalZonePadding();
     Q_INVOKABLE void refreshGlobalOuterGap();
+    Q_INVOKABLE void refreshGlobalOverlayDisplayMode();
+    void setOverlayDisplayMode(int mode);
     void setUseFullScreenGeometry(bool enabled);
 
     // Shader setters (create undo commands)
@@ -280,6 +349,7 @@ public:
     void setOuterGapBottomDirect(int gap);
     void setOuterGapLeftDirect(int gap);
     void setOuterGapRightDirect(int gap);
+    void setOverlayDisplayModeDirect(int mode);
     void setUseFullScreenGeometryDirect(bool enabled);
 
     // Shader setters - Direct (for undo/redo, bypass command creation)
@@ -322,30 +392,29 @@ public:
     Q_INVOKABLE QVariantMap getShaderInfo(const QString& shaderId) const;
 
     /**
-     * @brief Show shader preview overlay via daemon (avoids multi-pass clear in embedded preview)
-     * @param x Global X coordinate for preview top-left
-     * @param y Global Y coordinate for preview top-left
-     * @param width Preview width in pixels
-     * @param height Preview height in pixels
-     * @param screenName Screen name (empty = screen containing x,y)
-     * @param shaderId Shader UUID
-     * @param shaderParamsJson JSON map of uniform names to values
-     * @param zonesJson JSON array of zone objects (pixel coords)
+     * @brief Build a labels texture (zone numbers) for shader preview
+     * @param zones Zone data from zonesForShaderPreview()
+     * @param width Texture width in pixels
+     * @param height Texture height in pixels
+     * @return QImage with zone numbers rendered, or null image if no zones
      */
-    Q_INVOKABLE void showShaderPreviewOverlay(int x, int y, int width, int height, const QString& screenName,
-                                              const QString& shaderId, const QString& shaderParamsJson,
-                                              const QString& zonesJson);
+    Q_INVOKABLE QImage buildLabelsTexture(const QVariantList& zones, int width, int height) const;
 
     /**
-     * @brief Update existing shader preview overlay geometry and/or params
+     * @brief Load the current Plasma desktop wallpaper as a QImage
+     * @return RGBA8888 QImage, or null image if no wallpaper found
      */
-    Q_INVOKABLE void updateShaderPreviewOverlay(int x, int y, int width, int height,
-                                                const QString& shaderParamsJson, const QString& zonesJson);
+    Q_INVOKABLE QImage loadWallpaperTexture() const;
 
     /**
-     * @brief Hide and destroy the shader preview overlay
+     * @brief Start CAVA audio capture for shader preview (if available)
      */
-    Q_INVOKABLE void hideShaderPreviewOverlay();
+    Q_INVOKABLE void startAudioCapture();
+
+    /**
+     * @brief Stop CAVA audio capture
+     */
+    Q_INVOKABLE void stopAudioCapture();
 
 public Q_SLOTS:
     // Layout operations
@@ -424,7 +493,7 @@ public Q_SLOTS:
     Q_INVOKABLE void selectAll();
     Q_INVOKABLE void clearSelection();
     Q_INVOKABLE bool isSelected(const QString& zoneId) const;
-    
+
     /**
      * @brief Check if all selected zones have useCustomColors enabled
      * @return true if all selected zones use custom colors, false otherwise
@@ -432,7 +501,7 @@ public Q_SLOTS:
      * Performance optimization: O(n) C++ lookup instead of O(n*m) JavaScript nested loops.
      */
     Q_INVOKABLE bool allSelectedUseCustomColors() const;
-    
+
     /**
      * @brief Select zones that intersect with a rectangle
      * @param x Rectangle X in relative coordinates (0.0-1.0)
@@ -591,6 +660,8 @@ Q_SIGNALS:
     void outerGapChanged();
     void globalZonePaddingChanged();
     void globalOuterGapChanged();
+    void overlayDisplayModeChanged();
+    void globalOverlayDisplayModeChanged();
     void useFullScreenGeometryChanged();
     void targetScreenSizeChanged();
 
@@ -600,6 +671,7 @@ Q_SIGNALS:
     void availableShadersChanged();
     void currentShaderParametersChanged();
     void shadersEnabledChanged();
+    void audioSpectrumChanged();
 
     // Visibility filtering signals
     void allowedScreensChanged();
@@ -630,11 +702,15 @@ Q_SIGNALS:
     void zoneNameValidationError(const QString& zoneId, const QString& error);
     void zoneNumberValidationError(const QString& zoneId, const QString& error);
 
+    // Preview mode signal
+    void previewModeChanged();
+
     // Clipboard signals
     void canPasteChanged();
     void clipboardOperationFailed(const QString& error);
 
 private:
+    QVariant audioSpectrumVariant() const;
     void markUnsaved();
 
     /**
@@ -648,7 +724,12 @@ private:
     /**
      * @brief Z-order operation types for changeZOrderImpl
      */
-    enum class ZOrderOp { BringToFront, SendToBack, BringForward, SendBackward };
+    enum class ZOrderOp {
+        BringToFront,
+        SendToBack,
+        BringForward,
+        SendBackward
+    };
 
     /**
      * @brief Internal implementation for all z-order operations
@@ -683,8 +764,8 @@ private:
      * @param emitSignal Lambda to emit the changed signal
      */
     template<typename F>
-    void loadShortcutSetting(KConfigGroup& group, const QString& key,
-                             const QString& defaultValue, QString& member, F emitSignal)
+    void loadShortcutSetting(KConfigGroup& group, const QString& key, const QString& defaultValue, QString& member,
+                             F emitSignal)
     {
         QString value = group.readEntry(key, defaultValue);
         if (value.isEmpty()) {
@@ -723,6 +804,7 @@ private:
     QStringList m_selectedZoneIds; // Multi-selection: list of selected zone IDs
     bool m_hasUnsavedChanges = false;
     bool m_isNewLayout = false;
+    bool m_previewMode = false;
 
     // Services (dependency injection)
     ILayoutService* m_layoutService = nullptr;
@@ -762,9 +844,11 @@ private:
     int m_outerGapBottom = -1;
     int m_outerGapLeft = -1;
     int m_outerGapRight = -1;
+    int m_overlayDisplayMode = -1; // -1 = use global setting
     bool m_useFullScreenGeometry = false;
     int m_cachedGlobalZonePadding = PlasmaZones::Defaults::ZonePadding; // Cached to avoid D-Bus calls
     int m_cachedGlobalOuterGap = PlasmaZones::Defaults::OuterGap; // Cached to avoid D-Bus calls
+    int m_cachedGlobalOverlayDisplayMode = 0; // Cached global overlay display mode
     bool m_cachedGlobalUsePerSideOuterGap = false;
     int m_cachedGlobalOuterGapTop = PlasmaZones::Defaults::OuterGap;
     int m_cachedGlobalOuterGapBottom = PlasmaZones::Defaults::OuterGap;
@@ -781,6 +865,10 @@ private:
     // Current layout's shader settings
     QString m_currentShaderId; // Empty = no shader effect
     QVariantMap m_currentShaderParams;
+
+    // Audio spectrum (CAVA) for shader preview
+    CavaService* m_cavaService = nullptr;
+    QVector<float> m_audioSpectrum;
 
     // Cache for current shader's parameter definitions (avoids repeated D-Bus calls)
     // Updated when shader selection changes

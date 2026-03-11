@@ -44,6 +44,10 @@ public:
     virtual void setCustomParams2(const QVector4D& params) = 0;
     virtual void setCustomParams3(const QVector4D& params) = 0;
     virtual void setCustomParams4(const QVector4D& params) = 0;
+    virtual void setCustomParams5(const QVector4D& params) = 0;
+    virtual void setCustomParams6(const QVector4D& params) = 0;
+    virtual void setCustomParams7(const QVector4D& params) = 0;
+    virtual void setCustomParams8(const QVector4D& params) = 0;
     virtual void setCustomColor1(const QColor& color) = 0;
     virtual void setCustomColor2(const QColor& color) = 0;
     virtual void setCustomColor3(const QColor& color) = 0;
@@ -52,6 +56,14 @@ public:
     virtual void setCustomColor6(const QColor& color) = 0;
     virtual void setCustomColor7(const QColor& color) = 0;
     virtual void setCustomColor8(const QColor& color) = 0;
+    virtual void setCustomColor9(const QColor& color) = 0;
+    virtual void setCustomColor10(const QColor& color) = 0;
+    virtual void setCustomColor11(const QColor& color) = 0;
+    virtual void setCustomColor12(const QColor& color) = 0;
+    virtual void setCustomColor13(const QColor& color) = 0;
+    virtual void setCustomColor14(const QColor& color) = 0;
+    virtual void setCustomColor15(const QColor& color) = 0;
+    virtual void setCustomColor16(const QColor& color) = 0;
 
     /** Labels texture (pre-rendered zone numbers). Default no-op for backends that don't support it. */
     virtual void setLabelsTexture(const QImage& image)
@@ -78,16 +90,42 @@ public:
         Q_UNUSED(wrap)
     }
 
+    /** Desktop wallpaper image (binding 11). Only used when shader subscribes via "wallpaper": true. */
+    virtual void setWallpaperTexture(const QImage& image)
+    {
+        Q_UNUSED(image)
+    }
+    /** Whether the shader subscribes to wallpaper texture. */
+    virtual void setUseWallpaper(bool use)
+    {
+        Q_UNUSED(use)
+    }
+
     /** Multi-pass: optional buffer pass fragment shader path. No-op if backend does not support multipass. */
-    virtual void setBufferShaderPath(const QString& path) { Q_UNUSED(path) }
+    virtual void setBufferShaderPath(const QString& path)
+    {
+        Q_UNUSED(path)
+    }
     /** Multi-pass: up to 4 buffer pass fragment shader paths (A→B→C→D). Overrides single path when non-empty. */
-    virtual void setBufferShaderPaths(const QStringList& paths) { Q_UNUSED(paths) }
+    virtual void setBufferShaderPaths(const QStringList& paths)
+    {
+        Q_UNUSED(paths)
+    }
     /** When true, buffer pass uses ping-pong (two textures, samples previous frame as iChannel0). Default no-op. */
-    virtual void setBufferFeedback(bool enable) { Q_UNUSED(enable) }
+    virtual void setBufferFeedback(bool enable)
+    {
+        Q_UNUSED(enable)
+    }
     /** Buffer resolution scale (e.g. 0.5 = half size). Default no-op. */
-    virtual void setBufferScale(qreal scale) { Q_UNUSED(scale) }
+    virtual void setBufferScale(qreal scale)
+    {
+        Q_UNUSED(scale)
+    }
     /** Buffer channel wrap: "clamp" or "repeat". Default no-op. */
-    virtual void setBufferWrap(const QString& wrap) { Q_UNUSED(wrap) }
+    virtual void setBufferWrap(const QString& wrap)
+    {
+        Q_UNUSED(wrap)
+    }
 
     // Shader loading (paths; RHI node bakes GLSL 330 at runtime)
     virtual bool loadVertexShader(const QString& path) = 0;

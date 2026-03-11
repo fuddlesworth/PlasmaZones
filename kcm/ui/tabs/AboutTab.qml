@@ -44,19 +44,19 @@ ScrollView {
                 }
 
                 Label {
-                    text: kcm.currentVersion.length > 0
-                          ? i18n("Version %1", kcm.currentVersion)
-                          : i18n("Version unknown")
+                    text: kcm.currentVersion.length > 0 ? i18n("Version %1", kcm.currentVersion) : i18n("Version unknown")
                     opacity: 0.7
                 }
+
             }
+
         }
 
         // Description
         Label {
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.largeSpacing
-            text: i18n("A window tiling and zone management tool for KDE Plasma, inspired by Windows PowerToys FancyZones. Organize your desktop with customizable zones for efficient window placement.")
+            text: i18n("A window tiling and zone management tool for KDE Plasma. Organize your desktop with customizable zones, automatic tiling layouts, and keyboard-driven window placement.")
             wrapMode: Text.WordWrap
         }
 
@@ -97,7 +97,9 @@ ScrollView {
                     linkIcon: "package-available"
                     url: "https://github.com/fuddlesworth/PlasmaZones/releases"
                 }
+
             }
+
         }
 
         // License card
@@ -124,7 +126,9 @@ ScrollView {
                     linkIcon: "license"
                     url: "https://www.gnu.org/licenses/gpl-3.0.html"
                 }
+
             }
+
         }
 
         // Credits card
@@ -148,7 +152,7 @@ ScrollView {
 
                 Label {
                     Layout.fillWidth: true
-                    text: i18n("Inspired by Microsoft PowerToys FancyZones")
+                    text: i18n("Inspired by FancyZones, extended with automatic tiling")
                     opacity: 0.7
                 }
 
@@ -157,109 +161,153 @@ ScrollView {
                     text: i18n("Built with Qt, KDE Frameworks, and Kirigami")
                     opacity: 0.7
                 }
+
             }
+
         }
 
-        // Check for updates section - use Item to prevent layout shift
+        // Check for updates — the header banner in main.qml handles "update available";
+        // this section only surfaces "up to date" or "error" feedback from manual checks.
         Item {
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.largeSpacing
-            implicitHeight: checkUpdateButton.height
+            implicitHeight: updateCheckColumn.implicitHeight
 
-            Button {
-                id: checkUpdateButton
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: kcm.checkingForUpdates ? i18n("Checking...") : i18n("Check for Updates")
-                icon.name: "view-refresh"
-                enabled: !kcm.checkingForUpdates
-                onClicked: {
-                    updateStatusLabel.manualCheck = true
-                    updateStatusLabel.visible = false
-                    kcm.checkForUpdates()
-                    // Show result after short delay (handles rate-limited case where
-                    // checkingForUpdates never becomes true because check was skipped)
-                    statusShowTimer.restart()
+            ColumnLayout {
+                id: updateCheckColumn
+
+                anchors.fill: parent
+                spacing: Kirigami.Units.smallSpacing
+
+                Button {
+                    id: checkUpdateButton
+
+                    Layout.alignment: Qt.AlignHCenter
+                    text: kcm.checkingForUpdates ? i18n("Checking...") : i18n("Check for Updates")
+                    icon.name: "view-refresh"
+                    enabled: !kcm.checkingForUpdates
+                    Accessible.name: text
+                    Accessible.role: Accessible.Button
+                    onClicked: {
+                        updateResultMessage.pendingResult = true;
+                        updateResultMessage.visible = false;
+                        statusHideTimer.stop();
+                        kcm.checkForUpdates();
+                        // Fallback timer for rate-limited checks where checkingForUpdates
+                        // never transitions (the check is silently skipped)
+                        statusShowTimer.restart();
+                    }
                 }
 
-                Accessible.name: text
-                Accessible.role: Accessible.Button
-            }
+                Kirigami.InlineMessage {
+                    id: updateResultMessage
 
-            // Status message - anchored to right of button, doesn't affect button position
-            Label {
-                id: updateStatusLabel
-                anchors.left: checkUpdateButton.right
-                anchors.leftMargin: Kirigami.Units.largeSpacing
-                anchors.verticalCenter: checkUpdateButton.verticalCenter
-                visible: false
+                    // Internal flag: true while waiting for a manual check to complete.
+                    // Not a public API — only set by Button.onClicked, cleared by showResult().
+                    property bool pendingResult: false
+                    // Computed state avoids triplicating the condition across type/text
+                    readonly property int resultState: kcm.updateAvailable ? 2 : kcm.latestVersion.length > 0 ? 1 : 0
 
-                property bool manualCheck: false
+                    function showResult() {
+                        if (!pendingResult)
+                            return ;
 
-                // Track when checking finishes to show result immediately
-                Connections {
-                    target: kcm
-                    function onCheckingForUpdatesChanged() {
-                        // When checking completes (transitions from true to false)
-                        if (!kcm.checkingForUpdates && updateStatusLabel.manualCheck) {
-                            statusShowTimer.stop()
-                            updateStatusLabel.showResult()
+                        // re-entry guard (M1 fix)
+                        pendingResult = false;
+                        visible = true;
+                        if (kcm.updateAvailable) {
+                            // Only clear dismissal if the found version differs from
+                            // what was previously dismissed (M2 fix) — re-shows header banner
+                            if (kcm.latestVersion.length > 0 && kcm.dismissedUpdateVersion !== kcm.latestVersion)
+                                kcm.dismissedUpdateVersion = "";
+
+                        } else {
+                            // Auto-hide non-actionable results after 8s (longer text needs more read time)
+                            statusHideTimer.restart();
                         }
                     }
+
+                    Layout.fillWidth: true
+                    visible: false
+                    type: resultState === 2 ? Kirigami.MessageType.Positive : resultState === 1 ? Kirigami.MessageType.Information : Kirigami.MessageType.Warning
+                    text: resultState === 2 ? i18n("Version %1 is available! You are currently on %2.", kcm.latestVersion, kcm.currentVersion.length > 0 ? kcm.currentVersion : i18n("unknown")) : resultState === 1 ? i18n("You're up to date (%1).", kcm.currentVersion.length > 0 ? kcm.currentVersion : i18n("unknown")) : i18n("Could not check for updates. Please try again later.")
+                    // Only show actions when an update is found; use conditional array
+                    // for reliable rendering across all Kirigami versions (M4 fix)
+                    actions: resultState === 2 ? [viewReleaseAction, dismissAction] : []
+                    Accessible.name: text
+                    Accessible.description: i18n("Update check result")
+
+                    Kirigami.Action {
+                        id: viewReleaseAction
+
+                        text: i18n("View Release")
+                        icon.name: "internet-web-browser"
+                        onTriggered: kcm.openReleaseUrl()
+                    }
+
+                    Kirigami.Action {
+                        id: dismissAction
+
+                        text: i18n("Dismiss")
+                        icon.name: "dialog-close"
+                        onTriggered: {
+                            statusHideTimer.stop();
+                            if (kcm.latestVersion.length > 0)
+                                kcm.dismissedUpdateVersion = kcm.latestVersion;
+
+                            updateResultMessage.visible = false;
+                        }
+                    }
+
                 }
 
-                function showResult() {
-                    updateStatusLabel.visible = true
-                    updateStatusLabel.manualCheck = false
-                    statusHideTimer.restart()
-                    // Reshow the header banner if an update was found
-                    if (kcm.updateAvailable) {
-                        kcm.dismissedUpdateVersion = ""
+                // Timers at ColumnLayout scope so both Button and InlineMessage
+                // can reference them without cross-sibling id fragility (L1 fix)
+                Timer {
+                    id: statusShowTimer
+
+                    interval: 500
+                    onTriggered: {
+                        if (updateResultMessage.pendingResult && !kcm.checkingForUpdates)
+                            updateResultMessage.showResult();
+
                     }
                 }
 
-                text: {
-                    if (kcm.updateAvailable) {
-                        return i18n("Update available!")
-                    } else if (kcm.latestVersion.length > 0) {
-                        return i18n("You're up to date.")
-                    } else {
-                        return i18n("Could not check for updates.")
-                    }
+                Timer {
+                    id: statusHideTimer
+
+                    interval: 8000
+                    onTriggered: updateResultMessage.visible = false
                 }
 
-                color: {
-                    if (kcm.updateAvailable) {
-                        return Kirigami.Theme.positiveTextColor
-                    } else if (kcm.latestVersion.length > 0) {
-                        return Kirigami.Theme.textColor
-                    } else {
-                        return Kirigami.Theme.neutralTextColor
+                Connections {
+                    function onCheckingForUpdatesChanged() {
+                        if (!kcm.checkingForUpdates && updateResultMessage.pendingResult) {
+                            statusShowTimer.stop();
+                            updateResultMessage.showResult();
+                        }
                     }
+
+                    // Synchronize with header banner dismiss (M3 fix)
+                    function onDismissedUpdateVersionChanged() {
+                        if (kcm.updateAvailable && kcm.dismissedUpdateVersion === kcm.latestVersion)
+                            updateResultMessage.visible = false;
+
+                    }
+
+                    target: kcm
                 }
+
             }
 
-            // Short delay to show result (handles rate-limited case)
-            Timer {
-                id: statusShowTimer
-                interval: 500
-                onTriggered: {
-                    if (updateStatusLabel.manualCheck && !kcm.checkingForUpdates) {
-                        updateStatusLabel.showResult()
-                    }
-                }
-            }
-
-            Timer {
-                id: statusHideTimer
-                interval: 5000
-                onTriggered: updateStatusLabel.visible = false
-            }
         }
 
         // Spacer
         Item {
             Layout.fillHeight: true
         }
+
     }
 
     // Helper component for link buttons
@@ -274,10 +322,10 @@ ScrollView {
         Layout.fillWidth: true
         flat: true
         horizontalPadding: Kirigami.Units.largeSpacing
-
         Accessible.name: linkText
         Accessible.role: Accessible.Link
         Accessible.description: i18n("Opens %1 in web browser", url)
+        onClicked: Qt.openUrlExternally(linkButton.url)
 
         contentItem: RowLayout {
             spacing: Kirigami.Units.smallSpacing
@@ -300,8 +348,9 @@ ScrollView {
                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
                 opacity: 0.5
             }
+
         }
 
-        onClicked: Qt.openUrlExternally(linkButton.url)
     }
+
 }

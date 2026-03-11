@@ -7,7 +7,6 @@
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <effect/globals.h> // For ElectricBorder enum
-
 #include <QJsonArray>
 #include <QObject>
 #include <QVector>
@@ -20,10 +19,17 @@
 
 #include <functional>
 
+namespace KWin {
+class OutlinedBorderItem;
+}
+
 namespace PlasmaZones {
 
 // Forward declarations for helper classes
+class AutotileHandler;
 class NavigationHandler;
+class ScreenChangeHandler;
+class SnapAssistHandler;
 class WindowAnimator;
 class DragTracker;
 
@@ -33,7 +39,8 @@ class DragTracker;
  * Each trigger has a modifier (enum value) and optional mouseButton bitmask.
  * Parsed once in loadCachedSettings() from the QVariantList received via D-Bus.
  */
-struct ParsedTrigger {
+struct ParsedTrigger
+{
     int modifier = 0;
     int mouseButton = 0;
 };
@@ -65,8 +72,12 @@ public:
     void reconfigure(ReconfigureFlags flags) override;
     bool isActive() const override;
 
+    void prePaintScreen(KWin::ScreenPrePaintData& data, std::chrono::milliseconds presentTime) override;
+    void postPaintScreen() override;
     void prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
                         std::chrono::milliseconds presentTime) override;
+    // paintScreen override removed — borders are now rendered natively by KWin's
+    // scene graph (OutlinedBorderItem), no custom GL drawing needed.
     void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                      KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                      KWin::WindowPaintData& data) override;
@@ -79,7 +90,6 @@ private Q_SLOTS:
     void slotMouseChanged(const QPointF& pos, const QPointF& oldpos, Qt::MouseButtons buttons,
                           Qt::MouseButtons oldbuttons, Qt::KeyboardModifiers modifiers,
                           Qt::KeyboardModifiers oldmodifiers);
-    void slotScreenGeometryChanged();
     void slotSettingsChanged();
 
     // Keyboard Navigation handlers
@@ -87,6 +97,8 @@ private Q_SLOTS:
     void slotFocusWindowInZoneRequested(const QString& targetZoneId, const QString& windowId);
     void slotRestoreWindowRequested();
     void slotToggleWindowFloatRequested(bool shouldFloat);
+    void slotApplyGeometryRequested(const QString& windowId, const QString& geometryJson, const QString& zoneId,
+                                    const QString& screenName);
     void slotSwapWindowsRequested(const QString& targetZoneId, const QString& targetWindowId,
                                   const QString& zoneGeometry);
     void slotRotateWindowsRequested(bool clockwise, const QString& rotationData);
@@ -94,12 +106,15 @@ private Q_SLOTS:
     void slotSnapAllWindowsRequested(const QString& screenName);
     void slotCycleWindowsInZoneRequested(const QString& directive, const QString& unused);
     void slotPendingRestoresAvailable();
-    void slotReapplyWindowGeometriesRequested();
-    void slotWindowFloatingChanged(const QString& windowId, bool isFloating);
+    void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenName);
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
     void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId,
-                                                const QString& geometryJson);
+                                               const QString& geometryJson);
+    void slotWindowMinimizedChanged(KWin::EffectWindow* w);
+
+    // Daemon lifecycle
+    void slotDaemonReady();
 
 private:
     // Window management
@@ -108,19 +123,34 @@ private:
     // Window identification
     QString getWindowId(KWin::EffectWindow* w) const;
     bool shouldHandleWindow(KWin::EffectWindow* w) const;
+    bool isTileableWindow(KWin::EffectWindow* w) const;
     bool shouldAutoSnapWindow(KWin::EffectWindow* w) const;
     bool hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow* w) const;
     bool isWindowSticky(KWin::EffectWindow* w) const;
     void updateWindowStickyState(KWin::EffectWindow* w);
 
     // D-Bus communication
+
+    /**
+     * @brief Fire-and-forget async D-Bus call with error logging.
+     *
+     * Creates a QDBusMessage, sends it asynchronously, and attaches a
+     * watcher that logs warnings on failure. No reply data is used.
+     *
+     * @param interface  D-Bus interface (e.g., DBus::Interface::Autotile)
+     * @param method     D-Bus method name
+     * @param args       Method arguments
+     * @param logContext Human-readable label for the warning log
+     */
+    void fireAndForgetDBusCall(const QString& interface, const QString& method, const QVariantList& args,
+                               const QString& logContext = {});
+
     void callDragStarted(const QString& windowId, const QRectF& geometry);
     void callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons);
     void callDragStopped(KWin::EffectWindow* window, const QString& windowId);
     void callCancelSnap();
-    void callSnapToLastZone(KWin::EffectWindow* window);
+    void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr);
     void ensureWindowTrackingInterface();
-    void ensureZoneDetectionInterface();
     void connectNavigationSignals();
     void syncFloatingWindowsFromDaemon();
 
@@ -132,30 +162,6 @@ private:
      */
     bool ensureWindowTrackingReady(const char* methodName);
     bool ensureOverlayInterface(const char* methodName);
-
-    /**
-     * @brief Build candidate windows for Snap Assist (excluding just-snapped and already-snapped)
-     * @param excludeWindowId Window ID to exclude (the one just snapped)
-     * @param screenName Screen where snap occurred (filter by same screen)
-     * @param snappedWindowIds Set of full window IDs already snapped to zones (excluded).
-     *        Uses full ID matching with stable ID fallback for single-instance apps.
-     * @return JSON array of {windowId, kwinHandle, icon, caption}
-     */
-    QJsonArray buildSnapAssistCandidates(const QString& excludeWindowId, const QString& screenName,
-                                          const QSet<QString>& snappedWindowIds = QSet<QString>()) const;
-
-    /**
-     * @brief Async D-Bus chain: getSnappedWindows → buildCandidates → showSnapAssist
-     *
-     * Shared by callDragStopped and showSnapAssistContinuationIfNeeded.
-     * All D-Bus calls are async to prevent compositor freeze (see discussion #158).
-     *
-     * @param excludeWindowId Window to exclude from candidates (empty for continuation)
-     * @param screenName Target screen name
-     * @param emptyZonesJson JSON string of empty zones from daemon
-     */
-    void asyncShowSnapAssist(const QString& excludeWindowId, const QString& screenName,
-                             const QString& emptyZonesJson);
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
@@ -169,24 +175,24 @@ private:
     QRect parseZoneGeometry(const QString& json) const;
 
     /**
-     * @brief Async query zone ID for a window from daemon
-     * @param windowId The window identifier
-     * @param callback Called with zone ID or empty string if not snapped/error
-     */
-    void queryZoneForWindowAsync(const QString& windowId, std::function<void(const QString&)> callback);
-
-    /**
      * @brief Ensure pre-snap geometry is stored for a window before snapping
      * @param w The effect window
      * @param windowId The window identifier
      * @note Checks if geometry exists, stores current geometry if not
      */
-    void ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId, const QRectF& preCapturedGeometry = QRectF());
+    void ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
+                                     const QRectF& preCapturedGeometry = QRectF());
 
     /**
-     * @brief Build a map of stable window IDs to EffectWindow pointers
+     * @brief Build a map of full window IDs to EffectWindow pointers
+     *
+     * Keys are full window IDs (appId|uuid) from getWindowId(),
+     * so two windows of the same app get separate entries. Callers that
+     * receive daemon data keyed by appId should do a linear scan fallback
+     * when the exact full ID is not found.
+     *
      * @param filterHandleable If true, only include windows passing shouldHandleWindow()
-     * @return Hash map of stableId -> EffectWindow*
+     * @return Hash map of fullWindowId -> EffectWindow*
      */
     QHash<QString, KWin::EffectWindow*> buildWindowMap(bool filterHandleable = true) const;
 
@@ -198,20 +204,24 @@ private:
     KWin::EffectWindow* getValidActiveWindowOrFail(const QString& action);
 
     /**
-     * @brief Check if a window is floating (full windowId with stableId fallback)
-     * @param windowId The window identifier (full or stable)
+     * @brief Check if a window is floating (full windowId with appId fallback)
+     * @param windowId The window identifier (full or appId-only)
      * @return true if window is floating
      */
     bool isWindowFloating(const QString& windowId) const;
 
     void notifyWindowClosed(KWin::EffectWindow* w);
     void notifyWindowActivated(KWin::EffectWindow* w);
+    KWin::EffectWindow* findWindowById(const QString& windowId) const;
+
+    /**
+     * @brief All windows matching windowId (exact or same appId).
+     * Used by autotile to disambiguate when multiple windows share an appId (e.g. two Firefox).
+     */
+    QVector<KWin::EffectWindow*> findAllWindowsById(const QString& windowId) const;
 
     // Navigation helpers
     KWin::EffectWindow* getActiveWindow() const;
-    void queryAdjacentZoneAsync(const QString& currentZoneId, const QString& direction, std::function<void(const QString&)> callback);
-    void queryFirstZoneInDirectionAsync(const QString& direction, const QString& screenName, std::function<void(const QString&)> callback);
-    void queryZoneGeometryForScreenAsync(const QString& zoneId, const QString& screenName, std::function<void(const QString&)> callback);
     QString getWindowScreenName(KWin::EffectWindow* w) const;
 
     /**
@@ -228,9 +238,11 @@ private:
                                 const QString& screenName = QString());
 
     // Apply snap geometry to window
-    // When allowDuringDrag is true, applies immediately even if window is in user move state (for FancyZones-style)
+    // When allowDuringDrag is true, applies immediately even if window is in user move state (snap-on-hover)
     // retriesLeft caps the deferred-retry chain (avoids unbounded timers if isUserMove gets stuck)
-    void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false, int retriesLeft = 20);
+    void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
+                           int retriesLeft = 20, bool skipAnimation = false);
+    void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
     // iface must remain valid for the duration of the async call (caller guarantees
@@ -238,28 +250,20 @@ private:
     // not captured in the async lambda).
     // onSnapSuccess: optional callback when snap is applied, receives (windowId, screenName)
     void tryAsyncSnapCall(QDBusAbstractInterface& iface, const QString& method, const QList<QVariant>& args,
-                          QPointer<KWin::EffectWindow> window, const QString& windowId,
-                          bool storePreSnap, std::function<void()> fallback,
-                          std::function<void(const QString&, const QString&)> onSnapSuccess = nullptr);
+                          QPointer<KWin::EffectWindow> window, const QString& windowId, bool storePreSnap,
+                          std::function<void()> fallback,
+                          std::function<void(const QString&, const QString&)> onSnapSuccess = nullptr,
+                          bool skipAnimation = false, std::function<void()> onComplete = nullptr);
 
-    // Shared async dispatch: watch a QDBusPendingCall returning QString and invoke callback
-    void dispatchAsyncStringReply(QDBusPendingCall call, std::function<void(const QString&)> callback);
-
-    /**
-     * If there are empty zones and unsnapped candidates, show Snap Assist.
-     * Used to continue Snap Assist after each snap until all zones filled or no candidates.
-     */
-    void showSnapAssistContinuationIfNeeded(const QString& screenName);
-
-    // Extract stable ID from full window ID (strips pointer address)
-    // Stable ID = windowClass:resourceName (without pointer address)
-    // This allows matching windows across KWin restarts
-    static QString extractStableId(const QString& windowId);
+    // Extract app identity from window ID (the portion before the '|' separator)
+    // New format: "appId|internalUuid" → returns "appId"
+    // Legacy format: "windowClass:resourceName:ptr" → returns everything before last ':'
+    static QString extractAppId(const QString& windowId);
 
     /**
-     * @brief Derive short name from window class for icon/app display
-     * X11: "resourceName resourceClass" → first part (e.g., "dolphin")
-     * Wayland app_id: "org.kde.dolphin" → last dot-segment (e.g., "dolphin")
+     * @brief Derive short name from app ID for icon/app display
+     * Reverse-DNS: "org.kde.dolphin" → last dot-segment (e.g., "dolphin")
+     * Simple name: "firefox" → as-is
      */
     static QString deriveShortNameFromWindowClass(const QString& windowClass);
 
@@ -278,18 +282,62 @@ public Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════════
 public:
     // D-Bus interface access for helpers
-    QDBusInterface* windowTrackingInterface() const { return m_windowTrackingInterface.get(); }
+    QDBusInterface* windowTrackingInterface() const
+    {
+        return m_windowTrackingInterface.get();
+    }
+
+    // Animation sequence mode: 0=all at once, 1=one by one in zone order (for batch snaps)
+    int cachedAnimationSequenceMode() const
+    {
+        return m_cachedAnimationSequenceMode;
+    }
+    int animationDurationMs() const
+    {
+        return m_cachedAnimationDuration;
+    }
+    int cachedAnimationStaggerInterval() const
+    {
+        return m_cachedAnimationStaggerInterval;
+    }
+
+    /**
+     * @brief Apply a series of operations with optional stagger timing.
+     *
+     * When sequence mode is "one by one" and stagger interval > 0, each
+     * applyFn(i) call is delayed by i * staggerInterval ms (cascading).
+     * Otherwise all calls are immediate.
+     *
+     * @param count       Number of items to process.
+     * @param applyFn     Called with index [0, count). Must capture by value
+     *                    (lambda may fire asynchronously via QTimer).
+     * @param onComplete  Optional callback after all items are processed.
+     */
+    void applyStaggeredOrImmediate(int count, const std::function<void(int)>& applyFn,
+                                   const std::function<void()>& onComplete = nullptr);
 
 private:
     // Friend classes for helpers
+    friend class AutotileHandler;
     friend class NavigationHandler;
+    friend class ScreenChangeHandler;
+    friend class SnapAssistHandler;
     friend class WindowAnimator;
     friend class DragTracker;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper class instances
     // ═══════════════════════════════════════════════════════════════════════════════
+    std::unique_ptr<AutotileHandler> m_autotileHandler;
+
+    // Native border for the active borderless window (scene graph item).
+    void updateActiveBorder();
+    void clearActiveBorder();
+    KWin::OutlinedBorderItem* m_activeBorderItem = nullptr;
+    QMetaObject::Connection m_borderGeometryConnection;
     std::unique_ptr<NavigationHandler> m_navigationHandler;
+    std::unique_ptr<ScreenChangeHandler> m_screenChangeHandler;
+    std::unique_ptr<SnapAssistHandler> m_snapAssistHandler;
     std::unique_ptr<WindowAnimator> m_windowAnimator;
     std::unique_ptr<DragTracker> m_dragTracker;
 
@@ -305,30 +353,23 @@ private:
     // (no QDBusInterface) to avoid synchronous D-Bus introspection that could
     // block the compositor thread during startup. See callDragMoved() etc.
     std::unique_ptr<QDBusInterface> m_windowTrackingInterface; // WindowTracking interface
-    std::unique_ptr<QDBusInterface> m_zoneDetectionInterface; // ZoneDetection interface
     std::unique_ptr<QDBusInterface> m_overlayInterface; // Overlay interface (Snap Assist)
     std::unique_ptr<QDBusInterface> m_settingsInterface; // Settings interface
 
-    // Screen geometry change debouncing
-    // The virtualScreenGeometryChanged signal can fire rapidly (monitor connect/disconnect,
-    // arrangement changes, etc.) which causes windows to be unnecessarily resnapped.
-    // We debounce to only apply changes after 500ms of no further signals.
-    QTimer m_screenChangeDebounce;
-    bool m_pendingScreenChange = false;
-    QRect m_lastVirtualScreenGeometry;
-
-    // Apply debounced screen geometry change
-    void applyScreenGeometryChange();
-    // Fetch getUpdatedWindowGeometries from daemon and apply (used by resolution change and reapply request)
-    void fetchAndApplyWindowGeometries();
-    void applyWindowGeometriesFromJson(const QString& geometriesJson);
-
-    // Reapply guard: avoid overlapping async reapply runs; pending request runs once after current finishes
-    bool m_reapplyInProgress = false;
-    bool m_reapplyPending = false;
+    // Screen change debouncing and reapply handled by ScreenChangeHandler
 
     // Load cached settings from daemon (exclusions, activation triggers, etc.)
     void loadCachedSettings();
+
+    /**
+     * @brief Async helper for loading a single daemon setting.
+     *
+     * Sends getSetting(name) via raw QDBusMessage (no QDBusInterface), unwraps
+     * the QDBusVariant, and calls onValue with the extracted QVariant.
+     * Used by loadCachedSettings() to eliminate 13 identical watcher blocks.
+     */
+    template<typename Fn>
+    void loadSettingAsync(const QString& name, Fn&& onValue);
 
     /**
      * @brief Check if any activation trigger is currently held locally
@@ -371,7 +412,13 @@ private:
     bool m_excludeTransientWindows = true;
     int m_minimumWindowWidth = 200;
     int m_minimumWindowHeight = 150;
-    bool m_snapAssistEnabled = false; // false until loaded from D-Bus (avoids race at startup)
+
+    // Autotile: true when the current drag was started on an autotile screen
+    // (callDragStarted was skipped). Captured at drag start so the drag end
+    // handler uses the same decision, preventing a race where m_autotileScreens
+    // changes mid-drag (e.g., async D-Bus signal) and leaves the popup visible.
+    bool m_dragBypassedForAutotile = false;
+    QString m_dragBypassScreenName; // Screen at drag start (for float D-Bus call on drag end)
 
     // Cached activation settings (loaded from daemon via D-Bus, updated on settingsChanged)
     // Used for local trigger checking to gate D-Bus calls (see anyLocalTriggerHeld)
@@ -380,10 +427,15 @@ private:
     // startup window before async loads complete, no D-Bus calls are incorrectly skipped.
     // Once real settings arrive, they override these conservative defaults.
     QVariantList m_cachedDragActivationTriggers; // raw D-Bus data, kept for reload
-    QVector<ParsedTrigger> m_parsedTriggers; // pre-parsed from QVariantList at load time (avoids QVariant unboxing in hot path)
-    bool m_triggersLoaded = false; // false until D-Bus reply arrives — permissive default bypasses trigger gating (#175)
+    QVector<ParsedTrigger>
+        m_parsedTriggers; // pre-parsed from QVariantList at load time (avoids QVariant unboxing in hot path)
+    bool m_triggersLoaded =
+        false; // false until D-Bus reply arrives — permissive default bypasses trigger gating (#175)
     bool m_cachedToggleActivation = false;
     bool m_cachedZoneSelectorEnabled = true; // true until proven false — ensures dragMoved passes through at startup
+    int m_cachedAnimationSequenceMode = 0; // 0=all at once, 1=one by one in zone order
+    int m_cachedAnimationDuration = 150; // ms, fallback until loaded from daemon
+    int m_cachedAnimationStaggerInterval = 30; // ms between each window start when animating one by one (cascading)
 
     // Per-drag activation tracking: set once any activation trigger is detected
     // during the current drag. Stays true for the remainder of the drag so
@@ -398,6 +450,25 @@ private:
     bool m_dragStartedSent = false;
     QString m_pendingDragWindowId;
     QRectF m_pendingDragGeometry;
+
+    // Autotile: true when the current drag was started on an autotile screen
+
+    /**
+     * @brief Encode a QIcon as a data:image/png;base64 URL string.
+     * @param icon The icon to encode
+     * @param size The pixel size to render
+     * @return Data URL string, or empty string on failure
+     */
+    static QString iconToDataUrl(const QIcon& icon, int size);
+
+    // Snap-mode: windows floated due to minimize (mirrors autotile's m_minimizeFloatedWindows)
+    QSet<QString> m_minimizeFloatedWindows;
+
+    // Cached daemon D-Bus service registration state.
+    // Updated via QDBusServiceWatcher signals (registration/unregistration) to avoid
+    // synchronous isServiceRegistered() calls that block the compositor thread.
+    bool m_daemonServiceRegistered = false;
+    bool m_daemonReadyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
 
     // Cursor screen tracking (for daemon shortcut screen detection on Wayland)
     // Updated in slotMouseChanged() whenever the cursor crosses to a different monitor.

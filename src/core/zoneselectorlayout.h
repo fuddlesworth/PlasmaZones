@@ -28,10 +28,15 @@ struct ZoneSelectorLayout
     int labelTopMargin = 8;
     int labelHeight = 20;
     int labelSpace = 28;
+    int cardPadding = 26; // Extra vertical space for card chrome (showCardBackground: true)
+    int cardTopMargin = 18; // Preview top offset within card (matches Kirigami.Units.gridUnit)
+    int cardSidePadding = 18; // Extra horizontal space for card chrome (matches paddingSide)
     int paddingSide = 18;
+    int cellWidth = 0; // Full card cell width (indicatorWidth + cardSidePadding * 2)
+    int cellHeight = 0; // Full card cell height (indicatorHeight + labelSpace + cardPadding)
     int columns = 1;
-    int rows = 1;          // Visible rows (may be limited by maxRows)
-    int totalRows = 1;     // Total rows (for scroll content height)
+    int rows = 1; // Visible rows (may be limited by maxRows)
+    int totalRows = 1; // Total rows (for scroll content height)
     int contentWidth = 0;
     int contentHeight = 0;
     int scrollContentHeight = 0;
@@ -92,6 +97,11 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
     layout.labelSpace = layout.labelTopMargin + layout.labelHeight;
     layout.paddingSide = layout.containerPadding / 2;
 
+    // Card chrome: showCardBackground adds top margin + internal padding around
+    // the preview in LayoutCard.qml.  Account for this in per-card cell size.
+    layout.cellWidth = layout.indicatorWidth + layout.cardSidePadding * 2;
+    layout.cellHeight = layout.indicatorHeight + layout.labelSpace + layout.cardPadding;
+
     // Step 1: Apply maxRows setting (Auto mode, Grid only)
     int visibleRows = layout.rows;
     if (sizeMode == ZoneSelectorSizeMode::Auto && layoutMode == ZoneSelectorLayoutMode::Grid && layout.rows > maxRows) {
@@ -103,7 +113,7 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
     const int screenW = screenGeom.width();
     const int maxContentH = std::max(0, screenH - layout.containerPadding - 2 * layout.containerTopMargin);
     const int maxContentW = std::max(0, screenW - layout.containerPadding - 2 * layout.containerSideMargin);
-    const int rowUnitH = layout.indicatorHeight + layout.labelSpace + layout.indicatorSpacing;
+    const int rowUnitH = layout.cellHeight + layout.indicatorSpacing;
     if (rowUnitH > 0) {
         const int maxFittingRows = std::max(1, (maxContentH + layout.indicatorSpacing) / rowUnitH);
         if (visibleRows > maxFittingRows) {
@@ -114,13 +124,12 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
     layout.rows = visibleRows;
     layout.needsScrolling = (layout.totalRows > visibleRows);
 
-    layout.scrollContentWidth = layout.columns * layout.indicatorWidth + (layout.columns - 1) * layout.indicatorSpacing;
-    layout.scrollContentHeight = layout.totalRows * (layout.indicatorHeight + layout.labelSpace)
-        + (layout.totalRows - 1) * layout.indicatorSpacing;
+    layout.scrollContentWidth = layout.columns * layout.cellWidth + (layout.columns - 1) * layout.indicatorSpacing;
+    layout.scrollContentHeight =
+        layout.totalRows * layout.cellHeight + (layout.totalRows - 1) * layout.indicatorSpacing;
 
     layout.contentWidth = layout.scrollContentWidth;
-    layout.contentHeight =
-        visibleRows * (layout.indicatorHeight + layout.labelSpace) + (visibleRows - 1) * layout.indicatorSpacing;
+    layout.contentHeight = visibleRows * layout.cellHeight + (visibleRows - 1) * layout.indicatorSpacing;
 
     if (layout.contentWidth > maxContentW && maxContentW > 0) {
         layout.contentWidth = maxContentW;

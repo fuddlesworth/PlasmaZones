@@ -8,7 +8,7 @@
     "vertexShader": "zone.vert",
     "multipass": false,
     "parameters": [
-        {"id": "cellScale", "name": "Cell Scale", "group": "Crystalline", "type": "float", "slot": 0, "default": 12, "min": 4, "max": 32},
+        {"id": "cellScale", "name": "Cell Scale", "group": "Crystalline", "type": "int", "slot": 0, "default": 12, "min": 4, "max": 32},
         {"id": "animSpeed", "name": "Animation Speed", "group": "Crystalline", "type": "float", "slot": 1, "default": 0.6, "min": 0, "max": 2},
         {"id": "facetSharpness", "name": "Facet Sharpness", "group": "Crystalline", "type": "float", "slot": 2, "default": 0.7, "min": 0.1, "max": 1},
         {"id": "zoneTintBlend", "name": "Zone Tint Blend", "group": "Crystalline", "type": "float", "slot": 3, "default": 0.35, "min": 0, "max": 1},
@@ -24,6 +24,10 @@
         {"id": "crystalColor2", "name": "Crystal Color 2", "group": "Crystal Palette", "type": "color", "slot": 3, "default": "#4488cc"},
         {"id": "crystalColor3", "name": "Crystal Color 3", "group": "Crystal Palette", "type": "color", "slot": 4, "default": "#88aadd"},
         {"id": "crystalColor4", "name": "Crystal Color 4", "group": "Crystal Palette", "type": "color", "slot": 5, "default": "#aaccff"},
-        {"id": "edgeColor", "name": "Facet Edge Color", "group": "Crystal Palette", "type": "color", "slot": 6, "default": "#00d4ff"}
+        {"id": "edgeColor", "name": "Facet Edge Color", "group": "Crystal Palette", "type": "color", "slot": 6, "default": "#00d4ff"},
+        {"id": "etchSpread", "name": "Crystal Etch Spread", "group": "Labels", "type": "float", "slot": 10, "default": 3.0, "min": 1.0, "max": 6.0},
+        {"id": "etchBright", "name": "Etch Brightness", "group": "Labels", "type": "float", "slot": 11, "default": 2.0, "min": 0.5, "max": 4.0},
+        {"id": "refractionReact", "name": "Refraction Reactivity", "group": "Labels", "type": "float", "slot": 12, "default": 1.0, "min": 0.0, "max": 2.0},
+        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 13, "default": true}
     ]
 }

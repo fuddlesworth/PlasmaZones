@@ -69,9 +69,9 @@ ColorImportResult ColorImporter::parsePywalJson(const QString& content)
     }
 
     // Extract pywal colors - color4 (accent), color0 (background), color7 (foreground)
-    QString color4Str = colors[QStringLiteral("color4")].toString();
-    QString color0Str = colors[QStringLiteral("color0")].toString();
-    QString color7Str = colors[QStringLiteral("color7")].toString();
+    QString color4Str = colors[QLatin1String("color4")].toString();
+    QString color0Str = colors[QLatin1String("color0")].toString();
+    QString color7Str = colors[QLatin1String("color7")].toString();
 
     if (color4Str.isEmpty() || color0Str.isEmpty() || color7Str.isEmpty()) {
         result.errorMessage = QObject::tr("Missing required colors (color0, color4, color7) in pywal file");
@@ -96,7 +96,7 @@ ColorImportResult ColorImporter::parsePywalJson(const QString& content)
     result.highlightColor = accent;
     result.inactiveColor = bg;
     result.borderColor = fg;
-    result.labelFontColor = fg;  // Same as border but without modified alpha
+    result.labelFontColor = fg; // Same as border but without modified alpha
     result.labelFontColor.setAlpha(255);
 
     return result;

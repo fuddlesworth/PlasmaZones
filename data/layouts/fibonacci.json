@@ -3,7 +3,7 @@
     "name": "Fibonacci",
     "description": "Spiral subdivision layout inspired by golden ratio",
     "type": 5,
-    "builtIn": true,
+    "isBuiltIn": true,
     "showZoneNumbers": true,
     "zones": [
         {

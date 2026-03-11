@@ -17,8 +17,10 @@
  * - Traveling crystallite: Sweeping light creates sharper "diamond" sparkle on highlight
  *
  * Audio reactive (when CAVA/spectrum available):
- * - Bass: traveling light pulse, border flash, outer glow expansion
- * - Mids: facet edge brightness; Treble: caustic boost
+ * - Bass: facet resonance (per-facet rhythm at unique frequencies), resonant node glow
+ * - Mids: prismatic diffraction (rainbow hue splitting along facet edges)
+ * - Treble: crystal fracture lines (bright crack-like flashes at facet boundaries)
+ * - Border: harmonic shimmer (bass/mids/treble light different angular regions)
  * - Idle: subtle pulse when no audio
  */
 
@@ -116,6 +118,7 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 
     float energy = hasAudio ? overall * audioReact : 0.0;
     float idleAnim = hasAudio ? 0.0 : (0.5 + 0.5 * sin(iTime * 1.2 * PI)) * idlePulse;
+    float vitality = zoneVitality(isHighlighted);
 
     vec3 accent = colorWithFallback(customColors[0].rgb, vec3(0.0, 0.83, 1.0));
     vec3 hlTint = colorWithFallback(customColors[1].rgb, vec3(1.0));
@@ -136,7 +139,10 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     if (d < 0.0) {
         // === UNIFIED: Global UV — pattern flows across entire overlay ===
         vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
-        float speedMod = 1.0 + energy * 0.8 + idleAnim * 0.4;
+        // Harmonic shimmer: bass drives large-scale time warp, treble adds fine jitter
+        float bassWarp = hasAudio ? sin(iTime * 0.7) * bass * audioReact * 0.3 : 0.0;
+        float trebleJitter = hasAudio ? noise1D(iTime * 12.0) * treble * audioReact * 0.08 : 0.0;
+        float speedMod = 1.0 + bassWarp + trebleJitter + idleAnim * 0.4;
         float time = iTime * animSpeed * speedMod;
 
         float mouseDist = length(globalUV - mouseGlobal);
@@ -161,18 +167,33 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
             smoothstep(0.25, 0.75, t)
         );
 
-        // Facet edge — Edge Color brightens at cell boundaries (mids pulse the edge)
+        // Prismatic diffraction: mids cause rainbow color splitting along facet edges
         float edgeFactor = exp(-edgeDist * facetSharpness * 4.0);
-        float edgePulse = hasAudio ? (0.6 + 0.4 * mids * audioReact) : (0.6 + 0.2 * idleAnim);
+        // Per-facet diffraction phase so each edge refracts differently
+        float diffractionPhase = cellId * TAU + edgeDist * 15.0;
+        float edgePulse = hasAudio
+            ? (0.6 + 0.3 * sin(diffractionPhase + iTime * 2.5) * mids * audioReact)
+            : (0.6 + 0.2 * idleAnim);
         // Mouse: boost edges near cursor
         if (mouseInZone) {
             float cursorEdgeBoost = mouseInfluence * 0.4;
             edgeFactor = min(edgeFactor + cursorEdgeBoost * edgeFactor, 1.0);
             edgePulse += mouseInfluence * 0.3;
         }
-        vec3 edgeColor = mix(facetColor, edgeClr, edgeFactor * 0.5 * edgePulse);
+        // Mids-driven hue shift along edges — prismatic rainbow refraction
+        vec3 edgeTint = edgeClr;
+        if (hasAudio && mids > 0.05) {
+            float hueShift = diffractionPhase * 0.5 + edgeDist * 8.0;
+            vec3 rainbow = vec3(
+                sin(hueShift) * 0.5 + 0.5,
+                sin(hueShift + 2.094) * 0.5 + 0.5,
+                sin(hueShift + 4.189) * 0.5 + 0.5
+            );
+            edgeTint = mix(edgeClr, rainbow, mids * audioReact * 0.4);
+        }
+        vec3 edgeColor = mix(facetColor, edgeTint, edgeFactor * 0.5 * edgePulse);
 
-        // Traveling light — ONE light that sweeps across entire overlay (bass intensifies)
+        // Traveling light — ONE light that sweeps across entire overlay
         vec2 lightPos = vec2(0.5 + 0.35 * cos(time * 0.8), 0.5 + 0.35 * sin(time * 0.6));
         // Mouse: light gravitates toward cursor
         if (mouseInZone) {
@@ -181,8 +202,11 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         vec2 toLight = lightPos - globalUV;
         float lightDist = length(toLight);
         float spec = pow(max(0.0, 1.0 - lightDist * 3.0), 4.0);
+        // Facet resonance: each facet has its own bass-driven pulse rhythm
+        float facetPhase = cellId * TAU;
+        float facetResonance = sin(iTime * (1.5 + cellId * 2.0) + facetPhase);
         float specPulse = 0.5 + 0.5 * sin(time * 2.0);
-        specPulse += hasAudio ? bass * audioReact * 0.6 : idleAnim * 0.3;
+        specPulse += hasAudio ? facetResonance * bass * audioReact * 0.4 : idleAnim * 0.3;
         spec *= specPulse;
         vec3 specular = accent * spec;
 
@@ -196,106 +220,186 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
             base += accent * cursorGlow;
         }
 
-        // === NOVEL HIGHLIGHT EFFECTS (not just color change) ===
-        if (isHighlighted) {
-            // 1) Caustic pooling — light patterns intensify in highlighted zones (treble boosts)
+        // === VITALITY-SCALED EFFECTS (rich when highlighted, subtle when dormant) ===
+        {
+            // 1) Caustic pooling — light patterns inside zones
             float cau = caustics(globalUV, time);
             float cauMask = smoothstep(0.3, 0.7, cau);
-            float cauBoost = hasAudio ? (1.0 + treble * audioReact * 0.8) : (1.0 + idleAnim * 0.4);
-            base += accent * cauMask * causticStr * 0.35 * cauBoost;
-            base += hlTint * cauMask * causticStr * 0.15 * cauBoost;
+            float fractureEdge = smoothstep(0.08, 0.02, edgeDist);
+            float trebleSpike = hasAudio ? pow(treble * audioReact, 2.0) : 0.0;
+            float fractureBright = fractureEdge * trebleSpike * 1.5;
+            float cauBoost = 1.0 + (hasAudio ? fractureBright * 0.4 : idleAnim * 0.4);
+            base += accent * cauMask * causticStr * vitalityScale(0.08, 0.35, vitality) * cauBoost;
+            base += hlTint * cauMask * causticStr * vitalityScale(0.03, 0.15, vitality) * cauBoost;
+            base += hlTint * fractureBright * vitalityScale(0.04, 0.2, vitality);
 
             // 2) Chromatic fracture — RGB dispersion on facet edges
             vec3 chroma = chromaticSample(1.0, edgeDist, chromaStr);
-            base *= mix(vec3(1.0), chroma, edgeFactor * chromaStr);
+            base *= mix(vec3(1.0), chroma, edgeFactor * chromaStr * vitalityScale(0.3, 1.0, vitality));
 
-            // 3) Inner resonance — pulsing refraction from within facets (bass-driven)
-            float pulse = hasAudio
-                ? (0.6 + 0.4 * sin(time * 3.0) + bass * audioReact * 0.5)
+            // 3) Resonant node glow — facet vertices pulse with bass
+            float nodeFreq = 1.5 + cellId * 2.0;
+            float nodePhase = cellId * TAU;
+            float nodePulse = hasAudio
+                ? (0.6 + 0.4 * sin(iTime * nodeFreq + nodePhase) * bass * audioReact)
                 : (0.7 + 0.3 * sin(time * 3.0) + idleAnim * 0.2);
-            float radial = 1.0 - length(localUV - 0.5) * 1.5;
-            float resonance = max(0.0, radial) * pulse * resonanceStr * 0.25;
+            float cellCenterGlow = exp(-cellDist * cellDist * 8.0);
+            float resonance = cellCenterGlow * nodePulse * resonanceStr * vitalityScale(0.08, 0.35, vitality);
             base += accent * resonance;
-            base += hlTint * resonance * 0.5;
+            base += hlTint * resonance * vitalityScale(0.15, 0.5, vitality);
 
-            // 4) Traveling crystallite — sharper diamond sparkle when light passes through
-            spec *= 1.5 + resonanceStr;
-            base += specular * 0.6;
-
-            // Slight overall brighten
-            base *= 1.08;
+            // 4) Traveling crystallite — sharper sparkle when highlighted
+            base += specular * vitalityScale(0.1, 0.6, vitality);
         }
 
+        // Dormant desaturation and vitality brightness
+        base = vitalityDesaturate(base, vitality);
+        base *= vitalityScale(0.8, 1.08, vitality);
+
         result.rgb = base;
-        result.a = fillOpacity;
+        result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
     }
 
-    // Border (audio: bass flash, energy flow)
+    // Border — prismatic traveling light with bass-driven facet flash
     float border = softBorder(d, borderWidth);
     if (border > 0.0) {
         vec3 borderClr = colorWithFallback(borderColor.rgb, accent);
-        float flow = 0.5 + 0.5 * sin(atan(p.y, p.x) * 6.0 + iTime * (2.0 + energy * 3.0) + idleAnim * 2.0);
-        if (hasAudio && bass > 0.4) {
-            float bassFlash = (bass - 0.4) * audioReact;
-            borderClr = mix(borderClr, vec3(1.0), bassFlash * 0.25);
+        // Angle around the border perimeter
+        float angle = atan(p.y, p.x);
+        // Use integer lobe count (6) to avoid atan seam artifacts
+        float flow = 0.5 + 0.5 * sin(angle * 6.0 + iTime * 2.0 + idleAnim * 2.0);
+        if (hasAudio) {
+            // Harmonic shimmer: different bands light up different angular regions
+            // Bass lights broad lobes (2), mids light medium (4), treble lights fine (8)
+            float bassLobe = sin(angle * 2.0 + iTime * 1.2) * bass * audioReact;
+            float midsLobe = sin(angle * 4.0 + iTime * 2.0) * mids * audioReact;
+            float trebleLobe = sin(angle * 8.0 + iTime * 3.5) * treble * audioReact;
+            float harmonic = max(bassLobe * 0.3, 0.0) + max(midsLobe * 0.15, 0.0) + max(trebleLobe * 0.1, 0.0);
+            borderClr += accent * harmonic;
         }
         borderClr = mix(borderClr, accent, flow * 0.3);
-        if (isHighlighted) {
-            borderClr = mix(borderClr, accent, 0.4);
-            borderClr *= 1.1;
-        }
+        borderClr = mix(borderClr, accent, vitalityScale(0.05, 0.4, vitality));
+        borderClr *= vitalityScale(0.8, 1.1, vitality);
+        borderClr = vitalityDesaturate(borderClr, vitality);
         result.rgb = mix(result.rgb, borderClr, border * 0.9);
         result.a = max(result.a, border * 0.95);
     }
 
-    // Outer glow for highlighted zones (bass expands glow)
-    if (isHighlighted && d > 0.0) {
-        float glowR = 28.0 + (hasAudio ? bass * audioReact * 20.0 : idleAnim * 8.0);
-        if (d < glowR) {
-            float glow = expGlow(d, 9.0, 0.5 * (1.0 + energy * 0.5));
-            result.rgb += accent * glow * 0.4;
-            result.a = max(result.a, glow * 0.55);
-        }
+    // Outer glow (both states, vitality-modulated)
+    float outerGlowR = vitalityScale(10.0, 28.0, vitality) + idleAnim * vitalityScale(3.0, 8.0, vitality);
+    if (hasAudio) {
+        float glowAngle = atan(p.y, p.x);
+        float nodePattern = 0.5 + 0.5 * sin(glowAngle * 6.0 + iTime * 1.8);
+        outerGlowR += nodePattern * bass * audioReact * vitalityScale(5.0, 18.0, vitality);
+    }
+    if (d > 0.0 && d < outerGlowR) {
+        float outerStr = vitalityScale(0.15, 0.5, vitality) + (hasAudio ? mids * audioReact * vitalityScale(0.08, 0.3, vitality) : 0.0);
+        float glow = expGlow(d, vitalityScale(5.0, 9.0, vitality), outerStr);
+        vec3 glowCol = vitalityDesaturate(accent, vitality);
+        result.rgb += glowCol * glow * vitalityScale(0.15, 0.4, vitality);
+        result.a = max(result.a, glow * vitalityScale(0.2, 0.55, vitality));
     }
 
     return result;
 }
 
-// Custom label composite — labels get subtle prismatic outline
-vec4 compositePrismataLabels(vec4 color, vec2 fragCoord) {
+// Crystal Etch — labels appear etched into the crystalline lattice with
+// prismatic refraction, facet-edge flash, chromatic split, diamond sparkle.
+vec4 compositePrismataLabels(vec4 color, vec2 fragCoord,
+                              float bass, float mids, float treble, bool hasAudio) {
     vec2 uv = labelsUv(fragCoord);
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
+    float etchSpread   = customParams[2].z >= 0.0 ? customParams[2].z : 3.0;
+    float etchBright   = customParams[2].w >= 0.0 ? customParams[2].w : 2.0;
+    float refractReact = customParams[3].x >= 0.0 ? customParams[3].x : 1.0;
+
     vec3 accent = colorWithFallback(customColors[0].rgb, vec3(0.0, 0.83, 1.0));
+    vec3 hlTint = colorWithFallback(customColors[1].rgb, vec3(1.0));
 
-    // Dilate for outline (8 samples)
-    float dilated = labels.a;
-    dilated = max(dilated, texture(uZoneLabels, uv + vec2(-2.0,  0.0) * px).a);
-    dilated = max(dilated, texture(uZoneLabels, uv + vec2( 2.0,  0.0) * px).a);
-    dilated = max(dilated, texture(uZoneLabels, uv + vec2(0.0, -2.0) * px).a);
-    dilated = max(dilated, texture(uZoneLabels, uv + vec2(0.0,  2.0) * px).a);
-    dilated = max(dilated, texture(uZoneLabels, uv + vec2(-1.4, -1.4) * px).a);
-    dilated = max(dilated, texture(uZoneLabels, uv + vec2( 1.4, -1.4) * px).a);
-    dilated = max(dilated, texture(uZoneLabels, uv + vec2(-1.4,  1.4) * px).a);
-    dilated = max(dilated, texture(uZoneLabels, uv + vec2( 1.4,  1.4) * px).a);
-    float outline = max(0.0, dilated - labels.a);
+    // Sample voronoi at label position — crystal facet geometry
+    vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
+    float cellScale = customParams[0].x >= 0.0 ? customParams[0].x : 12.0;
+    float animSpeed = customParams[0].y >= 0.0 ? customParams[0].y : 0.6;
+    float time = iTime * animSpeed;
+    vec3 vor = voronoi(globalUV, cellScale, time);
+    float edgeDist = vor.z;
+    float cellId = vor.y;
 
-    // Prismatic outline
-    float phase = fragCoord.x * 0.02 + fragCoord.y * 0.015 + iTime * 0.5;
-    vec3 prismOutline = vec3(
-        sin(phase) * 0.5 + 0.5,
-        sin(phase + 2.094) * 0.5 + 0.5,
-        sin(phase + 4.189) * 0.5 + 0.5
-    );
-    prismOutline = mix(accent, prismOutline, 0.5);
+    // ── Gaussian halo with crystal-edge amplification ──────────────
+    float halo = 0.0;
+    float totalW = 0.0;
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            if (dx == 0 && dy == 0) continue;
+            float w = exp(-float(dx*dx + dy*dy) * 0.5);
+            halo += texture(uZoneLabels, uv + vec2(float(dx), float(dy)) * px * etchSpread).a * w;
+            totalW += w;
+        }
+    }
+    halo /= max(totalW, 0.001);
+    // Facet edges near labels glow brighter (crystal-edge amplification)
+    halo *= 1.0 + exp(-edgeDist * 6.0) * 0.6;
+    float outline = max(0.0, halo - labels.a * 0.7);
 
-    color.rgb = mix(color.rgb, prismOutline, outline * 0.8);
-    color.a = max(color.a, outline * 0.7);
+    // ── Prismatic rainbow outline ──────────────────────────────────
+    if (outline > 0.01) {
+        // Phase from position + voronoi cell for per-facet spectral variation
+        float prismPhase = globalUV.x * 15.0 + globalUV.y * 10.0
+                         + cellId * TAU + time * 0.8;
+        if (hasAudio) prismPhase += bass * refractReact * 1.5;
+        vec3 rainbow = vec3(
+            sin(prismPhase) * 0.5 + 0.5,
+            sin(prismPhase + 2.094) * 0.5 + 0.5,
+            sin(prismPhase + 4.189) * 0.5 + 0.5
+        );
+        vec3 prismClr = mix(accent, rainbow, 0.55);
 
+        // Per-cell resonance: each facet pulses at its own bass frequency
+        float resonance = hasAudio
+            ? 1.0 + sin(iTime * (1.5 + cellId * 2.0) + cellId * TAU)
+                  * bass * refractReact * 0.4
+            : 1.0;
+        // Mids shift hue balance between accent and rainbow
+        float midsBlend = hasAudio ? smoothstep(0.05, 0.5, mids) * 0.3 : 0.0;
+        prismClr = mix(prismClr, rainbow, midsBlend);
+
+        color.rgb += prismClr * outline * 0.8 * resonance;
+        color.a = max(color.a, outline * 0.6);
+    }
+
+    // ── Treble facet flash: crystal edges near labels catch light ───
+    if (hasAudio && treble > 0.08) {
+        float facetFlash = exp(-edgeDist * 8.0);
+        float sparkPhase = fract(cellId * 7.0 + iTime * 3.0);
+        float sparkPulse = pow(max(0.0, sin(sparkPhase * TAU)), 8.0);
+        float flash = facetFlash * sparkPulse * treble * refractReact * 0.5;
+        float labelProx = max(halo, labels.a);
+        color.rgb += hlTint * flash * labelProx;
+    }
+
+    // ── Chromatic aberration core: prismatic RGB split ─────────────
     if (labels.a > 0.01) {
-        color.rgb = color.rgb * (1.0 - labels.a) + labels.rgb;
-        color.a = max(color.a, labels.a);
+        float caAngle = time * 0.5 + cellId * TAU;
+        vec2 caDir = vec2(cos(caAngle), sin(caAngle));
+        float caAmount = (hasAudio ? 1.5 + bass * refractReact * 2.0 : 1.5)
+                         * px.x * iResolution.x * 0.002;
+
+        float rCh = texture(uZoneLabels, uv + caDir * caAmount).a;
+        float gCh = labels.a;
+        float bCh = texture(uZoneLabels, uv - caDir * caAmount).a;
+        float maxCh = max(max(rCh, gCh), bCh);
+
+        vec3 chromaticLabel = vec3(rCh, gCh, bCh);
+        vec3 boosted = color.rgb * etchBright + chromaticLabel * accent * 0.5;
+
+        // Diamond sparkle: bright peaks traveling across text surface
+        float sparkle = pow(noise2D(globalUV * 80.0 + vec2(time * 2.0, 0.0)), 16.0) * 0.6;
+        boosted += hlTint * sparkle * labels.a;
+
+        color.rgb = mix(color.rgb, boosted, maxCh);
+        color.a = max(color.a, maxCh);
     }
 
     return color;
@@ -312,10 +416,10 @@ void main() {
 
     // Audio analysis (computed once for all zones)
     bool  hasAudio = iAudioSpectrumSize > 0;
-    float bass    = getBass();
-    float mids    = getMids();
-    float treble  = getTreble();
-    float overall = getOverall();
+    float bass    = getBassSoft();
+    float mids    = getMidsSoft();
+    float treble  = getTrebleSoft();
+    float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
@@ -329,7 +433,8 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositePrismataLabels(color, fragCoord);
+    if (customParams[3].y > 0.5)
+        color = compositePrismataLabels(color, fragCoord, bass, mids, treble, hasAudio);
 
     fragColor = clampFragColor(color);
 }

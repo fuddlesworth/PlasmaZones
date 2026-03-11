@@ -14,6 +14,12 @@ kconfig_add_kcfg_files(kcm_plasmazones_kcfg_SRCS
 set(kcm_plasmazones_SRCS
     kcm_plasmazones.cpp
     kcm_plasmazones.h
+    assignmentmanager.cpp
+    assignmentmanager.h
+    daemoncontroller.cpp
+    daemoncontroller.h
+    layoutmanager.cpp
+    layoutmanager.h
     ${kcm_plasmazones_kcfg_SRCS}
 )
 
@@ -56,6 +62,10 @@ qt_add_resources(kcm_plasmazones "kcm_qml_components"
         ui/PositionPicker.qml
         ui/PreviewSizeControl.qml
         ui/ScreenComboBox.qml
+        ui/WideComboBox.qml
+        ui/MonitorSelectorSection.qml
+        ui/EasingPreview.qml
+        ui/PerScreenOverrideHelper.qml
 )
 
 qt_add_resources(kcm_plasmazones "kcm_qml_tabs"
@@ -65,9 +75,10 @@ qt_add_resources(kcm_plasmazones "kcm_qml_tabs"
         ui/tabs/qmldir
         ui/tabs/AboutTab.qml
         ui/tabs/ActivityAssignmentsCard.qml
+        ui/tabs/AlgorithmPreview.qml
         ui/tabs/AppRulesCard.qml
         ui/tabs/AssignmentsTab.qml
-        ui/tabs/DisplayTab.qml
+        ui/tabs/AutotilingTab.qml
         ui/tabs/EditorTab.qml
         ui/tabs/ExclusionListCard.qml
         ui/tabs/ExclusionsTab.qml
@@ -78,6 +89,8 @@ qt_add_resources(kcm_plasmazones "kcm_qml_tabs"
         ui/tabs/QuickLayoutSlotsCard.qml
         ui/tabs/WindowPickerDialog.qml
         ui/tabs/ZonesTab.qml
+        ui/tabs/ZoneSelectorSection.qml
+        ui/tabs/GeneralTab.qml
 )
 
 target_link_libraries(kcm_plasmazones
@@ -108,7 +121,11 @@ install(FILES
     ui/LayoutComboBox.qml
     ui/AssignmentRow.qml
     ui/ScreenComboBox.qml
+    ui/WideComboBox.qml
     ui/FontPickerDialog.qml
+    ui/MonitorSelectorSection.qml
+    ui/EasingPreview.qml
+    ui/PerScreenOverrideHelper.qml
     DESTINATION ${KDE_INSTALL_QMLDIR}/org/kde/kcms/plasmazones
 )
 
@@ -119,7 +136,7 @@ install(FILES
     ui/tabs/EditorTab.qml
     ui/tabs/AssignmentsTab.qml
     ui/tabs/ZonesTab.qml
-    ui/tabs/DisplayTab.qml
+    ui/tabs/GeneralTab.qml
     ui/tabs/ExclusionsTab.qml
     ui/tabs/AboutTab.qml
     ui/tabs/ExclusionListCard.qml
@@ -130,5 +147,8 @@ install(FILES
     ui/tabs/LayoutToolbar.qml
     ui/tabs/AppRulesCard.qml
     ui/tabs/LayoutGridDelegate.qml
+    ui/tabs/AutotilingTab.qml
+    ui/tabs/AlgorithmPreview.qml
+    ui/tabs/ZoneSelectorSection.qml
     DESTINATION ${KDE_INSTALL_QMLDIR}/org/kde/kcms/plasmazones/tabs
 )

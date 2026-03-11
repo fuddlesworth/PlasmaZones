@@ -57,18 +57,19 @@ bool SnappingService::validateGeometry(qreal x, qreal y, qreal width, qreal heig
 {
     // Reject invalid or degenerate geometry
     if (!qIsFinite(x) || !qIsFinite(y) || !qIsFinite(width) || !qIsFinite(height)) {
-        qCDebug(PlasmaZones::lcSnapping) << "Rejected non-finite geometry - x:" << x << "y:" << y << "w:" << width
-                                         << "h:" << height;
+        qCDebug(PlasmaZones::lcSnapping) << "Geometry validation: rejected non-finite, x:" << x << "y:" << y
+                                         << "w:" << width << "h:" << height;
         return false;
     }
     if (width <= 0 || height <= 0) {
-        qCDebug(PlasmaZones::lcSnapping) << "Rejected non-positive dimensions - w:" << width << "h:" << height;
+        qCDebug(PlasmaZones::lcSnapping) << "Geometry validation: rejected non-positive dimensions, w:" << width
+                                         << "h:" << height;
         return false;
     }
     // Allow some tolerance for coordinates slightly outside [0,1] due to floating point
-    constexpr qreal tolerance = 0.001;
+    constexpr qreal tolerance = EditorConstants::GeometryBoundsTolerance;
     if (x < -tolerance || y < -tolerance || x + width > 1.0 + tolerance || y + height > 1.0 + tolerance) {
-        qCDebug(PlasmaZones::lcSnapping) << "Rejected out-of-bounds geometry - x:" << x << "y:" << y
+        qCDebug(PlasmaZones::lcSnapping) << "Geometry validation: rejected out-of-bounds, x:" << x << "y:" << y
                                          << "right:" << (x + width) << "bottom:" << (y + height);
         return false;
     }
@@ -82,17 +83,43 @@ qreal SnappingService::snapValueToGrid(qreal value, qreal interval) const
 
     // Grid snapping should not snap to canvas boundaries (0.0 or 1.0).
     // Edge snapping handles boundaries; grid snapping returns interior grid points only.
-    if (qFuzzyCompare(snapped, 1.0)) {
+    if (qFuzzyCompare(1.0 + snapped, 2.0)) {
         // Would snap to right/bottom boundary - return previous grid point instead
         qreal prevGridPoint = qFloor(value / interval) * interval;
         return qBound(0.0, prevGridPoint, 1.0 - interval);
-    } else if (qFuzzyCompare(snapped, 0.0)) {
+    } else if (qFuzzyCompare(1.0 + snapped, 1.0)) {
         // Would snap to left/top boundary - return next grid point instead
         qreal nextGridPoint = qCeil(value / interval) * interval;
         return qBound(interval, nextGridPoint, 1.0);
     }
 
     return snapped;
+}
+
+SnappingService::EdgeLists SnappingService::collectZoneEdges(const QVariantList& allZones,
+                                                             const QString& excludeZoneId) const
+{
+    using namespace PlasmaZones::JsonKeys;
+
+    EdgeLists edges;
+    edges.vertical = {0.0, 1.0};
+    edges.horizontal = {0.0, 1.0};
+
+    for (const QVariant& zoneVar : allZones) {
+        QVariantMap zone = zoneVar.toMap();
+        if (zone[Id].toString() == excludeZoneId)
+            continue;
+
+        qreal zx = zone[X].toDouble();
+        qreal zy = zone[Y].toDouble();
+        qreal zw = zone[Width].toDouble();
+        qreal zh = zone[Height].toDouble();
+
+        edges.vertical << zx << (zx + zw);
+        edges.horizontal << zy << (zy + zh);
+    }
+
+    return edges;
 }
 
 QVariantMap SnappingService::snapGeometry(qreal x, qreal y, qreal width, qreal height, const QVariantList& allZones,
@@ -121,24 +148,7 @@ QVariantMap SnappingService::snapGeometry(qreal x, qreal y, qreal width, qreal h
     bool leftSnapped = false, rightSnapped = false, topSnapped = false, bottomSnapped = false;
 
     if (m_edgeSnappingEnabled) {
-        // First, try snapping the left edge to zone edges
-        QList<qreal> verticalEdges = {0.0, 1.0};
-        QList<qreal> horizontalEdges = {0.0, 1.0};
-
-        for (const QVariant& zoneVar : allZones) {
-            QVariantMap zone = zoneVar.toMap();
-            QString zoneId = zone[Id].toString();
-            if (zoneId == excludeZoneId)
-                continue;
-
-            qreal zx = zone[X].toDouble();
-            qreal zy = zone[Y].toDouble();
-            qreal zw = zone[Width].toDouble();
-            qreal zh = zone[Height].toDouble();
-
-            verticalEdges << zx << (zx + zw);
-            horizontalEdges << zy << (zy + zh);
-        }
+        EdgeLists edges = collectZoneEdges(allZones, excludeZoneId);
 
         qreal left = rect.left();
         qreal top = rect.top();
@@ -150,7 +160,7 @@ QVariantMap SnappingService::snapGeometry(qreal x, qreal y, qreal width, qreal h
         qreal minLeftDist = m_edgeThreshold, minRightDist = m_edgeThreshold;
         qreal minTopDist = m_edgeThreshold, minBottomDist = m_edgeThreshold;
 
-        for (qreal edge : verticalEdges) {
+        for (qreal edge : edges.vertical) {
             qreal leftDist = qAbs(left - edge);
             if (leftDist < minLeftDist) {
                 minLeftDist = leftDist;
@@ -163,7 +173,7 @@ QVariantMap SnappingService::snapGeometry(qreal x, qreal y, qreal width, qreal h
             }
         }
 
-        for (qreal edge : horizontalEdges) {
+        for (qreal edge : edges.horizontal) {
             qreal topDist = qAbs(top - edge);
             if (topDist < minTopDist) {
                 minTopDist = topDist;
@@ -308,25 +318,7 @@ QRectF SnappingService::snapToEdgesSelectiveWithTracking(const QRectF& rect, con
     topSnapped = false;
     bottomSnapped = false;
 
-    QList<qreal> verticalEdges = {0.0, 1.0};
-    QList<qreal> horizontalEdges = {0.0, 1.0};
-
-    using namespace PlasmaZones::JsonKeys;
-
-    for (const QVariant& zoneVar : allZones) {
-        QVariantMap zone = zoneVar.toMap();
-        QString zoneId = zone[Id].toString();
-        if (zoneId == excludeZoneId)
-            continue;
-
-        qreal zx = zone[X].toDouble();
-        qreal zy = zone[Y].toDouble();
-        qreal zw = zone[Width].toDouble();
-        qreal zh = zone[Height].toDouble();
-
-        verticalEdges << zx << (zx + zw);
-        horizontalEdges << zy << (zy + zh);
-    }
+    EdgeLists edges = collectZoneEdges(allZones, excludeZoneId);
 
     qreal left = rect.left();
     qreal top = rect.top();
@@ -343,7 +335,7 @@ QRectF SnappingService::snapToEdgesSelectiveWithTracking(const QRectF& rect, con
     qreal minBottomDist = m_edgeThreshold;
 
     if (snapLeft || snapRight) {
-        for (qreal edge : verticalEdges) {
+        for (qreal edge : edges.vertical) {
             if (snapLeft) {
                 qreal leftDist = qAbs(left - edge);
                 if (leftDist < minLeftDist) {
@@ -362,7 +354,7 @@ QRectF SnappingService::snapToEdgesSelectiveWithTracking(const QRectF& rect, con
     }
 
     if (snapTop || snapBottom) {
-        for (qreal edge : horizontalEdges) {
+        for (qreal edge : edges.horizontal) {
             if (snapTop) {
                 qreal topDist = qAbs(top - edge);
                 if (topDist < minTopDist) {
@@ -505,7 +497,7 @@ QRectF SnappingService::snapToGridSelective(const QRectF& rect, bool snapLeft, b
     if (width < minSize || height < minSize || !qIsFinite(left) || !qIsFinite(top) || !qIsFinite(width)
         || !qIsFinite(height)) {
         // Fallback to original rect if snapping produced invalid result
-        qCDebug(PlasmaZones::lcSnapping) << "Snapping produced invalid result, using original rect - computed w:"
+        qCDebug(PlasmaZones::lcSnapping) << "Snapping: produced invalid result, using original rect, computed w:"
                                          << width << "h:" << height;
         return rect;
     }

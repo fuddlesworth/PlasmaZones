@@ -24,16 +24,26 @@ class EditorController;
 class UpdateGapOverrideCommand : public QUndoCommand
 {
 public:
-    enum class GapType { ZonePadding, OuterGap, OuterGapTop, OuterGapBottom, OuterGapLeft, OuterGapRight, UsePerSideOuterGap };
+    enum class GapType {
+        ZonePadding,
+        OuterGap,
+        OuterGapTop,
+        OuterGapBottom,
+        OuterGapLeft,
+        OuterGapRight,
+        UsePerSideOuterGap,
+        OverlayDisplayMode
+    };
 
-    explicit UpdateGapOverrideCommand(QPointer<EditorController> editorController,
-                                      GapType type, int oldValue, int newValue,
-                                      const QString& text = QString(),
-                                      QUndoCommand* parent = nullptr);
+    explicit UpdateGapOverrideCommand(QPointer<EditorController> editorController, GapType type, int oldValue,
+                                      int newValue, const QString& text = QString(), QUndoCommand* parent = nullptr);
 
     void undo() override;
     void redo() override;
-    int id() const override { return CommandId::UpdateGapOverride; }
+    int id() const override
+    {
+        return CommandId::UpdateGapOverride;
+    }
     bool mergeWith(const QUndoCommand* other) override;
 
 private:

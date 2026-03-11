@@ -76,8 +76,8 @@ bool ActivityManager::init()
                 if (m_activitiesAvailable && !wasAvailable) {
                     // Service just became available - fetch current activity
                     m_currentActivity = controller->currentActivity();
-                    qCInfo(lcCore) << "KActivities service now running, current activity:"
-                                    << m_currentActivity << "(" << activityName(m_currentActivity) << ")";
+                    qCInfo(lcCore) << "KActivities service now running, current activity:" << m_currentActivity << "("
+                                   << activityName(m_currentActivity) << ")";
 
                     // Emit signals so UI can update
                     Q_EMIT activitiesChanged();
@@ -102,18 +102,18 @@ bool ActivityManager::init()
 
     if (m_activitiesAvailable) {
         m_currentActivity = controller->currentActivity();
-        qCInfo(lcCore) << "KActivities available, current activity:" << m_currentActivity
-                        << "(" << activityName(m_currentActivity) << ")";
+        qCInfo(lcCore) << "KActivities available, current activity:" << m_currentActivity << "("
+                       << activityName(m_currentActivity) << ")";
     } else if (status == KActivities::Controller::Unknown) {
         // Service status unknown - it may become available later
-        qCInfo(lcCore) << "KActivities service status unknown - waiting for connection";
+        qCInfo(lcCore) << "KActivities: service status unknown, waiting for connection";
     } else {
-        qCInfo(lcCore) << "KActivities service not running - activity support disabled";
+        qCInfo(lcCore) << "KActivities: service not running, activity support disabled";
     }
 
     return true; // Always return true - activities are optional
 #else
-    qCInfo(lcCore) << "KActivities support not compiled in - activity support disabled";
+    qCInfo(lcCore) << "KActivities: not compiled in, activity support disabled";
     m_activitiesAvailable = false;
     return true; // Return true since activities are optional
 #endif
@@ -126,7 +126,7 @@ void ActivityManager::start()
     }
 
     if (!m_activitiesAvailable) {
-        qCDebug(lcCore) << "Activities not available - skipping activity manager start";
+        qCDebug(lcCore) << "ActivityManager: not available, skipping start";
         return;
     }
 
@@ -202,7 +202,7 @@ void ActivityManager::onCurrentActivityChanged(const QString& activityId)
     }
 
     m_currentActivity = activityId;
-    qCInfo(lcCore) << "Activity changed activity= " << activityId << " name= " << activityName(activityId);
+    qCInfo(lcCore) << "Activity changed activity=" << activityId << "name=" << activityName(activityId);
 
     updateActiveLayout();
     Q_EMIT currentActivityChanged(activityId);
@@ -210,13 +210,13 @@ void ActivityManager::onCurrentActivityChanged(const QString& activityId)
 
 void ActivityManager::onActivityAdded(const QString& activityId)
 {
-    qCInfo(lcCore) << "Activity added activity= " << activityId << " name= " << activityName(activityId);
+    qCInfo(lcCore) << "Activity added activity=" << activityId << "name=" << activityName(activityId);
     Q_EMIT activitiesChanged();
 }
 
 void ActivityManager::onActivityRemoved(const QString& activityId)
 {
-    qCInfo(lcCore) << "Activity removed activity= " << activityId;
+    qCInfo(lcCore) << "Activity removed activity=" << activityId;
     Q_EMIT activitiesChanged();
 }
 
@@ -232,10 +232,8 @@ void ActivityManager::connectSignals()
     }
     connect(controller, &KActivities::Controller::currentActivityChanged, this,
             &ActivityManager::onCurrentActivityChanged);
-    connect(controller, &KActivities::Controller::activityAdded, this,
-            &ActivityManager::onActivityAdded);
-    connect(controller, &KActivities::Controller::activityRemoved, this,
-            &ActivityManager::onActivityRemoved);
+    connect(controller, &KActivities::Controller::activityAdded, this, &ActivityManager::onActivityAdded);
+    connect(controller, &KActivities::Controller::activityRemoved, this, &ActivityManager::onActivityRemoved);
 #endif
 }
 
@@ -276,9 +274,9 @@ void ActivityManager::updateActiveLayout()
     auto* layout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), currentDesktop, m_currentActivity);
 
     if (layout && layout != m_layoutManager->activeLayout()) {
-        qCInfo(lcCore) << "Switching to layout" << layout->name() << "for activity"
-                        << activityName(m_currentActivity) << "(" << m_currentActivity << ")"
-                        << "desktop" << currentDesktop << "on screen" << screen->name();
+        qCInfo(lcCore) << "Switching to layout" << layout->name() << "for activity" << activityName(m_currentActivity)
+                       << "(" << m_currentActivity << ")"
+                       << "desktop" << currentDesktop << "on screen" << screen->name();
         m_layoutManager->setActiveLayout(layout);
     }
 }
