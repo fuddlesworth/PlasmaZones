@@ -7,7 +7,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [2.0.0] - 2026-03-05
+## [2.0.0] - 2026-03-10
 
 ### Added
 
@@ -703,17 +703,24 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
 [Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.0.0...HEAD
-[2.0.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.6...v2.0.0
+[2.0.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.15...v2.0.0
+[1.15.15]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.14...v1.15.15
+[1.15.14]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.13...v1.15.14
+[1.15.13]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.12...v1.15.13
+[1.15.12]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.11...v1.15.12
+[1.15.11]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.9...v1.15.11
+[1.15.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.8...v1.15.9
+[1.15.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.7...v1.15.8
+[1.15.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.6...v1.15.7
 [1.15.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.5...v1.15.6
 [1.15.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.4...v1.15.5
 [1.15.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.3...v1.15.4
 [1.15.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.2...v1.15.3
 [1.15.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.1...v1.15.2
-[1.15.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.0...v1.15.1
-[1.15.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.14.1...v1.15.0
+[1.15.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.14.1...v1.15.1
 [1.14.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.14.0...v1.14.1
-[1.14.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.13.0...v1.14.0
-[1.13.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.2...v1.13.0
+[1.14.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.13.1...v1.14.0
+[1.13.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.2...v1.13.1
 [1.12.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.11.8...v1.12.0
@@ -744,8 +751,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [1.6.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.6.1...v1.6.2
 [1.6.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.5.9...v1.6.0
-[1.5.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.5.2...v1.5.9
-[1.5.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.4...v1.5.2
+[1.5.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.5.3...v1.5.9
+[1.5.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.4...v1.5.3
 [1.3.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.1...v1.3.2
