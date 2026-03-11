@@ -349,7 +349,7 @@ Item {
             var progress = Math.min(elapsed / totalDuration, 1);
             var easedProgress = root.evaluateEasing(progress);
             var trackWidth = Math.max(0, animBox.parent.width - root.boxSize);
-            animBox.x = easedProgress * trackWidth;
+            animBox.x = Math.max(0, Math.min(trackWidth, easedProgress * trackWidth));
             if (progress >= 1) {
                 animBox.x = trackWidth;
                 animTimer.stop();

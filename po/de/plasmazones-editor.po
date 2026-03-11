@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: plasmazones-editor\n"
 "Report-Msgid-Bugs-To: https://github.com/fuddlesworth/PlasmaZones/issues\n"
-"POT-Creation-Date: 2026-03-09 09:41-0500\n"
+"POT-Creation-Date: 2026-03-10 14:48-0500\n"
 "PO-Revision-Date: 2026-02-22 12:00-0600\n"
 "Last-Translator: \n"
 "Language-Team: German <kde-i18n-de@kde.org>\n"
@@ -1267,14 +1267,14 @@ msgid "Overlay Style"
 msgstr ""
 
 #: src/editor/qml/LayoutSettingsDialog.qml:405
-#: src/editor/qml/PropertyPanel.qml:710
+#: src/editor/qml/PropertyPanel.qml:701
 #, fuzzy
 msgctxt "@item:inlistbox"
 msgid "Full zone highlight"
 msgstr "Zonen-Hervorhebungsfarbe"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:405
-#: src/editor/qml/PropertyPanel.qml:710
+#: src/editor/qml/PropertyPanel.qml:701
 msgctxt "@item:inlistbox"
 msgid "Compact preview"
 msgstr ""
@@ -1478,7 +1478,7 @@ msgctxt "@info:tooltip"
 msgid "Set corner radius for all selected zones (0-50)"
 msgstr "Eckenradius für alle ausgewählten Zonen festlegen (0-50)"
 
-#: src/editor/qml/PropertyPanel.qml:267 src/editor/qml/PropertyPanel.qml:788
+#: src/editor/qml/PropertyPanel.qml:267 src/editor/qml/PropertyPanel.qml:773
 msgctxt "@title"
 msgid "Actions"
 msgstr "Aktionen"
@@ -1679,62 +1679,62 @@ msgctxt "@title"
 msgid "Overlay"
 msgstr ""
 
-#: src/editor/qml/PropertyPanel.qml:708
+#: src/editor/qml/PropertyPanel.qml:699
 msgctxt "@label"
 msgid "Style:"
 msgstr ""
 
-#: src/editor/qml/PropertyPanel.qml:710
+#: src/editor/qml/PropertyPanel.qml:701
 msgctxt "@item:inlistbox overlay mode"
 msgid "Use layout default"
 msgstr ""
 
-#: src/editor/qml/PropertyPanel.qml:719
+#: src/editor/qml/PropertyPanel.qml:710
 msgctxt "@label"
 msgid "Zone overlay display mode"
 msgstr ""
 
-#: src/editor/qml/PropertyPanel.qml:720
+#: src/editor/qml/PropertyPanel.qml:711
 msgctxt "@info:accessibility"
 msgid "Override the overlay style for this zone only"
 msgstr ""
 
-#: src/editor/qml/PropertyPanel.qml:794
+#: src/editor/qml/PropertyPanel.qml:779
 msgctxt "@action:button"
 msgid "Delete Zone"
 msgstr "Zone löschen"
 
-#: src/editor/qml/PropertyPanel.qml:798
+#: src/editor/qml/PropertyPanel.qml:783
 msgctxt "@info"
 msgid "Delete the selected zone"
 msgstr "Die ausgewählte Zone löschen"
 
-#: src/editor/qml/PropertyPanel.qml:848
+#: src/editor/qml/PropertyPanel.qml:833
 msgctxt "@title:window"
 msgid "Zone Highlight Color"
 msgstr "Zonen-Hervorhebungsfarbe"
 
-#: src/editor/qml/PropertyPanel.qml:863
+#: src/editor/qml/PropertyPanel.qml:848
 msgctxt "@title:window"
 msgid "Zone Inactive Color"
 msgstr "Zonen-Inaktivfarbe"
 
-#: src/editor/qml/PropertyPanel.qml:878
+#: src/editor/qml/PropertyPanel.qml:863
 msgctxt "@title:window"
 msgid "Zone Border Color"
 msgstr "Zonen-Rahmenfarbe"
 
-#: src/editor/qml/PropertyPanel.qml:896
+#: src/editor/qml/PropertyPanel.qml:881
 msgctxt "@title:window"
 msgid "Highlight Color for All Selected Zones"
 msgstr "Hervorhebungsfarbe für alle ausgewählten Zonen"
 
-#: src/editor/qml/PropertyPanel.qml:909
+#: src/editor/qml/PropertyPanel.qml:894
 msgctxt "@title:window"
 msgid "Inactive Color for All Selected Zones"
 msgstr "Inaktivfarbe für alle ausgewählten Zonen"
 
-#: src/editor/qml/PropertyPanel.qml:922
+#: src/editor/qml/PropertyPanel.qml:907
 msgctxt "@title:window"
 msgid "Border Color for All Selected Zones"
 msgstr "Rahmenfarbe für alle ausgewählten Zonen"

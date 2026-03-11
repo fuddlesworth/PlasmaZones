@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: kcm_plasmazones\n"
 "Report-Msgid-Bugs-To: https://github.com/fuddlesworth/PlasmaZones/issues\n"
-"POT-Creation-Date: 2026-03-09 09:42-0500\n"
+"POT-Creation-Date: 2026-03-11 12:24-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -279,7 +279,7 @@ msgstr ""
 msgid "Click to set key, modifier, or any mouse button"
 msgstr ""
 
-#: kcm/ui/ModifierCheckBoxes.qml:36 kcm/ui/tabs/GeneralTab.qml:607
+#: kcm/ui/ModifierCheckBoxes.qml:36 kcm/ui/tabs/GeneralTab.qml:517
 #: kcm/ui/tabs/QuickLayoutSlotsCard.qml:99
 msgid "None"
 msgstr ""
@@ -963,7 +963,7 @@ msgid "Colored border drawn around borderless tiled windows (0 to disable)"
 msgstr ""
 
 #: kcm/ui/tabs/AutotilingTab.qml:165 kcm/ui/tabs/AutotilingTab.qml:249
-#: kcm/ui/tabs/AutotilingTab.qml:271 kcm/ui/tabs/GeneralTab.qml:543
+#: kcm/ui/tabs/AutotilingTab.qml:271 kcm/ui/tabs/GeneralTab.qml:453
 #: kcm/ui/tabs/ZonesTab.qml:250 kcm/ui/tabs/ZonesTab.qml:268
 #: kcm/ui/tabs/ZonesTab.qml:610 kcm/ui/tabs/ZonesTab.qml:794
 #: kcm/ui/tabs/ZonesTab.qml:814
@@ -1254,8 +1254,7 @@ msgstr ""
 
 #: kcm/ui/tabs/ExclusionsTab.qml:119
 msgid ""
-"Windows smaller than these dimensions will be excluded. Set to 0 to "
-"disable."
+"Windows smaller than these dimensions will be excluded. Set to 0 to disable."
 msgstr ""
 
 #: kcm/ui/tabs/ExclusionsTab.qml:141
@@ -1271,7 +1270,8 @@ msgid "No excluded applications"
 msgstr ""
 
 #: kcm/ui/tabs/ExclusionsTab.qml:144
-msgid "Add application names above to exclude them from snapping and autotiling"
+msgid ""
+"Add application names above to exclude them from snapping and autotiling"
 msgstr ""
 
 #: kcm/ui/tabs/ExclusionsTab.qml:169
@@ -1304,357 +1304,254 @@ msgid ""
 "snapping and autotiling."
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:103 kcm/ui/tabs/ZoneSelectorSection.qml:502
+#: kcm/ui/tabs/GeneralTab.qml:92 kcm/ui/tabs/ZoneSelectorSection.qml:502
 msgid "Custom"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:106
-msgid "--- Standard ---"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:109
+#: kcm/ui/tabs/GeneralTab.qml:93
 msgid "Linear"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:112
-msgid "--- Sine ---"
+#: kcm/ui/tabs/GeneralTab.qml:94
+msgid "Gentle (Sine)"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:115
-msgid "Ease In (Sine)"
+#: kcm/ui/tabs/GeneralTab.qml:95
+msgid "Smooth (Quad)"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:118
-msgid "Ease Out (Sine)"
+#: kcm/ui/tabs/GeneralTab.qml:96
+msgid "Standard (Cubic)"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:121
-msgid "Ease In-Out (Sine)"
+#: kcm/ui/tabs/GeneralTab.qml:97
+msgid "Snappy (Quart)"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:124
-msgid "--- Quad ---"
+#: kcm/ui/tabs/GeneralTab.qml:98
+msgid "Sharp (Quint)"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:127
-msgid "Ease In (Quad)"
+#: kcm/ui/tabs/GeneralTab.qml:99
+msgid "Aggressive (Expo)"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:130
-msgid "Ease Out (Quad)"
+#: kcm/ui/tabs/GeneralTab.qml:100
+msgid "Circular (Circ)"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:133
-msgid "Ease In-Out (Quad)"
+#: kcm/ui/tabs/GeneralTab.qml:101
+msgid "Overshoot (Back)"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:136
-msgid "--- Cubic ---"
+#: kcm/ui/tabs/GeneralTab.qml:102
+msgid "Elastic"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:139
-msgid "Ease In (Cubic)"
+#: kcm/ui/tabs/GeneralTab.qml:103
+msgid "Bounce"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:142
-msgid "Ease Out (Cubic)"
+#: kcm/ui/tabs/GeneralTab.qml:107
+msgid "Ease In"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:145
-msgid "Ease In-Out (Cubic)"
+#: kcm/ui/tabs/GeneralTab.qml:108
+msgid "Ease Out"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:148
-msgid "--- Quart ---"
+#: kcm/ui/tabs/GeneralTab.qml:109
+msgid "Ease In-Out"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:151
-msgid "Ease In (Quart)"
+#: kcm/ui/tabs/GeneralTab.qml:207
+msgid "Style:"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:154
-msgid "Ease Out (Quart)"
+#: kcm/ui/tabs/GeneralTab.qml:218
+msgid "Animation curve style — controls how acceleration feels"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:157
-msgid "Ease In-Out (Quart)"
+#: kcm/ui/tabs/GeneralTab.qml:237
+msgid "Direction:"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:160
-msgid "--- Quint ---"
+#: kcm/ui/tabs/GeneralTab.qml:250
+msgid ""
+"Ease In accelerates from rest, Ease Out decelerates to rest, In-Out does both"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:163
-msgid "Ease In (Quint)"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:166
-msgid "Ease Out (Quint)"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:169
-msgid "Ease In-Out (Quint)"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:172
-msgid "--- Expo ---"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:175
-msgid "Ease In (Expo)"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:178
-msgid "Ease Out (Expo)"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:181
-msgid "Ease In-Out (Expo)"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:184
-msgid "--- Circ ---"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:187
-msgid "Ease In (Circ)"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:190
-msgid "Ease Out (Circ)"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:193
-msgid "Ease In-Out (Circ)"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:196
-msgid "--- Back ---"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:199
-msgid "Ease In (Back)"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:202
-msgid "Overshoot"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:205
-msgid "Overshoot (In-Out)"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:208
-msgid "--- Elastic ---"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:211
-msgid "Elastic In"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:214
-msgid "Elastic Out"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:217
-msgid "Elastic In-Out"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:220
-msgid "--- Bounce ---"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:223
-msgid "Bounce In"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:226
-msgid "Bounce Out"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:229
-msgid "Bounce In-Out"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:318
-msgid "Preset:"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:330
-msgid "Select a preset or drag control points to customize"
-msgstr ""
-
-#: kcm/ui/tabs/GeneralTab.qml:360
+#: kcm/ui/tabs/GeneralTab.qml:270
 msgid "Amplitude:"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:383
+#: kcm/ui/tabs/GeneralTab.qml:293
 msgid "Amplitude"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:385
+#: kcm/ui/tabs/GeneralTab.qml:295
 msgid ""
 "Controls the bounce height — higher values exaggerate bounces, lower values "
 "flatten them (1.0 = standard)"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:385
+#: kcm/ui/tabs/GeneralTab.qml:295
 msgid ""
 "Controls the overshoot intensity of the elastic animation (1.0 = standard)"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:397
+#: kcm/ui/tabs/GeneralTab.qml:307
 msgid "Bounces:"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:415
+#: kcm/ui/tabs/GeneralTab.qml:325
 msgid "Number of bounces"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:417
+#: kcm/ui/tabs/GeneralTab.qml:327
 msgid ""
 "Number of bounces before settling — fewer bounces feel snappier, more feel "
 "bouncier"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:429
+#: kcm/ui/tabs/GeneralTab.qml:339
 msgid "Period:"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:448
+#: kcm/ui/tabs/GeneralTab.qml:358
 msgid "Elastic period"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:450
+#: kcm/ui/tabs/GeneralTab.qml:360
 msgid ""
 "Controls the oscillation frequency — lower values produce tighter, faster "
 "bounces"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:462
+#: kcm/ui/tabs/GeneralTab.qml:372
 msgid "Duration:"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:475
+#: kcm/ui/tabs/GeneralTab.qml:385
 msgid "Animation duration"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:477
+#: kcm/ui/tabs/GeneralTab.qml:387
 msgid "How long window animations take to complete (milliseconds)"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:489
+#: kcm/ui/tabs/GeneralTab.qml:399
 msgid "Multiple windows:"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:491
+#: kcm/ui/tabs/GeneralTab.qml:401
 msgid "Animate all at once"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:491
+#: kcm/ui/tabs/GeneralTab.qml:401
 msgid "Animate one by one (zone order)"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:497
+#: kcm/ui/tabs/GeneralTab.qml:407
 msgid ""
 "When moving multiple windows (resnap, snap all, autotile, etc.), animate "
 "them all together or one after another in zone order."
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:502
+#: kcm/ui/tabs/GeneralTab.qml:412
 msgid "Delay between windows:"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:514
+#: kcm/ui/tabs/GeneralTab.qml:424
 msgid "Delay between each window starting its animation"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:516
+#: kcm/ui/tabs/GeneralTab.qml:426
 msgid ""
 "When animating one by one: milliseconds between each window starting. Lower "
 "values create a fast cascading effect with overlapping animations."
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:520
+#: kcm/ui/tabs/GeneralTab.qml:430
 msgid "%1 ms"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:528
+#: kcm/ui/tabs/GeneralTab.qml:438
 msgid "Minimum distance:"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:539
+#: kcm/ui/tabs/GeneralTab.qml:449
 msgid ""
 "Skip animation when the geometry change is smaller than this many pixels. "
 "Prevents jittery micro-animations."
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:547
+#: kcm/ui/tabs/GeneralTab.qml:457
 msgid "(always animate)"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:576
+#: kcm/ui/tabs/GeneralTab.qml:486
 msgid "On-Screen Display"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:584
+#: kcm/ui/tabs/GeneralTab.qml:494
 msgid "Layout switch:"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:585
+#: kcm/ui/tabs/GeneralTab.qml:495
 msgid "Show OSD when switching layouts"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:591
+#: kcm/ui/tabs/GeneralTab.qml:501
 msgid "Keyboard navigation:"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:592
+#: kcm/ui/tabs/GeneralTab.qml:502
 msgid "Show OSD when using keyboard navigation"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:604
+#: kcm/ui/tabs/GeneralTab.qml:514
 msgid "OSD style:"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:607
+#: kcm/ui/tabs/GeneralTab.qml:517
 msgid "Text only"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:607
+#: kcm/ui/tabs/GeneralTab.qml:517
 msgid "Visual preview"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:612
+#: kcm/ui/tabs/GeneralTab.qml:522
 msgid ""
 "No OSD shown. Enable layout switch or keyboard navigation above to show OSD."
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:612
+#: kcm/ui/tabs/GeneralTab.qml:522
 msgid "Show layout name as text only"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:612
+#: kcm/ui/tabs/GeneralTab.qml:522
 msgid "Show visual layout preview"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:616
+#: kcm/ui/tabs/GeneralTab.qml:526
 msgid "Overlay style:"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:618
+#: kcm/ui/tabs/GeneralTab.qml:528
 msgid "Full zone highlight"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:618
+#: kcm/ui/tabs/GeneralTab.qml:528
 msgid "Compact preview"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:623
+#: kcm/ui/tabs/GeneralTab.qml:533
 msgid "Highlight each zone as a full-size translucent rectangle while dragging"
 msgstr ""
 
-#: kcm/ui/tabs/GeneralTab.qml:623
+#: kcm/ui/tabs/GeneralTab.qml:533
 msgid "Show a small layout thumbnail inside each zone while dragging"
 msgstr ""
 

@@ -82,161 +82,123 @@ ScrollView {
                     Kirigami.FormLayout {
                         Layout.fillWidth: true
 
-                        // Preset selector
-                        WideComboBox {
-                            // --- Standard ---
-                            // --- Sine ---
-                            // --- Quad ---
-                            // --- Cubic ---
-                            // --- Quart ---
-                            // --- Quint ---
-                            // --- Expo ---
-                            // --- Circ ---
-                            // --- Back ---
-                            // --- Elastic ---
-                            // --- Bounce ---
+                        // Easing style + direction selector (two dropdowns)
+                        // Curve lookup table: styles × directions → bezier/named curve strings
+                        QtObject {
+                            id: easingData
 
-                            id: easingPresetCombo
-
-                            // Section separator sentinel: curve === "__section__"
-                            readonly property var presets: [{
-                                "name": i18n("Custom"),
-                                "curve": ""
+                            // Style definitions: user-friendly name, technical name, curves per direction
+                            readonly property var styles: [{
+                                "label": i18n("Custom"),
+                                "key": "custom"
                             }, {
-                                "name": i18n("--- Standard ---"),
-                                "curve": "__section__"
+                                "label": i18n("Linear"),
+                                "key": "linear"
                             }, {
-                                "name": i18n("Linear"),
-                                "curve": "0.00,0.00,1.00,1.00"
+                                "label": i18n("Gentle (Sine)"),
+                                "key": "sine"
                             }, {
-                                "name": i18n("--- Sine ---"),
-                                "curve": "__section__"
+                                "label": i18n("Smooth (Quad)"),
+                                "key": "quad"
                             }, {
-                                "name": i18n("Ease In (Sine)"),
-                                "curve": "0.12,0.00,0.39,0.00"
+                                "label": i18n("Standard (Cubic)"),
+                                "key": "cubic"
                             }, {
-                                "name": i18n("Ease Out (Sine)"),
-                                "curve": "0.61,1.00,0.88,1.00"
+                                "label": i18n("Snappy (Quart)"),
+                                "key": "quart"
                             }, {
-                                "name": i18n("Ease In-Out (Sine)"),
-                                "curve": "0.37,0.00,0.63,1.00"
+                                "label": i18n("Sharp (Quint)"),
+                                "key": "quint"
                             }, {
-                                "name": i18n("--- Quad ---"),
-                                "curve": "__section__"
+                                "label": i18n("Aggressive (Expo)"),
+                                "key": "expo"
                             }, {
-                                "name": i18n("Ease In (Quad)"),
-                                "curve": "0.11,0.00,0.50,0.00"
+                                "label": i18n("Circular (Circ)"),
+                                "key": "circ"
                             }, {
-                                "name": i18n("Ease Out (Quad)"),
-                                "curve": "0.50,1.00,0.89,1.00"
+                                "label": i18n("Overshoot (Back)"),
+                                "key": "back"
                             }, {
-                                "name": i18n("Ease In-Out (Quad)"),
-                                "curve": "0.45,0.00,0.55,1.00"
+                                "label": i18n("Elastic"),
+                                "key": "elastic"
                             }, {
-                                "name": i18n("--- Cubic ---"),
-                                "curve": "__section__"
-                            }, {
-                                "name": i18n("Ease In (Cubic)"),
-                                "curve": "0.32,0.00,0.67,0.00"
-                            }, {
-                                "name": i18n("Ease Out (Cubic)"),
-                                "curve": "0.33,1.00,0.68,1.00"
-                            }, {
-                                "name": i18n("Ease In-Out (Cubic)"),
-                                "curve": "0.65,0.00,0.35,1.00"
-                            }, {
-                                "name": i18n("--- Quart ---"),
-                                "curve": "__section__"
-                            }, {
-                                "name": i18n("Ease In (Quart)"),
-                                "curve": "0.50,0.00,0.75,0.00"
-                            }, {
-                                "name": i18n("Ease Out (Quart)"),
-                                "curve": "0.25,1.00,0.50,1.00"
-                            }, {
-                                "name": i18n("Ease In-Out (Quart)"),
-                                "curve": "0.76,0.00,0.24,1.00"
-                            }, {
-                                "name": i18n("--- Quint ---"),
-                                "curve": "__section__"
-                            }, {
-                                "name": i18n("Ease In (Quint)"),
-                                "curve": "0.64,0.00,0.78,0.00"
-                            }, {
-                                "name": i18n("Ease Out (Quint)"),
-                                "curve": "0.23,1.00,0.32,1.00"
-                            }, {
-                                "name": i18n("Ease In-Out (Quint)"),
-                                "curve": "0.83,0.00,0.17,1.00"
-                            }, {
-                                "name": i18n("--- Expo ---"),
-                                "curve": "__section__"
-                            }, {
-                                "name": i18n("Ease In (Expo)"),
-                                "curve": "0.70,0.00,0.84,0.00"
-                            }, {
-                                "name": i18n("Ease Out (Expo)"),
-                                "curve": "0.16,1.00,0.30,1.00"
-                            }, {
-                                "name": i18n("Ease In-Out (Expo)"),
-                                "curve": "0.87,0.00,0.13,1.00"
-                            }, {
-                                "name": i18n("--- Circ ---"),
-                                "curve": "__section__"
-                            }, {
-                                "name": i18n("Ease In (Circ)"),
-                                "curve": "0.55,0.00,1.00,0.45"
-                            }, {
-                                "name": i18n("Ease Out (Circ)"),
-                                "curve": "0.00,0.55,0.45,1.00"
-                            }, {
-                                "name": i18n("Ease In-Out (Circ)"),
-                                "curve": "0.85,0.00,0.15,1.00"
-                            }, {
-                                "name": i18n("--- Back ---"),
-                                "curve": "__section__"
-                            }, {
-                                "name": i18n("Ease In (Back)"),
-                                "curve": "0.36,0.00,0.66,-0.56"
-                            }, {
-                                "name": i18n("Overshoot"),
-                                "curve": "0.18,0.89,0.32,1.28"
-                            }, {
-                                "name": i18n("Overshoot (In-Out)"),
-                                "curve": "0.68,-0.55,0.27,1.55"
-                            }, {
-                                "name": i18n("--- Elastic ---"),
-                                "curve": "__section__"
-                            }, {
-                                "name": i18n("Elastic In"),
-                                "curve": "elastic-in:1.0,0.30"
-                            }, {
-                                "name": i18n("Elastic Out"),
-                                "curve": "elastic-out:1.0,0.30"
-                            }, {
-                                "name": i18n("Elastic In-Out"),
-                                "curve": "elastic-in-out:1.0,0.30"
-                            }, {
-                                "name": i18n("--- Bounce ---"),
-                                "curve": "__section__"
-                            }, {
-                                "name": i18n("Bounce In"),
-                                "curve": "bounce-in:1.0,3"
-                            }, {
-                                "name": i18n("Bounce Out"),
-                                "curve": "bounce-out:1.0,3"
-                            }, {
-                                "name": i18n("Bounce In-Out"),
-                                "curve": "bounce-in-out:1.0,3"
+                                "label": i18n("Bounce"),
+                                "key": "bounce"
                             }]
+                            readonly property var directions: [{
+                                "label": i18n("Ease In"),
+                                "key": "in"
+                            }, {
+                                "label": i18n("Ease Out"),
+                                "key": "out"
+                            }, {
+                                "label": i18n("Ease In-Out"),
+                                "key": "in-out"
+                            }]
+                            // Bezier curves: style → { in, out, in-out }
+                            readonly property var curves: ({
+                                "linear": {
+                                    "in": "0.00,0.00,1.00,1.00",
+                                    "out": "0.00,0.00,1.00,1.00",
+                                    "in-out": "0.00,0.00,1.00,1.00"
+                                },
+                                "sine": {
+                                    "in": "0.12,0.00,0.39,0.00",
+                                    "out": "0.61,1.00,0.88,1.00",
+                                    "in-out": "0.37,0.00,0.63,1.00"
+                                },
+                                "quad": {
+                                    "in": "0.11,0.00,0.50,0.00",
+                                    "out": "0.50,1.00,0.89,1.00",
+                                    "in-out": "0.45,0.00,0.55,1.00"
+                                },
+                                "cubic": {
+                                    "in": "0.32,0.00,0.67,0.00",
+                                    "out": "0.33,1.00,0.68,1.00",
+                                    "in-out": "0.65,0.00,0.35,1.00"
+                                },
+                                "quart": {
+                                    "in": "0.50,0.00,0.75,0.00",
+                                    "out": "0.25,1.00,0.50,1.00",
+                                    "in-out": "0.76,0.00,0.24,1.00"
+                                },
+                                "quint": {
+                                    "in": "0.64,0.00,0.78,0.00",
+                                    "out": "0.23,1.00,0.32,1.00",
+                                    "in-out": "0.83,0.00,0.17,1.00"
+                                },
+                                "expo": {
+                                    "in": "0.70,0.00,0.84,0.00",
+                                    "out": "0.16,1.00,0.30,1.00",
+                                    "in-out": "0.87,0.00,0.13,1.00"
+                                },
+                                "circ": {
+                                    "in": "0.55,0.00,1.00,0.45",
+                                    "out": "0.00,0.55,0.45,1.00",
+                                    "in-out": "0.85,0.00,0.15,1.00"
+                                },
+                                "back": {
+                                    "in": "0.36,0.00,0.66,-0.56",
+                                    "out": "0.18,0.89,0.32,1.28",
+                                    "in-out": "0.68,-0.55,0.27,1.55"
+                                },
+                                "elastic": {
+                                    "in": "elastic-in:1.0,0.30",
+                                    "out": "elastic-out:1.0,0.30",
+                                    "in-out": "elastic-in-out:1.0,0.30"
+                                },
+                                "bounce": {
+                                    "in": "bounce-in:1.0,3",
+                                    "out": "bounce-out:1.0,3",
+                                    "in-out": "bounce-in-out:1.0,3"
+                                }
+                            })
 
-                            // Normalize curve string for comparison
+                            // Normalize curve for comparison (2 decimal bezier, canonical named)
                             function normalizeCurve(curve) {
-                                if (!curve || curve === "" || curve === "__section__")
+                                if (!curve || curve === "")
                                     return "";
 
-                                // Named curves: normalize by parsing and reconstructing.
-                                // Skip 'e'/'E' (scientific notation) to avoid misrouting bezier strings.
                                 var hasLetter = false;
                                 for (var i = 0; i < curve.length; i++) {
                                     var c = curve.charAt(i);
@@ -251,8 +213,8 @@ ScrollView {
                                     var colonIdx = curve.indexOf(':');
                                     var name = colonIdx >= 0 ? curve.substring(0, colonIdx).trim() : curve.trim();
                                     var params = colonIdx >= 0 ? curve.substring(colonIdx + 1).trim() : "";
-                                    var isElastic = (name === "elastic-in" || name === "elastic-out" || name === "elastic-in-out");
-                                    var isBounce = (name === "bounce-in" || name === "bounce-out" || name === "bounce-in-out");
+                                    var isElastic = name.startsWith("elastic");
+                                    var isBounce = name.startsWith("bounce");
                                     if (params) {
                                         var parts = params.split(",");
                                         var amp = parts.length >= 1 ? parseFloat(parts[0]) : 1;
@@ -274,7 +236,6 @@ ScrollView {
                                             return name + ":" + amp.toFixed(2) + "," + bn;
                                         }
                                     }
-                                    // Bare name without params: apply defaults for round-trip consistency
                                     if (isBounce)
                                         return name + ":1.00,3";
 
@@ -283,69 +244,138 @@ ScrollView {
 
                                     return name;
                                 }
-                                // Bezier: normalize to 2 decimal places
                                 var bparts = curve.split(",");
                                 if (bparts.length !== 4)
                                     return "";
 
-                                var x1 = parseFloat(bparts[0]);
-                                var y1 = parseFloat(bparts[1]);
-                                var x2 = parseFloat(bparts[2]);
-                                var y2 = parseFloat(bparts[3]);
+                                var x1 = parseFloat(bparts[0]), y1 = parseFloat(bparts[1]);
+                                var x2 = parseFloat(bparts[2]), y2 = parseFloat(bparts[3]);
                                 if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2))
                                     return "";
 
                                 return x1.toFixed(2) + "," + y1.toFixed(2) + "," + x2.toFixed(2) + "," + y2.toFixed(2);
                             }
 
-                            // Find matching preset for current curve (normalized comparison)
-                            function findPresetIndex(curve) {
+                            // Reverse-lookup: curve string → { styleIndex, dirIndex }
+                            function findIndices(curve) {
                                 var norm = normalizeCurve(curve);
                                 if (norm === "")
-                                    return 0;
-
-                                for (var i = 1; i < presets.length; i++) {
-                                    if (presets[i].curve === "__section__")
+                                    return {
+                                    "styleIndex": 0,
+                                    "dirIndex": 1
+                                };
+ // Custom, Ease Out
+                                for (var si = 1; si < styles.length; si++) {
+                                    var key = styles[si].key;
+                                    if (!curves[key])
                                         continue;
 
-                                    if (normalizeCurve(presets[i].curve) === norm)
-                                        return i;
+                                    for (var di = 0; di < directions.length; di++) {
+                                        var dirKey = directions[di].key;
+                                        if (normalizeCurve(curves[key][dirKey]) === norm)
+                                            return {
+                                            "styleIndex": si,
+                                            "dirIndex": di
+                                        };
 
+                                    }
                                 }
-                                return 0; // Custom
+                                return {
+                                    "styleIndex": 0,
+                                    "dirIndex": 1
+                                }; // Custom
                             }
 
-                            Kirigami.FormData.label: i18n("Preset:")
+                            // Build curve string from style + direction indices
+                            function curveForSelection(styleIndex, dirIndex) {
+                                if (styleIndex <= 0 || styleIndex >= styles.length)
+                                    return "";
+
+                                var key = styles[styleIndex].key;
+                                var dirKey = directions[dirIndex].key;
+                                return curves[key] ? curves[key][dirKey] : "";
+                            }
+
+                        }
+
+                        // Style selector
+                        WideComboBox {
+                            id: easingStyleCombo
+
+                            property bool updating: false
+
+                            Kirigami.FormData.label: i18n("Style:")
                             enabled: animationsEnabledCheck.checked
-                            model: presets.map((p) => {
-                                return p.name;
+                            model: easingData.styles.map((s) => {
+                                return s.label;
                             })
-                            currentIndex: findPresetIndex(kcm.animationEasingCurve)
+                            currentIndex: easingData.findIndices(kcm.animationEasingCurve).styleIndex
                             onActivated: (index) => {
-                                if (index > 0 && presets[index].curve !== "__section__")
-                                    kcm.animationEasingCurve = presets[index].curve;
+                                if (updating)
+                                    return ;
+
+                                if (index <= 0)
+                                    return ;
+ // Custom — don't change curve
+                                var curve = easingData.curveForSelection(index, easingDirectionCombo.currentIndex);
+                                if (curve)
+                                    kcm.animationEasingCurve = curve;
 
                             }
                             ToolTip.visible: hovered
-                            ToolTip.text: i18n("Select a preset or drag control points to customize")
+                            ToolTip.text: i18n("Animation curve style — controls how acceleration feels")
 
-                            // Update when curve changes externally (e.g. from editor drag)
                             Connections {
                                 function onAnimationEasingCurveChanged() {
-                                    easingPresetCombo.currentIndex = easingPresetCombo.findPresetIndex(kcm.animationEasingCurve);
+                                    easingStyleCombo.updating = true;
+                                    var idx = easingData.findIndices(kcm.animationEasingCurve);
+                                    easingStyleCombo.currentIndex = idx.styleIndex;
+                                    easingStyleCombo.updating = false;
                                 }
 
                                 target: kcm
                             }
 
-                            delegate: ItemDelegate {
-                                width: parent ? parent.width : 0
-                                text: modelData
-                                enabled: easingPresetCombo.presets[index].curve !== "__section__"
-                                font.bold: easingPresetCombo.presets[index].curve === "__section__"
-                                font.italic: easingPresetCombo.presets[index].curve === "__section__"
-                                leftPadding: easingPresetCombo.presets[index].curve === "__section__" ? Kirigami.Units.smallSpacing : Kirigami.Units.largeSpacing
-                                highlighted: easingPresetCombo.highlightedIndex === index
+                        }
+
+                        // Direction selector
+                        WideComboBox {
+                            id: easingDirectionCombo
+
+                            property bool updating: false
+
+                            Kirigami.FormData.label: i18n("Direction:")
+                            enabled: animationsEnabledCheck.checked && easingStyleCombo.currentIndex > 0
+                            opacity: easingStyleCombo.currentIndex > 0 ? 1 : 0.4
+                            model: easingData.directions.map((d) => {
+                                return d.label;
+                            })
+                            currentIndex: easingData.findIndices(kcm.animationEasingCurve).dirIndex
+                            onActivated: (index) => {
+                                if (updating)
+                                    return ;
+
+                                var styleIdx = easingStyleCombo.currentIndex;
+                                if (styleIdx <= 0)
+                                    return ;
+
+                                var curve = easingData.curveForSelection(styleIdx, index);
+                                if (curve)
+                                    kcm.animationEasingCurve = curve;
+
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.text: i18n("Ease In accelerates from rest, Ease Out decelerates to rest, In-Out does both")
+
+                            Connections {
+                                function onAnimationEasingCurveChanged() {
+                                    easingDirectionCombo.updating = true;
+                                    var idx = easingData.findIndices(kcm.animationEasingCurve);
+                                    easingDirectionCombo.currentIndex = idx.dirIndex;
+                                    easingDirectionCombo.updating = false;
+                                }
+
+                                target: kcm
                             }
 
                         }

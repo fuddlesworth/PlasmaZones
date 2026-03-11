@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: plasmazonesd\n"
 "Report-Msgid-Bugs-To: https://github.com/fuddlesworth/PlasmaZones/issues\n"
-"POT-Creation-Date: 2026-03-09 09:41-0500\n"
+"POT-Creation-Date: 2026-03-10 17:46-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -42,22 +42,22 @@ msgstr ""
 msgid "Replace existing daemon instance"
 msgstr ""
 
-#: src/daemon/daemon/osd.cpp:91
+#: src/daemon/daemon/osd.cpp:92
 #, kde-format
 msgid "Layout: %1"
 msgstr ""
 
-#: src/daemon/daemon/osd.cpp:132
+#: src/daemon/daemon/osd.cpp:133
 #, kde-format
 msgid "Tiling: %1"
 msgstr ""
 
-#: src/daemon/shortcutmanager.cpp:451
+#: src/daemon/shortcutmanager.cpp:524
 #, kde-format
 msgid "Apply Layout %1"
 msgstr ""
 
-#: src/daemon/shortcutmanager.cpp:525
+#: src/daemon/shortcutmanager.cpp:598
 #, kde-format
 msgid "Snap to Zone %1"
 msgstr ""

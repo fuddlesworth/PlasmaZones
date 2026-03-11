@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: plasmazonesd\n"
 "Report-Msgid-Bugs-To: https://github.com/fuddlesworth/PlasmaZones/issues\n"
-"POT-Creation-Date: 2026-03-09 09:41-0500\n"
+"POT-Creation-Date: 2026-03-10 17:46-0500\n"
 "PO-Revision-Date: 2026-02-22 12:00-0600\n"
 "Last-Translator: \n"
 "Language-Team: German <kde-i18n-de@kde.org>\n"
@@ -42,22 +42,22 @@ msgstr "fuddlesworth"
 msgid "Replace existing daemon instance"
 msgstr "Vorhandene Instanz des Hintergrunddienstes ersetzen"
 
-#: src/daemon/daemon/osd.cpp:91
+#: src/daemon/daemon/osd.cpp:92
 #, fuzzy, kde-format
 msgid "Layout: %1"
 msgstr "Layout: %1"
 
-#: src/daemon/daemon/osd.cpp:132
+#: src/daemon/daemon/osd.cpp:133
 #, kde-format
 msgid "Tiling: %1"
 msgstr ""
 
-#: src/daemon/shortcutmanager.cpp:451
+#: src/daemon/shortcutmanager.cpp:524
 #, kde-format
 msgid "Apply Layout %1"
 msgstr "Layout %1 anwenden"
 
-#: src/daemon/shortcutmanager.cpp:525
+#: src/daemon/shortcutmanager.cpp:598
 #, kde-format
 msgid "Snap to Zone %1"
 msgstr "In Zone %1 einrasten"
