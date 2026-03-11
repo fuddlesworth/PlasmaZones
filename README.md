@@ -254,6 +254,25 @@ yay -S plasmazones-bin
 yay -S plasmazones
 ```
 
+### Fedora (COPR)
+
+```bash
+sudo dnf copr enable fuddlesworth/PlasmaZones
+sudo dnf install plasmazones
+```
+
+### openSUSE Tumbleweed (OBS)
+
+Community-maintained package by [ilFrance](https://build.opensuse.org/package/show/home:ilFrance/plasmazones):
+
+```bash
+sudo zypper addrepo https://download.opensuse.org/repositories/home:ilFrance/openSUSE_Tumbleweed/home:ilFrance.repo
+sudo zypper refresh
+sudo zypper install plasmazones
+```
+
+> **Note:** Do not use the Fedora RPM on openSUSE — it has incompatible Qt private API dependencies.
+
 ### Nix
 
 ```bash

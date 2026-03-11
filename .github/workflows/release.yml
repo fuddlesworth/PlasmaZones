@@ -492,6 +492,14 @@ jobs:
             echo "sudo dnf install plasmazones-${VERSION}-1.fc43.x86_64.rpm"
             echo '```'
             echo ""
+            echo "**openSUSE Tumbleweed (OBS):**"
+            echo '```bash'
+            echo "sudo zypper addrepo https://download.opensuse.org/repositories/home:ilFrance/openSUSE_Tumbleweed/home:ilFrance.repo"
+            echo "sudo zypper refresh"
+            echo "sudo zypper install plasmazones"
+            echo '```'
+            echo "> Community-maintained package by [ilFrance](https://build.opensuse.org/package/show/home:ilFrance/plasmazones)"
+            echo ""
             echo "**Universal Linux (AppDir):**"
             echo "For Fedora Atomic, Steam Deck, or non-root user installation:"
             echo '```bash'
