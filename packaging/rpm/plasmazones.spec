@@ -140,7 +140,7 @@ Features:
 %autosetup -n PlasmaZones-%{version}
 
 %build
-%cmake -G Ninja \
+%cmake \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DBUILD_TESTING=OFF
 %cmake_build
