@@ -376,8 +376,8 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
         window->setProperty("borderWidth", m_settings->borderWidth());
         window->setProperty("borderRadius", m_settings->borderRadius());
         window->setProperty("enableBlur", m_settings->enableBlur());
-        // Layout's showZoneNumbers takes precedence over global setting
-        bool showNumbers = screenLayout ? screenLayout->showZoneNumbers() : m_settings->showZoneNumbers();
+        // Global setting is a master switch; per-layout setting can only further restrict
+        bool showNumbers = m_settings->showZoneNumbers() && (!screenLayout || screenLayout->showZoneNumbers());
         window->setProperty("showNumbers", showNumbers);
         writeFontProperties(window, m_settings);
     }

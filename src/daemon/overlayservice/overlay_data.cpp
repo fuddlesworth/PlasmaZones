@@ -27,7 +27,7 @@ void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QV
         return;
     }
     const bool showNumbers =
-        screenLayout ? screenLayout->showZoneNumbers() : (m_settings ? m_settings->showZoneNumbers() : true);
+        (m_settings ? m_settings->showZoneNumbers() : true) && (!screenLayout || screenLayout->showZoneNumbers());
     const QColor labelFontColor = m_settings ? m_settings->labelFontColor() : QColor(Qt::white);
     QColor backgroundColor = Qt::black;
     if (m_settings) {
