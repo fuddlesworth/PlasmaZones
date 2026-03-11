@@ -7,6 +7,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-03-11
+
+### Fixed
+- **Missing `retileAllScreens` D-Bus slot**: KWin effect called `retileAllScreens` but the adaptor only exposed `retile(screenName)`, causing D-Bus errors on border width changes and other bulk retile triggers
+- **Negative zone geometries from constraint solver**: When window minimum sizes exceed available space, the constraint solver could produce non-positive zone dimensions — now clamped to minimum 1x1 after layout calculation
+
+### Changed
+- **Generic tarball built on Arch Linux**: Switched the release pipeline's generic tarball build from Fedora 43 to Arch Linux, eliminating lib64/lib path mismatches at the source instead of working around them post-build
+
 ## [2.0.1] - 2026-03-11
 
 ### Fixed
@@ -714,7 +723,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.0.2...HEAD
+[2.0.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.15...v2.0.0
 [1.15.15]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.14...v1.15.15
