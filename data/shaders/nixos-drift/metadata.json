@@ -1,0 +1,159 @@
+{
+    "id": "nixos-drift",
+    "name": "NixOS Drift",
+    "description": "Procedural NixOS snowflake logo with 6-fold SDF geometry and two-tone twilight gradient fill, drifting through hexagonal Voronoi lattice — aurora curtains, constellation particles, crystal growth lines, and nebula pulse borders with per-arm audio reactivity",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "fragmentShader": "effect.frag",
+    "vertexShader": "zone.vert",
+    "parameters": [
+        {
+            "id": "speed",
+            "name": "Animation Speed",
+            "group": "Animation",
+            "type": "float",
+            "slot": 0,
+            "default": 0.08,
+            "min": 0.01,
+            "max": 0.5
+        },
+        {
+            "id": "flowSpeed",
+            "name": "Flow Speed",
+            "group": "Animation",
+            "type": "float",
+            "slot": 1,
+            "default": 0.15,
+            "min": 0.05,
+            "max": 1.0
+        },
+        {
+            "id": "noiseScale",
+            "name": "Noise Scale",
+            "group": "Pattern",
+            "type": "float",
+            "slot": 2,
+            "default": 3.5,
+            "min": 1.0,
+            "max": 10.0
+        },
+        {
+            "id": "gridScale",
+            "name": "Hex Lattice Scale",
+            "group": "Crystal",
+            "type": "float",
+            "slot": 4,
+            "default": 5.0,
+            "min": 1.0,
+            "max": 12.0
+        },
+        {
+            "id": "gridStrength",
+            "name": "Hex Lattice Strength",
+            "group": "Crystal",
+            "type": "float",
+            "slot": 5,
+            "default": 0.25,
+            "min": 0.0,
+            "max": 0.5
+        },
+        {
+            "id": "brightness",
+            "name": "Brightness",
+            "group": "Colors",
+            "type": "float",
+            "slot": 6,
+            "default": 0.75,
+            "min": 0.2,
+            "max": 1.0
+        },
+        {
+            "id": "fillOpacity",
+            "name": "Fill Opacity",
+            "group": "Zone",
+            "type": "float",
+            "slot": 8,
+            "default": 0.85,
+            "min": 0.5,
+            "max": 1.0
+        },
+        {
+            "id": "borderGlow",
+            "name": "Border Glow",
+            "group": "Zone",
+            "type": "float",
+            "slot": 9,
+            "default": 0.35,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "edgeFadeStart",
+            "name": "Edge Fade Start",
+            "group": "Zone",
+            "type": "float",
+            "slot": 10,
+            "default": 30.0,
+            "min": 5.0,
+            "max": 60.0
+        },
+        {
+            "id": "borderBrightness",
+            "name": "Border Brightness",
+            "group": "Zone",
+            "type": "float",
+            "slot": 11,
+            "default": 1.4,
+            "min": 0.8,
+            "max": 2.0
+        },
+        {"id": "audioReactivity", "name": "Audio Reactivity", "group": "Audio", "type": "float", "slot": 12, "default": 1.0, "min": 0.0, "max": 2.0},
+        {"id": "particleStrength", "name": "Particle Strength", "group": "Crystal", "type": "float", "slot": 13, "default": 0.4, "min": 0.0, "max": 1.0},
+        {"id": "innerGlowStrength", "name": "Inner Glow Strength", "group": "Appearance", "type": "float", "slot": 14, "default": 0.45, "min": 0.0, "max": 0.8},
+        {"id": "labelGlowSpread", "name": "Label Halo Spread", "group": "Labels", "type": "float", "slot": 16, "default": 3.0, "min": 1.0, "max": 6.0},
+        {"id": "labelBrightness", "name": "Label Brightness", "group": "Labels", "type": "float", "slot": 17, "default": 2.5, "min": 1.0, "max": 4.0},
+        {"id": "labelAudioReact", "name": "Label Reactivity", "group": "Labels", "type": "float", "slot": 18, "default": 1.0, "min": 0.0, "max": 2.0},
+        {"id": "flowDirection", "name": "Flow Direction", "group": "Animation", "type": "float", "slot": 20, "default": 0.3, "min": 0.0, "max": 1.0},
+        {"id": "logoScale", "name": "Logo Scale", "group": "Logo", "type": "float", "slot": 21, "default": 0.45, "min": 0.1, "max": 1.0},
+        {"id": "logoIntensity", "name": "Logo Intensity", "group": "Logo", "type": "float", "slot": 22, "default": 0.8, "min": 0.0, "max": 1.5},
+        {"id": "logoPulse", "name": "Logo Bass Pulse", "group": "Logo", "type": "float", "slot": 23, "default": 0.8, "min": 0.0, "max": 2.0},
+        {"id": "logoCount", "name": "Logo Count", "group": "Logo", "type": "int", "slot": 24, "default": 3, "min": 1, "max": 8},
+        {"id": "logoSizeMin", "name": "Logo Size Min", "group": "Logo", "type": "float", "slot": 25, "default": 0.4, "min": 0.1, "max": 1.0},
+        {"id": "logoSizeMax", "name": "Logo Size Max", "group": "Logo", "type": "float", "slot": 26, "default": 1.0, "min": 0.3, "max": 1.5},
+        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 29, "default": true},
+        {"id": "logoSpin", "name": "Logo Wobble", "group": "Logo", "type": "float", "slot": 30, "default": 0.15, "min": 0.0, "max": 0.5},
+        {"id": "idleStrength", "name": "Idle Animation", "group": "Animation", "type": "float", "slot": 31, "default": 0.6, "min": 0.0, "max": 1.0},
+        {
+            "id": "primaryColor",
+            "name": "Primary (Twilight Deep)",
+            "group": "Palette",
+            "type": "color",
+            "slot": 0,
+            "default": "#415E9A"
+        },
+        {
+            "id": "secondaryColor",
+            "name": "Secondary (NixOS Dark)",
+            "group": "Palette",
+            "type": "color",
+            "slot": 1,
+            "default": "#5277C3"
+        },
+        {
+            "id": "accentColor",
+            "name": "Accent (NixOS Sky)",
+            "group": "Palette",
+            "type": "color",
+            "slot": 2,
+            "default": "#699AD7"
+        },
+        {
+            "id": "glowColor",
+            "name": "Glow (NixOS Light)",
+            "group": "Palette",
+            "type": "color",
+            "slot": 3,
+            "default": "#7EBAE4"
+        }
+    ]
+}
