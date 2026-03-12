@@ -30,6 +30,8 @@ DaemonController::DaemonController(QObject* parent)
             m_lastState = true;
             Q_EMIT runningChanged();
         }
+        // Re-check enabled state so other DaemonController instances stay in sync
+        refreshEnabledState();
     });
 
     connect(m_watcher, &QDBusServiceWatcher::serviceUnregistered, this, [this]() {
@@ -37,6 +39,8 @@ DaemonController::DaemonController(QObject* parent)
             m_lastState = false;
             Q_EMIT runningChanged();
         }
+        // Re-check enabled state so other DaemonController instances stay in sync
+        refreshEnabledState();
     });
 
     // Load initial state
