@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Service
+X-KDE-System-Settings-Category=plasmazones
+X-KDE-System-Settings-Parent-Category=applications
+X-KDE-Weight=70
+Icon=plasmazones
+Name=PlasmaZones
+Comment=Window zone snapping and autotiling

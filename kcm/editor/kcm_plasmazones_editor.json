@@ -1,0 +1,17 @@
+{
+    "KPlugin": {
+        "Name": "Editor",
+        "Description": "Layout editor keyboard shortcuts and snapping settings",
+        "Icon": "document-edit",
+        "Authors": [
+            {
+                "Name": "fuddlesworth",
+                "Email": "plasmazones@kde.org"
+            }
+        ],
+        "License": "GPL-3.0-or-later"
+    },
+    "X-KDE-ParentApp": "systemsettings",
+    "X-KDE-System-Settings-Parent-Category": "plasmazones",
+    "X-KDE-Weight": 32
+}
