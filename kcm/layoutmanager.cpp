@@ -2,24 +2,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "layoutmanager.h"
+#include "kcm_plasmazones.h"
 #include <algorithm>
 #include <QDBusConnection>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include "dbusutils.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTimer>
-#include "../../src/config/settings.h"
-#include "../../src/core/constants.h"
-#include "../../src/core/logging.h"
+#include "../src/config/settings.h"
+#include "../src/core/constants.h"
+#include "../src/core/logging.h"
 
 namespace PlasmaZones {
 
-LayoutManager::LayoutManager(Settings* settings, ScreenNameResolver screenNameResolver, QObject* parent)
+LayoutManager::LayoutManager(KCMPlasmaZones* kcm, Settings* settings, QObject* parent)
     : QObject(parent)
+    , m_kcm(kcm)
     , m_settings(settings)
-    , m_screenNameResolver(std::move(screenNameResolver))
 {
     // Debounce timer for coalescing rapid D-Bus layout signals into a single loadAsync() call
     m_loadTimer = new QTimer(this);
@@ -29,8 +29,23 @@ LayoutManager::LayoutManager(Settings* settings, ScreenNameResolver screenNameRe
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// D-Bus helpers
+// D-Bus helpers (local copies — avoid tight coupling to KCM's private API)
 // ═══════════════════════════════════════════════════════════════════════════════
+
+QDBusMessage LayoutManager::callDaemon(const QString& interface, const QString& method, const QVariantList& args) const
+{
+    QDBusMessage msg =
+        QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath), interface, method);
+    if (!args.isEmpty()) {
+        msg.setArguments(args);
+    }
+    QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 5000);
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcKcm) << "D-Bus call failed:" << interface << "::" << method << "-" << reply.errorName() << ":"
+                         << reply.errorMessage();
+    }
+    return reply;
+}
 
 void LayoutManager::watchAsyncDbusCall(QDBusPendingCall call, const QString& operation)
 {
@@ -50,8 +65,8 @@ void LayoutManager::watchAsyncDbusCall(QDBusPendingCall call, const QString& ope
 
 void LayoutManager::createNewLayout()
 {
-    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("createLayout"),
-                                             {QStringLiteral("New Layout"), QStringLiteral("custom")});
+    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("createLayout"),
+                                    {QStringLiteral("New Layout"), QStringLiteral("custom")});
 
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString newLayoutId = reply.arguments().first().toString();
@@ -65,7 +80,7 @@ void LayoutManager::createNewLayout()
 void LayoutManager::deleteLayout(const QString& layoutId)
 {
     QDBusMessage reply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("deleteLayout"), {layoutId});
+        callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("deleteLayout"), {layoutId});
     if (reply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcKcm) << "deleteLayout failed:" << reply.errorMessage();
     }
@@ -74,7 +89,7 @@ void LayoutManager::deleteLayout(const QString& layoutId)
 void LayoutManager::duplicateLayout(const QString& layoutId)
 {
     QDBusMessage reply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("duplicateLayout"), {layoutId});
+        callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("duplicateLayout"), {layoutId});
 
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString newLayoutId = reply.arguments().first().toString();
@@ -87,7 +102,7 @@ void LayoutManager::duplicateLayout(const QString& layoutId)
 void LayoutManager::importLayout(const QString& filePath)
 {
     QDBusMessage reply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("importLayout"), {filePath});
+        callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("importLayout"), {filePath});
 
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString newLayoutId = reply.arguments().first().toString();
@@ -108,7 +123,7 @@ void LayoutManager::exportLayout(const QString& layoutId, const QString& filePat
 
 void LayoutManager::editLayout(const QString& layoutId)
 {
-    QString screenName = m_screenNameResolver ? m_screenNameResolver() : QString();
+    QString screenName = m_kcm->currentScreenName();
 
     QDBusMessage msg = QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                                       QString(DBus::Interface::LayoutManager),
@@ -119,7 +134,7 @@ void LayoutManager::editLayout(const QString& layoutId)
 
 void LayoutManager::openEditor()
 {
-    QString screenName = m_screenNameResolver ? m_screenNameResolver() : QString();
+    QString screenName = m_kcm->currentScreenName();
 
     QDBusMessage msg;
     if (!screenName.isEmpty()) {
@@ -236,7 +251,7 @@ void LayoutManager::loadSync()
     ++m_loadGeneration;
 
     QVariantList newLayouts;
-    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutList"));
+    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutList"));
 
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QStringList layoutJsonList = reply.arguments().first().toStringList();
@@ -279,6 +294,7 @@ void LayoutManager::applyLayoutFilter()
     });
 
     // Compare by ID list — if order hasn't changed, update data in-place
+    // to avoid full model swap (which resets scroll position in QML GridView)
     auto extractIds = [](const QVariantList& list) {
         QStringList ids;
         ids.reserve(list.size());
@@ -288,6 +304,8 @@ void LayoutManager::applyLayoutFilter()
         return ids;
     };
     if (extractIds(m_layouts) == extractIds(newLayouts)) {
+        // IDs unchanged — update entries in-place (zone data may have changed,
+        // e.g. when autotile maxWindows changes preview zone count)
         bool dataChanged = false;
         for (int i = 0; i < newLayouts.size(); ++i) {
             if (m_layouts[i] != newLayouts[i]) {
@@ -348,8 +366,7 @@ void LayoutManager::savePendingStates(QStringList& failedOperations)
 
     if (!m_pendingHiddenStates.isEmpty()) {
         for (auto it = m_pendingHiddenStates.cbegin(); it != m_pendingHiddenStates.cend(); ++it) {
-            QDBusMessage reply =
-                KCMDBus::callDaemon(layoutInterface, QStringLiteral("setLayoutHidden"), {it.key(), it.value()});
+            QDBusMessage reply = callDaemon(layoutInterface, QStringLiteral("setLayoutHidden"), {it.key(), it.value()});
             if (reply.type() == QDBusMessage::ErrorMessage) {
                 failedOperations.append(QStringLiteral("Layout visibility (%1)").arg(it.key()));
             }
@@ -360,7 +377,7 @@ void LayoutManager::savePendingStates(QStringList& failedOperations)
     if (!m_pendingAutoAssignStates.isEmpty()) {
         for (auto it = m_pendingAutoAssignStates.cbegin(); it != m_pendingAutoAssignStates.cend(); ++it) {
             QDBusMessage reply =
-                KCMDBus::callDaemon(layoutInterface, QStringLiteral("setLayoutAutoAssign"), {it.key(), it.value()});
+                callDaemon(layoutInterface, QStringLiteral("setLayoutAutoAssign"), {it.key(), it.value()});
             if (reply.type() == QDBusMessage::ErrorMessage) {
                 failedOperations.append(QStringLiteral("Layout auto-assign (%1)").arg(it.key()));
             }

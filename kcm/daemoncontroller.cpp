@@ -2,17 +2,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "daemoncontroller.h"
+#include "kcm_plasmazones.h"
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QProcess>
 #include <QTimer>
-#include "../../src/core/constants.h"
-#include "../../src/core/logging.h"
+#include "../src/core/constants.h"
+#include "../src/core/logging.h"
 
 namespace PlasmaZones {
 
-DaemonController::DaemonController(QObject* parent)
+DaemonController::DaemonController(KCMPlasmaZones* kcm, QObject* parent)
     : QObject(parent)
+    , m_kcm(kcm)
 {
     // Set up daemon status polling (fallback for edge cases the watcher might miss)
     m_checkTimer = new QTimer(this);
@@ -81,6 +83,8 @@ void DaemonController::checkStatus()
     if (currentState != m_lastState) {
         m_lastState = currentState;
         Q_EMIT runningChanged();
+        // Note: When daemon starts, we rely on the daemonReady D-Bus signal
+        // to trigger loadLayouts(). No polling needed here.
     }
 }
 
@@ -114,6 +118,7 @@ void DaemonController::startDaemon()
         return;
     }
     runSystemctl({QStringLiteral("--user"), QStringLiteral("start"), QLatin1String(KCMConstants::SystemdServiceName)});
+    // Layouts will be loaded when daemonReady D-Bus signal is received
 }
 
 void DaemonController::stopDaemon()

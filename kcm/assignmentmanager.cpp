@@ -2,30 +2,50 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "assignmentmanager.h"
+#include "kcm_plasmazones.h"
 #include <QDBusConnection>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include "dbusutils.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <KConfigGroup>
 #include <KGlobalAccel>
 #include <KSharedConfig>
-#include "../../src/config/settings.h"
-#include "../../src/core/constants.h"
-#include "../../src/core/layout.h"
-#include "../../src/core/logging.h"
-#include "../../src/core/utils.h"
-#include "../../src/autotile/AlgorithmRegistry.h"
+#include "../src/config/settings.h"
+#include "../src/core/constants.h"
+#include "../src/core/layout.h"
+#include "../src/core/logging.h"
+#include "../src/core/utils.h"
+#include "../src/autotile/AlgorithmRegistry.h"
 
 namespace PlasmaZones {
 
-AssignmentManager::AssignmentManager(Settings* settings, ScreenListProvider screenListProvider, QObject* parent)
+AssignmentManager::AssignmentManager(KCMPlasmaZones* kcm, Settings* settings, QObject* parent)
     : QObject(parent)
+    , m_kcm(kcm)
     , m_settings(settings)
-    , m_screenListProvider(std::move(screenListProvider))
 {
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// D-Bus helper (local copy — avoid tight coupling to KCM's private API)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QDBusMessage AssignmentManager::callDaemon(const QString& interface, const QString& method,
+                                           const QVariantList& args) const
+{
+    QDBusMessage msg =
+        QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath), interface, method);
+    if (!args.isEmpty()) {
+        msg.setArguments(args);
+    }
+    QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 5000);
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcKcm) << "D-Bus call failed:" << interface << "::" << method << "-" << reply.errorName() << ":"
+                         << reply.errorMessage();
+    }
+    return reply;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -154,8 +174,8 @@ QString AssignmentManager::getLayoutForScreenDesktop(const QString& screenName, 
     if (m_clearedDesktopAssignments.contains(key)) {
         return QString();
     }
-    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                             QStringLiteral("getLayoutForScreenDesktop"), {screenName, virtualDesktop});
+    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager),
+                                    QStringLiteral("getLayoutForScreenDesktop"), {screenName, virtualDesktop});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         return reply.arguments().first().toString();
     }
@@ -170,8 +190,8 @@ bool AssignmentManager::hasExplicitAssignmentForScreenDesktop(const QString& scr
     if (m_clearedDesktopAssignments.contains(key))
         return false;
     QDBusMessage reply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                            QStringLiteral("hasExplicitAssignmentForScreenDesktop"), {screenName, virtualDesktop});
+        callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("hasExplicitAssignmentForScreenDesktop"),
+                   {screenName, virtualDesktop});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         return reply.arguments().first().toBool();
     }
@@ -259,8 +279,8 @@ QString AssignmentManager::getLayoutForScreenActivity(const QString& screenName,
     if (m_clearedActivityAssignments.contains(key)) {
         return QString();
     }
-    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                             QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
+    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager),
+                                    QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         return reply.arguments().first().toString();
     }
@@ -275,9 +295,8 @@ bool AssignmentManager::hasExplicitAssignmentForScreenActivity(const QString& sc
         return true;
     if (m_clearedActivityAssignments.contains(key))
         return false;
-    QDBusMessage reply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                            QStringLiteral("hasExplicitAssignmentForScreenActivity"), {screenName, activityId});
+    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager),
+                                    QStringLiteral("hasExplicitAssignmentForScreenActivity"), {screenName, activityId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         return reply.arguments().first().toBool();
     }
@@ -410,8 +429,7 @@ QVariantList AssignmentManager::getAppRulesForLayout(const QString& layoutId) co
     if (m_pendingAppRules.contains(layoutId)) {
         return m_pendingAppRules.value(layoutId);
     }
-    QDBusMessage reply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayout"), {layoutId});
+    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayout"), {layoutId});
     if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
         return {};
 
@@ -619,7 +637,7 @@ void AssignmentManager::save(QStringList& failedOperations)
     // Auto-populate tiling assignments when autotiling enabled but none exist
     bool screenAssignmentsMutated = false;
     if (m_settings->autotileEnabled() && m_tilingScreenAssignments.isEmpty()) {
-        QVariantList screens = m_screenListProvider ? m_screenListProvider() : QVariantList{};
+        QVariantList screens = m_kcm->screens();
         if (screens.isEmpty()) {
             qCWarning(lcKcm) << "Auto-populate: no screens available, cannot create tiling assignments";
         } else {
@@ -655,7 +673,7 @@ void AssignmentManager::save(QStringList& failedOperations)
         }
     }
     QDBusMessage screenReply =
-        KCMDBus::callDaemon(layoutInterface, QStringLiteral("setAllScreenAssignments"), {screenAssignments});
+        callDaemon(layoutInterface, QStringLiteral("setAllScreenAssignments"), {screenAssignments});
     if (screenReply.type() == QDBusMessage::ErrorMessage) {
         failedOperations.append(QStringLiteral("Screen assignments"));
     }
@@ -665,8 +683,7 @@ void AssignmentManager::save(QStringList& failedOperations)
     for (int slot = 1; slot <= 9; ++slot) {
         quickSlots[QString::number(slot)] = m_quickLayoutSlots.value(slot, QString());
     }
-    QDBusMessage quickReply =
-        KCMDBus::callDaemon(layoutInterface, QStringLiteral("setAllQuickLayoutSlots"), {quickSlots});
+    QDBusMessage quickReply = callDaemon(layoutInterface, QStringLiteral("setAllQuickLayoutSlots"), {quickSlots});
     if (quickReply.type() == QDBusMessage::ErrorMessage) {
         failedOperations.append(QStringLiteral("Quick layout slots"));
     }
@@ -757,7 +774,7 @@ void AssignmentManager::save(QStringList& failedOperations)
     if (!m_pendingDesktopAssignments.isEmpty() || !m_clearedDesktopAssignments.isEmpty()
         || m_tilingDesktopAssignmentsDirty) {
         QVariantMap desktopAssignments;
-        QDBusMessage currentReply = KCMDBus::callDaemon(layoutInterface, QStringLiteral("getAllDesktopAssignments"));
+        QDBusMessage currentReply = callDaemon(layoutInterface, QStringLiteral("getAllDesktopAssignments"));
         if (currentReply.type() == QDBusMessage::ReplyMessage && !currentReply.arguments().isEmpty()) {
             desktopAssignments = qdbus_cast<QVariantMap>(currentReply.arguments().first());
         }
@@ -772,7 +789,7 @@ void AssignmentManager::save(QStringList& failedOperations)
                 desktopAssignments[it.key()] = it.value();
         }
         QDBusMessage desktopReply =
-            KCMDBus::callDaemon(layoutInterface, QStringLiteral("setAllDesktopAssignments"), {desktopAssignments});
+            callDaemon(layoutInterface, QStringLiteral("setAllDesktopAssignments"), {desktopAssignments});
         if (desktopReply.type() == QDBusMessage::ErrorMessage) {
             failedOperations.append(QStringLiteral("Per-desktop assignments"));
         }
@@ -787,7 +804,7 @@ void AssignmentManager::save(QStringList& failedOperations)
     if (!m_pendingActivityAssignments.isEmpty() || !m_clearedActivityAssignments.isEmpty()
         || m_tilingActivityAssignmentsDirty) {
         QVariantMap activityAssignments;
-        QDBusMessage currentReply = KCMDBus::callDaemon(layoutInterface, QStringLiteral("getAllActivityAssignments"));
+        QDBusMessage currentReply = callDaemon(layoutInterface, QStringLiteral("getAllActivityAssignments"));
         if (currentReply.type() == QDBusMessage::ReplyMessage && !currentReply.arguments().isEmpty()) {
             activityAssignments = qdbus_cast<QVariantMap>(currentReply.arguments().first());
         }
@@ -802,7 +819,7 @@ void AssignmentManager::save(QStringList& failedOperations)
                 activityAssignments[it.key()] = it.value();
         }
         QDBusMessage activityReply =
-            KCMDBus::callDaemon(layoutInterface, QStringLiteral("setAllActivityAssignments"), {activityAssignments});
+            callDaemon(layoutInterface, QStringLiteral("setAllActivityAssignments"), {activityAssignments});
         if (activityReply.type() == QDBusMessage::ErrorMessage) {
             failedOperations.append(QStringLiteral("Per-activity assignments"));
         }
@@ -817,7 +834,7 @@ void AssignmentManager::save(QStringList& failedOperations)
             const QString& layoutId = it.key();
             const QVariantList& rules = it.value();
 
-            QDBusMessage layoutReply = KCMDBus::callDaemon(layoutInterface, QStringLiteral("getLayout"), {layoutId});
+            QDBusMessage layoutReply = callDaemon(layoutInterface, QStringLiteral("getLayout"), {layoutId});
             if (layoutReply.type() != QDBusMessage::ReplyMessage || layoutReply.arguments().isEmpty()) {
                 failedOperations.append(QStringLiteral("App rules (get %1)").arg(layoutId));
                 continue;
@@ -843,8 +860,7 @@ void AssignmentManager::save(QStringList& failedOperations)
             QJsonObject obj = doc.object();
             obj[JsonKeys::AppRules] = rulesArray;
             QString updatedJson = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-            QDBusMessage updateReply =
-                KCMDBus::callDaemon(layoutInterface, QStringLiteral("updateLayout"), {updatedJson});
+            QDBusMessage updateReply = callDaemon(layoutInterface, QStringLiteral("updateLayout"), {updatedJson});
             if (updateReply.type() == QDBusMessage::ErrorMessage) {
                 failedOperations.append(QStringLiteral("App rules (save %1)").arg(layoutId));
             }
@@ -940,8 +956,7 @@ void AssignmentManager::load()
                 }
             } else {
                 // Fallback: load from daemon for first run
-                QDBusMessage assignmentsReply =
-                    KCMDBus::callDaemon(layoutInterface, QStringLiteral("getAllScreenAssignments"));
+                QDBusMessage assignmentsReply = callDaemon(layoutInterface, QStringLiteral("getAllScreenAssignments"));
                 if (assignmentsReply.type() == QDBusMessage::ReplyMessage && !assignmentsReply.arguments().isEmpty()) {
                     QString assignmentsJson = assignmentsReply.arguments().first().toString();
                     QJsonDocument doc = QJsonDocument::fromJson(assignmentsJson.toUtf8());
@@ -1000,7 +1015,7 @@ void AssignmentManager::load()
 
     // Quick layout slots from daemon
     m_quickLayoutSlots.clear();
-    QDBusMessage slotsReply = KCMDBus::callDaemon(layoutInterface, QStringLiteral("getAllQuickLayoutSlots"));
+    QDBusMessage slotsReply = callDaemon(layoutInterface, QStringLiteral("getAllQuickLayoutSlots"));
     if (slotsReply.type() == QDBusMessage::ReplyMessage && !slotsReply.arguments().isEmpty()) {
         QVariantMap slotsMap = qdbus_cast<QVariantMap>(slotsReply.arguments().first());
         for (auto it = slotsMap.begin(); it != slotsMap.end(); ++it) {

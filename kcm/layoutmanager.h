@@ -3,32 +3,31 @@
 
 #pragma once
 
+#include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QHash>
 #include <QObject>
 #include <QVariantList>
-#include <functional>
 
 class QTimer;
 
 namespace PlasmaZones {
 
+class KCMPlasmaZones;
 class Settings;
 
 /**
  * @brief Manages layout CRUD, async loading, filtering, and pending states
  *
  * Owns the layout list, load timer, and pending hidden/auto-assign state.
- * Uses a callback to resolve the current screen name (for editor targeting).
+ * Uses the back-pointer pattern to access KCM's Settings and currentScreenName().
  */
 class LayoutManager : public QObject
 {
     Q_OBJECT
 
 public:
-    using ScreenNameResolver = std::function<QString()>;
-
-    explicit LayoutManager(Settings* settings, ScreenNameResolver screenNameResolver, QObject* parent = nullptr);
+    explicit LayoutManager(KCMPlasmaZones* kcm, Settings* settings, QObject* parent = nullptr);
 
     // Layout list accessors
     const QVariantList& layouts() const
@@ -76,10 +75,11 @@ Q_SIGNALS:
     void needsSave();
 
 private:
+    QDBusMessage callDaemon(const QString& interface, const QString& method, const QVariantList& args = {}) const;
     void watchAsyncDbusCall(QDBusPendingCall call, const QString& operation);
 
+    KCMPlasmaZones* m_kcm = nullptr;
     Settings* m_settings = nullptr;
-    ScreenNameResolver m_screenNameResolver;
 
     QVariantList m_layouts;
     QVariantList m_unfilteredLayouts;

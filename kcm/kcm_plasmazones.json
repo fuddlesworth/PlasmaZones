@@ -1,8 +1,8 @@
 {
     "KPlugin": {
-        "Name": "Tiling",
-        "Description": "Automatic window tiling algorithms, gaps, and behavior",
-        "Icon": "window-duplicate",
+        "Name": "PlasmaZones",
+        "Description": "Configure window zone snapping and autotiling",
+        "Icon": "plasmazones",
         "Authors": [
             {
                 "Name": "fuddlesworth",
@@ -12,6 +12,6 @@
         "License": "GPL-3.0-or-later"
     },
     "X-KDE-ParentApp": "systemsettings",
-    "X-KDE-System-Settings-Parent-Category": "plasmazones",
-    "X-KDE-Weight": 50
+    "X-KDE-System-Settings-Parent-Category": "windowmanagement",
+    "X-KDE-Weight": 70
 }

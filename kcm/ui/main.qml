@@ -1,0 +1,519 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import QtCore
+/**
+ * @brief Main KCM settings UI with tabbed interface
+ *
+ * Pages:
+ * - Layouts: View, create, edit, import/export layouts
+ * - Editor: Keyboard shortcuts and snapping settings
+ * - Assignments: Monitor, activity, quick layout, and app-to-zone assignments
+ * - Snapping: Zone selector popup, appearance, and behavior settings
+ * - Tiling: Autotiling algorithm, gaps, and per-screen overrides
+ * - General: Mode-agnostic settings (OSD)
+ * - Exclusions: Apps and windows to exclude from snapping
+ */
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Dialogs
+import QtQuick.Layouts
+import org.kde.kcmutils as KCM
+import org.kde.kirigami as Kirigami
+import "tabs"
+
+KCM.AbstractKCM {
+    // ═══════════════════════════════════════════════════════════════════════
+    // DIALOGS
+    // ═══════════════════════════════════════════════════════════════════════
+
+    id: root
+
+    // Capture the kcm context property as a regular property for passing to child components
+    // Context properties don't automatically propagate to imported QML modules
+    readonly property var kcmModule: kcm
+    // Screen aspect ratio for locked preview calculations
+    readonly property real screenAspectRatio: Screen.width > 0 && Screen.height > 0 ? (Screen.width / Screen.height) : (16 / 9)
+
+    title: i18n("PlasmaZones")
+    framedView: false
+
+    // Constants to eliminate magic numbers
+    QtObject {
+        id: constants
+
+        // Layout dimensions
+        readonly property int layoutListMinHeight: 150
+        readonly property int sliderPreferredWidth: 200
+        readonly property int sliderValueLabelWidth: 40
+        readonly property int colorButtonSize: 32
+        // Opacity values
+        readonly property real labelSecondaryOpacity: 0.7
+        // Slider ranges
+        readonly property int opacitySliderMax: 100
+        readonly property int borderWidthMax: 10
+        readonly property int borderRadiusMax: 50
+        readonly property int paddingMax: 50
+        readonly property int thresholdMax: 100
+        readonly property int zonePaddingMax: 50
+        readonly property int outerGapMax: 50
+        readonly property int adjacentThresholdMax: 100
+        readonly property int zoneSelectorTriggerMax: 200
+        readonly property int zoneSelectorPreviewWidthMin: 80
+        readonly property int zoneSelectorPreviewWidthMax: 400
+        readonly property int zoneSelectorPreviewHeightMin: 60
+        readonly property int zoneSelectorPreviewHeightMax: 300
+        readonly property int zoneSelectorGridColumnsMax: 10
+        // Quick layout shortcuts
+        readonly property int quickLayoutSlotCount: 9
+        // Layout type ratios (matching C++ Defaults)
+        readonly property real priorityGridMainRatio: 0.667
+        readonly property real priorityGridSecondaryRatio: 0.333
+        readonly property real focusSideRatio: 0.2
+        readonly property real focusMainRatio: 0.6
+        // Autotiling gap limits
+        readonly property int autotileGapMax: 50
+        // Autotiling algorithm preview dimensions
+        readonly property int algorithmPreviewWidth: 280
+        readonly property int algorithmPreviewHeight: 160
+    }
+
+    // Placeholder when daemon is disabled
+    Item {
+        anchors.fill: parent
+        visible: !kcm.daemonEnabled
+
+        ColumnLayout {
+            anchors.centerIn: parent
+            spacing: Kirigami.Units.largeSpacing
+
+            Kirigami.Icon {
+                source: "plasmazones"
+                Layout.preferredWidth: Kirigami.Units.iconSizes.huge
+                Layout.preferredHeight: Kirigami.Units.iconSizes.huge
+                Layout.alignment: Qt.AlignHCenter
+                opacity: 0.5
+            }
+
+            Label {
+                text: i18n("PlasmaZones is disabled")
+                font.bold: true
+                Layout.alignment: Qt.AlignHCenter
+            }
+
+            Label {
+                text: i18n("Turn on PlasmaZones to manage window layouts.")
+                opacity: 0.7
+                Layout.alignment: Qt.AlignHCenter
+            }
+
+        }
+
+    }
+
+    StackLayout {
+        id: stackLayout
+
+        anchors.fill: parent
+        anchors.margins: Kirigami.Units.largeSpacing
+        currentIndex: tabBar.currentIndex
+        visible: kcm.daemonEnabled
+
+        // TAB 1: LAYOUTS
+        // Pass kcmModule (captured context property) to child components
+        LayoutsTab {
+            id: layoutsTab
+
+            kcm: root.kcmModule
+            constants: constants
+            onRequestDeleteLayout: function(layout) {
+                deleteConfirmDialog.layoutToDelete = layout;
+                deleteConfirmDialog.open();
+            }
+            onRequestImportLayout: importDialog.open()
+            onRequestExportLayout: function(layoutId) {
+                exportDialog.layoutId = layoutId;
+                exportDialog.open();
+            }
+        }
+
+        // TAB 2: EDITOR
+        EditorTab {
+            kcm: root.kcmModule
+            constants: constants
+        }
+
+        // TAB 3: ASSIGNMENTS
+        AssignmentsTab {
+            kcm: root.kcmModule
+            constants: constants
+        }
+
+        // TAB 4: SNAPPING (zone selector, appearance, behavior)
+        ZonesTab {
+            id: zonesTab
+
+            kcm: root.kcmModule
+            constants: constants
+            isCurrentTab: stackLayout.currentIndex === 3
+            screenAspectRatio: root.screenAspectRatio
+            onRequestHighlightColorDialog: {
+                highlightColorDialog.selectedColor = kcm.highlightColor;
+                highlightColorDialog.open();
+            }
+            onRequestInactiveColorDialog: {
+                inactiveColorDialog.selectedColor = kcm.inactiveColor;
+                inactiveColorDialog.open();
+            }
+            onRequestBorderColorDialog: {
+                borderColorDialog.selectedColor = kcm.borderColor;
+                borderColorDialog.open();
+            }
+            onRequestLabelFontColorDialog: {
+                labelFontColorDialog.selectedColor = kcm.labelFontColor;
+                labelFontColorDialog.open();
+            }
+            onRequestColorFileDialog: colorFileDialog.open()
+            onRequestFontDialog: {
+                fontDialog.selectedFamily = kcm.labelFontFamily;
+                fontDialog.selectedWeight = kcm.labelFontWeight;
+                fontDialog.selectedItalic = kcm.labelFontItalic;
+                fontDialog.selectedUnderline = kcm.labelFontUnderline;
+                fontDialog.selectedStrikeout = kcm.labelFontStrikeout;
+                fontDialog.open();
+            }
+        }
+
+        // TAB 5: TILING (automatic window tiling)
+        AutotilingTab {
+            id: autotilingTab
+
+            kcm: root.kcmModule
+            constants: constants
+            isCurrentTab: stackLayout.currentIndex === 4
+            onRequestAutotileBorderColorDialog: {
+                autotileBorderColorDialog.selectedColor = kcm.autotileBorderColor;
+                autotileBorderColorDialog.open();
+            }
+        }
+
+        // TAB 6: GENERAL (OSD and global settings)
+        GeneralTab {
+            kcm: root.kcmModule
+            constants: constants
+        }
+
+        // TAB 7: EXCLUSIONS
+        ExclusionsTab {
+            kcm: root.kcmModule
+            constants: constants
+        }
+
+        // TAB 8: ABOUT
+        AboutTab {
+            kcm: root.kcmModule
+            constants: constants
+        }
+
+    }
+
+    // Color dialogs
+    ColorDialog {
+        id: highlightColorDialog
+
+        title: i18n("Choose Highlight Color")
+        onAccepted: kcm.highlightColor = selectedColor
+    }
+
+    ColorDialog {
+        id: inactiveColorDialog
+
+        title: i18n("Choose Inactive Zone Color")
+        onAccepted: kcm.inactiveColor = selectedColor
+    }
+
+    ColorDialog {
+        id: borderColorDialog
+
+        title: i18n("Choose Border Color")
+        onAccepted: kcm.borderColor = selectedColor
+    }
+
+    ColorDialog {
+        id: labelFontColorDialog
+
+        title: i18n("Choose Label Color")
+        onAccepted: kcm.labelFontColor = selectedColor
+    }
+
+    ColorDialog {
+        id: autotileBorderColorDialog
+
+        title: i18n("Choose Autotile Border Color")
+        onAccepted: kcm.autotileBorderColor = selectedColor
+    }
+
+    // Font dialog
+    FontPickerDialog {
+        id: fontDialog
+
+        kcm: root.kcmModule
+        onAccepted: {
+            kcm.labelFontFamily = selectedFamily;
+            kcm.labelFontWeight = selectedWeight;
+            kcm.labelFontItalic = selectedItalic;
+            kcm.labelFontUnderline = selectedUnderline;
+            kcm.labelFontStrikeout = selectedStrikeout;
+        }
+    }
+
+    // File dialogs
+    FileDialog {
+        id: importDialog
+
+        title: i18n("Import Layout")
+        nameFilters: ["JSON files (*.json)", "All files (*)"]
+        fileMode: FileDialog.OpenFile
+        onAccepted: kcm.importLayout(selectedFile.toString().replace(/^file:\/\/+/, "/"))
+    }
+
+    FileDialog {
+        id: exportDialog
+
+        property string layoutId: ""
+
+        title: i18n("Export Layout")
+        nameFilters: ["JSON files (*.json)"]
+        fileMode: FileDialog.SaveFile
+        onAccepted: kcm.exportLayout(layoutId, selectedFile.toString().replace(/^file:\/\/+/, "/"))
+    }
+
+    FileDialog {
+        id: colorFileDialog
+
+        title: i18n("Import Colors from File")
+        nameFilters: ["JSON files (*.json)", "All files (*)"]
+        fileMode: FileDialog.OpenFile
+        onAccepted: kcm.loadColorsFromFile(selectedFile.toString().replace(/^file:\/\/+/, "/"))
+    }
+
+    // Delete confirmation dialog
+    Kirigami.PromptDialog {
+        id: deleteConfirmDialog
+
+        property var layoutToDelete: null
+
+        title: i18n("Delete Layout")
+        subtitle: i18n("Are you sure you want to delete '%1'?", layoutToDelete ? layoutToDelete.name : "")
+        standardButtons: Kirigami.Dialog.Yes | Kirigami.Dialog.No
+        preferredWidth: Math.min(Kirigami.Units.gridUnit * 30, parent.width * 0.8)
+        onAccepted: {
+            if (layoutToDelete) {
+                kcm.deleteLayout(layoutToDelete.id);
+                layoutToDelete = null;
+            }
+        }
+        onRejected: layoutToDelete = null
+    }
+
+    // Layout editor launcher dialog
+    Kirigami.Dialog {
+        id: layoutEditorSheet
+
+        property string layoutId: ""
+        property string layoutName: ""
+
+        title: i18n("Edit Layout")
+        standardButtons: Kirigami.Dialog.Close
+        preferredWidth: Math.min(Kirigami.Units.gridUnit * 25, parent.width * 0.8)
+
+        ColumnLayout {
+            spacing: Kirigami.Units.largeSpacing
+            width: parent.width
+
+            Label {
+                Layout.fillWidth: true
+                text: i18n("Use the visual editor to create and modify zone layouts.")
+                wrapMode: Text.WordWrap
+            }
+
+            Button {
+                Layout.fillWidth: true
+                text: i18n("Open Layout Editor")
+                icon.name: "document-edit"
+                onClicked: {
+                    kcm.openEditor();
+                    layoutEditorSheet.close();
+                }
+            }
+
+            Kirigami.Separator {
+                Layout.fillWidth: true
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: i18n("You can also edit layout JSON files directly:")
+                wrapMode: Text.WordWrap
+                opacity: 0.7
+            }
+
+            Button {
+                text: i18n("Open Layouts Folder")
+                icon.name: "folder-open"
+                onClicked: {
+                    // Use KIO to open folder (better integration with KDE)
+                    Qt.openUrlExternally("file://" + StandardPaths.writableLocation(StandardPaths.StandardLocation.GenericDataLocation) + "/plasmazones/layouts");
+                }
+            }
+
+        }
+
+    }
+
+    // Color import error dialog
+    Kirigami.PromptDialog {
+        id: colorImportErrorDialog
+
+        title: i18n("Color Import Failed")
+        subtitle: ""
+        standardButtons: Kirigami.Dialog.Ok
+        preferredWidth: Math.min(Kirigami.Units.gridUnit * 30, parent.width * 0.8)
+    }
+
+    // Connect to KCM signals for color import feedback
+    Connections {
+        function onColorImportError(message) {
+            colorImportErrorDialog.subtitle = message;
+            colorImportErrorDialog.open();
+        }
+
+        function onColorImportSuccess() {
+            // Switch to Snapping tab (index 3) to show the updated colors
+            tabBar.currentIndex = 3;
+        }
+
+        target: kcm
+    }
+
+    header: ColumnLayout {
+        width: parent.width
+        spacing: 0
+
+        // Update available banner
+        Kirigami.InlineMessage {
+            id: updateBanner
+
+            Layout.fillWidth: true
+            visible: kcm.updateAvailable && kcm.latestVersion !== kcm.dismissedUpdateVersion
+            type: Kirigami.MessageType.Information
+            text: i18n("A new version is available: %1 (installed: %2)", kcm.latestVersion, kcm.currentVersion)
+            actions: [
+                Kirigami.Action {
+                    text: i18n("View Release")
+                    icon.name: "internet-web-browser"
+                    onTriggered: kcm.openReleaseUrl()
+                },
+                Kirigami.Action {
+                    text: i18n("Dismiss")
+                    icon.name: "dialog-close"
+                    onTriggered: kcm.dismissedUpdateVersion = kcm.latestVersion
+                }
+            ]
+        }
+
+        // Master enable/disable row
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.margins: Kirigami.Units.largeSpacing
+
+            Label {
+                text: i18n("Enable PlasmaZones")
+                font.bold: true
+            }
+
+            Item {
+                Layout.fillWidth: true
+            }
+
+            Label {
+                text: kcm.daemonRunning ? i18n("Running") : i18n("Stopped")
+                opacity: 0.7
+            }
+
+            Switch {
+                id: daemonEnabledSwitch
+
+                checked: kcm.daemonEnabled
+                onToggled: kcm.daemonEnabled = checked
+                Accessible.name: i18n("Enable PlasmaZones")
+            }
+
+        }
+
+        Kirigami.Separator {
+            Layout.fillWidth: true
+            visible: kcm.daemonEnabled
+        }
+
+        TabBar {
+            id: tabBar
+
+            Layout.fillWidth: true
+            visible: kcm.daemonEnabled
+
+            // Force equal tab widths — the desktop style bolds the checked tab,
+            // which changes implicitWidth and causes TabBar to redistribute sizes.
+            TabButton {
+                width: tabBar.availableWidth / tabBar.count
+                text: i18n("Layouts")
+                icon.name: "view-grid-symbolic"
+            }
+
+            TabButton {
+                width: tabBar.availableWidth / tabBar.count
+                text: i18n("Editor")
+                icon.name: "document-edit"
+            }
+
+            TabButton {
+                width: tabBar.availableWidth / tabBar.count
+                text: i18n("Assignments")
+                icon.name: "view-list-details"
+            }
+
+            TabButton {
+                width: tabBar.availableWidth / tabBar.count
+                text: i18n("Snapping")
+                icon.name: "view-split-left-right"
+            }
+
+            TabButton {
+                width: tabBar.availableWidth / tabBar.count
+                text: i18n("Tiling")
+                icon.name: "window-duplicate"
+            }
+
+            TabButton {
+                width: tabBar.availableWidth / tabBar.count
+                text: i18n("General")
+                icon.name: "configure"
+            }
+
+            TabButton {
+                width: tabBar.availableWidth / tabBar.count
+                text: i18n("Exclusions")
+                icon.name: "dialog-cancel-symbolic"
+            }
+
+            TabButton {
+                width: tabBar.availableWidth / tabBar.count
+                text: i18n("About")
+                icon.name: "help-about"
+            }
+
+        }
+
+    }
+
+}
