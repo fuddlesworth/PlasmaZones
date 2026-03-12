@@ -13,5 +13,6 @@
     },
     "X-KDE-ParentApp": "systemsettings",
     "X-KDE-System-Settings-Parent-Category": "plasmazones",
+    "X-KDE-System-Settings-Uses-ModuleData": true,
     "X-KDE-Weight": 10
 }

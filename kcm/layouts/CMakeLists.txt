@@ -4,8 +4,6 @@
 set(kcm_layouts_SRCS
     kcmlayouts.cpp
     kcmlayouts.h
-    ../plasmazonesmoduledata.cpp
-    ../plasmazonesmoduledata.h
 )
 
 kcmutils_add_qml_kcm(kcm_plasmazones_layouts

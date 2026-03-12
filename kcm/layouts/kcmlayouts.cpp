@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "kcmlayouts.h"
-#include "../plasmazonesmoduledata.h"
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QTimer>
@@ -16,8 +15,7 @@
 #include "../../src/core/constants.h"
 #include "../common/layoutmanager.h"
 
-K_PLUGIN_FACTORY_WITH_JSON(KCMLayoutsFactory, "kcm_plasmazones_layouts.json", registerPlugin<PlasmaZones::KCMLayouts>();
-                           registerPlugin<PlasmaZones::PlasmaZonesModuleData>();)
+K_PLUGIN_CLASS_WITH_JSON(PlasmaZones::KCMLayouts, "kcm_plasmazones_layouts.json")
 
 namespace PlasmaZones {
 

@@ -4,6 +4,8 @@
 set(kcm_about_SRCS
     kcmabout.cpp
     kcmabout.h
+    ../plasmazonesmoduledata.cpp
+    ../plasmazonesmoduledata.h
 )
 
 kcmutils_add_qml_kcm(kcm_plasmazones_about
