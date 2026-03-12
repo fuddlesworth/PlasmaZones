@@ -44,6 +44,9 @@ public:
 
     void notifyWindowAdded(KWin::EffectWindow* w);
     void onWindowClosed(const QString& windowId, const QString& screenName);
+    void onWindowDesktopsChanged(KWin::EffectWindow* w);
+    void onDesktopChanged();
+    void onActivityChanged();
     void onDaemonReady();
 
     // D-Bus signal connections and settings
@@ -134,6 +137,9 @@ private:
     // Utility methods
     // ═══════════════════════════════════════════════════════════════════
 
+    void refreshAutotileWindowSet();
+    void cleanupWindowTracking(const QString& windowId, const QString& screenName);
+    QString currentContextKey() const;
     void setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless);
     void unmaximizeMonocleWindow(const QString& windowId);
     bool saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenName, const QRectF& frame);
@@ -173,6 +179,13 @@ private:
     QPointer<KWin::EffectWindow> m_pendingReactivateWindow; ///< re-activate after raise loop (daemon restart)
     QSet<QString> m_monocleMaximizedWindows;
     int m_suppressMaximizeChanged = 0;
+    // ── Virtual desktop/activity context tracking ──
+    // Tiled window order per screen, updated from slotWindowsTileRequested JSON.
+    // Used to preserve window positions across desktop/activity switches.
+    QHash<QString, QStringList> m_currentTiledOrder; ///< screenName → ordered windowIds
+    // Saved tiled orders per context key (desktopId|activityId → screen → order)
+    QHash<QString, QHash<QString, QStringList>> m_savedContextOrders;
+    QString m_lastContextKey; ///< Last desktop|activity context key
     // ── Focus follows mouse ──
     bool m_focusFollowsMouse = false;
     QString m_lastFocusFollowsMouseWindowId;

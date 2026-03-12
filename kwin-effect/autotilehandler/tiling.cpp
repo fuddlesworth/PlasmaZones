@@ -159,6 +159,16 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, screenName, e.isMonocle});
     }
 
+    // Update per-screen tiled window order cache for desktop/activity switch preservation.
+    // Group windowIds by screen in the order they appear (which is tiling order from daemon).
+    QHash<QString, QStringList> orderByScreen;
+    for (const TileSnap& snap : std::as_const(toApply)) {
+        orderByScreen[snap.screenName].append(snap.windowId);
+    }
+    for (auto it = orderByScreen.constBegin(); it != orderByScreen.constEnd(); ++it) {
+        m_currentTiledOrder[it.key()] = it.value();
+    }
+
     const uint64_t gen = m_autotileStaggerGeneration;
 
     auto onComplete = [this, toApply, tiledWindowIds, tileScreenNames, savedGlobalStack, gen]() {

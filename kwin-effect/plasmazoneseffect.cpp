@@ -347,6 +347,16 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, m_screenChangeHandler.get(),
             &ScreenChangeHandler::slotScreenGeometryChanged);
 
+    // Refresh autotile windows on virtual desktop or activity switch so each
+    // context tiles independently (only windows on the active desktop/activity participate).
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this,
+            [this](KWin::VirtualDesktop*, KWin::VirtualDesktop*, KWin::EffectWindow*) {
+                m_autotileHandler->onDesktopChanged();
+            });
+    connect(KWin::effects, &KWin::EffectsHandler::currentActivityChanged, this, [this](const QString&) {
+        m_autotileHandler->onActivityChanged();
+    });
+
     // Connect to daemon's settingsChanged D-Bus signal
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
                                           QStringLiteral("settingsChanged"), this, SLOT(slotSettingsChanged()));
@@ -611,6 +621,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
 
     connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this](KWin::EffectWindow* window) {
         updateWindowStickyState(window);
+        m_autotileHandler->onWindowDesktopsChanged(window);
     });
 
     // Detect drag start/end via KWin's per-window signals instead of polling.

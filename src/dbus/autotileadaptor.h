@@ -183,6 +183,29 @@ public Q_SLOTS:
     void windowClosed(const QString& windowId);
 
     /**
+     * @brief Batch-remove multiple windows without intermediate retiles
+     *
+     * Called by KWin effect on virtual desktop/activity switch to remove all
+     * windows leaving the current context in one operation. Retiles each
+     * affected screen exactly once after all removals complete.
+     *
+     * @param windowIds List of window IDs to remove
+     */
+    void windowsClosedBatch(const QStringList& windowIds);
+
+    /**
+     * @brief Pre-seed window insertion order for a screen
+     *
+     * When switching virtual desktops, the KWin effect saves the tiled window
+     * order before removing windows. On return, it sends the saved order so
+     * windows are re-inserted in their previous positions (master stays master).
+     *
+     * @param screenName Screen to set order for
+     * @param windowIds Window IDs in desired tiling order
+     */
+    void setInitialWindowOrder(const QString& screenName, const QStringList& windowIds);
+
+    /**
      * @brief Notify the daemon that a window has been focused
      *
      * Called by KWin effect when a window gains focus. This allows the

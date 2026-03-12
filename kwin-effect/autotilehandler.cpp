@@ -9,6 +9,7 @@
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
+#include <virtualdesktops.h>
 #include <window.h>
 #include <workspace.h>
 
@@ -300,6 +301,16 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
         return;
     }
 
+    // Skip windows not on the current virtual desktop or activity.
+    // Without this, windows on other desktops/activities are added to the
+    // tiling engine and affect the layout of the current desktop's windows.
+    if (!w->isOnCurrentDesktop() && !w->isOnAllDesktops()) {
+        return;
+    }
+    if (!w->isOnCurrentActivity()) {
+        return;
+    }
+
     const QString windowId = m_effect->getWindowId(w);
 
     // Window was already closed before we could notify open — skip (D-Bus ordering race)
@@ -354,20 +365,10 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
     }
 }
 
-void AutotileHandler::onWindowClosed(const QString& windowId, const QString& screenName)
+void AutotileHandler::cleanupWindowTracking(const QString& windowId, const QString& screenName)
 {
-    // If we haven't notified the daemon about this window yet, record the close
-    // so we can suppress the open if it arrives late (D-Bus ordering race)
-    if (!m_notifiedWindows.contains(windowId) && m_autotileScreens.contains(screenName)) {
-        m_pendingCloses.insert(windowId);
-    }
-
-    // Remove from autotile tracking sets so re-opened windows get re-notified.
     m_notifiedWindows.remove(windowId);
     m_minimizeFloatedWindows.remove(windowId);
-
-    // Clean up borderless, monocle-maximize, deferred-centering, border zone, focus-follows-mouse,
-    // and pre-autotile tracking
     m_border.borderlessWindows.remove(windowId);
     m_border.zoneGeometries.remove(windowId);
     m_monocleMaximizedWindows.remove(windowId);
@@ -379,13 +380,23 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     if (m_preAutotileGeometries.contains(screenName)) {
         m_preAutotileGeometries[screenName].remove(windowId);
     }
-    // Remove from saved stacking orders so stale IDs don't accumulate
     if (m_savedSnapStackingOrder.contains(screenName)) {
         m_savedSnapStackingOrder[screenName].removeAll(windowId);
     }
     if (m_savedAutotileStackingOrder.contains(screenName)) {
         m_savedAutotileStackingOrder[screenName].removeAll(windowId);
     }
+}
+
+void AutotileHandler::onWindowClosed(const QString& windowId, const QString& screenName)
+{
+    // If we haven't notified the daemon about this window yet, record the close
+    // so we can suppress the open if it arrives late (D-Bus ordering race)
+    if (!m_notifiedWindows.contains(windowId) && m_autotileScreens.contains(screenName)) {
+        m_pendingCloses.insert(windowId);
+    }
+
+    cleanupWindowTracking(windowId, screenName);
 
     // Notify autotile daemon
     if (m_autotileScreens.contains(screenName)) {
@@ -449,6 +460,11 @@ void AutotileHandler::loadSettings()
             const QSet<QString> added(screens.begin(), screens.end());
             m_autotileScreens = added;
             qCInfo(lcEffect) << "Loaded autotile screens:" << m_autotileScreens;
+
+            // Initialize context key so first desktop/activity switch saves order
+            if (!added.isEmpty() && m_lastContextKey.isEmpty()) {
+                m_lastContextKey = currentContextKey();
+            }
 
             if (!added.isEmpty()) {
                 const auto windows = KWin::effects->stackingOrder();

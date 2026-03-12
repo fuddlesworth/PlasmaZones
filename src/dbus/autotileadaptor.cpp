@@ -221,6 +221,44 @@ void AutotileAdaptor::windowClosed(const QString& windowId)
     m_engine->windowClosed(windowId);
 }
 
+void AutotileAdaptor::windowsClosedBatch(const QStringList& windowIds)
+{
+    if (!ensureEngine("windowsClosedBatch")) {
+        return;
+    }
+    if (windowIds.isEmpty()) {
+        return;
+    }
+    qCDebug(lcDbusAutotile) << "windowsClosedBatch: count=" << windowIds.size();
+
+    // Collect affected screens before removal (removeWindow clears m_windowToScreen)
+    QSet<QString> affectedScreens;
+    for (const QString& windowId : windowIds) {
+        const QString screen = m_engine->screenForWindow(windowId);
+        if (!screen.isEmpty()) {
+            affectedScreens.insert(screen);
+        }
+        m_engine->removeWindowOnly(windowId);
+    }
+
+    // Retile each affected screen exactly once
+    for (const QString& screen : std::as_const(affectedScreens)) {
+        m_engine->retileAfterOperation(screen, true);
+    }
+}
+
+void AutotileAdaptor::setInitialWindowOrder(const QString& screenName, const QStringList& windowIds)
+{
+    if (!ensureEngine("setInitialWindowOrder")) {
+        return;
+    }
+    if (screenName.isEmpty() || windowIds.isEmpty()) {
+        return;
+    }
+    qCDebug(lcDbusAutotile) << "setInitialWindowOrder: screen=" << screenName << "count=" << windowIds.size();
+    m_engine->setInitialWindowOrder(screenName, windowIds);
+}
+
 void AutotileAdaptor::notifyWindowFocused(const QString& windowId, const QString& screenName)
 {
     if (!ensureEngine("notifyWindowFocused")) {

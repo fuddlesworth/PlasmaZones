@@ -534,6 +534,23 @@ public:
     void windowClosed(const QString& windowId) override;
 
     /**
+     * @brief Remove a window from tracking without triggering a retile
+     *
+     * Used by windowsClosedBatch() to remove multiple windows in one pass,
+     * deferring the retile until all removals are complete.
+     *
+     * @param windowId Window identifier from KWin
+     */
+    void removeWindowOnly(const QString& windowId);
+
+    /**
+     * @brief Get the screen name for a tracked window
+     * @param windowId Window identifier
+     * @return Screen name, or empty if not tracked
+     */
+    QString screenForWindow(const QString& windowId) const;
+
+    /**
      * @brief Notify the engine that a window was focused
      *
      * Called by Daemon when KWin reports window activation. Updates focus
@@ -661,7 +678,6 @@ private:
     void recalculateLayout(const QString& screenName);
     void applyTiling(const QString& screenName);
     bool shouldTileWindow(const QString& windowId) const;
-    QString screenForWindow(const QString& windowId) const;
     QRect screenGeometry(const QString& screenName) const;
 
     /**

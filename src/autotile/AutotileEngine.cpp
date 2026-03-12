@@ -955,6 +955,15 @@ void AutotileEngine::windowClosed(const QString& windowId)
     onWindowRemoved(windowId);
 }
 
+void AutotileEngine::removeWindowOnly(const QString& windowId)
+{
+    if (!warnIfEmptyWindowId(windowId, "removeWindowOnly")) {
+        return;
+    }
+    m_savedFloatingWindows.remove(windowId);
+    removeWindow(windowId);
+}
+
 void AutotileEngine::windowFocused(const QString& windowId, const QString& screenName)
 {
     if (!warnIfEmptyWindowId(windowId, "windowFocused")) {

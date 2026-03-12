@@ -11,6 +11,7 @@
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
+#include <virtualdesktops.h>
 #include <window.h>
 #include <workspace.h>
 
@@ -40,6 +41,156 @@ void AutotileHandler::slotEnabledChanged(bool enabled)
         m_savedSnapStackingOrder.clear();
         m_savedAutotileStackingOrder.clear();
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Virtual desktop change handlers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void AutotileHandler::onWindowDesktopsChanged(KWin::EffectWindow* w)
+{
+    if (!w || !m_effect->shouldHandleWindow(w) || !m_effect->isTileableWindow(w)) {
+        return;
+    }
+
+    const QString windowId = m_effect->getWindowId(w);
+    const QString screenName = m_effect->getWindowScreenName(w);
+    if (!m_autotileScreens.contains(screenName)) {
+        return;
+    }
+
+    const bool visibleNow = w->isOnCurrentDesktop() || w->isOnAllDesktops();
+    const bool wasNotified = m_notifiedWindows.contains(windowId);
+
+    if (wasNotified && !visibleNow) {
+        // Window moved away from current desktop — remove from autotile
+        qCInfo(lcEffect) << "Autotile: window moved to different desktop, removing:" << windowId;
+        onWindowClosed(windowId, screenName);
+    } else if (!wasNotified && visibleNow && !w->isMinimized()) {
+        // Window moved to current desktop — add to autotile
+        qCInfo(lcEffect) << "Autotile: window moved to current desktop, adding:" << windowId;
+        notifyWindowAdded(w);
+    }
+}
+
+void AutotileHandler::onDesktopChanged()
+{
+    qCInfo(lcEffect) << "Virtual desktop changed — refreshing autotile windows";
+    refreshAutotileWindowSet();
+}
+
+void AutotileHandler::onActivityChanged()
+{
+    qCInfo(lcEffect) << "Activity changed — refreshing autotile windows";
+    refreshAutotileWindowSet();
+}
+
+QString AutotileHandler::currentContextKey() const
+{
+    QString desktopId;
+    KWin::VirtualDesktop* desktop = KWin::effects->currentDesktop();
+    if (desktop) {
+        desktopId = desktop->id();
+    }
+    const QString activityId = KWin::effects->currentActivity();
+    return desktopId + QLatin1Char('|') + activityId;
+}
+
+void AutotileHandler::refreshAutotileWindowSet()
+{
+    if (m_autotileScreens.isEmpty()) {
+        return;
+    }
+
+    const QString newContextKey = currentContextKey();
+    const auto windows = KWin::effects->stackingOrder();
+
+    // ── Save outgoing context's tiled order ──
+    if (!m_lastContextKey.isEmpty() && m_lastContextKey != newContextKey) {
+        // Save current tiled orders for the context we're leaving
+        if (!m_currentTiledOrder.isEmpty()) {
+            m_savedContextOrders[m_lastContextKey] = m_currentTiledOrder;
+            qCDebug(lcEffect) << "Saved tiled order for context" << m_lastContextKey;
+        }
+    }
+
+    // ── Pass 1: Batch-remove windows no longer visible ──
+    QStringList toRemove;
+    for (KWin::EffectWindow* w : windows) {
+        if (!w || !m_effect->shouldHandleWindow(w)) {
+            continue;
+        }
+        const QString windowId = m_effect->getWindowId(w);
+        if (!m_notifiedWindows.contains(windowId)) {
+            continue;
+        }
+        const bool onDesktop = w->isOnCurrentDesktop() || w->isOnAllDesktops();
+        const bool onActivity = w->isOnCurrentActivity();
+        if (onDesktop && onActivity) {
+            continue;
+        }
+        const QString screenName = m_effect->getWindowScreenName(w);
+        if (m_autotileScreens.contains(screenName)) {
+            qCDebug(lcEffect) << "Context switch: removing" << windowId << "from autotile";
+            cleanupWindowTracking(windowId, screenName);
+            toRemove.append(windowId);
+        }
+    }
+
+    // Single D-Bus batch-close (daemon removes all, retiles each screen once)
+    if (!toRemove.isEmpty() && m_effect->m_daemonServiceRegistered) {
+        m_effect->fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("windowsClosedBatch"),
+                                        {QVariant::fromValue(toRemove)}, QStringLiteral("windowsClosedBatch"));
+    }
+
+    // Clear local tiled order (all windows removed from outgoing context)
+    m_currentTiledOrder.clear();
+
+    // ── Restore saved window order for incoming context ──
+    const auto savedIt = m_savedContextOrders.constFind(newContextKey);
+    if (savedIt != m_savedContextOrders.constEnd()) {
+        // Send pre-seeded window orders to daemon before adding windows
+        const QHash<QString, QStringList>& savedOrders = savedIt.value();
+        if (m_effect->m_daemonServiceRegistered) {
+            for (auto oit = savedOrders.constBegin(); oit != savedOrders.constEnd(); ++oit) {
+                if (!oit.value().isEmpty() && m_autotileScreens.contains(oit.key())) {
+                    m_effect->fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("setInitialWindowOrder"),
+                                                    {oit.key(), QVariant::fromValue(oit.value())},
+                                                    QStringLiteral("setInitialWindowOrder"));
+                    qCDebug(lcEffect) << "Restored tiled order for" << oit.key() << "context" << newContextKey << ":"
+                                      << oit.value().size() << "windows";
+                }
+            }
+        }
+    }
+
+    // ── Pass 2: Add windows now visible on current desktop + activity ──
+    for (KWin::EffectWindow* w : windows) {
+        if (!w || !m_effect->shouldHandleWindow(w) || !m_effect->isTileableWindow(w)) {
+            continue;
+        }
+        if (w->isMinimized()) {
+            continue;
+        }
+        if (!w->isOnCurrentDesktop() && !w->isOnAllDesktops()) {
+            continue;
+        }
+        if (!w->isOnCurrentActivity()) {
+            continue;
+        }
+        const QString windowId = m_effect->getWindowId(w);
+        if (m_notifiedWindows.contains(windowId)) {
+            continue; // Already in tiling (sticky window)
+        }
+        const QString screenName = m_effect->getWindowScreenName(w);
+        if (m_autotileScreens.contains(screenName)) {
+            qCDebug(lcEffect) << "Context switch: adding" << windowId << "to autotile";
+            saveAndRecordPreAutotileGeometry(windowId, screenName, w->frameGeometry());
+            notifyWindowAdded(w);
+        }
+    }
+
+    m_lastContextKey = newContextKey;
 }
 
 void AutotileHandler::slotScreensChanged(const QStringList& screenNames)
