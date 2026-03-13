@@ -256,13 +256,12 @@ void Settings::save()
 void Settings::reset()
 {
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    const QStringList groups = {QStringLiteral("Activation"),        QStringLiteral("Display"),
-                                QStringLiteral("Appearance"),        QStringLiteral("Zones"),
-                                QStringLiteral("Behavior"),          QStringLiteral("Exclusions"),
-                                QStringLiteral("ZoneSelector"),      QStringLiteral("Shaders"),
-                                QStringLiteral("GlobalShortcuts"),   QStringLiteral("Autotiling"),
-                                QStringLiteral("AutotileShortcuts"), QStringLiteral("Animations"),
-                                QStringLiteral("ModeTracking"),      QStringLiteral("Updates")};
+    const QStringList groups = {
+        QStringLiteral("Activation"),   QStringLiteral("Display"),           QStringLiteral("Appearance"),
+        QStringLiteral("Zones"),        QStringLiteral("Behavior"),          QStringLiteral("Exclusions"),
+        QStringLiteral("ZoneSelector"), QStringLiteral("Shaders"),           QStringLiteral("GlobalShortcuts"),
+        QStringLiteral("Autotiling"),   QStringLiteral("AutotileShortcuts"), QStringLiteral("Animations"),
+        QStringLiteral("Updates")};
     for (const QString& groupName : groups) {
         config->deleteGroup(groupName);
     }

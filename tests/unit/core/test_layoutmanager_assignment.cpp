@@ -8,14 +8,21 @@
 
 #include <QTest>
 #include <QDir>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QScopedPointer>
 #include <QUuid>
+#include <KConfigGroup>
+#include <KSharedConfig>
 #include <memory>
 #include <vector>
 
 #include "core/layoutmanager.h"
 #include "core/layout.h"
 #include "core/zone.h"
+#include "core/constants.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
@@ -76,6 +83,7 @@ private Q_SLOTS:
         mgr->assignLayout(QStringLiteral("DP-1"), 2, QString(), desktopLayout);
 
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 2)->name(), QStringLiteral("DesktopSpecific"));
+        // Desktop 1 has no explicit entry — cascades to display default
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 1)->name(), QStringLiteral("ScreenSpecific"));
 
         Layout* fallback = mgr->layoutForScreen(QStringLiteral("HDMI-1"));
@@ -148,6 +156,359 @@ private Q_SLOTS:
 
         settings->setTestDefaultLayoutId(QString());
         QCOMPARE(mgr->defaultLayout()->name(), QStringLiteral("OnlyLayout"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // P3: AssignmentEntry explicit fields
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testAssignmentEntry_snappingAssignment_setsFields()
+    {
+        QScopedPointer<LayoutManager> mgr(createManager());
+
+        auto* layout = createTestLayout(QStringLiteral("Manual"));
+        mgr->addLayout(layout);
+
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
+
+        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, layout->id().toString());
+        QVERIFY(entry.tilingAlgorithm.isEmpty());
+        QCOMPARE(entry.activeLayoutId(), layout->id().toString());
+    }
+
+    void testAssignmentEntry_autotileAssignment_setsFields()
+    {
+        QScopedPointer<LayoutManager> mgr(createManager());
+
+        auto* layout = createTestLayout(QStringLiteral("Manual"));
+        mgr->addLayout(layout);
+
+        // First assign a snapping layout
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
+
+        // Then assign autotile — should preserve snappingLayout
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("autotile:wide"));
+
+        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, AssignmentEntry::Autotile);
+        QCOMPARE(entry.tilingAlgorithm, QStringLiteral("wide"));
+        // snappingLayout should be preserved from the earlier assignment
+        QCOMPARE(entry.snappingLayout, layout->id().toString());
+        QCOMPARE(entry.activeLayoutId(), QStringLiteral("autotile:wide"));
+    }
+
+    void testAssignmentEntry_togglePreservesBothFields()
+    {
+        QScopedPointer<LayoutManager> mgr(createManager());
+
+        auto* layout = createTestLayout(QStringLiteral("Manual"));
+        mgr->addLayout(layout);
+
+        // Set snapping layout
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
+        // Set autotile (snapping preserved)
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("autotile:dwindle"));
+
+        auto entry1 = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry1.mode, AssignmentEntry::Autotile);
+        QCOMPARE(entry1.snappingLayout, layout->id().toString());
+        QCOMPARE(entry1.tilingAlgorithm, QStringLiteral("dwindle"));
+
+        // Toggle back to snapping (tilingAlgorithm preserved)
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
+
+        auto entry2 = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry2.mode, AssignmentEntry::Snapping);
+        QCOMPARE(entry2.snappingLayout, layout->id().toString());
+        QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("dwindle"));
+        QCOMPARE(entry2.activeLayoutId(), layout->id().toString());
+    }
+
+    void testAssignmentEntry_modeForScreen_delegates()
+    {
+        QScopedPointer<LayoutManager> mgr(createManager());
+
+        auto* layout = createTestLayout(QStringLiteral("Manual"));
+        mgr->addLayout(layout);
+
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), AssignmentEntry::Snapping);
+
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("autotile:wide"));
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), AssignmentEntry::Autotile);
+    }
+
+    void testAssignmentEntry_snappingLayoutForScreen_returnsField()
+    {
+        QScopedPointer<LayoutManager> mgr(createManager());
+
+        auto* layout = createTestLayout(QStringLiteral("Manual"));
+        mgr->addLayout(layout);
+
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("autotile:wide"));
+
+        // Even in autotile mode, snappingLayoutForScreen returns the preserved layout
+        QCOMPARE(mgr->snappingLayoutForScreen(QStringLiteral("DP-1"), 0), layout->id().toString());
+    }
+
+    void testAssignmentEntry_tilingAlgorithmForScreen_returnsField()
+    {
+        QScopedPointer<LayoutManager> mgr(createManager());
+
+        auto* layout = createTestLayout(QStringLiteral("Manual"));
+        mgr->addLayout(layout);
+
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("autotile:wide"));
+
+        // Switch back to snapping — tilingAlgorithm is still preserved
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
+        QCOMPARE(mgr->tilingAlgorithmForScreen(QStringLiteral("DP-1"), 0), QStringLiteral("wide"));
+    }
+
+    void testAssignmentEntry_perDesktop_independentEntries()
+    {
+        QScopedPointer<LayoutManager> mgr(createManager());
+
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
+        mgr->addLayout(layoutB);
+
+        // Desktop 1: snapping with layoutA
+        mgr->assignLayout(QStringLiteral("DP-1"), 1, QString(), layoutA);
+        // Desktop 2: autotile with layoutB as snapping fallback
+        mgr->assignLayout(QStringLiteral("DP-1"), 2, QString(), layoutB);
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 2, QString(), QStringLiteral("autotile:dwindle"));
+
+        auto entry1 = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 1);
+        QCOMPARE(entry1.mode, AssignmentEntry::Snapping);
+        QCOMPARE(entry1.snappingLayout, layoutA->id().toString());
+
+        auto entry2 = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 2);
+        QCOMPARE(entry2.mode, AssignmentEntry::Autotile);
+        QCOMPARE(entry2.snappingLayout, layoutB->id().toString());
+        QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("dwindle"));
+    }
+
+    void testAssignmentEntry_clearAutotile_flipsToSnapping()
+    {
+        QScopedPointer<LayoutManager> mgr(createManager());
+
+        auto* layout = createTestLayout(QStringLiteral("Manual"));
+        mgr->addLayout(layout);
+
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("autotile:wide"));
+
+        // clearAutotileAssignments should flip mode to Snapping, preserving both fields
+        mgr->clearAutotileAssignments();
+
+        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, layout->id().toString());
+        QCOMPARE(entry.tilingAlgorithm, QStringLiteral("wide"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // P6: KConfig round-trip
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testKConfigRoundTrip_saveAndLoad_preservesAllFields()
+    {
+        QScopedPointer<LayoutManager> mgr(createManager());
+
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
+        mgr->addLayout(layoutB);
+
+        QString idA = layoutA->id().toString();
+        QString idB = layoutB->id().toString();
+
+        // Base screen: autotile with snapping preserved
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("autotile:wide"));
+
+        // Per-desktop: snapping with tiling preserved
+        mgr->assignLayout(QStringLiteral("DP-1"), 2, QString(), layoutB);
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 2, QString(), QStringLiteral("autotile:dwindle"));
+        mgr->assignLayout(QStringLiteral("DP-1"), 2, QString(), layoutB); // flip back to snapping
+
+        // Per-activity: pure autotile
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QStringLiteral("act-123"), QStringLiteral("autotile:tall"));
+
+        // Quick layout slot
+        mgr->setQuickLayoutSlot(3, idA);
+
+        // Save
+        mgr->saveAssignments();
+
+        // Create a new manager and load — same KSharedConfig singleton sees the data
+        QScopedPointer<LayoutManager> mgr2(new LayoutManager(nullptr));
+        mgr2->addLayout(createTestLayout(QStringLiteral("LayoutA")));
+        mgr2->addLayout(createTestLayout(QStringLiteral("LayoutB")));
+        QString layoutDir2 = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts2");
+        QDir().mkpath(layoutDir2);
+        mgr2->setLayoutDirectory(layoutDir2);
+        mgr2->loadAssignments();
+
+        // Verify base screen
+        auto base = mgr2->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(base.mode, AssignmentEntry::Autotile);
+        QCOMPARE(base.snappingLayout, idA);
+        QCOMPARE(base.tilingAlgorithm, QStringLiteral("wide"));
+
+        // Verify per-desktop
+        auto desk2 = mgr2->assignmentEntryForScreen(QStringLiteral("DP-1"), 2);
+        QCOMPARE(desk2.mode, AssignmentEntry::Snapping);
+        QCOMPARE(desk2.snappingLayout, idB);
+        QCOMPARE(desk2.tilingAlgorithm, QStringLiteral("dwindle"));
+
+        // Verify per-activity
+        auto act = mgr2->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QStringLiteral("act-123"));
+        QCOMPARE(act.mode, AssignmentEntry::Autotile);
+        QCOMPARE(act.tilingAlgorithm, QStringLiteral("tall"));
+
+        // Verify quick layout slot
+        QCOMPARE(mgr2->quickLayoutSlots().value(3), idA);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // P6: Migration from old assignments.json with shadows
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testMigration_oldJsonWithShadows_mergesIntoAssignmentEntry()
+    {
+        QScopedPointer<LayoutManager> mgr(createManager());
+
+        auto* layout = createTestLayout(QStringLiteral("Manual"));
+        mgr->addLayout(layout);
+        QString layoutId = layout->id().toString();
+
+        // Write old-format assignments.json
+        QString layoutDir = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts");
+        QString jsonPath = layoutDir + QStringLiteral("/assignments.json");
+
+        QJsonObject root;
+        QJsonArray assignments;
+        {
+            // Active: autotile:wide on DP-1, desktop 0
+            QJsonObject obj;
+            obj[JsonKeys::ScreenId] = QStringLiteral("DP-1");
+            obj[JsonKeys::Desktop] = 0;
+            obj[JsonKeys::LayoutId] = QStringLiteral("autotile:wide");
+            assignments.append(obj);
+        }
+        root[JsonKeys::Assignments] = assignments;
+
+        // Shadow: the snapping layout that was active before toggling to autotile
+        QJsonArray shadows;
+        {
+            QJsonObject shadow;
+            shadow[JsonKeys::ScreenId] = QStringLiteral("DP-1");
+            shadow[JsonKeys::Desktop] = 0;
+            shadow[JsonKeys::LayoutId] = layoutId;
+            shadows.append(shadow);
+        }
+        root[QStringLiteral("shadowedAssignments")] = shadows;
+
+        QFile file(jsonPath);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(QJsonDocument(root).toJson());
+        file.close();
+
+        // Load — should migrate
+        mgr->loadAssignments();
+
+        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, AssignmentEntry::Autotile);
+        QCOMPARE(entry.tilingAlgorithm, QStringLiteral("wide"));
+        // Shadow should be merged into snappingLayout field
+        QCOMPARE(entry.snappingLayout, layoutId);
+
+        // Old file should be renamed to .migrated
+        QVERIFY(!QFile::exists(jsonPath));
+        QVERIFY(QFile::exists(jsonPath + QStringLiteral(".migrated")));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // P6: Migration from old [ModeTracking] KConfig group
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testMigration_modeTrackingGroup_fillsMissingFields()
+    {
+        QScopedPointer<LayoutManager> mgr(createManager());
+
+        auto* layout = createTestLayout(QStringLiteral("Manual"));
+        mgr->addLayout(layout);
+        QString layoutId = layout->id().toString();
+
+        // Pre-populate KConfig with an Assignment entry that has autotile but no snappingLayout
+        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
+        {
+            KConfigGroup grp = config->group(QStringLiteral("Assignment:DP-1"));
+            grp.writeEntry(QStringLiteral("Mode"), 1); // Autotile
+            grp.writeEntry(QStringLiteral("TilingAlgorithm"), QStringLiteral("dwindle"));
+            // SnappingLayout intentionally empty
+        }
+        // Write old ModeTracking group with the manual layout ID
+        {
+            KConfigGroup mt = config->group(QStringLiteral("ModeTracking"));
+            mt.writeEntry(QStringLiteral("LastManualLayoutId"), layoutId);
+            mt.writeEntry(QStringLiteral("LastAutotileAlgorithm"), QStringLiteral("wide"));
+            mt.writeEntry(QStringLiteral("LastTilingMode"), 1);
+        }
+        config->sync();
+
+        mgr->loadAssignments();
+
+        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, AssignmentEntry::Autotile);
+        QCOMPARE(entry.tilingAlgorithm, QStringLiteral("dwindle")); // Existing value preserved
+        QCOMPARE(entry.snappingLayout, layoutId); // Filled from ModeTracking
+
+        // ModeTracking group should be deleted
+        config->reparseConfiguration();
+        QVERIFY(!config->hasGroup(QStringLiteral("ModeTracking")));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // P6: AssignmentEntry::fromLayoutId static factory
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testAssignmentEntry_fromLayoutId_autotile()
+    {
+        auto entry = AssignmentEntry::fromLayoutId(QStringLiteral("autotile:wide"));
+        QCOMPARE(entry.mode, AssignmentEntry::Autotile);
+        QCOMPARE(entry.tilingAlgorithm, QStringLiteral("wide"));
+        QVERIFY(entry.snappingLayout.isEmpty());
+    }
+
+    void testAssignmentEntry_fromLayoutId_snapping()
+    {
+        QString uuid = QUuid::createUuid().toString();
+        auto entry = AssignmentEntry::fromLayoutId(uuid);
+        QCOMPARE(entry.mode, AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, uuid);
+        QVERIFY(entry.tilingAlgorithm.isEmpty());
+    }
+
+    void testAssignmentEntry_fromLayoutId_preservesExisting()
+    {
+        AssignmentEntry existing;
+        existing.mode = AssignmentEntry::Autotile;
+        existing.tilingAlgorithm = QStringLiteral("dwindle");
+        existing.snappingLayout = QStringLiteral("{some-uuid}");
+
+        // Flip to snapping — should preserve tilingAlgorithm
+        auto entry = AssignmentEntry::fromLayoutId(QStringLiteral("{new-uuid}"), existing);
+        QCOMPARE(entry.mode, AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, QStringLiteral("{new-uuid}"));
+        QCOMPARE(entry.tilingAlgorithm, QStringLiteral("dwindle")); // preserved
     }
 };
 

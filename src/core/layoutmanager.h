@@ -5,35 +5,13 @@
 
 #include "layout.h"
 #include "interfaces.h"
+#include "assignmententry.h"
 #include <QHash>
 #include <QSet>
 #include <QUuid>
 #include <QString>
 
 namespace PlasmaZones {
-
-/**
- * @brief Key for layout assignment (screen + desktop + activity)
- */
-struct LayoutAssignmentKey
-{
-    QString screenId; // Stable EDID-based identifier (or connector name fallback)
-    int virtualDesktop = 0; // 0 = all desktops
-    QString activity; // Empty = all activities
-
-    bool operator==(const LayoutAssignmentKey& other) const
-    {
-        return screenId == other.screenId && virtualDesktop == other.virtualDesktop && activity == other.activity;
-    }
-};
-
-inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
-{
-    seed = ::qHash(key.screenId, seed);
-    seed = ::qHash(key.virtualDesktop, seed);
-    seed = ::qHash(key.activity, seed);
-    return seed;
-}
 
 /**
  * @brief Manages all layouts and their assignments to screens/desktops
@@ -134,10 +112,36 @@ public:
                                   const QString& activity = QString()) const;
 
     /**
+     * @brief Get the full AssignmentEntry for a screen/desktop/activity
+     * @note Same fallback cascade as layoutForScreen() but returns the full entry
+     */
+    AssignmentEntry assignmentEntryForScreen(const QString& screenId, int virtualDesktop = 0,
+                                             const QString& activity = QString()) const;
+
+    /**
+     * @brief Get the mode (Snapping or Autotile) for a context
+     */
+    AssignmentEntry::Mode modeForScreen(const QString& screenId, int virtualDesktop = 0,
+                                        const QString& activity = QString()) const;
+
+    /**
+     * @brief Get the snapping layout UUID for a context (regardless of mode)
+     */
+    QString snappingLayoutForScreen(const QString& screenId, int virtualDesktop = 0,
+                                    const QString& activity = QString()) const;
+
+    /**
+     * @brief Get the tiling algorithm ID for a context (regardless of mode)
+     */
+    QString tilingAlgorithmForScreen(const QString& screenId, int virtualDesktop = 0,
+                                     const QString& activity = QString()) const;
+
+    /**
      * @brief Clear all autotile assignments (when feature gate is disabled)
      *
-     * Removes all assignments whose value starts with "autotile:" prefix.
-     * Emits layoutAssigned for each affected screen and saves once at end.
+     * Flips mode to Snapping for all entries that are in Autotile mode.
+     * Preserves snappingLayout field. Emits layoutAssigned for each
+     * affected screen and saves once at end.
      */
     void clearAutotileAssignments();
 
@@ -227,7 +231,7 @@ Q_SIGNALS:
     void layoutAdded(Layout* layout);
     void layoutRemoved(Layout* layout);
     void activeLayoutChanged(Layout* layout);
-    void layoutAssigned(const QString& screenId, Layout* layout);
+    void layoutAssigned(const QString& screenId, int virtualDesktop, Layout* layout);
     void layoutDirectoryChanged();
     void layoutsLoaded();
     void layoutsSaved();
@@ -239,16 +243,15 @@ private:
     QString layoutFilePath(const QUuid& id) const;
     Layout* cycleLayoutImpl(const QString& screenId, int direction);
     bool shouldSkipLayoutAssignment(const QString& layoutId, const QString& context) const;
-    void emitLayoutAssigned(const QString& screenId, const QString& layoutId);
+    void emitLayoutAssigned(const QString& screenId, int virtualDesktop, const QString& layoutId);
     QJsonObject loadAllAutotileOverrides() const;
     void saveAllAutotileOverrides(const QJsonObject& all);
-
     ISettings* m_settings = nullptr;
     QString m_layoutDirectory;
     QVector<Layout*> m_layouts;
     Layout* m_activeLayout = nullptr;
     Layout* m_previousLayout = nullptr; ///< Layout active before last setActiveLayout (for resnap)
-    QHash<LayoutAssignmentKey, QString> m_assignments;
+    QHash<LayoutAssignmentKey, AssignmentEntry> m_assignments;
     QHash<int, QString> m_quickLayoutShortcuts; // number -> layout ID
     int m_currentVirtualDesktop = 1;
     QString m_currentActivity;

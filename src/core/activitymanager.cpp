@@ -85,10 +85,8 @@ bool ActivityManager::init()
                         Q_EMIT currentActivityChanged(m_currentActivity);
                     }
 
-                    // Update layout if we're running
-                    if (m_running) {
-                        updateActiveLayout();
-                    }
+                    // Layout resolution is handled by the daemon's
+                    // syncModeFromAssignments() via currentActivityChanged signal.
                 } else if (!m_activitiesAvailable && wasAvailable) {
                     qCWarning(lcCore) << "KActivities service stopped";
                     m_currentActivity.clear();
@@ -133,7 +131,7 @@ void ActivityManager::start()
 #ifdef KACTIVITIES_AVAILABLE
     m_running = true;
     connectSignals();
-    updateActiveLayout();
+    // Layout resolution is handled by the daemon via currentActivityChanged signal.
 #endif
 }
 
@@ -204,7 +202,6 @@ void ActivityManager::onCurrentActivityChanged(const QString& activityId)
     m_currentActivity = activityId;
     qCInfo(lcCore) << "Activity changed activity=" << activityId << "name=" << activityName(activityId);
 
-    updateActiveLayout();
     Q_EMIT currentActivityChanged(activityId);
 }
 
@@ -246,39 +243,8 @@ void ActivityManager::disconnectSignals()
 #endif
 }
 
-void ActivityManager::updateActiveLayout()
-{
-    if (!m_layoutManager || !m_activitiesAvailable || m_currentActivity.isEmpty()) {
-        return;
-    }
-
-    // Get primary screen name
-    const auto* screen = qGuiApp->primaryScreen();
-    if (!screen) {
-        return;
-    }
-
-    // Get current virtual desktop from VirtualDesktopManager if available
-    // Consider activity + desktop combination
-    int currentDesktop = 0;
-    if (m_virtualDesktopManager) {
-        currentDesktop = m_virtualDesktopManager->currentDesktop();
-    }
-
-    // Find layout for current screen, desktop, and activity
-    // LayoutManager::layoutForScreen has fallback logic:
-    // 1. Exact match (screen + desktop + activity)
-    // 2. Screen + desktop (any activity)
-    // 3. Screen only (any desktop, any activity)
-    // 4. Active layout (global fallback)
-    auto* layout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), currentDesktop, m_currentActivity);
-
-    if (layout && layout != m_layoutManager->activeLayout()) {
-        qCInfo(lcCore) << "Switching to layout" << layout->name() << "for activity" << activityName(m_currentActivity)
-                       << "(" << m_currentActivity << ")"
-                       << "desktop" << currentDesktop << "on screen" << screen->name();
-        m_layoutManager->setActiveLayout(layout);
-    }
-}
+// NOTE: updateActiveLayout() was removed — layout resolution is handled exclusively
+// by the daemon's syncModeFromAssignments() which understands autotile vs snapping mode.
+// ActivityManager only tracks activity state and emits signals.
 
 } // namespace PlasmaZones

@@ -4,15 +4,14 @@
 #pragma once
 
 #include "../core/constants.h"
-#include "../core/layout.h"
+#include "../core/layoutmanager.h"
 #include <QObject>
-#include <QPointer>
 #include <QString>
-#include <QUuid>
 
 namespace PlasmaZones {
 
 class Settings;
+class LayoutManager;
 
 /**
  * @brief Tiling mode: manual zone layouts or automatic tiling algorithms
@@ -23,82 +22,75 @@ enum class TilingMode {
 };
 
 /**
- * @brief Tracks the last-used manual layout, tiling mode, and autotile algorithm.
+ * @brief Thin convenience wrapper over LayoutManager's per-context AssignmentEntry.
  *
- * Provides smart toggle between manual and autotile modes, persisting state
- * across sessions via KConfig.
+ * All state queries delegate to LayoutManager::assignmentEntryForScreen().
+ * Mutation methods write to AssignmentEntry directly. No global [ModeTracking]
+ * KConfig group is used — per-context state lives in [Assignment:*] groups.
+ *
+ * Callers must set the current context (screen, desktop, activity) before
+ * querying or mutating state.
  */
 class ModeTracker : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QString lastManualLayoutId READ lastManualLayoutId)
     Q_PROPERTY(TilingMode currentMode READ currentMode NOTIFY currentModeChanged)
-    Q_PROPERTY(QString lastAutotileAlgorithm READ lastAutotileAlgorithm NOTIFY lastAutotileAlgorithmChanged)
 
 public:
-    explicit ModeTracker(Settings* settings, QObject* parent = nullptr);
+    explicit ModeTracker(Settings* settings, LayoutManager* layoutManager, QObject* parent = nullptr);
     ~ModeTracker() override;
 
+    /**
+     * @brief Set the context for subsequent queries/mutations
+     */
+    void setContext(const QString& screenId, int desktop, const QString& activity);
+
     // ═══════════════════════════════════════════════════════════════════════════
-    // Current mode
+    // Current mode (reads from AssignmentEntry for current context)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    TilingMode currentMode() const
-    {
-        return m_currentMode;
-    }
-    void setCurrentMode(TilingMode mode);
-
+    TilingMode currentMode() const;
     bool isAutotileMode() const
     {
-        return m_currentMode == TilingMode::Autotile;
+        return currentMode() == TilingMode::Autotile;
     }
     bool isManualMode() const
     {
-        return m_currentMode == TilingMode::Manual;
+        return currentMode() == TilingMode::Manual;
     }
 
     /**
-     * @brief Toggle between Manual and Autotile modes
-     * @return The new mode after toggling
+     * @brief Check if any screen on the current desktop is in autotile mode
      */
-    TilingMode toggleMode();
+    bool isAnyScreenAutotile() const;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Layout tracking
+    // Layout tracking (reads from AssignmentEntry for current context)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    QString lastManualLayoutId() const
+    QString lastManualLayoutId() const;
+    QString lastAutotileAlgorithm() const;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Persistence (no-ops — state lives in LayoutManager's KConfig)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void load()
     {
-        return m_lastManualLayoutId;
     }
-    void recordManualLayout(const QString& layoutId);
-    void recordManualLayout(const QUuid& layoutId);
-
-    QString lastAutotileAlgorithm() const
+    void save()
     {
-        return m_lastAutotileAlgorithm;
     }
-    void recordAutotileAlgorithm(const QString& algorithmId);
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Persistence
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    void load();
-    void save();
 
 Q_SIGNALS:
     void currentModeChanged(TilingMode mode);
-    void lastAutotileAlgorithmChanged(const QString& algorithmId);
-    void modeToggled(TilingMode newMode);
 
 private:
-    QPointer<Settings> m_settings;
-    TilingMode m_currentMode = TilingMode::Manual;
-    bool m_toggling = false; // Re-entrance guard for toggleMode()
-    QString m_lastManualLayoutId;
-    QString m_lastAutotileAlgorithm = QString(DBus::AutotileAlgorithm::BSP);
+    Settings* m_settings = nullptr;
+    LayoutManager* m_layoutManager = nullptr;
+    QString m_screenId;
+    int m_desktop = 0;
+    QString m_activity;
 };
 
 } // namespace PlasmaZones

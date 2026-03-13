@@ -2066,7 +2066,7 @@ bool PlasmaZonesEffect::isWindowSticky(KWin::EffectWindow* w) const
 
 void PlasmaZonesEffect::updateWindowStickyState(KWin::EffectWindow* w)
 {
-    if (!w || !ensureWindowTrackingReady("update sticky state")) {
+    if (!w || !m_daemonServiceRegistered) {
         return;
     }
 
@@ -2076,7 +2076,13 @@ void PlasmaZonesEffect::updateWindowStickyState(KWin::EffectWindow* w)
     }
 
     bool sticky = isWindowSticky(w);
-    m_windowTrackingInterface->asyncCall(QStringLiteral("setWindowSticky"), windowId, sticky);
+    // Use fire-and-forget instead of QDBusInterface to avoid synchronous D-Bus
+    // introspection. slotWindowAdded → updateWindowStickyState fires for every
+    // window during login; QDBusInterface creation blocks the compositor thread
+    // for ~25s if the daemon hasn't entered app.exec() yet (daemonReady is
+    // emitted before the event loop starts).
+    fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("setWindowSticky"), {windowId, sticky},
+                          QStringLiteral("setWindowSticky"));
 }
 
 void PlasmaZonesEffect::callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods,

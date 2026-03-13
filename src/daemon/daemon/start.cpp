@@ -16,6 +16,9 @@
 #include "../../dbus/layoutadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include "../../autotile/AutotileEngine.h"
+#include "../../autotile/AlgorithmRegistry.h"
+#include "../../autotile/TilingAlgorithm.h"
+#include "../config/settings.h"
 #include <QGuiApplication>
 #include <QScreen>
 
@@ -113,17 +116,55 @@ void Daemon::connectDesktopActivity()
         if (m_unifiedLayoutController) {
             m_unifiedLayoutController->setCurrentVirtualDesktop(desktop);
         }
+        // Set engine's desktop context BEFORE updateAutotileScreens() so it
+        // resolves TilingStates for the correct desktop. Without this, the
+        // engine would look up/create states under the OLD desktop's key.
+        if (m_autotileEngine) {
+            m_autotileEngine->setCurrentDesktop(desktop);
+        }
         // Per-desktop assignments may differ — recompute autotile screens
         updateAutotileScreens();
+        // Sync mode, layout filter, and controller state from per-desktop assignments.
+        // This ensures ModeTracker, layout filter, and cycling index reflect the
+        // new desktop — not the old one's global state.
+        syncModeFromAssignments();
         if (m_overlayService->isVisible()) {
             m_overlayService->updateGeometries();
         }
+
+        showDesktopSwitchOsd(desktop, currentActivity());
+    });
+
+    // Prune stale TilingState entries when desktops are removed
+    connect(m_virtualDesktopManager.get(), &VirtualDesktopManager::desktopCountChanged, this, [this](int newCount) {
+        if (!m_autotileEngine) {
+            return;
+        }
+        // Desktop numbers are 1-based. Any state with desktop > newCount is stale.
+        // Iterate the engine's own state map to find stale desktops (avoids
+        // the arbitrary upper bound of the old newCount+20 sweep).
+        QSet<int> staleDesktops;
+        for (auto it = m_autotileEngine->screenStates().constBegin(); it != m_autotileEngine->screenStates().constEnd();
+             ++it) {
+            if (it.key().desktop > newCount) {
+                staleDesktops.insert(it.key().desktop);
+            }
+        }
+        for (int d : staleDesktops) {
+            m_autotileEngine->pruneStatesForDesktop(d);
+        }
+        // Prune fallback assignment maps
+        pruneContextMapsForDesktop(newCount);
     });
 
     // Set initial virtual desktop on components that maintain their own copy
     // (WindowDragAdaptor reads from LayoutManager directly via resolveLayoutForScreen())
     const int initialDesktop = m_virtualDesktopManager->currentDesktop();
     m_overlayService->setCurrentVirtualDesktop(initialDesktop);
+    m_layoutManager->setCurrentVirtualDesktop(initialDesktop);
+    if (m_autotileEngine) {
+        m_autotileEngine->setCurrentDesktop(initialDesktop);
+    }
 
     // Initialize and start activity manager
     // Connect to VirtualDesktopManager for desktop+activity coordinate lookup
@@ -132,8 +173,24 @@ void Daemon::connectDesktopActivity()
     if (ActivityManager::isAvailable()) {
         m_activityManager->start();
 
+        // Prune stale TilingState entries when activities are added/removed
+        connect(m_activityManager.get(), &ActivityManager::activitiesChanged, this, [this]() {
+            if (!m_autotileEngine || !m_activityManager) {
+                return;
+            }
+            const QStringList activities = m_activityManager->activities();
+            m_autotileEngine->pruneStatesForActivities(activities);
+            const QSet<QString> validSet(activities.begin(), activities.end());
+            pruneContextMapsForActivities(validSet);
+        });
+
         // Set initial activity on components that maintain their own copy
-        m_overlayService->setCurrentActivity(m_activityManager->currentActivity());
+        const QString initialActivity = m_activityManager->currentActivity();
+        m_overlayService->setCurrentActivity(initialActivity);
+        m_layoutManager->setCurrentActivity(initialActivity);
+        if (m_autotileEngine) {
+            m_autotileEngine->setCurrentActivity(initialActivity);
+        }
 
         // Connect activity changes: update all components
         connect(m_activityManager.get(), &ActivityManager::currentActivityChanged, this,
@@ -143,11 +200,19 @@ void Daemon::connectDesktopActivity()
                     if (m_unifiedLayoutController) {
                         m_unifiedLayoutController->setCurrentActivity(activityId);
                     }
+                    // Set engine's activity context BEFORE updateAutotileScreens()
+                    if (m_autotileEngine) {
+                        m_autotileEngine->setCurrentActivity(activityId);
+                    }
                     // Per-activity assignments may differ — recompute autotile screens
                     updateAutotileScreens();
+                    // Sync mode, layout filter, and controller state from per-activity assignments.
+                    syncModeFromAssignments();
                     if (m_overlayService->isVisible()) {
                         m_overlayService->updateGeometries();
                     }
+
+                    showDesktopSwitchOsd(currentDesktop(), activityId);
                 });
     }
 }
@@ -289,6 +354,30 @@ void Daemon::connectShortcutSignals()
             m_windowTrackingAdaptor->resnapToNewLayout();
         }
     });
+}
+
+void Daemon::pruneContextMapsForDesktop(int maxDesktop)
+{
+    auto it = m_lastAutotileOrders.begin();
+    while (it != m_lastAutotileOrders.end()) {
+        if (it.key().desktop > maxDesktop) {
+            it = m_lastAutotileOrders.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void Daemon::pruneContextMapsForActivities(const QSet<QString>& validActivities)
+{
+    auto it = m_lastAutotileOrders.begin();
+    while (it != m_lastAutotileOrders.end()) {
+        if (!it.key().activity.isEmpty() && !validActivities.contains(it.key().activity)) {
+            it = m_lastAutotileOrders.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 } // namespace PlasmaZones

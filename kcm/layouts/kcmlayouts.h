@@ -27,7 +27,8 @@ class KCMLayouts : public KQuickConfigModule
     // Settings needed by LayoutsTab / LayoutGridDelegate / LayoutToolbar
     Q_PROPERTY(QString defaultLayoutId READ defaultLayoutId WRITE setDefaultLayoutId NOTIFY defaultLayoutIdChanged)
     Q_PROPERTY(bool autotileEnabled READ autotileEnabled NOTIFY autotileEnabledChanged)
-    Q_PROPERTY(QString autotileAlgorithm READ autotileAlgorithm NOTIFY autotileAlgorithmChanged)
+    Q_PROPERTY(
+        QString autotileAlgorithm READ autotileAlgorithm WRITE setAutotileAlgorithm NOTIFY autotileAlgorithmChanged)
 
     // Font properties for LayoutThumbnail zone number labels
     Q_PROPERTY(QString labelFontFamily READ labelFontFamily NOTIFY labelFontFamilyChanged)
@@ -53,6 +54,7 @@ public:
     void setDefaultLayoutId(const QString& layoutId);
     bool autotileEnabled() const;
     QString autotileAlgorithm() const;
+    void setAutotileAlgorithm(const QString& algorithm);
 
     // Font (read-only — edited in Snapping KCM)
     QString labelFontFamily() const;

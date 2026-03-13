@@ -277,7 +277,7 @@ Kirigami.Card {
                                         return hasExplicit ? (root.kcm.getTilingLayoutForScreenDesktop(monitorDelegate.screenName, desktopNumber) || "") : "";
                                     } else {
                                         let hasExplicit = root.kcm.hasExplicitAssignmentForScreenDesktop(monitorDelegate.screenName, desktopNumber);
-                                        return hasExplicit ? (root.kcm.getLayoutForScreenDesktop(monitorDelegate.screenName, desktopNumber) || "") : "";
+                                        return hasExplicit ? (root.kcm.getSnappingLayoutForScreenDesktop(monitorDelegate.screenName, desktopNumber) || "") : "";
                                     }
                                 }
                                 onAssignmentSelected: (layoutId) => {

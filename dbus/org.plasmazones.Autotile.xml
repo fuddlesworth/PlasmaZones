@@ -165,6 +165,9 @@
             <arg name="screenNames" type="as">
                 <annotation name="org.gtk.GDBus.DocString" value="List of screen names currently using autotile."/>
             </arg>
+            <arg name="isDesktopSwitch" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="True if the change is due to desktop/activity switch (effect should skip geometry restore/re-notification)."/>
+            </arg>
         </signal>
 
         <signal name="algorithmChanged">

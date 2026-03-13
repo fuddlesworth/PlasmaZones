@@ -95,7 +95,7 @@ KCMAssignments::KCMAssignments(QObject* parent, const KPluginMetaData& data)
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager),
                                           QStringLiteral("screenLayoutChanged"), m_assignmentManager.get(),
-                                          SLOT(onScreenLayoutChanged(QString, QString)));
+                                          SLOT(onScreenLayoutChanged(QString, QString, int)));
 
     // Listen for quick layout slot changes
     QDBusConnection::sessionBus().connect(
@@ -306,6 +306,11 @@ QString KCMAssignments::getLayoutForScreenDesktop(const QString& screenName, int
     return m_assignmentManager->getLayoutForScreenDesktop(screenName, virtualDesktop);
 }
 
+QString KCMAssignments::getSnappingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
+{
+    return m_assignmentManager->getSnappingLayoutForScreenDesktop(screenName, virtualDesktop);
+}
+
 bool KCMAssignments::hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
     return m_assignmentManager->hasExplicitAssignmentForScreenDesktop(screenName, virtualDesktop);
@@ -350,6 +355,11 @@ void KCMAssignments::clearScreenActivityAssignment(const QString& screenName, co
 QString KCMAssignments::getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
 {
     return m_assignmentManager->getLayoutForScreenActivity(screenName, activityId);
+}
+
+QString KCMAssignments::getSnappingLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
+{
+    return m_assignmentManager->getSnappingLayoutForScreenActivity(screenName, activityId);
 }
 
 bool KCMAssignments::hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const

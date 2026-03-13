@@ -13,6 +13,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QStandardPaths>
+#include <KConfigGroup>
+#include <KSharedConfig>
 #include <algorithm>
 
 namespace PlasmaZones {
@@ -224,154 +226,325 @@ void LayoutManager::saveLayouts()
 
 void LayoutManager::loadAssignments()
 {
-    const QString filePath = m_layoutDirectory + QStringLiteral("/assignments.json");
-    QFile file(filePath);
+    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
+    config->reparseConfiguration();
+    const QStringList allGroups = config->groupList();
 
-    if (!file.exists()) {
-        qCInfo(lcLayout) << "Assignments file does not exist, using defaults:" << filePath;
-        return;
-    }
+    // ── Primary path: read from [Assignment:*] KConfig groups ──────────────
+    const QLatin1String assignmentPrefix("Assignment:");
+    bool foundKConfigGroups = false;
 
-    if (!file.open(QIODevice::ReadOnly)) {
-        qCWarning(lcLayout) << "Failed to open assignments file:" << filePath << "Error:" << file.errorString();
-        return;
-    }
-
-    const QByteArray data = file.readAll();
-    if (data.isEmpty()) {
-        qCWarning(lcLayout) << "Assignments file is empty:" << filePath;
-        return;
-    }
-
-    QJsonParseError parseError;
-    const auto doc = QJsonDocument::fromJson(data, &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qCWarning(lcLayout) << "Failed to parse assignments file:" << filePath << "Error:" << parseError.errorString()
-                            << "at offset" << parseError.offset;
-        return;
-    }
-
-    const auto root = doc.object();
-
-    // Load assignments with error handling
-    const auto assignmentsArray = root[JsonKeys::Assignments].toArray();
-    for (const auto& value : assignmentsArray) {
-        if (!value.isObject()) {
-            qCWarning(lcLayout) << "Invalid assignment entry (not an object), skipping";
+    for (const QString& groupName : allGroups) {
+        if (!groupName.startsWith(assignmentPrefix))
             continue;
+
+        foundKConfigGroups = true;
+        // Parse group name: Assignment:screenId[:Desktop:N][:Activity:id]
+        QString remainder = groupName.mid(assignmentPrefix.size());
+        if (remainder.isEmpty())
+            continue;
+
+        QString screenId;
+        int virtualDesktop = 0;
+        QString activity;
+
+        // Extract :Activity:id suffix first (activity IDs contain colons in UUIDs)
+        int actIdx = remainder.indexOf(QLatin1String(":Activity:"));
+        if (actIdx >= 0) {
+            activity = remainder.mid(actIdx + 10); // len(":Activity:") = 10
+            remainder = remainder.left(actIdx);
         }
 
-        const auto obj = value.toObject();
-        // Prefer screenId (EDID-based); fall back to screen (connector name) for legacy configs
-        QString sid = obj[JsonKeys::ScreenId].toString();
-        if (sid.isEmpty()) {
-            sid = obj[JsonKeys::Screen].toString();
+        // Extract :Desktop:N suffix
+        int deskIdx = remainder.indexOf(QLatin1String(":Desktop:"));
+        if (deskIdx >= 0) {
+            bool ok = false;
+            virtualDesktop = remainder.mid(deskIdx + 9).toInt(&ok); // len(":Desktop:") = 9
+            if (!ok)
+                virtualDesktop = 0;
+            remainder = remainder.left(deskIdx);
         }
-        LayoutAssignmentKey key{sid, obj[JsonKeys::Desktop].toInt(), obj[JsonKeys::Activity].toString()};
 
-        const QString layoutIdStr = obj[JsonKeys::LayoutId].toString();
+        screenId = remainder;
+        if (screenId.isEmpty())
+            continue;
 
-        if (LayoutId::isAutotile(layoutIdStr)) {
-            // Autotile IDs are stored as-is
-            m_assignments[key] = layoutIdStr;
-        } else {
-            // Validate UUID format
-            const QUuid uuid = QUuid::fromString(layoutIdStr);
-            if (uuid.isNull()) {
-                qCWarning(lcLayout) << "Invalid layout ID in assignment:" << layoutIdStr << "skipping";
-                continue;
-            }
-            // Normalize to braced UUID format for consistent comparison
-            m_assignments[key] = uuid.toString();
+        KConfigGroup grp = config->group(groupName);
+        AssignmentEntry entry;
+        int modeInt = grp.readEntry(QStringLiteral("Mode"), 0);
+        entry.mode = (modeInt == AssignmentEntry::Autotile) ? AssignmentEntry::Autotile : AssignmentEntry::Snapping;
+        entry.snappingLayout = grp.readEntry(QStringLiteral("SnappingLayout"), QString());
+        entry.tilingAlgorithm = grp.readEntry(QStringLiteral("TilingAlgorithm"), QString());
+
+        if (entry.isValid()) {
+            LayoutAssignmentKey key{screenId, virtualDesktop, activity};
+            m_assignments[key] = entry;
         }
     }
 
-    // Load quick shortcuts with error handling
-    const auto shortcutsObj = root[JsonKeys::QuickShortcuts].toObject();
-    for (auto it = shortcutsObj.begin(); it != shortcutsObj.end(); ++it) {
-        bool ok = false;
-        const int number = it.key().toInt(&ok);
-        if (!ok) {
-            qCWarning(lcLayout) << "Invalid shortcut number:" << it.key() << "skipping";
-            continue;
-        }
-
-        const QString layoutIdStr = it.value().toString();
-
-        if (LayoutId::isAutotile(layoutIdStr)) {
-            m_quickLayoutShortcuts[number] = layoutIdStr;
-        } else {
-            const QUuid uuid = QUuid::fromString(layoutIdStr);
-            if (uuid.isNull()) {
-                qCWarning(lcLayout) << "Invalid layout ID in shortcut:" << layoutIdStr << "skipping";
-                continue;
+    // ── Quick layout shortcuts from [QuickLayouts] group ───────────────────
+    {
+        KConfigGroup quickGroup = config->group(QStringLiteral("QuickLayouts"));
+        if (quickGroup.exists()) {
+            const QStringList keys = quickGroup.keyList();
+            for (const QString& key : keys) {
+                bool ok = false;
+                int number = key.toInt(&ok);
+                if (!ok)
+                    continue;
+                QString layoutId = quickGroup.readEntry(key, QString());
+                if (!layoutId.isEmpty())
+                    m_quickLayoutShortcuts[number] = layoutId;
             }
-            m_quickLayoutShortcuts[number] = uuid.toString();
+        }
+    }
+
+    // ── Migration fallback: read from assignments.json (one-time) ──────────
+    if (!foundKConfigGroups) {
+        const QString filePath = m_layoutDirectory + QStringLiteral("/assignments.json");
+        QFile file(filePath);
+
+        if (file.exists() && file.open(QIODevice::ReadOnly)) {
+            const QByteArray data = file.readAll();
+            if (!data.isEmpty()) {
+                QJsonParseError parseError;
+                const auto doc = QJsonDocument::fromJson(data, &parseError);
+                if (parseError.error == QJsonParseError::NoError) {
+                    const auto root = doc.object();
+                    qCInfo(lcLayout) << "Migrating assignments from JSON to KConfig";
+
+                    // Load shadowed assignments from old format
+                    QHash<LayoutAssignmentKey, QString> oldShadows;
+                    const auto shadowArray = root[QStringLiteral("shadowedAssignments")].toArray();
+                    for (const auto& value : shadowArray) {
+                        if (!value.isObject())
+                            continue;
+                        const auto obj = value.toObject();
+                        QString sid = obj[JsonKeys::ScreenId].toString();
+                        if (sid.isEmpty())
+                            sid = obj[JsonKeys::Screen].toString();
+                        LayoutAssignmentKey key{sid, obj[JsonKeys::Desktop].toInt(),
+                                                obj[JsonKeys::Activity].toString()};
+                        const QString layoutIdStr = obj[JsonKeys::LayoutId].toString();
+                        if (!layoutIdStr.isEmpty())
+                            oldShadows[key] = layoutIdStr;
+                    }
+
+                    // Load assignments
+                    const auto assignmentsArray = root[JsonKeys::Assignments].toArray();
+                    for (const auto& value : assignmentsArray) {
+                        if (!value.isObject())
+                            continue;
+                        const auto obj = value.toObject();
+                        QString sid = obj[JsonKeys::ScreenId].toString();
+                        if (sid.isEmpty())
+                            sid = obj[JsonKeys::Screen].toString();
+                        LayoutAssignmentKey key{sid, obj[JsonKeys::Desktop].toInt(),
+                                                obj[JsonKeys::Activity].toString()};
+
+                        AssignmentEntry entry;
+                        if (obj.contains(QStringLiteral("mode"))) {
+                            // Already in new explicit format
+                            int modeInt = obj[QStringLiteral("mode")].toInt();
+                            entry.mode = (modeInt == AssignmentEntry::Autotile) ? AssignmentEntry::Autotile
+                                                                                : AssignmentEntry::Snapping;
+                            entry.snappingLayout = obj[QStringLiteral("snappingLayout")].toString();
+                            entry.tilingAlgorithm = obj[QStringLiteral("tilingAlgorithm")].toString();
+                        } else {
+                            // Old single layoutId format
+                            const QString layoutIdStr = obj[JsonKeys::LayoutId].toString();
+                            QString normalizedId = layoutIdStr;
+                            if (!LayoutId::isAutotile(layoutIdStr)) {
+                                const QUuid uuid = QUuid::fromString(layoutIdStr);
+                                if (uuid.isNull())
+                                    continue;
+                                normalizedId = uuid.toString();
+                            }
+                            entry = AssignmentEntry::fromLayoutId(normalizedId);
+
+                            // Merge shadow into opposite field
+                            auto shadowIt = oldShadows.constFind(key);
+                            if (shadowIt != oldShadows.constEnd()) {
+                                if (entry.mode == AssignmentEntry::Autotile
+                                    && !LayoutId::isAutotile(shadowIt.value())) {
+                                    entry.snappingLayout = shadowIt.value();
+                                } else if (entry.mode == AssignmentEntry::Snapping
+                                           && LayoutId::isAutotile(shadowIt.value())) {
+                                    entry.tilingAlgorithm = LayoutId::extractAlgorithmId(shadowIt.value());
+                                }
+                            }
+                        }
+
+                        if (entry.isValid())
+                            m_assignments[key] = entry;
+                    }
+
+                    // Load quick shortcuts from JSON (migration)
+                    if (m_quickLayoutShortcuts.isEmpty()) {
+                        const auto shortcutsObj = root[JsonKeys::QuickShortcuts].toObject();
+                        for (auto it = shortcutsObj.begin(); it != shortcutsObj.end(); ++it) {
+                            bool ok = false;
+                            const int number = it.key().toInt(&ok);
+                            if (!ok)
+                                continue;
+                            const QString layoutIdStr = it.value().toString();
+                            if (LayoutId::isAutotile(layoutIdStr)) {
+                                m_quickLayoutShortcuts[number] = layoutIdStr;
+                            } else {
+                                const QUuid uuid = QUuid::fromString(layoutIdStr);
+                                if (!uuid.isNull())
+                                    m_quickLayoutShortcuts[number] = uuid.toString();
+                            }
+                        }
+                    }
+
+                    // Migrate activity-keyed per-desktop entries
+                    {
+                        QList<LayoutAssignmentKey> toRemove;
+                        QHash<LayoutAssignmentKey, AssignmentEntry> toAdd;
+                        for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
+                            const LayoutAssignmentKey& key = it.key();
+                            if (key.virtualDesktop > 0 && !key.activity.isEmpty()) {
+                                LayoutAssignmentKey emptyActivityKey{key.screenId, key.virtualDesktop, QString()};
+                                if (!m_assignments.contains(emptyActivityKey) && !toAdd.contains(emptyActivityKey)) {
+                                    toAdd[emptyActivityKey] = it.value();
+                                }
+                                toRemove.append(key);
+                            }
+                        }
+                        for (const auto& key : toRemove)
+                            m_assignments.remove(key);
+                        for (auto it = toAdd.constBegin(); it != toAdd.constEnd(); ++it)
+                            m_assignments[it.key()] = it.value();
+                        if (!toRemove.isEmpty()) {
+                            qCInfo(lcLayout) << "Migrated" << toRemove.size()
+                                             << "activity-keyed per-desktop assignments to empty-activity";
+                        }
+                    }
+
+                    // Write migrated data to KConfig immediately
+                    saveAssignments();
+                    qCInfo(lcLayout) << "Migration from assignments.json complete";
+
+                    // Rename old file so it isn't re-read on next startup
+                    file.close();
+                    QFile::rename(filePath, filePath + QStringLiteral(".migrated"));
+                }
+            }
+        }
+    }
+
+    // ── Migrate [ModeTracking] into base screen entries ──────────────────────
+    // Old ModeTracker stored a global LastTilingMode, LastManualLayoutId, and
+    // LastAutotileAlgorithm. If base screen entries exist but lack the opposite
+    // field (e.g. mode=Autotile but snappingLayout is empty), fill from legacy.
+    {
+        KConfigGroup modeGroup = config->group(QStringLiteral("ModeTracking"));
+        if (modeGroup.exists()) {
+            const QString lastManualId = modeGroup.readEntry(QStringLiteral("LastManualLayoutId"), QString());
+            const QString lastAlgorithm = modeGroup.readEntry(QStringLiteral("LastAutotileAlgorithm"), QString());
+            bool migrated = false;
+
+            for (auto it = m_assignments.begin(); it != m_assignments.end(); ++it) {
+                if (it.key().virtualDesktop != 0 || !it.key().activity.isEmpty())
+                    continue; // Only base screen entries
+                AssignmentEntry& entry = it.value();
+                if (entry.snappingLayout.isEmpty() && !lastManualId.isEmpty()) {
+                    entry.snappingLayout = lastManualId;
+                    migrated = true;
+                }
+                if (entry.tilingAlgorithm.isEmpty() && !lastAlgorithm.isEmpty()) {
+                    entry.tilingAlgorithm = lastAlgorithm;
+                    migrated = true;
+                }
+            }
+
+            // Delete the old group
+            modeGroup.deleteGroup();
+            config->sync();
+
+            if (migrated) {
+                saveAssignments();
+                qCInfo(lcLayout) << "Migrated [ModeTracking] into base screen entries";
+            } else {
+                qCInfo(lcLayout) << "Cleaned up obsolete [ModeTracking] group";
+            }
+        }
+    }
+
+    // ── Clean up other obsolete KConfig groups ──────────────────────────────
+    {
+        bool cleaned = false;
+        const QStringList currentGroups = config->groupList();
+        for (const QString& groupName : currentGroups) {
+            if (groupName.startsWith(QLatin1String("TilingScreen:"))
+                || groupName.startsWith(QLatin1String("TilingActivity:"))
+                || groupName.startsWith(QLatin1String("TilingDesktop:"))) {
+                config->deleteGroup(groupName);
+                cleaned = true;
+            }
+        }
+        if (cleaned) {
+            config->sync();
+            qCInfo(lcLayout) << "Cleaned up obsolete TilingScreen/TilingActivity/TilingDesktop KConfig groups";
         }
     }
 
     qCInfo(lcLayout) << "Loaded assignments=" << m_assignments.size()
                      << "quickShortcuts=" << m_quickLayoutShortcuts.size();
     for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
-        Layout* layout = LayoutId::isAutotile(it.value()) ? nullptr : layoutById(QUuid::fromString(it.value()));
-        QString layoutName =
-            layout ? layout->name() : (LayoutId::isAutotile(it.value()) ? it.value() : QStringLiteral("(unknown)"));
+        const AssignmentEntry& entry = it.value();
         qCDebug(lcLayout) << "Assignment screenId=" << it.key().screenId << "desktop=" << it.key().virtualDesktop
                           << "activity=" << (it.key().activity.isEmpty() ? QStringLiteral("(all)") : it.key().activity)
-                          << "layout=" << layoutName;
+                          << "mode=" << static_cast<int>(entry.mode) << "snapping=" << entry.snappingLayout
+                          << "tiling=" << entry.tilingAlgorithm;
     }
 }
 
 void LayoutManager::saveAssignments()
 {
-    ensureLayoutDirectory();
+    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
 
-    QJsonObject root;
-
-    // Save assignments (write both screenId and screen for backward compat)
-    QJsonArray assignmentsArray;
-    for (auto it = m_assignments.begin(); it != m_assignments.end(); ++it) {
-        QJsonObject obj;
-        obj[JsonKeys::ScreenId] = it.key().screenId;
-        // Write connector name for backward compat and debugging
-        QString connectorName = Utils::screenNameForId(it.key().screenId);
-        obj[JsonKeys::Screen] = connectorName.isEmpty() ? it.key().screenId : connectorName;
-        obj[JsonKeys::Desktop] = it.key().virtualDesktop;
-        obj[JsonKeys::Activity] = it.key().activity;
-        obj[JsonKeys::LayoutId] = it.value();
-        assignmentsArray.append(obj);
-    }
-    root[JsonKeys::Assignments] = assignmentsArray;
-
-    // Save quick shortcuts
-    QJsonObject shortcutsObj;
-    for (auto it = m_quickLayoutShortcuts.begin(); it != m_quickLayoutShortcuts.end(); ++it) {
-        shortcutsObj[QString::number(it.key())] = it.value();
-    }
-    root[JsonKeys::QuickShortcuts] = shortcutsObj;
-
-    const QString filePath = m_layoutDirectory + QStringLiteral("/assignments.json");
-    QFile file(filePath);
-
-    if (!file.open(QIODevice::WriteOnly)) {
-        qCWarning(lcLayout) << "Failed to open assignments file for writing:" << filePath
-                            << "Error:" << file.errorString();
-        return;
+    // Delete old Assignment:* groups
+    const QStringList allGroups = config->groupList();
+    for (const QString& groupName : allGroups) {
+        if (groupName.startsWith(QLatin1String("Assignment:"))) {
+            config->deleteGroup(groupName);
+        }
     }
 
-    QJsonDocument doc(root);
-    const QByteArray data = doc.toJson(QJsonDocument::Indented);
+    // Write [Assignment:*] groups
+    for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
+        const LayoutAssignmentKey& key = it.key();
+        const AssignmentEntry& entry = it.value();
 
-    if (file.write(data) != data.size()) {
-        qCWarning(lcLayout) << "Failed to write assignments file:" << filePath << "Error:" << file.errorString();
-        return;
+        // Build group name: Assignment:screenId[:Desktop:N][:Activity:id]
+        QString groupName = QStringLiteral("Assignment:") + key.screenId;
+        if (key.virtualDesktop > 0) {
+            groupName += QStringLiteral(":Desktop:") + QString::number(key.virtualDesktop);
+        }
+        if (!key.activity.isEmpty()) {
+            groupName += QStringLiteral(":Activity:") + key.activity;
+        }
+
+        KConfigGroup group = config->group(groupName);
+        group.writeEntry(QStringLiteral("Mode"), static_cast<int>(entry.mode));
+        group.writeEntry(QStringLiteral("SnappingLayout"), entry.snappingLayout);
+        group.writeEntry(QStringLiteral("TilingAlgorithm"), entry.tilingAlgorithm);
     }
 
-    if (!file.flush()) {
-        qCWarning(lcLayout) << "Failed to flush assignments file:" << filePath << "Error:" << file.errorString();
+    // Write [QuickLayouts] group
+    {
+        KConfigGroup quickGroup = config->group(QStringLiteral("QuickLayouts"));
+        quickGroup.deleteGroup();
+        for (auto it = m_quickLayoutShortcuts.constBegin(); it != m_quickLayoutShortcuts.constEnd(); ++it) {
+            quickGroup.writeEntry(QString::number(it.key()), it.value());
+        }
     }
 
-    qCInfo(lcLayout) << "Saved assignments to:" << filePath;
+    config->sync();
+    qCInfo(lcLayout) << "Saved assignments=" << m_assignments.size()
+                     << "quickShortcuts=" << m_quickLayoutShortcuts.size() << "to KConfig";
 }
 
 void LayoutManager::importLayout(const QString& filePath)

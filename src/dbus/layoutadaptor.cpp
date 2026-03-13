@@ -69,17 +69,21 @@ void LayoutAdaptor::onLayoutsChanged()
     Q_EMIT layoutListChanged();
 }
 
-void LayoutAdaptor::onLayoutAssigned(const QString& screen, Layout* layout)
+void LayoutAdaptor::onLayoutAssigned(const QString& screen, int virtualDesktop, Layout* layout)
 {
     if (layout) {
-        Q_EMIT screenLayoutChanged(screen, layout->id().toString());
+        Q_EMIT screenLayoutChanged(screen, layout->id().toString(), virtualDesktop);
     } else {
-        // layout is nullptr for autotile assignments or cleared assignments
-        // Try to retrieve the raw assignment ID for the signal
-        int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-        QString activity = m_activityManager ? m_activityManager->currentActivity() : QString();
+        // layout is nullptr for autotile assignments or cleared assignments.
+        // Resolve the assignment ID at the EXACT level that changed:
+        // - virtualDesktop > 0: per-desktop change → resolve at that desktop
+        // - virtualDesktop == 0: base/display-default change → resolve at base (desktop=0)
+        // Using currentDesktop() for base changes would leak per-desktop entries
+        // into the display-default signal, causing the KCM to show wrong values.
+        int desktop = virtualDesktop;
+        QString activity = (virtualDesktop > 0 && m_activityManager) ? m_activityManager->currentActivity() : QString();
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screen, desktop, activity);
-        Q_EMIT screenLayoutChanged(screen, assignmentId);
+        Q_EMIT screenLayoutChanged(screen, assignmentId, virtualDesktop);
     }
 }
 

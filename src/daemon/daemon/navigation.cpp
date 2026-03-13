@@ -5,6 +5,7 @@
 #include "helpers.h"
 #include "macros.h"
 #include "../overlayservice.h"
+#include "../unifiedlayoutcontroller.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../core/screenmanager.h"
@@ -221,30 +222,28 @@ void Daemon::handleRetile()
 
 void Daemon::resnapIfManualMode()
 {
-    // Only resnap for manual layouts — autotile handles its own retile.
-    // Resnapping during autotile uses a stale buffer from the old snap-mode
-    // layout, sending competing geometry D-Bus signals to the effect.
-    if (m_snapEngine && !(m_modeTracker && m_modeTracker->isAutotileMode())) {
-        m_suppressResnapOsd = 1;
-        m_snapEngine->resnapToNewLayout();
+    if (!m_snapEngine) {
+        return;
     }
-}
-
-QString Daemon::resolveAlgorithmId() const
-{
-    if (m_modeTracker) {
-        QString algoId = m_modeTracker->lastAutotileAlgorithm();
-        if (!algoId.isEmpty()) {
-            return algoId;
+    // Only skip resnap when the current screen is in autotile mode.
+    // Per-desktop assignments mean some screens can be autotile while
+    // others are manual — a global check would block manual resnaps.
+    if (m_autotileEngine && m_unifiedLayoutController) {
+        const QString screenId = m_unifiedLayoutController->currentScreenName();
+        if (screenId.isEmpty()) {
+            return; // No screen context — can't determine mode, skip resnap
+        }
+        // Convert screen ID to connector name for autotile engine lookup
+        QString connectorName = Utils::screenNameForId(screenId);
+        if (connectorName.isEmpty()) {
+            connectorName = screenId; // already a connector name
+        }
+        if (m_autotileEngine->isAutotileScreen(connectorName)) {
+            return; // This screen is autotile — engine handles retile
         }
     }
-    if (m_settings) {
-        QString algoId = m_settings->autotileAlgorithm();
-        if (!algoId.isEmpty()) {
-            return algoId;
-        }
-    }
-    return AlgorithmRegistry::defaultAlgorithmId();
+    m_suppressResnapOsd = 1;
+    m_snapEngine->resnapToNewLayout();
 }
 
 } // namespace PlasmaZones

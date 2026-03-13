@@ -8,6 +8,7 @@
 #include <QStringList>
 
 class QDBusInterface;
+class QDBusMessage;
 
 namespace PlasmaZones {
 
@@ -67,13 +68,6 @@ public:
      */
     QStringList desktopNames() const;
 
-public Q_SLOTS:
-    /**
-     * @brief Update the active layout for the current desktop
-     * Called when assignments change to refresh the overlay display
-     */
-    void updateActiveLayout();
-
 Q_SIGNALS:
     /**
      * @brief Emitted when virtual desktop changes
@@ -99,6 +93,7 @@ private:
     void connectSignals();
     void disconnectSignals();
     void initKWinDBus();
+    void applyDesktopListReply(const QDBusMessage& reply, const QString& currentId);
 
     LayoutManager* m_layoutManager = nullptr;
     QDBusInterface* m_kwinVDInterface = nullptr;

@@ -159,6 +159,15 @@ QString KCMLayouts::autotileAlgorithm() const
     return m_settings->autotileAlgorithm();
 }
 
+void KCMLayouts::setAutotileAlgorithm(const QString& algorithm)
+{
+    if (m_settings->autotileAlgorithm() != algorithm) {
+        m_settings->setAutotileAlgorithm(algorithm);
+        Q_EMIT autotileAlgorithmChanged();
+        setNeedsSave(true);
+    }
+}
+
 // Font properties (read-only — edited in Snapping KCM)
 QString KCMLayouts::labelFontFamily() const
 {

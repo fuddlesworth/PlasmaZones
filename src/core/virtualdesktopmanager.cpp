@@ -83,6 +83,72 @@ void VirtualDesktopManager::initKWinDBus()
     }
 }
 
+void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply, const QString& currentId)
+{
+    m_desktopNames.clear();
+    m_desktopIds.clear();
+
+    struct DesktopInfo
+    {
+        int position;
+        QString id;
+        QString name;
+    };
+    QList<DesktopInfo> desktops;
+
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+        QVariant outerVariant = reply.arguments().at(0);
+        QDBusVariant dbusVariant = outerVariant.value<QDBusVariant>();
+        QVariant innerVariant = dbusVariant.variant();
+
+        if (innerVariant.userType() == qMetaTypeId<QDBusArgument>()) {
+            const QDBusArgument& arg = *static_cast<const QDBusArgument*>(innerVariant.constData());
+
+            arg.beginArray();
+            while (!arg.atEnd()) {
+                DesktopInfo info;
+                arg.beginStructure();
+                arg >> info.position >> info.id >> info.name;
+                arg.endStructure();
+                desktops.append(info);
+            }
+            arg.endArray();
+
+            std::sort(desktops.begin(), desktops.end(), [](const DesktopInfo& a, const DesktopInfo& b) {
+                return a.position < b.position;
+            });
+
+            for (const auto& desktop : desktops) {
+                m_desktopIds.append(desktop.id);
+                QString name = desktop.name;
+                if (name.isEmpty()) {
+                    name = QStringLiteral("Desktop %1").arg(desktop.position + 1);
+                }
+                m_desktopNames.append(name);
+                qCDebug(lcCore) << "Desktop" << (desktop.position + 1) << "id=" << desktop.id << "name=" << name;
+            }
+        }
+    } else {
+        qCWarning(lcCore) << "Failed to get virtual desktops:" << reply.errorMessage();
+    }
+
+    if (!m_desktopIds.isEmpty() && m_desktopIds.size() != m_desktopCount) {
+        m_desktopCount = m_desktopIds.size();
+    }
+
+    if (!currentId.isEmpty() && !m_desktopIds.isEmpty()) {
+        int idx = m_desktopIds.indexOf(currentId);
+        if (idx >= 0) {
+            m_currentDesktop = idx + 1;
+            qCDebug(lcCore) << "Current desktop=" << m_currentDesktop << "id=" << currentId;
+        }
+    }
+
+    while (m_desktopNames.size() < m_desktopCount) {
+        m_desktopNames.append(QStringLiteral("Desktop %1").arg(m_desktopNames.size() + 1));
+    }
+}
+
 void VirtualDesktopManager::refreshFromKWin()
 {
     if (!m_kwinVDInterface || !m_kwinVDInterface->isValid()) {
@@ -108,16 +174,21 @@ void VirtualDesktopManager::refreshFromKWin()
     }
 
     // desktops property - array of structs (position, id, name)
-    // Use raw D-Bus message to avoid QDBusInterface::property() triggering type conversion warnings
-    // Use ASYNC call to avoid blocking the main thread during startup
     QDBusMessage getDesktopsMsg =
         QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
                                        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
     getDesktopsMsg << QStringLiteral("org.kde.KWin.VirtualDesktopManager") << QStringLiteral("desktops");
 
+    // On first call (during init), use synchronous D-Bus so m_currentDesktop is
+    // set before any downstream code reads it. Subsequent calls (signal-triggered
+    // desktop add/remove) use async to avoid blocking the main thread.
+    if (!m_running) {
+        QDBusMessage reply = QDBusConnection::sessionBus().call(getDesktopsMsg, QDBus::Block, 1000);
+        applyDesktopListReply(reply, currentId);
+        return;
+    }
+
     // Increment generation to invalidate any pending callbacks from previous refreshFromKWin() calls
-    // This prevents race conditions when refreshFromKWin() is called rapidly (e.g., multiple desktop
-    // created/removed signals in quick succession)
     ++m_refreshGeneration;
     const uint thisGeneration = m_refreshGeneration;
 
@@ -126,7 +197,6 @@ void VirtualDesktopManager::refreshFromKWin()
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this, currentId, thisGeneration](QDBusPendingCallWatcher* w) {
-                // Check if this callback is stale (a newer refresh was started)
                 if (thisGeneration != m_refreshGeneration) {
                     qCDebug(lcCore) << "Ignoring stale virtual desktop refresh callback";
                     w->deleteLater();
@@ -134,78 +204,7 @@ void VirtualDesktopManager::refreshFromKWin()
                 }
 
                 QDBusPendingReply<QDBusVariant> reply = *w;
-
-                // Clear and prepare for new data
-                m_desktopNames.clear();
-                m_desktopIds.clear();
-
-                // Store (position, id, name) tuples for sorting
-                struct DesktopInfo
-                {
-                    int position;
-                    QString id;
-                    QString name;
-                };
-                QList<DesktopInfo> desktops;
-
-                if (reply.isValid()) {
-                    // The reply is a QDBusVariant containing the actual value
-                    // We need to carefully extract without triggering type conversion issues
-                    const QDBusVariant& dbusVariant = reply.value();
-                    const QVariant& innerVariant = dbusVariant.variant();
-
-                    if (innerVariant.userType() == qMetaTypeId<QDBusArgument>()) {
-                        const QDBusArgument& arg = *static_cast<const QDBusArgument*>(innerVariant.constData());
-
-                        // Parse array of structs manually using const reference
-                        arg.beginArray();
-                        while (!arg.atEnd()) {
-                            DesktopInfo info;
-                            arg.beginStructure();
-                            arg >> info.position >> info.id >> info.name;
-                            arg.endStructure();
-                            desktops.append(info);
-                        }
-                        arg.endArray();
-
-                        // Sort by position
-                        std::sort(desktops.begin(), desktops.end(), [](const DesktopInfo& a, const DesktopInfo& b) {
-                            return a.position < b.position;
-                        });
-
-                        for (const auto& desktop : desktops) {
-                            m_desktopIds.append(desktop.id);
-                            QString name = desktop.name;
-                            if (name.isEmpty()) {
-                                name = QStringLiteral("Desktop %1").arg(desktop.position + 1);
-                            }
-                            m_desktopNames.append(name);
-                            qCDebug(lcCore)
-                                << "Desktop" << (desktop.position + 1) << "id=" << desktop.id << "name=" << name;
-                        }
-                    }
-                } else {
-                    qCWarning(lcCore) << "Failed to get virtual desktops:" << reply.error().message();
-                }
-
-                // Update count if desktops property gave us more accurate info
-                if (!m_desktopIds.isEmpty() && m_desktopIds.size() != m_desktopCount) {
-                    m_desktopCount = m_desktopIds.size();
-                }
-
-                // Convert current UUID to 1-based position
-                if (!currentId.isEmpty() && !m_desktopIds.isEmpty()) {
-                    int idx = m_desktopIds.indexOf(currentId);
-                    if (idx >= 0) {
-                        m_currentDesktop = idx + 1; // Convert to 1-based
-                        qCDebug(lcCore) << "Current desktop=" << m_currentDesktop << "id=" << currentId;
-                    }
-                }
-
-                // Fallback if we couldn't get names
-                while (m_desktopNames.size() < m_desktopCount) {
-                    m_desktopNames.append(QStringLiteral("Desktop %1").arg(m_desktopNames.size() + 1));
-                }
+                applyDesktopListReply(reply.reply(), currentId);
 
                 w->deleteLater();
             });
@@ -224,7 +223,6 @@ void VirtualDesktopManager::onKWinCurrentChanged(const QString& desktopId)
     m_currentDesktop = newDesktop;
     qCInfo(lcCore) << "Virtual desktop changed desktop=" << m_currentDesktop << "id=" << desktopId;
 
-    updateActiveLayout();
     Q_EMIT currentDesktopChanged(m_currentDesktop);
 }
 
@@ -255,8 +253,8 @@ void VirtualDesktopManager::start()
     } else {
         m_currentDesktop = currentDesktop();
     }
-
-    updateActiveLayout();
+    // Layout resolution is handled by the daemon's syncModeFromAssignments()
+    // via the currentDesktopChanged signal — no direct layout switching here.
 }
 
 void VirtualDesktopManager::stop()
@@ -312,7 +310,6 @@ void VirtualDesktopManager::onCurrentDesktopChanged(int desktop)
     m_currentDesktop = desktop;
     qCInfo(lcCore) << "Virtual desktop changed to:" << desktop;
 
-    updateActiveLayout();
     Q_EMIT currentDesktopChanged(desktop);
 }
 
@@ -333,7 +330,8 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
     // Ensure current desktop is still valid
     if (m_currentDesktop > count) {
         m_currentDesktop = count;
-        updateActiveLayout();
+        // Layout resolution happens via currentDesktopChanged signal to daemon
+        Q_EMIT currentDesktopChanged(m_currentDesktop);
     }
 
     Q_EMIT desktopCountChanged(count);
@@ -374,28 +372,8 @@ void VirtualDesktopManager::disconnectSignals()
     // Note: KWin D-Bus signals stay connected for lifetime
 }
 
-void VirtualDesktopManager::updateActiveLayout()
-{
-    if (!m_layoutManager) {
-        return;
-    }
-
-    // Get primary screen name
-    const auto* screen = qGuiApp->primaryScreen();
-    if (!screen) {
-        return;
-    }
-
-    // Find layout for current screen and desktop
-    // Note: We use screen name and current desktop, activity is empty (all activities)
-    // ActivityManager handles activity-specific layouts separately
-    auto* layout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), m_currentDesktop, QString());
-
-    if (layout && layout != m_layoutManager->activeLayout()) {
-        qCInfo(lcCore) << "Switching to layout" << layout->name() << "for desktop" << m_currentDesktop << "on screen"
-                       << screen->name();
-        m_layoutManager->setActiveLayout(layout);
-    }
-}
+// NOTE: updateActiveLayout() was removed — layout resolution is handled exclusively
+// by the daemon's syncModeFromAssignments() which understands autotile vs snapping mode.
+// VirtualDesktopManager only tracks desktop state and emits signals.
 
 } // namespace PlasmaZones

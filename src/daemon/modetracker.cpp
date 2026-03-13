@@ -3,131 +3,74 @@
 
 #include "modetracker.h"
 
-#include <KConfigGroup>
-#include <KSharedConfig>
-
 #include "../config/settings.h"
 #include "../core/constants.h"
+#include "../core/layoutmanager.h"
 #include "../core/logging.h"
+#include "../core/utils.h"
+#include <QGuiApplication>
+#include <QScreen>
 
 namespace PlasmaZones {
 
-ModeTracker::ModeTracker(Settings* settings, QObject* parent)
+ModeTracker::ModeTracker(Settings* settings, LayoutManager* layoutManager, QObject* parent)
     : QObject(parent)
     , m_settings(settings)
+    , m_layoutManager(layoutManager)
 {
 }
 
 ModeTracker::~ModeTracker() = default;
 
-void ModeTracker::setCurrentMode(TilingMode mode)
+void ModeTracker::setContext(const QString& screenId, int desktop, const QString& activity)
 {
-    if (m_currentMode == mode) {
-        return;
-    }
-
-    m_currentMode = mode;
-    // Immediate save: mode changes are infrequent (user-initiated) and the data is
-    // critical for correct session restore, so we write synchronously rather than
-    // debouncing. KSharedConfig internally buffers writes.
-    save();
-    Q_EMIT currentModeChanged(mode);
-    qCInfo(lcDaemon) << "Mode changed to" << (mode == TilingMode::Autotile ? "Autotile" : "Manual");
+    m_screenId = screenId;
+    m_desktop = desktop;
+    m_activity = activity;
 }
 
-// toggleMode() emits two signals with distinct purposes:
-//   - modeToggled:       action-oriented, indicates the user explicitly toggled
-//   - currentModeChanged: state-oriented (emitted by setCurrentMode), reports the new state
-// Slots connected to currentModeChanged must NOT call toggleMode() recursively,
-// as this would cause infinite re-entrance through setCurrentMode -> emit -> toggle.
-// The m_toggling guard prevents this at runtime.
-TilingMode ModeTracker::toggleMode()
+TilingMode ModeTracker::currentMode() const
 {
-    if (m_toggling) {
-        return m_currentMode;
+    if (!m_layoutManager || m_screenId.isEmpty()) {
+        return TilingMode::Manual;
     }
-    m_toggling = true;
-    TilingMode newMode = (m_currentMode == TilingMode::Manual) ? TilingMode::Autotile : TilingMode::Manual;
-    setCurrentMode(newMode);
-    Q_EMIT modeToggled(newMode);
-    m_toggling = false;
-    return newMode;
+    auto mode = m_layoutManager->modeForScreen(m_screenId, m_desktop, m_activity);
+    return (mode == AssignmentEntry::Autotile) ? TilingMode::Autotile : TilingMode::Manual;
 }
 
-void ModeTracker::recordManualLayout(const QString& layoutId)
+bool ModeTracker::isAnyScreenAutotile() const
 {
-    if (layoutId.isEmpty()) {
-        return;
+    if (!m_layoutManager) {
+        return false;
     }
-
-    if (m_lastManualLayoutId != layoutId) {
-        m_lastManualLayoutId = layoutId;
-        // Immediate save: mode changes are infrequent (user-initiated) and the data is
-        // critical for correct session restore, so we write synchronously rather than
-        // debouncing. KSharedConfig internally buffers writes.
-        save();
-        qCInfo(lcDaemon) << "Recorded manual layout=" << layoutId;
+    for (QScreen* screen : Utils::allScreens()) {
+        const QString screenId = Utils::screenIdentifier(screen);
+        const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, m_desktop, m_activity);
+        if (LayoutId::isAutotile(assignmentId)) {
+            return true;
+        }
     }
+    return false;
 }
 
-void ModeTracker::recordManualLayout(const QUuid& layoutId)
+QString ModeTracker::lastManualLayoutId() const
 {
-    recordManualLayout(layoutId.toString());
+    if (!m_layoutManager || m_screenId.isEmpty()) {
+        return {};
+    }
+    return m_layoutManager->snappingLayoutForScreen(m_screenId, m_desktop, m_activity);
 }
 
-void ModeTracker::recordAutotileAlgorithm(const QString& algorithmId)
+QString ModeTracker::lastAutotileAlgorithm() const
 {
-    if (algorithmId.isEmpty()) {
-        return;
+    if (!m_layoutManager || m_screenId.isEmpty()) {
+        return m_settings ? m_settings->autotileAlgorithm() : QString(DBus::AutotileAlgorithm::BSP);
     }
-
-    if (m_lastAutotileAlgorithm != algorithmId) {
-        m_lastAutotileAlgorithm = algorithmId;
-        Q_EMIT lastAutotileAlgorithmChanged(algorithmId);
-        // Immediate save: mode changes are infrequent (user-initiated) and the data is
-        // critical for correct session restore, so we write synchronously rather than
-        // debouncing. KSharedConfig internally buffers writes.
-        save();
-        qCInfo(lcDaemon) << "Recorded autotile algorithm=" << algorithmId;
+    QString algo = m_layoutManager->tilingAlgorithmForScreen(m_screenId, m_desktop, m_activity);
+    if (algo.isEmpty() && m_settings) {
+        algo = m_settings->autotileAlgorithm();
     }
-}
-
-void ModeTracker::load()
-{
-    if (!m_settings) {
-        qCWarning(lcDaemon) << "ModeTracker::load() called without settings";
-        return;
-    }
-
-    KSharedConfig::Ptr config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup group = config->group(QStringLiteral("ModeTracking"));
-
-    m_lastManualLayoutId = group.readEntry(QStringLiteral("LastManualLayoutId"), QString());
-    const int rawMode = group.readEntry(QStringLiteral("LastTilingMode"), 0);
-    m_currentMode = (rawMode == 1) ? TilingMode::Autotile : TilingMode::Manual;
-    m_lastAutotileAlgorithm =
-        group.readEntry(QStringLiteral("LastAutotileAlgorithm"), QString(DBus::AutotileAlgorithm::BSP));
-
-    qCDebug(lcDaemon) << "ModeTracker loaded mode=" << static_cast<int>(m_currentMode)
-                      << "lastLayout=" << m_lastManualLayoutId << "lastAlgorithm=" << m_lastAutotileAlgorithm;
-}
-
-void ModeTracker::save()
-{
-    if (!m_settings) {
-        qCWarning(lcDaemon) << "ModeTracker::save() called without settings";
-        return;
-    }
-
-    KSharedConfig::Ptr config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup group = config->group(QStringLiteral("ModeTracking"));
-
-    group.writeEntry(QStringLiteral("LastManualLayoutId"), m_lastManualLayoutId);
-    group.writeEntry(QStringLiteral("LastTilingMode"), static_cast<int>(m_currentMode));
-    group.writeEntry(QStringLiteral("LastAutotileAlgorithm"), m_lastAutotileAlgorithm);
-
-    config->sync();
-    qCDebug(lcDaemon) << "ModeTracker saved";
+    return algo.isEmpty() ? QString(DBus::AutotileAlgorithm::BSP) : algo;
 }
 
 } // namespace PlasmaZones

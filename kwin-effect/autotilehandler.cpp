@@ -300,6 +300,12 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
         return;
     }
 
+    // Only notify windows on the current desktop/activity — prevents windows from
+    // other desktops being added to the autotile engine on desktop switch.
+    if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+        return;
+    }
+
     const QString windowId = m_effect->getWindowId(w);
 
     // Window was already closed before we could notify open — skip (D-Bus ordering race)
@@ -364,6 +370,7 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
 
     // Remove from autotile tracking sets so re-opened windows get re-notified.
     m_notifiedWindows.remove(windowId);
+    m_savedNotifiedForDesktopReturn.remove(windowId);
     m_minimizeFloatedWindows.remove(windowId);
 
     // Clean up borderless, monocle-maximize, deferred-centering, border zone, focus-follows-mouse,
@@ -400,6 +407,7 @@ void AutotileHandler::onDaemonReady()
     loadSettings();
     connectSignals();
     m_notifiedWindows.clear();
+    m_savedNotifiedForDesktopReturn.clear();
     m_pendingCloses.clear();
 }
 
@@ -424,7 +432,7 @@ void AutotileHandler::connectSignals()
                 SLOT(slotEnabledChanged(bool)));
 
     bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
-                QStringLiteral("autotileScreensChanged"), this, SLOT(slotScreensChanged(QStringList)));
+                QStringLiteral("autotileScreensChanged"), this, SLOT(slotScreensChanged(QStringList, bool)));
 
     bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("windowFloatingChanged"),
                 this, SLOT(slotWindowFloatingChanged(QString, bool, QString)));
@@ -454,6 +462,11 @@ void AutotileHandler::loadSettings()
                 const auto windows = KWin::effects->stackingOrder();
                 for (KWin::EffectWindow* win : windows) {
                     if (win && m_effect->shouldHandleWindow(win)) {
+                        // Only process windows on the current desktop/activity
+                        // (prevents cross-desktop geometry pollution on daemon restart)
+                        if (!win->isOnCurrentDesktop() || !win->isOnCurrentActivity()) {
+                            continue;
+                        }
                         const QString screenName = m_effect->getWindowScreenName(win);
                         if (added.contains(screenName)) {
                             const QString windowId = m_effect->getWindowId(win);

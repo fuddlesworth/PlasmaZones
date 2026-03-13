@@ -63,9 +63,7 @@ void WindowTrackingAdaptor::saveState()
     // Save zone assignments with full windowIds (appId|uuid) to preserve multi-instance
     // distinction. On daemon-only restart (KWin still running), UUIDs are stable so
     // exact matching prevents restoring the wrong instance of a multi-instance app.
-    // Also save appId-keyed format as fallback for KWin restarts (UUIDs change).
     QJsonArray fullAssignments;
-    QJsonObject assignmentsObj;
     for (auto it = m_service->zoneAssignments().constBegin(); it != m_service->zoneAssignments().constEnd(); ++it) {
         QJsonObject entry;
         entry[QLatin1String("windowId")] = it.key();
@@ -73,35 +71,9 @@ void WindowTrackingAdaptor::saveState()
         entry[QLatin1String("screen")] = Utils::screenIdForName(m_service->screenAssignments().value(it.key()));
         entry[QLatin1String("desktop")] = m_service->desktopAssignments().value(it.key(), 0);
         fullAssignments.append(entry);
-
-        QString appId = Utils::extractAppId(it.key());
-        assignmentsObj[appId] = toJsonArray(it.value());
     }
     tracking.writeEntry(QStringLiteral("WindowZoneAssignmentsFull"),
                         QString::fromUtf8(QJsonDocument(fullAssignments).toJson(QJsonDocument::Compact)));
-    tracking.writeEntry(QStringLiteral("WindowZoneAssignments"),
-                        QString::fromUtf8(QJsonDocument(assignmentsObj).toJson(QJsonDocument::Compact)));
-
-    // Save screen assignments (translate connector names to stable screen IDs for persistence)
-    QJsonObject screenAssignmentsObj;
-    for (auto it = m_service->screenAssignments().constBegin(); it != m_service->screenAssignments().constEnd(); ++it) {
-        QString appId = Utils::extractAppId(it.key());
-        screenAssignmentsObj[appId] = Utils::screenIdForName(it.value());
-    }
-    tracking.writeEntry(QStringLiteral("WindowScreenAssignments"),
-                        QString::fromUtf8(QJsonDocument(screenAssignmentsObj).toJson(QJsonDocument::Compact)));
-
-    // Save active desktop assignments (for cross-restart persistence)
-    QJsonObject desktopAssignmentsObj;
-    for (auto it = m_service->desktopAssignments().constBegin(); it != m_service->desktopAssignments().constEnd();
-         ++it) {
-        if (it.value() > 0) {
-            QString appId = Utils::extractAppId(it.key());
-            desktopAssignmentsObj[appId] = it.value();
-        }
-    }
-    tracking.writeEntry(QStringLiteral("WindowDesktopAssignments"),
-                        QString::fromUtf8(QJsonDocument(desktopAssignmentsObj).toJson(QJsonDocument::Compact)));
 
     // Save pending restore queues as JSON: appId -> array of entry objects
     // Each entry: {zoneIds: [...], screen: "...", desktop: N, layout: "...", zoneNumbers: [...]}
@@ -137,11 +109,14 @@ void WindowTrackingAdaptor::saveState()
     tracking.writeEntry(QStringLiteral("PendingRestoreQueues"),
                         QString::fromUtf8(QJsonDocument(pendingQueuesObj).toJson(QJsonDocument::Compact)));
 
-    // Clean up obsolete keys from old format
+    // Clean up obsolete keys from old formats
     tracking.deleteEntry(QStringLiteral("PendingWindowScreenAssignments"));
     tracking.deleteEntry(QStringLiteral("PendingWindowDesktopAssignments"));
     tracking.deleteEntry(QStringLiteral("PendingWindowLayoutAssignments"));
     tracking.deleteEntry(QStringLiteral("PendingWindowZoneNumbers"));
+    tracking.deleteEntry(QStringLiteral("WindowZoneAssignments"));
+    tracking.deleteEntry(QStringLiteral("WindowScreenAssignments"));
+    tracking.deleteEntry(QStringLiteral("WindowDesktopAssignments"));
 
     // Save pre-tile geometries so float-toggle restores to the correct position
     // even after daemon restart (windows stay at their zone positions across restarts).
@@ -195,8 +170,7 @@ void WindowTrackingAdaptor::saveState()
 
     config->sync();
     qCInfo(lcDbusWindow) << "Saved state to KConfig:"
-                         << "zones=" << assignmentsObj.size() << "screens=" << screenAssignmentsObj.size()
-                         << "desktops=" << desktopAssignmentsObj.size() << "pending=" << pendingQueuesObj.size()
+                         << "zones=" << fullAssignments.size() << "pending=" << pendingQueuesObj.size()
                          << "preTile=" << m_service->preTileGeometries().size()
                          << "preFloat=" << preFloatZonesObj.size() << "userSnapped=" << userSnappedArray.size();
 }
@@ -245,18 +219,20 @@ void WindowTrackingAdaptor::loadState()
         return storedScreen;
     };
 
-    // Phase 1: Load active zone assignments
+    // Pending entries derived from active assignments (fallback for KWin restarts where
+    // UUIDs change). Collected separately from persisted pending queues so we can do
+    // count-based merging — prevents exponential growth while preserving multi-instance entries.
+    QHash<QString, QList<PendingRestore>> activePending;
+
     // Try full-windowId format first (preserves multi-instance distinction)
     QHash<QString, QStringList> fullZones;
     QHash<QString, QString> fullScreens;
     QHash<QString, int> fullDesktops;
-    bool hasFullFormat = false;
 
     QString fullJson = tracking.readEntry(QStringLiteral("WindowZoneAssignmentsFull"), QString());
     if (!fullJson.isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(fullJson.toUtf8());
         if (doc.isArray()) {
-            hasFullFormat = true;
             for (const QJsonValue& val : doc.array()) {
                 if (!val.isObject()) {
                     continue;
@@ -282,67 +258,28 @@ void WindowTrackingAdaptor::loadState()
                 fullScreens[windowId] = screen;
                 fullDesktops[windowId] = desktop;
 
-                // Also build appId-keyed pending queue as fallback for KWin restarts
+                // Also build appId-keyed pending entries as fallback for KWin restarts
                 // (UUIDs change, so exact matches won't work). For daemon-only restarts,
                 // calculateRestoreFromSession() guards against wrong-instance consumption.
+                // Collected separately — merged after loading persisted queues to prevent duplication.
                 QString appId = Utils::extractAppId(windowId);
                 PendingRestore pending;
                 pending.zoneIds = zoneIds;
                 pending.screenName = screen;
                 pending.virtualDesktop = desktop;
-                pendingQueues[appId].append(pending);
+                activePending[appId].append(pending);
             }
         }
     }
 
-    if (hasFullFormat) {
-        // Load exact assignments so isWindowSnapped() returns true for daemon-only restarts.
-        // calculateRestoreFromSession() checks for exact-match siblings before allowing
-        // FIFO consumption, preventing wrong-instance restore for multi-instance apps.
-        m_service->setActiveAssignments(fullZones, fullScreens, fullDesktops);
-    } else {
-        // Legacy format: appId-keyed (no multi-instance distinction)
-        QHash<QString, QStringList> activeZones =
-            parseZoneListMap(tracking.readEntry(QStringLiteral("WindowZoneAssignments"), QString()));
+    // Load exact assignments so isWindowSnapped() returns true for daemon-only restarts.
+    // calculateRestoreFromSession() checks for exact-match siblings before allowing
+    // FIFO consumption, preventing wrong-instance restore for multi-instance apps.
+    m_service->setActiveAssignments(fullZones, fullScreens, fullDesktops);
 
-        QHash<QString, QString> activeScreens;
-        QString activeScreensJson = tracking.readEntry(QStringLiteral("WindowScreenAssignments"), QString());
-        if (!activeScreensJson.isEmpty()) {
-            QJsonDocument doc = QJsonDocument::fromJson(activeScreensJson.toUtf8());
-            if (doc.isObject()) {
-                QJsonObject obj = doc.object();
-                for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-                    if (it.value().isString() && !it.value().toString().isEmpty()) {
-                        activeScreens[it.key()] = resolveScreen(it.value().toString());
-                    }
-                }
-            }
-        }
-
-        QHash<QString, int> activeDesktops;
-        QString activeDesktopsJson = tracking.readEntry(QStringLiteral("WindowDesktopAssignments"), QString());
-        if (!activeDesktopsJson.isEmpty()) {
-            QJsonDocument doc = QJsonDocument::fromJson(activeDesktopsJson.toUtf8());
-            if (doc.isObject()) {
-                QJsonObject obj = doc.object();
-                for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-                    if (it.value().isDouble() && it.value().toInt() > 0) {
-                        activeDesktops[it.key()] = it.value().toInt();
-                    }
-                }
-            }
-        }
-
-        for (auto it = activeZones.constBegin(); it != activeZones.constEnd(); ++it) {
-            PendingRestore entry;
-            entry.zoneIds = it.value();
-            entry.screenName = activeScreens.value(it.key());
-            entry.virtualDesktop = activeDesktops.value(it.key(), 0);
-            pendingQueues[it.key()].append(entry);
-        }
-    }
-
-    // Phase 2: Load pending restore queues (new format: appId -> array of entry objects)
+    // Load persisted pending restore queues (appId -> array of entry objects).
+    // These go directly into pendingQueues. Persisted entries are richer than
+    // active-derived ones (they include layoutId and zoneNumbers).
     QString pendingQueuesJson = tracking.readEntry(QStringLiteral("PendingRestoreQueues"), QString());
     if (!pendingQueuesJson.isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(pendingQueuesJson.toUtf8());
@@ -377,6 +314,46 @@ void WindowTrackingAdaptor::loadState()
                     }
                     pendingQueues[it.key()].append(entry);
                 }
+            }
+        }
+    }
+
+    // Merge active-derived entries: only add entries not already covered by persisted
+    // queues. saveState() persists ALL pending entries including active-derived ones
+    // from the previous load. Without count-based merging, entries would double on
+    // every daemon restart (1→2→4→...).
+    //
+    // For each (appId, zoneIds, screen, desktop) fingerprint, a persisted entry
+    // "covers" one active-derived entry. Uncovered active-derived entries (new windows
+    // snapped since last save) are appended. This correctly handles multi-instance
+    // apps in the same zone — two konsole windows in zone Z produce two entries.
+    for (auto activeIt = activePending.constBegin(); activeIt != activePending.constEnd(); ++activeIt) {
+        const QString& appId = activeIt.key();
+        // Build a consumable budget of persisted fingerprints for this appId
+        struct Fingerprint
+        {
+            QStringList zoneIds;
+            QString screenName;
+            int virtualDesktop;
+        };
+        QList<Fingerprint> persistedBudget;
+        for (const auto& e : pendingQueues.value(appId)) {
+            persistedBudget.append({e.zoneIds, e.screenName, e.virtualDesktop});
+        }
+        for (const auto& activeEntry : activeIt.value()) {
+            bool covered = false;
+            for (int i = 0; i < persistedBudget.size(); ++i) {
+                if (persistedBudget[i].zoneIds == activeEntry.zoneIds
+                    && persistedBudget[i].screenName == activeEntry.screenName
+                    && persistedBudget[i].virtualDesktop == activeEntry.virtualDesktop) {
+                    persistedBudget.removeAt(i); // consume one match
+                    covered = true;
+                    break;
+                }
+            }
+            if (!covered) {
+                // New window snapped since last save — persisted queues don't have it
+                pendingQueues[appId].append(activeEntry);
             }
         }
     }

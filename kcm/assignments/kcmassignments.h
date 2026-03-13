@@ -90,6 +90,7 @@ public:
                                                  const QString& layoutId);
     Q_INVOKABLE void clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop);
     Q_INVOKABLE QString getLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const;
+    Q_INVOKABLE QString getSnappingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const;
     Q_INVOKABLE bool hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const;
 
     // ── Tiling per-desktop screen assignments ──────────────────────────────
@@ -104,6 +105,7 @@ public:
                                                   const QString& layoutId);
     Q_INVOKABLE void clearScreenActivityAssignment(const QString& screenName, const QString& activityId);
     Q_INVOKABLE QString getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const;
+    Q_INVOKABLE QString getSnappingLayoutForScreenActivity(const QString& screenName, const QString& activityId) const;
     Q_INVOKABLE bool hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const;
 
     // ── Tiling per-activity screen assignments ─────────────────────────────

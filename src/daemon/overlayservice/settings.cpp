@@ -154,7 +154,7 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
                 refreshVisibleWindows();
             });
             connect(manager, &LayoutManager::layoutAssigned, this,
-                    [this](const QString& /*screenName*/, Layout* /*layout*/) {
+                    [this](const QString& /*screenName*/, int /*virtualDesktop*/, Layout* /*layout*/) {
                         refreshVisibleWindows();
                     });
         }

@@ -27,7 +27,7 @@ Kirigami.Card {
         if (viewMode === 1)
             return kcm.hasExplicitTilingAssignmentForScreenActivity(screenName, activityId) ? (kcm.getTilingLayoutForScreenActivity(screenName, activityId) || "") : "";
         else
-            return kcm.hasExplicitAssignmentForScreenActivity(screenName, activityId) ? (kcm.getLayoutForScreenActivity(screenName, activityId) || "") : "";
+            return kcm.hasExplicitAssignmentForScreenActivity(screenName, activityId) ? (kcm.getSnappingLayoutForScreenActivity(screenName, activityId) || "") : "";
     }
 
     function assignScreenActivity(screenName, activityId, layoutId) {

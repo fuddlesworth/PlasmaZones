@@ -179,8 +179,21 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromCurrentAssignme
     }
 
     qCInfo(lcCore) << "Resnap from current assignments:" << result.size() << "windows"
+                   << "(total zone assignments:" << m_windowZoneAssignments.size() << ")"
                    << (screenFilter.isEmpty() ? QStringLiteral("(all screens)")
                                               : QStringLiteral("(screen: %1)").arg(screenFilter));
+    if (result.isEmpty() && !m_windowZoneAssignments.isEmpty() && lcCore().isDebugEnabled()) {
+        for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
+            QString screen = m_windowScreenAssignments.value(it.key());
+            bool floating = isWindowFloating(it.key());
+            QRect geo = it.value().isEmpty() ? QRect()
+                                             : (it.value().size() > 1 ? multiZoneGeometry(it.value(), screen)
+                                                                      : zoneGeometry(it.value().first(), screen));
+            qCDebug(lcCore) << "  skipped:" << it.key() << "zones=" << it.value() << "screen=" << screen
+                            << "floating=" << floating << "geoValid=" << geo.isValid()
+                            << "screenMatch=" << (screenFilter.isEmpty() || screen == screenFilter);
+        }
+    }
     return result;
 }
 
@@ -226,12 +239,36 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(c
                           << "windows will not be resnapped";
     }
 
+    // Build a lookup from zone ID → zone pointer for original-zone restoration
+    QHash<QString, Zone*> zoneById;
+    for (Zone* z : zones) {
+        zoneById[z->id().toString()] = z;
+    }
+
+    // Track which zones have been claimed by original-assignment restoration
+    // so positional fallback doesn't double-assign.
+    QSet<int> claimedZoneIndices;
+
+    // First pass: restore windows to their ORIGINAL zone assignment (pre-autotile).
+    // m_windowZoneAssignments preserves zone IDs from before autotile was activated.
+    // This ensures a window in zone 3 returns to zone 3, not whatever autotile
+    // position it ended up in.
     for (int i = 0; i < std::min(windowCount, zoneCount); ++i) {
         const QString& windowId = autotileWindowOrder.at(i);
+        const QStringList& savedZones = m_windowZoneAssignments.value(windowId);
 
-        // Map autotile position directly to zone (1:1, no cycling)
-        int zoneIdx = i;
-        Zone* targetZone = zones.at(zoneIdx);
+        if (savedZones.isEmpty())
+            continue;
+
+        // Use the first saved zone assignment (primary zone for multi-zone snaps)
+        const QString& savedZoneId = savedZones.first();
+        Zone* targetZone = zoneById.value(savedZoneId);
+        if (!targetZone)
+            continue; // Zone no longer exists in the restored layout
+
+        int zoneIdx = zones.indexOf(targetZone);
+        if (zoneIdx < 0 || claimedZoneIndices.contains(zoneIdx))
+            continue; // Already claimed by another window
 
         bool useAvail = !layout->useFullScreenGeometry();
         QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
@@ -244,6 +281,50 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(c
             entry.targetZoneId = targetZone->id().toString();
             entry.targetGeometry = geo;
             result.append(entry);
+            claimedZoneIndices.insert(zoneIdx);
+        }
+    }
+
+    // Second pass: windows without a valid original zone get positional fallback
+    // (autotile order position → first unclaimed zone).
+    for (int i = 0; i < std::min(windowCount, zoneCount); ++i) {
+        const QString& windowId = autotileWindowOrder.at(i);
+
+        // Skip if already placed by original-zone restoration
+        bool alreadyPlaced = false;
+        for (const auto& entry : result) {
+            if (entry.windowId == windowId) {
+                alreadyPlaced = true;
+                break;
+            }
+        }
+        if (alreadyPlaced)
+            continue;
+
+        // Find next unclaimed zone
+        int zoneIdx = -1;
+        for (int z = 0; z < zoneCount; ++z) {
+            if (!claimedZoneIndices.contains(z)) {
+                zoneIdx = z;
+                break;
+            }
+        }
+        if (zoneIdx < 0)
+            break; // No more zones available
+
+        Zone* targetZone = zones.at(zoneIdx);
+        bool useAvail = !layout->useFullScreenGeometry();
+        QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
+        QRect geo = GeometryUtils::snapToRect(geoF);
+
+        if (geo.isValid()) {
+            RotationEntry entry;
+            entry.windowId = windowId;
+            entry.sourceZoneId = QString();
+            entry.targetZoneId = targetZone->id().toString();
+            entry.targetGeometry = geo;
+            result.append(entry);
+            claimedZoneIndices.insert(zoneIdx);
         }
     }
 

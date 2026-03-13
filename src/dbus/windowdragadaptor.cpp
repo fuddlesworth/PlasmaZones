@@ -53,7 +53,9 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* de
     // Connect to layout change signals to invalidate cached zone geometry mid-drag
     // Uses LayoutManager (concrete) because ILayoutManager is a pure interface without signals
     connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, &WindowDragAdaptor::onLayoutChanged);
-    connect(m_layoutManager, &LayoutManager::layoutAssigned, this, &WindowDragAdaptor::onLayoutChanged);
+    connect(m_layoutManager, &LayoutManager::layoutAssigned, this, [this](const QString&, int, Layout*) {
+        onLayoutChanged();
+    });
 
     // Escape shortcut to cancel overlay during drag (registered when drag starts, unregistered when drag ends)
     m_cancelOverlayAction = new QAction(i18n("Cancel Zone Overlay"), this);

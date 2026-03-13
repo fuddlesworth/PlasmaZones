@@ -17,7 +17,32 @@
 
 #include "OverflowManager.h"
 
+#include <QHashFunctions>
+
 namespace PlasmaZones {
+
+/**
+ * @brief Composite key for per-desktop/activity TilingState lookup
+ *
+ * desktop=1 (matching m_currentDesktop default) and empty activity represent
+ * the initial desktop/activity context. Always uses explicit desktop numbers.
+ */
+struct TilingStateKey
+{
+    QString screenName;
+    int desktop = 1;
+    QString activity;
+
+    bool operator==(const TilingStateKey& other) const
+    {
+        return screenName == other.screenName && desktop == other.desktop && activity == other.activity;
+    }
+};
+
+inline size_t qHash(const TilingStateKey& key, size_t seed = 0)
+{
+    return qHashMulti(seed, key.screenName, key.desktop, key.activity);
+}
 
 class AutotileConfig;
 class Layout;
@@ -88,11 +113,66 @@ public:
      * @brief Set which screens use autotile (derived from layout assignments)
      *
      * Computes added/removed screens, retiles newly-added ones, and emits
-     * enabledChanged if the overall state flips.
+     * enabledChanged if the overall state flips.  Only processes states for
+     * the current desktop/activity — states for other desktops are preserved.
      *
      * @param screens Set of screen names that should use autotile
      */
     void setAutotileScreens(const QSet<QString>& screens);
+
+    /**
+     * @brief Set the current virtual desktop for per-desktop tiling state
+     *
+     * Swaps the active TilingState set without releasing windows. Must be
+     * called BEFORE updateAutotileScreens() on desktop switch so the engine
+     * resolves states for the correct desktop.
+     *
+     * @param desktop Virtual desktop number (1-based from KWin)
+     */
+    void setCurrentDesktop(int desktop);
+
+    /**
+     * @brief Set the current activity for per-activity tiling state
+     *
+     * Swaps the active TilingState set without releasing windows. Must be
+     * called BEFORE updateAutotileScreens() on activity switch so the engine
+     * resolves states for the correct activity.
+     *
+     * @param activity Activity ID (empty string for no activity)
+     */
+    void setCurrentActivity(const QString& activity);
+
+    /**
+     * @brief Prune TilingState and saved floating entries for a removed desktop
+     *
+     * Removes all states where key.desktop == removedDesktop. Called when a
+     * virtual desktop is deleted so stale entries don't accumulate.
+     */
+    void pruneStatesForDesktop(int removedDesktop);
+
+    /**
+     * @brief Prune TilingState entries for activities not in the given set
+     *
+     * Removes states whose activity is non-empty and not in validActivities.
+     * Called when activities change so stale entries don't accumulate.
+     */
+    void pruneStatesForActivities(const QStringList& validActivities);
+
+    /**
+     * @brief Get the current virtual desktop tracked by the engine
+     */
+    int currentDesktop() const noexcept
+    {
+        return m_currentDesktop;
+    }
+
+    /**
+     * @brief Get the current activity tracked by the engine
+     */
+    const QString& currentActivity() const noexcept
+    {
+        return m_currentActivity;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Algorithm selection
@@ -578,8 +658,9 @@ Q_SIGNALS:
     /**
      * @brief Emitted when the set of autotile screens changes
      * @param screenNames List of screen names using autotile
+     * @param isDesktopSwitch True if caused by desktop/activity switch (not user toggle)
      */
-    void autotileScreensChanged(const QStringList& screenNames);
+    void autotileScreensChanged(const QStringList& screenNames, bool isDesktopSwitch);
 
     /**
      * @brief Emitted when the algorithm changes
@@ -665,6 +746,23 @@ private:
     QRect screenGeometry(const QString& screenName) const;
 
     /**
+     * @brief Construct a TilingStateKey for the current desktop/activity
+     */
+    TilingStateKey currentKeyForScreen(const QString& screenName) const
+    {
+        return TilingStateKey{screenName, m_currentDesktop, m_currentActivity};
+    }
+
+    /**
+     * @brief Get TilingState for an explicit key (bypasses current desktop/activity)
+     *
+     * Creates the state if it doesn't exist. Used by loadState() to restore states
+     * for arbitrary desktop/activity combinations without temporarily mutating
+     * m_currentDesktop/m_currentActivity.
+     */
+    TilingState* stateForKey(const TilingStateKey& key);
+
+    /**
      * @brief Reset maxWindows when switching algorithms (DRY helper)
      *
      * If the current maxWindows matches the old algorithm's default, reset
@@ -690,7 +788,7 @@ private:
      * gate check remain untiled. This method iterates autotile screens and inserts
      * tracked-but-untiled windows up to the per-screen effective limit.
      *
-     * Note: Iteration order over m_windowToScreen (QHash) is non-deterministic.
+     * Note: Iteration order over m_windowToStateKey (QHash) is non-deterministic.
      * Backfill order may differ between runs; this is acceptable since all
      * candidates are equally valid.
      */
@@ -740,7 +838,7 @@ private:
     /**
      * @brief Get TilingState for a window by looking up its screen
      *
-     * Consolidates the common pattern of m_windowToScreen lookup + stateForScreen.
+     * Consolidates the common pattern of m_windowToStateKey lookup + state resolution.
      *
      * @param windowId Window ID to look up
      * @param outScreenName If non-null, receives the screen name
@@ -759,14 +857,28 @@ private:
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;
     QString m_activeScreen; // Last-focused screen (updated by onWindowFocused)
-    QHash<QString, TilingState*> m_screenStates; // Owned via Qt parent (this)
-    QHash<QString, QString> m_windowToScreen; // windowId -> screenName
+    QHash<TilingStateKey, TilingState*> m_screenStates; // Owned via Qt parent (this)
+public:
+    const QHash<TilingStateKey, TilingState*>& screenStates() const
+    {
+        return m_screenStates;
+    }
+
+private:
+    QHash<QString, TilingStateKey> m_windowToStateKey; // windowId -> owning state key
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
 
-    // Floating window IDs preserved across mode switches.
+    // Current desktop/activity context — used by stateForScreen() to construct
+    // TilingStateKey. Updated by setCurrentDesktop()/setCurrentActivity() BEFORE
+    // updateAutotileScreens() runs on desktop/activity switch.
+    int m_currentDesktop = 1;
+    QString m_currentActivity;
+    bool m_isDesktopContextSwitch = false;
+
+    // Floating window IDs preserved across mode switches, per desktop/activity.
     // When autotile is deactivated, floated windows are saved here so that
     // re-enabling autotile restores them as floating regardless of screen.
-    QSet<QString> m_savedFloatingWindows;
+    QHash<TilingStateKey, QSet<QString>> m_savedFloatingWindows;
 
     // Pre-seeded window order for snapping → autotile transitions.
     // Keyed by screen connector name (screen->name()), NOT stable screen ID.

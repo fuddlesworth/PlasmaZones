@@ -188,6 +188,24 @@
                 <annotation name="org.gtk.GDBus.DocString" value="True if explicit assignment exists."/>
             </arg>
         </method>
+        <method name="getModeForScreenDesktop">
+            <annotation name="org.gtk.GDBus.DocString" value="Get the current mode (0=Snapping, 1=Autotile) for a screen/desktop."/>
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="virtualDesktop" type="i" direction="in"/>
+            <arg name="mode" type="i" direction="out"/>
+        </method>
+        <method name="getSnappingLayoutForScreenDesktop">
+            <annotation name="org.gtk.GDBus.DocString" value="Get the snapping layout UUID for a screen/desktop (regardless of current mode)."/>
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="virtualDesktop" type="i" direction="in"/>
+            <arg name="layoutId" type="s" direction="out"/>
+        </method>
+        <method name="getTilingAlgorithmForScreenDesktop">
+            <annotation name="org.gtk.GDBus.DocString" value="Get the tiling algorithm ID for a screen/desktop (regardless of current mode)."/>
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="virtualDesktop" type="i" direction="in"/>
+            <arg name="algorithm" type="s" direction="out"/>
+        </method>
         <method name="setAllDesktopAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-desktop assignments (saves once). Key format: screenName:desktopNumber."/>
             <arg name="assignments" type="a{ss}" direction="in">
@@ -415,6 +433,9 @@
             </arg>
             <arg name="layoutId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Assigned layout UUID."/>
+            </arg>
+            <arg name="virtualDesktop" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop number (0 = display default)."/>
             </arg>
         </signal>
     </interface>

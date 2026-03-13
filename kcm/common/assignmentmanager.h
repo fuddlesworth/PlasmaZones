@@ -10,6 +10,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <functional>
+#include "../../src/core/assignmententry.h" // AssignmentEntry
 
 namespace PlasmaZones {
 
@@ -59,6 +60,8 @@ public:
     void clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop);
     QString getLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const;
     bool hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const;
+    /** @brief Get the explicit snapping layout for a screen/desktop from cached AssignmentEntry */
+    QString getSnappingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const;
 
     // ── Tiling per-desktop screen assignments ──────────────────────────────
     void assignTilingLayoutToScreenDesktop(const QString& screenName, int virtualDesktop, const QString& layoutId);
@@ -71,6 +74,8 @@ public:
     void clearScreenActivityAssignment(const QString& screenName, const QString& activityId);
     QString getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const;
     bool hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const;
+    /** @brief Get the explicit snapping layout for a screen/activity from cached AssignmentEntry */
+    QString getSnappingLayoutForScreenActivity(const QString& screenName, const QString& activityId) const;
 
     // ── Tiling per-activity screen assignments ─────────────────────────────
     void assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId,
@@ -98,7 +103,7 @@ public:
 
 public Q_SLOTS:
     // ── D-Bus event handlers ───────────────────────────────────────────────
-    void onScreenLayoutChanged(const QString& screenName, const QString& layoutId);
+    void onScreenLayoutChanged(const QString& screenName, const QString& layoutId, int virtualDesktop);
     void onQuickLayoutSlotsChanged();
 
 public:
@@ -135,21 +140,23 @@ private:
     QVariantMap m_tilingScreenAssignments;
     QMap<int, QString> m_quickLayoutSlots;
     QMap<int, QString> m_tilingQuickLayoutSlots;
-    QMap<QString, QString> m_tilingActivityAssignments;
-    QMap<QString, QString> m_tilingDesktopAssignments;
     int m_assignmentViewMode = 0;
 
-    // Pending per-desktop assignments
+    // Cached per-desktop assignments loaded from KConfig [Assignment:*:Desktop:*]
+    // Key: "screenId|desktop" (same as D-Bus composite key format)
+    QMap<QString, AssignmentEntry> m_cachedDesktopAssignments;
+
+    // Cached per-activity assignments loaded from KConfig [Assignment:*:Activity:*]
+    // Key: "screenId|activityId"
+    QMap<QString, AssignmentEntry> m_cachedActivityAssignments;
+
+    // Pending per-desktop assignments (shared by snapping and tiling)
     QMap<QString, QString> m_pendingDesktopAssignments;
     QSet<QString> m_clearedDesktopAssignments;
 
-    // Pending per-activity assignments
+    // Pending per-activity assignments (shared by snapping and tiling)
     QMap<QString, QString> m_pendingActivityAssignments;
     QSet<QString> m_clearedActivityAssignments;
-
-    // Dirty flags for tiling per-desktop/per-activity
-    bool m_tilingDesktopAssignmentsDirty = false;
-    bool m_tilingActivityAssignmentsDirty = false;
 
     // Pending app-to-zone rules
     QHash<QString, QVariantList> m_pendingAppRules;

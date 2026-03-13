@@ -255,8 +255,9 @@ Q_SIGNALS:
     /**
      * @brief Emitted when the set of autotile screens changes
      * @param screenNames List of screen names currently using autotile
+     * @param isDesktopSwitch True if the change is due to desktop/activity switch
      */
-    void autotileScreensChanged(const QStringList& screenNames);
+    void autotileScreensChanged(const QStringList& screenNames, bool isDesktopSwitch);
 
     /**
      * @brief Emitted when the tiling algorithm changes

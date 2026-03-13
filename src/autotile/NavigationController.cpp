@@ -317,20 +317,27 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
 
     // Use the tracked active screen (set by onWindowFocused) to avoid
     // non-deterministic QHash iteration when multiple screens have focused windows
-    if (!m_engine->m_activeScreen.isEmpty() && m_engine->m_screenStates.contains(m_engine->m_activeScreen)) {
-        TilingState* state = m_engine->m_screenStates.value(m_engine->m_activeScreen);
-        if (state && !state->focusedWindow().isEmpty()) {
-            outScreenName = m_engine->m_activeScreen;
-            outState = state;
-            return state->tiledWindows();
+    if (!m_engine->m_activeScreen.isEmpty()) {
+        const auto key = m_engine->currentKeyForScreen(m_engine->m_activeScreen);
+        auto sit = m_engine->m_screenStates.constFind(key);
+        if (sit != m_engine->m_screenStates.constEnd()) {
+            TilingState* state = sit.value();
+            if (state && !state->focusedWindow().isEmpty()) {
+                outScreenName = m_engine->m_activeScreen;
+                outState = state;
+                return state->tiledWindows();
+            }
         }
     }
 
-    // Fallback: scan all states (e.g., if m_activeScreen is stale)
+    // Fallback: scan states for current desktop/activity (e.g., if m_activeScreen is stale)
     for (auto it = m_engine->m_screenStates.constBegin(); it != m_engine->m_screenStates.constEnd(); ++it) {
+        if (it.key().desktop != m_engine->m_currentDesktop || it.key().activity != m_engine->m_currentActivity) {
+            continue;
+        }
         TilingState* state = it.value();
         if (state && !state->focusedWindow().isEmpty()) {
-            outScreenName = it.key();
+            outScreenName = it.key().screenName;
             outState = state;
             return state->tiledWindows();
         }
@@ -339,12 +346,11 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
     // No focused window found - fallback to primary screen if available
     if (m_engine->m_screenManager && m_engine->m_screenManager->primaryScreen()) {
         outScreenName = m_engine->m_screenManager->primaryScreen()->name();
-        if (m_engine->m_screenStates.contains(outScreenName)) {
-            TilingState* state = m_engine->m_screenStates.value(outScreenName);
-            if (state) {
-                outState = state;
-                return state->tiledWindows();
-            }
+        const auto key = m_engine->currentKeyForScreen(outScreenName);
+        auto sit = m_engine->m_screenStates.constFind(key);
+        if (sit != m_engine->m_screenStates.constEnd() && sit.value()) {
+            outState = sit.value();
+            return sit.value()->tiledWindows();
         }
     }
 
@@ -358,9 +364,11 @@ void NavigationController::applyToAllStates(const std::function<void(TilingState
         return; // No states to modify
     }
 
-    for (TilingState* state : m_engine->m_screenStates) {
-        if (state) {
-            operation(state);
+    // Only apply to states for the current desktop/activity
+    for (auto it = m_engine->m_screenStates.begin(); it != m_engine->m_screenStates.end(); ++it) {
+        if (it.key().desktop == m_engine->m_currentDesktop && it.key().activity == m_engine->m_currentActivity
+            && it.value()) {
+            operation(it.value());
         }
     }
 

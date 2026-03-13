@@ -129,9 +129,11 @@ void UnifiedLayoutController::cycle(bool forward)
     applyLayoutByIndex(nextIndex);
 }
 
-void UnifiedLayoutController::syncFromExternalState()
+void UnifiedLayoutController::syncFromExternalState(const QString& overrideId)
 {
-    if (m_layoutManager && m_layoutManager->activeLayout()) {
+    if (!overrideId.isEmpty()) {
+        m_currentLayoutId = overrideId;
+    } else if (m_layoutManager && m_layoutManager->activeLayout()) {
         m_currentLayoutId = m_layoutManager->activeLayout()->id().toString();
     } else {
         m_currentLayoutId.clear();
@@ -195,8 +197,13 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
             // Without this ordering, setAlgorithm's retile uses stale per-screen
             // overrides (old algorithm), producing wrong zone geometries.
             if (!m_currentScreenName.isEmpty()) {
-                m_layoutManager->assignLayoutById(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity,
-                                                  entry.id);
+                // Write per-desktop assignment with empty activity so it applies
+                // regardless of which activity is active.  Activity-specific
+                // overrides are a separate KCM-only feature.
+                if (!m_currentActivity.isEmpty()) {
+                    m_layoutManager->clearAssignment(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity);
+                }
+                m_layoutManager->assignLayoutById(m_currentScreenName, m_currentVirtualDesktop, QString(), entry.id);
             }
             m_autotileEngine->setAlgorithm(algoId);
             setCurrentLayoutId(entry.id);
@@ -216,9 +223,23 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
         Layout* layout = m_layoutManager->layoutById(*uuidOpt);
         if (layout) {
             if (!m_currentScreenName.isEmpty()) {
-                m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity, layout);
+                // Write per-desktop assignment with empty activity so it applies
+                // regardless of which activity is active.  Activity-specific
+                // overrides are a separate KCM-only feature.
+                // Clear any stale activity-keyed entry that would shadow this one
+                // in the cascade (exact match takes priority over desktop-only).
+                if (!m_currentActivity.isEmpty()) {
+                    m_layoutManager->clearAssignment(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity);
+                }
+                // assignLayout FIRST so the per-desktop assignment is stored
+                // before setActiveLayout fires activeLayoutChanged →
+                // onLayoutChanged(). That handler calls resolveLayoutForScreen()
+                // which reads per-desktop assignments — it must see the new
+                // assignment to correctly populate the resnap buffer.
+                m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop, QString(), layout);
             }
-            // Always update global active layout (fires activeLayoutChanged)
+            // Always update global active layout (fires activeLayoutChanged →
+            // onLayoutChanged → resnap buffer population)
             m_layoutManager->setActiveLayout(layout);
             setCurrentLayoutId(entry.id);
             qCInfo(lcDaemon) << "Applied unified layout=" << entry.name << "screen=" << m_currentScreenName;

@@ -82,6 +82,9 @@ public Q_SLOTS:
     void assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop, const QString& layoutId);
     void clearAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop);
     bool hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop);
+    int getModeForScreenDesktop(const QString& screenName, int virtualDesktop);
+    QString getSnappingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop);
+    QString getTilingAlgorithmForScreenDesktop(const QString& screenName, int virtualDesktop);
     void setAllDesktopAssignments(const QVariantMap& assignments); // Batch set - key: "screen:desktop", value: layoutId
 
     // Virtual desktop information
@@ -156,7 +159,7 @@ Q_SIGNALS:
 
     void layoutChanged(const QString& layoutJson);
     void layoutListChanged();
-    void screenLayoutChanged(const QString& screenName, const QString& layoutId);
+    void screenLayoutChanged(const QString& screenName, const QString& layoutId, int virtualDesktop);
     void virtualDesktopCountChanged(int count);
 
     /**
@@ -190,7 +193,7 @@ private Q_SLOTS:
     // (LayoutManager redeclares signals for Q_PROPERTY, so we use string-based connections)
     void onActiveLayoutChanged(Layout* layout);
     void onLayoutsChanged();
-    void onLayoutAssigned(const QString& screen, Layout* layout);
+    void onLayoutAssigned(const QString& screen, int virtualDesktop, Layout* layout);
 
 public:
     void invalidateCache();

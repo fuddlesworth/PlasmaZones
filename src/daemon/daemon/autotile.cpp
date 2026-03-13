@@ -165,9 +165,14 @@ void Daemon::handleAutotileDisabled()
     // Restore last manual layout so windows aren't stuck in tiled positions.
     // Assign per-screen (not just globally) so layoutForScreen() finds explicit
     // assignments instead of falling through to the default layout.
-    if (m_modeTracker && m_layoutManager && m_screenManager) {
-        m_modeTracker->setCurrentMode(TilingMode::Manual);
-        const QString lastLayoutId = m_modeTracker->lastManualLayoutId();
+    if (m_layoutManager && m_screenManager) {
+        // Resolve a manual layout to restore. Use the first screen's snappingLayout
+        // from AssignmentEntry (preserved when mode flips to Snapping).
+        QString lastLayoutId;
+        if (!m_screenManager->screens().isEmpty()) {
+            QString screenId = Utils::screenIdentifier(m_screenManager->screens().first());
+            lastLayoutId = m_layoutManager->snappingLayoutForScreen(screenId, currentDesktop(), currentActivity());
+        }
         Layout* layout =
             lastLayoutId.isEmpty() ? nullptr : m_layoutManager->layoutById(QUuid::fromString(lastLayoutId));
         // Fallback to active layout or first available layout
@@ -182,11 +187,15 @@ void Daemon::handleAutotileDisabled()
             const QString activity = currentActivity();
             // Block signals: per-screen assignments are batch-written here
             // and the caller will call updateAutotileScreens() afterward.
+            // Write with empty activity so entries are visible to D-Bus/KCM queries.
             {
                 QSignalBlocker blocker(m_layoutManager.get());
                 for (QScreen* screen : m_screenManager->screens()) {
                     QString screenId = Utils::screenIdentifier(screen);
-                    m_layoutManager->assignLayout(screenId, desktop, activity, layout);
+                    if (!activity.isEmpty()) {
+                        m_layoutManager->clearAssignment(screenId, desktop, activity);
+                    }
+                    m_layoutManager->assignLayout(screenId, desktop, QString(), layout);
                 }
             }
             // Set active layout OUTSIDE blocker so activeLayoutChanged fires
@@ -217,11 +226,15 @@ void Daemon::handleAutotileDisabled()
  */
 void Daemon::handleSnappingToAutotile()
 {
-    if (!m_settings || !m_modeTracker || !m_unifiedLayoutController || !m_layoutManager || !m_screenManager) {
+    if (!m_settings || !m_unifiedLayoutController || !m_layoutManager || !m_screenManager) {
         return;
     }
 
-    const QString algoId = resolveAlgorithmId();
+    // Resolve algorithm from settings (this is a global enable, not per-desktop toggle)
+    QString algoId = m_settings->autotileAlgorithm();
+    if (algoId.isEmpty()) {
+        algoId = AlgorithmRegistry::defaultAlgorithmId();
+    }
     const QString autotileLayoutId = LayoutId::makeAutotileId(algoId);
 
     if (m_autotileEngine) {
@@ -240,34 +253,42 @@ void Daemon::handleSnappingToAutotile()
     // Assign autotile layout to ALL screens (global toggle).
     // Block signals to avoid N intermediate updateAutotileScreens()
     // from layoutAssigned — one final call below is sufficient.
+    // Write with empty activity so the entry is visible to D-Bus/KCM
+    // queries that use empty activity for cascading resolution.
     const int desktop = currentDesktop();
     const QString activity = currentActivity();
     {
         QSignalBlocker blocker(m_layoutManager.get());
         for (QScreen* screen : m_screenManager->screens()) {
             QString screenId = Utils::screenIdentifier(screen);
-            m_layoutManager->assignLayoutById(screenId, desktop, activity, autotileLayoutId);
+            if (!activity.isEmpty()) {
+                m_layoutManager->clearAssignment(screenId, desktop, activity);
+            }
+            m_layoutManager->assignLayoutById(screenId, desktop, QString(), autotileLayoutId);
         }
     }
-    m_modeTracker->setCurrentMode(TilingMode::Autotile);
 }
 
-QHash<QString, QStringList> Daemon::captureAutotileOrders() const
+QHash<Daemon::DesktopContextKey, QStringList> Daemon::captureAutotileOrders() const
 {
-    QHash<QString, QStringList> orders;
+    QHash<DesktopContextKey, QStringList> orders;
     if (!m_autotileEngine) {
         return orders;
     }
-    for (const QString& s : m_autotileEngine->autotileScreens()) {
-        QStringList order = m_autotileEngine->tiledWindowOrder(s);
+    const int desktop = currentDesktop();
+    const QString activity = currentActivity();
+    for (const QString& screenName : m_autotileEngine->autotileScreens()) {
+        QStringList order = m_autotileEngine->tiledWindowOrder(screenName);
         if (!order.isEmpty()) {
-            orders[s] = order;
+            // Use connector name as screenId — consistent with how
+            // seedAutotileOrderForScreen looks up by connector name.
+            orders[DesktopContextKey{screenName, desktop, activity}] = order;
         }
     }
     return orders;
 }
 
-void Daemon::restoreAutotileOnlyGeometries()
+void Daemon::restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows, int desktop, const QString& activity)
 {
     if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
         return;
@@ -277,10 +298,20 @@ void Daemon::restoreAutotileOnlyGeometries()
         return;
     }
     for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
-        const QString& screenName = it.key();
+        // Only process entries for the specified desktop/activity context.
+        // Without this filter, windows from other desktops could get stale
+        // geometry restores that overwrite their current position.
+        if (desktop >= 0 && (it.key().desktop != desktop || it.key().activity != activity)) {
+            continue;
+        }
+        const QString& screenName = it.key().screenId;
         for (const QString& windowId : it.value()) {
+            if (excludeWindows.contains(windowId))
+                continue;
             if (wts->isWindowSnapped(windowId))
                 continue;
+            if (wts->isWindowFloating(windowId))
+                continue; // Already restored by windowsReleasedFromTiling
             m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenName);
         }
     }
@@ -310,7 +341,8 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenName)
     // Prefer saved autotile order from last mode toggle (deterministic re-entry).
     // Falls back to zone-ordered window list when no saved order exists (first
     // activation, or windows changed between toggles).
-    QStringList order = m_lastAutotileOrders.value(screenName);
+    DesktopContextKey orderKey{screenName, currentDesktop(), currentActivity()};
+    QStringList order = m_lastAutotileOrders.value(orderKey);
     if (order.isEmpty()) {
         WindowTrackingService* wts = m_windowTrackingAdaptor->service();
         if (wts) {

@@ -8,6 +8,8 @@
 #include <QTimer>
 #include <QHash>
 #include <QRect>
+#include <QSet>
+#include <QThreadPool>
 #include <memory>
 
 #include "shortcutmanager.h"
@@ -178,15 +180,35 @@ private:
      */
     void presaveSnapFloats();
 
+    // Per-desktop context key for layout/autotile tracking.
+    // Uses screenId (EDID-based) or connector name depending on context.
+    struct DesktopContextKey
+    {
+        QString screenId;
+        int desktop;
+        QString activity;
+        bool operator==(const DesktopContextKey& o) const
+        {
+            return screenId == o.screenId && desktop == o.desktop && activity == o.activity;
+        }
+    };
+    friend size_t qHash(const DesktopContextKey& k, size_t seed)
+    {
+        seed = ::qHash(k.screenId, seed);
+        seed = ::qHash(k.desktop, seed);
+        seed = ::qHash(k.activity, seed);
+        return seed;
+    }
+
     /**
      * @brief Capture autotile window order for all autotile screens
      *
      * Must be called BEFORE any mode switch that destroys TilingState
      * (e.g. applyLayoutById, handleAutotileDisabled, updateAutotileScreens).
      *
-     * @return Map of screenName -> ordered window IDs (master first)
+     * @return Map of (screen, desktop, activity) -> ordered window IDs (master first)
      */
-    QHash<QString, QStringList> captureAutotileOrders() const;
+    QHash<DesktopContextKey, QStringList> captureAutotileOrders() const;
 
     /**
      * @brief Restore pre-tile geometry for autotile-only windows
@@ -195,12 +217,25 @@ private:
      * window that has no zone assignment (never manually snapped). Zone-snapped
      * windows are already handled by resnapCurrentAssignments.
      */
-    void restoreAutotileOnlyGeometries();
+    void restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows = {}, int desktop = -1,
+                                       const QString& activity = QString());
 
     /** @brief Show layout OSD deferred (avoids blocking on first-time QML compilation) */
     void showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenName);
     /** @brief Show algorithm OSD deferred (avoids blocking on first-time QML compilation) */
     void showAlgorithmOsdDeferred(const QString& algorithmId, const QString& algorithmName, const QString& screenName);
+
+    /**
+     * @brief Show OSD for the current desktop's layout/algorithm on desktop or activity switch
+     *
+     * Resolves the focused screen, reads the per-desktop assignment, and shows
+     * the appropriate OSD (layout or algorithm). DRY helper for both
+     * currentDesktopChanged and currentActivityChanged handlers.
+     *
+     * @param desktop Current virtual desktop number
+     * @param activity Current activity ID
+     */
+    void showDesktopSwitchOsd(int desktop, const QString& activity);
 
     /**
      * @brief Recompute which screens use autotile from layout assignments
@@ -219,6 +254,15 @@ private:
      * Shows both manual and autotile layouts when the feature gate is enabled.
      */
     void updateLayoutFilter();
+
+    /**
+     * @brief Sync ModeTracker and UnifiedLayoutController from per-desktop assignments
+     *
+     * Derives the tiling mode (Manual vs Autotile) and current layout from the
+     * actual per-desktop assignment for the focused screen. Must be called on
+     * every desktop/activity switch so global state reflects the new context.
+     */
+    void syncModeFromAssignments();
 
     std::unique_ptr<LayoutManager> m_layoutManager;
     std::unique_ptr<Settings> m_settings;
@@ -256,16 +300,20 @@ private:
     int currentDesktop() const;
     QString currentActivity() const;
 
-    /** @brief Resolve algorithm ID with fallback: last used → settings → default */
-    QString resolveAlgorithmId() const;
+    /** @brief Prune m_lastAutotileOrders for stale desktops */
+    void pruneContextMapsForDesktop(int maxDesktop);
+    /** @brief Prune context maps for removed activities */
+    void pruneContextMapsForActivities(const QSet<QString>& validActivities);
 
     bool m_running = false;
     int m_suppressResnapOsd = 0;
 
-    // Last autotile window order per screen, captured when leaving autotile.
-    // Used to re-seed the autotile engine with the same order on re-entry,
-    // producing deterministic arrangements across mode toggles.
-    QHash<QString, QStringList> m_lastAutotileOrders;
+    // Last autotile window order per (screen, desktop, activity), captured when
+    // leaving autotile. Used to re-seed the autotile engine with the same order
+    // on re-entry, producing deterministic arrangements across mode toggles.
+    // Keyed by DesktopContextKey (not plain screen name) so cross-desktop toggles
+    // don't overwrite each other's ordering.
+    QHash<DesktopContextKey, QStringList> m_lastAutotileOrders;
 
     // State tracking for settingsChanged delta detection (replaces individual signal handlers)
     // Initialized from m_settings in init() before settingsChanged is connected.
@@ -273,6 +321,10 @@ private:
     // first settingsChanged won't detect a spurious toggle.
     bool m_prevSnappingEnabled = false;
     bool m_prevAutotileEnabled = false;
+
+    // Single-threaded pool for shader baking — QShaderBaker/glslang is not
+    // thread-safe for concurrent compilation (SIGSEGV in QSpirvCompiler).
+    QThreadPool m_shaderBakePool;
 
     // Geometry update debouncing to prevent cascade of redundant recalculations
     QTimer m_geometryUpdateTimer;

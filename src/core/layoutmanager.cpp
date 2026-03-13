@@ -60,10 +60,10 @@ static Layout* findLayout(const QVector<Layout*>& layouts, Predicate pred)
 }
 
 // Helper: emit layoutAssigned for a single screenId/layoutId pair
-void LayoutManager::emitLayoutAssigned(const QString& screenId, const QString& layoutId)
+void LayoutManager::emitLayoutAssigned(const QString& screenId, int virtualDesktop, const QString& layoutId)
 {
     Layout* layout = LayoutId::isAutotile(layoutId) ? nullptr : layoutById(QUuid::fromString(layoutId));
-    Q_EMIT layoutAssigned(screenId, layout);
+    Q_EMIT layoutAssigned(screenId, virtualDesktop, layout);
 }
 
 // Helper for validating layout assignment
@@ -166,7 +166,14 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenId, int direction)
     // cleanup, OSD, etc.). Per-screen assignments are still respected by
     // resolveLayoutForScreen() since they take priority over the global active.
     if (!resolvedScreenId.isEmpty()) {
-        assignLayout(resolvedScreenId, m_currentVirtualDesktop, m_currentActivity, newLayout);
+        // Write per-desktop assignment with empty activity so it applies
+        // regardless of which activity is active.  Activity-specific
+        // overrides are a separate KCM-only feature.  Clear any stale
+        // activity-keyed entry that would shadow this one in the cascade.
+        if (!m_currentActivity.isEmpty()) {
+            clearAssignment(resolvedScreenId, m_currentVirtualDesktop, m_currentActivity);
+        }
+        assignLayout(resolvedScreenId, m_currentVirtualDesktop, QString(), newLayout);
     }
     setActiveLayout(newLayout);
     return newLayout;
@@ -248,7 +255,7 @@ void LayoutManager::removeLayout(Layout* layout)
     } else {
         // Truly deleted — clean up assignments and shortcuts referencing this layout
         for (auto it = m_assignments.begin(); it != m_assignments.end();) {
-            if (it.value() == layoutIdStr) {
+            if (it.value().snappingLayout == layoutIdStr || it.value().activeLayoutId() == layoutIdStr) {
                 it = m_assignments.erase(it);
             } else {
                 ++it;
@@ -336,8 +343,12 @@ void LayoutManager::applyQuickLayout(int number, const QString& screenId)
     auto layout = layoutForShortcut(number);
     if (layout) {
         qCDebug(lcLayout) << "Found layout for shortcut" << number << ":" << layout->name();
-        // Assign to current monitor + current virtual desktop + current activity (not global default)
-        assignLayout(screenId, m_currentVirtualDesktop, m_currentActivity, layout);
+        // Assign to current monitor + current virtual desktop with empty activity
+        // so D-Bus/KCM queries (which use empty activity) can find the entry.
+        if (!m_currentActivity.isEmpty()) {
+            clearAssignment(screenId, m_currentVirtualDesktop, m_currentActivity);
+        }
+        assignLayout(screenId, m_currentVirtualDesktop, QString(), layout);
         setActiveLayout(layout);
     } else {
         // No layout assigned to this quick slot - try to use layout at index (number-1) as fallback
@@ -346,7 +357,10 @@ void LayoutManager::applyQuickLayout(int number, const QString& screenId)
             layout = m_layouts.at(number - 1);
             if (layout) {
                 qCInfo(lcLayout) << "Using fallback layout:" << layout->name();
-                assignLayout(screenId, m_currentVirtualDesktop, m_currentActivity, layout);
+                if (!m_currentActivity.isEmpty()) {
+                    clearAssignment(screenId, m_currentVirtualDesktop, m_currentActivity);
+                }
+                assignLayout(screenId, m_currentVirtualDesktop, QString(), layout);
                 setActiveLayout(layout);
             }
         } else {

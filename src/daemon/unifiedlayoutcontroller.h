@@ -118,8 +118,12 @@ public:
      *
      * Call this when layout changes from other sources (zone selector, D-Bus).
      * Updates internal tracking without triggering signals.
+     *
+     * @param overrideId If non-empty, use this as the current layout ID instead
+     *                   of querying the global active layout. Used for per-desktop
+     *                   sync where the assignment may be an autotile ID.
      */
-    void syncFromExternalState();
+    void syncFromExternalState(const QString& overrideId = QString());
 
     /**
      * @brief Get current screen name

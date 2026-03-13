@@ -869,26 +869,6 @@
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════
-       Mode Tracking (for smart toggle between manual and autotile modes)
-       ═══════════════════════════════════════════════════════════════════════════════ -->
-  <group name="ModeTracking">
-    <entry name="LastManualLayoutId" type="String">
-      <label>UUID of the last manually selected layout</label>
-      <default></default>
-    </entry>
-    <entry name="LastTilingMode" type="Int">
-      <label>Last active tiling mode (0=Manual, 1=Autotile)</label>
-      <default>0</default>
-      <min>0</min>
-      <max>1</max>
-    </entry>
-    <entry name="LastAutotileAlgorithm" type="String">
-      <label>Last used autotile algorithm ID</label>
-      <default>master-stack</default>
-    </entry>
-  </group>
-
-  <!-- ═══════════════════════════════════════════════════════════════════════════════
        Update Notifications
        ═══════════════════════════════════════════════════════════════════════════════ -->
   <group name="Updates">

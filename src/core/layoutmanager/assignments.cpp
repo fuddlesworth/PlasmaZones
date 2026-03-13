@@ -18,12 +18,27 @@ void LayoutManager::assignLayout(const QString& screenId, int virtualDesktop, co
     LayoutAssignmentKey key{screenId, virtualDesktop, activity};
 
     if (layout) {
-        m_assignments[key] = layout->id().toString();
+        AssignmentEntry& entry = m_assignments[key];
+        entry.mode = AssignmentEntry::Snapping;
+        entry.snappingLayout = layout->id().toString();
+        // Preserve existing tilingAlgorithm — only mode + snappingLayout change
+        qCDebug(lcLayout) << "assignLayout: screen=" << screenId << "desktop=" << virtualDesktop
+                          << "activity=" << (activity.isEmpty() ? QStringLiteral("(all)") : activity)
+                          << "layout=" << layout->name();
     } else {
-        m_assignments.remove(key);
+        // Clearing: remove the entry entirely.
+        // Skip save/signal when there's nothing to remove — avoids a redundant
+        // disk write and layoutAssigned emission (e.g. clearAssignment for an
+        // activity-keyed entry that doesn't exist).
+        bool hadAssignment = m_assignments.remove(key);
+        if (!hadAssignment) {
+            return;
+        }
+        qCDebug(lcLayout) << "assignLayout: removed screen=" << screenId << "desktop=" << virtualDesktop
+                          << "activity=" << (activity.isEmpty() ? QStringLiteral("(all)") : activity);
     }
 
-    Q_EMIT layoutAssigned(screenId, layout);
+    Q_EMIT layoutAssigned(screenId, key.virtualDesktop, layout);
     saveAssignments();
 }
 
@@ -31,10 +46,13 @@ void LayoutManager::assignLayoutById(const QString& screenId, int virtualDesktop
                                      const QString& layoutId)
 {
     if (LayoutId::isAutotile(layoutId)) {
-        // Store autotile ID directly — no Layout* exists for autotile algorithms
+        // Store autotile assignment — set mode to Autotile, preserve snappingLayout
         LayoutAssignmentKey key{screenId, virtualDesktop, activity};
-        m_assignments[key] = layoutId;
-        Q_EMIT layoutAssigned(screenId, nullptr);
+        AssignmentEntry& entry = m_assignments[key];
+        entry.mode = AssignmentEntry::Autotile;
+        entry.tilingAlgorithm = LayoutId::extractAlgorithmId(layoutId);
+        // Preserve existing snappingLayout — only mode + tilingAlgorithm change
+        Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
         saveAssignments();
     } else {
         assignLayout(screenId, virtualDesktop, activity, layoutById(QUuid::fromString(layoutId)));
@@ -43,29 +61,31 @@ void LayoutManager::assignLayoutById(const QString& screenId, int virtualDesktop
 
 Layout* LayoutManager::layoutForScreen(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
-    // Helper: resolve stored assignment string to Layout* (returns nullptr for autotile IDs)
-    auto resolveAssignment = [this](const QString& id) -> Layout* {
-        if (id.isEmpty() || LayoutId::isAutotile(id))
+    // Helper: resolve stored assignment to Layout* (returns nullptr for autotile mode)
+    auto resolveEntry = [this](const AssignmentEntry& entry) -> Layout* {
+        if (entry.mode == AssignmentEntry::Autotile)
             return nullptr;
-        return layoutById(QUuid::fromString(id));
+        if (entry.snappingLayout.isEmpty())
+            return nullptr;
+        return layoutById(QUuid::fromString(entry.snappingLayout));
     };
 
     // Try exact match first
     LayoutAssignmentKey exactKey{screenId, virtualDesktop, activity};
     if (m_assignments.contains(exactKey)) {
-        return resolveAssignment(m_assignments[exactKey]);
+        return resolveEntry(m_assignments[exactKey]);
     }
 
     // Try screen + desktop (any activity)
     LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
     if (m_assignments.contains(desktopKey)) {
-        return resolveAssignment(m_assignments[desktopKey]);
+        return resolveEntry(m_assignments[desktopKey]);
     }
 
-    // Try screen only (any desktop, any activity)
+    // Try screen only (any desktop, any activity) — the "display default"
     LayoutAssignmentKey screenKey{screenId, 0, QString()};
     if (m_assignments.contains(screenKey)) {
-        return resolveAssignment(m_assignments[screenKey]);
+        return resolveEntry(m_assignments[screenKey]);
     }
 
     // Fallback: if screenId looks like a connector name (no colons), try resolving
@@ -105,19 +125,21 @@ QString LayoutManager::assignmentIdForScreen(const QString& screenId, int virtua
     // Try exact match first
     LayoutAssignmentKey exactKey{screenId, virtualDesktop, activity};
     if (m_assignments.contains(exactKey)) {
-        return m_assignments[exactKey];
+        return m_assignments[exactKey].activeLayoutId();
     }
 
     // Try screen + desktop (any activity)
     LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
     if (m_assignments.contains(desktopKey)) {
-        return m_assignments[desktopKey];
+        return m_assignments[desktopKey].activeLayoutId();
     }
 
-    // Try screen only (any desktop, any activity)
+    // Try screen only (any desktop, any activity) — the "display default".
+    // Both manual and autotile base entries inherit to desktops without
+    // explicit assignments, so fresh desktops match the display default.
     LayoutAssignmentKey screenKey{screenId, 0, QString()};
     if (m_assignments.contains(screenKey)) {
-        return m_assignments[screenKey];
+        return m_assignments[screenKey].activeLayoutId();
     }
 
     // Fallback: if screenId looks like a connector name, try resolving to screen ID
@@ -131,18 +153,73 @@ QString LayoutManager::assignmentIdForScreen(const QString& screenId, int virtua
     return QString();
 }
 
+AssignmentEntry LayoutManager::assignmentEntryForScreen(const QString& screenId, int virtualDesktop,
+                                                        const QString& activity) const
+{
+    // Same fallback cascade as layoutForScreen()
+
+    LayoutAssignmentKey exactKey{screenId, virtualDesktop, activity};
+    if (m_assignments.contains(exactKey)) {
+        return m_assignments[exactKey];
+    }
+
+    LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
+    if (m_assignments.contains(desktopKey)) {
+        return m_assignments[desktopKey];
+    }
+
+    LayoutAssignmentKey screenKey{screenId, 0, QString()};
+    if (m_assignments.contains(screenKey)) {
+        return m_assignments[screenKey];
+    }
+
+    if (Utils::isConnectorName(screenId)) {
+        QString resolved = Utils::screenIdForName(screenId);
+        if (resolved != screenId) {
+            return assignmentEntryForScreen(resolved, virtualDesktop, activity);
+        }
+    }
+
+    return AssignmentEntry{};
+}
+
+AssignmentEntry::Mode LayoutManager::modeForScreen(const QString& screenId, int virtualDesktop,
+                                                   const QString& activity) const
+{
+    return assignmentEntryForScreen(screenId, virtualDesktop, activity).mode;
+}
+
+QString LayoutManager::snappingLayoutForScreen(const QString& screenId, int virtualDesktop,
+                                               const QString& activity) const
+{
+    return assignmentEntryForScreen(screenId, virtualDesktop, activity).snappingLayout;
+}
+
+QString LayoutManager::tilingAlgorithmForScreen(const QString& screenId, int virtualDesktop,
+                                                const QString& activity) const
+{
+    return assignmentEntryForScreen(screenId, virtualDesktop, activity).tilingAlgorithm;
+}
+
 void LayoutManager::clearAutotileAssignments()
 {
-    bool changed = false;
-    for (auto it = m_assignments.begin(); it != m_assignments.end();) {
-        if (LayoutId::isAutotile(it.value())) {
-            QString screenId = it.key().screenId;
-            it = m_assignments.erase(it);
-            Q_EMIT layoutAssigned(screenId, nullptr);
-            changed = true;
-        } else {
-            ++it;
+    // Collect autotile keys first, then modify in a second pass.
+    QList<LayoutAssignmentKey> autotileKeys;
+    for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
+        if (it.value().mode == AssignmentEntry::Autotile) {
+            autotileKeys.append(it.key());
         }
+    }
+
+    bool changed = !autotileKeys.isEmpty();
+    for (const LayoutAssignmentKey& key : autotileKeys) {
+        AssignmentEntry& entry = m_assignments[key];
+        // Flip mode to Snapping — preserve both snappingLayout and tilingAlgorithm
+        // so re-enabling autotile can restore the previous algorithm.
+        entry.mode = AssignmentEntry::Snapping;
+        qCDebug(lcLayout) << "clearAutotileAssignments: flipped to Snapping for screen=" << key.screenId
+                          << "desktop=" << key.virtualDesktop;
+        Q_EMIT layoutAssigned(key.screenId, key.virtualDesktop, nullptr);
     }
 
     // Also clear autotile quick layout slots
@@ -163,10 +240,12 @@ void LayoutManager::clearAutotileAssignments()
 
 void LayoutManager::setAllScreenAssignments(const QHash<QString, QString>& assignments)
 {
-    // Clear existing base screen assignments (desktop=0, activity=empty)
-    // Keep per-desktop and per-activity assignments intact
+    // Snapshot existing base entries so fromLayoutId can preserve the "other" field
+    // (e.g. batch-setting snapping layout preserves tilingAlgorithm)
+    QHash<LayoutAssignmentKey, AssignmentEntry> oldBase;
     for (auto it = m_assignments.begin(); it != m_assignments.end();) {
         if (it.key().virtualDesktop == 0 && it.key().activity.isEmpty()) {
+            oldBase[it.key()] = it.value();
             it = m_assignments.erase(it);
         } else {
             ++it;
@@ -189,7 +268,8 @@ void LayoutManager::setAllScreenAssignments(const QHash<QString, QString>& assig
         }
 
         LayoutAssignmentKey key{screenId, 0, QString()};
-        m_assignments[key] = layoutId;
+        AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldBase.value(key));
+        m_assignments[key] = entry;
         storedScreens.insert(screenId);
         ++count;
         qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to screen" << screenId;
@@ -198,10 +278,11 @@ void LayoutManager::setAllScreenAssignments(const QHash<QString, QString>& assig
     saveAssignments();
 
     // Emit layoutAssigned for stored entries, deduplicated by screenId.
-    // Use assignmentIdForScreen (cascading resolution) so the signal carries
-    // the effective layout for the current desktop/activity context.
+    // Resolve at desktop=0 (the base level we just wrote) so the KCM
+    // receives the actual display default — NOT the current desktop's
+    // effective layout, which would corrupt its m_screenAssignments cache.
     for (const QString& screenId : storedScreens) {
-        emitLayoutAssigned(screenId, assignmentIdForScreen(screenId, m_currentVirtualDesktop, m_currentActivity));
+        emitLayoutAssigned(screenId, 0, assignmentIdForScreen(screenId, 0, QString()));
     }
 
     qCInfo(lcLayout) << "Batch set" << count << "screen assignments";
@@ -209,9 +290,11 @@ void LayoutManager::setAllScreenAssignments(const QHash<QString, QString>& assig
 
 void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments)
 {
-    // Clear existing per-desktop assignments (desktop > 0, activity empty)
+    // Snapshot existing per-desktop entries so fromLayoutId can preserve the "other" field
+    QHash<LayoutAssignmentKey, AssignmentEntry> oldDesktop;
     for (auto it = m_assignments.begin(); it != m_assignments.end();) {
         if (it.key().virtualDesktop > 0 && it.key().activity.isEmpty()) {
+            oldDesktop[it.key()] = it.value();
             it = m_assignments.erase(it);
         } else {
             ++it;
@@ -236,7 +319,8 @@ void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QS
         }
 
         LayoutAssignmentKey key{screenId, virtualDesktop, QString()};
-        m_assignments[key] = layoutId;
+        AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldDesktop.value(key));
+        m_assignments[key] = entry;
         storedScreens.insert(screenId);
         ++count;
         qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to" << screenId << "desktop" << virtualDesktop;
@@ -247,7 +331,8 @@ void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QS
     // Emit once per screen (deduplicated) — use cascading resolution so the
     // signal carries the effective layout for the current context.
     for (const QString& screenId : storedScreens) {
-        emitLayoutAssigned(screenId, assignmentIdForScreen(screenId, m_currentVirtualDesktop, m_currentActivity));
+        emitLayoutAssigned(screenId, m_currentVirtualDesktop,
+                           assignmentIdForScreen(screenId, m_currentVirtualDesktop, m_currentActivity));
     }
 
     qCInfo(lcLayout) << "Batch set" << count << "desktop assignments";
@@ -255,9 +340,11 @@ void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QS
 
 void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments)
 {
-    // Clear existing per-activity assignments (activity non-empty, desktop=0)
+    // Snapshot existing per-activity entries so fromLayoutId can preserve the "other" field
+    QHash<LayoutAssignmentKey, AssignmentEntry> oldActivity;
     for (auto it = m_assignments.begin(); it != m_assignments.end();) {
         if (!it.key().activity.isEmpty() && it.key().virtualDesktop == 0) {
+            oldActivity[it.key()] = it.value();
             it = m_assignments.erase(it);
         } else {
             ++it;
@@ -282,7 +369,8 @@ void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString
         }
 
         LayoutAssignmentKey key{screenId, 0, activityId};
-        m_assignments[key] = layoutId;
+        AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldActivity.value(key));
+        m_assignments[key] = entry;
         storedScreens.insert(screenId);
         ++count;
         qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to" << screenId << "activity" << activityId;
@@ -290,10 +378,11 @@ void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString
 
     saveAssignments();
 
-    // Emit once per screen (deduplicated) — use cascading resolution so the
-    // signal carries the effective layout for the current context.
+    // Emit once per screen (deduplicated) — resolve at the base level
+    // (desktop=0) so the KCM receives the display default, not the
+    // current desktop's effective layout which would corrupt its cache.
     for (const QString& screenId : storedScreens) {
-        emitLayoutAssigned(screenId, assignmentIdForScreen(screenId, m_currentVirtualDesktop, m_currentActivity));
+        emitLayoutAssigned(screenId, 0, assignmentIdForScreen(screenId, 0, QString()));
     }
 
     qCInfo(lcLayout) << "Batch set" << count << "activity assignments";
@@ -307,7 +396,7 @@ QHash<QPair<QString, int>, QString> LayoutManager::desktopAssignments() const
         const LayoutAssignmentKey& key = it.key();
         // Per-desktop: virtualDesktop > 0 and activity is empty
         if (key.virtualDesktop > 0 && key.activity.isEmpty()) {
-            result[qMakePair(key.screenId, key.virtualDesktop)] = it.value();
+            result[qMakePair(key.screenId, key.virtualDesktop)] = it.value().activeLayoutId();
         }
     }
 
@@ -322,7 +411,7 @@ QHash<QPair<QString, QString>, QString> LayoutManager::activityAssignments() con
         const LayoutAssignmentKey& key = it.key();
         // Per-activity: activity is non-empty (for any desktop value)
         if (!key.activity.isEmpty()) {
-            result[qMakePair(key.screenId, key.activity)] = it.value();
+            result[qMakePair(key.screenId, key.activity)] = it.value().activeLayoutId();
         }
     }
 

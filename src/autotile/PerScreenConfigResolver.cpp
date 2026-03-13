@@ -88,7 +88,7 @@ void PerScreenConfigResolver::clearPerScreenConfig(const QString& screenName)
         return;
     }
     // Restore global defaults on TilingState
-    TilingState* state = m_engine->m_screenStates.value(screenName);
+    TilingState* state = m_engine->stateForScreen(screenName);
     if (state) {
         state->setSplitRatio(m_engine->config()->splitRatio);
         state->setMasterCount(m_engine->config()->masterCount);

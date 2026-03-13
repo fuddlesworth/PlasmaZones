@@ -84,13 +84,6 @@ public:
      */
     QString activityIcon(const QString& activityId) const;
 
-public Q_SLOTS:
-    /**
-     * @brief Re-evaluate and update the active layout based on current activity/desktop
-     * Called when activity assignments change to refresh the layout
-     */
-    void updateActiveLayout();
-
 Q_SIGNALS:
     /**
      * @brief Emitted when activity changes

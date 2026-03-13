@@ -310,6 +310,8 @@ void WindowTrackingService::onLayoutChanged()
     // (not just the global active), so per-screen assignments aren't incorrectly purged.
     // Skip windows on autotile screens — their zone assignments must survive the
     // autotile period so resnapCurrentAssignments() can restore them when tiling is toggled off.
+    // Skip windows on OTHER virtual desktops — their zone assignments belong to that
+    // desktop's layout and must not be purged when the current desktop's layout changes.
     const int currentDesktop = m_layoutManager->currentVirtualDesktop();
     const QString currentActivity = m_layoutManager->currentActivity();
 
@@ -323,6 +325,14 @@ void WindowTrackingService::onLayoutChanged()
             toRemove.append(it.key());
             continue;
         }
+
+        // Preserve zone assignments for windows on other desktops. Desktop 0
+        // means "all desktops" (pinned window) — always process those.
+        const int windowDesktop = m_windowDesktopAssignments.value(it.key(), 0);
+        if (windowDesktop != 0 && windowDesktop != currentDesktop) {
+            continue;
+        }
+
         QString windowScreen = m_windowScreenAssignments.value(it.key());
 
         // If this screen's assignment is autotile, preserve zone assignments for resnap

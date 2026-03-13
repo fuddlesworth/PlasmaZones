@@ -41,14 +41,6 @@ private Q_SLOTS:
     }
 
     /**
-     * lastManualLayoutId() must return an empty QString for fresh installs.
-     */
-    void testLastManualLayoutId_accessor_returnsEmpty()
-    {
-        QVERIFY2(ConfigDefaults::lastManualLayoutId().isEmpty(), "lastManualLayoutId default must be empty string");
-    }
-
-    /**
      * labelFontFamily() must return an empty QString (system default font).
      */
     void testLabelFontFamily_accessor_returnsEmpty()
@@ -182,10 +174,6 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::animationSequenceMode() <= 1);
         QVERIFY(ConfigDefaults::animationStaggerInterval() >= 10);
         QVERIFY(ConfigDefaults::animationStaggerInterval() <= 200);
-
-        // Mode Tracking
-        QVERIFY(ConfigDefaults::lastTilingMode() >= 0);
-        QVERIFY(ConfigDefaults::lastTilingMode() <= 1);
     }
 
     /**

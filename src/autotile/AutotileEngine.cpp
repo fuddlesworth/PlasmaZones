@@ -76,7 +76,12 @@ void AutotileEngine::connectSignals()
                         // floating windows are still managed by autotile, skip removal.
                         // Note: windowClosed() calls onWindowRemoved() directly and
                         // bypasses this guard, so closed floating windows are cleaned up.
+                        // Only check current desktop/activity states — a window
+                        // floating on desktop 1 should not block removal on desktop 2.
                         for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                            if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
+                                continue;
+                            }
                             if (it.value() && it.value()->isFloating(windowId)) {
                                 return;
                             }
@@ -84,7 +89,7 @@ void AutotileEngine::connectSignals()
                         onWindowRemoved(windowId);
                     } else {
                         // Window was assigned to a zone - treat as added if not already tracked
-                        if (!m_windowToScreen.contains(windowId)) {
+                        if (!m_windowToStateKey.contains(windowId)) {
                             onWindowAdded(windowId);
                         }
                     }
@@ -146,14 +151,53 @@ void AutotileEngine::moveToPosition(const QString& /*windowId*/, int position, c
     moveFocusedToPosition(position);
 }
 
+void AutotileEngine::setCurrentDesktop(int desktop)
+{
+    if (desktop == m_currentDesktop) {
+        return;
+    }
+    qCInfo(lcAutotile) << "Switching autotile context: desktop" << m_currentDesktop << "->" << desktop;
+    // Only flag as desktop switch if we already had a valid context (desktop > 0).
+    // Initial setup (desktop 0 → 1 during daemon startup) is NOT a switch — the
+    // effect must receive the normal enabledChanged/autotileScreensChanged sequence
+    // to initialize window tracking. Without this, login with autotile enabled
+    // suppresses enabledChanged and the effect treats the first autotileScreensChanged
+    // as a "desktop return", skipping window notification to the daemon entirely.
+    // Use |= so that a prior setCurrentActivity() flag is not lost when both
+    // desktop AND activity change simultaneously (e.g., activity-per-desktop).
+    m_isDesktopContextSwitch |= (m_currentDesktop > 0);
+    m_currentDesktop = desktop;
+}
+
+void AutotileEngine::setCurrentActivity(const QString& activity)
+{
+    if (activity == m_currentActivity) {
+        return;
+    }
+    qCInfo(lcAutotile) << "Switching autotile context: activity" << m_currentActivity << "->" << activity;
+    // Only flag as desktop/activity switch if we already had a valid context.
+    // Initial setup (activity "" → real during daemon startup) is NOT a switch.
+    // Use |= so that a prior setCurrentDesktop() flag is not lost when both
+    // desktop AND activity change simultaneously.
+    m_isDesktopContextSwitch |= !m_currentActivity.isEmpty();
+    m_currentActivity = activity;
+}
+
 void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
 {
     if (m_autotileScreens == screens) {
+        // Must consume the desktop-context-switch flag even on early return.
+        // Without this, a desktop switch between two desktops with the same
+        // autotile screen set leaves the flag set. The NEXT setAutotileScreens
+        // call (e.g. from a toggle OFF) then incorrectly reports isDesktopSwitch=true,
+        // causing the effect to skip geometry/border restore on toggle OFF.
+        m_isDesktopContextSwitch = false;
         return;
     }
 
     const bool wasEnabled = !m_autotileScreens.isEmpty();
     const QSet<QString> added = screens - m_autotileScreens;
+    const QSet<QString> removed = m_autotileScreens - screens;
 
     m_autotileScreens = screens;
 
@@ -170,41 +214,59 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // with the first real retile's animation timing.
         // For screen hotplug (no pending order), windows are already in the TilingState
         // and the retile is needed to reflow them on the new screen.
+        //
+        // Skip retile when pending initial order exists (windows arriving shortly
+        // via D-Bus). For desktop return with existing tiled windows, still retile
+        // to ensure geometry is up-to-date (screen geometry may have changed while
+        // on another desktop, e.g., panel added/removed). The effect-side borderless
+        // re-application handles the visual state; the retile ensures positions match
+        // the current screen geometry.
         if (!m_pendingInitialOrders.contains(screenName)) {
             scheduleRetileForScreen(screenName);
         }
     }
 
-    // Collect windows from removed screens before pruning, then prune
+    // Only prune states for the CURRENT desktop/activity. States belonging to
+    // other desktops are preserved so desktop switching is a fast state swap
+    // (no window release/re-add). windowsReleasedFromTiling MUST NOT fire
+    // for desktop/activity transitions — only for true autotile disable.
     QStringList releasedWindows;
-    QMutableHashIterator<QString, TilingState*> it(m_screenStates);
+    QMutableHashIterator<TilingStateKey, TilingState*> it(m_screenStates);
     while (it.hasNext()) {
         it.next();
-        if (!m_autotileScreens.contains(it.key())) {
-            // Save user-floated windows so they stay floating when autotile is re-enabled.
-            // Exclude overflow windows — they were auto-floated by maxWindows cap and
-            // should tile normally when autotile is re-enabled.
-            QSet<QString> screenOverflow = m_overflow.takeForScreen(it.key());
-            const QStringList floated = it.value()->floatingWindows();
-            for (const QString& fid : floated) {
-                if (!screenOverflow.contains(fid)) {
-                    m_savedFloatingWindows.insert(fid);
-                }
-            }
-            releasedWindows.append(it.value()->tiledWindows());
-            releasedWindows.append(it.value()->floatingWindows());
-            m_configResolver->removeOverridesForScreen(it.key());
-            m_pendingInitialOrders.remove(it.key());
-            it.value()->deleteLater();
-            it.remove();
+        const TilingStateKey& key = it.key();
+        // Only prune states that match the current desktop/activity AND whose
+        // screen is no longer in the autotile set. States for other desktops
+        // are left untouched — they'll be pruned when that desktop is current.
+        if (key.desktop != m_currentDesktop || key.activity != m_currentActivity) {
+            continue;
         }
+        if (!removed.contains(key.screenName)) {
+            continue;
+        }
+        // Save user-floated windows so they stay floating when autotile is re-enabled.
+        // Exclude overflow windows — they were auto-floated by maxWindows cap and
+        // should tile normally when autotile is re-enabled.
+        QSet<QString> screenOverflow = m_overflow.takeForScreen(key.screenName);
+        const QStringList floated = it.value()->floatingWindows();
+        for (const QString& fid : floated) {
+            if (!screenOverflow.contains(fid)) {
+                m_savedFloatingWindows[key].insert(fid);
+            }
+        }
+        releasedWindows.append(it.value()->tiledWindows());
+        releasedWindows.append(it.value()->floatingWindows());
+        m_configResolver->removeOverridesForScreen(key.screenName);
+        m_pendingInitialOrders.remove(key.screenName);
+        it.value()->deleteLater();
+        it.remove();
     }
-    // Clean up m_windowToScreen entries for released windows BEFORE emitting
+    // Clean up m_windowToStateKey entries for released windows BEFORE emitting
     // the signal. Signal handlers (signals.cpp windowsReleasedFromTiling) check
-    // zone assignments and floating state — stale m_windowToScreen mappings
-    // would cause them to see phantom candidates.
+    // zone assignments and floating state — stale mappings would cause them to
+    // see phantom candidates.
     for (const QString& windowId : std::as_const(releasedWindows)) {
-        m_windowToScreen.remove(windowId);
+        m_windowToStateKey.remove(windowId);
     }
 
     if (!releasedWindows.isEmpty()) {
@@ -212,9 +274,6 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     }
 
     // Clean up any remaining overflow entries for removed screens.
-    // The floating-windows loop above handles overflow windows that are currently
-    // floating in the TilingState, but entries could remain if an overflow window
-    // was unfloated by a concurrent retile before reaching this point.
     m_overflow.clearForRemovedScreens(m_autotileScreens);
 
     // Clear any pending deferred retiles for removed screens
@@ -227,11 +286,18 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     }
 
     const bool nowEnabled = !m_autotileScreens.isEmpty();
-    if (wasEnabled != nowEnabled) {
+    // Capture before clearing — the emit below needs the original value.
+    const bool wasDesktopSwitch = m_isDesktopContextSwitch;
+    m_isDesktopContextSwitch = false;
+
+    if (wasEnabled != nowEnabled && !wasDesktopSwitch) {
+        // Only emit enabledChanged for actual mode toggles, not desktop/activity
+        // switch. On desktop switch the effect must NOT clear borderless/monocle/
+        // stacking tracking (enabledChanged false) or re-process windows (true).
         Q_EMIT enabledChanged(nowEnabled);
     }
 
-    Q_EMIT autotileScreensChanged(QStringList(m_autotileScreens.begin(), m_autotileScreens.end()));
+    Q_EMIT autotileScreensChanged(QStringList(m_autotileScreens.begin(), m_autotileScreens.end()), wasDesktopSwitch);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -354,20 +420,145 @@ TilingState* AutotileEngine::stateForScreen(const QString& screenName)
         return nullptr;
     }
 
-    auto it = m_screenStates.find(screenName);
+    const TilingStateKey key = currentKeyForScreen(screenName);
+
+    // Check for existing state before validating screen existence — existing
+    // states are valid even if the screen is temporarily disconnected (e.g.,
+    // monitor power-off during a desktop switch). Only gate NEW state creation.
+    auto it = m_screenStates.find(key);
     if (it != m_screenStates.end()) {
         return it.value();
     }
 
-    // Create new state for this screen with parent ownership
+    // Reject unknown screens to prevent unbounded state creation from bogus
+    // D-Bus callers. Session bus only (same user), but still good hygiene.
+    if (m_screenManager) {
+        bool found = false;
+        for (QScreen* s : m_screenManager->screens()) {
+            if (s && s->name() == screenName) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            qCWarning(lcAutotile) << "AutotileEngine::stateForScreen: unknown screen" << screenName;
+            return nullptr;
+        }
+    }
+
+    // Create new state for this screen+desktop+activity with parent ownership
     auto* state = new TilingState(screenName, this);
 
     // Initialize with config defaults
     state->setMasterCount(m_config->masterCount);
     state->setSplitRatio(m_config->splitRatio);
 
-    m_screenStates.insert(screenName, state);
+    m_screenStates.insert(key, state);
     return state;
+}
+
+TilingState* AutotileEngine::stateForKey(const TilingStateKey& key)
+{
+    if (key.screenName.isEmpty()) {
+        return nullptr;
+    }
+
+    auto it = m_screenStates.find(key);
+    if (it != m_screenStates.end()) {
+        return it.value();
+    }
+
+    // Reject unknown screens (same validation as stateForScreen)
+    if (m_screenManager) {
+        bool found = false;
+        for (QScreen* s : m_screenManager->screens()) {
+            if (s && s->name() == key.screenName) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            qCWarning(lcAutotile) << "AutotileEngine::stateForKey: unknown screen" << key.screenName;
+            return nullptr;
+        }
+    }
+
+    auto* state = new TilingState(key.screenName, this);
+    state->setMasterCount(m_config->masterCount);
+    state->setSplitRatio(m_config->splitRatio);
+    m_screenStates.insert(key, state);
+    return state;
+}
+
+void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
+{
+    QMutableHashIterator<TilingStateKey, TilingState*> it(m_screenStates);
+    int pruned = 0;
+    while (it.hasNext()) {
+        it.next();
+        if (it.key().desktop == removedDesktop) {
+            it.value()->deleteLater();
+            it.remove();
+            ++pruned;
+        }
+    }
+    // Also prune saved floating windows for this desktop
+    QMutableHashIterator<TilingStateKey, QSet<QString>> fit(m_savedFloatingWindows);
+    while (fit.hasNext()) {
+        fit.next();
+        if (fit.key().desktop == removedDesktop) {
+            fit.remove();
+        }
+    }
+    // Clean up window-to-state-key entries that reference the pruned desktop.
+    // Stale entries would pollute backfillWindows() and could incorrectly match
+    // if desktop numbers are reused.
+    QMutableHashIterator<QString, TilingStateKey> wit(m_windowToStateKey);
+    while (wit.hasNext()) {
+        wit.next();
+        if (wit.value().desktop == removedDesktop) {
+            wit.remove();
+        }
+    }
+    if (pruned > 0) {
+        qCInfo(lcAutotile) << "Pruned" << pruned << "TilingStates for removed desktop" << removedDesktop;
+    }
+}
+
+void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities)
+{
+    const QSet<QString> valid(validActivities.begin(), validActivities.end());
+    QMutableHashIterator<TilingStateKey, TilingState*> it(m_screenStates);
+    int pruned = 0;
+    while (it.hasNext()) {
+        it.next();
+        const QString& act = it.key().activity;
+        if (!act.isEmpty() && !valid.contains(act)) {
+            it.value()->deleteLater();
+            it.remove();
+            ++pruned;
+        }
+    }
+    QMutableHashIterator<TilingStateKey, QSet<QString>> fit(m_savedFloatingWindows);
+    while (fit.hasNext()) {
+        fit.next();
+        const QString& act = fit.key().activity;
+        if (!act.isEmpty() && !valid.contains(act)) {
+            fit.remove();
+        }
+    }
+    // Clean up window-to-state-key entries that reference pruned activities
+    QMutableHashIterator<QString, TilingStateKey> wit(m_windowToStateKey);
+    while (wit.hasNext()) {
+        wit.next();
+        const QString& act = wit.value().activity;
+        if (!act.isEmpty() && !valid.contains(act)) {
+            wit.remove();
+        }
+    }
+    if (pruned > 0) {
+        qCInfo(lcAutotile) << "Pruned" << pruned << "TilingStates for removed activities";
+    }
 }
 
 AutotileConfig* AutotileEngine::config() const noexcept
@@ -387,7 +578,7 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenName, const QStr
     // Only take effect when the screen's TilingState is empty (no prior windows —
     // including floating — from session restore). Uses windowCount() instead of
     // tiledWindows() to also detect floating-only states.
-    TilingState* state = m_screenStates.value(screenName);
+    TilingState* state = stateForScreen(screenName);
     if (state && state->windowCount() > 0) {
         qCDebug(lcAutotile) << "setInitialWindowOrder: screen" << screenName << "already has" << state->windowCount()
                             << "windows, ignoring pre-seeded order";
@@ -411,24 +602,36 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenName, const QStr
 
 void AutotileEngine::clearSavedFloatingForWindows(const QStringList& windowIds)
 {
-    for (const QString& id : windowIds) {
-        if (m_savedFloatingWindows.remove(id)) {
-            qCDebug(lcAutotile) << "Cleared stale saved-floating state for zone-snapped window" << id;
+    for (auto it = m_savedFloatingWindows.begin(); it != m_savedFloatingWindows.end();) {
+        for (const QString& id : windowIds) {
+            if (it.value().remove(id)) {
+                qCDebug(lcAutotile) << "Cleared stale saved-floating state for zone-snapped window" << id;
+            }
+        }
+        if (it.value().isEmpty()) {
+            it = m_savedFloatingWindows.erase(it);
+        } else {
+            ++it;
         }
     }
 }
 
 void AutotileEngine::clearAllSavedFloating()
 {
-    if (!m_savedFloatingWindows.isEmpty()) {
-        qCInfo(lcAutotile) << "Clearing all saved floating state -" << m_savedFloatingWindows.size() << "windows";
+    int total = 0;
+    for (auto it = m_savedFloatingWindows.constBegin(); it != m_savedFloatingWindows.constEnd(); ++it) {
+        total += it.value().size();
+    }
+    if (total > 0) {
+        qCInfo(lcAutotile) << "Clearing all saved floating state -" << total << "windows";
         m_savedFloatingWindows.clear();
     }
 }
 
 QStringList AutotileEngine::tiledWindowOrder(const QString& screenName) const
 {
-    TilingState* state = m_screenStates.value(screenName);
+    const TilingStateKey key{screenName, m_currentDesktop, m_currentActivity};
+    TilingState* state = m_screenStates.value(key);
     if (!state) {
         return {};
     }
@@ -552,8 +755,14 @@ void AutotileEngine::processPendingRetiles()
     m_pendingRetileScreens.clear();
 
     for (const QString& screenName : screens) {
-        if (isAutotileScreen(screenName) && m_screenStates.contains(screenName)) {
+        bool isAt = isAutotileScreen(screenName);
+        bool hasState = m_screenStates.contains(currentKeyForScreen(screenName));
+        if (isAt && hasState) {
+            qCInfo(lcAutotile) << "processPendingRetiles: retiling screen" << screenName;
             retileAfterOperation(screenName, true);
+        } else {
+            qCWarning(lcAutotile) << "processPendingRetiles: skipping screen" << screenName << "isAutotile=" << isAt
+                                  << "hasState=" << hasState;
         }
     }
 }
@@ -578,10 +787,10 @@ void AutotileEngine::retile(const QString& screenName)
     m_retiling = true;
 
     if (screenName.isEmpty()) {
-        // Retile autotile screens only
-        for (const QString& key : m_autotileScreens) {
-            if (m_screenStates.contains(key)) {
-                retileScreen(key);
+        // Retile autotile screens only (current desktop/activity)
+        for (const QString& screen : m_autotileScreens) {
+            if (m_screenStates.contains(currentKeyForScreen(screen))) {
+                retileScreen(screen);
             }
         }
     } else {
@@ -600,8 +809,10 @@ void AutotileEngine::swapWindows(const QString& windowId1, const QString& window
     }
 
     // Find screens for both windows
-    const QString screen1 = m_windowToScreen.value(windowId1);
-    const QString screen2 = m_windowToScreen.value(windowId2);
+    const auto key1 = m_windowToStateKey.value(windowId1);
+    const auto key2 = m_windowToStateKey.value(windowId2);
+    const QString screen1 = key1.screenName;
+    const QString screen2 = key2.screenName;
 
     if (screen1.isEmpty() || screen2.isEmpty()) {
         qCWarning(lcAutotile) << "AutotileEngine::swapWindows: window not found";
@@ -613,7 +824,9 @@ void AutotileEngine::swapWindows(const QString& windowId1, const QString& window
         return;
     }
 
-    TilingState* state = stateForScreen(screen1);
+    // Use the stored key — not stateForScreen(currentContext) — to avoid
+    // wrong-desktop lookups from stale D-Bus calls after a context switch.
+    TilingState* state = m_screenStates.value(key1);
     if (!state) {
         return;
     }
@@ -752,8 +965,8 @@ void AutotileEngine::toggleFocusedWindowFloat()
     QString screenName;
     TilingState* state = nullptr;
 
-    if (!m_activeScreen.isEmpty() && m_screenStates.contains(m_activeScreen)) {
-        TilingState* s = m_screenStates.value(m_activeScreen);
+    if (!m_activeScreen.isEmpty() && m_screenStates.contains(currentKeyForScreen(m_activeScreen))) {
+        TilingState* s = m_screenStates.value(currentKeyForScreen(m_activeScreen));
         if (s && !s->focusedWindow().isEmpty()) {
             screenName = m_activeScreen;
             state = s;
@@ -761,8 +974,9 @@ void AutotileEngine::toggleFocusedWindowFloat()
     }
     if (!state) {
         for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-            if (it.value() && !it.value()->focusedWindow().isEmpty()) {
-                screenName = it.key();
+            if (it.value() && !it.value()->focusedWindow().isEmpty() && it.key().desktop == m_currentDesktop
+                && it.key().activity == m_currentActivity) {
+                screenName = it.key().screenName;
                 state = it.value();
                 break;
             }
@@ -813,12 +1027,16 @@ void AutotileEngine::toggleWindowFloat(const QString& windowId, const QString& s
     }
 
     // Cross-screen fallback: the window may have been moved (e.g., pre-autotile
-    // geometry restore put it on a different screen). Search all autotile states.
+    // geometry restore put it on a different screen). Search current desktop/activity
+    // states only — states for other desktops should not be considered.
     if (!state) {
         for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+            if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
+                continue;
+            }
             if (it.value() && it.value()->containsWindow(windowId)) {
                 state = it.value();
-                resolvedScreen = it.key();
+                resolvedScreen = it.key().screenName;
                 qCInfo(lcAutotile) << "toggleWindowFloat: window" << windowId << "found on screen" << resolvedScreen
                                    << "(caller reported" << screenName << ")";
                 break;
@@ -856,7 +1074,7 @@ void AutotileEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
 
     // floatWindow checks autotile screen membership; unfloatWindow does not
     // (window might be on a screen that was removed from autotile after it was floated)
-    if (shouldFloat && !isAutotileScreen(m_windowToScreen.value(windowId))) {
+    if (shouldFloat && !isAutotileScreen(m_windowToStateKey.value(windowId).screenName)) {
         return;
     }
 
@@ -874,7 +1092,7 @@ void AutotileEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
 
     state->setFloating(windowId, shouldFloat);
     m_overflow.clearOverflow(windowId);
-    const QString screenName = m_windowToScreen.value(windowId);
+    const QString screenName = m_windowToStateKey.value(windowId).screenName;
     retileAfterOperation(screenName, true);
 
     qCInfo(lcAutotile) << "Window" << (shouldFloat ? "floated from" : "unfloated to") << "autotile -" << windowId;
@@ -909,7 +1127,7 @@ void AutotileEngine::windowOpened(const QString& windowId, const QString& screen
 
     // Store screen mapping so onWindowAdded uses correct screen
     if (!screenName.isEmpty()) {
-        m_windowToScreen[windowId] = screenName;
+        m_windowToStateKey[windowId] = currentKeyForScreen(screenName);
     }
     onWindowAdded(windowId);
 }
@@ -936,8 +1154,9 @@ void AutotileEngine::windowMinSizeUpdated(const QString& windowId, int minWidth,
     qCDebug(lcAutotile) << "Updated min size for" << windowId << "-" << oldMin << "->" << newMin;
 
     // Retile the screen this window is on
-    const QString screenName = m_windowToScreen.value(windowId);
-    if (!screenName.isEmpty() && m_screenStates.contains(screenName)) {
+    const auto stateKey = m_windowToStateKey.value(windowId);
+    const QString screenName = stateKey.screenName;
+    if (!screenName.isEmpty() && m_screenStates.contains(stateKey)) {
         scheduleRetileForScreen(screenName);
     }
 }
@@ -950,7 +1169,14 @@ void AutotileEngine::windowClosed(const QString& windowId)
 
     // Clean up saved floating state even if window isn't currently tracked
     // (it may have been floating when autotile was disabled on its screen)
-    m_savedFloatingWindows.remove(windowId);
+    for (auto it = m_savedFloatingWindows.begin(); it != m_savedFloatingWindows.end();) {
+        it.value().remove(windowId);
+        if (it.value().isEmpty()) {
+            it = m_savedFloatingWindows.erase(it);
+        } else {
+            ++it;
+        }
+    }
 
     onWindowRemoved(windowId);
 }
@@ -962,24 +1188,25 @@ void AutotileEngine::windowFocused(const QString& windowId, const QString& scree
     }
 
     // Detect cross-screen moves. When a window's focus moves to a different
-    // screen, migrate its TilingState membership so m_windowToScreen and the
+    // screen, migrate its TilingState membership so m_windowToStateKey and the
     // TilingState remain consistent. This handles both overflow-floated windows
     // and windows that were previously migrated (preventing the Screen1->2->1
     // rapid-migration desync where the second hop was silently skipped).
     //
-    // Only update m_windowToScreen for windows already tracked via windowOpened().
+    // Only update m_windowToStateKey for windows already tracked via windowOpened().
     // The KWin effect sends focus events for ALL handleable windows (including
     // transients and non-tileable windows that pass shouldHandleWindow but fail
     // isTileableWindow). Creating entries for these phantom windows causes
     // backfillWindows() to insert them on algorithm switches, inflating the
     // tiled window count.
-    const QString oldScreen = m_windowToScreen.value(windowId);
-    if (!screenName.isEmpty() && m_windowToScreen.contains(windowId)) {
-        m_windowToScreen[windowId] = screenName;
+    const TilingStateKey oldKey = m_windowToStateKey.value(windowId);
+    const QString oldScreen = oldKey.screenName;
+    if (!screenName.isEmpty() && m_windowToStateKey.contains(windowId)) {
+        m_windowToStateKey[windowId] = currentKeyForScreen(screenName);
     }
 
     if (!oldScreen.isEmpty() && !screenName.isEmpty() && oldScreen != screenName) {
-        TilingState* oldState = m_screenStates.value(oldScreen);
+        TilingState* oldState = m_screenStates.value(oldKey);
         if (oldState && oldState->containsWindow(windowId)) {
             oldState->removeWindow(windowId);
             m_overflow.migrateWindow(windowId);
@@ -1043,7 +1270,7 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
 
 void AutotileEngine::onWindowRemoved(const QString& windowId)
 {
-    const QString screenName = m_windowToScreen.value(windowId);
+    const QString screenName = m_windowToStateKey.value(windowId).screenName;
     if (screenName.isEmpty()) {
         return;
     }
@@ -1067,14 +1294,14 @@ void AutotileEngine::onWindowFocused(const QString& windowId)
 
     // Track which screen has the active focus (used by tiledWindowsForFocusedScreen
     // to avoid non-deterministic QHash iteration when multiple screens have focused windows)
-    m_activeScreen = m_windowToScreen.value(windowId);
+    m_activeScreen = m_windowToStateKey.value(windowId).screenName;
 
     state->setFocusedWindow(windowId);
 }
 
 void AutotileEngine::onScreenGeometryChanged(const QString& screenName)
 {
-    if (!isAutotileScreen(screenName) || !m_screenStates.contains(screenName)) {
+    if (!isAutotileScreen(screenName) || !m_screenStates.contains(currentKeyForScreen(screenName))) {
         return;
     }
 
@@ -1102,9 +1329,9 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     }
 
     // Check if window already tracked in this screen's tiling state
-    // Note: We check the TilingState (not m_windowToScreen) because windowOpened()
-    // stores the screen mapping in m_windowToScreen *before* calling onWindowAdded(),
-    // so m_windowToScreen.contains() would always be true via that path.
+    // Note: We check the TilingState (not m_windowToStateKey) because windowOpened()
+    // stores the screen mapping in m_windowToStateKey *before* calling onWindowAdded(),
+    // so m_windowToStateKey.contains() would always be true via that path.
     if (state->containsWindow(windowId)) {
         return false;
     }
@@ -1157,13 +1384,18 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // Restore floating state from engine's saved set (populated when autotile was
     // previously deactivated). Float state is per-mode: snap-mode floats don't
     // carry into autotile and vice versa. Only m_savedFloatingWindows (the
-    // engine's own memory) is authoritative for autotile-mode floating.
-    if (m_savedFloatingWindows.remove(windowId)) {
+    // engine's own memory, keyed by screen+desktop+activity) is authoritative.
+    const TilingStateKey stateKey = currentKeyForScreen(screenName);
+    auto savedIt = m_savedFloatingWindows.find(stateKey);
+    if (savedIt != m_savedFloatingWindows.end() && savedIt.value().remove(windowId)) {
         state->setFloating(windowId, true);
         qCInfo(lcAutotile) << "Restored saved floating state for window" << windowId << "on screen" << screenName;
+        if (savedIt.value().isEmpty()) {
+            m_savedFloatingWindows.erase(savedIt);
+        }
     }
 
-    m_windowToScreen.insert(windowId, screenName);
+    m_windowToStateKey.insert(windowId, stateKey);
     return true;
 }
 
@@ -1171,18 +1403,25 @@ void AutotileEngine::removeWindow(const QString& windowId)
 {
     m_windowMinSizes.remove(windowId);
     m_overflow.clearOverflow(windowId);
-    const QString screenName = m_windowToScreen.take(windowId);
-    if (screenName.isEmpty()) {
+    const TilingStateKey key = m_windowToStateKey.take(windowId);
+    if (key.screenName.isEmpty()) {
         return;
     }
 
-    TilingState* state = m_screenStates.value(screenName);
+    TilingState* state = m_screenStates.value(key);
     if (state) {
         state->removeWindow(windowId);
     }
 
     // Clean up saved floating state for closed windows
-    m_savedFloatingWindows.remove(windowId);
+    for (auto it = m_savedFloatingWindows.begin(); it != m_savedFloatingWindows.end();) {
+        it.value().remove(windowId);
+        if (it.value().isEmpty()) {
+            it = m_savedFloatingWindows.erase(it);
+        } else {
+            ++it;
+        }
+    }
 
     // Purge closed window from pending initial orders.
     // If a pre-seeded window closes before arriving at the autotile engine,
@@ -1368,9 +1607,12 @@ bool AutotileEngine::shouldTileWindow(const QString& windowId) const
     }
 
     // Check if window is floating in any screen's TilingState
-    // (floating windows are excluded from autotiling)
-    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (it.value() && it.value()->isFloating(windowId)) {
+    // (floating windows are excluded from autotiling).
+    // Only check states for the current desktop/activity.
+    for (const QString& screen : m_autotileScreens) {
+        const TilingStateKey key = currentKeyForScreen(screen);
+        auto it = m_screenStates.constFind(key);
+        if (it != m_screenStates.constEnd() && it.value() && it.value()->isFloating(windowId)) {
             qCDebug(lcAutotile) << "Window" << windowId << "is floating, skipping tile";
             return false;
         }
@@ -1386,15 +1628,16 @@ bool AutotileEngine::shouldTileWindow(const QString& windowId) const
 QString AutotileEngine::screenForWindow(const QString& windowId) const
 {
     // Check if already tracked
-    if (m_windowToScreen.contains(windowId)) {
-        return m_windowToScreen.value(windowId);
+    auto it = m_windowToStateKey.constFind(windowId);
+    if (it != m_windowToStateKey.constEnd()) {
+        return it->screenName;
     }
 
     // R6 fix: Warn when falling back to primary screen — this may indicate a
-    // missing screen name in windowOpened() or a stale m_windowToScreen entry.
+    // missing screen name in windowOpened() or a stale m_windowToStateKey entry.
     if (m_screenManager && m_screenManager->primaryScreen()) {
         qCWarning(lcAutotile) << "screenForWindow: window" << windowId
-                              << "not in m_windowToScreen, falling back to primary screen";
+                              << "not in m_windowToStateKey, falling back to primary screen";
         return m_screenManager->primaryScreen()->name();
     }
 
@@ -1427,8 +1670,13 @@ void AutotileEngine::resetMaxWindowsForAlgorithmSwitch(TilingAlgorithm* oldAlgo,
 
 void AutotileEngine::propagateGlobalSplitRatio()
 {
+    // Only propagate to current desktop/activity states — per-desktop split
+    // ratio adjustments (via increaseMasterRatio) are preserved on other desktops.
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (it.value() && !hasPerScreenOverride(it.key(), QLatin1String("SplitRatio"))) {
+        if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
+            continue;
+        }
+        if (it.value() && !hasPerScreenOverride(it.key().screenName, QLatin1String("SplitRatio"))) {
             it.value()->setSplitRatio(m_config->splitRatio);
         }
     }
@@ -1436,8 +1684,13 @@ void AutotileEngine::propagateGlobalSplitRatio()
 
 void AutotileEngine::propagateGlobalMasterCount()
 {
+    // Only propagate to current desktop/activity states — per-desktop master
+    // count adjustments are preserved on other desktops.
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (it.value() && !hasPerScreenOverride(it.key(), QLatin1String("MasterCount"))) {
+        if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
+            continue;
+        }
+        if (it.value() && !hasPerScreenOverride(it.key().screenName, QLatin1String("MasterCount"))) {
             it.value()->setMasterCount(m_config->masterCount);
         }
     }
@@ -1460,11 +1713,13 @@ void AutotileEngine::backfillWindows()
         if (state->tiledWindowCount() >= maxWin) {
             continue;
         }
-        // Collect candidates to avoid modifying m_windowToScreen during iteration
-        // (insertWindow calls m_windowToScreen.insert which is unsafe during const iteration)
+        // Collect candidates to avoid modifying m_windowToStateKey during iteration
+        // (insertWindow calls m_windowToStateKey.insert which is unsafe during const iteration)
         QStringList candidates;
-        for (auto it = m_windowToScreen.constBegin(); it != m_windowToScreen.constEnd(); ++it) {
-            if (it.value() == screenName && !state->containsWindow(it.key()) && shouldTileWindow(it.key())) {
+        for (auto it = m_windowToStateKey.constBegin(); it != m_windowToStateKey.constEnd(); ++it) {
+            if (it.value().screenName == screenName && it.value().desktop == m_currentDesktop
+                && it.value().activity == m_currentActivity && !state->containsWindow(it.key())
+                && shouldTileWindow(it.key())) {
                 candidates.append(it.key());
             }
         }
@@ -1563,7 +1818,7 @@ bool AutotileEngine::cleanupPendingOrderIfResolved(const QString& screenName)
         return false;
     }
 
-    TilingState* state = m_screenStates.value(screenName);
+    TilingState* state = stateForScreen(screenName);
     if (!state) {
         return false;
     }
@@ -1581,8 +1836,8 @@ bool AutotileEngine::cleanupPendingOrderIfResolved(const QString& screenName)
 
 TilingState* AutotileEngine::stateForWindow(const QString& windowId, QString* outScreenName)
 {
-    const QString screenName = m_windowToScreen.value(windowId);
-    if (screenName.isEmpty()) {
+    auto it = m_windowToStateKey.constFind(windowId);
+    if (it == m_windowToStateKey.constEnd() || it->screenName.isEmpty()) {
         if (outScreenName) {
             outScreenName->clear();
         }
@@ -1590,9 +1845,11 @@ TilingState* AutotileEngine::stateForWindow(const QString& windowId, QString* ou
     }
 
     if (outScreenName) {
-        *outScreenName = screenName;
+        *outScreenName = it->screenName;
     }
-    return stateForScreen(screenName);
+    // Use the stored key directly — this returns the state that owns the window,
+    // even if the current desktop/activity has changed since the window was added.
+    return m_screenStates.value(*it);
 }
 
 void AutotileEngine::setInnerGap(int gap)
