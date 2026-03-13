@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QRect>
 #include <QSet>
+#include <QThreadPool>
 #include <memory>
 
 #include "shortcutmanager.h"
@@ -179,15 +180,35 @@ private:
      */
     void presaveSnapFloats();
 
+    // Per-desktop context key for layout/autotile tracking.
+    // Uses screenId (EDID-based) or connector name depending on context.
+    struct DesktopContextKey
+    {
+        QString screenId;
+        int desktop;
+        QString activity;
+        bool operator==(const DesktopContextKey& o) const
+        {
+            return screenId == o.screenId && desktop == o.desktop && activity == o.activity;
+        }
+    };
+    friend size_t qHash(const DesktopContextKey& k, size_t seed)
+    {
+        seed = ::qHash(k.screenId, seed);
+        seed = ::qHash(k.desktop, seed);
+        seed = ::qHash(k.activity, seed);
+        return seed;
+    }
+
     /**
      * @brief Capture autotile window order for all autotile screens
      *
      * Must be called BEFORE any mode switch that destroys TilingState
      * (e.g. applyLayoutById, handleAutotileDisabled, updateAutotileScreens).
      *
-     * @return Map of screenName -> ordered window IDs (master first)
+     * @return Map of (screen, desktop, activity) -> ordered window IDs (master first)
      */
-    QHash<QString, QStringList> captureAutotileOrders() const;
+    QHash<DesktopContextKey, QStringList> captureAutotileOrders() const;
 
     /**
      * @brief Restore pre-tile geometry for autotile-only windows
@@ -284,30 +305,15 @@ private:
     bool m_running = false;
     int m_suppressResnapOsd = 0;
 
-    // Last autotile window order per screen, captured when leaving autotile.
-    // Used to re-seed the autotile engine with the same order on re-entry,
-    // producing deterministic arrangements across mode toggles.
-    QHash<QString, QStringList> m_lastAutotileOrders;
+    // Last autotile window order per (screen, desktop, activity), captured when
+    // leaving autotile. Used to re-seed the autotile engine with the same order
+    // on re-entry, producing deterministic arrangements across mode toggles.
+    // Keyed by DesktopContextKey (not plain screen name) so cross-desktop toggles
+    // don't overwrite each other's ordering.
+    QHash<DesktopContextKey, QStringList> m_lastAutotileOrders;
 
     // Per-desktop last autotile assignment, keyed by (screenId, desktop, activity).
     // Saved when toggling FROM autotile so re-entry restores the same algorithm.
-    struct DesktopContextKey
-    {
-        QString screenId;
-        int desktop;
-        QString activity;
-        bool operator==(const DesktopContextKey& o) const
-        {
-            return screenId == o.screenId && desktop == o.desktop && activity == o.activity;
-        }
-    };
-    friend size_t qHash(const DesktopContextKey& k, size_t seed)
-    {
-        seed = ::qHash(k.screenId, seed);
-        seed = ::qHash(k.desktop, seed);
-        seed = ::qHash(k.activity, seed);
-        return seed;
-    }
     QHash<DesktopContextKey, QString> m_lastAutotileAssignments;
     QHash<DesktopContextKey, QString> m_lastManualAssignments;
 
@@ -317,6 +323,10 @@ private:
     // first settingsChanged won't detect a spurious toggle.
     bool m_prevSnappingEnabled = false;
     bool m_prevAutotileEnabled = false;
+
+    // Single-threaded pool for shader baking — QShaderBaker/glslang is not
+    // thread-safe for concurrent compilation (SIGSEGV in QSpirvCompiler).
+    QThreadPool m_shaderBakePool;
 
     // Geometry update debouncing to prevent cascade of redundant recalculations
     QTimer m_geometryUpdateTimer;

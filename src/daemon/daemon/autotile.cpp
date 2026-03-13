@@ -252,16 +252,20 @@ void Daemon::handleSnappingToAutotile()
     m_modeTracker->setCurrentMode(TilingMode::Autotile);
 }
 
-QHash<QString, QStringList> Daemon::captureAutotileOrders() const
+QHash<Daemon::DesktopContextKey, QStringList> Daemon::captureAutotileOrders() const
 {
-    QHash<QString, QStringList> orders;
+    QHash<DesktopContextKey, QStringList> orders;
     if (!m_autotileEngine) {
         return orders;
     }
-    for (const QString& s : m_autotileEngine->autotileScreens()) {
-        QStringList order = m_autotileEngine->tiledWindowOrder(s);
+    const int desktop = currentDesktop();
+    const QString activity = currentActivity();
+    for (const QString& screenName : m_autotileEngine->autotileScreens()) {
+        QStringList order = m_autotileEngine->tiledWindowOrder(screenName);
         if (!order.isEmpty()) {
-            orders[s] = order;
+            // Use connector name as screenId — consistent with how
+            // seedAutotileOrderForScreen looks up by connector name.
+            orders[DesktopContextKey{screenName, desktop, activity}] = order;
         }
     }
     return orders;
@@ -277,7 +281,7 @@ void Daemon::restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows)
         return;
     }
     for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
-        const QString& screenName = it.key();
+        const QString& screenName = it.key().screenId;
         for (const QString& windowId : it.value()) {
             if (excludeWindows.contains(windowId))
                 continue;
@@ -312,7 +316,8 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenName)
     // Prefer saved autotile order from last mode toggle (deterministic re-entry).
     // Falls back to zone-ordered window list when no saved order exists (first
     // activation, or windows changed between toggles).
-    QStringList order = m_lastAutotileOrders.value(screenName);
+    DesktopContextKey orderKey{screenName, currentDesktop(), currentActivity()};
+    QStringList order = m_lastAutotileOrders.value(orderKey);
     if (order.isEmpty()) {
         WindowTrackingService* wts = m_windowTrackingAdaptor->service();
         if (wts) {

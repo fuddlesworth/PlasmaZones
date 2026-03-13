@@ -39,6 +39,7 @@ void AutotileHandler::slotEnabledChanged(bool enabled)
         restoreAllMonocleMaximized();
         m_savedSnapStackingOrder.clear();
         m_savedAutotileStackingOrder.clear();
+        m_savedNotifiedForDesktopReturn.clear();
     }
 }
 
@@ -87,6 +88,13 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
                     // their borderless state — restoring them here would leak title bars
                     // into other desktops' autotile sessions.
                     if (!w->isOnCurrentDesktop()) {
+                        continue;
+                    }
+                    // Skip sticky (all-desktops) windows when some screens still
+                    // use autotile. setNoBorder() is a global KWin property — restoring
+                    // the border here would remove it on OTHER desktops where the window
+                    // is still autotiled. Only restore when autotile is fully disabled.
+                    if (w->isOnAllDesktops() && !newScreens.isEmpty()) {
                         continue;
                     }
                     windowsOnRemovedScreens.insert(m_effect->getWindowId(w));
@@ -224,7 +232,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
             ++m_restoreStaggerGeneration;
             m_resnapOverriddenWindows.clear();
             const uint64_t restoreGen = m_restoreStaggerGeneration;
-            QTimer::singleShot(0, m_effect, [this, toRestore, restoreGen, savedGlobalStack]() {
+            QTimer::singleShot(0, this, [this, toRestore, restoreGen, savedGlobalStack]() {
                 if (m_restoreStaggerGeneration != restoreGen) {
                     return;
                 }
@@ -292,7 +300,17 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
                     }
                 }
             }
-            m_savedNotifiedForDesktopReturn.clear();
+            // Only remove entries for windows on screens we just processed.
+            // In multi-screen setups, windows on OTHER screens (not in `added`)
+            // must remain in the set for when their screen returns.
+            for (const QString& screenName : added) {
+                for (KWin::EffectWindow* w : windows) {
+                    if (w && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
+                        && m_effect->getWindowScreenName(w) == screenName) {
+                        m_savedNotifiedForDesktopReturn.remove(m_effect->getWindowId(w));
+                    }
+                }
+            }
 
             // Re-apply borderless state for windows returning to autotile desktop.
             // The daemon skips retile for desktop return (tiledWindowCount > 0), so
@@ -319,11 +337,11 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
                                 kw->setNoBorder(true);
                                 qCDebug(lcEffect) << "Desktop return: re-applied setNoBorder for" << windowId;
                             }
-                        } else {
-                            // Not tracked — apply fresh (window was tiled on this desktop
-                            // but borderless tracking was lost)
-                            setWindowBorderless(w, windowId, true);
                         }
+                        // Don't apply borderless to untracked windows here — they may
+                        // be genuinely new (opened while this desktop was inactive).
+                        // Borderless is applied when the daemon retiles via
+                        // slotWindowsTileRequested, not during desktop return.
                     }
                 }
             }

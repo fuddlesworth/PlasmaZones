@@ -370,6 +370,7 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
 
     // Remove from autotile tracking sets so re-opened windows get re-notified.
     m_notifiedWindows.remove(windowId);
+    m_savedNotifiedForDesktopReturn.remove(windowId);
     m_minimizeFloatedWindows.remove(windowId);
 
     // Clean up borderless, monocle-maximize, deferred-centering, border zone, focus-follows-mouse,
@@ -406,6 +407,7 @@ void AutotileHandler::onDaemonReady()
     loadSettings();
     connectSignals();
     m_notifiedWindows.clear();
+    m_savedNotifiedForDesktopReturn.clear();
     m_pendingCloses.clear();
 }
 

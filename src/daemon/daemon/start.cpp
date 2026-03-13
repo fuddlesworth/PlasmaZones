@@ -135,6 +135,39 @@ void Daemon::connectDesktopActivity()
         showDesktopSwitchOsd(desktop, currentActivity());
     });
 
+    // Prune stale TilingState entries when desktops are removed
+    connect(m_virtualDesktopManager.get(), &VirtualDesktopManager::desktopCountChanged, this, [this](int newCount) {
+        if (!m_autotileEngine) {
+            return;
+        }
+        // Desktop numbers are 1-based. Any state with desktop > newCount is stale.
+        for (int d = newCount + 1; d <= newCount + 20; ++d) {
+            m_autotileEngine->pruneStatesForDesktop(d);
+        }
+        // Also prune fallback assignment maps
+        QMutableHashIterator<DesktopContextKey, QString> ait(m_lastAutotileAssignments);
+        while (ait.hasNext()) {
+            ait.next();
+            if (ait.key().desktop > newCount) {
+                ait.remove();
+            }
+        }
+        QMutableHashIterator<DesktopContextKey, QString> mit(m_lastManualAssignments);
+        while (mit.hasNext()) {
+            mit.next();
+            if (mit.key().desktop > newCount) {
+                mit.remove();
+            }
+        }
+        QMutableHashIterator<DesktopContextKey, QStringList> oit(m_lastAutotileOrders);
+        while (oit.hasNext()) {
+            oit.next();
+            if (oit.key().desktop > newCount) {
+                oit.remove();
+            }
+        }
+    });
+
     // Set initial virtual desktop on components that maintain their own copy
     // (WindowDragAdaptor reads from LayoutManager directly via resolveLayoutForScreen())
     const int initialDesktop = m_virtualDesktopManager->currentDesktop();
@@ -146,6 +179,38 @@ void Daemon::connectDesktopActivity()
     m_activityManager->init();
     if (ActivityManager::isAvailable()) {
         m_activityManager->start();
+
+        // Prune stale TilingState entries when activities are added/removed
+        connect(m_activityManager.get(), &ActivityManager::activitiesChanged, this, [this]() {
+            if (!m_autotileEngine || !m_activityManager) {
+                return;
+            }
+            const QStringList activities = m_activityManager->activities();
+            m_autotileEngine->pruneStatesForActivities(activities);
+            // Prune fallback maps for removed activities
+            const QSet<QString> validSet(activities.begin(), activities.end());
+            QMutableHashIterator<DesktopContextKey, QString> ait(m_lastAutotileAssignments);
+            while (ait.hasNext()) {
+                ait.next();
+                if (!ait.key().activity.isEmpty() && !validSet.contains(ait.key().activity)) {
+                    ait.remove();
+                }
+            }
+            QMutableHashIterator<DesktopContextKey, QString> mit(m_lastManualAssignments);
+            while (mit.hasNext()) {
+                mit.next();
+                if (!mit.key().activity.isEmpty() && !validSet.contains(mit.key().activity)) {
+                    mit.remove();
+                }
+            }
+            QMutableHashIterator<DesktopContextKey, QStringList> oit(m_lastAutotileOrders);
+            while (oit.hasNext()) {
+                oit.next();
+                if (!oit.key().activity.isEmpty() && !validSet.contains(oit.key().activity)) {
+                    oit.remove();
+                }
+            }
+        });
 
         // Set initial activity on components that maintain their own copy
         m_overlayService->setCurrentActivity(m_activityManager->currentActivity());

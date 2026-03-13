@@ -79,6 +79,12 @@ Daemon::~Daemon()
 bool Daemon::init()
 {
     // Settings constructor already calls load(); avoid duplicate load
+
+    // QShaderBaker/glslang is not thread-safe — concurrent bake() calls crash
+    // in QSpirvCompiler::compileToSpirv(). Limit to 1 thread so bakes are
+    // sequential but still off the main thread.
+    m_shaderBakePool.setMaxThreadCount(1);
+
     // Initialize shader registry singleton (must be done early, before D-Bus adaptors)
     // The registry checks for Qt6::ShaderTools availability at compile time
     // and for qsb tool availability at runtime
@@ -113,9 +119,10 @@ bool Daemon::init()
                 watcher->deleteLater();
             });
             reg->reportShaderBakeStarted(shaderId);
-            watcher->setFuture(QtConcurrent::run([vertPath = info.vertexShaderPath, fragPath = info.sourcePath]() {
-                return warmShaderBakeCacheForPaths(vertPath, fragPath);
-            }));
+            watcher->setFuture(
+                QtConcurrent::run(&m_shaderBakePool, [vertPath = info.vertexShaderPath, fragPath = info.sourcePath]() {
+                    return warmShaderBakeCacheForPaths(vertPath, fragPath);
+                }));
         };
     connect(shaderRegistry, &ShaderRegistry::shadersChanged, this, [scheduleWarmForShader]() {
         const QList<ShaderRegistry::ShaderInfo> shaders = ShaderRegistry::instance()->availableShaders();

@@ -419,9 +419,29 @@ TilingState* AutotileEngine::stateForScreen(const QString& screenName)
     }
 
     const TilingStateKey key = currentKeyForScreen(screenName);
+
+    // Check for existing state before validating screen existence — existing
+    // states are valid even if the screen is temporarily disconnected (e.g.,
+    // monitor power-off during a desktop switch). Only gate NEW state creation.
     auto it = m_screenStates.find(key);
     if (it != m_screenStates.end()) {
         return it.value();
+    }
+
+    // Reject unknown screens to prevent unbounded state creation from bogus
+    // D-Bus callers. Session bus only (same user), but still good hygiene.
+    if (m_screenManager) {
+        bool found = false;
+        for (QScreen* s : m_screenManager->screens()) {
+            if (s && s->name() == screenName) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            qCWarning(lcAutotile) << "AutotileEngine::stateForScreen: unknown screen" << screenName;
+            return nullptr;
+        }
     }
 
     // Create new state for this screen+desktop+activity with parent ownership
@@ -433,6 +453,76 @@ TilingState* AutotileEngine::stateForScreen(const QString& screenName)
 
     m_screenStates.insert(key, state);
     return state;
+}
+
+TilingState* AutotileEngine::stateForKey(const TilingStateKey& key)
+{
+    if (key.screenName.isEmpty()) {
+        return nullptr;
+    }
+
+    auto it = m_screenStates.find(key);
+    if (it != m_screenStates.end()) {
+        return it.value();
+    }
+
+    auto* state = new TilingState(key.screenName, this);
+    state->setMasterCount(m_config->masterCount);
+    state->setSplitRatio(m_config->splitRatio);
+    m_screenStates.insert(key, state);
+    return state;
+}
+
+void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
+{
+    QMutableHashIterator<TilingStateKey, TilingState*> it(m_screenStates);
+    int pruned = 0;
+    while (it.hasNext()) {
+        it.next();
+        if (it.key().desktop == removedDesktop) {
+            it.value()->deleteLater();
+            it.remove();
+            ++pruned;
+        }
+    }
+    // Also prune saved floating windows for this desktop
+    QMutableHashIterator<TilingStateKey, QSet<QString>> fit(m_savedFloatingWindows);
+    while (fit.hasNext()) {
+        fit.next();
+        if (fit.key().desktop == removedDesktop) {
+            fit.remove();
+        }
+    }
+    if (pruned > 0) {
+        qCInfo(lcAutotile) << "Pruned" << pruned << "TilingStates for removed desktop" << removedDesktop;
+    }
+}
+
+void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities)
+{
+    const QSet<QString> valid(validActivities.begin(), validActivities.end());
+    QMutableHashIterator<TilingStateKey, TilingState*> it(m_screenStates);
+    int pruned = 0;
+    while (it.hasNext()) {
+        it.next();
+        const QString& act = it.key().activity;
+        if (!act.isEmpty() && !valid.contains(act)) {
+            it.value()->deleteLater();
+            it.remove();
+            ++pruned;
+        }
+    }
+    QMutableHashIterator<TilingStateKey, QSet<QString>> fit(m_savedFloatingWindows);
+    while (fit.hasNext()) {
+        fit.next();
+        const QString& act = fit.key().activity;
+        if (!act.isEmpty() && !valid.contains(act)) {
+            fit.remove();
+        }
+    }
+    if (pruned > 0) {
+        qCInfo(lcAutotile) << "Pruned" << pruned << "TilingStates for removed activities";
+    }
 }
 
 AutotileConfig* AutotileEngine::config() const noexcept
@@ -896,9 +986,13 @@ void AutotileEngine::toggleWindowFloat(const QString& windowId, const QString& s
     }
 
     // Cross-screen fallback: the window may have been moved (e.g., pre-autotile
-    // geometry restore put it on a different screen). Search all autotile states.
+    // geometry restore put it on a different screen). Search current desktop/activity
+    // states only — states for other desktops should not be considered.
     if (!state) {
         for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+            if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
+                continue;
+            }
             if (it.value() && it.value()->containsWindow(windowId)) {
                 state = it.value();
                 resolvedScreen = it.key().screenName;

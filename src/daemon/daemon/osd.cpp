@@ -263,32 +263,19 @@ void Daemon::syncModeFromAssignments()
     // Sync UnifiedLayoutController's current layout ID to match this desktop.
     // Without this, layout cycling uses the old desktop's current index.
     if (m_unifiedLayoutController) {
-        QScreen* screen = m_windowTrackingAdaptor ? resolveShortcutScreen(m_windowTrackingAdaptor) : nullptr;
-        if (!screen && !m_screenManager->screens().isEmpty()) {
-            screen = m_screenManager->screens().first();
+        QScreen* focusedScreen = m_windowTrackingAdaptor ? resolveShortcutScreen(m_windowTrackingAdaptor) : nullptr;
+        if (!focusedScreen && !m_screenManager->screens().isEmpty()) {
+            focusedScreen = m_screenManager->screens().first();
         }
-        if (screen) {
-            const QString screenId = Utils::screenIdentifier(screen);
-            const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-            m_unifiedLayoutController->setCurrentScreenName(screenId);
+        if (focusedScreen) {
+            const QString focusedScreenId = Utils::screenIdentifier(focusedScreen);
+            const QString focusedAssignmentId =
+                m_layoutManager->assignmentIdForScreen(focusedScreenId, desktop, activity);
+            m_unifiedLayoutController->setCurrentScreenName(focusedScreenId);
             // Pass the per-desktop assignment as override — syncFromExternalState()
             // without override only reads the global active layout, which doesn't
             // reflect per-desktop autotile assignments.
-            m_unifiedLayoutController->syncFromExternalState(assignmentId);
-
-            // Populate m_lastManualAssignments / m_lastAutotileAssignments for this
-            // desktop so the first toggle on a desktop that was never toggled has a
-            // correct fallback (instead of falling through to global last-used).
-            DesktopContextKey ctxKey{screenId, desktop, activity};
-            if (LayoutId::isAutotile(assignmentId)) {
-                if (!m_lastAutotileAssignments.contains(ctxKey)) {
-                    m_lastAutotileAssignments[ctxKey] = assignmentId;
-                }
-            } else {
-                if (!m_lastManualAssignments.contains(ctxKey)) {
-                    m_lastManualAssignments[ctxKey] = assignmentId;
-                }
-            }
+            m_unifiedLayoutController->syncFromExternalState(focusedAssignmentId);
 
             // Update the global active layout to match this desktop's per-screen
             // assignment. Without this, LayoutManager::activeLayout() returns the
@@ -298,11 +285,29 @@ void Daemon::syncModeFromAssignments()
             // onLayoutChanged → resnap buffer population. Desktop switch is not
             // a layout change — the resnap buffer entries would be stale and corrupt
             // the next real manual layout switch.
-            if (!anyAutotile && !LayoutId::isAutotile(assignmentId)) {
-                Layout* desktopLayout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
+            if (!anyAutotile && !LayoutId::isAutotile(focusedAssignmentId)) {
+                Layout* desktopLayout = m_layoutManager->layoutForScreen(focusedScreenId, desktop, activity);
                 if (desktopLayout && desktopLayout != m_layoutManager->activeLayout()) {
                     QSignalBlocker blocker(m_layoutManager.get());
                     m_layoutManager->setActiveLayout(desktopLayout);
+                }
+            }
+        }
+
+        // Populate m_lastManualAssignments / m_lastAutotileAssignments for ALL
+        // screens on this desktop so the first toggle has a correct fallback
+        // (not just the focused screen — multi-monitor needs all screens seeded).
+        for (QScreen* screen : m_screenManager->screens()) {
+            const QString screenId = Utils::screenIdentifier(screen);
+            const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+            DesktopContextKey ctxKey{screenId, desktop, activity};
+            if (LayoutId::isAutotile(assignmentId)) {
+                if (!m_lastAutotileAssignments.contains(ctxKey)) {
+                    m_lastAutotileAssignments[ctxKey] = assignmentId;
+                }
+            } else {
+                if (!m_lastManualAssignments.contains(ctxKey)) {
+                    m_lastManualAssignments[ctxKey] = assignmentId;
                 }
             }
         }

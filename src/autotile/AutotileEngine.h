@@ -143,6 +143,22 @@ public:
     void setCurrentActivity(const QString& activity);
 
     /**
+     * @brief Prune TilingState and saved floating entries for a removed desktop
+     *
+     * Removes all states where key.desktop == removedDesktop. Called when a
+     * virtual desktop is deleted so stale entries don't accumulate.
+     */
+    void pruneStatesForDesktop(int removedDesktop);
+
+    /**
+     * @brief Prune TilingState entries for activities not in the given set
+     *
+     * Removes states whose activity is non-empty and not in validActivities.
+     * Called when activities change so stale entries don't accumulate.
+     */
+    void pruneStatesForActivities(const QStringList& validActivities);
+
+    /**
      * @brief Get the current virtual desktop tracked by the engine
      */
     int currentDesktop() const noexcept
@@ -736,6 +752,15 @@ private:
     {
         return TilingStateKey{screenName, m_currentDesktop, m_currentActivity};
     }
+
+    /**
+     * @brief Get TilingState for an explicit key (bypasses current desktop/activity)
+     *
+     * Creates the state if it doesn't exist. Used by loadState() to restore states
+     * for arbitrary desktop/activity combinations without temporarily mutating
+     * m_currentDesktop/m_currentActivity.
+     */
+    TilingState* stateForKey(const TilingStateKey& key);
 
     /**
      * @brief Reset maxWindows when switching algorithms (DRY helper)

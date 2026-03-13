@@ -294,12 +294,13 @@ void Daemon::initializeAutotile()
                 QSet<QString> resnappedWindows;
                 for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
                     const QStringList& windowOrder = it.value();
-                    Layout* screenLayout = m_layoutManager->resolveLayoutForScreen(it.key());
+                    const QString& screenName = it.key().screenId;
+                    Layout* screenLayout = m_layoutManager->resolveLayoutForScreen(screenName);
                     int zoneCount = screenLayout ? screenLayout->zoneCount() : 0;
                     for (int i = 0; i < std::min(static_cast<int>(windowOrder.size()), zoneCount); ++i) {
                         resnappedWindows.insert(windowOrder.at(i));
                     }
-                    m_snapEngine->resnapFromAutotileOrder(windowOrder, it.key());
+                    m_snapEngine->resnapFromAutotileOrder(windowOrder, screenName);
                 }
 
                 restoreAutotileOnlyGeometries(resnappedWindows);
@@ -493,7 +494,7 @@ void Daemon::connectOverlaySignals()
             // Suppress resnap OSD when triggered by a mode/layout change
             // (layout switch OSD already provides feedback)
             if (m_suppressResnapOsd > 0 && (action == QStringLiteral("resnap") || action == QStringLiteral("retile"))) {
-                --m_suppressResnapOsd;
+                m_suppressResnapOsd = std::max(0, m_suppressResnapOsd - 1);
                 return;
             }
             if (m_settings && m_settings->showNavigationOsd()) {

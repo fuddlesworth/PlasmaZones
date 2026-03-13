@@ -410,17 +410,14 @@ void SettingsBridge::loadState()
         const int desktop = screenObj[QStringLiteral("desktop")].toInt(0);
         const QString activity = screenObj[QStringLiteral("activity")].toString();
 
-        // Temporarily set engine context to match the saved state's desktop/activity
-        // so stateForScreen() creates the state under the correct key.
-        const int savedDesktop = m_engine->m_currentDesktop;
-        const QString savedActivity = m_engine->m_currentActivity;
-        m_engine->m_currentDesktop = (desktop > 0) ? desktop : savedDesktop;
-        m_engine->m_currentActivity = !activity.isEmpty() ? activity : savedActivity;
+        // Use stateForKey() to create the state under the exact saved key
+        // without mutating the engine's current desktop/activity context.
+        TilingStateKey loadKey;
+        loadKey.screenName = screenName;
+        loadKey.desktop = (desktop > 0) ? desktop : m_engine->m_currentDesktop;
+        loadKey.activity = !activity.isEmpty() ? activity : m_engine->m_currentActivity;
 
-        TilingState* state = m_engine->stateForScreen(screenName);
-
-        m_engine->m_currentDesktop = savedDesktop;
-        m_engine->m_currentActivity = savedActivity;
+        TilingState* state = m_engine->stateForKey(loadKey);
 
         if (!state) {
             continue;
