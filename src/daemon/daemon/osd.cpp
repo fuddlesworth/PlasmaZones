@@ -318,6 +318,11 @@ void Daemon::syncModeFromAssignments()
 
 void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
 {
+    // Skip during startup — the initial activity/desktop detection fires
+    // before start() completes and should not produce an OSD flash.
+    if (!m_running) {
+        return;
+    }
     if (!m_settings || !m_settings->showOsdOnLayoutSwitch() || !m_overlayService || !m_layoutManager
         || !m_screenManager) {
         return;
