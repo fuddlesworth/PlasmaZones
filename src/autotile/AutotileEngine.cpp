@@ -205,7 +205,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     // stateForScreen() creates the TilingState lazily, so windows that arrive
     // shortly after (via KWin effect re-notification) have a state ready.
     for (const QString& screenName : added) {
-        TilingState* state = stateForScreen(screenName);
+        stateForScreen(screenName);
         // Skip retile if windows are expected to arrive shortly (pending initial
         // order from seedAutotileOrderForScreen). The KWin effect sends windowOpened
         // D-Bus calls after receiving autotileScreensChanged, and each insertWindow
