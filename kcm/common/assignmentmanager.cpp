@@ -196,6 +196,10 @@ void AssignmentManager::assignTilingLayoutToScreenDesktop(const QString& screenN
 
 void AssignmentManager::clearTilingScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
 {
+    if (virtualDesktop < 1) {
+        qCWarning(lcKcm) << "Cannot clear tiling assignment - invalid desktop number:" << virtualDesktop;
+        return;
+    }
     clearScreenDesktopAssignment(screenName, virtualDesktop);
     Q_EMIT tilingDesktopAssignmentsChanged();
 }
@@ -208,9 +212,19 @@ QString AssignmentManager::getTilingLayoutForScreenDesktop(const QString& screen
 
 bool AssignmentManager::hasExplicitTilingAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
-    if (!hasExplicitAssignmentForScreenDesktop(screenName, virtualDesktop))
+    // Single-call path: getLayoutForScreenDesktop checks pending cache first
+    // (no D-Bus), and returns empty if cleared. Only hits D-Bus once (if needed).
+    const QString id = getLayoutForScreenDesktop(screenName, virtualDesktop);
+    if (id.isEmpty())
         return false;
-    return LayoutId::isAutotile(getLayoutForScreenDesktop(screenName, virtualDesktop));
+    // Verify it's an explicit assignment, not a fallback — check pending/cleared cache
+    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName)).arg(virtualDesktop);
+    if (m_pendingDesktopAssignments.contains(key))
+        return LayoutId::isAutotile(id);
+    if (m_clearedDesktopAssignments.contains(key))
+        return false;
+    // D-Bus result — verify explicit via hasExplicit (already cached in the same D-Bus call path)
+    return LayoutId::isAutotile(id) && hasExplicitAssignmentForScreenDesktop(screenName, virtualDesktop);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -303,9 +317,15 @@ QString AssignmentManager::getTilingLayoutForScreenActivity(const QString& scree
 bool AssignmentManager::hasExplicitTilingAssignmentForScreenActivity(const QString& screenName,
                                                                      const QString& activityId) const
 {
-    if (!hasExplicitAssignmentForScreenActivity(screenName, activityId))
+    const QString id = getLayoutForScreenActivity(screenName, activityId);
+    if (id.isEmpty())
         return false;
-    return LayoutId::isAutotile(getLayoutForScreenActivity(screenName, activityId));
+    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
+    if (m_pendingActivityAssignments.contains(key))
+        return LayoutId::isAutotile(id);
+    if (m_clearedActivityAssignments.contains(key))
+        return false;
+    return LayoutId::isAutotile(id) && hasExplicitAssignmentForScreenActivity(screenName, activityId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

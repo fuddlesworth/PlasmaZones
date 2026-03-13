@@ -302,6 +302,11 @@ private:
     /** @brief Resolve algorithm ID with fallback: last used → settings → default */
     QString resolveAlgorithmId() const;
 
+    /** @brief Prune m_lastAutotileAssignments, m_lastManualAssignments, m_lastAutotileOrders for stale desktops */
+    void pruneContextMapsForDesktop(int maxDesktop);
+    /** @brief Prune context maps for removed activities */
+    void pruneContextMapsForActivities(const QSet<QString>& validActivities);
+
     bool m_running = false;
     int m_suppressResnapOsd = 0;
 

@@ -141,31 +141,20 @@ void Daemon::connectDesktopActivity()
             return;
         }
         // Desktop numbers are 1-based. Any state with desktop > newCount is stale.
-        for (int d = newCount + 1; d <= newCount + 20; ++d) {
+        // Iterate the engine's own state map to find stale desktops (avoids
+        // the arbitrary upper bound of the old newCount+20 sweep).
+        QSet<int> staleDesktops;
+        for (auto it = m_autotileEngine->screenStates().constBegin(); it != m_autotileEngine->screenStates().constEnd();
+             ++it) {
+            if (it.key().desktop > newCount) {
+                staleDesktops.insert(it.key().desktop);
+            }
+        }
+        for (int d : staleDesktops) {
             m_autotileEngine->pruneStatesForDesktop(d);
         }
-        // Also prune fallback assignment maps
-        QMutableHashIterator<DesktopContextKey, QString> ait(m_lastAutotileAssignments);
-        while (ait.hasNext()) {
-            ait.next();
-            if (ait.key().desktop > newCount) {
-                ait.remove();
-            }
-        }
-        QMutableHashIterator<DesktopContextKey, QString> mit(m_lastManualAssignments);
-        while (mit.hasNext()) {
-            mit.next();
-            if (mit.key().desktop > newCount) {
-                mit.remove();
-            }
-        }
-        QMutableHashIterator<DesktopContextKey, QStringList> oit(m_lastAutotileOrders);
-        while (oit.hasNext()) {
-            oit.next();
-            if (oit.key().desktop > newCount) {
-                oit.remove();
-            }
-        }
+        // Prune fallback assignment maps
+        pruneContextMapsForDesktop(newCount);
     });
 
     // Set initial virtual desktop on components that maintain their own copy
@@ -187,29 +176,8 @@ void Daemon::connectDesktopActivity()
             }
             const QStringList activities = m_activityManager->activities();
             m_autotileEngine->pruneStatesForActivities(activities);
-            // Prune fallback maps for removed activities
             const QSet<QString> validSet(activities.begin(), activities.end());
-            QMutableHashIterator<DesktopContextKey, QString> ait(m_lastAutotileAssignments);
-            while (ait.hasNext()) {
-                ait.next();
-                if (!ait.key().activity.isEmpty() && !validSet.contains(ait.key().activity)) {
-                    ait.remove();
-                }
-            }
-            QMutableHashIterator<DesktopContextKey, QString> mit(m_lastManualAssignments);
-            while (mit.hasNext()) {
-                mit.next();
-                if (!mit.key().activity.isEmpty() && !validSet.contains(mit.key().activity)) {
-                    mit.remove();
-                }
-            }
-            QMutableHashIterator<DesktopContextKey, QStringList> oit(m_lastAutotileOrders);
-            while (oit.hasNext()) {
-                oit.next();
-                if (!oit.key().activity.isEmpty() && !validSet.contains(oit.key().activity)) {
-                    oit.remove();
-                }
-            }
+            pruneContextMapsForActivities(validSet);
         });
 
         // Set initial activity on components that maintain their own copy
@@ -377,6 +345,40 @@ void Daemon::connectShortcutSignals()
             m_windowTrackingAdaptor->resnapToNewLayout();
         }
     });
+}
+
+void Daemon::pruneContextMapsForDesktop(int maxDesktop)
+{
+    auto pruneByDesktop = [maxDesktop](auto& map) {
+        auto it = map.begin();
+        while (it != map.end()) {
+            if (it.key().desktop > maxDesktop) {
+                it = map.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    };
+    pruneByDesktop(m_lastAutotileAssignments);
+    pruneByDesktop(m_lastManualAssignments);
+    pruneByDesktop(m_lastAutotileOrders);
+}
+
+void Daemon::pruneContextMapsForActivities(const QSet<QString>& validActivities)
+{
+    auto pruneByActivity = [&validActivities](auto& map) {
+        auto it = map.begin();
+        while (it != map.end()) {
+            if (!it.key().activity.isEmpty() && !validActivities.contains(it.key().activity)) {
+                it = map.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    };
+    pruneByActivity(m_lastAutotileAssignments);
+    pruneByActivity(m_lastManualAssignments);
+    pruneByActivity(m_lastAutotileOrders);
 }
 
 } // namespace PlasmaZones

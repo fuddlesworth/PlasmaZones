@@ -24,13 +24,13 @@ namespace PlasmaZones {
 /**
  * @brief Composite key for per-desktop/activity TilingState lookup
  *
- * desktop=0 and empty activity represent "all desktops/activities",
- * matching the LayoutAssignmentKey convention for backward compatibility.
+ * desktop=1 (matching m_currentDesktop default) and empty activity represent
+ * the initial desktop/activity context. Always uses explicit desktop numbers.
  */
 struct TilingStateKey
 {
     QString screenName;
-    int desktop = 0;
+    int desktop = 1;
     QString activity;
 
     bool operator==(const TilingStateKey& other) const
@@ -858,6 +858,13 @@ private:
     QString m_algorithmId;
     QString m_activeScreen; // Last-focused screen (updated by onWindowFocused)
     QHash<TilingStateKey, TilingState*> m_screenStates; // Owned via Qt parent (this)
+public:
+    const QHash<TilingStateKey, TilingState*>& screenStates() const
+    {
+        return m_screenStates;
+    }
+
+private:
     QHash<QString, TilingStateKey> m_windowToStateKey; // windowId -> owning state key
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
 

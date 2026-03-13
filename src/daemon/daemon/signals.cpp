@@ -204,9 +204,13 @@ void Daemon::initializeAutotile()
             const bool wasAutotile = LayoutId::isAutotile(currentAssignment);
 
             // Capture autotile window order BEFORE layout switch destroys TilingState.
-            // Saved in m_lastAutotileOrders for deterministic re-seeding on next entry.
+            // Merge (not replace) into m_lastAutotileOrders so other desktops' saved
+            // orders are preserved — a replace would discard them.
             if (wasAutotile) {
-                m_lastAutotileOrders = captureAutotileOrders();
+                auto currentOrders = captureAutotileOrders();
+                for (auto it = currentOrders.constBegin(); it != currentOrders.constEnd(); ++it) {
+                    m_lastAutotileOrders[it.key()] = it.value();
+                }
             }
 
             DesktopContextKey ctxKey{screenId, desktop, activity};
@@ -284,15 +288,21 @@ void Daemon::initializeAutotile()
             // Windows that were autotile-only (never zone-snapped) get their
             // pre-autotile floating geometry restored by restoreAutotileOnlyGeometries.
             if (applied && wasAutotile && m_snapEngine) {
-                m_suppressResnapOsd = m_lastAutotileOrders.size();
                 // Build exclusion set: windows that fit into the target layout's zones
                 // will be zone-snapped by the resnap D-Bus signal. Without excluding them,
                 // restoreAutotileOnlyGeometries sends float-geometry D-Bus calls that
                 // arrive AFTER the resnap and overwrite the zone positions.
                 // Use per-screen zone count (not global activeLayout) because each screen
                 // may have a different layout assigned with a different zone count.
+                // Only process entries for the CURRENT desktop (m_lastAutotileOrders
+                // accumulates entries across desktops after the merge fix).
+                int resnapScreenCount = 0;
                 QSet<QString> resnappedWindows;
                 for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
+                    if (it.key().desktop != desktop || it.key().activity != activity) {
+                        continue;
+                    }
+                    ++resnapScreenCount;
                     const QStringList& windowOrder = it.value();
                     const QString& screenName = it.key().screenId;
                     Layout* screenLayout = m_layoutManager->resolveLayoutForScreen(screenName);
@@ -302,6 +312,7 @@ void Daemon::initializeAutotile()
                     }
                     m_snapEngine->resnapFromAutotileOrder(windowOrder, screenName);
                 }
+                m_suppressResnapOsd = resnapScreenCount;
 
                 restoreAutotileOnlyGeometries(resnappedWindows);
             }

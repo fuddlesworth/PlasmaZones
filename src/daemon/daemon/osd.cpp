@@ -285,7 +285,7 @@ void Daemon::syncModeFromAssignments()
             // onLayoutChanged → resnap buffer population. Desktop switch is not
             // a layout change — the resnap buffer entries would be stale and corrupt
             // the next real manual layout switch.
-            if (!anyAutotile && !LayoutId::isAutotile(focusedAssignmentId)) {
+            if (!LayoutId::isAutotile(focusedAssignmentId)) {
                 Layout* desktopLayout = m_layoutManager->layoutForScreen(focusedScreenId, desktop, activity);
                 if (desktopLayout && desktopLayout != m_layoutManager->activeLayout()) {
                     QSignalBlocker blocker(m_layoutManager.get());

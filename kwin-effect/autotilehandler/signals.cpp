@@ -285,7 +285,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
             qCInfo(lcEffect) << "slotScreensChanged: desktop return for screens:" << added;
             for (const QString& screenName : added) {
                 for (KWin::EffectWindow* w : windows) {
-                    if (w && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
+                    if (w && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop() && w->isOnCurrentActivity()
                         && m_effect->getWindowScreenName(w) == screenName) {
                         const QString windowId = m_effect->getWindowId(w);
                         if (m_savedNotifiedForDesktopReturn.contains(windowId)
@@ -305,7 +305,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
             // must remain in the set for when their screen returns.
             for (const QString& screenName : added) {
                 for (KWin::EffectWindow* w : windows) {
-                    if (w && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop()
+                    if (w && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop() && w->isOnCurrentActivity()
                         && m_effect->getWindowScreenName(w) == screenName) {
                         m_savedNotifiedForDesktopReturn.remove(m_effect->getWindowId(w));
                     }
@@ -320,7 +320,8 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
             if (m_border.hideTitleBars) {
                 for (const QString& screenName : added) {
                     for (KWin::EffectWindow* w : windows) {
-                        if (!w || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop() || w->isMinimized()) {
+                        if (!w || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()
+                            || !w->isOnCurrentActivity() || w->isMinimized()) {
                             continue;
                         }
                         if (m_effect->getWindowScreenName(w) != screenName) {
@@ -350,7 +351,6 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
             m_effect->updateActiveBorder();
         } else {
             // Genuine user toggle — process all added screens as new.
-            const QSet<QString> trulyNewScreens = added;
 
             // Save stacking order for windows on screens entering autotile.
             // Restored when leaving autotile so windows return to their
@@ -363,7 +363,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
                     continue;
                 }
                 const QString screenName = m_effect->getWindowScreenName(w);
-                if (trulyNewScreens.contains(screenName)) {
+                if (added.contains(screenName)) {
                     m_savedSnapStackingOrder[screenName].append(m_effect->getWindowId(w));
                 }
             }
@@ -382,7 +382,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
                     continue;
                 }
                 const QString screenName = m_effect->getWindowScreenName(w);
-                if (!trulyNewScreens.contains(screenName)) {
+                if (!added.contains(screenName)) {
                     continue;
                 }
                 const QString windowId = m_effect->getWindowId(w);
@@ -405,7 +405,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
                     notifyWindowAdded(w);
                 }
             }
-            qCInfo(lcEffect) << "Saved pre-autotile geometries for screens:" << trulyNewScreens;
+            qCInfo(lcEffect) << "Saved pre-autotile geometries for screens:" << added;
 
             // Async fetch of daemon's persisted pre-autotile geometries from previous session.
             // These may be more accurate than the current frame for windows that were resnapped

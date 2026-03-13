@@ -182,7 +182,7 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromCurrentAssignme
                    << "(total zone assignments:" << m_windowZoneAssignments.size() << ")"
                    << (screenFilter.isEmpty() ? QStringLiteral("(all screens)")
                                               : QStringLiteral("(screen: %1)").arg(screenFilter));
-    if (result.isEmpty() && !m_windowZoneAssignments.isEmpty()) {
+    if (result.isEmpty() && !m_windowZoneAssignments.isEmpty() && lcCore().isDebugEnabled()) {
         for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
             QString screen = m_windowScreenAssignments.value(it.key());
             bool floating = isWindowFloating(it.key());
