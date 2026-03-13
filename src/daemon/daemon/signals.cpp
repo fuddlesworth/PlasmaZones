@@ -260,14 +260,23 @@ void Daemon::initializeAutotile()
                 }
 
                 // Resolve algorithm: prefer this desktop's last-used algorithm,
-                // then fall back to global last-used → settings → default.
+                // then fall back to the user's configured default (settings).
+                // Do NOT use resolveAlgorithmId() here — it checks the global
+                // ModeTracker lastAutotileAlgorithm first, which is whatever
+                // algorithm was last used on ANY desktop. The default autotile
+                // setting should behave like the default snapping layout: each
+                // desktop without an explicit per-desktop assignment gets the
+                // configured default, not the global last-used.
                 QString algoId;
                 auto savedIt = m_lastAutotileAssignments.constFind(ctxKey);
                 if (savedIt != m_lastAutotileAssignments.constEnd()) {
                     algoId = LayoutId::extractAlgorithmId(savedIt.value());
                 }
+                if (algoId.isEmpty() && m_settings) {
+                    algoId = m_settings->autotileAlgorithm();
+                }
                 if (algoId.isEmpty()) {
-                    algoId = resolveAlgorithmId();
+                    algoId = AlgorithmRegistry::defaultAlgorithmId();
                 }
                 if (!algoId.isEmpty()) {
                     applied = m_unifiedLayoutController->applyLayoutById(LayoutId::makeAutotileId(algoId));
