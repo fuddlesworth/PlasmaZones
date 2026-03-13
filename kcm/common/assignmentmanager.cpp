@@ -561,7 +561,7 @@ void AssignmentManager::onScreenLayoutChanged(const QString& screenName, const Q
         connectorName = screenName;
     }
 
-    const bool isAutotile = layoutId.startsWith(QLatin1String("autotile:"));
+    const bool isAutotile = LayoutId::isAutotile(layoutId);
 
     if (virtualDesktop == 0) {
         // Update display-level defaults (base screen assignments)

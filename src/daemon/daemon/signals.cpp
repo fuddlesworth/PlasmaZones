@@ -367,15 +367,32 @@ void Daemon::connectLayoutSignals()
 
     // Re-derive autotile screens and layout filter when assignments change
     // (e.g., from D-Bus, layout picker, unified controller).
-    // Do NOT call syncModeFromAssignments() here — it sets the global active
-    // layout with QSignalBlocker, which steals the activeLayoutChanged transition
-    // from user-initiated layout switches (applyEntry, zone selector) and leaves
-    // the resnap buffer empty. syncModeFromAssignments() is called directly by
-    // desktop/activity change handlers where the active layout update is needed.
+    // Also sync the unified controller's cycling index when the assignment
+    // affects the current desktop — needed for D-Bus/KCM batch operations.
+    // Do NOT touch setActiveLayout here — applyEntry/manualLayoutSelected
+    // handle active layout themselves, and calling it here with QSignalBlocker
+    // steals the activeLayoutChanged transition, leaving the resnap buffer
+    // empty. Desktop switches sync active layout via syncModeFromAssignments().
     connect(m_layoutManager.get(), &LayoutManager::layoutAssigned, this,
-            [this](const QString& /*screenId*/, int /*virtualDesktop*/, Layout* /*layout*/) {
+            [this](const QString& screenId, int virtualDesktop, Layout* /*layout*/) {
                 updateAutotileScreens();
                 updateLayoutFilter();
+
+                // Sync unified controller cycling index when assignment affects current desktop.
+                const int curDesktop = currentDesktop();
+                if (virtualDesktop != 0 && virtualDesktop != curDesktop) {
+                    return;
+                }
+                if (!m_unifiedLayoutController || !m_layoutManager) {
+                    return;
+                }
+                const QString focusedScreenId = m_unifiedLayoutController->currentScreenName();
+                if (focusedScreenId.isEmpty() || focusedScreenId != screenId) {
+                    return;
+                }
+                const QString assignmentId =
+                    m_layoutManager->assignmentIdForScreen(focusedScreenId, curDesktop, currentActivity());
+                m_unifiedLayoutController->syncFromExternalState(assignmentId);
             });
 
     // Connect unified layout controller signals for OSD display

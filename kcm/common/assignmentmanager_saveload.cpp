@@ -109,7 +109,9 @@ void AssignmentManager::save(QStringList& failedOperations)
                 || groupName.startsWith(QLatin1String("TilingScreen:"))
                 || groupName.startsWith(QLatin1String("TilingActivity:"))
                 || groupName.startsWith(QLatin1String("TilingDesktop:"))
-                || groupName.startsWith(QLatin1String("Assignment:"))) {
+                || (groupName.startsWith(QLatin1String("Assignment:"))
+                    && !groupName.contains(QLatin1String(":Desktop:"))
+                    && !groupName.contains(QLatin1String(":Activity:")))) {
                 config->deleteGroup(groupName);
             }
         }

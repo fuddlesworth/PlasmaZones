@@ -271,7 +271,8 @@ void LayoutManager::loadAssignments()
 
         KConfigGroup grp = config->group(groupName);
         AssignmentEntry entry;
-        entry.mode = static_cast<AssignmentEntry::Mode>(grp.readEntry(QStringLiteral("Mode"), 0));
+        int modeInt = grp.readEntry(QStringLiteral("Mode"), 0);
+        entry.mode = (modeInt == AssignmentEntry::Autotile) ? AssignmentEntry::Autotile : AssignmentEntry::Snapping;
         entry.snappingLayout = grp.readEntry(QStringLiteral("SnappingLayout"), QString());
         entry.tilingAlgorithm = grp.readEntry(QStringLiteral("TilingAlgorithm"), QString());
 
@@ -344,7 +345,9 @@ void LayoutManager::loadAssignments()
                         AssignmentEntry entry;
                         if (obj.contains(QStringLiteral("mode"))) {
                             // Already in new explicit format
-                            entry.mode = static_cast<AssignmentEntry::Mode>(obj[QStringLiteral("mode")].toInt());
+                            int modeInt = obj[QStringLiteral("mode")].toInt();
+                            entry.mode = (modeInt == AssignmentEntry::Autotile) ? AssignmentEntry::Autotile
+                                                                                : AssignmentEntry::Snapping;
                             entry.snappingLayout = obj[QStringLiteral("snappingLayout")].toString();
                             entry.tilingAlgorithm = obj[QStringLiteral("tilingAlgorithm")].toString();
                         } else {

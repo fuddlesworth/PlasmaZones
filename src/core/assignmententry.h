@@ -50,8 +50,10 @@ struct AssignmentEntry
 
     QString activeLayoutId() const
     {
-        return (mode == Autotile && !tilingAlgorithm.isEmpty()) ? LayoutId::makeAutotileId(tilingAlgorithm)
-                                                                : snappingLayout;
+        if (mode == Autotile) {
+            return !tilingAlgorithm.isEmpty() ? LayoutId::makeAutotileId(tilingAlgorithm) : QString();
+        }
+        return snappingLayout;
     }
     bool isValid() const
     {

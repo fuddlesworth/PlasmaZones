@@ -230,15 +230,16 @@ void Daemon::resnapIfManualMode()
     // others are manual — a global check would block manual resnaps.
     if (m_autotileEngine && m_unifiedLayoutController) {
         const QString screenId = m_unifiedLayoutController->currentScreenName();
-        if (!screenId.isEmpty()) {
-            // Convert screen ID to connector name for autotile engine lookup
-            QString connectorName = Utils::screenNameForId(screenId);
-            if (connectorName.isEmpty()) {
-                connectorName = screenId; // already a connector name
-            }
-            if (m_autotileEngine->isAutotileScreen(connectorName)) {
-                return; // This screen is autotile — engine handles retile
-            }
+        if (screenId.isEmpty()) {
+            return; // No screen context — can't determine mode, skip resnap
+        }
+        // Convert screen ID to connector name for autotile engine lookup
+        QString connectorName = Utils::screenNameForId(screenId);
+        if (connectorName.isEmpty()) {
+            connectorName = screenId; // already a connector name
+        }
+        if (m_autotileEngine->isAutotileScreen(connectorName)) {
+            return; // This screen is autotile — engine handles retile
         }
     }
     m_suppressResnapOsd = 1;
