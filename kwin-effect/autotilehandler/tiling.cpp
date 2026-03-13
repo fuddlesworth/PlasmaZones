@@ -339,46 +339,43 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
 
     // Window doesn't match zone — center it within the zone so it's visually
     // balanced rather than stuck at the zone origin.
-    if (dw > MinCenteringDelta || dh > MinCenteringDelta || dw < -MinCenteringDelta || dh < -MinCenteringDelta) {
-        // Window doesn't match zone — center it.
-        const qreal dx = dw / 2.0;
-        const qreal dy = dh / 2.0;
-        const QRectF centered(targetZone.x() + dx, targetZone.y() + dy, actual.width(), actual.height());
+    const qreal dx = dw / 2.0;
+    const qreal dy = dh / 2.0;
+    const QRectF centered(targetZone.x() + dx, targetZone.y() + dy, actual.width(), actual.height());
 
-        // Already at the centered position — record and consume
-        if (qAbs(actual.x() - centered.x()) < 1.0 && qAbs(actual.y() - centered.y()) < 1.0) {
-            m_centeredWaylandZones[windowId] = targetZone;
-            m_autotileTargetZones.erase(it);
-            return;
-        }
-
-        KWin::Window* kw = w->window();
-        if (!kw) {
-            // No KWin::Window — consume stale entry to prevent perpetual lookups
-            m_autotileTargetZones.erase(it);
-            return;
-        }
-
-        qCInfo(lcEffect) << "Centering autotile window" << windowId << "actual=" << actual.size()
-                         << "zone=" << targetZone.size() << "offset=(" << dx << "," << dy << ")";
-
-        // Window refused to shrink below its actual size — report discovered
-        // min size to daemon so future retiles can account for it. Only report
-        // when the window is larger than the zone (negative delta = oversized).
-        if (dw < -MinCenteringDelta || dh < -MinCenteringDelta) {
-            const int discoveredMinW = (dw < -MinCenteringDelta) ? qCeil(actual.width()) : 0;
-            const int discoveredMinH = (dh < -MinCenteringDelta) ? qCeil(actual.height()) : 0;
-            reportDiscoveredMinSize(windowId, discoveredMinW, discoveredMinH);
-        }
-
-        // Erase BEFORE moveResize to prevent re-entrancy: moveResize emits
-        // windowFrameGeometryChanged synchronously, which would re-enter
-        // this slot and find the entry still present → infinite recursion → crash.
+    // Already at the centered position — record and consume
+    if (qAbs(actual.x() - centered.x()) < 1.0 && qAbs(actual.y() - centered.y()) < 1.0) {
         m_centeredWaylandZones[windowId] = targetZone;
         m_autotileTargetZones.erase(it);
-        m_effect->m_windowAnimator->removeAnimation(w);
-        kw->moveResize(centered);
+        return;
     }
+
+    KWin::Window* kw = w->window();
+    if (!kw) {
+        // No KWin::Window — consume stale entry to prevent perpetual lookups
+        m_autotileTargetZones.erase(it);
+        return;
+    }
+
+    qCInfo(lcEffect) << "Centering autotile window" << windowId << "actual=" << actual.size()
+                     << "zone=" << targetZone.size() << "offset=(" << dx << "," << dy << ")";
+
+    // Window refused to shrink below its actual size — report discovered
+    // min size to daemon so future retiles can account for it. Only report
+    // when the window is larger than the zone (negative delta = oversized).
+    if (dw < -MinCenteringDelta || dh < -MinCenteringDelta) {
+        const int discoveredMinW = (dw < -MinCenteringDelta) ? qCeil(actual.width()) : 0;
+        const int discoveredMinH = (dh < -MinCenteringDelta) ? qCeil(actual.height()) : 0;
+        reportDiscoveredMinSize(windowId, discoveredMinW, discoveredMinH);
+    }
+
+    // Erase BEFORE moveResize to prevent re-entrancy: moveResize emits
+    // windowFrameGeometryChanged synchronously, which would re-enter
+    // this slot and find the entry still present → infinite recursion → crash.
+    m_centeredWaylandZones[windowId] = targetZone;
+    m_autotileTargetZones.erase(it);
+    m_effect->m_windowAnimator->removeAnimation(w);
+    kw->moveResize(centered);
 }
 
 void AutotileHandler::slotFocusWindowRequested(const QString& windowId)

@@ -287,6 +287,8 @@ void Daemon::restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows)
                 continue;
             if (wts->isWindowSnapped(windowId))
                 continue;
+            if (wts->isWindowFloating(windowId))
+                continue; // Already restored by windowsReleasedFromTiling
             m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenName);
         }
     }

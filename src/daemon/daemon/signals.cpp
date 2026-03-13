@@ -305,6 +305,7 @@ void Daemon::initializeAutotile()
                 // may have a different layout assigned with a different zone count.
                 // Only process entries for the CURRENT desktop (m_lastAutotileOrders
                 // accumulates entries across desktops after the merge fix).
+                WindowTrackingService* wts = m_windowTrackingAdaptor ? m_windowTrackingAdaptor->service() : nullptr;
                 int resnapScreenCount = 0;
                 QSet<QString> resnappedWindows;
                 for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
@@ -312,8 +313,25 @@ void Daemon::initializeAutotile()
                         continue;
                     }
                     ++resnapScreenCount;
-                    const QStringList& windowOrder = it.value();
+                    const QStringList& fullOrder = it.value();
                     const QString& screenName = it.key().screenId;
+
+                    // Filter out floating windows — windowsReleasedFromTiling already
+                    // restored their snap-float state. Resnapping them would override
+                    // the restored float with a zone snap.
+                    // Also skip windows with no zone assignment (never snapped before
+                    // autotile) — they get pre-autotile geometry via restoreAutotileOnlyGeometries.
+                    QStringList windowOrder;
+                    for (const QString& windowId : fullOrder) {
+                        if (wts && wts->isWindowFloating(windowId)) {
+                            continue;
+                        }
+                        if (wts && wts->zoneAssignments().value(windowId).isEmpty()) {
+                            continue;
+                        }
+                        windowOrder.append(windowId);
+                    }
+
                     Layout* screenLayout = m_layoutManager->resolveLayoutForScreen(screenName);
                     int zoneCount = screenLayout ? screenLayout->zoneCount() : 0;
                     for (int i = 0; i < std::min(static_cast<int>(windowOrder.size()), zoneCount); ++i) {
