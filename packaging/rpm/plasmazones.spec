@@ -183,11 +183,8 @@ echo ""
 # KWin effect plugin
 %{_libdir}/qt6/plugins/kwin/effects/plugins/kwin_effect_plasmazones.so
 
-# KCM (System Settings module)
-%{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_plasmazones.so
-
-# QML modules (KDE KCM QML files)
-%{_libdir}/qt6/qml/org/kde/kcms/plasmazones/
+# KCM sub-modules (System Settings)
+%{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_plasmazones_*.so
 
 # D-Bus interfaces
 %{_datadir}/dbus-1/interfaces/org.plasmazones.*.xml
@@ -195,7 +192,7 @@ echo ""
 # Desktop files
 %{_datadir}/applications/org.plasmazones.editor.desktop
 %{_datadir}/applications/org.plasmazones.daemon.desktop
-%{_datadir}/applications/kcm_plasmazones.desktop
+%{_datadir}/applications/kcm_plasmazones_*.desktop
 
 # Data files
 %{_datadir}/plasmazones/
