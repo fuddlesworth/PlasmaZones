@@ -61,16 +61,26 @@ KCMUtils.SimpleKCM {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // Enable toggle - prominent at top
-        CheckBox {
-            id: autotileEnabledCheck
-
+        // Enable toggle
+        RowLayout {
             Layout.fillWidth: true
-            text: i18n("Enable automatic window tiling")
-            checked: kcm.autotileEnabled
-            onToggled: kcm.autotileEnabled = checked
-            font.bold: true
-            Accessible.name: i18n("Enable autotiling")
+            Layout.margins: Kirigami.Units.largeSpacing
+
+            Label {
+                text: i18n("Enable Automatic Tiling")
+                font.bold: true
+            }
+
+            Item {
+                Layout.fillWidth: true
+            }
+
+            Switch {
+                checked: kcm.autotileEnabled
+                onToggled: kcm.autotileEnabled = checked
+                Accessible.name: i18n("Enable automatic tiling")
+            }
+
         }
 
         Item {

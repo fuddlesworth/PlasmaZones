@@ -68,16 +68,26 @@ KCMUtils.SimpleKCM {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // Enable toggle - prominent at top
-        CheckBox {
-            id: snappingEnabledCheck
-
+        // Enable toggle
+        RowLayout {
             Layout.fillWidth: true
-            text: i18n("Enable zone snapping")
-            checked: kcm.snappingEnabled
-            onToggled: kcm.snappingEnabled = checked
-            font.bold: true
-            Accessible.name: i18n("Enable snapping")
+            Layout.margins: Kirigami.Units.largeSpacing
+
+            Label {
+                text: i18n("Enable Zone Snapping")
+                font.bold: true
+            }
+
+            Item {
+                Layout.fillWidth: true
+            }
+
+            Switch {
+                checked: kcm.snappingEnabled
+                onToggled: kcm.snappingEnabled = checked
+                Accessible.name: i18n("Enable zone snapping")
+            }
+
         }
 
         // ═══════════════════════════════════════════════════════════════════════
