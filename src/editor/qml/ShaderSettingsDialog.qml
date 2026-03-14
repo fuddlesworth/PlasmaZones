@@ -80,6 +80,74 @@ Kirigami.Dialog {
         });
         return arr;
     }
+    // Shaders grouped by category for the cascading menu.
+    // Supports "/" path separators for nested submenus (e.g. "Audio/Reactive").
+    // Returns: [{ name, shaders (direct), subcategories: [{ name, shaders }] }]
+    readonly property var shaderCategoryTree: {
+        var shaders = root.sortedShaders;
+        var tree = {
+        }; // { topName: { direct: [], subcats: { subName: [] } } }
+        var uncategorized = [];
+        for (var i = 0; i < shaders.length; i++) {
+            var s = shaders[i];
+            var cat = (s.category || "").trim();
+            if (cat === "") {
+                uncategorized.push(s);
+                continue;
+            }
+            var slashIdx = cat.indexOf("/");
+            var top = slashIdx >= 0 ? cat.substring(0, slashIdx).trim() : cat;
+            var sub = slashIdx >= 0 ? cat.substring(slashIdx + 1).trim() : "";
+            if (top === "") {
+                uncategorized.push(s);
+                continue;
+            }
+            if (!tree[top])
+                tree[top] = {
+                "direct": [],
+                "subcats": {
+                }
+            };
+
+            if (sub === "") {
+                tree[top].direct.push(s);
+            } else {
+                if (!tree[top].subcats[sub])
+                    tree[top].subcats[sub] = [];
+
+                tree[top].subcats[sub].push(s);
+            }
+        }
+        // Convert to sorted array
+        var keys = Object.keys(tree);
+        keys.sort(function(a, b) {
+            return a.localeCompare(b);
+        });
+        var categories = [];
+        for (var k = 0; k < keys.length; k++) {
+            var node = tree[keys[k]];
+            var subKeys = Object.keys(node.subcats);
+            subKeys.sort(function(a, b) {
+                return a.localeCompare(b);
+            });
+            var subcategories = [];
+            for (var s = 0; s < subKeys.length; s++) subcategories.push({
+                "name": subKeys[s],
+                "shaders": node.subcats[subKeys[s]]
+            })
+            categories.push({
+                "name": keys[k],
+                "shaders": node.direct,
+                "subcategories": subcategories
+            });
+        }
+        return {
+            "categories": categories,
+            "uncategorized": uncategorized
+        };
+    }
+    readonly property var shaderCategories: shaderCategoryTree.categories || []
+    readonly property var uncategorizedShaders: shaderCategoryTree.uncategorized || []
     // Computed property: parameters grouped by their "group" field
     readonly property var parameterGroups: buildParameterGroups(shaderParams)
     // Pause/resume local preview animation when app loses/gains focus
@@ -95,6 +163,26 @@ Kirigami.Dialog {
     property real previewLastTime: 0
     property real previewTimeDelta: 0.016
     property int previewFrame: 0
+
+    // Translate shader category names for display
+    function translateCategory(cat) {
+        switch (cat) {
+        case "3D":
+            return i18nc("@item:inmenu shader category", "3D");
+        case "Audio Visualizer":
+            return i18nc("@item:inmenu shader category", "Audio Visualizer");
+        case "Branded":
+            return i18nc("@item:inmenu shader category", "Branded");
+        case "Cyberpunk":
+            return i18nc("@item:inmenu shader category", "Cyberpunk");
+        case "Energy":
+            return i18nc("@item:inmenu shader category", "Energy");
+        case "Organic":
+            return i18nc("@item:inmenu shader category", "Organic");
+        default:
+            return cat;
+        }
+    }
 
     function hideShaderPreview() {
         previewAnimationTimer.stop();
@@ -538,40 +626,166 @@ Kirigami.Dialog {
                     }
                 }
 
-                ComboBox {
-                    id: shaderComboBox
+                Button {
+                    id: shaderMenuButton
 
-                    function findShaderIndex() {
-                        if (!model)
-                            return 0;
-
-                        for (var i = 0; i < model.length; i++) {
-                            if (model[i] && model[i].id === root.pendingShaderId)
-                                return i;
-
-                        }
-                        return 0;
+                    readonly property string displayText: {
+                        var info = root.currentShaderInfo;
+                        return info ? info.name : i18nc("@action:button", "Select shader...");
                     }
 
                     Kirigami.FormData.label: i18nc("@label", "Shader:")
                     enabled: root.hasShaderEffect
                     Layout.fillWidth: true
-                    model: root.sortedShaders
-                    textRole: "name"
-                    valueRole: "id"
-                    Component.onCompleted: currentIndex = findShaderIndex()
-                    onActivated: {
-                        if (currentValue !== undefined)
-                            root.pendingShaderId = currentValue;
+                    onClicked: shaderCategoryMenu.popup(shaderMenuButton, 0, shaderMenuButton.height)
+                    Accessible.name: displayText
+                    ToolTip.text: i18nc("@info:tooltip", "Choose a shader effect from categorized list")
+                    ToolTip.visible: hovered && !shaderCategoryMenu.visible
+                    ToolTip.delay: Kirigami.Units.toolTipDelay
+
+                    // Exclusive action group ensures only one shader is checked at a time
+                    ActionGroup {
+                        id: shaderActionGroup
+
+                        exclusive: true
+                    }
+
+                    Menu {
+                        id: shaderCategoryMenu
+
+                        // Category submenus (with support for nested subcategories via "/")
+                        Instantiator {
+                            id: categoryInstantiator
+
+                            model: root.shaderCategories
+                            onObjectAdded: (index, object) => {
+                                return shaderCategoryMenu.insertMenu(index, object);
+                            }
+                            onObjectRemoved: (index, object) => {
+                                return shaderCategoryMenu.removeMenu(object);
+                            }
+
+                            delegate: Menu {
+                                id: categorySubMenu
+
+                                required property var modelData
+
+                                title: root.translateCategory(modelData.name)
+
+                                // Direct shaders in this category (no subcategory)
+                                Instantiator {
+                                    model: modelData.shaders
+                                    onObjectAdded: (index, object) => {
+                                        return categorySubMenu.insertItem(index, object);
+                                    }
+                                    onObjectRemoved: (index, object) => {
+                                        return categorySubMenu.removeItem(object);
+                                    }
+
+                                    delegate: MenuItem {
+                                        required property var modelData
+
+                                        text: modelData.name
+                                        checkable: true
+                                        checked: modelData.id === root.pendingShaderId
+                                        ActionGroup.group: shaderActionGroup
+                                        onTriggered: root.pendingShaderId = modelData.id
+                                    }
+
+                                }
+
+                                // Subcategory submenus (from "/" path splits)
+                                Instantiator {
+                                    model: modelData.subcategories || []
+                                    onObjectAdded: (index, object) => {
+                                        return categorySubMenu.insertMenu(categorySubMenu.count, object);
+                                    }
+                                    onObjectRemoved: (index, object) => {
+                                        return categorySubMenu.removeMenu(object);
+                                    }
+
+                                    delegate: Menu {
+                                        id: subCategoryMenu
+
+                                        required property var modelData
+
+                                        title: root.translateCategory(modelData.name)
+
+                                        Instantiator {
+                                            model: subCategoryMenu.modelData.shaders
+                                            onObjectAdded: (index, object) => {
+                                                return subCategoryMenu.insertItem(index, object);
+                                            }
+                                            onObjectRemoved: (index, object) => {
+                                                return subCategoryMenu.removeItem(object);
+                                            }
+
+                                            delegate: MenuItem {
+                                                required property var modelData
+
+                                                text: modelData.name
+                                                checkable: true
+                                                checked: modelData.id === root.pendingShaderId
+                                                ActionGroup.group: shaderActionGroup
+                                                onTriggered: root.pendingShaderId = modelData.id
+                                            }
+
+                                        }
+
+                                    }
+
+                                }
+
+                            }
+
+                        }
+
+                        // Separator before uncategorized shaders (if any exist)
+                        MenuSeparator {
+                            visible: root.uncategorizedShaders.length > 0 && root.shaderCategories.length > 0
+                        }
+
+                        // Uncategorized shaders appear at the top level
+                        Instantiator {
+                            model: root.uncategorizedShaders
+                            onObjectAdded: (index, object) => {
+                                return shaderCategoryMenu.insertItem(shaderCategoryMenu.count, object);
+                            }
+                            onObjectRemoved: (index, object) => {
+                                return shaderCategoryMenu.removeItem(object);
+                            }
+
+                            delegate: MenuItem {
+                                required property var modelData
+
+                                text: modelData.name
+                                checkable: true
+                                checked: modelData.id === root.pendingShaderId
+                                ActionGroup.group: shaderActionGroup
+                                onTriggered: root.pendingShaderId = modelData.id
+                            }
+
+                        }
 
                     }
 
-                    Connections {
-                        function onPendingShaderIdChanged() {
-                            shaderComboBox.currentIndex = shaderComboBox.findShaderIndex();
+                    contentItem: RowLayout {
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: shaderMenuButton.displayText
+                            elide: Text.ElideRight
+                            color: shaderMenuButton.enabled ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
                         }
 
-                        target: root
+                        Kirigami.Icon {
+                            source: "arrow-down"
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+
                     }
 
                 }

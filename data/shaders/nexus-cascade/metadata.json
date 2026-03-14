@@ -1,6 +1,7 @@
 {
     "id": "nexus-cascade",
     "name": "Nexus Cascade",
+    "category": "Energy",
     "description": "Layered plasma energy with distortion, chromatic aberration, bloom, and zone masking",
     "author": "PlasmaZones",
     "version": "1.0",

@@ -27,6 +27,7 @@ QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo& info) const
     map[QStringLiteral("author")] = info.author;
     map[QStringLiteral("version")] = info.version;
     map[QStringLiteral("isUserShader")] = info.isUserShader;
+    map[QStringLiteral("category")] = info.category;
     map[QStringLiteral("isValid")] = info.isValid();
 
     // Optional fields - only include if non-empty (avoids D-Bus issues with empty URLs)

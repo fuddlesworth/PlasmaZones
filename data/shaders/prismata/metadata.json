@@ -1,6 +1,7 @@
 {
     "id": "prismata",
     "name": "Prismata",
+    "category": "Energy",
     "description": "Unified crystalline prismatic overlay — facets and caustics flow across zones; sound reactive; highlighted zones get chromatic fracture and inner resonance",
     "author": "PlasmaZones",
     "version": "1.0",

@@ -1,6 +1,7 @@
 {
     "id": "mosaic-pulse",
     "name": "Mosaic Pulse",
+    "category": "Audio Visualizer",
     "description": "Audio-reactive stained glass mosaic — colorful tiles with pulsing shapes, sparkles, and dithered posterization. Bass drives shape pulse, mids shift hue, treble triggers sparkles. Enable CAVA audio visualization in settings.",
     "author": "PlasmaZones",
     "version": "1.0",

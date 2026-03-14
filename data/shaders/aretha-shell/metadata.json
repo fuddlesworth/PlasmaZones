@@ -1,6 +1,7 @@
 {
     "id": "aretha-shell",
     "name": "Aretha Shell",
+    "category": "Cyberpunk",
     "description": "Ghost in the Shell inspired cyberpunk effect with color grading, hex grid, and data streams",
     "author": "PlasmaZones",
     "version": "1.0",

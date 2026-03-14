@@ -1,6 +1,7 @@
 {
     "id": "neon-drift",
     "name": "KDE Neon Drift",
+    "category": "Branded",
     "description": "Procedural KDE Neon gear logo drawn as SDF geometry, drifting through the scene — concentric rings, radial teeth, and orbital dots animate with per-part audio reactivity, bass shatter, shockwave rings, and edge sparks",
     "author": "PlasmaZones",
     "version": "1.0",

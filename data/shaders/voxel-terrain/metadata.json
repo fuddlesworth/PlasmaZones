@@ -1,6 +1,7 @@
 {
     "id": "voxel-terrain",
     "name": "Voxel Terrain",
+    "category": "3D",
     "description": "Fly through an infinite 3D voxel world with floating islands and overhangs. Audio drives wireframe glow, face emission, and volumetric haze — geometry stays stable. Dark and moody with bright neon edges that pulse with the beat. Enable CAVA audio visualization in settings.",
     "author": "PlasmaZones",
     "version": "1.0",

@@ -64,6 +64,7 @@ public:
         QString bufferShaderPath; ///< Path to first buffer pass shader (backward compat)
         QStringList bufferShaderPaths; ///< Up to 4 buffer pass fragment shaders (A→B→C→D order)
         QString previewPath; ///< Absolute path to preview.png
+        QString category; ///< Hierarchical category path (e.g. "Organic", "Audio Visualizer")
         QList<ParameterInfo> parameters;
 
         bool isUserShader = false; ///< True for ~/.local/share shaders

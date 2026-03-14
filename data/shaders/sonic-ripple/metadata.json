@@ -1,6 +1,7 @@
 {
     "id": "sonic-ripple",
     "name": "Sonic Ripple",
+    "category": "Audio Visualizer",
     "description": "Concentric audio rings radiate from the zone center — bass kicks launch expanding shockwaves, mids drive ring density, treble sparks the edges. Every beat is visible. Enable CAVA audio visualization in settings.",
     "author": "PlasmaZones",
     "version": "1.0",

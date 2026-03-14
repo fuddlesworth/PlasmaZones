@@ -1,6 +1,7 @@
 {
     "id": "nixos-drift",
     "name": "NixOS Drift",
+    "category": "Branded",
     "description": "Procedural NixOS snowflake logo with 6-fold SDF geometry and two-tone twilight gradient fill, drifting through hexagonal Voronoi lattice — aurora curtains, constellation particles, crystal growth lines, and nebula pulse borders with per-arm audio reactivity",
     "author": "PlasmaZones",
     "version": "1.0",

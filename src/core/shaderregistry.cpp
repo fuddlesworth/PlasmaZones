@@ -341,6 +341,7 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
     info.description = root.value(QLatin1String("description")).toString();
     info.author = root.value(QLatin1String("author")).toString();
     info.version = root.value(QLatin1String("version")).toString(QStringLiteral("1.0"));
+    info.category = root.value(QLatin1String("category")).toString();
 
     // Get fragment/vertex shader paths (default: effect.frag, zone.vert)
     const QString fragShaderName = root.value(QLatin1String("fragmentShader")).toString(QStringLiteral("effect.frag"));

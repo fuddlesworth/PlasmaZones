@@ -1,6 +1,7 @@
 {
     "id": "magnetic-field",
     "name": "Magnetic Field",
+    "category": "Energy",
     "description": "Mouse-reactive magnetic field effect with orbiting particles and energy waves",
     "author": "PlasmaZones",
     "version": "1.0",

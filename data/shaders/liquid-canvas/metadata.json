@@ -1,6 +1,7 @@
 {
     "id": "liquid-canvas",
     "name": "Liquid Canvas",
+    "category": "Organic",
     "description": "Desktop wallpaper becomes a living liquid painting: a procedural flow field distorts the image like paint on flowing water, with multipass bloom and audio-reactive ripples",
     "author": "PlasmaZones",
     "version": "1.0",
