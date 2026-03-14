@@ -15,8 +15,11 @@
  *
  * Audio reactivity (organic — modulates existing animation):
  *   Bass  = scale breathing + color metamorphosis speed + dust wind
+ *          + chromatophore cascade + tail pulse + scale ripple wave
  *   Mids  = thin-film thickness shift (hue change) + Turing evolution
+ *          + turret eye iris pulse + camouflage shimmer
  *   Treble = scale edge sparkle + dust particle bursts + logo flicker
+ *           + nanocrystal prism bursts
  */
 
 layout(location = 0) in vec2 vTexCoord;
@@ -126,6 +129,14 @@ float fbm(vec2 uv, int octaves, float rotAngle) {
         amplitude *= 0.55;
     }
     return value;
+}
+
+// ── Signed distance to line segment ─────────────────────────
+
+float sdSegmentSuse(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a, ba = b - a;
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(pa - ba * h);
 }
 
 
@@ -317,7 +328,7 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
 // ═══════════════════════════════════════════════════════════════
 
 vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params,
-                    bool isHighlighted, float bass, float mids, float treble, float overall,
+                    bool isHighlighted, float bass, float mids, float treble,
                     bool hasAudio) {
     float borderRadius = max(params.x, 8.0);
     float borderWidth  = max(params.y, 2.0);
@@ -353,6 +364,12 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     float logoSpin      = customParams[7].z >= 0.0 ? customParams[7].z : 0.15;
     float idleStr       = customParams[7].w >= 0.0 ? customParams[7].w : 0.6;
+
+    // ── Chameleon biology effects ────────────────────────────────
+    float chromatophoreStr = customParams[3].w >= 0.0 ? customParams[3].w : 0.6;
+    float tailPulseStr  = customParams[4].w >= 0.0 ? customParams[4].w : 0.7;
+    float camoStr       = customParams[6].w >= 0.0 ? customParams[6].w : 0.25;
+    float eyeBeamStr    = customParams[7].x >= 0.0 ? customParams[7].x : 0.5;
 
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
@@ -478,6 +495,28 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             col += creaseCol * crease * (0.15 + bassEnv * 0.2);
         }
 
+        // ── Scale ripple propagation: bass color-change wave ─────
+        // Real chameleons propagate color changes as visible waves
+        // across their skin — here the hex field acts as extended skin.
+        {
+            float ripplePhase = fract(time * 0.25);
+            float rippleRadius = ripplePhase * noiseScale * 1.5;
+            float rippleDist = length(centeredUV);
+            // Gaussian ring wavefront
+            float rippleRing = exp(-pow((rippleDist - rippleRadius) * 4.0, 2.0));
+            float rippleFade = 1.0 - ripplePhase;
+            float rippleAudio = bassEnv * 0.35 * rippleFade;
+            // Color shifts through complementary hues as wave passes
+            vec3 rippleShift = susePalette(cell.cellHash + ripplePhase * 2.0,
+                                            palAccent, palGlow, palSecondary);
+            col = mix(col, rippleShift * brightness * 1.5,
+                      rippleRing * rippleAudio * scaleRim);
+            // Trail: cells already swept retain a brief afterglow
+            float rippleTrail = smoothstep(rippleRadius, rippleRadius - 0.3, rippleDist)
+                              * rippleAudio * 0.2;
+            col += palGlow * rippleTrail * scaleRim * 0.15;
+        }
+
         // ── Treble sparkle on scale edges ─────────────────────
         if (trebleEnv > 0.01 && scaledEdge < 0.08 && scaledEdge > 0.01) {
             float sparkN = noise2D(cell.id * 50.0 + time * 8.0);
@@ -486,6 +525,24 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             // Bright point sparks (like light catching crystal facets)
             float pointSpark = step(0.92, sparkN) * trebleEnv * 2.0;
             col += vec3(1.0) * pointSpark * 0.3;
+        }
+
+        // ── Nanocrystal prism bursts ─────────────────────────
+        // Chameleons shift color via nanocrystal lattice spacing in
+        // their skin. On treble hits, individual scales "fire" —
+        // their crystal lattice diffracts light into rainbow bursts.
+        if (trebleEnv > 0.05 && scaledEdge < 0.06) {
+            float prismSeed = noise2D(cell.id * 30.0 + time * 5.0);
+            if (prismSeed > 0.65) {
+                float prismPhase = fract(prismSeed * 7.0 + time * 3.0);
+                // Rapid thin-film cycling = prismatic rainbow
+                vec3 prismCol = thinFilm(prismPhase, 0.25 + prismPhase * 0.6);
+                float prismStr = (prismSeed - 0.65) * 2.86 * trebleEnv;
+                // Burst radiates from cell center
+                float prismDist = length(cell.local) * 5.0;
+                float prismBurst = exp(-prismDist * prismDist * 2.0);
+                col += prismCol * prismStr * prismBurst * 0.5;
+            }
         }
 
         // ═══════════════════════════════════════════════════════
@@ -601,8 +658,36 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                     float angularShift = sin(fillAngle * 2.0 + time * 0.3) * 0.06;
                     shiftTarget = mix(shiftTarget, susePalette(shiftPhase + angularShift + 0.33,
                                                                palAccent, palGlow, palSecondary), 0.2);
-                    vec3 bodyCol = mix(palSecondary, shiftTarget, 0.35);
-                    logoCol = bodyCol * brightness * 1.8;
+                    // Start from a saturated, boosted green (not raw palette)
+                    vec3 vivid = palSecondary * 1.6 + palGlow * 0.4;
+                    vec3 bodyCol = mix(vivid, shiftTarget * 1.4, 0.55);
+                    logoCol = bodyCol * brightness * 2.5;
+
+                    // ── Chromatophore cascade: bass color-change wavefront ──
+                    // Real chameleons shift color via nanocrystal spacing
+                    // changes that propagate as a visible wave across skin.
+                    if (chromatophoreStr > 0.01 && bassEnv > 0.05) {
+                        float chromaPhase = fract(time * 0.35 + float(li) * 0.17);
+                        float chromaRadius = chromaPhase * 0.5;
+                        float chromaDist = length(fillLP);
+                        // Gaussian ring wavefront expanding outward from center
+                        float chromaRing = exp(-pow((chromaDist - chromaRadius) * 15.0, 2.0));
+                        float chromaFade = 1.0 - chromaPhase;
+                        float chromaAudio = bassEnv * chromatophoreStr * chromaFade;
+                        // Target hue: complementary shift (green→turquoise→teal cycle)
+                        vec3 chromaTarget = susePalette(
+                            chromaDist * 4.0 + chromaPhase * 2.0,
+                            palAccent, palGlow, palSecondary);
+                        logoCol = mix(logoCol, chromaTarget * brightness * 2.2,
+                                      chromaRing * chromaAudio);
+                        // Trail: swept area retains shifted hue briefly
+                        float chromaTrail = smoothstep(chromaRadius,
+                                                        chromaRadius - 0.12,
+                                                        chromaDist)
+                                          * chromaAudio * 0.25;
+                        logoCol = mix(logoCol, chromaTarget * brightness * 1.5,
+                                      chromaTrail);
+                    }
 
                     // ── Sub-skin energy (domain-warped FBM under scales) ──
                     vec2 energyUV = iLogoUV * 4.0 + flowDir * time * flowSpeed * 1.5;
@@ -611,47 +696,108 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                     vec3 energyCol = susePalette(er * 1.2 + time * 0.05 + float(li) * 0.3,
                                                   palSecondary, palGlow, palAccent);
                     // Blend energy under the color shift (visible as flowing depth)
-                    logoCol = mix(logoCol, energyCol * brightness * 2.0, 0.25);
+                    logoCol = mix(logoCol, energyCol * brightness * 2.4, 0.35);
 
                     // ── Bass reactive brightness wave across body ─────
                     float bassBodyWave = sin(bodyAxis * 6.0 - time * 4.0);
                     logoCol *= 1.0 + bassEnv * logoPulse * 0.3 * smoothstep(-0.3, 0.5, bassBodyWave);
 
                     // Regional tinting (vibrant)
-                    logoCol = mix(logoCol, palGlow * brightness * 2.2, headRegion * 0.2);
-                    logoCol = mix(logoCol, palAccent * brightness * 2.0, tailRegion * 0.15);
+                    logoCol = mix(logoCol, palGlow * brightness * 2.8, headRegion * 0.3);
+                    logoCol = mix(logoCol, palAccent * brightness * 2.5, tailRegion * 0.25);
 
                     // ── Fresnel-like interior edge highlight ───────────
                     float fresnelLike = smoothstep(-0.02, -0.002, fDist);
-                    logoCol += palGlow * fresnelLike * 0.2 * (1.0 + midsEnv * 0.4);
+                    logoCol += palGlow * fresnelLike * 0.35 * (1.0 + midsEnv * 0.5);
 
-                    // Eye rendering (matches SVG: sclera circle → green iris ring → oval pupil)
+                    // ── Turret eye: independent orbit + iridescent iris ──
+                    // Chameleon eyes rotate independently on turrets and
+                    // are one of the most iconic features of the animal.
                     float eyeDist = length(iLogoUV - GEEKO_EYE_CENTER);
-                    if (eyeDist < GEEKO_SCLERA_R * 1.3) {
-                        float scleraEdge = smoothstep(GEEKO_SCLERA_R, GEEKO_SCLERA_R - 0.004, eyeDist);
+                    if (eyeDist < GEEKO_SCLERA_R * 1.5) {
+                        float scleraEdge = smoothstep(GEEKO_SCLERA_R,
+                                                       GEEKO_SCLERA_R - 0.004, eyeDist);
                         vec3 scleraCol = vec3(0.95, 0.93, 0.88);
 
-                        float irisOuter = smoothstep(GEEKO_SCLERA_R, GEEKO_SCLERA_R - 0.004, eyeDist);
-                        float irisInner = smoothstep(GEEKO_IRIS_R - 0.003, GEEKO_IRIS_R, eyeDist);
+                        // Iridescent iris ring — mids make the nanocrystals shift
+                        float irisOuter = smoothstep(GEEKO_SCLERA_R,
+                                                      GEEKO_SCLERA_R - 0.004, eyeDist);
+                        float irisInner = smoothstep(GEEKO_IRIS_R - 0.003,
+                                                      GEEKO_IRIS_R, eyeDist);
                         float irisMask = irisOuter * irisInner;
-                        vec3 irisCol = mix(palSecondary, palGlow, 0.3) * 1.4;
+                        float irisFilmT = 0.4 + midsEnv * 0.4 + time * 0.3;
+                        vec3 irisIri = thinFilm(0.6 + 0.2 * sin(time * 0.5),
+                                                 irisFilmT);
+                        vec3 irisCol = mix(palSecondary,
+                                           irisIri * palGlow,
+                                           0.35 + midsEnv * 0.35) * 1.6;
                         scleraCol = mix(scleraCol, irisCol, irisMask);
 
-                        vec2 pupilLP = (iLogoUV - GEEKO_PUPIL_C) / GEEKO_PUPIL_R;
+                        // Turret pupil: slow independent orbit
+                        float eyeOrbitAngle = time * 0.4 + sin(time * 0.7) * 0.8;
+                        vec2 pupilOrbit = vec2(cos(eyeOrbitAngle),
+                                               sin(eyeOrbitAngle)) * 0.005;
+                        vec2 pupilCenter = GEEKO_PUPIL_C + pupilOrbit;
+                        // Pupil dilates on bass (chameleons dilate when excited)
+                        float pupilDilate = 1.0 + bassEnv * 0.4;
+                        vec2 pupilLP = (iLogoUV - pupilCenter)
+                                     / (GEEKO_PUPIL_R * pupilDilate);
                         float pupilDist = length(pupilLP);
                         float pupilMask = smoothstep(1.1, 0.7, pupilDist);
-                        scleraCol = mix(scleraCol, vec3(0.03, 0.05, 0.02), pupilMask);
+                        scleraCol = mix(scleraCol, vec3(0.03, 0.05, 0.02),
+                                        pupilMask);
 
+                        // Specular highlight
                         vec2 specOff = GEEKO_EYE_CENTER + vec2(-0.008, 0.006);
                         float specDist = length(iLogoUV - specOff);
                         float spec = smoothstep(0.008, 0.003, specDist) * 0.4;
                         scleraCol += vec3(spec);
+
+                        // Attention cone: glow beam in look direction
+                        if (eyeBeamStr > 0.01) {
+                            float beamAngle = atan(
+                                iLogoUV.y - GEEKO_EYE_CENTER.y,
+                                iLogoUV.x - GEEKO_EYE_CENTER.x);
+                            float beamSpread = abs(
+                                mod(beamAngle - eyeOrbitAngle + PI, TAU) - PI);
+                            float beamR = eyeDist;
+                            float cone = smoothstep(0.3, 0.0, beamSpread)
+                                       * smoothstep(0.0, 0.008,
+                                                     beamR - GEEKO_SCLERA_R)
+                                       * exp(-(beamR - GEEKO_SCLERA_R) * 10.0);
+                            scleraCol += mix(palGlow, vec3(1.0), 0.3)
+                                       * cone * eyeBeamStr
+                                       * (0.5 + midsEnv * 0.5);
+                        }
 
                         logoCol = mix(logoCol, scleraCol, scleraEdge);
                     }
 
                     // Reinhard tonemap on interior only
                     logoCol = logoCol / (1.0 + logoCol);
+
+                    // ── Camouflage shimmer: stealth fade ─────────────
+                    // Chameleons blend with their environment. Parts of
+                    // the body fade toward the background, then snap
+                    // back to full visibility on audio hits.
+                    if (camoStr > 0.01) {
+                        float camoPattern = turingPattern(iLogoUV * 2.0,
+                                                           time * 0.5);
+                        float camoWave = sin(time * 0.3 + float(li) * 1.7)
+                                       * 0.5 + 0.5;
+                        // Bass startles the chameleon → full visibility
+                        float camoSuppress = 1.0 - bassEnv * 0.8;
+                        float camoFade = camoPattern * camoWave * camoStr
+                                       * camoSuppress;
+                        // Blend logo toward background color (subtle)
+                        logoCol = mix(logoCol, col * 0.7, camoFade * 0.15);
+                    }
+
+                    // ── Saturation boost: make logo pop against background ──
+                    float logoLum = luminance(logoCol);
+                    logoCol = mix(vec3(logoLum), logoCol, 1.6);
+                    logoCol = max(logoCol, vec3(0.0));
+
                     fillAlpha = smoothstep(0.005, -0.005, fDist);
                 }
 
@@ -696,6 +842,69 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 col += beamCol * (beam + beamWide) * beamMask * instIntensity * 0.5 * depthFactor;
             }
 
+            // ── Tail pulse: bass-triggered energy spiral ─────
+            // Energy wave propagates from body into the curled tail,
+            // spiraling through the prehensile curl and sparking at tip.
+            if (tailPulseStr > 0.01) {
+                vec2 tailCenter = vec2(0.17, 0.60);   // Geeko tail spiral center
+                vec2 tailBase   = vec2(0.34, 0.57);   // where body meets tail
+                vec2 tailTip    = vec2(0.19, 0.74);   // outermost curl point
+
+                float tailPhase = fract(time * 0.45 + float(li) * 0.23);
+                float tailTrigger = smoothstep(0.08, 0.22, bassEnv)
+                                  * tailPulseStr;
+
+                if (tailTrigger > 0.01) {
+                    // Distance along tail spiral (body→curl center→tip)
+                    vec2 toPixel = iLogoUV - tailCenter;
+                    float spiralAngle = atan(toPixel.y, toPixel.x);
+                    float spiralR = length(toPixel);
+
+                    // Parametric progress: body→center→tip as 0→1
+                    float bodyDist = length(iLogoUV - tailBase);
+                    float tipDist  = length(iLogoUV - tailTip);
+                    float tailProgress = clamp(bodyDist / (bodyDist + tipDist + 0.001), 0.0, 1.0);
+
+                    // Traveling wave front from body toward tip
+                    float waveFront = tailPhase * 1.4;
+                    float wave = exp(-pow((tailProgress - waveFront) * 8.0, 2.0));
+                    // Trail: already-passed region retains fading glow
+                    float trail = smoothstep(waveFront, waveFront - 0.35, tailProgress)
+                                * (1.0 - tailPhase) * 0.4;
+
+                    // Only affect pixels near the tail region (mask to tail SDF)
+                    float tailMask = smoothstep(0.15, 0.04, spiralR);
+
+                    // Spiral energy lines rotating through the curl
+                    float spiralLines = sin(spiralAngle * 3.0 - time * 2.5
+                                          + spiralR * 18.0) * 0.5 + 0.5;
+                    spiralLines = pow(spiralLines, 3.0);
+
+                    float intensity = (wave + trail) * tailTrigger * tailMask;
+
+                    // Color: green at base, turquoise through curl, bright glow at tip
+                    vec3 tailCol = mix(palSecondary * 2.2, palAccent * 2.5,
+                                       tailProgress);
+                    tailCol = mix(tailCol, palGlow * 3.0,
+                                  smoothstep(0.7, 1.0, tailProgress));
+                    tailCol *= brightness * (1.2 + bassEnv * 0.6);
+
+                    // Spiral energy overlay
+                    col += tailCol * intensity * depthFactor;
+                    col += palAccent * spiralLines * intensity * 0.3 * depthFactor;
+
+                    // Tip spark: bright flash at the curl tip
+                    float tipSpark = smoothstep(0.04, 0.005, tipDist);
+                    float sparkPulse = smoothstep(0.8, 1.0, waveFront)
+                                     * (1.0 - tailPhase);
+                    col += palGlow * 2.5 * tipSpark * sparkPulse * tailTrigger * depthFactor;
+
+                    // Glow halo around tail spiral
+                    float tailGlow = exp(-spiralR * 12.0) * 0.15 * intensity;
+                    col += palGlow * tailGlow * depthFactor;
+                }
+            }
+
             // ── Compositing: interior opaque, outer additive ──
             col = mix(col, logoCol, fillAlpha);
 
@@ -706,18 +915,17 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         } // end logo instance loop
 
         // ── Vitality ───────────────────────────────────────────
-        if (isHighlighted) {
-            col *= 1.1;
-        } else {
+        col *= mix(0.85, 1.1, vitality);
+        if (!isHighlighted) {
             float lum = luminance(col);
-            col = mix(col, vec3(lum), 0.25);
-            col *= 0.7 + idlePulse * 0.08;
+            col = mix(col, vec3(lum), 0.08);
+            col += col * idlePulse * 0.08;
         }
 
         // ── Inner edge glow (iridescent scale rim) ────────────
         float innerDist = -d;
         float depthDarken = smoothstep(0.0, edgeFadeStart, innerDist);
-        col *= mix(0.6, 1.0, 1.0 - depthDarken * 0.35);
+        col *= mix(0.8, 1.0, 1.0 - depthDarken * 0.2);
 
         float innerGlow = exp(-innerDist / 12.0);
         float edgeAngle = atan(p.y, p.x);
@@ -725,7 +933,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         vec3 edgeIriCol = susePalette(iriT, palSecondary, palAccent, palGlow);
         col += edgeIriCol * innerGlow * innerGlowStr;
 
-        col = mix(col, fillColor.rgb * luminance(col), 0.15);
+        col = mix(col, fillColor.rgb * luminance(col), 0.07);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
@@ -778,7 +986,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 }
 
 
-// ─── Custom Label Composite (scale-textured halo) ────────────────
+// ─── Custom Label Composite (iridescent scale-reveal text) ───────
 
 vec4 compositeSuseLabels(vec4 color, vec2 fragCoord,
                          float bass, float mids, float treble, bool hasAudio) {
@@ -786,6 +994,7 @@ vec4 compositeSuseLabels(vec4 color, vec2 fragCoord,
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
+    vec3 palPrimary   = colorWithFallback(customColors[0].rgb, SUSE_TEAL);
     vec3 palSecondary = colorWithFallback(customColors[1].rgb, SUSE_GREEN);
     vec3 palAccent    = colorWithFallback(customColors[2].rgb, SUSE_TURQ);
     vec3 palGlow      = colorWithFallback(customColors[3].rgb, SUSE_GLOW);
@@ -795,50 +1004,120 @@ vec4 compositeSuseLabels(vec4 color, vec2 fragCoord,
     float labelAudioReact = customParams[4].z >= 0.0 ? customParams[4].z : 1.0;
     float iridescence     = customParams[1].y >= 0.0 ? customParams[1].y : 0.6;
 
-    // Radial halo sampling
-    float halo = 0.0;
-    for (int i = 0; i < 12; i++) {
-        float angle = float(i) * TAU / 12.0;
-        for (int r = 1; r <= 3; r++) {
+    float bassR = hasAudio ? bass * labelAudioReact : 0.0;
+    float midsR = hasAudio ? mids * labelAudioReact : 0.0;
+    float trebleR = hasAudio ? treble * labelAudioReact : 0.0;
+
+    // ── Expanded halo (two-layer: inner sharp + outer soft) ──────
+    float haloInner = 0.0;
+    float haloOuter = 0.0;
+    for (int i = 0; i < 16; i++) {
+        float angle = float(i) * TAU / 16.0;
+        for (int r = 1; r <= 4; r++) {
             float radius = float(r) * labelGlowSpread;
             vec2 offset = vec2(cos(angle), sin(angle)) * px * radius;
-            float sample_a = texture(uZoneLabels, uv + offset).a;
-            float w = exp(-float(r) * 0.5);
-            halo += sample_a * w;
+            float s = texture(uZoneLabels, uv + offset).a;
+            if (r <= 2) haloInner += s * exp(-float(r) * 0.4);
+            haloOuter += s * exp(-float(r) * 0.35);
         }
     }
-    halo /= 24.0;
+    haloInner /= 24.0;
+    haloOuter /= 48.0;
 
-    if (halo > 0.003) {
-        float haloEdge = halo * (1.0 - labels.a);
+    if (haloOuter > 0.002) {
+        float haloMask = haloOuter * (1.0 - labels.a);
+        float innerMask = haloInner * (1.0 - labels.a);
 
-        // Iridescent halo color
+        // Color-shifting halo — chromatophore wave sweeps through
         float haloAngle = atan(uv.y - 0.5, uv.x - 0.5);
-        vec3 haloFilm = thinFilm(0.5 + 0.3 * sin(haloAngle * 3.0),
-                                  0.5 + iTime * 0.08 + mids * 0.2);
-        vec3 haloBase = susePalette(haloAngle / TAU + iTime * 0.06,
-                                     palSecondary, palAccent, palGlow);
-        vec3 haloCol = mix(haloBase, haloFilm * palSecondary * 2.0, iridescence * 0.5);
+        float chromaWave = sin(haloAngle * 2.0 + iTime * 1.2 + midsR * 1.5)
+                         * 0.5 + 0.5;
 
-        float haloBright = haloEdge * (0.5 + (hasAudio ? bass * 0.5 * labelAudioReact : 0.0));
-        color.rgb += haloCol * haloBright;
+        vec3 haloCol1 = susePalette(chromaWave + iTime * 0.08,
+                                     palGlow, palAccent, palSecondary);
+        vec3 haloFilm = thinFilm(0.5 + 0.3 * sin(haloAngle * 3.0 + iTime * 0.5),
+                                  0.6 + midsR * 0.3);
+        vec3 haloCol = mix(haloCol1 * 1.4, haloFilm * palGlow * 2.0,
+                           iridescence * 0.6);
 
-        if (hasAudio && treble > 0.1) {
-            float sparkNoise = noise2D(uv * 40.0 + iTime * 3.5);
-            float spark = smoothstep(0.7, 0.95, sparkNoise) * treble * 2.0 * labelAudioReact;
-            color.rgb += mix(vec3(1.0), palGlow, 0.3) * haloEdge * spark;
+        // Inner halo: bright, saturated ring hugging the text
+        float innerBright = innerMask * (0.8 + bassR * 0.6);
+        color.rgb += haloCol * innerBright * 1.2;
+
+        // Outer halo: softer, wider atmospheric glow
+        float outerBright = haloMask * (0.3 + bassR * 0.2);
+        color.rgb += mix(haloCol, palAccent, 0.3) * outerBright * 0.6;
+
+        // Treble edge sparks — electrical arcs along the halo boundary
+        if (trebleR > 0.08) {
+            float sparkN = noise2D(uv * 50.0 + iTime * 5.0);
+            float spark = smoothstep(0.65, 0.92, sparkN) * trebleR * 2.5;
+            // Sparks travel around the halo perimeter
+            float arcPos = fract(haloAngle / TAU + iTime * 0.8);
+            float arc = smoothstep(0.0, 0.08, arcPos) * smoothstep(0.25, 0.12, arcPos);
+            color.rgb += vec3(1.0, 0.95, 0.8) * innerMask * spark * (0.6 + arc * 0.8);
         }
-        color.a = max(color.a, haloEdge * 0.5);
+        color.a = max(color.a, innerMask * 0.7);
     }
 
+    // ── Text fill: iridescent scale-patterned interior ──────────
     if (labels.a > 0.01) {
-        vec3 lens = color.rgb * labelBrightness;
-        float textAngle = atan(uv.y - 0.5, uv.x - 0.5);
-        vec3 textFilm = thinFilm(0.6, 0.5 + iTime * 0.1 + textAngle * 0.5);
-        lens += mix(palSecondary, textFilm * palGlow, iridescence * 0.3) * 0.2;
-        float bassPulse = hasAudio ? 1.0 + bass * 0.4 * labelAudioReact : 1.0;
-        lens *= bassPulse;
-        color.rgb = mix(color.rgb, lens, labels.a);
+        // Reuse the proper hex grid — animate UV so scales drift
+        vec2 textScaleUV = (uv * 2.0 - 1.0) * 12.0;
+        textScaleUV.x *= iResolution.x / max(iResolution.y, 1.0);
+        textScaleUV += vec2(iTime * 0.15, iTime * 0.08);  // slow drift
+        ScaleCell cell = hexScaleGrid(textScaleUV, 4.0);
+
+        // Bass makes scales breathe (radius pulsation per cell)
+        float breatheAmount = 1.0 + bassR * 0.25
+                            * sin(cell.cellHash * TAU + iTime * 2.5);
+        float scaledEdge = cell.edgeDist * breatheAmount;
+        float scaleRim = smoothstep(0.0, 0.05, scaledEdge);
+        float scaleHighlight = pow(scaleRim, 0.5);
+
+        // Thin-film iridescence per cell — thickness cycles with time
+        float cosT = clamp(1.0 - length(cell.local) * 3.0, 0.0, 1.0);
+        float thickness = 0.4 + 0.3 * cell.cellHash + midsR * 0.3
+                        + sin(iTime * 0.6 + cell.cellHash * TAU) * 0.15;
+        vec3 cellFilm = thinFilm(cosT, thickness);
+
+        // Color-shift wave sweeping diagonally across text
+        float textWave = sin(uv.x * 8.0 - iTime * 1.8 + uv.y * 4.0) * 0.5 + 0.5;
+        // Per-cell color cycles through palette over time
+        vec3 textPalette = susePalette(cell.cellHash + textWave * 0.5
+                                        + iTime * 0.1,
+                                        palGlow, palSecondary, palAccent);
+
+        // Palette tinted by iridescent film
+        vec3 textCol = textPalette * mix(vec3(1.0), cellFilm, iridescence * 0.6);
+        // Scale structure: bright centers, visible gaps with energy
+        vec3 gapCol = palPrimary * 0.2 + palSecondary * 0.08
+                    + palAccent * 0.06 * sin(iTime * 2.0 + cell.cellHash * 10.0);
+        textCol = mix(gapCol, textCol * scaleHighlight, scaleRim);
+
+        // Edge glint — flows along scale edges
+        if (scaledEdge < 0.04 && scaledEdge > 0.0) {
+            float edgeFlow = noise2D(cell.id * 15.0 + iTime * 2.0);
+            float flowPulse = smoothstep(0.3, 0.7, edgeFlow);
+            float edgeGlint = smoothstep(0.03, 0.005, scaledEdge);
+            vec3 glintCol = mix(palGlow, palAccent, flowPulse);
+            textCol += glintCol * edgeGlint * (0.1 + trebleR * 0.15);
+        }
+
+        // Bass: overall brightness pulse
+        float breathe = 1.0 + bassR * 0.4;
+        textCol *= breathe;
+
+        // Apply brightness then tonemap to preserve saturation
+        textCol *= labelBrightness;
+        textCol = textCol / (0.6 + textCol);
+
+        // Saturation boost post-tonemap
+        float textLum = dot(textCol, vec3(0.2126, 0.7152, 0.0722));
+        textCol = mix(vec3(textLum), textCol, 1.5);
+        textCol = max(textCol, vec3(0.0));
+
+        color.rgb = mix(color.rgb, textCol, labels.a);
         color.a = max(color.a, labels.a);
     }
 
@@ -859,15 +1138,13 @@ void main() {
     float bass    = getBassSoft();
     float mids    = getMidsSoft();
     float treble  = getTrebleSoft();
-    float overall = getOverallSoft();
-
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
 
         vec4 zoneColor = renderSuseZone(fragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5,
-            bass, mids, treble, overall, hasAudio);
+            bass, mids, treble, hasAudio);
         color = blendOver(color, zoneColor);
     }
 
