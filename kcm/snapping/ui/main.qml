@@ -280,7 +280,7 @@ KCMUtils.SimpleKCM {
 
                 header: Kirigami.Heading {
                     level: 3
-                    text: i18n("Snapping Behavior")
+                    text: i18n("Behavior")
                     padding: Kirigami.Units.smallSpacing
                 }
 
