@@ -612,6 +612,28 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
 
     connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this](KWin::EffectWindow* window) {
         updateWindowStickyState(window);
+
+        // When a window is moved to a different desktop (e.g., "Move to Desktop 2"),
+        // treat it as removed from the current desktop's tiling. The normal desktop-
+        // switch flow will pick it up when the user switches to the target desktop.
+        if (window && !window->isOnCurrentDesktop() && !window->isOnAllDesktops()) {
+            const QString windowId = getWindowId(window);
+            const QString screenName = getWindowScreenName(window);
+            if (m_autotileHandler->isAutotileScreen(screenName)) {
+                // Restore title bar before removing from tiling — onWindowClosed
+                // only clears tracking, it doesn't call setNoBorder(false) since
+                // it's also used for truly closing windows.
+                if (m_autotileHandler->isBorderlessWindow(windowId)) {
+                    KWin::Window* kw = window->window();
+                    if (kw) {
+                        kw->setNoBorder(false);
+                    }
+                }
+                m_autotileHandler->onWindowClosed(windowId, screenName);
+                updateActiveBorder();
+                qCInfo(lcEffect) << "Window moved off current desktop, removed from autotile:" << windowId;
+            }
+        }
     });
 
     // Detect drag start/end via KWin's per-window signals instead of polling.
