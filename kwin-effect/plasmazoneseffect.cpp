@@ -843,7 +843,10 @@ void PlasmaZonesEffect::slotDaemonReady()
 
     // These already use QDBusMessage::createMethodCall (no QDBusInterface)
     loadCachedSettings();
-    connectNavigationSignals();
+    // Note: connectNavigationSignals() is NOT called here — it's already called
+    // once in the constructor. D-Bus signal subscriptions persist across daemon
+    // restarts. Calling it again would create duplicate connections, causing
+    // handlers (e.g., toggleWindowFloat) to fire twice per signal.
 
     // Delegate autotile re-initialization to handler.
     // Snapshot the active window so the autotile raise loop can re-activate it

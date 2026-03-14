@@ -87,12 +87,12 @@ void AutotileEngine::connectSignals()
                             }
                         }
                         onWindowRemoved(windowId);
-                    } else {
-                        // Window was assigned to a zone - treat as added if not already tracked
-                        if (!m_windowToStateKey.contains(windowId)) {
-                            onWindowAdded(windowId);
-                        }
                     }
+                    // Non-empty zoneId for already-tracked windows: no action needed,
+                    // the zone assignment is handled by the retile path.
+                    // Untracked windows (snap-mode zone assignments from SnapEngine)
+                    // are intentionally ignored — autotile windows are always added via
+                    // windowOpened() which stores m_windowToStateKey before onWindowAdded.
                 });
     }
 
