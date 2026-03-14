@@ -7,6 +7,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-03-14
+
+### Fixed
+- **Primary screen detection on Wayland**: `QGuiApplication::primaryScreen()` could diverge from KDE Display Settings on some multi-monitor Wayland configurations. The KWin effect now queries `Workspace::outputOrder()` (the compositor's authoritative output priority) and pushes the true primary to the daemon via D-Bus. Updates automatically when display settings change.
+
+### Changed
+- **Complete German translations**: All three translation domains are now 100% translated (KCM: 520, Editor: 446, Daemon: 61 strings).
+- **Translation extraction fix**: Sub-KCM QML files were missing from pot extraction (glob only scanned `kcm/ui/`, not `kcm/*/ui/`).
+
 ## [2.2.0] - 2026-03-14
 
 ### Added
@@ -762,7 +771,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.2.1...HEAD
+[2.2.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.0.2...v2.1.0
 [2.0.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.0.1...v2.0.2
