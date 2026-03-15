@@ -256,6 +256,32 @@ Item {
             Layout.fillWidth: true
         }
 
+        // ═══════════════════════════════════════════════════════════════
+        // LOCK TOGGLE (all parameter types)
+        // ═══════════════════════════════════════════════════════════════
+        ToolButton {
+            // Force re-evaluation when lockedParams changes (same pattern as _pendingRef)
+            readonly property var _lockedRef: paramDelegate.resolvedDialogRoot ? paramDelegate.resolvedDialogRoot.lockedParams : null
+            readonly property bool isLocked: {
+                void (_lockedRef);
+                return paramDelegate.resolvedDialogRoot && paramDelegate.paramData ? paramDelegate.resolvedDialogRoot.isParamLocked(paramDelegate.paramData.id) : false;
+            }
+
+            icon.name: isLocked ? "object-locked" : "object-unlocked"
+            icon.width: Kirigami.Units.iconSizes.small
+            icon.height: Kirigami.Units.iconSizes.small
+            opacity: isLocked ? 1 : 0.4
+            display: ToolButton.IconOnly
+            ToolTip.text: isLocked ? i18nc("@info:tooltip", "Locked — preserved during randomize") : i18nc("@info:tooltip", "Unlocked — will be randomized")
+            ToolTip.visible: hovered
+            ToolTip.delay: Kirigami.Units.toolTipDelay
+            onClicked: {
+                if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot)
+                    paramDelegate.resolvedDialogRoot.setParamLocked(paramDelegate.paramData.id, !isLocked);
+
+            }
+        }
+
     }
 
     FileDialog {

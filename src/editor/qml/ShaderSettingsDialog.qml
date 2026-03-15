@@ -33,6 +33,8 @@ Kirigami.Dialog {
     // ═══════════════════════════════════════════════════════════════════════
     property var pendingParams: ({
     })
+    property var lockedParams: ({
+    })
     property string pendingShaderId: ""
     // Accordion state - only one group expanded at a time (-1 = all collapsed)
     property int expandedGroupIndex: 0
@@ -163,6 +165,14 @@ Kirigami.Dialog {
     property real previewLastTime: 0
     property real previewTimeDelta: 0.016
     property int previewFrame: 0
+    readonly property bool hasAnyLocked: {
+        for (var key in lockedParams) {
+            if (lockedParams[key] === true)
+                return true;
+
+        }
+        return false;
+    }
 
     // Translate shader category names for display
     function translateCategory(cat) {
@@ -284,6 +294,8 @@ Kirigami.Dialog {
             copy[key] = current[key];
         }
         pendingParams = copy;
+        lockedParams = {
+        };
     }
 
     function initializePendingParamsForShader() {
@@ -332,6 +344,34 @@ Kirigami.Dialog {
         return fallback;
     }
 
+    function isParamLocked(paramId) {
+        return lockedParams && lockedParams[paramId] === true;
+    }
+
+    function setParamLocked(paramId, locked) {
+        var copy = {
+        };
+        for (var key in lockedParams) copy[key] = lockedParams[key]
+        if (locked)
+            copy[paramId] = true;
+        else
+            delete copy[paramId];
+        lockedParams = copy;
+    }
+
+    function toggleAllLocks(locked) {
+        var copy = {
+        };
+        if (locked && shaderParams) {
+            for (var i = 0; i < shaderParams.length; i++) {
+                if (shaderParams[i] && shaderParams[i].id !== undefined)
+                    copy[shaderParams[i].id] = true;
+
+            }
+        }
+        lockedParams = copy;
+    }
+
     function applyChanges() {
         if (!editorController)
             return ;
@@ -369,6 +409,11 @@ Kirigami.Dialog {
             if (!param || param.id === undefined)
                 continue;
 
+            // Skip locked parameters — preserve their current value
+            if (isParamLocked(param.id)) {
+                randomized[param.id] = parameterValue(param.id, param.default);
+                continue;
+            }
             var value;
             switch (param.type) {
             case "float":
@@ -544,6 +589,8 @@ Kirigami.Dialog {
         if (visible)
             initializePendingParamsForShader();
 
+        lockedParams = {
+        };
         debouncePreviewUpdate.restart();
     }
     onPendingParamsChanged: debouncePreviewUpdate.restart()
@@ -885,9 +932,18 @@ Kirigami.Dialog {
                 }
 
                 ToolButton {
+                    icon.name: root.hasAnyLocked ? "object-unlocked" : "object-locked"
+                    display: ToolButton.IconOnly
+                    ToolTip.text: root.hasAnyLocked ? i18nc("@info:tooltip", "Unlock all parameters") : i18nc("@info:tooltip", "Lock all parameters")
+                    Accessible.name: root.hasAnyLocked ? i18nc("@action:button", "Unlock All") : i18nc("@action:button", "Lock All")
+                    Accessible.description: ToolTip.text
+                    onClicked: root.toggleAllLocks(!root.hasAnyLocked)
+                }
+
+                ToolButton {
                     icon.name: "roll"
                     display: ToolButton.IconOnly
-                    ToolTip.text: i18nc("@info:tooltip", "Randomize all parameters")
+                    ToolTip.text: root.hasAnyLocked ? i18nc("@info:tooltip", "Randomize unlocked parameters") : i18nc("@info:tooltip", "Randomize all parameters")
                     Accessible.name: i18nc("@action:button", "Random")
                     Accessible.description: ToolTip.text
                     onClicked: root.randomizeParameters()
@@ -926,6 +982,7 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
                         title: modelData.name
                         groupParams: modelData.params
+                        dialogRoot: root
                         expanded: root.expandedGroupIndex === index
                         onToggled: {
                             root.expandedGroupIndex = expanded ? -1 : index;
