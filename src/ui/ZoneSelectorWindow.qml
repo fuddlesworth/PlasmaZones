@@ -88,6 +88,7 @@ Window {
     property int scaledPadding: 1
     property int scaledBorderWidth: 1
     property int scaledBorderRadius: 2
+    property bool locked: false
     // Appearance properties - unified with ZoneOverlay/ZoneItem for consistent look
     property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
     property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
@@ -440,7 +441,7 @@ Window {
                             // Zone selector features
                             showIndicatorBar: true
                             showCardBackground: true
-                            interactive: true
+                            interactive: !(root.locked && !indicator.isActive)
                             selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
                             // Zone appearance
                             zonePadding: root.scaledPadding
@@ -468,6 +469,10 @@ Window {
                             shortAnimationDuration: animationConstants.shortDuration
                             labelTopMargin: root.labelTopMargin
                             onZoneHovered: function(zoneIndex) {
+                                // Block zone interaction on locked non-active layouts
+                                if (root.locked && !indicator.isActive)
+                                    return ;
+
                                 root.selectedLayoutId = indicator.layoutId;
                                 root.selectedZoneIndex = zoneIndex;
                                 var zones = indicator.modelData.zones || [];
@@ -477,6 +482,36 @@ Window {
                                 };
                                 root.zoneSelected(indicator.layoutId, root.selectedZoneIndex, relGeo);
                             }
+                        }
+
+                        // Lock overlay for non-active layouts — absorbs all mouse events
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: root.locked && !indicator.isActive
+                            z: 100
+                            color: Qt.rgba(0, 0, 0, 0.5)
+                            radius: Kirigami.Units.largeSpacing
+
+                            Kirigami.Icon {
+                                anchors.centerIn: parent
+                                source: "object-locked"
+                                width: Math.min(parent.width, parent.height) * 0.3
+                                height: width
+                                color: "white"
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.ForbiddenCursor
+                                onClicked: function(mouse) {
+                                    mouse.accepted = true;
+                                }
+                                onPressed: function(mouse) {
+                                    mouse.accepted = true;
+                                }
+                            }
+
                         }
 
                     }

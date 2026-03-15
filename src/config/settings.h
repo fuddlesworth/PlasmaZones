@@ -1042,6 +1042,8 @@ public:
     void setLockedScreens(const QStringList& screens) override;
     bool isScreenLocked(const QString& screenName) const override;
     void setScreenLocked(const QString& screenName, bool locked) override;
+    bool isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity) const override;
+    void setContextLocked(const QString& screenName, int virtualDesktop, const QString& activity, bool locked) override;
 
     // Shader Effects
     bool enableShaderEffects() const override

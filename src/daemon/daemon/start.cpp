@@ -250,10 +250,14 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "QuickLayout shortcut: no screen info";
             return;
         }
-        // Check if screen is locked
-        if (m_settings && m_settings->isScreenLocked(screen->name())) {
-            showLockedOsd(screen->name());
-            return;
+        // Check if screen is locked for its current mode
+        if (m_layoutManager) {
+            int mode = static_cast<int>(
+                m_layoutManager->modeForScreen(Utils::screenIdentifier(screen), currentDesktop(), currentActivity()));
+            if (isCurrentContextLockedForMode(screen->name(), mode)) {
+                showLockedPreviewOsd(screen->name());
+                return;
+            }
         }
         if (!m_unifiedLayoutController->applyLayoutByNumber(number)) {
             return;
@@ -273,10 +277,14 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "PreviousLayout shortcut: no screen info";
             return;
         }
-        // Check if screen is locked
-        if (m_settings && m_settings->isScreenLocked(screen->name())) {
-            showLockedOsd(screen->name());
-            return;
+        // Check if screen is locked for its current mode
+        if (m_layoutManager) {
+            int mode = static_cast<int>(
+                m_layoutManager->modeForScreen(Utils::screenIdentifier(screen), currentDesktop(), currentActivity()));
+            if (isCurrentContextLockedForMode(screen->name(), mode)) {
+                showLockedPreviewOsd(screen->name());
+                return;
+            }
         }
         m_unifiedLayoutController->cyclePrevious();
         resnapIfManualMode();
@@ -292,10 +300,14 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "NextLayout shortcut: no screen info";
             return;
         }
-        // Check if screen is locked
-        if (m_settings && m_settings->isScreenLocked(screen->name())) {
-            showLockedOsd(screen->name());
-            return;
+        // Check if screen is locked for its current mode
+        if (m_layoutManager) {
+            int mode = static_cast<int>(
+                m_layoutManager->modeForScreen(Utils::screenIdentifier(screen), currentDesktop(), currentActivity()));
+            if (isCurrentContextLockedForMode(screen->name(), mode)) {
+                showLockedPreviewOsd(screen->name());
+                return;
+            }
         }
         m_unifiedLayoutController->cycleNext();
         resnapIfManualMode();
@@ -358,6 +370,16 @@ void Daemon::connectShortcutSignals()
     connect(m_overlayService.get(), &OverlayService::layoutPickerSelected, this, [this](const QString& layoutId) {
         if (!m_unifiedLayoutController) {
             return;
+        }
+        // Check if screen is locked for its current mode
+        QString screenName = m_unifiedLayoutController->currentScreenName();
+        if (!screenName.isEmpty() && m_layoutManager) {
+            int mode =
+                static_cast<int>(m_layoutManager->modeForScreen(screenName, currentDesktop(), currentActivity()));
+            if (isCurrentContextLockedForMode(screenName, mode)) {
+                showLockedPreviewOsd(screenName);
+                return;
+            }
         }
         // Screen name was already set when the picker opened.
         if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {

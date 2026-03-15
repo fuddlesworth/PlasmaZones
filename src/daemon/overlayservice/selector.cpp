@@ -142,6 +142,22 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 QVariantMap layoutMap = layouts[i].toMap();
                 QString layoutId = layoutMap[QStringLiteral("id")].toString();
 
+                // Skip non-active layouts when screen is locked (either mode)
+                if (m_settings && m_layoutManager) {
+                    int curDesktop = m_layoutManager->currentVirtualDesktop();
+                    QString curActivity = m_layoutManager->currentActivity();
+                    bool locked =
+                        m_settings->isContextLocked(QStringLiteral("0:") + screen->name(), curDesktop, curActivity)
+                        || m_settings->isContextLocked(QStringLiteral("1:") + screen->name(), curDesktop, curActivity);
+                    if (locked) {
+                        // Only allow zone selection from the active layout
+                        Layout* activeLayout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
+                        if (activeLayout && layoutId != activeLayout->id().toString()) {
+                            continue; // Skip this non-active layout entirely
+                        }
+                    }
+                }
+
                 // Per-zone hit testing
                 QVariantList zones = layoutMap[QStringLiteral("zones")].toList();
                 int scaledPadding = window->property("scaledPadding").toInt();

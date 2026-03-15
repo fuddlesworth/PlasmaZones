@@ -217,6 +217,17 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     }
     writeQmlProperty(window, QStringLiteral("activeLayoutId"), activeLayoutId);
 
+    // Push lock state so QML disables non-active layout interaction
+    // Check both modes — zone selector appears during drag for the current mode
+    bool locked = false;
+    if (m_settings && m_layoutManager) {
+        int curDesktop = m_layoutManager->currentVirtualDesktop();
+        QString curActivity = m_layoutManager->currentActivity();
+        locked = m_settings->isContextLocked(QStringLiteral("0:") + screen->name(), curDesktop, curActivity)
+            || m_settings->isContextLocked(QStringLiteral("1:") + screen->name(), curDesktop, curActivity);
+    }
+    writeQmlProperty(window, QStringLiteral("locked"), locked);
+
     // Compute layout for geometry updates using per-screen config
     const int layoutCount = layouts.size();
     const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screen, layoutCount);

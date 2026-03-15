@@ -125,69 +125,102 @@ Kirigami.Card {
 
                     }
 
-                    // Per-screen assignments using AssignmentRow
+                    // Per-screen assignments using AssignmentRow + lock toggle
                     Repeater {
                         model: root.kcm.screens
 
-                        AssignmentRow {
-                            id: screenRow
+                        RowLayout {
+                            id: activityScreenRow
 
                             required property var modelData
+                            required property int index
                             property string screenName: modelData.name || ""
-                            // Activity "Default" resolves to monitor's layout (or global if monitor has none)
-                            // Uses revision counter to avoid imperative assignment breaking the binding
-                            property string monitorLayout: {
-                                void (activityDelegate._activityRevision);
-                                return root.getScreenLayout(screenRow.screenName);
-                            }
 
                             Layout.fillWidth: true
                             Layout.leftMargin: Kirigami.Units.gridUnit * 2
-                            kcm: root.kcm
-                            iconSource: "video-display"
-                            iconOpacity: 0.7
-                            layoutFilter: root.viewMode === 1 ? 1 : 0
-                            showPreview: root.viewMode === 0
-                            labelText: {
-                                let mfr = modelData.manufacturer || "";
-                                let mdl = modelData.model || "";
-                                let parts = [mfr, mdl].filter(function(s) {
-                                    return s !== "";
-                                });
-                                let displayInfo = parts.join(" ");
-                                return displayInfo ? screenName + " — " + displayInfo : screenName;
-                            }
-                            noneText: i18n("Use default")
-                            resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.kcm.defaultLayoutId || "")
-                            currentLayoutId: {
-                                void (activityDelegate._activityRevision);
-                                return root.getScreenActivityLayout(screenRow.screenName, activityDelegate.activityId);
-                            }
-                            onAssignmentSelected: (layoutId) => {
-                                root.assignScreenActivity(screenRow.screenName, activityDelegate.activityId, layoutId);
-                            }
-                            onAssignmentCleared: {
-                                root.clearScreenActivity(screenRow.screenName, activityDelegate.activityId);
-                            }
+                            spacing: Kirigami.Units.smallSpacing
 
-                            Connections {
-                                function onActivityAssignmentsChanged() {
-                                    activityDelegate._activityRevision++;
+                            AssignmentRow {
+                                id: screenRow
+
+                                property string monitorLayout: {
+                                    void (activityDelegate._activityRevision);
+                                    return root.getScreenLayout(activityScreenRow.screenName);
                                 }
 
-                                function onTilingActivityAssignmentsChanged() {
-                                    activityDelegate._activityRevision++;
+                                Layout.fillWidth: true
+                                enabled: {
+                                    void (activityDelegate._activityRevision);
+                                    return !root.kcm.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode);
+                                }
+                                kcm: root.kcm
+                                iconSource: "video-display"
+                                iconOpacity: 0.7
+                                layoutFilter: root.viewMode === 1 ? 1 : 0
+                                showPreview: root.viewMode === 0
+                                labelText: {
+                                    let mfr = activityScreenRow.modelData.manufacturer || "";
+                                    let mdl = activityScreenRow.modelData.model || "";
+                                    let parts = [mfr, mdl].filter(function(s) {
+                                        return s !== "";
+                                    });
+                                    let displayInfo = parts.join(" ");
+                                    return displayInfo ? activityScreenRow.screenName + " — " + displayInfo : activityScreenRow.screenName;
+                                }
+                                noneText: i18n("Use default")
+                                resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.kcm.defaultLayoutId || "")
+                                currentLayoutId: {
+                                    void (activityDelegate._activityRevision);
+                                    return root.getScreenActivityLayout(activityScreenRow.screenName, activityDelegate.activityId);
+                                }
+                                onAssignmentSelected: (layoutId) => {
+                                    root.assignScreenActivity(activityScreenRow.screenName, activityDelegate.activityId, layoutId);
+                                }
+                                onAssignmentCleared: {
+                                    root.clearScreenActivity(activityScreenRow.screenName, activityDelegate.activityId);
                                 }
 
-                                function onScreenAssignmentsChanged() {
-                                    activityDelegate._activityRevision++;
+                                Connections {
+                                    function onActivityAssignmentsChanged() {
+                                        activityDelegate._activityRevision++;
+                                    }
+
+                                    function onTilingActivityAssignmentsChanged() {
+                                        activityDelegate._activityRevision++;
+                                    }
+
+                                    function onScreenAssignmentsChanged() {
+                                        activityDelegate._activityRevision++;
+                                    }
+
+                                    function onTilingScreenAssignmentsChanged() {
+                                        activityDelegate._activityRevision++;
+                                    }
+
+                                    target: root.kcm
                                 }
 
-                                function onTilingScreenAssignmentsChanged() {
+                            }
+
+                            ToolButton {
+                                icon.name: {
+                                    void (activityDelegate._activityRevision);
+                                    return root.kcm.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode) ? "object-locked" : "object-unlocked";
+                                }
+                                opacity: {
+                                    void (activityDelegate._activityRevision);
+                                    return root.kcm.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode) ? 1 : 0.4;
+                                }
+                                display: ToolButton.IconOnly
+                                ToolTip.text: {
+                                    void (activityDelegate._activityRevision);
+                                    return root.kcm.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode) ? i18n("Unlock layout for %1 on %2", activityDelegate.activityName, activityScreenRow.screenName) : i18n("Lock layout for %1 on %2", activityDelegate.activityName, activityScreenRow.screenName);
+                                }
+                                ToolTip.visible: hovered
+                                onClicked: {
+                                    root.kcm.toggleContextLock(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode);
                                     activityDelegate._activityRevision++;
                                 }
-
-                                target: root.kcm
                             }
 
                         }

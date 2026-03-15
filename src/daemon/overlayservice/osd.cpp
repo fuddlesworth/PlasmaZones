@@ -119,6 +119,7 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenName)
         return;
     }
 
+    writeQmlProperty(window, QStringLiteral("locked"), false);
     writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
     writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
@@ -130,6 +131,37 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenName)
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
     qCInfo(lcOverlay) << "Layout OSD: layout=" << layout->name() << "screen=" << screenName;
+}
+
+void OverlayService::showLockedLayoutOsd(Layout* layout, const QString& screenName)
+{
+    if (!layout) {
+        return;
+    }
+
+    hideLayoutOsd();
+
+    QQuickWindow* window = nullptr;
+    QRect screenGeom;
+    qreal aspectRatio = 0;
+    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio, screenName)) {
+        return;
+    }
+
+    writeQmlProperty(window, QStringLiteral("locked"), true);
+    writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
+    writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
+    writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
+    writeQmlProperty(window, QStringLiteral("category"), static_cast<int>(LayoutCategory::Manual));
+    writeQmlProperty(window, QStringLiteral("autoAssign"), layout->autoAssign());
+    writeQmlProperty(window, QStringLiteral("zones"),
+                     layout->zones().isEmpty() ? QVariantList()
+                                               : LayoutUtils::zonesToVariantList(layout, ZoneField::Full));
+    writeFontProperties(window, m_settings);
+
+    sizeAndCenterOsd(window, screenGeom, aspectRatio);
+    QMetaObject::invokeMethod(window, "show");
+    qCInfo(lcOverlay) << "Locked OSD: layout=" << layout->name() << "screen=" << screenName;
 }
 
 void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,

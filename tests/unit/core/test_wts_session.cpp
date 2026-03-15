@@ -664,6 +664,13 @@ public:
     void setScreenLocked(const QString&, bool) override
     {
     }
+    bool isContextLocked(const QString&, int, const QString&) const override
+    {
+        return false;
+    }
+    void setContextLocked(const QString&, int, const QString&, bool) override
+    {
+    }
     // Persistence
     void load() override
     {

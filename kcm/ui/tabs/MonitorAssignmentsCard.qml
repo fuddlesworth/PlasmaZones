@@ -137,6 +137,10 @@ Kirigami.Card {
                             id: screenLayoutCombo
 
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 16
+                            enabled: {
+                                void (monitorDelegate._assignmentRevision);
+                                return !root.kcm.isScreenLocked(monitorDelegate.screenName, root.viewMode);
+                            }
                             kcm: root.kcm
                             noneText: i18n("Default")
                             showPreview: root.viewMode === 0
@@ -180,6 +184,10 @@ Kirigami.Card {
 
                         ToolButton {
                             icon.name: "edit-clear"
+                            enabled: {
+                                void (monitorDelegate._assignmentRevision);
+                                return !root.kcm.isScreenLocked(monitorDelegate.screenName, root.viewMode);
+                            }
                             onClicked: {
                                 if (root.viewMode === 1)
                                     root.kcm.clearTilingScreenAssignment(monitorDelegate.screenName);
@@ -189,6 +197,27 @@ Kirigami.Card {
                             }
                             ToolTip.visible: hovered
                             ToolTip.text: i18n("Clear assignment")
+                        }
+
+                        ToolButton {
+                            icon.name: {
+                                void (monitorDelegate._assignmentRevision);
+                                return root.kcm.isScreenLocked(monitorDelegate.screenName, root.viewMode) ? "object-locked" : "object-unlocked";
+                            }
+                            opacity: {
+                                void (monitorDelegate._assignmentRevision);
+                                return root.kcm.isScreenLocked(monitorDelegate.screenName, root.viewMode) ? 1 : 0.4;
+                            }
+                            display: ToolButton.IconOnly
+                            ToolTip.text: {
+                                void (monitorDelegate._assignmentRevision);
+                                return root.kcm.isScreenLocked(monitorDelegate.screenName, root.viewMode) ? i18n("Unlock layout for this monitor") : i18n("Lock layout for this monitor");
+                            }
+                            ToolTip.visible: hovered
+                            onClicked: {
+                                root.kcm.toggleScreenLock(monitorDelegate.screenName, root.viewMode);
+                                monitorDelegate._assignmentRevision++;
+                            }
                         }
 
                         Item {
@@ -250,48 +279,82 @@ Kirigami.Card {
                         Repeater {
                             model: root.kcm.virtualDesktopCount
 
-                            AssignmentRow {
-                                id: desktopRow
+                            RowLayout {
+                                id: desktopRowContainer
 
                                 required property int index
                                 property int desktopNumber: index + 1
                                 property string desktopName: root.kcm.virtualDesktopNames[index] || i18n("Desktop %1", desktopNumber)
-                                // Per-desktop "Default" resolves to monitor's layout (or global if monitor has none)
-                                property string monitorLayout: {
-                                    void (monitorDelegate._assignmentRevision);
-                                    return root.viewMode === 1 ? (root.kcm.getTilingLayoutForScreen(monitorDelegate.screenName) || "") : (root.kcm.getLayoutForScreen(monitorDelegate.screenName) || "");
-                                }
 
                                 Layout.fillWidth: true
-                                kcm: root.kcm
-                                iconSource: "preferences-desktop-virtual"
-                                labelText: desktopName
-                                layoutFilter: root.viewMode === 1 ? 1 : 0
-                                showPreview: root.viewMode === 0
-                                noneText: i18n("Use default")
-                                resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.kcm.defaultLayoutId || "")
-                                currentLayoutId: {
-                                    void (monitorDelegate._assignmentRevision);
-                                    if (root.viewMode === 1) {
-                                        let hasExplicit = root.kcm.hasExplicitTilingAssignmentForScreenDesktop(monitorDelegate.screenName, desktopNumber);
-                                        return hasExplicit ? (root.kcm.getTilingLayoutForScreenDesktop(monitorDelegate.screenName, desktopNumber) || "") : "";
-                                    } else {
-                                        let hasExplicit = root.kcm.hasExplicitAssignmentForScreenDesktop(monitorDelegate.screenName, desktopNumber);
-                                        return hasExplicit ? (root.kcm.getSnappingLayoutForScreenDesktop(monitorDelegate.screenName, desktopNumber) || "") : "";
+                                spacing: Kirigami.Units.smallSpacing
+
+                                AssignmentRow {
+                                    id: desktopRow
+
+                                    // Per-desktop "Default" resolves to monitor's layout (or global if monitor has none)
+                                    property string monitorLayout: {
+                                        void (monitorDelegate._assignmentRevision);
+                                        return root.viewMode === 1 ? (root.kcm.getTilingLayoutForScreen(monitorDelegate.screenName) || "") : (root.kcm.getLayoutForScreen(monitorDelegate.screenName) || "");
+                                    }
+
+                                    Layout.fillWidth: true
+                                    enabled: {
+                                        void (monitorDelegate._assignmentRevision);
+                                        return !root.kcm.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode);
+                                    }
+                                    kcm: root.kcm
+                                    iconSource: "preferences-desktop-virtual"
+                                    labelText: desktopRowContainer.desktopName
+                                    layoutFilter: root.viewMode === 1 ? 1 : 0
+                                    showPreview: root.viewMode === 0
+                                    noneText: i18n("Use default")
+                                    resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.kcm.defaultLayoutId || "")
+                                    currentLayoutId: {
+                                        void (monitorDelegate._assignmentRevision);
+                                        if (root.viewMode === 1) {
+                                            let hasExplicit = root.kcm.hasExplicitTilingAssignmentForScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
+                                            return hasExplicit ? (root.kcm.getTilingLayoutForScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber) || "") : "";
+                                        } else {
+                                            let hasExplicit = root.kcm.hasExplicitAssignmentForScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
+                                            return hasExplicit ? (root.kcm.getSnappingLayoutForScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber) || "") : "";
+                                        }
+                                    }
+                                    onAssignmentSelected: (layoutId) => {
+                                        if (root.viewMode === 1)
+                                            root.kcm.assignTilingLayoutToScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber, layoutId);
+                                        else
+                                            root.kcm.assignLayoutToScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber, layoutId);
+                                    }
+                                    onAssignmentCleared: {
+                                        if (root.viewMode === 1)
+                                            root.kcm.clearTilingScreenDesktopAssignment(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
+                                        else
+                                            root.kcm.clearScreenDesktopAssignment(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
                                     }
                                 }
-                                onAssignmentSelected: (layoutId) => {
-                                    if (root.viewMode === 1)
-                                        root.kcm.assignTilingLayoutToScreenDesktop(monitorDelegate.screenName, desktopNumber, layoutId);
-                                    else
-                                        root.kcm.assignLayoutToScreenDesktop(monitorDelegate.screenName, desktopNumber, layoutId);
+
+                                ToolButton {
+                                    icon.name: {
+                                        void (monitorDelegate._assignmentRevision);
+                                        return root.kcm.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode) ? "object-locked" : "object-unlocked";
+                                    }
+                                    opacity: {
+                                        void (monitorDelegate._assignmentRevision);
+                                        return root.kcm.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode) ? 1 : 0.4;
+                                    }
+                                    display: ToolButton.IconOnly
+                                    ToolTip.text: {
+                                        void (monitorDelegate._assignmentRevision);
+                                        return root.kcm.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode) ? i18n("Unlock layout for %1", desktopRowContainer.desktopName) : i18n("Lock layout for %1", desktopRowContainer.desktopName);
+                                    }
+                                    ToolTip.visible: hovered
+                                    onClicked: {
+                                        root.kcm.toggleContextLock(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode);
+                                        monitorDelegate._assignmentRevision++;
+                                    }
                                 }
-                                onAssignmentCleared: {
-                                    if (root.viewMode === 1)
-                                        root.kcm.clearTilingScreenDesktopAssignment(monitorDelegate.screenName, desktopNumber);
-                                    else
-                                        root.kcm.clearScreenDesktopAssignment(monitorDelegate.screenName, desktopNumber);
-                                }
+
                             }
 
                         }

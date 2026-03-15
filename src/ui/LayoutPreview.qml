@@ -39,6 +39,7 @@ Rectangle {
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
+    property bool locked: false
     // Scale effect on hover
     readonly property real hoverScale: 1.05
 
@@ -184,10 +185,41 @@ Rectangle {
 
     }
 
+    // Lock overlay (shown on non-active layouts when screen is locked)
+    Rectangle {
+        anchors.fill: parent
+        visible: root.locked
+        z: 100
+        color: Qt.rgba(0, 0, 0, 0.5)
+        radius: parent.radius
+
+        Kirigami.Icon {
+            anchors.centerIn: parent
+            source: "object-locked"
+            width: Math.min(parent.width, parent.height) * 0.3
+            height: width
+            color: "white"
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.ForbiddenCursor
+            onClicked: function(mouse) {
+                mouse.accepted = true;
+            }
+            onPressed: function(mouse) {
+                mouse.accepted = true;
+            }
+        }
+
+    }
+
     // Mouse interaction
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
+        enabled: !root.locked
         cursorShape: Qt.PointingHandCursor
         onEntered: {
             root.isHovered = true;
@@ -205,7 +237,7 @@ Rectangle {
     // Tooltip
     ToolTip {
         visible: root.isHovered
-        text: root.isActive ? i18nc("@tooltip", "Current layout: %1", root.layoutName) : i18nc("@tooltip", "Select layout: %1", root.layoutName)
+        text: root.locked ? i18nc("@tooltip", "Locked") : root.isActive ? i18nc("@tooltip", "Current layout: %1", root.layoutName) : i18nc("@tooltip", "Select layout: %1", root.layoutName)
         delay: Kirigami.Units.toolTipDelay
     }
 

@@ -54,6 +54,7 @@ Rectangle {
     property bool fontUnderline: false
     property bool fontStrikeout: false
     // Preview dimensions
+    property bool locked: false
     property int previewWidth: 130
     property int previewHeight: 70
     property int previewSpacing: Kirigami.Units.gridUnit // 8px
@@ -150,6 +151,9 @@ Rectangle {
      * Handle layout selection
      */
     function selectLayout(layoutId) {
+        if (root.locked)
+            return ;
+
         activeLayoutId = layoutId;
         layoutSelected(layoutId);
     }
@@ -276,10 +280,15 @@ Rectangle {
                     fontItalic: root.fontItalic
                     fontUnderline: root.fontUnderline
                     fontStrikeout: root.fontStrikeout
+                    // Show lock overlay on non-active layouts when screen is locked
+                    locked: root.locked && !isActive
                     onClicked: {
-                        root.layoutSelected(layoutId);
+                        root.selectLayout(layoutId);
                     }
                     onHovered: {
+                        if (root.locked)
+                            return ;
+
                         root.hoveredLayoutId = layoutId;
                         root.layoutHovered(layoutId);
                     }

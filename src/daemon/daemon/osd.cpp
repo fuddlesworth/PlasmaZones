@@ -124,7 +124,28 @@ void Daemon::showLockedOsd(const QString& screenName)
 
     msg << QStringLiteral("object-locked") << i18n("Layout Locked");
     QDBusConnection::sessionBus().asyncCall(msg);
-    qCInfo(lcDaemon) << "Showing locked OSD for screen=" << screenName;
+    qCInfo(lcDaemon) << "Showing locked text OSD for screen=" << screenName;
+}
+
+void Daemon::showLockedPreviewOsd(const QString& screenName)
+{
+    OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
+    if (style == OsdStyle::None) {
+        return;
+    }
+
+    // Show the visual preview OSD with lock overlay showing the current layout
+    if (style == OsdStyle::Preview && m_overlayService && m_layoutManager) {
+        const QString screenId = Utils::screenIdForName(screenName);
+        Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId.isEmpty() ? screenName : screenId);
+        if (layout) {
+            m_overlayService->showLockedLayoutOsd(layout, screenName);
+            return;
+        }
+    }
+
+    // Fall back to text OSD
+    showLockedOsd(screenName);
 }
 
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName,
@@ -345,6 +366,22 @@ int Daemon::currentDesktop() const
 QString Daemon::currentActivity() const
 {
     return (m_activityManager && ActivityManager::isAvailable()) ? m_activityManager->currentActivity() : QString();
+}
+
+bool Daemon::isCurrentContextLocked(const QString& screenName) const
+{
+    // Check both snapping and tiling locks (mode-agnostic check)
+    return m_settings
+        && (m_settings->isContextLocked(QStringLiteral("0:") + screenName, currentDesktop(), currentActivity())
+            || m_settings->isContextLocked(QStringLiteral("1:") + screenName, currentDesktop(), currentActivity()));
+}
+
+bool Daemon::isCurrentContextLockedForMode(const QString& screenName, int mode) const
+{
+    if (!m_settings)
+        return false;
+    QString prefix = QString::number(mode) + QStringLiteral(":");
+    return m_settings->isContextLocked(prefix + screenName, currentDesktop(), currentActivity());
 }
 
 } // namespace PlasmaZones

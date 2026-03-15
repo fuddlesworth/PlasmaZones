@@ -155,6 +155,8 @@ public Q_SLOTS:
     // Screen layout lock
     void toggleScreenLock(const QString& screenName);
     bool isScreenLocked(const QString& screenName);
+    void toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity);
+    bool isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity);
 
 Q_SIGNALS:
     /**

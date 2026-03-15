@@ -130,6 +130,7 @@ public:
     void showLayoutOsd(Layout* layout, const QString& screenName = QString());
     void showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
                        bool autoAssign = false, const QString& screenName = QString());
+    void showLockedLayoutOsd(Layout* layout, const QString& screenName = QString());
 
     /**
      * @brief Pre-create Layout OSD QML windows for all connected screens.

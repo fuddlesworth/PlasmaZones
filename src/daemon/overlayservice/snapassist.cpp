@@ -339,6 +339,17 @@ void OverlayService::showLayoutPicker(const QString& screenName)
     writeQmlProperty(m_layoutPickerWindow, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeFontProperties(m_layoutPickerWindow, m_settings);
 
+    // Push lock state so picker disables non-active layout interaction
+    // Check both modes — if either is locked for this context, show lock
+    bool locked = false;
+    if (m_settings && m_layoutManager) {
+        int curDesktop = m_layoutManager->currentVirtualDesktop();
+        QString curActivity = m_layoutManager->currentActivity();
+        locked = m_settings->isContextLocked(QStringLiteral("0:") + screen->name(), curDesktop, curActivity)
+            || m_settings->isContextLocked(QStringLiteral("1:") + screen->name(), curDesktop, curActivity);
+    }
+    writeQmlProperty(m_layoutPickerWindow, QStringLiteral("locked"), locked);
+
     // Theme colors and zone appearance (consistent with zone selector)
     if (m_settings) {
         writeQmlProperty(m_layoutPickerWindow, QStringLiteral("highlightColor"), m_settings->highlightColor());

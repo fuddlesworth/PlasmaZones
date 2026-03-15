@@ -120,6 +120,15 @@ public:
     Q_INVOKABLE bool isMonitorDisabled(const QString& screenName) const;
     Q_INVOKABLE void setMonitorDisabled(const QString& screenName, bool disabled);
 
+    // ── Layout lock ─────────────────────────────────────────────────────────
+    // mode: 0 = snapping, 1 = tiling (locks are independent per mode)
+    Q_INVOKABLE bool isScreenLocked(const QString& screenName, int mode) const;
+    Q_INVOKABLE void toggleScreenLock(const QString& screenName, int mode);
+    Q_INVOKABLE bool isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity,
+                                     int mode) const;
+    Q_INVOKABLE void toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity,
+                                       int mode);
+
     // ── Quick layout slots ─────────────────────────────────────────────────
     Q_INVOKABLE QString getQuickLayoutSlot(int slotNumber) const;
     Q_INVOKABLE void setQuickLayoutSlot(int slotNumber, const QString& layoutId);

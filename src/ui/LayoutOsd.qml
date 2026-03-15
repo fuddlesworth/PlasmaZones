@@ -46,6 +46,7 @@ Window {
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
+    property bool locked: false
 
     // Signals
     signal dismissed()
@@ -223,6 +224,23 @@ Window {
 
             }
 
+            // Lock overlay (shown on top of preview when locked)
+            Rectangle {
+                anchors.fill: previewContainer
+                visible: root.locked
+                color: Qt.rgba(0, 0, 0, 0.5)
+                radius: Kirigami.Units.smallSpacing
+
+                Kirigami.Icon {
+                    anchors.centerIn: parent
+                    source: "object-locked"
+                    width: Kirigami.Units.iconSizes.large
+                    height: Kirigami.Units.iconSizes.large
+                    color: "white"
+                }
+
+            }
+
             // Layout name with category badge
             Row {
                 id: nameLabelRow
@@ -246,7 +264,7 @@ Window {
                     id: nameLabel
 
                     anchors.verticalCenter: parent.verticalCenter
-                    text: root.layoutName
+                    text: root.locked ? i18n("%1 (Locked)", root.layoutName) : root.layoutName
                     font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.2
                     font.weight: Font.Medium
                     color: textColor

@@ -49,7 +49,6 @@ class PLASMAZONES_EXPORT ZoneSelectorController : public QObject
     Q_PROPERTY(QVariantList layouts READ layouts NOTIFY layoutsChanged)
     Q_PROPERTY(QString activeLayoutId READ activeLayoutId WRITE setActiveLayoutId NOTIFY activeLayoutIdChanged)
     Q_PROPERTY(QString hoveredLayoutId READ hoveredLayoutId WRITE setHoveredLayoutId NOTIFY hoveredLayoutIdChanged)
-
     // Configuration
     Q_PROPERTY(int triggerDistance READ triggerDistance WRITE setTriggerDistance NOTIFY triggerDistanceChanged)
     Q_PROPERTY(int nearDistance READ nearDistance WRITE setNearDistance NOTIFY nearDistanceChanged)
@@ -180,6 +179,9 @@ public:
     // Layout selection
     Q_INVOKABLE void selectLayout(const QString& layoutId);
     Q_INVOKABLE void hoverLayout(const QString& layoutId);
+
+    // Lock state (exposed to QML for visual feedback)
+    bool isScreenLocked() const;
 
     // QML item binding (for direct communication)
     void setQmlItem(QQuickItem* item);

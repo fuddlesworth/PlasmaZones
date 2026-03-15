@@ -101,6 +101,9 @@ public:
     virtual void setLockedScreens(const QStringList& screens) = 0;
     virtual void setScreenLocked(const QString& screenName, bool locked) = 0;
     virtual bool isScreenLocked(const QString& screenName) const = 0;
+    virtual bool isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity) const = 0;
+    virtual void setContextLocked(const QString& screenName, int virtualDesktop, const QString& activity,
+                                  bool locked) = 0;
     virtual bool showZoneNumbers() const = 0;
     virtual void setShowZoneNumbers(bool show) = 0;
     virtual bool flashZonesOnSwitch() const = 0;

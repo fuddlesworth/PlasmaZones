@@ -6,6 +6,7 @@
 #include "../core/constants.h"
 #include "../core/layoututils.h"
 #include "../core/utils.h"
+#include "../core/assignmententry.h"
 #include <QGuiApplication>
 #include <QQuickItem>
 #include <QScreen>
@@ -345,6 +346,11 @@ void ZoneSelectorController::toggle()
 
 void ZoneSelectorController::selectLayout(const QString& layoutId)
 {
+    if (isScreenLocked()) {
+        qCInfo(lcOverlay) << "Layout selection blocked (screen locked):" << layoutId;
+        return;
+    }
+
     qCInfo(lcOverlay) << "Layout selected=" << layoutId;
 
     setActiveLayoutId(layoutId);
@@ -365,8 +371,25 @@ void ZoneSelectorController::selectLayout(const QString& layoutId)
     }
 }
 
+bool ZoneSelectorController::isScreenLocked() const
+{
+    if (m_layoutManager && m_settings && m_screen) {
+        int desktop = m_layoutManager->currentVirtualDesktop();
+        return m_settings->isContextLocked(
+            (QString::number(static_cast<int>(m_layoutManager->modeForScreen(Utils::screenIdentifier(m_screen), desktop,
+                                                                             m_layoutManager->currentActivity())))
+             + QStringLiteral(":"))
+                + m_screen->name(),
+            desktop, m_layoutManager->currentActivity());
+    }
+    return false;
+}
+
 void ZoneSelectorController::hoverLayout(const QString& layoutId)
 {
+    if (isScreenLocked()) {
+        return;
+    }
     setHoveredLayoutId(layoutId);
 }
 

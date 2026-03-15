@@ -113,22 +113,66 @@ bool Settings::isMonitorDisabled(const QString& screenName) const
 
 bool Settings::isScreenLocked(const QString& screenName) const
 {
-    return m_lockedScreens.contains(screenName);
+    return isContextLocked(screenName, 0, QString());
 }
 
 void Settings::setScreenLocked(const QString& screenName, bool locked)
 {
-    if (locked) {
-        if (!m_lockedScreens.contains(screenName)) {
-            m_lockedScreens.append(screenName);
-            Q_EMIT lockedScreensChanged();
-            Q_EMIT settingsChanged();
-        }
+    setContextLocked(screenName, 0, QString(), locked);
+}
+
+bool Settings::isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity) const
+{
+    // Resolve both connector name and screen ID so locks match regardless
+    // of which format was used to store vs query (same approach as isMonitorDisabled)
+    QStringList namesToCheck = {screenName};
+    if (Utils::isConnectorName(screenName)) {
+        QString resolved = Utils::screenIdForName(screenName);
+        if (resolved != screenName)
+            namesToCheck.append(resolved);
     } else {
-        if (m_lockedScreens.removeAll(screenName) > 0) {
-            Q_EMIT lockedScreensChanged();
-            Q_EMIT settingsChanged();
+        QString connector = Utils::screenNameForId(screenName);
+        if (!connector.isEmpty() && connector != screenName)
+            namesToCheck.append(connector);
+    }
+
+    for (const QString& name : std::as_const(namesToCheck)) {
+        // Check exact context first, then fall back to broader contexts
+        // Most specific: screen+desktop+activity
+        if (virtualDesktop > 0 && !activity.isEmpty()) {
+            QString key = name + QStringLiteral(":") + QString::number(virtualDesktop) + QStringLiteral(":") + activity;
+            if (m_lockedScreens.contains(key))
+                return true;
         }
+        // Screen+desktop
+        if (virtualDesktop > 0) {
+            QString key = name + QStringLiteral(":") + QString::number(virtualDesktop);
+            if (m_lockedScreens.contains(key))
+                return true;
+        }
+        // Screen-level (broadest lock)
+        if (m_lockedScreens.contains(name))
+            return true;
+    }
+    return false;
+}
+
+void Settings::setContextLocked(const QString& screenName, int virtualDesktop, const QString& activity, bool locked)
+{
+    QString key = screenName;
+    if (virtualDesktop > 0) {
+        key += QStringLiteral(":") + QString::number(virtualDesktop);
+        if (!activity.isEmpty())
+            key += QStringLiteral(":") + activity;
+    }
+
+    if (locked && !m_lockedScreens.contains(key)) {
+        m_lockedScreens.append(key);
+        Q_EMIT lockedScreensChanged();
+        Q_EMIT settingsChanged();
+    } else if (!locked && m_lockedScreens.removeAll(key) > 0) {
+        Q_EMIT lockedScreensChanged();
+        Q_EMIT settingsChanged();
     }
 }
 

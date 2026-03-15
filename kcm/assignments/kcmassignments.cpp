@@ -403,6 +403,39 @@ void KCMAssignments::setMonitorDisabled(const QString& screenName, bool disabled
     m_screenHelper->setMonitorDisabled(screenName, disabled);
 }
 
+// ── Layout lock ──────────────────────────────────────────────────────────
+
+static QString modePrefix(int mode)
+{
+    return QString::number(mode) + QStringLiteral(":");
+}
+
+bool KCMAssignments::isScreenLocked(const QString& screenName, int mode) const
+{
+    return m_settings->isScreenLocked(modePrefix(mode) + screenName);
+}
+
+void KCMAssignments::toggleScreenLock(const QString& screenName, int mode)
+{
+    const QString key = modePrefix(mode) + screenName;
+    m_settings->setScreenLocked(key, !m_settings->isScreenLocked(key));
+    setNeedsSave(true);
+}
+
+bool KCMAssignments::isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity,
+                                     int mode) const
+{
+    return m_settings->isContextLocked(modePrefix(mode) + screenName, virtualDesktop, activity);
+}
+
+void KCMAssignments::toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity, int mode)
+{
+    const QString key = modePrefix(mode) + screenName;
+    bool locked = m_settings->isContextLocked(key, virtualDesktop, activity);
+    m_settings->setContextLocked(key, virtualDesktop, activity, !locked);
+    setNeedsSave(true);
+}
+
 // ── Quick layout slots ───────────────────────────────────────────────────
 
 QString KCMAssignments::getQuickLayoutSlot(int slotNumber) const

@@ -104,6 +104,7 @@ public:
     // OSD notifications
     void showLayoutOsd(Layout* layout, const QString& screenName = QString());
     void showLockedOsd(const QString& screenName);
+    void showLockedPreviewOsd(const QString& screenName);
 
 private:
     /**
@@ -300,6 +301,8 @@ private:
     // Desktop/activity resolution helpers (DRY — used by multiple handlers)
     int currentDesktop() const;
     QString currentActivity() const;
+    bool isCurrentContextLocked(const QString& screenName) const;
+    bool isCurrentContextLockedForMode(const QString& screenName, int mode) const;
 
     /** @brief Prune m_lastAutotileOrders for stale desktops */
     void pruneContextMapsForDesktop(int maxDesktop);

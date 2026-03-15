@@ -41,6 +41,7 @@ Window {
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
+    property bool locked: false
     // Current keyboard selection index — binding is intentionally broken on first
     // keyboard/mouse interaction; the picker is recreated each time so this is safe.
     property int selectedIndex: {
@@ -86,7 +87,7 @@ Window {
     }
 
     function moveSelection(dx, dy) {
-        if (layoutCount === 0)
+        if (layoutCount === 0 || root.locked)
             return ;
 
         var col = selectedIndex % gridColumns;
@@ -103,6 +104,9 @@ Window {
     }
 
     function confirmSelection() {
+        if (root.locked)
+            return ;
+
         if (selectedIndex >= 0 && selectedIndex < layoutCount) {
             var layout = layouts[selectedIndex];
             root.layoutSelected(layout.id);
@@ -337,16 +341,56 @@ Window {
                             animationDuration: Kirigami.Units.shortDuration
                         }
 
+                        // Lock overlay for non-active layouts — absorbs all mouse events
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: root.locked && !layoutCard.isActive
+                            z: 100
+                            color: Qt.rgba(0, 0, 0, 0.5)
+                            radius: Kirigami.Units.largeSpacing
+
+                            Kirigami.Icon {
+                                anchors.centerIn: parent
+                                source: "object-locked"
+                                width: Math.min(parent.width, parent.height) * 0.3
+                                height: width
+                                color: "white"
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.ForbiddenCursor
+                                onClicked: function(mouse) {
+                                    mouse.accepted = true;
+                                }
+                                onPressed: function(mouse) {
+                                    mouse.accepted = true;
+                                }
+                            }
+
+                        }
+
                         MouseArea {
                             id: cardMouse
 
                             anchors.fill: parent
                             hoverEnabled: true
+                            enabled: !(root.locked && !layoutCard.isActive)
+                            cursorShape: root.locked && !layoutCard.isActive ? Qt.ForbiddenCursor : Qt.PointingHandCursor
                             onClicked: {
+                                if (root.locked)
+                                    return ;
+
                                 root.selectedIndex = index;
                                 root.confirmSelection();
                             }
-                            onEntered: root.selectedIndex = index
+                            onEntered: {
+                                if (root.locked && !layoutCard.isActive)
+                                    return ;
+
+                                root.selectedIndex = index;
+                            }
                         }
 
                     }

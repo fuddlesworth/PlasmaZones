@@ -495,20 +495,28 @@ void LayoutAdaptor::setSettings(ISettings* settings)
 
 void LayoutAdaptor::toggleScreenLock(const QString& screenName)
 {
-    if (!m_settings) {
-        return;
-    }
-    bool locked = m_settings->isScreenLocked(screenName);
-    m_settings->setScreenLocked(screenName, !locked);
-    m_settings->save();
+    toggleContextLock(screenName, 0, QString());
 }
 
 bool LayoutAdaptor::isScreenLocked(const QString& screenName)
 {
-    if (!m_settings) {
+    return isContextLocked(screenName, 0, QString());
+}
+
+void LayoutAdaptor::toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity)
+{
+    if (!m_settings)
+        return;
+    bool locked = m_settings->isContextLocked(screenName, virtualDesktop, activity);
+    m_settings->setContextLocked(screenName, virtualDesktop, activity, !locked);
+    m_settings->save();
+}
+
+bool LayoutAdaptor::isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity)
+{
+    if (!m_settings)
         return false;
-    }
-    return m_settings->isScreenLocked(screenName);
+    return m_settings->isContextLocked(screenName, virtualDesktop, activity);
 }
 
 } // namespace PlasmaZones
