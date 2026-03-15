@@ -442,7 +442,8 @@ void Daemon::connectLayoutSignals()
                     return;
                 }
                 // Check if snapping layout is locked
-                if (!screenName.isEmpty() && isCurrentContextLockedForMode(screenName, 0)) {
+                QString lockScreenId = screenName.isEmpty() ? QString() : Utils::screenIdForName(screenName);
+                if (!lockScreenId.isEmpty() && isCurrentContextLockedForMode(lockScreenId, 0)) {
                     showLockedPreviewOsd(screenName);
                     return;
                 }
@@ -487,7 +488,8 @@ void Daemon::connectOverlaySignals()
     connect(m_overlayService.get(), &IOverlayService::autotileLayoutSelected, this,
             [this](const QString& algorithmId, const QString& screenName) {
                 // Check if tiling algorithm is locked
-                if (!screenName.isEmpty() && isCurrentContextLockedForMode(screenName, 1)) {
+                QString lockScreenId = screenName.isEmpty() ? QString() : Utils::screenIdForName(screenName);
+                if (!lockScreenId.isEmpty() && isCurrentContextLockedForMode(lockScreenId, 1)) {
                     showLockedPreviewOsd(screenName);
                     return;
                 }

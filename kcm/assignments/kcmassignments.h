@@ -168,6 +168,7 @@ Q_SIGNALS:
     void activitiesChanged();
     void currentActivityChanged();
     void disabledMonitorsChanged();
+    void lockedScreensChanged();
     void screenAssignmentsChanged();
     void tilingScreenAssignmentsChanged();
     void tilingActivityAssignmentsChanged();

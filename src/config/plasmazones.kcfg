@@ -512,6 +512,12 @@
       <label>Shortcut to open layout picker (switch layout and resnap)</label>
       <default>Meta+Alt+Space</default>
     </entry>
+
+    <!-- Toggle Layout Lock (Meta+Ctrl+L — lock/unlock current layout on focused screen+desktop) -->
+    <entry name="ToggleLayoutLockShortcut" type="String">
+      <label>Shortcut to toggle layout lock on the focused screen</label>
+      <default>Meta+Ctrl+L</default>
+    </entry>
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════

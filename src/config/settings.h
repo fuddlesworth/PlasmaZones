@@ -342,6 +342,10 @@ public:
     Q_PROPERTY(QString layoutPickerShortcut READ layoutPickerShortcut WRITE setLayoutPickerShortcut NOTIFY
                    layoutPickerShortcutChanged)
 
+    // Toggle Layout Lock (Meta+Ctrl+L)
+    Q_PROPERTY(QString toggleLayoutLockShortcut READ toggleLayoutLockShortcut WRITE setToggleLayoutLockShortcut NOTIFY
+                   toggleLayoutLockShortcutChanged)
+
 public:
     explicit Settings(QObject* parent = nullptr);
     ~Settings() override = default;
@@ -1304,6 +1308,12 @@ public:
     }
     void setLayoutPickerShortcut(const QString& shortcut);
 
+    QString toggleLayoutLockShortcut() const
+    {
+        return m_toggleLayoutLockShortcut;
+    }
+    void setToggleLayoutLockShortcut(const QString& shortcut);
+
     // Persistence
     void load() override;
     void save() override;
@@ -1618,6 +1628,9 @@ private:
 
     // Layout Picker (Meta+Alt+Space — browse and switch layouts interactively)
     QString m_layoutPickerShortcut = QStringLiteral("Meta+Alt+Space");
+
+    // Toggle Layout Lock (Meta+Ctrl+L)
+    QString m_toggleLayoutLockShortcut = QStringLiteral("Meta+Ctrl+L");
 };
 
 } // namespace PlasmaZones

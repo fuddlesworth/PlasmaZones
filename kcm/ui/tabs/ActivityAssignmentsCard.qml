@@ -197,6 +197,10 @@ Kirigami.Card {
                                         activityDelegate._activityRevision++;
                                     }
 
+                                    function onLockedScreensChanged() {
+                                        activityDelegate._activityRevision++;
+                                    }
+
                                     target: root.kcm
                                 }
 
@@ -217,10 +221,7 @@ Kirigami.Card {
                                     return root.kcm.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode) ? i18n("Unlock layout for %1 on %2", activityDelegate.activityName, activityScreenRow.screenName) : i18n("Lock layout for %1 on %2", activityDelegate.activityName, activityScreenRow.screenName);
                                 }
                                 ToolTip.visible: hovered
-                                onClicked: {
-                                    root.kcm.toggleContextLock(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode);
-                                    activityDelegate._activityRevision++;
-                                }
+                                onClicked: root.kcm.toggleContextLock(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode)
                             }
 
                         }

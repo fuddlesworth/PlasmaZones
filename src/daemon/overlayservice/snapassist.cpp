@@ -345,8 +345,10 @@ void OverlayService::showLayoutPicker(const QString& screenName)
     if (m_settings && m_layoutManager) {
         int curDesktop = m_layoutManager->currentVirtualDesktop();
         QString curActivity = m_layoutManager->currentActivity();
-        locked = m_settings->isContextLocked(QStringLiteral("0:") + screen->name(), curDesktop, curActivity)
-            || m_settings->isContextLocked(QStringLiteral("1:") + screen->name(), curDesktop, curActivity);
+        locked =
+            m_settings->isContextLocked(QStringLiteral("0:") + Utils::screenIdentifier(screen), curDesktop, curActivity)
+            || m_settings->isContextLocked(QStringLiteral("1:") + Utils::screenIdentifier(screen), curDesktop,
+                                           curActivity);
     }
     writeQmlProperty(m_layoutPickerWindow, QStringLiteral("locked"), locked);
 

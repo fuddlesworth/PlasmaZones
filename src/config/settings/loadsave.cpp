@@ -286,6 +286,8 @@ void Settings::loadShortcutConfig(const KConfigGroup& globalShortcuts)
         globalShortcuts.readEntry(QLatin1String("SnapAllWindowsShortcut"), ConfigDefaults::snapAllWindowsShortcut());
     m_layoutPickerShortcut =
         globalShortcuts.readEntry(QLatin1String("LayoutPickerShortcut"), ConfigDefaults::layoutPickerShortcut());
+    m_toggleLayoutLockShortcut = globalShortcuts.readEntry(QLatin1String("ToggleLayoutLockShortcut"),
+                                                           ConfigDefaults::toggleLayoutLockShortcut());
 }
 
 void Settings::loadAutotilingConfig(const KConfigGroup& autotiling, const KConfigGroup& animations,
@@ -536,6 +538,7 @@ void Settings::saveShortcutConfig(KConfigGroup& globalShortcuts)
     globalShortcuts.writeEntry(QLatin1String("ResnapToNewLayoutShortcut"), m_resnapToNewLayoutShortcut);
     globalShortcuts.writeEntry(QLatin1String("SnapAllWindowsShortcut"), m_snapAllWindowsShortcut);
     globalShortcuts.writeEntry(QLatin1String("LayoutPickerShortcut"), m_layoutPickerShortcut);
+    globalShortcuts.writeEntry(QLatin1String("ToggleLayoutLockShortcut"), m_toggleLayoutLockShortcut);
 }
 
 void Settings::saveAutotilingConfig(KConfigGroup& autotiling, KConfigGroup& animations, KConfigGroup& autotileShortcuts)

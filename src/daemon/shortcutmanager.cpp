@@ -167,6 +167,10 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     // Layout Picker shortcut
     connect(m_settings, &Settings::layoutPickerShortcutChanged, this, &ShortcutManager::updateLayoutPickerShortcut);
 
+    // Toggle Layout Lock shortcut
+    connect(m_settings, &Settings::toggleLayoutLockShortcutChanged, this,
+            &ShortcutManager::updateToggleLayoutLockShortcut);
+
     // Autotile shortcut settings connections
     connect(m_settings, &Settings::autotileToggleShortcutChanged, this, &ShortcutManager::updateToggleAutotileShortcut);
     connect(m_settings, &Settings::autotileFocusMasterShortcutChanged, this,
@@ -221,6 +225,7 @@ void ShortcutManager::registerShortcuts()
     setupResnapToNewLayoutShortcut();
     setupSnapAllWindowsShortcut();
     setupLayoutPickerShortcut();
+    setupToggleLayoutLockShortcut();
     setupAutotileShortcuts();
 
     qCInfo(lcShortcuts) << "Defaults registered," << m_deferredQueue.size() << "key grabs queued";
@@ -406,6 +411,9 @@ void ShortcutManager::updateShortcuts()
     // Layout Picker shortcut
     updateLayoutPickerShortcut();
 
+    // Toggle Layout Lock shortcut
+    updateToggleLayoutLockShortcut();
+
     // Autotile shortcuts
     updateToggleAutotileShortcut();
     updateFocusMasterShortcut();
@@ -477,6 +485,9 @@ void ShortcutManager::unregisterShortcuts()
 
     // Layout Picker action
     DELETE_SHORTCUT(m_layoutPickerAction);
+
+    // Toggle Layout Lock action
+    DELETE_SHORTCUT(m_toggleLayoutLockAction);
 
     // Autotile actions
     DELETE_SHORTCUT(m_toggleAutotileAction);
@@ -654,6 +665,14 @@ void ShortcutManager::setupLayoutPickerShortcut()
                    &ShortcutManager::onLayoutPicker);
 
     qCInfo(lcShortcuts) << "Layout picker shortcut registered:" << m_settings->layoutPickerShortcut();
+}
+
+void ShortcutManager::setupToggleLayoutLockShortcut()
+{
+    SETUP_SHORTCUT(m_toggleLayoutLockAction, "Toggle Layout Lock", "toggle_layout_lock", toggleLayoutLockShortcut,
+                   &ShortcutManager::onToggleLayoutLock);
+
+    qCInfo(lcShortcuts) << "Toggle layout lock shortcut registered:" << m_settings->toggleLayoutLockShortcut();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -254,8 +254,8 @@ void Daemon::connectShortcutSignals()
         if (m_layoutManager) {
             int mode = static_cast<int>(
                 m_layoutManager->modeForScreen(Utils::screenIdentifier(screen), currentDesktop(), currentActivity()));
-            if (isCurrentContextLockedForMode(screen->name(), mode)) {
-                showLockedPreviewOsd(screen->name());
+            if (isCurrentContextLockedForMode(Utils::screenIdentifier(screen), mode)) {
+                showLockedPreviewOsd(Utils::screenIdentifier(screen));
                 return;
             }
         }
@@ -281,8 +281,8 @@ void Daemon::connectShortcutSignals()
         if (m_layoutManager) {
             int mode = static_cast<int>(
                 m_layoutManager->modeForScreen(Utils::screenIdentifier(screen), currentDesktop(), currentActivity()));
-            if (isCurrentContextLockedForMode(screen->name(), mode)) {
-                showLockedPreviewOsd(screen->name());
+            if (isCurrentContextLockedForMode(Utils::screenIdentifier(screen), mode)) {
+                showLockedPreviewOsd(Utils::screenIdentifier(screen));
                 return;
             }
         }
@@ -304,8 +304,8 @@ void Daemon::connectShortcutSignals()
         if (m_layoutManager) {
             int mode = static_cast<int>(
                 m_layoutManager->modeForScreen(Utils::screenIdentifier(screen), currentDesktop(), currentActivity()));
-            if (isCurrentContextLockedForMode(screen->name(), mode)) {
-                showLockedPreviewOsd(screen->name());
+            if (isCurrentContextLockedForMode(Utils::screenIdentifier(screen), mode)) {
+                showLockedPreviewOsd(Utils::screenIdentifier(screen));
                 return;
             }
         }
@@ -390,6 +390,36 @@ void Daemon::connectShortcutSignals()
             m_suppressResnapOsd = 1;
             m_windowTrackingAdaptor->resnapToNewLayout();
         }
+    });
+
+    // Toggle layout lock shortcut — locks/unlocks current screen at screen-level for current mode
+    connect(m_shortcutManager.get(), &ShortcutManager::toggleLayoutLockRequested, this, [this]() {
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (!screen || !m_settings || !m_layoutManager) {
+            return;
+        }
+        QString screenId = Utils::screenIdentifier(screen);
+        int desktop = currentDesktop();
+        QString activity = currentActivity();
+        int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, desktop, activity));
+        QString prefix = QString::number(mode) + QStringLiteral(":");
+        QString key = prefix + screenId;
+        // Lock at screen-level (desktop=0, activity="") so it applies to all desktops/activities
+        // and matches the KCM's screen-level lock button
+        bool wasLocked = m_settings->isScreenLocked(key);
+        m_settings->setScreenLocked(key, !wasLocked);
+        m_settings->save();
+
+        if (wasLocked) {
+            Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+            if (layout) {
+                showLayoutOsd(layout, screenId);
+            }
+        } else {
+            showLockedPreviewOsd(Utils::screenIdentifier(screen));
+        }
+        qCInfo(lcDaemon) << "Toggle layout lock:" << (wasLocked ? "unlocked" : "locked") << "screen=" << screenId
+                         << "mode=" << mode;
     });
 }
 

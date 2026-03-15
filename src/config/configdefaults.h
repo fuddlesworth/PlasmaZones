@@ -688,6 +688,10 @@ public:
     {
         return instance().defaultLayoutPickerShortcutValue();
     }
+    static QString toggleLayoutLockShortcut()
+    {
+        return instance().defaultToggleLayoutLockShortcutValue();
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotile Shortcuts

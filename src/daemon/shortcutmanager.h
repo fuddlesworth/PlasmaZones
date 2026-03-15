@@ -150,6 +150,11 @@ Q_SIGNALS:
      */
     void layoutPickerRequested();
 
+    /**
+     * @brief Emitted when toggle layout lock shortcut is triggered
+     */
+    void toggleLayoutLockRequested();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotile Shortcuts
     // ═══════════════════════════════════════════════════════════════════════════
@@ -244,6 +249,10 @@ private Q_SLOTS:
     void onLayoutPicker();
     void updateLayoutPickerShortcut();
 
+    // Toggle Layout Lock
+    void onToggleLayoutLock();
+    void updateToggleLayoutLockShortcut();
+
     // Autotile shortcuts
     void onToggleAutotile();
     void onFocusMaster();
@@ -276,6 +285,7 @@ private:
     void setupResnapToNewLayoutShortcut();
     void setupSnapAllWindowsShortcut();
     void setupLayoutPickerShortcut();
+    void setupToggleLayoutLockShortcut();
     void setupAutotileShortcuts();
     void queueGlobalShortcut(QAction* action, const QKeySequence& shortcut);
     void activateKeyGrabs();
@@ -327,6 +337,9 @@ private:
 
     // Layout Picker action
     QAction* m_layoutPickerAction = nullptr;
+
+    // Toggle Layout Lock action
+    QAction* m_toggleLayoutLockAction = nullptr;
 
     // Autotile actions
     QAction* m_toggleAutotileAction = nullptr;

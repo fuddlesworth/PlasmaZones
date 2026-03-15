@@ -177,6 +177,10 @@ Kirigami.Card {
                                     monitorDelegate._assignmentRevision++;
                                 }
 
+                                function onLockedScreensChanged() {
+                                    monitorDelegate._assignmentRevision++;
+                                }
+
                                 target: root.kcm
                             }
 
@@ -214,10 +218,7 @@ Kirigami.Card {
                                 return root.kcm.isScreenLocked(monitorDelegate.screenName, root.viewMode) ? i18n("Unlock layout for this monitor") : i18n("Lock layout for this monitor");
                             }
                             ToolTip.visible: hovered
-                            onClicked: {
-                                root.kcm.toggleScreenLock(monitorDelegate.screenName, root.viewMode);
-                                monitorDelegate._assignmentRevision++;
-                            }
+                            onClicked: root.kcm.toggleScreenLock(monitorDelegate.screenName, root.viewMode)
                         }
 
                         Item {
@@ -349,10 +350,7 @@ Kirigami.Card {
                                         return root.kcm.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode) ? i18n("Unlock layout for %1", desktopRowContainer.desktopName) : i18n("Lock layout for %1", desktopRowContainer.desktopName);
                                     }
                                     ToolTip.visible: hovered
-                                    onClicked: {
-                                        root.kcm.toggleContextLock(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode);
-                                        monitorDelegate._assignmentRevision++;
-                                    }
+                                    onClicked: root.kcm.toggleContextLock(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode)
                                 }
 
                             }

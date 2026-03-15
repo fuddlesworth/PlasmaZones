@@ -146,9 +146,10 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 if (m_settings && m_layoutManager) {
                     int curDesktop = m_layoutManager->currentVirtualDesktop();
                     QString curActivity = m_layoutManager->currentActivity();
-                    bool locked =
-                        m_settings->isContextLocked(QStringLiteral("0:") + screen->name(), curDesktop, curActivity)
-                        || m_settings->isContextLocked(QStringLiteral("1:") + screen->name(), curDesktop, curActivity);
+                    bool locked = m_settings->isContextLocked(QStringLiteral("0:") + Utils::screenIdentifier(screen),
+                                                              curDesktop, curActivity)
+                        || m_settings->isContextLocked(QStringLiteral("1:") + Utils::screenIdentifier(screen),
+                                                       curDesktop, curActivity);
                     if (locked) {
                         // Only allow zone selection from the active layout
                         Layout* activeLayout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));

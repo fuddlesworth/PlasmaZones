@@ -90,7 +90,8 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             QString prefix = QString::number(static_cast<int>(m_layoutManager->modeForScreen(
                                  Utils::screenIdentifier(screen), curDesktop, curActivity)))
                 + QStringLiteral(":");
-            selectorScreenLocked = m_settings->isContextLocked(prefix + screen->name(), curDesktop, curActivity);
+            selectorScreenLocked =
+                m_settings->isContextLocked(prefix + Utils::screenIdentifier(screen), curDesktop, curActivity);
         }
         if (screen && !selectorScreenLocked
             && (!m_settings || !m_settings->isMonitorDisabled(Utils::screenIdentifier(screen)))) {
@@ -149,8 +150,8 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                                 Utils::screenIdentifier(screen), layoutChangeDesktop, layoutChangeActivity)))
                             + QStringLiteral(":");
                         bool screenLocked = m_settings
-                            && m_settings->isContextLocked(layoutChangePrefix + screen->name(), layoutChangeDesktop,
-                                                           layoutChangeActivity);
+                            && m_settings->isContextLocked(layoutChangePrefix + Utils::screenIdentifier(screen),
+                                                           layoutChangeDesktop, layoutChangeActivity);
                         Layout* currentLayout =
                             m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
                         if (currentLayout != selectedLayout && !screenLocked) {

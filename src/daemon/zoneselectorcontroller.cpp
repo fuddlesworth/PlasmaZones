@@ -379,7 +379,7 @@ bool ZoneSelectorController::isScreenLocked() const
             (QString::number(static_cast<int>(m_layoutManager->modeForScreen(Utils::screenIdentifier(m_screen), desktop,
                                                                              m_layoutManager->currentActivity())))
              + QStringLiteral(":"))
-                + m_screen->name(),
+                + Utils::screenIdentifier(m_screen),
             desktop, m_layoutManager->currentActivity());
     }
     return false;

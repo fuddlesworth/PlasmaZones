@@ -405,34 +405,40 @@ void KCMAssignments::setMonitorDisabled(const QString& screenName, bool disabled
 
 // ── Layout lock ──────────────────────────────────────────────────────────
 
-static QString modePrefix(int mode)
+static QString lockKey(const QString& screenName, int mode)
 {
-    return QString::number(mode) + QStringLiteral(":");
+    // Resolve connector name to stable EDID-based screen ID for consistent lock keys
+    QString screenId = Utils::screenIdForName(screenName);
+    if (screenId.isEmpty())
+        screenId = screenName;
+    return QString::number(mode) + QStringLiteral(":") + screenId;
 }
 
 bool KCMAssignments::isScreenLocked(const QString& screenName, int mode) const
 {
-    return m_settings->isScreenLocked(modePrefix(mode) + screenName);
+    return m_settings->isScreenLocked(lockKey(screenName, mode));
 }
 
 void KCMAssignments::toggleScreenLock(const QString& screenName, int mode)
 {
-    const QString key = modePrefix(mode) + screenName;
+    const QString key = lockKey(screenName, mode);
     m_settings->setScreenLocked(key, !m_settings->isScreenLocked(key));
+    Q_EMIT lockedScreensChanged();
     setNeedsSave(true);
 }
 
 bool KCMAssignments::isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity,
                                      int mode) const
 {
-    return m_settings->isContextLocked(modePrefix(mode) + screenName, virtualDesktop, activity);
+    return m_settings->isContextLocked(lockKey(screenName, mode), virtualDesktop, activity);
 }
 
 void KCMAssignments::toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity, int mode)
 {
-    const QString key = modePrefix(mode) + screenName;
+    const QString key = lockKey(screenName, mode);
     bool locked = m_settings->isContextLocked(key, virtualDesktop, activity);
     m_settings->setContextLocked(key, virtualDesktop, activity, !locked);
+    Q_EMIT lockedScreensChanged();
     setNeedsSave(true);
 }
 
@@ -646,6 +652,7 @@ void KCMAssignments::emitAllChanged()
     Q_EMIT activitiesChanged();
     Q_EMIT currentActivityChanged();
     Q_EMIT disabledMonitorsChanged();
+    Q_EMIT lockedScreensChanged();
     Q_EMIT screenAssignmentsChanged();
     Q_EMIT tilingScreenAssignmentsChanged();
     Q_EMIT tilingActivityAssignmentsChanged();
