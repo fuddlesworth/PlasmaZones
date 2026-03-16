@@ -239,11 +239,11 @@ private:
                                 const QString& sourceZoneId = QString(), const QString& targetZoneId = QString(),
                                 const QString& screenName = QString());
 
-    // Apply snap geometry to window
-    // When allowDuringDrag is true, applies immediately even if window is in user move state (snap-on-hover)
-    // retriesLeft caps the deferred-retry chain (avoids unbounded timers if isUserMove gets stuck)
+    // Apply snap geometry to window.
+    // When allowDuringDrag is true, applies immediately even if window is in user move state (snap-on-hover).
+    // When false and the window is being dragged, defers via windowFinishUserMovedResized signal.
     void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
-                           int retriesLeft = 20, bool skipAnimation = false);
+                           bool skipAnimation = false);
     void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).

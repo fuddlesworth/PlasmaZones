@@ -1558,8 +1558,8 @@ private:
     bool m_autotileShowBorder = true;
     int m_autotileBorderWidth = 2;
     int m_autotileBorderRadius = 0;
-    QColor m_autotileBorderColor = QColor(255, 255, 255, 200); // #C8FFFFFF
-    QColor m_autotileInactiveBorderColor = QColor(161, 169, 177, 200); // #C8A1A9B1 — Breeze disabledTextColor
+    QColor m_autotileBorderColor = QColor(0, 120, 212, 128); // #800078D4 — same as highlightColor
+    QColor m_autotileInactiveBorderColor = QColor(128, 128, 128, 64); // #40808080 — same as inactiveColor
     bool m_autotileUseSystemBorderColors = true;
     QStringList m_lockedScreens;
     // Autotile Shortcuts (must match plasmazones.kcfg GlobalShortcuts defaults)

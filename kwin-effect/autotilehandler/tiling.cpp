@@ -270,14 +270,7 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
                 }
             } else {
                 unmaximizeMonocleWindow(snap.windowId);
-                // Store original zone geometry for border rendering, then apply inset
                 QRect geo = snap.geometry;
-                if (shouldInsetForBorder(snap.windowId, snap.geometry)) {
-                    m_border.zoneGeometries[snap.windowId] = snap.geometry;
-                    geo = applyBorderInset(geo);
-                } else {
-                    m_border.zoneGeometries.remove(snap.windowId);
-                }
 
                 // For Wayland windows being retiled to the same zone, skip the
                 // moveResize if the window was previously centered in this zone.
@@ -307,12 +300,7 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
             }
 
             if (!snap.isMonocle && snap.window->isWaylandClient()) {
-                // Use inset geometry for centering target so it matches actual window target
-                QRect targetGeo = snap.geometry;
-                if (shouldInsetForBorder(snap.windowId, snap.geometry)) {
-                    targetGeo = applyBorderInset(targetGeo);
-                }
-                m_autotileTargetZones[snap.windowId] = targetGeo;
+                m_autotileTargetZones[snap.windowId] = snap.geometry;
             }
         },
         onComplete);

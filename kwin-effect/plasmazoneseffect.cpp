@@ -2347,7 +2347,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(QDBusAbstractInterface& iface, const QS
                     qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
                     if (storePreSnap)
                         ensurePreSnapGeometryStored(window, windowId);
-                    applySnapGeometry(window, geo, false, 20, skipAnimation);
+                    applySnapGeometry(window, geo, false, skipAnimation);
                     // args[1] is screenName (e.g. for snapToEmptyZone, snapToLastZone)
                     if (onSnapSuccess && args.size() >= 2) {
                         onSnapSuccess(windowId, args[1].toString());
@@ -2373,7 +2373,7 @@ void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRe
 }
 
 void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
-                                          int retriesLeft, bool skipAnimation)
+                                          bool skipAnimation)
 {
     if (!window) {
         qCWarning(lcEffect) << "applyGeometry: window is null";
@@ -2444,7 +2444,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
                         [this, safeWindow, geo, skipAnimation, conn](KWin::EffectWindow*) {
                             disconnect(*conn);
                             if (safeWindow && !safeWindow->isDeleted() && !safeWindow->isFullScreen()) {
-                                applySnapGeometry(safeWindow, geo, false, /*retriesLeft=*/0, skipAnimation);
+                                applySnapGeometry(safeWindow, geo, false, skipAnimation);
                             }
                         });
         return;
@@ -2693,8 +2693,11 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
         return;
     }
 
+    // The OutlinedBorderItem draws the border OUTSIDE the innerRect, but the
+    // parent WindowItem clips children to the window frame.  Inset the innerRect
+    // by borderWidth so the border draws fully inside the frame (no clipping).
     const QRectF frame = w->frameGeometry();
-    const KWin::RectF innerRect(0, 0, frame.width(), frame.height());
+    const KWin::RectF innerRect(bw, bw, frame.width() - 2.0 * bw, frame.height() - 2.0 * bw);
     const int br = m_autotileHandler->borderRadius();
     const KWin::BorderOutline outline(bw, bc, KWin::BorderRadius(br));
 
@@ -2718,14 +2721,15 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
 
     // Keep the border in sync when the window resizes or moves.
     const QString wid = windowId; // capture by value
-    wb.geometryConnection = connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
-                                    [this, wid](KWin::EffectWindow* ew, const QRectF& /*oldGeo*/) {
-                                        auto it = m_windowBorders.find(wid);
-                                        if (it != m_windowBorders.end() && it->item) {
-                                            const QRectF f = ew->frameGeometry();
-                                            it->item->setInnerRect(KWin::RectF(0, 0, f.width(), f.height()));
-                                        }
-                                    });
+    wb.geometryConnection =
+        connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
+                [this, wid, bw](KWin::EffectWindow* ew, const QRectF& /*oldGeo*/) {
+                    auto it = m_windowBorders.find(wid);
+                    if (it != m_windowBorders.end() && it->item) {
+                        const QRectF f = ew->frameGeometry();
+                        it->item->setInnerRect(KWin::RectF(bw, bw, f.width() - 2.0 * bw, f.height() - 2.0 * bw));
+                    }
+                });
 
     m_windowBorders.insert(windowId, wb);
 }

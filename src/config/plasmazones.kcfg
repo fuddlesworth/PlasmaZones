@@ -832,11 +832,11 @@
     </entry>
     <entry name="AutotileBorderColor" type="Color">
       <label>Border color for autotiled windows</label>
-      <default>#C8FFFFFF</default>
+      <default>#800078D4</default>
     </entry>
     <entry name="AutotileInactiveBorderColor" type="Color">
       <label>Border color for unfocused autotiled windows</label>
-      <default>#C8A1A9B1</default>
+      <default>#40808080</default>
     </entry>
     <entry name="AutotileUseSystemBorderColors" type="Bool">
       <label>Derive autotile border color from system color scheme</label>

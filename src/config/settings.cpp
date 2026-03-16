@@ -323,17 +323,11 @@ void Settings::applySystemColorScheme()
 
 void Settings::applyAutotileBorderSystemColor()
 {
-    KColorScheme scheme(QPalette::Active, KColorScheme::Selection);
-    QColor border = scheme.foreground(KColorScheme::NormalText).color();
-    border.setAlpha(Defaults::BorderAlpha);
-    m_autotileBorderColor = border;
+    // Use the exact snapping zone highlight/inactive colors including their alpha.
+    m_autotileBorderColor = m_highlightColor;
     Q_EMIT autotileBorderColorChanged();
 
-    // Inactive: KColorScheme::InactiveText maps to Kirigami.Theme.disabledTextColor —
-    // the system's own dimmed foreground, same alpha as active for equal opacity.
-    QColor inactive = scheme.foreground(KColorScheme::InactiveText).color();
-    inactive.setAlpha(Defaults::BorderAlpha);
-    m_autotileInactiveBorderColor = inactive;
+    m_autotileInactiveBorderColor = m_inactiveColor;
     Q_EMIT autotileInactiveBorderColorChanged();
 }
 
