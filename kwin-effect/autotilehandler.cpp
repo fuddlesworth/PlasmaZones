@@ -365,6 +365,22 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
     }
 }
 
+void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId, const QString& screenName)
+{
+    // Preserve the window's pre-autotile geometry before onWindowClosed clears it.
+    // When the window is re-added on the target desktop, this geometry is restored
+    // so that float-restore returns to the original position, not the tiled frame.
+    if (m_preAutotileGeometries.contains(screenName)) {
+        const auto& screenGeometries = m_preAutotileGeometries[screenName];
+        const QString savedKey = findSavedGeometryKey(screenGeometries, windowId);
+        if (!savedKey.isEmpty()) {
+            m_savedPreAutotileForDesktopMove[windowId] = screenGeometries.value(savedKey);
+            qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId
+                              << m_savedPreAutotileForDesktopMove[windowId];
+        }
+    }
+}
+
 void AutotileHandler::onWindowClosed(const QString& windowId, const QString& screenName)
 {
     // If we haven't notified the daemon about this window yet, record the close
@@ -392,6 +408,7 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     if (m_preAutotileGeometries.contains(screenName)) {
         m_preAutotileGeometries[screenName].remove(windowId);
     }
+    m_savedPreAutotileForDesktopMove.remove(windowId);
     // Remove from saved stacking orders so stale IDs don't accumulate
     if (m_savedSnapStackingOrder.contains(screenName)) {
         m_savedSnapStackingOrder[screenName].removeAll(windowId);
@@ -414,6 +431,7 @@ void AutotileHandler::onDaemonReady()
     connectSignals();
     m_notifiedWindows.clear();
     m_savedNotifiedForDesktopReturn.clear();
+    m_savedPreAutotileForDesktopMove.clear();
     m_pendingCloses.clear();
 }
 

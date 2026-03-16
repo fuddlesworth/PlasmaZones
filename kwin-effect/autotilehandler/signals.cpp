@@ -315,6 +315,38 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
                 }
             }
 
+            // Catch windows moved to this desktop while the user was on another.
+            // When both desktops share the same autotile screens, `added` is empty
+            // and the loop above doesn't run. Scan ALL autotile screens for windows
+            // on the current desktop that aren't tracked — they were removed from
+            // tiling by windowDesktopsChanged on the source desktop and need to be
+            // re-added here. notifyWindowAdded is idempotent (checks m_notifiedWindows).
+            for (const QString& screenName : m_autotileScreens) {
+                for (KWin::EffectWindow* w : windows) {
+                    if (!w || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()
+                        || w->isMinimized()) {
+                        continue;
+                    }
+                    if (m_effect->getWindowScreenName(w) != screenName) {
+                        continue;
+                    }
+                    const QString windowId = m_effect->getWindowId(w);
+                    if (!m_notifiedWindows.contains(windowId)) {
+                        // Restore preserved pre-autotile geometry so float-restore
+                        // returns to the original position, not the tiled frame from
+                        // the source desktop.
+                        auto savedIt = m_savedPreAutotileForDesktopMove.find(windowId);
+                        if (savedIt != m_savedPreAutotileForDesktopMove.end()) {
+                            m_preAutotileGeometries[screenName][windowId] = savedIt.value();
+                            m_savedPreAutotileForDesktopMove.erase(savedIt);
+                        }
+                        qCInfo(lcEffect) << "Desktop switch: re-adding moved window to autotile:" << windowId << "on"
+                                         << screenName;
+                        notifyWindowAdded(w);
+                    }
+                }
+            }
+
             // Re-apply borderless state for windows returning to autotile desktop.
             // The daemon skips retile for desktop return (tiledWindowCount > 0), so
             // slotWindowsTileRequested — which normally applies setWindowBorderless —

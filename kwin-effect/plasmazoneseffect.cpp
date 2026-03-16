@@ -635,6 +635,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             const QString windowId = getWindowId(window);
             const QString screenName = getWindowScreenName(window);
             if (m_autotileHandler->isAutotileScreen(screenName)) {
+                // Save pre-autotile geometry before onWindowClosed clears it.
+                // When the window is re-added on the target desktop, this preserved
+                // geometry is used instead of the current (tiled) frame position.
+                m_autotileHandler->savePreAutotileForDesktopMove(windowId, screenName);
+
                 // Restore title bar before removing from tiling — onWindowClosed
                 // only clears tracking, it doesn't call setNoBorder(false) since
                 // it's also used for truly closing windows.
