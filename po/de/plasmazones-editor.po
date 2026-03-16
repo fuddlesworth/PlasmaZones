@@ -876,15 +876,15 @@ msgid "Import Layout"
 msgstr "Layout importieren"
 
 #: src/editor/qml/EditorWindow.qml:622 src/editor/qml/EditorWindow.qml:636
-#: src/editor/qml/ShaderSettingsDialog.qml:1263
-#: src/editor/qml/ShaderSettingsDialog.qml:1294
+#: src/editor/qml/ShaderSettingsDialog.qml:1320
+#: src/editor/qml/ShaderSettingsDialog.qml:1351
 msgctxt "@item:inlistbox"
 msgid "JSON files (*.json)"
 msgstr "JSON-Dateien (*.json)"
 
-#: src/editor/qml/EditorWindow.qml:622 src/editor/qml/ParameterDelegate.qml:265
-#: src/editor/qml/ShaderSettingsDialog.qml:1263
-#: src/editor/qml/ShaderSettingsDialog.qml:1294
+#: src/editor/qml/EditorWindow.qml:622 src/editor/qml/ParameterDelegate.qml:291
+#: src/editor/qml/ShaderSettingsDialog.qml:1320
+#: src/editor/qml/ShaderSettingsDialog.qml:1351
 msgctxt "@item:inlistbox"
 msgid "All files (*)"
 msgstr "Alle Dateien (*)"
@@ -1298,7 +1298,7 @@ msgid "Include area behind panels and taskbars"
 msgstr "Bereich hinter Kontrollleisten und Programmleisten einbeziehen"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:482
-#: src/editor/qml/ShaderSettingsDialog.qml:1098
+#: src/editor/qml/ShaderSettingsDialog.qml:1155
 #: src/editor/qml/VisibilitySettingsDialog.qml:230
 msgctxt "@action:button"
 msgid "Apply"
@@ -1319,12 +1319,22 @@ msgctxt "@info:tooltip"
 msgid "Clear image"
 msgstr "Bild entfernen"
 
-#: src/editor/qml/ParameterDelegate.qml:264
+#: src/editor/qml/ParameterDelegate.qml:275
+msgctxt "@info:tooltip"
+msgid "Locked — preserved during randomize"
+msgstr "Gesperrt — wird beim Zufallsmodus beibehalten"
+
+#: src/editor/qml/ParameterDelegate.qml:275
+msgctxt "@info:tooltip"
+msgid "Unlocked — will be randomized"
+msgstr "Entsperrt — wird zufällig gesetzt"
+
+#: src/editor/qml/ParameterDelegate.qml:290
 msgctxt "@title:window"
 msgid "Choose Image"
 msgstr "Bild wählen"
 
-#: src/editor/qml/ParameterDelegate.qml:265
+#: src/editor/qml/ParameterDelegate.qml:291
 msgctxt "@item:inlistbox"
 msgid "Image files (*.png *.jpg *.jpeg *.bmp *.webp)"
 msgstr "Bilddateien (*.png *.jpg *.jpeg *.bmp *.webp)"
@@ -1827,180 +1837,215 @@ msgctxt "@info:tooltip"
 msgid "Drag to resize zone"
 msgstr "Ziehen, um die Zonengröße zu ändern"
 
-#: src/editor/qml/ShaderParameterSection.qml:46
+#: src/editor/qml/ShaderParameterSection.qml:48
 msgctxt "@action"
 msgid "collapse"
 msgstr "einklappen"
 
-#: src/editor/qml/ShaderParameterSection.qml:46
+#: src/editor/qml/ShaderParameterSection.qml:48
 msgctxt "@action"
 msgid "expand"
 msgstr "ausklappen"
 
-#: src/editor/qml/ShaderParameterSection.qml:46
+#: src/editor/qml/ShaderParameterSection.qml:48
 msgctxt "@info:tooltip"
 msgid "%1 parameters. Click to %2."
 msgstr "%1 Parameter. Klicken zum %2."
 
-#: src/editor/qml/ShaderSettingsDialog.qml:171
+#: src/editor/qml/ShaderParameterSection.qml:100
+msgctxt "@info:tooltip"
+msgid "Unlock all in %1"
+msgstr "Alle in %1 entsperren"
+
+#: src/editor/qml/ShaderParameterSection.qml:100
+msgctxt "@info:tooltip"
+msgid "Lock all in %1"
+msgstr "Alle in %1 sperren"
+
+#: src/editor/qml/ShaderSettingsDialog.qml:181
 msgctxt "@item:inmenu shader category"
 msgid "3D"
 msgstr "3D"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:173
+#: src/editor/qml/ShaderSettingsDialog.qml:183
 msgctxt "@item:inmenu shader category"
 msgid "Audio Visualizer"
 msgstr "Audio-Visualisierer"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:175
+#: src/editor/qml/ShaderSettingsDialog.qml:185
 msgctxt "@item:inmenu shader category"
 msgid "Branded"
 msgstr "Marken"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:177
+#: src/editor/qml/ShaderSettingsDialog.qml:187
 msgctxt "@item:inmenu shader category"
 msgid "Cyberpunk"
 msgstr "Cyberpunk"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:179
+#: src/editor/qml/ShaderSettingsDialog.qml:189
 msgctxt "@item:inmenu shader category"
 msgid "Energy"
 msgstr "Energie"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:181
+#: src/editor/qml/ShaderSettingsDialog.qml:191
 msgctxt "@item:inmenu shader category"
 msgid "Organic"
 msgstr "Organisch"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:487
+#: src/editor/qml/ShaderSettingsDialog.qml:532
 msgctxt "@title:group"
 msgid "General"
 msgstr "Allgemein"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:505
+#: src/editor/qml/ShaderSettingsDialog.qml:550
 msgctxt "@title:window"
 msgid "Shader Settings"
 msgstr "Shader-Einstellungen"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:615
+#: src/editor/qml/ShaderSettingsDialog.qml:662
 msgctxt "@label"
 msgid "Enable effect:"
 msgstr "Effekt aktivieren:"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:616
+#: src/editor/qml/ShaderSettingsDialog.qml:663
 msgctxt "@option:check"
 msgid "Enable shader effect"
 msgstr "Shader-Effekt aktivieren"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:634
+#: src/editor/qml/ShaderSettingsDialog.qml:681
 msgctxt "@action:button"
 msgid "Select shader..."
 msgstr "Shader auswählen ..."
 
-#: src/editor/qml/ShaderSettingsDialog.qml:637
+#: src/editor/qml/ShaderSettingsDialog.qml:684
 msgctxt "@label"
 msgid "Shader:"
 msgstr "Shader:"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:642
+#: src/editor/qml/ShaderSettingsDialog.qml:689
 msgctxt "@info:tooltip"
 msgid "Choose a shader effect from categorized list"
 msgstr "Einen Shader-Effekt aus der kategorisierten Liste wählen"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:823
-#: src/editor/qml/ShaderSettingsDialog.qml:826
+#: src/editor/qml/ShaderSettingsDialog.qml:870
+#: src/editor/qml/ShaderSettingsDialog.qml:873
 msgctxt "@info:placeholder"
 msgid "No description available"
 msgstr "Keine Beschreibung verfügbar"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:850
+#: src/editor/qml/ShaderSettingsDialog.qml:897
 msgctxt "@info shader author"
 msgid "by %1"
 msgstr "von %1"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:853
+#: src/editor/qml/ShaderSettingsDialog.qml:900
 msgctxt "@info shader version"
 msgid "v%1"
 msgstr "v%1"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:856
+#: src/editor/qml/ShaderSettingsDialog.qml:903
 msgctxt "@info user-installed shader"
 msgid "(User shader)"
 msgstr "(Benutzer-Shader)"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:883
+#: src/editor/qml/ShaderSettingsDialog.qml:930
 msgctxt "@title:group"
 msgid "Parameters"
 msgstr "Parameter"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:890
+#: src/editor/qml/ShaderSettingsDialog.qml:937
+msgctxt "@info:tooltip"
+msgid "Unlock all parameters"
+msgstr "Alle Parameter entsperren"
+
+#: src/editor/qml/ShaderSettingsDialog.qml:937
+msgctxt "@info:tooltip"
+msgid "Lock all parameters"
+msgstr "Alle Parameter sperren"
+
+#: src/editor/qml/ShaderSettingsDialog.qml:938
+msgctxt "@action:button"
+msgid "Unlock All"
+msgstr "Alle entsperren"
+
+#: src/editor/qml/ShaderSettingsDialog.qml:938
+msgctxt "@action:button"
+msgid "Lock All"
+msgstr "Alle sperren"
+
+#: src/editor/qml/ShaderSettingsDialog.qml:946
+msgctxt "@info:tooltip"
+msgid "Randomize unlocked parameters"
+msgstr "Entsperrte Parameter zufällig setzen"
+
+#: src/editor/qml/ShaderSettingsDialog.qml:946
 msgctxt "@info:tooltip"
 msgid "Randomize all parameters"
 msgstr "Alle Parameter zufällig setzen"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:891
+#: src/editor/qml/ShaderSettingsDialog.qml:947
 msgctxt "@action:button"
 msgid "Random"
 msgstr "Zufall"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:902
+#: src/editor/qml/ShaderSettingsDialog.qml:958
 msgctxt "@info"
 msgid "This effect has no configurable parameters."
 msgstr "Dieser Effekt hat keine konfigurierbaren Parameter."
 
-#: src/editor/qml/ShaderSettingsDialog.qml:1025
+#: src/editor/qml/ShaderSettingsDialog.qml:1082
 msgctxt "@info"
 msgid "Enable the shader effect to configure visual effects for zone overlays."
 msgstr ""
 "Aktivieren Sie den Shader-Effekt, um visuelle Effekte für "
 "Zonenüberlagerungen einzurichten."
 
-#: src/editor/qml/ShaderSettingsDialog.qml:1048
+#: src/editor/qml/ShaderSettingsDialog.qml:1105
 msgctxt "@action:button"
 msgid "Dismiss"
 msgstr "Schließen"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:1062
+#: src/editor/qml/ShaderSettingsDialog.qml:1119
 msgctxt "@action:button"
 msgid "Load Preset"
 msgstr "Voreinstellung laden"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:1064
+#: src/editor/qml/ShaderSettingsDialog.qml:1121
 msgctxt "@info:tooltip"
 msgid "Load shader settings from a preset file"
 msgstr "Shader-Einstellungen aus einer Voreinstellungsdatei laden"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:1074
+#: src/editor/qml/ShaderSettingsDialog.qml:1131
 msgctxt "@action:button"
 msgid "Save Preset"
 msgstr "Voreinstellung speichern"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:1077
+#: src/editor/qml/ShaderSettingsDialog.qml:1134
 msgctxt "@info:tooltip"
 msgid "Save current shader settings as a preset file"
 msgstr "Aktuelle Shader-Einstellungen als Voreinstellungsdatei speichern"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:1091
+#: src/editor/qml/ShaderSettingsDialog.qml:1148
 msgctxt "@action:button"
 msgid "Defaults"
 msgstr "Voreinstellungen"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:1229
+#: src/editor/qml/ShaderSettingsDialog.qml:1286
 msgctxt "@info:placeholder"
 msgid "Loading preview…"
 msgstr "Vorschau wird geladen …"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:1248
+#: src/editor/qml/ShaderSettingsDialog.qml:1305
 msgctxt "@title:window"
 msgid "Choose %1"
 msgstr "%1 wählen"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:1262
+#: src/editor/qml/ShaderSettingsDialog.qml:1319
 msgctxt "@title:window"
 msgid "Save Shader Preset"
 msgstr "Shader-Voreinstellung speichern"
 
-#: src/editor/qml/ShaderSettingsDialog.qml:1293
+#: src/editor/qml/ShaderSettingsDialog.qml:1350
 msgctxt "@title:window"
 msgid "Load Shader Preset"
 msgstr "Shader-Voreinstellung laden"

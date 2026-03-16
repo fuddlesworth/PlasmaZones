@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: plasmazonesd\n"
 "Report-Msgid-Bugs-To: https://github.com/fuddlesworth/PlasmaZones/issues\n"
-"POT-Creation-Date: 2026-03-13 18:01-0500\n"
+"POT-Creation-Date: 2026-03-16 16:29-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -47,17 +47,22 @@ msgstr ""
 msgid "Layout: %1"
 msgstr ""
 
-#: src/daemon/daemon/osd.cpp:135
+#: src/daemon/daemon/osd.cpp:125
+#, kde-format
+msgid "Layout Locked"
+msgstr ""
+
+#: src/daemon/daemon/osd.cpp:172
 #, kde-format
 msgid "Tiling: %1"
 msgstr ""
 
-#: src/daemon/shortcutmanager.cpp:524
+#: src/daemon/shortcutmanager.cpp:535
 #, kde-format
 msgid "Apply Layout %1"
 msgstr ""
 
-#: src/daemon/shortcutmanager.cpp:598
+#: src/daemon/shortcutmanager.cpp:609
 #, kde-format
 msgid "Snap to Zone %1"
 msgstr ""
@@ -67,30 +72,39 @@ msgstr ""
 msgid "Cancel Zone Overlay"
 msgstr ""
 
-#: src/ui/LayoutPickerOverlay.qml:240
+#: src/ui/LayoutOsd.qml:267
+msgid "%1 (Locked)"
+msgstr ""
+
+#: src/ui/LayoutPickerOverlay.qml:244
 msgid "Dismiss layout picker"
 msgstr ""
 
-#: src/ui/LayoutPickerOverlay.qml:273
+#: src/ui/LayoutPickerOverlay.qml:277
 msgid "Choose Layout"
-msgstr ""
-
-#: src/ui/LayoutPreview.qml:68
-msgctxt "@info:accessibility"
-msgid "Layout: %1"
 msgstr ""
 
 #: src/ui/LayoutPreview.qml:69
 msgctxt "@info:accessibility"
+msgid "Layout: %1"
+msgstr ""
+
+#: src/ui/LayoutPreview.qml:70
+msgctxt "@info:accessibility"
 msgid "Click to select this layout. Contains %1 zones."
 msgstr ""
 
-#: src/ui/LayoutPreview.qml:208
+#: src/ui/LayoutPreview.qml:240
+msgctxt "@tooltip"
+msgid "Locked"
+msgstr ""
+
+#: src/ui/LayoutPreview.qml:240
 msgctxt "@tooltip"
 msgid "Current layout: %1"
 msgstr ""
 
-#: src/ui/LayoutPreview.qml:208
+#: src/ui/LayoutPreview.qml:240
 msgctxt "@tooltip"
 msgid "Select layout: %1"
 msgstr ""
@@ -267,18 +281,18 @@ msgid ""
 "(No zones defined)"
 msgstr ""
 
-#: src/ui/ZoneSelector.qml:220
+#: src/ui/ZoneSelector.qml:224
 msgid "Select Layout"
 msgstr ""
 
-#: src/ui/ZoneSelector.qml:261
+#: src/ui/ZoneSelector.qml:265
 msgid "Layout %1"
 msgstr ""
 
-#: src/ui/ZoneSelector.qml:304
+#: src/ui/ZoneSelector.qml:313
 msgid "Zone layout selector"
 msgstr ""
 
-#: src/ui/ZoneSelector.qml:340 src/ui/ZoneSelectorWindow.qml:593
+#: src/ui/ZoneSelector.qml:349 src/ui/ZoneSelectorWindow.qml:628
 msgid "No layouts available"
 msgstr ""

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: kcm_plasmazones\n"
 "Report-Msgid-Bugs-To: https://github.com/fuddlesworth/PlasmaZones/issues\n"
-"POT-Creation-Date: 2026-03-14 16:33-0500\n"
+"POT-Creation-Date: 2026-03-16 10:59-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -280,55 +280,59 @@ msgid "Use system accent color"
 msgstr ""
 
 #: kcm/autotiling/ui/main.qml:118
-msgid "Border color:"
+msgid "Active color:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:139
+#: kcm/autotiling/ui/main.qml:138
+msgid "Inactive color:"
+msgstr ""
+
+#: kcm/autotiling/ui/main.qml:159
 msgid "Decorations"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:145
+#: kcm/autotiling/ui/main.qml:165
 msgid "Title bars:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:146
+#: kcm/autotiling/ui/main.qml:166
 msgid "Hide title bars on tiled windows"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:150
+#: kcm/autotiling/ui/main.qml:170
 msgid ""
 "Remove window title bars while autotiled. Restored when floating or leaving "
 "autotile mode."
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:155
-msgid "Focus Border"
+#: kcm/autotiling/ui/main.qml:175
+msgid "Borders"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:161 kcm/snapping/ui/AppearanceCard.qml:108
+#: kcm/autotiling/ui/main.qml:181 kcm/snapping/ui/AppearanceCard.qml:108
 msgid "Border:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:162
-msgid "Show focus border on tiled windows"
+#: kcm/autotiling/ui/main.qml:182
+msgid "Show borders in tiling mode"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:166
+#: kcm/autotiling/ui/main.qml:186
 msgid ""
-"Draw a colored border around the focused tiled window. Works with or without "
-"hidden title bars."
+"Draw colored borders around all windows in tiling mode. Active color for "
+"focused, inactive for unfocused. Works with or without hidden title bars."
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:170 kcm/exclusions/ui/main.qml:75
+#: kcm/autotiling/ui/main.qml:190 kcm/exclusions/ui/main.qml:75
 msgid "Width:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:180
+#: kcm/autotiling/ui/main.qml:200
 msgid "Colored border drawn around tiled windows (0 to disable)"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:184 kcm/autotiling/ui/main.qml:204
-#: kcm/autotiling/ui/main.qml:332 kcm/autotiling/ui/main.qml:354
+#: kcm/autotiling/ui/main.qml:204 kcm/autotiling/ui/main.qml:224
+#: kcm/autotiling/ui/main.qml:352 kcm/autotiling/ui/main.qml:374
 #: kcm/general/ui/EasingSettings.qml:520 kcm/snapping/ui/AppearanceCard.qml:229
 #: kcm/snapping/ui/AppearanceCard.qml:247
 #: kcm/snapping/ui/ZoneSelectorCard.qml:74
@@ -336,103 +340,103 @@ msgstr ""
 msgid "px"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:190
+#: kcm/autotiling/ui/main.qml:210
 msgid "Corner radius:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:200
+#: kcm/autotiling/ui/main.qml:220
 msgid "Corner radius for the border (0 for square corners)"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:230 kcm/snapping/ui/main.qml:293
+#: kcm/autotiling/ui/main.qml:250 kcm/snapping/ui/main.qml:293
 msgid "Behavior"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:238 kcm/snapping/ui/main.qml:313
+#: kcm/autotiling/ui/main.qml:258 kcm/snapping/ui/main.qml:313
 msgid "New windows:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:242
+#: kcm/autotiling/ui/main.qml:262
 msgid "Add after existing windows"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:245
+#: kcm/autotiling/ui/main.qml:265
 msgid "Insert after focused"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:248
+#: kcm/autotiling/ui/main.qml:268
 msgid "Add as main window"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:256
+#: kcm/autotiling/ui/main.qml:276
 msgid "Focus:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:257
+#: kcm/autotiling/ui/main.qml:277
 msgid "Automatically focus newly opened windows"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:264
+#: kcm/autotiling/ui/main.qml:284
 msgid "Focus follows mouse pointer"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:268
+#: kcm/autotiling/ui/main.qml:288
 msgid "When enabled, moving mouse over a window focuses it"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:272
+#: kcm/autotiling/ui/main.qml:292
 msgid "Constraints:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:273
+#: kcm/autotiling/ui/main.qml:293
 msgid "Respect window minimum size"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:277
+#: kcm/autotiling/ui/main.qml:297
 msgid ""
 "Windows will not be resized below their minimum size. This may leave gaps in "
 "the layout."
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:311 kcm/snapping/ui/ZoneSelectorCard.qml:54
+#: kcm/autotiling/ui/main.qml:331 kcm/snapping/ui/ZoneSelectorCard.qml:54
 msgid "Gaps"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:317
+#: kcm/autotiling/ui/main.qml:337
 msgid "Inner gap:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:328
+#: kcm/autotiling/ui/main.qml:348
 msgid "Gap between tiled windows"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:338
+#: kcm/autotiling/ui/main.qml:358
 msgid "Outer gap:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:350
+#: kcm/autotiling/ui/main.qml:370
 msgid "Gap from screen edges"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:361 kcm/snapping/ui/ZoneSelectorCard.qml:102
+#: kcm/autotiling/ui/main.qml:381 kcm/snapping/ui/ZoneSelectorCard.qml:102
 msgid "Set per side"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:371 kcm/snapping/ui/ZoneSelectorCard.qml:112
+#: kcm/autotiling/ui/main.qml:391 kcm/snapping/ui/ZoneSelectorCard.qml:112
 msgid "Per-side gaps:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:378 kcm/snapping/ui/ZoneSelectorCard.qml:119
+#: kcm/autotiling/ui/main.qml:398 kcm/snapping/ui/ZoneSelectorCard.qml:119
 msgid "Top:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:388 kcm/snapping/ui/ZoneSelectorCard.qml:129
+#: kcm/autotiling/ui/main.qml:408 kcm/snapping/ui/ZoneSelectorCard.qml:129
 msgctxt "@label"
 msgid "Top edge gap"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:392 kcm/autotiling/ui/main.qml:410
-#: kcm/autotiling/ui/main.qml:428 kcm/autotiling/ui/main.qml:446
+#: kcm/autotiling/ui/main.qml:412 kcm/autotiling/ui/main.qml:430
+#: kcm/autotiling/ui/main.qml:448 kcm/autotiling/ui/main.qml:466
 #: kcm/snapping/ui/ZoneSelectorCard.qml:133
 #: kcm/snapping/ui/ZoneSelectorCard.qml:151
 #: kcm/snapping/ui/ZoneSelectorCard.qml:169
@@ -441,43 +445,47 @@ msgctxt "@label"
 msgid "px"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:396 kcm/snapping/ui/ZoneSelectorCard.qml:137
+#: kcm/autotiling/ui/main.qml:416 kcm/snapping/ui/ZoneSelectorCard.qml:137
 msgid "Bottom:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:406 kcm/snapping/ui/ZoneSelectorCard.qml:147
+#: kcm/autotiling/ui/main.qml:426 kcm/snapping/ui/ZoneSelectorCard.qml:147
 msgctxt "@label"
 msgid "Bottom edge gap"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:414 kcm/snapping/ui/ZoneSelectorCard.qml:155
+#: kcm/autotiling/ui/main.qml:434 kcm/snapping/ui/ZoneSelectorCard.qml:155
 msgid "Left:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:424 kcm/snapping/ui/ZoneSelectorCard.qml:165
+#: kcm/autotiling/ui/main.qml:444 kcm/snapping/ui/ZoneSelectorCard.qml:165
 msgctxt "@label"
 msgid "Left edge gap"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:432 kcm/snapping/ui/ZoneSelectorCard.qml:173
+#: kcm/autotiling/ui/main.qml:452 kcm/snapping/ui/ZoneSelectorCard.qml:173
 msgid "Right:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:442 kcm/snapping/ui/ZoneSelectorCard.qml:183
+#: kcm/autotiling/ui/main.qml:462 kcm/snapping/ui/ZoneSelectorCard.qml:183
 msgctxt "@label"
 msgid "Right edge gap"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:452
+#: kcm/autotiling/ui/main.qml:472
 msgid "Smart gaps:"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:453
+#: kcm/autotiling/ui/main.qml:473
 msgid "Hide gaps when only one window is tiled"
 msgstr ""
 
-#: kcm/autotiling/ui/main.qml:480 kcm/snapping/ui/AppearanceCard.qml:496
-msgid "Choose Border Color"
+#: kcm/autotiling/ui/main.qml:500
+msgid "Choose Active Border Color"
+msgstr ""
+
+#: kcm/autotiling/ui/main.qml:507
+msgid "Choose Inactive Border Color"
 msgstr ""
 
 #: kcm/editor/ui/main.qml:42
@@ -1142,6 +1150,10 @@ msgstr ""
 msgid "Choose Inactive Zone Color"
 msgstr ""
 
+#: kcm/snapping/ui/AppearanceCard.qml:496
+msgid "Choose Border Color"
+msgstr ""
+
 #: kcm/snapping/ui/AppearanceCard.qml:503
 msgid "Choose Label Color"
 msgstr ""
@@ -1369,11 +1381,11 @@ msgid ""
 msgstr ""
 
 #: kcm/ui/AssignmentRow.qml:25 kcm/ui/LayoutComboBox.qml:31
-#: kcm/ui/tabs/AppRulesCard.qml:142 kcm/ui/tabs/MonitorAssignmentsCard.qml:141
+#: kcm/ui/tabs/AppRulesCard.qml:142 kcm/ui/tabs/MonitorAssignmentsCard.qml:145
 msgid "Default"
 msgstr ""
 
-#: kcm/ui/AssignmentRow.qml:87 kcm/ui/tabs/MonitorAssignmentsCard.qml:191
+#: kcm/ui/AssignmentRow.qml:87 kcm/ui/tabs/MonitorAssignmentsCard.qml:203
 msgid "Clear assignment"
 msgstr ""
 
@@ -1712,16 +1724,24 @@ msgstr ""
 msgid "Current"
 msgstr ""
 
-#: kcm/ui/tabs/ActivityAssignmentsCard.qml:160
-#: kcm/ui/tabs/MonitorAssignmentsCard.qml:271
+#: kcm/ui/tabs/ActivityAssignmentsCard.qml:170
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:312
 msgid "Use default"
 msgstr ""
 
-#: kcm/ui/tabs/ActivityAssignmentsCard.qml:208
+#: kcm/ui/tabs/ActivityAssignmentsCard.qml:221
+msgid "Unlock layout for %1 on %2"
+msgstr ""
+
+#: kcm/ui/tabs/ActivityAssignmentsCard.qml:221
+msgid "Lock layout for %1 on %2"
+msgstr ""
+
+#: kcm/ui/tabs/ActivityAssignmentsCard.qml:242
 msgid "No activities found. Create activities in System Settings → Activities."
 msgstr ""
 
-#: kcm/ui/tabs/ActivityAssignmentsCard.qml:216
+#: kcm/ui/tabs/ActivityAssignmentsCard.qml:250
 msgid "No screens detected. Make sure the PlasmaZones daemon is running."
 msgstr ""
 
@@ -1986,35 +2006,51 @@ msgstr ""
 msgid "All Desktops:"
 msgstr ""
 
-#: kcm/ui/tabs/MonitorAssignmentsCard.qml:201
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:218
+msgid "Unlock layout for this monitor"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:218
+msgid "Lock layout for this monitor"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:231
 msgid "Per-desktop"
 msgstr ""
 
-#: kcm/ui/tabs/MonitorAssignmentsCard.qml:205
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:235
 msgid "Hide per-desktop assignments"
 msgstr ""
 
-#: kcm/ui/tabs/MonitorAssignmentsCard.qml:205
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:235
 msgid "Show per-desktop assignments"
 msgstr ""
 
-#: kcm/ui/tabs/MonitorAssignmentsCard.qml:215
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:245
 msgid "Disable PlasmaZones on this monitor"
 msgstr ""
 
-#: kcm/ui/tabs/MonitorAssignmentsCard.qml:219
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:249
 msgid "When enabled, zones will not appear on this monitor"
 msgstr ""
 
-#: kcm/ui/tabs/MonitorAssignmentsCard.qml:243
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:273
 msgid "Per-Desktop Overrides"
 msgstr ""
 
-#: kcm/ui/tabs/MonitorAssignmentsCard.qml:258
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:288
 msgid "Desktop %1"
 msgstr ""
 
-#: kcm/ui/tabs/MonitorAssignmentsCard.qml:316
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:350
+msgid "Unlock layout for %1"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:350
+msgid "Lock layout for %1"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:377
 msgid "Per-desktop assignments are available with multiple virtual desktops."
 msgstr ""
 
