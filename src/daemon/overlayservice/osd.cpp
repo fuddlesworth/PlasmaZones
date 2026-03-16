@@ -109,9 +109,6 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenName)
         return;
     }
 
-    // Hide any existing layout OSD before showing new one (prevent stale OSD on other screen)
-    hideLayoutOsd();
-
     QQuickWindow* window = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
@@ -138,8 +135,6 @@ void OverlayService::showLockedLayoutOsd(Layout* layout, const QString& screenNa
     if (!layout) {
         return;
     }
-
-    hideLayoutOsd();
 
     QQuickWindow* window = nullptr;
     QRect screenGeom;
@@ -171,9 +166,6 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
         qCDebug(lcOverlay) << "Skipping OSD for empty layout=" << name;
         return;
     }
-
-    // Hide any existing layout OSD before showing new one (prevent stale OSD on other screen)
-    hideLayoutOsd();
 
     QQuickWindow* window = nullptr;
     QRect screenGeom;

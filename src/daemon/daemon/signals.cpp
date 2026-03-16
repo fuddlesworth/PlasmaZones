@@ -577,6 +577,28 @@ void Daemon::finalizeStartup()
 
     // Signal that daemon is fully initialized and ready for queries
     Q_EMIT m_layoutAdaptor->daemonReady();
+
+    // Show the layout OSD on ALL screens so the user sees what's assigned everywhere.
+    // The layoutApplied signal only fires for the focused screen; this covers the rest.
+    if (m_settings && m_settings->showOsdOnLayoutSwitch() && m_layoutManager && m_screenManager) {
+        const int desktop = currentDesktop();
+        const QString activity = currentActivity();
+        for (QScreen* screen : m_screenManager->screens()) {
+            const QString screenId = Utils::screenIdentifier(screen);
+            const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+            if (LayoutId::isAutotile(assignmentId)) {
+                const QString algoId = LayoutId::extractAlgorithmId(assignmentId);
+                auto* algo = AlgorithmRegistry::instance()->algorithm(algoId);
+                const QString displayName = algo ? algo->name() : algoId;
+                showAlgorithmOsdDeferred(algoId, displayName, screenId);
+            } else {
+                Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
+                if (layout) {
+                    showLayoutOsdDeferred(layout->id(), screenId);
+                }
+            }
+        }
+    }
 }
 
 } // namespace PlasmaZones
