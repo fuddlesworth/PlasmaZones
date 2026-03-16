@@ -437,34 +437,84 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         }
         notifyWindowAdded(w);
     } else if (oldIsAutotile && !newIsAutotile) {
-        // Autotile → snapping: restore pre-autotile SIZE after the drag ends.
-        // We can't apply geometry now — the user is still dragging and the
-        // position would be stale by the time the move finishes, potentially
-        // sending the window back to the old screen.  Wait for KWin's
-        // windowFinishUserMovedResized signal and use the drop position.
-        if (savedPreAutotileGeo.isValid()) {
-            const int savedW = std::max(0, qRound(savedPreAutotileGeo.width()));
-            const int savedH = std::max(0, qRound(savedPreAutotileGeo.height()));
-            QPointer<KWin::EffectWindow> safeW = w;
-            // Cancel any prior pending restore for this window (rapid back-and-forth)
-            auto oldIt = m_pendingCrossScreenRestore.find(windowId);
-            if (oldIt != m_pendingCrossScreenRestore.end()) {
-                QObject::disconnect(oldIt.value());
-                m_pendingCrossScreenRestore.erase(oldIt);
-            }
-            const QString wid = windowId; // capture by value
-            m_pendingCrossScreenRestore[windowId] =
-                connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, m_effect,
-                        [this, safeW, wid, savedW, savedH](KWin::EffectWindow*) {
-                            m_pendingCrossScreenRestore.remove(wid);
-                            if (!safeW || safeW->isDeleted()) {
-                                return;
-                            }
-                            const QRectF frame = safeW->frameGeometry();
-                            const QRect geo(qRound(frame.x()), qRound(frame.y()), savedW, savedH);
-                            m_effect->applySnapGeometry(safeW, geo);
-                        });
+        // Autotile → snapping: restore the window's original (pre-snap/pre-tile)
+        // SIZE after the drag ends.  The effect-side m_preAutotileGeometries may
+        // hold the snap zone geometry (if the window was snapped before entering
+        // autotile), so we ask the daemon for the true pre-tile geometry instead.
+        // If unavailable, fall back to the effect-side cache.
+        QPointer<KWin::EffectWindow> safeW = w;
+        const QString wid = windowId;
+
+        // Cancel any prior pending restore for this window (rapid back-and-forth)
+        auto oldIt = m_pendingCrossScreenRestore.find(windowId);
+        if (oldIt != m_pendingCrossScreenRestore.end()) {
+            QObject::disconnect(oldIt.value());
+            m_pendingCrossScreenRestore.erase(oldIt);
         }
+
+        // Fetch the daemon's pre-tile geometry (original size before any snapping).
+        // The effect-side savedPreAutotileGeo is kept as fallback.
+        const int fallbackW = savedPreAutotileGeo.isValid() ? std::max(0, qRound(savedPreAutotileGeo.width())) : 0;
+        const int fallbackH = savedPreAutotileGeo.isValid() ? std::max(0, qRound(savedPreAutotileGeo.height())) : 0;
+
+        QDBusMessage msg =
+            QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                           QStringLiteral("getValidatedPreTileGeometry"));
+        msg << windowId;
+        auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), m_effect);
+        connect(watcher, &QDBusPendingCallWatcher::finished, m_effect,
+                [this, safeW, wid, fallbackW, fallbackH](QDBusPendingCallWatcher* pw) {
+                    pw->deleteLater();
+
+                    int restoreW = fallbackW;
+                    int restoreH = fallbackH;
+                    QDBusPendingReply<bool, int, int, int, int> reply = *pw;
+                    if (reply.isValid() && reply.count() >= 5 && reply.argumentAt<0>()) {
+                        int dw = reply.argumentAt<3>();
+                        int dh = reply.argumentAt<4>();
+                        if (dw > 0 && dh > 0) {
+                            restoreW = dw;
+                            restoreH = dh;
+                        }
+                    }
+
+                    if (restoreW <= 0 || restoreH <= 0 || !safeW || safeW->isDeleted()) {
+                        return;
+                    }
+
+                    // If the window bounced back to an autotile screen during the
+                    // D-Bus round-trip, skip the restore — it's being tiled again.
+                    const QString currentScreen = m_effect->getWindowScreenName(safeW);
+                    if (m_autotileScreens.contains(currentScreen)) {
+                        return;
+                    }
+
+                    // If the drag already ended, apply immediately.
+                    if (!safeW->isUserMove() && !safeW->isUserResize()) {
+                        const QRectF frame = safeW->frameGeometry();
+                        const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
+                        m_effect->applySnapGeometry(safeW, geo);
+                        return;
+                    }
+
+                    // Still dragging — wait for drop.
+                    m_pendingCrossScreenRestore[wid] =
+                        connect(safeW.data(), &KWin::EffectWindow::windowFinishUserMovedResized, m_effect,
+                                [this, safeW, wid, restoreW, restoreH](KWin::EffectWindow*) {
+                                    m_pendingCrossScreenRestore.remove(wid);
+                                    if (!safeW || safeW->isDeleted()) {
+                                        return;
+                                    }
+                                    // Guard: window may have bounced back to autotile during drag.
+                                    const QString dropScreen = m_effect->getWindowScreenName(safeW);
+                                    if (m_autotileScreens.contains(dropScreen)) {
+                                        return;
+                                    }
+                                    const QRectF frame = safeW->frameGeometry();
+                                    const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
+                                    m_effect->applySnapGeometry(safeW, geo);
+                                });
+                });
 
         // Raise above existing windows so it doesn't end up buried behind
         // snapped windows on the target screen.
