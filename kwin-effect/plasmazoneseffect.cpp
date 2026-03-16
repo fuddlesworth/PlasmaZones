@@ -2437,24 +2437,16 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     // When allowDuringDrag is false: defer if window is in user move/resize (snap on release)
     // When allowDuringDrag is true: apply immediately (snap-on-hover during drag)
     if (!allowDuringDrag && (window->isUserMove() || window->isUserResize())) {
-        if (retriesLeft <= 0) {
-            qCWarning(lcEffect) << "snap geometry: window still in user move after"
-                                << "20 retries (2s). This may indicate a KWin state bug.";
-            return;
-        }
-        qCDebug(lcEffect) << "Window still in user move/resize state, deferring geometry change"
-                          << "(retries left:" << retriesLeft << ")";
-        // Schedule the geometry change for when the move operation completes.
-        // Use QPointer to safely handle window destruction during the timer delay.
-        // This covers the brief race where forceEnd fired but KWin hasn't cleared
-        // isUserMove yet (takes ~1 frame). The activation-button-held case is
-        // handled earlier in callDragStopped via cancelInteractiveMoveResize.
+        qCDebug(lcEffect) << "Window in user move/resize, deferring geometry via windowFinishUserMovedResized";
         QPointer<KWin::EffectWindow> safeWindow = window;
-        QTimer::singleShot(100, this, [this, safeWindow, geo, remaining = retriesLeft - 1, skipAnimation]() {
-            if (safeWindow && !safeWindow->isDeleted() && !safeWindow->isFullScreen()) {
-                applySnapGeometry(safeWindow, geo, false, remaining, skipAnimation);
-            }
-        });
+        auto conn = std::make_shared<QMetaObject::Connection>();
+        *conn = connect(window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
+                        [this, safeWindow, geo, skipAnimation, conn](KWin::EffectWindow*) {
+                            disconnect(*conn);
+                            if (safeWindow && !safeWindow->isDeleted() && !safeWindow->isFullScreen()) {
+                                applySnapGeometry(safeWindow, geo, false, /*retriesLeft=*/0, skipAnimation);
+                            }
+                        });
         return;
     }
 

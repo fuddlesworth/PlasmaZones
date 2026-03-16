@@ -194,6 +194,8 @@ private:
         m_savedPreAutotileForDesktopMove; ///< pre-autotile geometries for windows moved to another desktop
     QSet<QString> m_pendingCloses;
     bool m_inOutputChanged = false; ///< re-entrancy guard for handleWindowOutputChanged
+    QHash<QString, QMetaObject::Connection>
+        m_pendingCrossScreenRestore; ///< windowId → deferred size-restore connection
     QSet<QString> m_minimizeFloatedWindows;
     uint64_t m_autotileStaggerGeneration = 0;
     uint64_t m_restoreStaggerGeneration = 0;

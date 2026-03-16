@@ -401,8 +401,17 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
 
     qCInfo(lcEffect) << "Window moved between monitors:" << windowId << oldScreenName << "->" << newScreenName;
 
-    // Preserve pre-autotile geometry from the old screen before removal
-    savePreAutotileForDesktopMove(windowId, oldScreenName);
+    // Snapshot the pre-autotile geometry BEFORE onWindowClosed clears it.
+    // onWindowClosed removes m_preAutotileGeometries AND m_savedPreAutotileForDesktopMove,
+    // so we must hold onto the geometry locally.
+    QRectF savedPreAutotileGeo;
+    if (oldIsAutotile && m_preAutotileGeometries.contains(oldScreenName)) {
+        const auto& screenGeometries = m_preAutotileGeometries[oldScreenName];
+        const QString savedKey = findSavedGeometryKey(screenGeometries, windowId);
+        if (!savedKey.isEmpty()) {
+            savedPreAutotileGeo = screenGeometries.value(savedKey);
+        }
+    }
 
     // Restore title bar before removing
     if (isBorderlessWindow(windowId)) {
@@ -415,15 +424,57 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // Remove from old screen's autotile state
     onWindowClosed(windowId, oldScreenName);
 
-    // Re-add on new screen if it's an autotile screen
     if (newIsAutotile && !w->isMinimized() && w->isOnCurrentDesktop() && w->isOnCurrentActivity()) {
-        // Restore preserved pre-autotile geometry on the new screen
-        auto savedIt = m_savedPreAutotileForDesktopMove.find(windowId);
-        if (savedIt != m_savedPreAutotileForDesktopMove.end()) {
-            m_preAutotileGeometries[newScreenName][windowId] = savedIt.value();
-            m_savedPreAutotileForDesktopMove.erase(savedIt);
+        // Re-add on new autotile screen, carrying over pre-autotile geometry.
+        // Cancel any pending cross-screen restore — the window is back in autotile.
+        auto pendingIt = m_pendingCrossScreenRestore.find(windowId);
+        if (pendingIt != m_pendingCrossScreenRestore.end()) {
+            QObject::disconnect(pendingIt.value());
+            m_pendingCrossScreenRestore.erase(pendingIt);
+        }
+        if (savedPreAutotileGeo.isValid()) {
+            m_preAutotileGeometries[newScreenName][windowId] = savedPreAutotileGeo;
         }
         notifyWindowAdded(w);
+    } else if (oldIsAutotile && !newIsAutotile) {
+        // Autotile → snapping: restore pre-autotile SIZE after the drag ends.
+        // We can't apply geometry now — the user is still dragging and the
+        // position would be stale by the time the move finishes, potentially
+        // sending the window back to the old screen.  Wait for KWin's
+        // windowFinishUserMovedResized signal and use the drop position.
+        if (savedPreAutotileGeo.isValid()) {
+            const int savedW = std::max(0, qRound(savedPreAutotileGeo.width()));
+            const int savedH = std::max(0, qRound(savedPreAutotileGeo.height()));
+            QPointer<KWin::EffectWindow> safeW = w;
+            // Cancel any prior pending restore for this window (rapid back-and-forth)
+            auto oldIt = m_pendingCrossScreenRestore.find(windowId);
+            if (oldIt != m_pendingCrossScreenRestore.end()) {
+                QObject::disconnect(oldIt.value());
+                m_pendingCrossScreenRestore.erase(oldIt);
+            }
+            const QString wid = windowId; // capture by value
+            m_pendingCrossScreenRestore[windowId] =
+                connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, m_effect,
+                        [this, safeW, wid, savedW, savedH](KWin::EffectWindow*) {
+                            m_pendingCrossScreenRestore.remove(wid);
+                            if (!safeW || safeW->isDeleted()) {
+                                return;
+                            }
+                            const QRectF frame = safeW->frameGeometry();
+                            const QRect geo(qRound(frame.x()), qRound(frame.y()), savedW, savedH);
+                            m_effect->applySnapGeometry(safeW, geo);
+                        });
+        }
+
+        // Raise above existing windows so it doesn't end up buried behind
+        // snapped windows on the target screen.
+        KWin::Window* kw = w->window();
+        if (kw) {
+            auto* ws = KWin::Workspace::self();
+            if (ws) {
+                ws->raiseWindow(kw);
+            }
+        }
     }
 
     m_effect->updateAllBorders();
@@ -474,6 +525,11 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
         m_preAutotileGeometries[screenName].remove(windowId);
     }
     m_savedPreAutotileForDesktopMove.remove(windowId);
+    auto pendingConn = m_pendingCrossScreenRestore.find(windowId);
+    if (pendingConn != m_pendingCrossScreenRestore.end()) {
+        QObject::disconnect(pendingConn.value());
+        m_pendingCrossScreenRestore.erase(pendingConn);
+    }
     // Remove from saved stacking orders so stale IDs don't accumulate
     if (m_savedSnapStackingOrder.contains(screenName)) {
         m_savedSnapStackingOrder[screenName].removeAll(windowId);
