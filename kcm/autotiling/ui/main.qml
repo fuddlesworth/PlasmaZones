@@ -115,7 +115,7 @@ KCMUtils.SimpleKCM {
                     }
 
                     RowLayout {
-                        Kirigami.FormData.label: i18n("Border color:")
+                        Kirigami.FormData.label: i18n("Active color:")
                         visible: !useSystemBorderColorsCheck.checked
                         spacing: Kirigami.Units.smallSpacing
 
@@ -129,6 +129,26 @@ KCMUtils.SimpleKCM {
 
                         Label {
                             text: kcm.autotileBorderColor.toString().toUpperCase()
+                            font: Kirigami.Theme.fixedWidthFont
+                        }
+
+                    }
+
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Inactive color:")
+                        visible: !useSystemBorderColorsCheck.checked
+                        spacing: Kirigami.Units.smallSpacing
+
+                        ColorButton {
+                            color: kcm.autotileInactiveBorderColor
+                            onClicked: {
+                                autotileInactiveBorderColorDialog.selectedColor = kcm.autotileInactiveBorderColor;
+                                autotileInactiveBorderColorDialog.open();
+                            }
+                        }
+
+                        Label {
+                            text: kcm.autotileInactiveBorderColor.toString().toUpperCase()
                             font: Kirigami.Theme.fixedWidthFont
                         }
 
@@ -152,18 +172,18 @@ KCMUtils.SimpleKCM {
 
                     Kirigami.Separator {
                         Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Focus Border")
+                        Kirigami.FormData.label: i18n("Borders")
                     }
 
                     CheckBox {
                         id: showBorderCheck
 
                         Kirigami.FormData.label: i18n("Border:")
-                        text: i18n("Show focus border on tiled windows")
+                        text: i18n("Show borders in tiling mode")
                         checked: kcm.autotileShowBorder
                         onToggled: kcm.autotileShowBorder = checked
                         ToolTip.visible: hovered
-                        ToolTip.text: i18n("Draw a colored border around the focused tiled window. Works with or without hidden title bars.")
+                        ToolTip.text: i18n("Draw colored borders around all windows in tiling mode. Active color for focused, inactive for unfocused. Works with or without hidden title bars.")
                     }
 
                     RowLayout {
@@ -477,8 +497,15 @@ KCMUtils.SimpleKCM {
     ColorDialog {
         id: autotileBorderColorDialog
 
-        title: i18n("Choose Border Color")
+        title: i18n("Choose Active Border Color")
         onAccepted: kcm.autotileBorderColor = selectedColor
+    }
+
+    ColorDialog {
+        id: autotileInactiveBorderColorDialog
+
+        title: i18n("Choose Inactive Border Color")
+        onAccepted: kcm.autotileInactiveBorderColor = selectedColor
     }
 
 }

@@ -428,7 +428,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // Restore borderless and monocle-maximized windows — daemon state is gone
         m_autotileHandler->restoreAllBorderless();
         m_autotileHandler->restoreAllMonocleMaximized();
-        clearActiveBorder();
+        clearAllBorders();
     });
     connect(serviceWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
         qCInfo(lcEffect) << "Daemon registered: waiting for daemonReady signal";
@@ -501,7 +501,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     if (KWin::effects) {
         m_autotileHandler->restoreAllBorderless();
         m_autotileHandler->restoreAllMonocleMaximized();
-        clearActiveBorder();
+        clearAllBorders();
     }
 
     if (m_keyboardGrabbed) {
@@ -607,6 +607,10 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // Notify autotile handler for cleanup (tracking sets + autotile D-Bus)
     m_autotileHandler->onWindowClosed(closedWindowId, closedScreenName);
 
+    // Remove the window's border item (parent WindowItem is being destroyed anyway,
+    // but clean up our tracking hash to avoid stale entries).
+    removeWindowBorder(closedWindowId);
+
     // Notify general daemon for cleanup
     notifyWindowClosed(w);
 }
@@ -616,8 +620,11 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
     // Filtering (e.g. shouldHandleWindow) is done inside notifyWindowActivated
     notifyWindowActivated(w);
 
-    // Move the native border item to the newly focused window.
-    updateActiveBorder();
+    // Recreate all borders so the active window gets the active color
+    // and inactive windows get the inactive color.  A full recreate is
+    // used instead of in-place setOutline() because the latter may not
+    // trigger a scene-graph repaint in all KWin versions.
+    updateAllBorders();
 }
 
 void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
@@ -650,7 +657,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     }
                 }
                 m_autotileHandler->onWindowClosed(windowId, screenName);
-                updateActiveBorder();
+                removeWindowBorder(windowId);
                 qCInfo(lcEffect) << "Window moved off current desktop, removed from autotile:" << windowId;
             }
         }
@@ -1355,12 +1362,12 @@ void PlasmaZonesEffect::loadCachedSettings()
     // autotileHideTitleBars needs extra logic when toggled off — delegate to handler
     loadSettingAsync(QStringLiteral("autotileHideTitleBars"), [this](const QVariant& v) {
         m_autotileHandler->updateHideTitleBarsSetting(v.toBool());
-        updateActiveBorder(); // calls clearActiveBorder() internally
+        updateAllBorders();
     });
 
     loadSettingAsync(QStringLiteral("autotileShowBorder"), [this](const QVariant& v) {
         m_autotileHandler->updateShowBorderSetting(v.toBool());
-        updateActiveBorder();
+        updateAllBorders();
     });
 
     loadSettingAsync(QStringLiteral("autotileBorderWidth"), [this](const QVariant& v) {
@@ -1371,7 +1378,7 @@ void PlasmaZonesEffect::loadCachedSettings()
             m_autotileHandler->invalidateStaggerGeneration();
             fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("retileAllScreens"), {},
                                   QStringLiteral("border width change retile"));
-            updateActiveBorder();
+            updateAllBorders();
         }
     });
 
@@ -1379,13 +1386,18 @@ void PlasmaZonesEffect::loadCachedSettings()
         int br = qBound(0, v.toInt(), 20);
         if (m_autotileHandler->borderRadius() != br) {
             m_autotileHandler->setBorderRadius(br);
-            updateActiveBorder();
+            updateAllBorders();
         }
     });
 
     loadSettingAsync(QStringLiteral("autotileBorderColor"), [this](const QVariant& v) {
         m_autotileHandler->setBorderColor(QColor(v.toString()));
-        updateActiveBorder();
+        updateAllBorders();
+    });
+
+    loadSettingAsync(QStringLiteral("autotileInactiveBorderColor"), [this](const QVariant& v) {
+        m_autotileHandler->setInactiveBorderColor(QColor(v.toString()));
+        updateAllBorders();
     });
 
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
@@ -2637,86 +2649,115 @@ QVector<KWin::EffectWindow*> PlasmaZonesEffect::findAllWindowsById(const QString
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Active window border (native OutlinedBorderItem)
+// Per-window borders (native OutlinedBorderItem)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void PlasmaZonesEffect::clearActiveBorder()
+void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)
 {
-    // Restore the original corner radius on the surface we clipped
-    if (m_cornerClippedSurface) {
-        m_cornerClippedSurface->setBorderRadius(m_savedSurfaceBorderRadius);
-        m_cornerClippedSurface = nullptr;
-        m_savedSurfaceBorderRadius = KWin::BorderRadius();
+    auto it = m_windowBorders.find(windowId);
+    if (it == m_windowBorders.end()) {
+        return;
     }
-    delete m_activeBorderItem;
-    m_activeBorderItem = nullptr;
-    QObject::disconnect(m_borderGeometryConnection);
-    m_borderGeometryConnection = {};
+    WindowBorder& wb = it.value();
+    if (wb.clippedSurface) {
+        wb.clippedSurface->setBorderRadius(wb.savedSurfaceRadius);
+    }
+    // QPointer: item may already be null if Qt parent-child ownership destroyed it
+    delete wb.item.data();
+    QObject::disconnect(wb.geometryConnection);
+    m_windowBorders.erase(it);
 }
 
-void PlasmaZonesEffect::updateActiveBorder()
+void PlasmaZonesEffect::clearAllBorders()
 {
-    clearActiveBorder();
+    while (!m_windowBorders.isEmpty()) {
+        removeWindowBorder(m_windowBorders.begin().key());
+    }
+}
+
+void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::EffectWindow* w)
+{
+    // Remove existing border for this window first
+    removeWindowBorder(windowId);
 
     const int bw = m_autotileHandler->borderWidth();
-    const QColor bc = m_autotileHandler->borderColor();
-    if (bw <= 0 || !bc.isValid() || bc.alpha() == 0) {
+    if (bw <= 0) {
         return;
     }
 
+    if (!w || w->isMinimized() || w->isFullScreen()) {
+        return;
+    }
+
+    if (!m_autotileHandler->shouldShowBorderForWindow(windowId)) {
+        return;
+    }
+
+    // Choose color: active for focused window, inactive for others
     KWin::EffectWindow* active = KWin::effects->activeWindow();
-    if (!active || active->isMinimized() || active->isFullScreen()) {
+    const bool isFocused = (w == active);
+    const QColor bc = isFocused ? m_autotileHandler->borderColor() : m_autotileHandler->inactiveBorderColor();
+    if (!bc.isValid() || bc.alpha() == 0) {
         return;
     }
 
-    const QString wid = getWindowId(active);
-    if (!m_autotileHandler->shouldShowBorderForWindow(wid)) {
-        return;
-    }
-
-    const QRectF frame = active->frameGeometry();
+    const QRectF frame = w->frameGeometry();
     const KWin::RectF innerRect(0, 0, frame.width(), frame.height());
     const int br = m_autotileHandler->borderRadius();
     const KWin::BorderOutline outline(bw, bc, KWin::BorderRadius(br));
 
-    KWin::WindowItem* windowItem = active->windowItem();
+    KWin::WindowItem* windowItem = w->windowItem();
     if (!windowItem) {
         return;
     }
 
-    m_activeBorderItem = new KWin::OutlinedBorderItem(innerRect, outline, windowItem);
+    WindowBorder wb;
+    wb.item = new KWin::OutlinedBorderItem(innerRect, outline, windowItem);
 
-    // For borderless windows, clip the SurfaceItem corners to match the border
-    // radius. SurfaceItem and OutlinedBorderItem are siblings under WindowItem,
-    // so clipping the surface doesn't affect the border rendering.
-    // Decorated windows (showBorder without hideTitleBars) skip this — the
-    // decoration frame is a separate item and minor corner overshoot is acceptable.
-    if (br > 0 && m_autotileHandler->isBorderlessWindow(wid)) {
+    // For borderless windows, clip the SurfaceItem corners to match the border radius.
+    if (br > 0 && m_autotileHandler->isBorderlessWindow(windowId)) {
         KWin::SurfaceItem* surface = windowItem->surfaceItem();
         if (surface) {
-            m_savedSurfaceBorderRadius = surface->borderRadius();
+            wb.savedSurfaceRadius = surface->borderRadius();
             surface->setBorderRadius(KWin::BorderRadius(br));
-            m_cornerClippedSurface = surface;
+            wb.clippedSurface = surface;
         }
     }
 
-    // Null the raw pointer when Qt's parent-child ownership destroys the item
-    // (e.g. window deletion, compositor teardown) to prevent double-free.
-    connect(m_activeBorderItem, &QObject::destroyed, this, [this]() {
-        m_activeBorderItem = nullptr;
-        m_cornerClippedSurface = nullptr;
-        m_savedSurfaceBorderRadius = KWin::BorderRadius();
-    });
-
     // Keep the border in sync when the window resizes or moves.
-    m_borderGeometryConnection =
-        connect(active, &KWin::EffectWindow::windowFrameGeometryChanged, this,
-                [this](KWin::EffectWindow* w, const QRectF& /*oldGeo*/) {
-                    if (m_activeBorderItem) {
-                        const QRectF f = w->frameGeometry();
-                        m_activeBorderItem->setInnerRect(KWin::RectF(0, 0, f.width(), f.height()));
-                    }
-                });
+    const QString wid = windowId; // capture by value
+    wb.geometryConnection = connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
+                                    [this, wid](KWin::EffectWindow* ew, const QRectF& /*oldGeo*/) {
+                                        auto it = m_windowBorders.find(wid);
+                                        if (it != m_windowBorders.end() && it->item) {
+                                            const QRectF f = ew->frameGeometry();
+                                            it->item->setInnerRect(KWin::RectF(0, 0, f.width(), f.height()));
+                                        }
+                                    });
+
+    m_windowBorders.insert(windowId, wb);
+}
+
+void PlasmaZonesEffect::updateAllBorders()
+{
+    clearAllBorders();
+
+    const int bw = m_autotileHandler->borderWidth();
+    if (bw <= 0) {
+        return;
+    }
+
+    // Iterate all effect windows and create borders for tiled ones
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : windows) {
+        if (!w || w->isDeleted() || !w->isOnCurrentDesktop()) {
+            continue;
+        }
+        const QString wid = getWindowId(w);
+        if (m_autotileHandler->shouldShowBorderForWindow(wid)) {
+            updateWindowBorder(wid, w);
+        }
+    }
 }
 
 void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chrono::milliseconds presentTime)

@@ -106,6 +106,7 @@ void KCMAutotiling::defaults()
     setAutotileBorderWidth(ConfigDefaults::autotileBorderWidth());
     setAutotileBorderRadius(ConfigDefaults::autotileBorderRadius());
     setAutotileBorderColor(ConfigDefaults::autotileBorderColor());
+    setAutotileInactiveBorderColor(ConfigDefaults::autotileInactiveBorderColor());
     setAutotileUseSystemBorderColors(ConfigDefaults::autotileUseSystemBorderColors());
 }
 
@@ -135,6 +136,7 @@ void KCMAutotiling::emitAllChanged()
     Q_EMIT autotileBorderWidthChanged();
     Q_EMIT autotileBorderRadiusChanged();
     Q_EMIT autotileBorderColorChanged();
+    Q_EMIT autotileInactiveBorderColorChanged();
     Q_EMIT autotileUseSystemBorderColorsChanged();
     Q_EMIT screensChanged();
 }
@@ -458,6 +460,11 @@ QColor KCMAutotiling::autotileBorderColor() const
     return m_settings->autotileBorderColor();
 }
 
+QColor KCMAutotiling::autotileInactiveBorderColor() const
+{
+    return m_settings->autotileInactiveBorderColor();
+}
+
 bool KCMAutotiling::autotileUseSystemBorderColors() const
 {
     return m_settings->autotileUseSystemBorderColors();
@@ -508,6 +515,15 @@ void KCMAutotiling::setAutotileBorderColor(const QColor& color)
     if (m_settings->autotileBorderColor() != color) {
         m_settings->setAutotileBorderColor(color);
         Q_EMIT autotileBorderColorChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMAutotiling::setAutotileInactiveBorderColor(const QColor& color)
+{
+    if (m_settings->autotileInactiveBorderColor() != color) {
+        m_settings->setAutotileInactiveBorderColor(color);
+        Q_EMIT autotileInactiveBorderColorChanged();
         setNeedsSave(true);
     }
 }

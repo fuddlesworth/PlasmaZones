@@ -252,7 +252,6 @@ void AutotileHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& 
     if (!kw) {
         return;
     }
-    const bool isActive = (w == KWin::effects->activeWindow());
     if (borderless) {
         // Skip CSD windows (GTK/Electron) — hasDecoration() is false for them.
         if (!w->hasDecoration()) {
@@ -262,18 +261,13 @@ void AutotileHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& 
             kw->setNoBorder(true);
             m_border.borderlessWindows.insert(windowId);
             qCDebug(lcEffect) << "Autotile: hid title bar for" << windowId;
-            if (isActive) {
-                m_effect->updateActiveBorder();
-            }
         }
     } else {
         if (m_border.borderlessWindows.remove(windowId)) {
             m_border.zoneGeometries.remove(windowId);
             kw->setNoBorder(false);
             qCDebug(lcEffect) << "Autotile: restored title bar for" << windowId;
-            if (isActive) {
-                m_effect->updateActiveBorder();
-            }
+            m_effect->removeWindowBorder(windowId);
         }
     }
 }
@@ -387,7 +381,7 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         if (m_autotileScreens.contains(newScreenName) && m_effect->shouldHandleWindow(w) && !w->isMinimized()
             && w->isOnCurrentDesktop() && w->isOnCurrentActivity()) {
             notifyWindowAdded(w);
-            m_effect->updateActiveBorder();
+            m_effect->updateAllBorders();
         }
         return;
     }
@@ -432,7 +426,7 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         notifyWindowAdded(w);
     }
 
-    m_effect->updateActiveBorder();
+    m_effect->updateAllBorders();
 }
 
 void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId, const QString& screenName)

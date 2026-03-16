@@ -424,6 +424,8 @@ SETTINGS_SETTER_CLAMPED(AutotileBorderWidth, m_autotileBorderWidth, autotileBord
 SETTINGS_SETTER_CLAMPED(AutotileBorderRadius, m_autotileBorderRadius, autotileBorderRadiusChanged, 0, 20)
 
 SETTINGS_SETTER(const QColor&, AutotileBorderColor, m_autotileBorderColor, autotileBorderColorChanged)
+SETTINGS_SETTER(const QColor&, AutotileInactiveBorderColor, m_autotileInactiveBorderColor,
+                autotileInactiveBorderColorChanged)
 
 void Settings::setAutotileUseSystemBorderColors(bool use)
 {

@@ -328,6 +328,13 @@ void Settings::applyAutotileBorderSystemColor()
     border.setAlpha(Defaults::BorderAlpha);
     m_autotileBorderColor = border;
     Q_EMIT autotileBorderColorChanged();
+
+    // Inactive: KColorScheme::InactiveText maps to Kirigami.Theme.disabledTextColor —
+    // the system's own dimmed foreground, same alpha as active for equal opacity.
+    QColor inactive = scheme.foreground(KColorScheme::InactiveText).color();
+    inactive.setAlpha(Defaults::BorderAlpha);
+    m_autotileInactiveBorderColor = inactive;
+    Q_EMIT autotileInactiveBorderColorChanged();
 }
 
 } // namespace PlasmaZones

@@ -488,6 +488,10 @@ public:
     {
         return instance().defaultAutotileBorderColorValue();
     }
+    static QColor autotileInactiveBorderColor()
+    {
+        return instance().defaultAutotileInactiveBorderColorValue();
+    }
     static bool autotileUseSystemBorderColors()
     {
         return instance().defaultAutotileUseSystemBorderColorsValue();

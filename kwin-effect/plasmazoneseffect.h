@@ -332,13 +332,23 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════════
     std::unique_ptr<AutotileHandler> m_autotileHandler;
 
-    // Native border for the active borderless window (scene graph item).
-    void updateActiveBorder();
-    void clearActiveBorder();
-    KWin::OutlinedBorderItem* m_activeBorderItem = nullptr;
-    QMetaObject::Connection m_borderGeometryConnection;
-    QPointer<KWin::SurfaceItem> m_cornerClippedSurface;
-    KWin::BorderRadius m_savedSurfaceBorderRadius;
+    // Per-window native borders (scene graph items).
+    // item is QPointer because OutlinedBorderItem is parented to WindowItem —
+    // Qt parent-child ownership may destroy it before removeWindowBorder() runs.
+    struct WindowBorder
+    {
+        QPointer<KWin::OutlinedBorderItem> item;
+        QMetaObject::Connection geometryConnection;
+        QPointer<KWin::SurfaceItem> clippedSurface;
+        KWin::BorderRadius savedSurfaceRadius;
+    };
+    QHash<QString, WindowBorder> m_windowBorders; // windowId → border
+
+    void updateWindowBorder(const QString& windowId, KWin::EffectWindow* w);
+    void removeWindowBorder(const QString& windowId);
+    void updateAllBorders();
+    void clearAllBorders();
+
     std::unique_ptr<NavigationHandler> m_navigationHandler;
     std::unique_ptr<ScreenChangeHandler> m_screenChangeHandler;
     std::unique_ptr<SnapAssistHandler> m_snapAssistHandler;

@@ -236,7 +236,7 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
         // as soon as the client commits its constrained size — no deferred timer needed.
 
         // Refresh the active border for the focused window (tiledWindows may have changed)
-        m_effect->updateActiveBorder();
+        m_effect->updateAllBorders();
     };
 
     m_effect->applyStaggeredOrImmediate(

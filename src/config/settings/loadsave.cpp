@@ -381,6 +381,9 @@ void Settings::loadAutotilingConfig(const KConfigGroup& autotiling, const KConfi
                                               ConfigDefaults::autotileBorderRadius(), 0, 20, "autotile border radius");
     m_autotileBorderColor =
         readValidatedColor(autotiling, "AutotileBorderColor", ConfigDefaults::autotileBorderColor(), "autotile border");
+    m_autotileInactiveBorderColor =
+        readValidatedColor(autotiling, "AutotileInactiveBorderColor", ConfigDefaults::autotileInactiveBorderColor(),
+                           "autotile inactive border");
     m_autotileUseSystemBorderColors = autotiling.readEntry(QLatin1String("AutotileUseSystemBorderColors"),
                                                            ConfigDefaults::autotileUseSystemBorderColors());
     m_lockedScreens = autotiling.readEntry(QLatin1String("LockedScreens"), QStringList());
@@ -567,6 +570,7 @@ void Settings::saveAutotilingConfig(KConfigGroup& autotiling, KConfigGroup& anim
     autotiling.writeEntry(QLatin1String("AutotileBorderWidth"), m_autotileBorderWidth);
     autotiling.writeEntry(QLatin1String("AutotileBorderRadius"), m_autotileBorderRadius);
     autotiling.writeEntry(QLatin1String("AutotileBorderColor"), m_autotileBorderColor);
+    autotiling.writeEntry(QLatin1String("AutotileInactiveBorderColor"), m_autotileInactiveBorderColor);
     autotiling.writeEntry(QLatin1String("AutotileUseSystemBorderColors"), m_autotileUseSystemBorderColors);
     autotiling.writeEntry(QLatin1String("LockedScreens"), m_lockedScreens);
 

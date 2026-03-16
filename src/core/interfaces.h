@@ -88,6 +88,8 @@ public:
     virtual void setAutotileBorderRadius(int radius) = 0;
     virtual QColor autotileBorderColor() const = 0;
     virtual void setAutotileBorderColor(const QColor& color) = 0;
+    virtual QColor autotileInactiveBorderColor() const = 0;
+    virtual void setAutotileInactiveBorderColor(const QColor& color) = 0;
     virtual bool autotileUseSystemBorderColors() const = 0;
     virtual void setAutotileUseSystemBorderColors(bool use) = 0;
 
@@ -261,6 +263,7 @@ Q_SIGNALS:
     void autotileBorderWidthChanged();
     void autotileBorderRadiusChanged();
     void autotileBorderColorChanged();
+    void autotileInactiveBorderColorChanged();
     void autotileUseSystemBorderColorsChanged();
     void lockedScreensChanged();
     // Animation settings (general)

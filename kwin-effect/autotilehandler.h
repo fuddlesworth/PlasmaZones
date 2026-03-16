@@ -102,6 +102,14 @@ public:
     {
         m_border.color = c;
     }
+    QColor inactiveBorderColor() const
+    {
+        return m_border.inactiveColor;
+    }
+    void setInactiveBorderColor(const QColor& c)
+    {
+        m_border.inactiveColor = c;
+    }
     int borderRadius() const
     {
         return m_border.radius;
@@ -210,6 +218,7 @@ private:
         int width = 2;
         int radius = 0;
         QColor color;
+        QColor inactiveColor;
     } m_border;
 };
 

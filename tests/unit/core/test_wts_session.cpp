@@ -643,6 +643,13 @@ public:
     void setAutotileBorderColor(const QColor&) override
     {
     }
+    QColor autotileInactiveBorderColor() const override
+    {
+        return {};
+    }
+    void setAutotileInactiveBorderColor(const QColor&) override
+    {
+    }
     bool autotileUseSystemBorderColors() const override
     {
         return false;

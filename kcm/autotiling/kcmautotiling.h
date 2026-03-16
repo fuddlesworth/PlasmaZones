@@ -73,6 +73,8 @@ class KCMAutotiling : public KQuickConfigModule
                    autotileBorderRadiusChanged)
     Q_PROPERTY(QColor autotileBorderColor READ autotileBorderColor WRITE setAutotileBorderColor NOTIFY
                    autotileBorderColorChanged)
+    Q_PROPERTY(QColor autotileInactiveBorderColor READ autotileInactiveBorderColor WRITE setAutotileInactiveBorderColor
+                   NOTIFY autotileInactiveBorderColorChanged)
     Q_PROPERTY(bool autotileUseSystemBorderColors READ autotileUseSystemBorderColors WRITE
                    setAutotileUseSystemBorderColors NOTIFY autotileUseSystemBorderColorsChanged)
 
@@ -140,6 +142,8 @@ public:
     void setAutotileBorderRadius(int radius);
     QColor autotileBorderColor() const;
     void setAutotileBorderColor(const QColor& color);
+    QColor autotileInactiveBorderColor() const;
+    void setAutotileInactiveBorderColor(const QColor& color);
     bool autotileUseSystemBorderColors() const;
     void setAutotileUseSystemBorderColors(bool use);
 
@@ -202,6 +206,7 @@ Q_SIGNALS:
     void autotileBorderWidthChanged();
     void autotileBorderRadiusChanged();
     void autotileBorderColorChanged();
+    void autotileInactiveBorderColorChanged();
     void autotileUseSystemBorderColorsChanged();
 
     // Screens

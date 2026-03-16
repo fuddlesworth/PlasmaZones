@@ -40,7 +40,7 @@ void AutotileHandler::slotEnabledChanged(bool enabled)
         m_savedSnapStackingOrder.clear();
         m_savedAutotileStackingOrder.clear();
         m_savedNotifiedForDesktopReturn.clear();
-        m_effect->updateActiveBorder();
+        m_effect->updateAllBorders();
     }
 }
 
@@ -117,7 +117,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
                     }
                 }
             }
-            m_effect->updateActiveBorder();
+            m_effect->updateAllBorders();
 
             // Save autotile stacking order before restoring snap-mode order.
             // This allows restoring the user's autotile z-order (e.g. floated
@@ -387,7 +387,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
             }
 
             // Refresh active border for the focused window on the returned-to desktop
-            m_effect->updateActiveBorder();
+            m_effect->updateAllBorders();
         } else {
             // Genuine user toggle — process all added screens as new.
 
@@ -567,7 +567,7 @@ void AutotileHandler::slotWindowFloatingChanged(const QString& windowId, bool is
                 setWindowBorderless(w, windowId, false);
             }
         }
-        m_effect->updateActiveBorder();
+        m_effect->removeWindowBorder(windowId);
         unmaximizeMonocleWindow(windowId);
 
         KWin::EffectWindow* floatWin = m_effect->findWindowById(windowId);
@@ -671,7 +671,7 @@ void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     if (m_monocleMaximizedWindows.remove(windowId)) {
         qCInfo(lcEffect) << "Monocle window went fullscreen:" << windowId << "- removed from tracking";
     }
-    m_effect->updateActiveBorder();
+    m_effect->removeWindowBorder(windowId);
 }
 
 } // namespace PlasmaZones

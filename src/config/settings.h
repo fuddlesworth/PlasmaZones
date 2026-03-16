@@ -207,6 +207,8 @@ public:
         int autotileBorderWidth READ autotileBorderWidth WRITE setAutotileBorderWidth NOTIFY autotileBorderWidthChanged)
     Q_PROPERTY(QColor autotileBorderColor READ autotileBorderColor WRITE setAutotileBorderColor NOTIFY
                    autotileBorderColorChanged)
+    Q_PROPERTY(QColor autotileInactiveBorderColor READ autotileInactiveBorderColor WRITE setAutotileInactiveBorderColor
+                   NOTIFY autotileInactiveBorderColorChanged)
     Q_PROPERTY(bool autotileUseSystemBorderColors READ autotileUseSystemBorderColors WRITE
                    setAutotileUseSystemBorderColors NOTIFY autotileUseSystemBorderColorsChanged)
     // Autotile Shortcuts
@@ -1033,6 +1035,12 @@ public:
     }
     void setAutotileBorderColor(const QColor& color) override;
 
+    QColor autotileInactiveBorderColor() const override
+    {
+        return m_autotileInactiveBorderColor;
+    }
+    void setAutotileInactiveBorderColor(const QColor& color) override;
+
     bool autotileUseSystemBorderColors() const override
     {
         return m_autotileUseSystemBorderColors;
@@ -1551,6 +1559,7 @@ private:
     int m_autotileBorderWidth = 2;
     int m_autotileBorderRadius = 0;
     QColor m_autotileBorderColor = QColor(255, 255, 255, 200); // #C8FFFFFF
+    QColor m_autotileInactiveBorderColor = QColor(161, 169, 177, 200); // #C8A1A9B1 — Breeze disabledTextColor
     bool m_autotileUseSystemBorderColors = true;
     QStringList m_lockedScreens;
     // Autotile Shortcuts (must match plasmazones.kcfg GlobalShortcuts defaults)
