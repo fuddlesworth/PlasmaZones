@@ -152,13 +152,30 @@ void ShaderRegistry::setupFileWatcher()
 {
     m_watcher = new QFileSystemWatcher(this);
 
+    const QString sysDir = systemShaderDir();
+    if (QDir(sysDir).exists()) {
+        m_watcher->addPath(sysDir);
+        // Watch subdirectories too — QFileSystemWatcher only fires for direct children
+        QDir sysDirObj(sysDir);
+        for (const QString& entry : sysDirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            m_watcher->addPath(sysDirObj.filePath(entry));
+        }
+        qCDebug(lcCore) << "Watching system shader directory=" << sysDir;
+    }
+
     const QString userDir = userShaderDir();
     if (QDir(userDir).exists()) {
         m_watcher->addPath(userDir);
+        // Watch subdirectories for individual shader changes
+        QDir userDirObj(userDir);
+        for (const QString& entry : userDirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            m_watcher->addPath(userDirObj.filePath(entry));
+        }
         qCDebug(lcCore) << "Watching user shader directory=" << userDir;
     }
 
     connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, &ShaderRegistry::onUserShaderDirChanged);
+    connect(m_watcher, &QFileSystemWatcher::fileChanged, this, &ShaderRegistry::onUserShaderDirChanged);
 }
 
 void ShaderRegistry::onUserShaderDirChanged(const QString& path)
@@ -178,7 +195,7 @@ void ShaderRegistry::onUserShaderDirChanged(const QString& path)
 
 void ShaderRegistry::performDebouncedRefresh()
 {
-    qCInfo(lcCore) << "User shader directory changed, refreshing...";
+    qCInfo(lcCore) << "Shader directory changed, refreshing...";
     refresh();
 }
 
