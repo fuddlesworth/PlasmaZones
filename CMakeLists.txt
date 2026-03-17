@@ -118,6 +118,14 @@ find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
     ColorScheme
 )
 
+# KTextEditor for shader editor (optional)
+find_package(KF6TextEditor ${KF_MIN_VERSION} QUIET)
+if(KF6TextEditor_FOUND)
+    message(STATUS "KF6::TextEditor found - shader editor will be built")
+else()
+    message(STATUS "KF6::TextEditor not found - shader editor will NOT be built")
+endif()
+
 # KActivities/PlasmaActivities is optional (for activity-based layouts)
 # Plasma 6 renamed KActivities to PlasmaActivities
 find_package(PlasmaActivities QUIET)
@@ -233,17 +241,26 @@ file(GLOB PLASMAZONES_EDITOR_QML "${CMAKE_SOURCE_DIR}/src/editor/qml/*.qml")
 file(GLOB_RECURSE KCM_PLASMAZONES_QML "${CMAKE_SOURCE_DIR}/kcm/*.qml")
 list(APPEND KCM_PLASMAZONES_QML ${CMAKE_SOURCE_DIR}/src/shared/CategoryBadge.qml)
 
+file(GLOB PLASMAZONES_SHADER_EDITOR_CPP
+    "${CMAKE_SOURCE_DIR}/src/shader-editor/main.cpp"
+    "${CMAKE_SOURCE_DIR}/src/shader-editor/shadereditorwindow.cpp"
+    "${CMAKE_SOURCE_DIR}/src/shader-editor/shaderpackageio.cpp"
+)
+
 if(GETTEXT_XGETTEXT_EXECUTABLE)
     add_custom_target(extract-pot
         COMMENT "Extracting translatable strings into po/*.pot"
     )
-    foreach(_domain plasmazonesd plasmazones-editor kcm_plasmazones)
+    foreach(_domain plasmazonesd plasmazones-editor kcm_plasmazones plasmazones-shader-editor)
         if(_domain STREQUAL "plasmazonesd")
             set(_cpp "${PLASMAZONESD_CPP}")
             set(_qml "${PLASMAZONESD_QML}")
         elseif(_domain STREQUAL "plasmazones-editor")
             set(_cpp "${PLASMAZONES_EDITOR_CPP}")
             set(_qml "${PLASMAZONES_EDITOR_QML}")
+        elseif(_domain STREQUAL "plasmazones-shader-editor")
+            set(_cpp "${PLASMAZONES_SHADER_EDITOR_CPP}")
+            set(_qml "")
         else()
             set(_cpp "")
             set(_qml "${KCM_PLASMAZONES_QML}")
@@ -336,11 +353,13 @@ install(DIRECTORY data/shaders/
 install(FILES
     icons/hicolor/scalable/apps/plasmazones.svg
     icons/hicolor/scalable/apps/plasmazones-editor.svg
+    icons/hicolor/scalable/apps/plasmazones-shader-editor.svg
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps
 )
 install(FILES
     icons/hicolor-light/scalable/apps/plasmazones.svg
     icons/hicolor-light/scalable/apps/plasmazones-editor.svg
+    icons/hicolor-light/scalable/apps/plasmazones-shader-editor.svg
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor-light/scalable/apps
 )
 
@@ -358,6 +377,11 @@ add_custom_target(uninstall
 
 # Build/install only installs files. Enabling the daemon, refreshing sycoca/KWin,
 # and user-facing messages are handled by packaging (Arch .install, Debian postinst, RPM %post).
+
+set_package_properties(KF6TextEditor PROPERTIES
+    TYPE OPTIONAL
+    PURPOSE "Required for the shader package editor"
+)
 
 # Suppress transitive Qt6::Gui dependency from feature summary (not used by PlasmaZones)
 set_package_properties(WrapVulkanHeaders PROPERTIES TYPE RUNTIME)

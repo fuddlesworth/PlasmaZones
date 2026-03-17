@@ -665,3 +665,10 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/99-plasmazones-screenshot.conf
     DESTINATION ${KDE_INSTALL_LIBDIR}/environment.d
 )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Shader Editor
+# ═══════════════════════════════════════════════════════════════════════════════
+if(KF6TextEditor_FOUND)
+    add_subdirectory(shader-editor)
+endif()

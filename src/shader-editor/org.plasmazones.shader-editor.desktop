@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=PlasmaZones Shader Editor
+GenericName=Shader Effect Editor
+Comment=Create and edit shader effects for PlasmaZones zone overlays
+Icon=plasmazones-shader-editor
+Exec=plasmazones-shader-editor
+Terminal=false
+Categories=Qt;KDE;Development;Utility;
+Keywords=shader;glsl;effect;zone;plasmazones;
+StartupWMClass=plasmazones-shader-editor
+SingleMainWindow=true

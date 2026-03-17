@@ -1,0 +1,438 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" font-family="Segoe UI, Ubuntu, sans-serif">
+  <defs>
+    <linearGradient id="titlebar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2d2d2d"/>
+      <stop offset="100%" stop-color="#232323"/>
+    </linearGradient>
+    <linearGradient id="toolbar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#383838"/>
+      <stop offset="100%" stop-color="#2e2e2e"/>
+    </linearGradient>
+    <linearGradient id="preview-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a0a1a"/>
+      <stop offset="50%" stop-color="#0d1025"/>
+      <stop offset="100%" stop-color="#0a0a1a"/>
+    </linearGradient>
+    <linearGradient id="zone1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4a1a8a" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#2a0a5a" stop-opacity="0.4"/>
+    </linearGradient>
+    <linearGradient id="zone2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a4a8a" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#0a2a5a" stop-opacity="0.4"/>
+    </linearGradient>
+    <linearGradient id="zone3" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8a1a4a" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#5a0a2a" stop-opacity="0.3"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Window Background -->
+  <rect width="1400" height="900" rx="8" fill="#1e1e1e"/>
+
+  <!-- Title Bar -->
+  <rect width="1400" height="36" rx="8" fill="url(#titlebar)"/>
+  <rect y="28" width="1400" height="8" fill="url(#titlebar)"/>
+  <!-- Window controls -->
+  <circle cx="20" cy="18" r="6" fill="#ff5f57"/>
+  <circle cx="40" cy="18" r="6" fill="#febc2e"/>
+  <circle cx="60" cy="18" r="6" fill="#28c840"/>
+  <text x="700" y="23" text-anchor="middle" fill="#cccccc" font-size="13" font-weight="500">PlasmaZones Shader Editor — cosmic-flow</text>
+
+  <!-- Menu Bar -->
+  <rect y="36" width="1400" height="28" fill="#2a2a2a"/>
+  <text x="16" y="54" fill="#bbb" font-size="12">File</text>
+  <text x="52" y="54" fill="#bbb" font-size="12">Edit</text>
+  <text x="88" y="54" fill="#bbb" font-size="12">Shader</text>
+  <text x="140" y="54" fill="#bbb" font-size="12">View</text>
+  <text x="180" y="54" fill="#bbb" font-size="12">Help</text>
+
+  <!-- Toolbar -->
+  <rect y="64" width="1400" height="38" fill="url(#toolbar)"/>
+  <!-- Toolbar buttons -->
+  <rect x="8" y="70" width="26" height="26" rx="4" fill="#444" stroke="#555" stroke-width="0.5"/>
+  <text x="21" y="87" text-anchor="middle" fill="#ccc" font-size="14">📄</text>
+  <rect x="38" y="70" width="26" height="26" rx="4" fill="#444" stroke="#555" stroke-width="0.5"/>
+  <text x="51" y="87" text-anchor="middle" fill="#ccc" font-size="14">📂</text>
+  <rect x="68" y="70" width="26" height="26" rx="4" fill="#444" stroke="#555" stroke-width="0.5"/>
+  <text x="81" y="87" text-anchor="middle" fill="#ccc" font-size="14">💾</text>
+  <!-- Separator -->
+  <line x1="104" y1="74" x2="104" y2="92" stroke="#555" stroke-width="1"/>
+  <!-- Build/Run -->
+  <rect x="114" y="70" width="26" height="26" rx="4" fill="#2d5a1e" stroke="#4a8a2e" stroke-width="0.5"/>
+  <text x="127" y="87" text-anchor="middle" fill="#8f8" font-size="14">▶</text>
+  <rect x="144" y="70" width="80" height="26" rx="4" fill="#444" stroke="#555" stroke-width="0.5"/>
+  <text x="184" y="87" text-anchor="middle" fill="#ccc" font-size="11">Validate</text>
+  <!-- Separator -->
+  <line x1="234" y1="74" x2="234" y2="92" stroke="#555" stroke-width="1"/>
+  <!-- Zone layout selector -->
+  <text x="244" y="87" fill="#888" font-size="11">Test Layout:</text>
+  <rect x="316" y="70" width="120" height="26" rx="4" fill="#333" stroke="#555" stroke-width="0.5"/>
+  <text x="330" y="87" fill="#ccc" font-size="11">▦ 2-Column Split</text>
+  <text x="428" y="87" fill="#888" font-size="11">▾</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- LEFT PANEL: Code Editor (55% width) -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <rect x="0" y="102" width="770" height="798" fill="#1e1e1e"/>
+
+  <!-- Tab Bar -->
+  <rect x="0" y="102" width="770" height="32" fill="#252526"/>
+  <!-- Active tab -->
+  <rect x="0" y="102" width="120" height="32" fill="#1e1e1e"/>
+  <rect x="0" y="102" width="120" height="2" fill="#007acc"/>
+  <text x="12" y="122" fill="#ffffff" font-size="12">effect.frag</text>
+  <text x="106" y="122" fill="#888" font-size="10">×</text>
+  <!-- Inactive tabs -->
+  <rect x="120" y="102" width="100" height="32" fill="#2d2d2d"/>
+  <text x="132" y="122" fill="#888888" font-size="12">zone.vert</text>
+  <text x="208" y="122" fill="#666" font-size="10">×</text>
+  <rect x="220" y="102" width="120" height="32" fill="#2d2d2d"/>
+  <text x="232" y="122" fill="#888888" font-size="12">metadata.json</text>
+  <text x="328" y="122" fill="#666" font-size="10">×</text>
+  <!-- New tab button -->
+  <text x="350" y="122" fill="#888" font-size="14">+</text>
+
+  <!-- Code Editor Area -->
+  <rect x="0" y="134" width="770" height="660" fill="#1e1e1e"/>
+
+  <!-- Line numbers gutter -->
+  <rect x="0" y="134" width="48" height="660" fill="#1e1e1e"/>
+
+  <!-- GLSL Code with syntax highlighting -->
+  <g font-family="JetBrains Mono, Fira Code, monospace" font-size="12.5" fill="#d4d4d4">
+    <!-- Line 1 -->
+    <text x="36" y="154" text-anchor="end" fill="#858585">1</text>
+    <text x="56" y="154"><tspan fill="#569cd6">#version</tspan><tspan fill="#d4d4d4"> </tspan><tspan fill="#b5cea8">450</tspan></text>
+
+    <!-- Line 2 (blank) -->
+    <text x="36" y="172" text-anchor="end" fill="#858585">2</text>
+
+    <!-- Line 3 -->
+    <text x="36" y="190" text-anchor="end" fill="#858585">3</text>
+    <text x="56" y="190"><tspan fill="#569cd6">layout</tspan><tspan fill="#d4d4d4">(</tspan><tspan fill="#9cdcfe">location</tspan><tspan fill="#d4d4d4"> = </tspan><tspan fill="#b5cea8">0</tspan><tspan fill="#d4d4d4">) </tspan><tspan fill="#569cd6">in</tspan><tspan fill="#d4d4d4"> </tspan><tspan fill="#4ec9b0">vec2</tspan><tspan fill="#d4d4d4"> </tspan><tspan fill="#9cdcfe">vTexCoord</tspan><tspan fill="#d4d4d4">;</tspan></text>
+
+    <!-- Line 4 -->
+    <text x="36" y="208" text-anchor="end" fill="#858585">4</text>
+    <text x="56" y="208"><tspan fill="#569cd6">layout</tspan><tspan fill="#d4d4d4">(</tspan><tspan fill="#9cdcfe">location</tspan><tspan fill="#d4d4d4"> = </tspan><tspan fill="#b5cea8">1</tspan><tspan fill="#d4d4d4">) </tspan><tspan fill="#569cd6">in</tspan><tspan fill="#d4d4d4"> </tspan><tspan fill="#4ec9b0">vec2</tspan><tspan fill="#d4d4d4"> </tspan><tspan fill="#9cdcfe">vFragCoord</tspan><tspan fill="#d4d4d4">;</tspan></text>
+
+    <!-- Line 5 -->
+    <text x="36" y="226" text-anchor="end" fill="#858585">5</text>
+    <text x="56" y="226"><tspan fill="#569cd6">layout</tspan><tspan fill="#d4d4d4">(</tspan><tspan fill="#9cdcfe">location</tspan><tspan fill="#d4d4d4"> = </tspan><tspan fill="#b5cea8">0</tspan><tspan fill="#d4d4d4">) </tspan><tspan fill="#569cd6">out</tspan><tspan fill="#d4d4d4"> </tspan><tspan fill="#4ec9b0">vec4</tspan><tspan fill="#d4d4d4"> </tspan><tspan fill="#9cdcfe">fragColor</tspan><tspan fill="#d4d4d4">;</tspan></text>
+
+    <!-- Line 6 (blank) -->
+    <text x="36" y="244" text-anchor="end" fill="#858585">6</text>
+
+    <!-- Line 7 - include -->
+    <text x="36" y="262" text-anchor="end" fill="#858585">7</text>
+    <text x="56" y="262"><tspan fill="#569cd6">#include</tspan><tspan fill="#d4d4d4"> </tspan><tspan fill="#ce9178">&lt;common.glsl&gt;</tspan></text>
+
+    <!-- Line 8 (blank) -->
+    <text x="36" y="280" text-anchor="end" fill="#858585">8</text>
+
+    <!-- Line 9 - comment -->
+    <text x="36" y="298" text-anchor="end" fill="#858585">9</text>
+    <text x="56" y="298"><tspan fill="#6a9955">// Cosmic flow effect — animated particle field</tspan></text>
+
+    <!-- Line 10 -->
+    <text x="36" y="316" text-anchor="end" fill="#858585">10</text>
+    <text x="56" y="316"><tspan fill="#4ec9b0">vec3</tspan><tspan fill="#d4d4d4"> </tspan><tspan fill="#dcdcaa">palette</tspan><tspan fill="#d4d4d4">(</tspan><tspan fill="#4ec9b0">float</tspan><tspan fill="#d4d4d4"> t, </tspan><tspan fill="#4ec9b0">vec3</tspan><tspan fill="#d4d4d4"> a, </tspan><tspan fill="#4ec9b0">vec3</tspan><tspan fill="#d4d4d4"> b, </tspan><tspan fill="#4ec9b0">vec3</tspan><tspan fill="#d4d4d4"> c, </tspan><tspan fill="#4ec9b0">vec3</tspan><tspan fill="#d4d4d4"> d) {</tspan></text>
+
+    <!-- Line 11 -->
+    <text x="36" y="334" text-anchor="end" fill="#858585">11</text>
+    <text x="56" y="334"><tspan fill="#d4d4d4">    </tspan><tspan fill="#c586c0">return</tspan><tspan fill="#d4d4d4"> a + b * </tspan><tspan fill="#dcdcaa">cos</tspan><tspan fill="#d4d4d4">(</tspan><tspan fill="#b5cea8">6.28318</tspan><tspan fill="#d4d4d4"> * (c * t + d));</tspan></text>
+
+    <!-- Line 12 -->
+    <text x="36" y="352" text-anchor="end" fill="#858585">12</text>
+    <text x="56" y="352"><tspan fill="#d4d4d4">}</tspan></text>
+
+    <!-- Line 13 (blank) -->
+    <text x="36" y="370" text-anchor="end" fill="#858585">13</text>
+
+    <!-- Line 14 - mainImage -->
+    <text x="36" y="388" text-anchor="end" fill="#858585">14</text>
+    <text x="56" y="388"><tspan fill="#4ec9b0">void</tspan><tspan fill="#d4d4d4"> </tspan><tspan fill="#dcdcaa">main</tspan><tspan fill="#d4d4d4">() {</tspan></text>
+
+    <!-- Line 15 -->
+    <text x="36" y="406" text-anchor="end" fill="#858585">15</text>
+    <text x="56" y="406"><tspan fill="#d4d4d4">    </tspan><tspan fill="#4ec9b0">vec2</tspan><tspan fill="#d4d4d4"> uv = vFragCoord / </tspan><tspan fill="#4fc1ff">iResolution</tspan><tspan fill="#d4d4d4">;</tspan></text>
+
+    <!-- Line 16 -->
+    <text x="36" y="424" text-anchor="end" fill="#858585">16</text>
+    <text x="56" y="424"><tspan fill="#d4d4d4">    </tspan><tspan fill="#4ec9b0">float</tspan><tspan fill="#d4d4d4"> speed = </tspan><tspan fill="#4fc1ff">customParams1_x</tspan><tspan fill="#d4d4d4">;</tspan></text>
+
+    <!-- Line 17 -->
+    <text x="36" y="442" text-anchor="end" fill="#858585">17</text>
+    <text x="56" y="442"><tspan fill="#d4d4d4">    </tspan><tspan fill="#4ec9b0">float</tspan><tspan fill="#d4d4d4"> t = </tspan><tspan fill="#4fc1ff">iTime</tspan><tspan fill="#d4d4d4"> * speed;</tspan></text>
+
+    <!-- Line 18 (blank) -->
+    <text x="36" y="460" text-anchor="end" fill="#858585">18</text>
+
+    <!-- Line 19 -->
+    <text x="36" y="478" text-anchor="end" fill="#858585">19</text>
+    <text x="56" y="478"><tspan fill="#d4d4d4">    </tspan><tspan fill="#4ec9b0">vec3</tspan><tspan fill="#d4d4d4"> col = </tspan><tspan fill="#dcdcaa">palette</tspan><tspan fill="#d4d4d4">(</tspan><tspan fill="#dcdcaa">length</tspan><tspan fill="#d4d4d4">(uv) + t,</tspan></text>
+
+    <!-- Line 20 -->
+    <text x="36" y="496" text-anchor="end" fill="#858585">20</text>
+    <text x="56" y="496"><tspan fill="#d4d4d4">        </tspan><tspan fill="#4fc1ff">customColor1</tspan><tspan fill="#d4d4d4">.rgb,</tspan></text>
+
+    <!-- Line 21 -->
+    <text x="36" y="514" text-anchor="end" fill="#858585">21</text>
+    <text x="56" y="514"><tspan fill="#d4d4d4">        </tspan><tspan fill="#4fc1ff">customColor2</tspan><tspan fill="#d4d4d4">.rgb,</tspan></text>
+
+    <!-- Line 22 - cursor line highlight -->
+    <rect x="48" y="519" width="722" height="18" fill="#264f78" opacity="0.3"/>
+    <text x="36" y="532" text-anchor="end" fill="#c6c6c6">22</text>
+    <text x="56" y="532"><tspan fill="#d4d4d4">        </tspan><tspan fill="#4ec9b0">vec3</tspan><tspan fill="#d4d4d4">(</tspan><tspan fill="#b5cea8">0.263</tspan><tspan fill="#d4d4d4">, </tspan><tspan fill="#b5cea8">0.416</tspan><tspan fill="#d4d4d4">, </tspan><tspan fill="#b5cea8">0.557</tspan><tspan fill="#d4d4d4">),</tspan></text>
+    <!-- Cursor -->
+    <rect x="362" y="521" width="1.5" height="14" fill="#aeafad"/>
+
+    <!-- Line 23 -->
+    <text x="36" y="550" text-anchor="end" fill="#858585">23</text>
+    <text x="56" y="550"><tspan fill="#d4d4d4">        </tspan><tspan fill="#4ec9b0">vec3</tspan><tspan fill="#d4d4d4">(</tspan><tspan fill="#b5cea8">0.0</tspan><tspan fill="#d4d4d4">, </tspan><tspan fill="#b5cea8">0.15</tspan><tspan fill="#d4d4d4">, </tspan><tspan fill="#b5cea8">0.20</tspan><tspan fill="#d4d4d4">));</tspan></text>
+
+    <!-- Line 24 (blank) -->
+    <text x="36" y="568" text-anchor="end" fill="#858585">24</text>
+
+    <!-- Line 25 -->
+    <text x="36" y="586" text-anchor="end" fill="#858585">25</text>
+    <text x="56" y="586"><tspan fill="#d4d4d4">    fragColor = </tspan><tspan fill="#4ec9b0">vec4</tspan><tspan fill="#d4d4d4">(col, </tspan><tspan fill="#b5cea8">1.0</tspan><tspan fill="#d4d4d4">);</tspan></text>
+
+    <!-- Line 26 -->
+    <text x="36" y="604" text-anchor="end" fill="#858585">26</text>
+    <text x="56" y="604"><tspan fill="#d4d4d4">}</tspan></text>
+  </g>
+
+  <!-- Minimap (right edge of editor) -->
+  <rect x="735" y="134" width="35" height="660" fill="#1a1a1a"/>
+  <rect x="738" y="140" width="28" height="4" rx="1" fill="#444" opacity="0.4"/>
+  <rect x="738" y="147" width="20" height="2" rx="1" fill="#569cd6" opacity="0.3"/>
+  <rect x="738" y="152" width="25" height="2" rx="1" fill="#444" opacity="0.4"/>
+  <rect x="738" y="157" width="22" height="2" rx="1" fill="#444" opacity="0.4"/>
+  <rect x="738" y="162" width="18" height="2" rx="1" fill="#6a9955" opacity="0.3"/>
+  <rect x="738" y="167" width="28" height="2" rx="1" fill="#dcdcaa" opacity="0.3"/>
+  <rect x="738" y="172" width="24" height="2" rx="1" fill="#444" opacity="0.4"/>
+  <rect x="738" y="177" width="26" height="2" rx="1" fill="#444" opacity="0.4"/>
+  <rect x="738" y="182" width="20" height="2" rx="1" fill="#4fc1ff" opacity="0.3"/>
+  <rect x="738" y="187" width="22" height="2" rx="1" fill="#444" opacity="0.4"/>
+  <!-- Minimap viewport indicator -->
+  <rect x="736" y="138" width="32" height="40" rx="2" fill="#ffffff" opacity="0.08" stroke="#ffffff" stroke-opacity="0.15" stroke-width="0.5"/>
+
+  <!-- Error/Output Panel (bottom of editor) -->
+  <rect x="0" y="794" width="770" height="106" fill="#1e1e1e"/>
+  <rect x="0" y="794" width="770" height="26" fill="#252526"/>
+  <!-- Output tabs -->
+  <rect x="0" y="794" width="80" height="26" fill="#1e1e1e"/>
+  <rect x="0" y="794" width="80" height="2" fill="#007acc"/>
+  <text x="10" y="811" fill="#ffffff" font-size="11">Problems</text>
+  <rect x="66" y="799" width="16" height="16" rx="8" fill="#007acc"/>
+  <text x="74" y="811" text-anchor="middle" fill="#fff" font-size="9">0</text>
+  <text x="96" y="811" fill="#888" font-size="11">Output</text>
+  <text x="148" y="811" fill="#888" font-size="11">Compiler</text>
+
+  <!-- Success message -->
+  <text x="16" y="838" fill="#4ec9b0" font-family="JetBrains Mono, monospace" font-size="11">✓ Shader compiled successfully (GLSL 450, 26 lines)</text>
+  <text x="16" y="856" fill="#888" font-family="JetBrains Mono, monospace" font-size="11">  Uniforms: iTime, iResolution, customParams1, customColor1, customColor2</text>
+  <text x="16" y="874" fill="#888" font-family="JetBrains Mono, monospace" font-size="11">  Includes resolved: common.glsl (100 lines)</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- Vertical Splitter -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <rect x="770" y="102" width="3" fill="#333" height="798"/>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- RIGHT PANEL (45% width) -->
+  <!-- ═══════════════════════════════════════════════ -->
+
+  <!-- ─── PREVIEW PANE (top right) ─── -->
+  <rect x="773" y="102" width="627" height="420" fill="url(#preview-bg)"/>
+
+  <!-- Preview header -->
+  <rect x="773" y="102" width="627" height="28" fill="#252526"/>
+  <text x="785" y="120" fill="#cccccc" font-size="12" font-weight="500">Live Preview</text>
+  <!-- Preview controls -->
+  <rect x="1280" y="106" width="20" height="20" rx="3" fill="#444"/>
+  <text x="1290" y="120" text-anchor="middle" fill="#8f8" font-size="11">▶</text>
+  <rect x="1304" y="106" width="20" height="20" rx="3" fill="#444"/>
+  <text x="1314" y="120" text-anchor="middle" fill="#ccc" font-size="10">⟳</text>
+  <rect x="1328" y="106" width="20" height="20" rx="3" fill="#444"/>
+  <text x="1338" y="120" text-anchor="middle" fill="#ccc" font-size="11">⛶</text>
+  <!-- FPS counter -->
+  <text x="1240" y="120" fill="#6a9955" font-size="11" font-family="JetBrains Mono, monospace">60 FPS</text>
+
+  <!-- Simulated shader preview - cosmic flow effect -->
+  <rect x="773" y="130" width="627" height="392" fill="url(#preview-bg)"/>
+
+  <!-- Zone 1 (left half) -->
+  <rect x="793" y="150" width="287" height="352" rx="8" fill="url(#zone1)" stroke="#7b4fbf" stroke-width="1.5" stroke-opacity="0.7"/>
+  <!-- Zone 1 glow effect particles -->
+  <circle cx="870" cy="240" r="40" fill="#6a2faa" opacity="0.15"/>
+  <circle cx="950" cy="320" r="55" fill="#4a1f8a" opacity="0.12"/>
+  <circle cx="830" cy="380" r="30" fill="#8a3fca" opacity="0.1"/>
+  <circle cx="920" cy="200" r="25" fill="#5a2f9a" opacity="0.18"/>
+  <!-- Flow lines -->
+  <path d="M810 200 Q870 180, 920 220 Q970 260, 1000 240" stroke="#9b6fdf" stroke-width="1" fill="none" opacity="0.4"/>
+  <path d="M830 280 Q890 260, 940 300 Q990 340, 1020 320" stroke="#7b4fbf" stroke-width="1" fill="none" opacity="0.3"/>
+  <path d="M800 360 Q860 340, 910 380 Q960 420, 1010 400" stroke="#ab7fef" stroke-width="0.8" fill="none" opacity="0.35"/>
+  <!-- Bright particles -->
+  <circle cx="870" cy="220" r="2" fill="#c8a0ff" opacity="0.8" filter="url(#glow)"/>
+  <circle cx="940" cy="290" r="1.5" fill="#b090ff" opacity="0.7" filter="url(#glow)"/>
+  <circle cx="1000" cy="350" r="2.5" fill="#d0b0ff" opacity="0.6" filter="url(#glow)"/>
+  <circle cx="850" cy="400" r="1.8" fill="#c0a0ff" opacity="0.7" filter="url(#glow)"/>
+  <!-- Zone 1 label -->
+  <text x="937" y="330" text-anchor="middle" fill="#ffffff" font-size="14" opacity="0.6" font-weight="300">Zone 1</text>
+
+  <!-- Zone 2 (right half) -->
+  <rect x="1093" y="150" width="287" height="352" rx="8" fill="url(#zone2)" stroke="#4f7fbf" stroke-width="1.5" stroke-opacity="0.7"/>
+  <!-- Zone 2 glow effect -->
+  <circle cx="1180" cy="260" r="45" fill="#1a4a8a" opacity="0.15"/>
+  <circle cx="1260" cy="340" r="50" fill="#0a3a7a" opacity="0.12"/>
+  <circle cx="1220" cy="190" r="35" fill="#2a5a9a" opacity="0.1"/>
+  <!-- Flow lines -->
+  <path d="M1120 220 Q1180 200, 1230 240 Q1280 280, 1310 260" stroke="#6f9fdf" stroke-width="1" fill="none" opacity="0.4"/>
+  <path d="M1140 300 Q1200 280, 1250 320 Q1300 360, 1330 340" stroke="#4f7fbf" stroke-width="1" fill="none" opacity="0.3"/>
+  <!-- Bright particles -->
+  <circle cx="1180" cy="230" r="2" fill="#a0c8ff" opacity="0.8" filter="url(#glow)"/>
+  <circle cx="1260" cy="310" r="1.5" fill="#90b8ff" opacity="0.7" filter="url(#glow)"/>
+  <circle cx="1320" cy="380" r="2" fill="#b0d0ff" opacity="0.6" filter="url(#glow)"/>
+  <!-- Zone 2 label -->
+  <text x="1237" y="330" text-anchor="middle" fill="#ffffff" font-size="14" opacity="0.6" font-weight="300">Zone 2</text>
+
+  <!-- Preview time indicator -->
+  <text x="793" y="510" fill="#888" font-size="10" font-family="JetBrains Mono, monospace">t = 12.47s | 1920×1080 | 2 zones</text>
+
+  <!-- ─── Horizontal Splitter ─── -->
+  <rect x="773" y="522" width="627" height="3" fill="#333"/>
+
+  <!-- ─── PARAMETER PANEL (bottom right) ─── -->
+  <rect x="773" y="525" width="627" height="375" fill="#252526"/>
+
+  <!-- Parameter panel header with tabs -->
+  <rect x="773" y="525" width="627" height="32" fill="#2d2d2d"/>
+  <rect x="773" y="525" width="110" height="32" fill="#252526"/>
+  <rect x="773" y="525" width="110" height="2" fill="#007acc"/>
+  <text x="785" y="545" fill="#ffffff" font-size="12">Parameters</text>
+  <rect x="883" y="525" width="90" height="32" fill="#2d2d2d"/>
+  <text x="895" y="545" fill="#888888" font-size="12">Metadata</text>
+  <rect x="973" y="525" width="80" height="32" fill="#2d2d2d"/>
+  <text x="985" y="545" fill="#888888" font-size="12">Presets</text>
+
+  <!-- Scrollable parameter area -->
+  <rect x="773" y="557" width="627" height="343" fill="#252526"/>
+
+  <!-- ─── Group: Animation ─── -->
+  <rect x="785" y="565" width="603" height="28" rx="4" fill="#333"/>
+  <text x="808" y="583" fill="#cccccc" font-size="12" font-weight="600">▾ Animation</text>
+  <rect x="797" y="573" width="8" height="8" rx="1" fill="#007acc" opacity="0.8"/>
+
+  <!-- Speed parameter -->
+  <rect x="785" y="597" width="603" height="36" rx="0" fill="transparent"/>
+  <text x="801" y="619" fill="#bbbbbb" font-size="12">Speed</text>
+  <!-- Slider track -->
+  <rect x="901" y="612" width="400" height="4" rx="2" fill="#444"/>
+  <!-- Slider fill -->
+  <rect x="901" y="612" width="80" height="4" rx="2" fill="#007acc"/>
+  <!-- Slider thumb -->
+  <circle cx="981" cy="614" r="7" fill="#007acc" stroke="#fff" stroke-width="1.5"/>
+  <!-- Value -->
+  <text x="1320" y="619" fill="#9cdcfe" font-size="11" font-family="JetBrains Mono, monospace" text-anchor="end">0.10</text>
+  <!-- Lock icon -->
+  <text x="1370" y="619" fill="#888" font-size="12">🔓</text>
+
+  <!-- Intensity parameter -->
+  <rect x="785" y="637" width="603" height="36" rx="0" fill="transparent"/>
+  <text x="801" y="659" fill="#bbbbbb" font-size="12">Intensity</text>
+  <rect x="901" y="652" width="400" height="4" rx="2" fill="#444"/>
+  <rect x="901" y="652" width="280" height="4" rx="2" fill="#007acc"/>
+  <circle cx="1181" cy="654" r="7" fill="#007acc" stroke="#fff" stroke-width="1.5"/>
+  <text x="1320" y="659" fill="#9cdcfe" font-size="11" font-family="JetBrains Mono, monospace" text-anchor="end">0.70</text>
+  <text x="1370" y="659" fill="#888" font-size="12">🔓</text>
+
+  <!-- ─── Group: Colors ─── -->
+  <rect x="785" y="681" width="603" height="28" rx="4" fill="#333"/>
+  <text x="808" y="699" fill="#cccccc" font-size="12" font-weight="600">▾ Colors</text>
+  <rect x="797" y="689" width="8" height="8" rx="1" fill="#007acc" opacity="0.8"/>
+
+  <!-- Palette Base color -->
+  <rect x="785" y="713" width="603" height="36" rx="0" fill="transparent"/>
+  <text x="801" y="735" fill="#bbbbbb" font-size="12">Palette Base</text>
+  <!-- Color swatch -->
+  <rect x="920" y="720" width="28" height="22" rx="4" fill="#6a2faa" stroke="#666" stroke-width="0.5"/>
+  <!-- Hex value -->
+  <text x="958" y="735" fill="#9cdcfe" font-size="11" font-family="JetBrains Mono, monospace">#6A2FAA</text>
+  <!-- Insert uniform button -->
+  <rect x="1280" y="720" width="90" height="22" rx="4" fill="#333" stroke="#555" stroke-width="0.5"/>
+  <text x="1325" y="735" text-anchor="middle" fill="#4fc1ff" font-size="10">Insert →</text>
+
+  <!-- Palette Accent color -->
+  <rect x="785" y="753" width="603" height="36" rx="0" fill="transparent"/>
+  <text x="801" y="775" fill="#bbbbbb" font-size="12">Palette Accent</text>
+  <rect x="920" y="760" width="28" height="22" rx="4" fill="#4f7fbf" stroke="#666" stroke-width="0.5"/>
+  <text x="958" y="775" fill="#9cdcfe" font-size="11" font-family="JetBrains Mono, monospace">#4F7FBF</text>
+  <rect x="1280" y="760" width="90" height="22" rx="4" fill="#333" stroke="#555" stroke-width="0.5"/>
+  <text x="1325" y="775" text-anchor="middle" fill="#4fc1ff" font-size="10">Insert →</text>
+
+  <!-- ─── Group: Appearance (collapsed) ─── -->
+  <rect x="785" y="797" width="603" height="28" rx="4" fill="#333"/>
+  <text x="808" y="815" fill="#888888" font-size="12" font-weight="600">▸ Appearance</text>
+  <text x="880" y="815" fill="#666" font-size="10">(4 parameters)</text>
+
+  <!-- ─── Group: Audio (collapsed) ─── -->
+  <rect x="785" y="829" width="603" height="28" rx="4" fill="#333"/>
+  <text x="808" y="847" fill="#888888" font-size="12" font-weight="600">▸ Audio Reactivity</text>
+  <text x="920" y="847" fill="#666" font-size="10">(3 parameters)</text>
+
+  <!-- Bottom action bar -->
+  <rect x="773" y="865" width="627" height="35" fill="#2d2d2d"/>
+  <!-- Copy defaults button -->
+  <rect x="785" y="871" width="130" height="24" rx="4" fill="#333" stroke="#555" stroke-width="0.5"/>
+  <text x="850" y="887" text-anchor="middle" fill="#ccc" font-size="11">Copy as Defaults</text>
+  <!-- Reset button -->
+  <rect x="925" y="871" width="80" height="24" rx="4" fill="#333" stroke="#555" stroke-width="0.5"/>
+  <text x="965" y="887" text-anchor="middle" fill="#ccc" font-size="11">Reset All</text>
+  <!-- Spacer -->
+  <!-- Apply button -->
+  <rect x="1288" y="871" width="100" height="24" rx="4" fill="#007acc"/>
+  <text x="1338" y="887" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="500">Apply</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- Status Bar -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <rect y="900" width="1400" height="24" fill="#007acc"/>
+  <text x="12" y="915" fill="#ffffff" font-size="11">GLSL 450</text>
+  <text x="100" y="915" fill="#ffffffcc" font-size="11">|</text>
+  <text x="116" y="915" fill="#ffffff" font-size="11">Ln 22, Col 38</text>
+  <text x="230" y="915" fill="#ffffffcc" font-size="11">|</text>
+  <text x="246" y="915" fill="#ffffff" font-size="11">UTF-8</text>
+  <text x="350" y="915" fill="#ffffffcc" font-size="11">|</text>
+  <text x="366" y="915" fill="#ffffff" font-size="11">cosmic-flow v1.0</text>
+  <text x="520" y="915" fill="#ffffffcc" font-size="11">|</text>
+  <text x="536" y="915" fill="#ffffff" font-size="11">User Shader</text>
+  <!-- Right side -->
+  <text x="1200" y="915" fill="#ffffff" font-size="11">Shader compiled ✓</text>
+  <text x="1340" y="915" fill="#ffffff" font-size="11">60 FPS</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- ANNOTATIONS (layout labels) -->
+  <!-- ═══════════════════════════════════════════════ -->
+
+  <!-- Panel labels (subtle) -->
+  <!-- Left panel label -->
+  <rect x="300" y="106" width="170" height="20" rx="3" fill="#007acc" opacity="0.15"/>
+  <text x="385" y="119" text-anchor="middle" fill="#007acc" font-size="10" font-weight="600">CODE EDITOR (KTextEditor/Kate)</text>
+
+  <!-- Right top label -->
+  <rect x="1000" y="133" width="180" height="20" rx="3" fill="#4ec9b0" opacity="0.15"/>
+  <text x="1090" y="146" text-anchor="middle" fill="#4ec9b0" font-size="10" font-weight="600">LIVE PREVIEW (ZoneShaderItem)</text>
+
+  <!-- Right bottom label -->
+  <rect x="1000" y="558" width="200" height="20" rx="3" fill="#dcdcaa" opacity="0.15"/>
+  <text x="1100" y="571" text-anchor="middle" fill="#dcdcaa" font-size="10" font-weight="600">PARAMETER TUNING + METADATA</text>
+</svg>
