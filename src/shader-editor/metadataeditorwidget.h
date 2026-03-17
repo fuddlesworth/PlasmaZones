@@ -7,11 +7,11 @@
 #include <QWidget>
 
 class QCheckBox;
-class QComboBox;
 class QLabel;
 class QLineEdit;
-class QTableWidget;
-class QTextEdit;
+class QMenu;
+class QTreeWidget;
+class QTreeWidgetItem;
 
 namespace PlasmaZones {
 
@@ -36,26 +36,32 @@ Q_SIGNALS:
 private:
     void setupUi();
     void connectSignals();
+    void markModified();
+
     void onAddParameter();
     void onRemoveParameter();
     void onInsertUniform();
-    void markModified();
+    void onMoveParameterUp();
+    void onMoveParameterDown();
+    void showParameterContextMenu(const QPoint& pos);
+    void addParameterRow(const QJsonObject& param);
 
     static QString computeUniformName(const QString& type, int slot);
+    static QString formatDefaultValue(const QJsonObject& param);
 
     // Shader Info fields
+    QLabel* m_idLabel = nullptr;
     QLineEdit* m_idEdit = nullptr;
     QLineEdit* m_nameEdit = nullptr;
-    QComboBox* m_categoryCombo = nullptr;
+    QLineEdit* m_categoryEdit = nullptr;
     QLineEdit* m_authorEdit = nullptr;
     QLineEdit* m_versionEdit = nullptr;
-    QTextEdit* m_descriptionEdit = nullptr;
-    QLabel* m_fragShaderLabel = nullptr;
-    QLabel* m_vertShaderLabel = nullptr;
+    QLineEdit* m_descriptionEdit = nullptr;
     QCheckBox* m_multipassCheck = nullptr;
 
-    // Parameters table
-    QTableWidget* m_paramTable = nullptr;
+    // Parameters
+    QTreeWidget* m_paramTree = nullptr;
+    QMenu* m_paramContextMenu = nullptr;
 
     bool m_modified = false;
     bool m_loading = false;

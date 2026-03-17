@@ -7,6 +7,7 @@
 #include "shaderpackageio.h"
 
 #include <QColor>
+#include <QCryptographicHash>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -225,27 +226,30 @@ void PreviewController::setShaderParams(const QVariantMap& params)
 
 void PreviewController::onShaderStatus(int status, const QString& error)
 {
-    bool changed = false;
-
-    if (m_status != status) {
-        m_status = status;
-        changed = true;
-        Q_EMIT statusChanged();
+    // ZoneShaderItem's updatePaintNode retries broken shaders every frame.
+    // Suppress pure duplicates (same status AND same error).
+    if (m_status == status && m_errorLog == error) {
+        return;
     }
 
-    if (m_errorLog != error) {
-        m_errorLog = error;
-        changed = true;
-        Q_EMIT errorLogChanged();
-    }
+    m_status = status;
+    m_errorLog = error;
+    Q_EMIT this->statusChanged();
+    Q_EMIT errorLogChanged();
 
-    // Auto-start animation when shader is ready (status == 2 == Ready)
-    if (status == 2 && !m_animating) {
-        setAnimating(true);
-    }
-
-    if (changed) {
-        qCDebug(lcPreview) << "Shader status:" << status << "error:" << error;
+    if (status == 2) {
+        m_compilePending = false;
+        if (!m_animating) {
+            setAnimating(true);
+        }
+    } else if (status == 3) {
+        m_lastCompiledHash.clear();
+        // Only stop animation if no new compile has been dispatched since this error.
+        // A stale error from a previous compile's updatePaintNode must not stop
+        // animation that was just started for the new compile.
+        if (!m_compilePending && m_animating) {
+            setAnimating(false);
+        }
     }
 }
 
@@ -305,8 +309,16 @@ void PreviewController::writeExpandedShader()
     // The current file directory for relative includes: use shader dir if set, else temp dir
     const QString currentFileDir = m_shaderDir.isEmpty() ? m_tempDir.path() : m_shaderDir;
 
-    // Expand fragment shader includes
+    // Skip recompile if source hasn't changed
     const QString fragSource = m_fragDoc->text();
+    const QString vertSource = m_vertDoc ? m_vertDoc->text() : QString();
+    const QByteArray sourceHash = QCryptographicHash::hash(
+        (fragSource + vertSource).toUtf8(), QCryptographicHash::Md5);
+    if (sourceHash == m_lastCompiledHash) {
+        return;
+    }
+
+    // Expand fragment shader includes
     QString fragError;
     const QString expandedFrag = ShaderIncludeResolver::expandIncludes(fragSource, currentFileDir, includePaths, &fragError);
 
@@ -368,13 +380,19 @@ void PreviewController::writeExpandedShader()
     QUrl uniqueSource = newSource;
     uniqueSource.setQuery(QStringLiteral("rev=%1").arg(++m_shaderRevision));
     m_shaderSource = uniqueSource;
-    Q_EMIT shaderSourceChanged();
+    m_lastCompiledHash = sourceHash;
 
-    // Ensure animation is running so updatePaintNode() gets called
-    // (compilation happens in the render thread during updatePaintNode)
+    // Mark compile pending so stale error callbacks from the previous compile
+    // don't stop animation before the new compile has a chance to succeed.
+    m_compilePending = true;
+
+    // Start animation BEFORE emitting shaderSourceChanged so that
+    // updatePaintNode runs on the next frame to compile the new shader.
     if (!m_animating) {
         setAnimating(true);
     }
+
+    Q_EMIT shaderSourceChanged();
 }
 
 void PreviewController::loadDefaultParamsFromMetadata(const QString& metadataJson)

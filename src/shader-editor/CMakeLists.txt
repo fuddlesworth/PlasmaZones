@@ -15,6 +15,8 @@ set(plasmazones_shader_editor_SRCS
     addparameterdialog.h
     parameterpanel.cpp
     parameterpanel.h
+    outputpanel.cpp
+    outputpanel.h
 )
 
 # QML resources for live preview pane

@@ -104,7 +104,15 @@ Item {
                 shaderSource: root.pc ? root.pc.shaderSource : ""
 
                 onStatusChanged: {
-                    if (root.pc)
+                    // Only forward terminal states — skip Loading (1) to avoid
+                    // flooding from updatePaintNode retrying broken shaders every frame
+                    if (root.pc && (shaderPreview.status === 2 || shaderPreview.status === 3))
+                        root.pc.onShaderStatus(shaderPreview.status, shaderPreview.errorLog)
+                }
+                onErrorLogChanged: {
+                    // Re-forward when errorLog clears after status already transitioned to Ready
+                    // (status and errorLog are separate property notifications)
+                    if (root.pc && shaderPreview.status === 2)
                         root.pc.onShaderStatus(shaderPreview.status, shaderPreview.errorLog)
                 }
             }
@@ -117,51 +125,13 @@ Item {
                 when: root.pc && root.pc.labelsTexture && root.pc.labelsTexture.width > 0
             }
 
-            // Status overlay when no shader
+            // Status overlay when no shader loaded
             Label {
                 anchors.centerIn: parent
                 visible: !root.pc || root.pc.shaderSource.toString() === ""
                 text: qsTr("No shader loaded")
                 color: "#666666"
                 font.pixelSize: 14
-            }
-
-            // Error overlay
-            Label {
-                anchors.centerIn: parent
-                visible: root.pc && root.pc.status === 3 // Error
-                text: qsTr("Shader Error")
-                color: "#ff4444"
-                font.pixelSize: 14
-                font.bold: true
-            }
-        }
-
-        // Error panel (collapsible)
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: (root.pc && root.pc.errorLog !== "") ? Math.min(errorText.implicitHeight + 16, 120) : 0
-            color: "#1a0000"
-            visible: root.pc && root.pc.errorLog !== ""
-            clip: true
-
-            Behavior on Layout.preferredHeight {
-                NumberAnimation { duration: 150 }
-            }
-
-            ScrollView {
-                anchors.fill: parent
-                anchors.margins: 8
-
-                Label {
-                    id: errorText
-                    text: root.pc ? root.pc.errorLog : ""
-                    color: "#ff6666"
-                    font.family: "monospace"
-                    font.pixelSize: 11
-                    wrapMode: Text.Wrap
-                    width: parent.width
-                }
             }
         }
     }

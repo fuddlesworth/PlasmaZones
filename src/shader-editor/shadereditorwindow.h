@@ -22,6 +22,7 @@ class View;
 namespace PlasmaZones {
 
 class MetadataEditorWidget;
+class OutputPanel;
 class ParameterPanel;
 class PreviewController;
 
@@ -61,8 +62,10 @@ private:
 
     KTextEditor::Editor* m_editor = nullptr;
 
-    // Left panel: code editor tabs (only .frag/.vert files)
+    // Left panel: code editor tabs (top) + output panel (bottom)
     QTabWidget* m_tabWidget = nullptr;
+    OutputPanel* m_outputPanel = nullptr;
+    QSplitter* m_leftSplitter = nullptr;  // vertical: code on top, output on bottom
 
     // Right panel: preview (top) + tabbed panel (bottom)
     QQuickWidget* m_previewWidget = nullptr;

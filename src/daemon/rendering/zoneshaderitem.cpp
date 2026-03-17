@@ -323,8 +323,12 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             }
 
             if (loaded) {
-                node->invalidateShader(); // Ensure node re-bakes
-                setStatus(Status::Ready);
+                node->invalidateShader(); // Ensure node re-bakes on next render()
+                // Don't set Ready here — actual GLSL compilation happens in render().
+                // Lines below (isShaderReady check) will set Ready once bake succeeds.
+                if (m_status != Status::Loading) {
+                    setStatus(Status::Loading);
+                }
                 // Force zone data resync when shader changes successfully
                 m_zoneDataDirty = true;
             } else {
@@ -389,6 +393,10 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
     // Update status based on shader node state
     if (node->isShaderReady() && m_status != Status::Ready) {
+        if (!m_errorLog.isEmpty()) {
+            m_errorLog.clear();
+            Q_EMIT errorLogChanged();
+        }
         setStatus(Status::Ready);
     } else if (!node->shaderError().isEmpty() && m_status != Status::Error) {
         setError(node->shaderError());

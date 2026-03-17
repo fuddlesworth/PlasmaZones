@@ -3,6 +3,7 @@
 
 #include "shadereditorwindow.h"
 #include "metadataeditorwidget.h"
+#include "outputpanel.h"
 #include "parameterpanel.h"
 #include "previewcontroller.h"
 #include "shaderpackageio.h"
@@ -169,9 +170,52 @@ void ShaderEditorWindow::setupLayout()
     // Right panel tabs added later when a package is opened (setupRightPanel)
     m_rightSplitter->setStretchFactor(0, 3);  // preview gets more space initially
 
-    // ── Main horizontal splitter: code (left) + right panel ──
+    // ── Output panel (bottom of code editor) ──
+    m_outputPanel = new OutputPanel(this);
+    m_outputPanel->setMaximumHeight(200);
+
+    // Connect problem double-click to jump to line in code editor
+    connect(m_outputPanel, &OutputPanel::problemDoubleClicked, this, [this](int line) {
+        auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->currentWidget());
+        if (view) {
+            view->setCursorPosition(KTextEditor::Cursor(line - 1, 0));
+            view->setFocus();
+        }
+    });
+
+    // Connect preview controller status to output panel.
+    // Animation stops on error (no oscillation), so direct connection is safe.
+    auto updateOutputPanel = [this]() {
+        const int status = m_previewController->status();
+        if (status == 2) { // Ready
+            int lineCount = 0;
+            for (int i = 0; i < m_tabWidget->count(); ++i) {
+                if (m_tabWidget->tabText(i).endsWith(QLatin1String(".frag"))) {
+                    auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->widget(i));
+                    if (view) {
+                        lineCount = view->document()->lines();
+                    }
+                    break;
+                }
+            }
+            m_outputPanel->setCompilationSuccess(lineCount, {}, {});
+        } else if (status == 3) { // Error
+            m_outputPanel->setCompilationError(m_previewController->errorLog());
+        }
+    };
+    connect(m_previewController, &PreviewController::statusChanged, this, updateOutputPanel);
+    connect(m_previewController, &PreviewController::errorLogChanged, this, updateOutputPanel);
+
+    // ── Left vertical splitter: code tabs (top) + output panel (bottom) ──
+    m_leftSplitter = new QSplitter(Qt::Vertical, this);
+    m_leftSplitter->addWidget(m_tabWidget);
+    m_leftSplitter->addWidget(m_outputPanel);
+    m_leftSplitter->setStretchFactor(0, 4);  // code editor gets most space
+    m_leftSplitter->setStretchFactor(1, 1);  // output panel compact
+
+    // ── Main horizontal splitter: left (code+output) + right (preview+tabs) ──
     m_mainSplitter = new QSplitter(Qt::Horizontal, this);
-    m_mainSplitter->addWidget(m_tabWidget);
+    m_mainSplitter->addWidget(m_leftSplitter);
     m_mainSplitter->addWidget(m_rightSplitter);
     m_mainSplitter->setStretchFactor(0, 3);  // code editor ~55%
     m_mainSplitter->setStretchFactor(1, 2);  // right panel ~45%

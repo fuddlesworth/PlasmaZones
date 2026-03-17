@@ -120,6 +120,8 @@ private:
     QTemporaryDir m_tempDir; // temp dir for expanded shader files
     QString m_expandedFragPath; // path in m_tempDir
     QString m_expandedVertPath;
+    QByteArray m_lastCompiledHash; // hash of last compiled frag+vert source to skip redundant recompiles
+    bool m_compilePending = false; // true between dispatching new source and receiving first Ready/Error
 
     int m_zoneLayoutIndex = 0;
     static constexpr int ZoneLayoutCount = 4;

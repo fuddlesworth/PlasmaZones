@@ -5,9 +5,7 @@
 #include "addparameterdialog.h"
 
 #include <QCheckBox>
-#include <QComboBox>
 #include <QFormLayout>
-#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonArray>
@@ -16,10 +14,10 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QLoggingCategory>
+#include <QMenu>
 #include <QPushButton>
 #include <QScrollArea>
-#include <QTableWidget>
-#include <QTextEdit>
+#include <QTreeWidget>
 #include <QVBoxLayout>
 
 #include <KLocalizedString>
@@ -45,93 +43,86 @@ void MetadataEditorWidget::setupUi()
 
     auto* contentWidget = new QWidget(scrollArea);
     auto* mainLayout = new QVBoxLayout(contentWidget);
+    mainLayout->setContentsMargins(8, 8, 8, 8);
+    mainLayout->setSpacing(12);
 
-    // --- Section 1: Shader Info ---
-    auto* infoGroup = new QGroupBox(i18n("Shader Info"), contentWidget);
-    auto* infoLayout = new QFormLayout(infoGroup);
+    // ── Shader Info ──
+    auto* infoLayout = new QFormLayout;
+    infoLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    infoLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
-    m_idEdit = new QLineEdit(infoGroup);
-    m_idEdit->setPlaceholderText(i18n("e.g. my-custom-shader"));
-    infoLayout->addRow(i18n("ID:"), m_idEdit);
+    // ID: shown as read-only label for existing shaders, editable for new
+    m_idLabel = new QLabel(this);
+    m_idLabel->setTextFormat(Qt::PlainText);
+    m_idLabel->setVisible(false);
+    m_idEdit = new QLineEdit(this);
+    m_idEdit->setPlaceholderText(QStringLiteral("my-custom-shader"));
+    m_idEdit->setVisible(false);
+    // Stack both in a container — only one is visible at a time
+    auto* idContainer = new QWidget(this);
+    auto* idLayout = new QHBoxLayout(idContainer);
+    idLayout->setContentsMargins(0, 0, 0, 0);
+    idLayout->addWidget(m_idLabel);
+    idLayout->addWidget(m_idEdit);
+    infoLayout->addRow(i18n("ID:"), idContainer);
 
-    m_nameEdit = new QLineEdit(infoGroup);
-    m_nameEdit->setPlaceholderText(i18n("e.g. My Custom Shader"));
+    m_nameEdit = new QLineEdit(this);
+    m_nameEdit->setPlaceholderText(i18n("Shader display name"));
     infoLayout->addRow(i18n("Name:"), m_nameEdit);
 
-    m_categoryCombo = new QComboBox(infoGroup);
-    m_categoryCombo->setEditable(true);
-    m_categoryCombo->addItems({
-        QStringLiteral("Custom"),
-        QStringLiteral("Organic"),
-        QStringLiteral("Energy"),
-        QStringLiteral("Geometric"),
-        QStringLiteral("Audio Visualizer"),
-        QStringLiteral("Abstract"),
-        QStringLiteral("Retro"),
-        QStringLiteral("Minimal"),
-    });
-    infoLayout->addRow(i18n("Category:"), m_categoryCombo);
+    m_categoryEdit = new QLineEdit(this);
+    m_categoryEdit->setPlaceholderText(i18n("e.g. Organic, Energy, Audio Visualizer"));
+    infoLayout->addRow(i18n("Category:"), m_categoryEdit);
 
-    m_authorEdit = new QLineEdit(infoGroup);
-    infoLayout->addRow(i18n("Author:"), m_authorEdit);
-
-    m_versionEdit = new QLineEdit(infoGroup);
+    auto* authorVersionRow = new QHBoxLayout;
+    m_authorEdit = new QLineEdit(this);
+    m_authorEdit->setPlaceholderText(i18n("Author name"));
+    m_versionEdit = new QLineEdit(this);
     m_versionEdit->setPlaceholderText(QStringLiteral("1.0"));
-    infoLayout->addRow(i18n("Version:"), m_versionEdit);
+    m_versionEdit->setMaximumWidth(60);
+    authorVersionRow->addWidget(m_authorEdit, 1);
+    authorVersionRow->addWidget(new QLabel(i18n("Version:"), this));
+    authorVersionRow->addWidget(m_versionEdit);
+    infoLayout->addRow(i18n("Author:"), authorVersionRow);
 
-    m_descriptionEdit = new QTextEdit(infoGroup);
-    m_descriptionEdit->setMaximumHeight(80);
+    m_descriptionEdit = new QLineEdit(this);
     m_descriptionEdit->setPlaceholderText(i18n("Short description of the shader effect"));
     infoLayout->addRow(i18n("Description:"), m_descriptionEdit);
 
-    m_fragShaderLabel = new QLabel(QStringLiteral("effect.frag"), infoGroup);
-    m_fragShaderLabel->setEnabled(false);
-    infoLayout->addRow(i18n("Fragment Shader:"), m_fragShaderLabel);
+    m_multipassCheck = new QCheckBox(i18n("Enable multipass rendering"), this);
+    infoLayout->addRow(QString(), m_multipassCheck);
 
-    m_vertShaderLabel = new QLabel(QStringLiteral("zone.vert"), infoGroup);
-    m_vertShaderLabel->setEnabled(false);
-    infoLayout->addRow(i18n("Vertex Shader:"), m_vertShaderLabel);
+    mainLayout->addLayout(infoLayout);
 
-    m_multipassCheck = new QCheckBox(i18n("Enable multipass rendering"), infoGroup);
-    infoLayout->addRow(i18n("Multipass:"), m_multipassCheck);
+    // ── Parameters ──
+    auto* paramHeader = new QHBoxLayout;
+    paramHeader->addWidget(new QLabel(QStringLiteral("<b>%1</b>").arg(i18n("Parameters")), this));
+    paramHeader->addStretch();
 
-    mainLayout->addWidget(infoGroup);
+    auto* addBtn = new QPushButton(i18n("Add..."), this);
+    addBtn->setIcon(QIcon::fromTheme(QStringLiteral("list-add")));
+    paramHeader->addWidget(addBtn);
 
-    // --- Section 2: Parameters ---
-    auto* paramsGroup = new QGroupBox(i18n("Parameters"), contentWidget);
-    auto* paramsLayout = new QVBoxLayout(paramsGroup);
+    mainLayout->addLayout(paramHeader);
 
-    m_paramTable = new QTableWidget(0, 8, paramsGroup);
-    m_paramTable->setHorizontalHeaderLabels({
+    // QTreeWidget — cleaner than QTableWidget, supports variable row height
+    m_paramTree = new QTreeWidget(this);
+    m_paramTree->setHeaderLabels({
         i18n("Name"),
-        i18n("ID"),
         i18n("Type"),
         i18n("Slot"),
         i18n("Default"),
-        i18n("Min"),
-        i18n("Max"),
         i18n("Group"),
     });
-    m_paramTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_paramTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_paramTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_paramTable->horizontalHeader()->setStretchLastSection(true);
-    m_paramTable->verticalHeader()->setVisible(false);
-    m_paramTable->setAlternatingRowColors(true);
-    paramsLayout->addWidget(m_paramTable);
+    m_paramTree->setRootIsDecorated(false);
+    m_paramTree->setAlternatingRowColors(true);
+    m_paramTree->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_paramTree->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_paramTree->header()->setStretchLastSection(true);
+    m_paramTree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    m_paramTree->setMinimumHeight(150);
 
-    auto* buttonLayout = new QHBoxLayout;
-    auto* addBtn = new QPushButton(i18n("Add Parameter"), paramsGroup);
-    auto* removeBtn = new QPushButton(i18n("Remove Parameter"), paramsGroup);
-    auto* insertBtn = new QPushButton(i18n("Insert Uniform"), paramsGroup);
-
-    buttonLayout->addWidget(addBtn);
-    buttonLayout->addWidget(removeBtn);
-    buttonLayout->addStretch();
-    buttonLayout->addWidget(insertBtn);
-    paramsLayout->addLayout(buttonLayout);
-
-    mainLayout->addWidget(paramsGroup);
+    mainLayout->addWidget(m_paramTree, 1);
     mainLayout->addStretch();
 
     scrollArea->setWidget(contentWidget);
@@ -140,20 +131,30 @@ void MetadataEditorWidget::setupUi()
     outerLayout->setContentsMargins(0, 0, 0, 0);
     outerLayout->addWidget(scrollArea);
 
+    // Context menu for parameter tree
+    m_paramContextMenu = new QMenu(this);
+    m_paramContextMenu->addAction(QIcon::fromTheme(QStringLiteral("insert-text")),
+                                  i18n("Insert Uniform"), this, &MetadataEditorWidget::onInsertUniform);
+    m_paramContextMenu->addSeparator();
+    m_paramContextMenu->addAction(QIcon::fromTheme(QStringLiteral("go-up")),
+                                  i18n("Move Up"), this, &MetadataEditorWidget::onMoveParameterUp);
+    m_paramContextMenu->addAction(QIcon::fromTheme(QStringLiteral("go-down")),
+                                  i18n("Move Down"), this, &MetadataEditorWidget::onMoveParameterDown);
+    m_paramContextMenu->addSeparator();
+    m_paramContextMenu->addAction(QIcon::fromTheme(QStringLiteral("edit-delete")),
+                                  i18n("Remove"), this, &MetadataEditorWidget::onRemoveParameter);
+
     connect(addBtn, &QPushButton::clicked, this, &MetadataEditorWidget::onAddParameter);
-    connect(removeBtn, &QPushButton::clicked, this, &MetadataEditorWidget::onRemoveParameter);
-    connect(insertBtn, &QPushButton::clicked, this, &MetadataEditorWidget::onInsertUniform);
+    connect(m_paramTree, &QTreeWidget::customContextMenuRequested, this, &MetadataEditorWidget::showParameterContextMenu);
 }
 
 void MetadataEditorWidget::connectSignals()
 {
-    // Track modifications from all form fields
-    connect(m_idEdit, &QLineEdit::textChanged, this, &MetadataEditorWidget::markModified);
     connect(m_nameEdit, &QLineEdit::textChanged, this, &MetadataEditorWidget::markModified);
-    connect(m_categoryCombo, &QComboBox::currentTextChanged, this, &MetadataEditorWidget::markModified);
+    connect(m_categoryEdit, &QLineEdit::textChanged, this, &MetadataEditorWidget::markModified);
     connect(m_authorEdit, &QLineEdit::textChanged, this, &MetadataEditorWidget::markModified);
     connect(m_versionEdit, &QLineEdit::textChanged, this, &MetadataEditorWidget::markModified);
-    connect(m_descriptionEdit, &QTextEdit::textChanged, this, &MetadataEditorWidget::markModified);
+    connect(m_descriptionEdit, &QLineEdit::textChanged, this, &MetadataEditorWidget::markModified);
     connect(m_multipassCheck, &QCheckBox::toggled, this, &MetadataEditorWidget::markModified);
 }
 
@@ -168,115 +169,116 @@ void MetadataEditorWidget::loadFromJson(const QString& json)
 
     const QJsonObject obj = doc.object();
     m_originalJson = obj;
-
     m_loading = true;
 
     const QString id = obj.value(QStringLiteral("id")).toString();
-    m_idEdit->setText(id);
-
-    // If we have a non-empty ID, this is an existing shader — make ID read-only
     m_isExistingShader = !id.isEmpty();
-    m_idEdit->setReadOnly(m_isExistingShader);
+
+    if (m_isExistingShader) {
+        m_idLabel->setText(id);
+        m_idLabel->setVisible(true);
+        m_idEdit->setVisible(false);
+    } else {
+        m_idEdit->setText(id);
+        m_idLabel->setVisible(false);
+        m_idEdit->setVisible(true);
+    }
 
     m_nameEdit->setText(obj.value(QStringLiteral("name")).toString());
 
-    const QString category = obj.value(QStringLiteral("category")).toString();
-    const int catIdx = m_categoryCombo->findText(category);
-    if (catIdx >= 0) {
-        m_categoryCombo->setCurrentIndex(catIdx);
-    } else {
-        m_categoryCombo->setCurrentText(category);
-    }
+    m_categoryEdit->setText(obj.value(QStringLiteral("category")).toString());
 
     m_authorEdit->setText(obj.value(QStringLiteral("author")).toString());
     m_versionEdit->setText(obj.value(QStringLiteral("version")).toString());
-    m_descriptionEdit->setPlainText(obj.value(QStringLiteral("description")).toString());
-
-    const QString fragShader = obj.value(QStringLiteral("fragmentShader")).toString();
-    if (!fragShader.isEmpty()) {
-        m_fragShaderLabel->setText(fragShader);
-    }
-    const QString vertShader = obj.value(QStringLiteral("vertexShader")).toString();
-    if (!vertShader.isEmpty()) {
-        m_vertShaderLabel->setText(vertShader);
-    }
-
+    m_descriptionEdit->setText(obj.value(QStringLiteral("description")).toString());
     m_multipassCheck->setChecked(obj.value(QStringLiteral("multipass")).toBool(false));
 
     // Load parameters
-    m_paramTable->setRowCount(0);
+    m_paramTree->clear();
     const QJsonArray params = obj.value(QStringLiteral("parameters")).toArray();
     for (const QJsonValue& paramVal : params) {
-        const QJsonObject param = paramVal.toObject();
-        const int row = m_paramTable->rowCount();
-        m_paramTable->insertRow(row);
-
-        const QString type = param.value(QStringLiteral("type")).toString();
-
-        m_paramTable->setItem(row, 0, new QTableWidgetItem(param.value(QStringLiteral("name")).toString()));
-        m_paramTable->setItem(row, 1, new QTableWidgetItem(param.value(QStringLiteral("id")).toString()));
-        m_paramTable->setItem(row, 2, new QTableWidgetItem(type));
-        m_paramTable->setItem(row, 3, new QTableWidgetItem(QString::number(param.value(QStringLiteral("slot")).toInt())));
-
-        // Default value display
-        QString defaultStr;
-        if (type == QLatin1String("bool")) {
-            defaultStr = param.value(QStringLiteral("default")).toBool() ? QStringLiteral("true") : QStringLiteral("false");
-        } else if (type == QLatin1String("color")) {
-            defaultStr = param.value(QStringLiteral("default")).toString();
-        } else {
-            defaultStr = QString::number(param.value(QStringLiteral("default")).toDouble());
-        }
-        m_paramTable->setItem(row, 4, new QTableWidgetItem(defaultStr));
-
-        // Min/Max (empty for bool/color)
-        QString minStr, maxStr;
-        if (type != QLatin1String("bool") && type != QLatin1String("color")) {
-            if (param.contains(QStringLiteral("min"))) {
-                minStr = QString::number(param.value(QStringLiteral("min")).toDouble());
-            }
-            if (param.contains(QStringLiteral("max"))) {
-                maxStr = QString::number(param.value(QStringLiteral("max")).toDouble());
-            }
-        }
-        m_paramTable->setItem(row, 5, new QTableWidgetItem(minStr));
-        m_paramTable->setItem(row, 6, new QTableWidgetItem(maxStr));
-
-        m_paramTable->setItem(row, 7, new QTableWidgetItem(param.value(QStringLiteral("group")).toString()));
-
-        // Store full JSON object in UserRole on the first column item
-        m_paramTable->item(row, 0)->setData(Qt::UserRole, QJsonDocument(param).toJson(QJsonDocument::Compact));
+        addParameterRow(paramVal.toObject());
     }
 
-    m_paramTable->resizeColumnsToContents();
+    for (int i = 0; i < m_paramTree->columnCount(); ++i) {
+        m_paramTree->resizeColumnToContents(i);
+    }
 
     m_loading = false;
     m_modified = false;
 }
 
+void MetadataEditorWidget::addParameterRow(const QJsonObject& param)
+{
+    const QString name = param.value(QStringLiteral("name")).toString();
+    const QString type = param.value(QStringLiteral("type")).toString();
+    const int slot = param.value(QStringLiteral("slot")).toInt(-1);
+    const QString group = param.value(QStringLiteral("group")).toString();
+
+    auto* item = new QTreeWidgetItem(m_paramTree);
+    item->setText(0, name);
+    item->setText(1, type);
+    item->setText(2, QString::number(slot));
+    item->setText(3, formatDefaultValue(param));
+    item->setText(4, group);
+
+    // Store full JSON in UserRole for round-trip fidelity
+    item->setData(0, Qt::UserRole, QJsonDocument(param).toJson(QJsonDocument::Compact));
+
+    // Tooltip shows ID and uniform name
+    const QString id = param.value(QStringLiteral("id")).toString();
+    const QString uniformName = computeUniformName(type, slot);
+    QString tooltip = QStringLiteral("ID: %1").arg(id);
+    if (!uniformName.isEmpty()) {
+        tooltip += QStringLiteral("\nUniform: %1").arg(uniformName);
+    }
+    if (param.contains(QStringLiteral("min")) && param.contains(QStringLiteral("max"))) {
+        tooltip += QStringLiteral("\nRange: %1 – %2")
+                       .arg(param.value(QStringLiteral("min")).toDouble())
+                       .arg(param.value(QStringLiteral("max")).toDouble());
+    }
+    item->setToolTip(0, tooltip);
+    item->setToolTip(1, tooltip);
+    item->setToolTip(2, tooltip);
+}
+
+QString MetadataEditorWidget::formatDefaultValue(const QJsonObject& param)
+{
+    const QString type = param.value(QStringLiteral("type")).toString();
+    const QJsonValue def = param.value(QStringLiteral("default"));
+
+    if (type == QLatin1String("bool")) {
+        return def.toBool() ? QStringLiteral("true") : QStringLiteral("false");
+    }
+    if (type == QLatin1String("color")) {
+        return def.toString();
+    }
+    return QString::number(def.toDouble());
+}
+
 QString MetadataEditorWidget::toJson() const
 {
     QJsonObject obj = m_originalJson;
-    obj[QStringLiteral("id")] = m_idEdit->text().trimmed();
+
+    // ID: from label (existing) or edit field (new)
+    if (m_isExistingShader) {
+        // Preserve original ID
+    } else {
+        obj[QStringLiteral("id")] = m_idEdit->text().trimmed();
+    }
+
     obj[QStringLiteral("name")] = m_nameEdit->text().trimmed();
-    obj[QStringLiteral("category")] = m_categoryCombo->currentText().trimmed();
-    obj[QStringLiteral("description")] = m_descriptionEdit->toPlainText().trimmed();
+    obj[QStringLiteral("category")] = m_categoryEdit->text().trimmed();
+    obj[QStringLiteral("description")] = m_descriptionEdit->text().trimmed();
     obj[QStringLiteral("author")] = m_authorEdit->text().trimmed();
     obj[QStringLiteral("version")] = m_versionEdit->text().trimmed();
-    obj[QStringLiteral("fragmentShader")] = m_fragShaderLabel->text();
-    obj[QStringLiteral("vertexShader")] = m_vertShaderLabel->text();
-
     obj[QStringLiteral("multipass")] = m_multipassCheck->isChecked();
 
-    // Build parameters array from stored JSON in table rows
+    // Build parameters array from tree items
     QJsonArray params;
-    for (int row = 0; row < m_paramTable->rowCount(); ++row) {
-        const QTableWidgetItem* nameItem = m_paramTable->item(row, 0);
-        if (!nameItem) {
-            continue;
-        }
-
-        const QByteArray storedJson = nameItem->data(Qt::UserRole).toByteArray();
+    for (int i = 0; i < m_paramTree->topLevelItemCount(); ++i) {
+        const auto* item = m_paramTree->topLevelItem(i);
+        const QByteArray storedJson = item->data(0, Qt::UserRole).toByteArray();
         if (!storedJson.isEmpty()) {
             QJsonDocument paramDoc = QJsonDocument::fromJson(storedJson);
             if (paramDoc.isObject()) {
@@ -307,21 +309,25 @@ void MetadataEditorWidget::markModified()
     Q_EMIT this->modified();
 }
 
+void MetadataEditorWidget::showParameterContextMenu(const QPoint& pos)
+{
+    if (m_paramTree->topLevelItemCount() == 0) {
+        return;
+    }
+    m_paramContextMenu->exec(m_paramTree->viewport()->mapToGlobal(pos));
+}
+
 void MetadataEditorWidget::onAddParameter()
 {
     // Collect used slots
     QSet<int> usedScalarSlots;
     QSet<int> usedColorSlots;
 
-    for (int row = 0; row < m_paramTable->rowCount(); ++row) {
-        const QTableWidgetItem* typeItem = m_paramTable->item(row, 2);
-        const QTableWidgetItem* slotItem = m_paramTable->item(row, 3);
-        if (!typeItem || !slotItem) {
-            continue;
-        }
-
-        const int slot = slotItem->text().toInt();
-        if (typeItem->text() == QLatin1String("color")) {
+    for (int i = 0; i < m_paramTree->topLevelItemCount(); ++i) {
+        const auto* item = m_paramTree->topLevelItem(i);
+        const QString type = item->text(1);
+        const int slot = item->text(2).toInt();
+        if (type == QLatin1String("color")) {
             usedColorSlots.insert(slot);
         } else {
             usedScalarSlots.insert(slot);
@@ -333,76 +339,62 @@ void MetadataEditorWidget::onAddParameter()
         return;
     }
 
-    const QJsonObject param = dialog.parameterJson();
-    const int row = m_paramTable->rowCount();
-    m_paramTable->insertRow(row);
+    addParameterRow(dialog.parameterJson());
 
-    const QString type = param.value(QStringLiteral("type")).toString();
-
-    m_paramTable->setItem(row, 0, new QTableWidgetItem(param.value(QStringLiteral("name")).toString()));
-    m_paramTable->setItem(row, 1, new QTableWidgetItem(param.value(QStringLiteral("id")).toString()));
-    m_paramTable->setItem(row, 2, new QTableWidgetItem(type));
-    m_paramTable->setItem(row, 3, new QTableWidgetItem(QString::number(param.value(QStringLiteral("slot")).toInt())));
-
-    QString defaultStr;
-    if (type == QLatin1String("bool")) {
-        defaultStr = param.value(QStringLiteral("default")).toBool() ? QStringLiteral("true") : QStringLiteral("false");
-    } else if (type == QLatin1String("color")) {
-        defaultStr = param.value(QStringLiteral("default")).toString();
-    } else {
-        defaultStr = QString::number(param.value(QStringLiteral("default")).toDouble());
+    for (int i = 0; i < m_paramTree->columnCount(); ++i) {
+        m_paramTree->resizeColumnToContents(i);
     }
-    m_paramTable->setItem(row, 4, new QTableWidgetItem(defaultStr));
 
-    QString minStr, maxStr;
-    if (type != QLatin1String("bool") && type != QLatin1String("color")) {
-        if (param.contains(QStringLiteral("min"))) {
-            minStr = QString::number(param.value(QStringLiteral("min")).toDouble());
-        }
-        if (param.contains(QStringLiteral("max"))) {
-            maxStr = QString::number(param.value(QStringLiteral("max")).toDouble());
-        }
-    }
-    m_paramTable->setItem(row, 5, new QTableWidgetItem(minStr));
-    m_paramTable->setItem(row, 6, new QTableWidgetItem(maxStr));
-
-    m_paramTable->setItem(row, 7, new QTableWidgetItem(param.value(QStringLiteral("group")).toString()));
-
-    // Store full JSON
-    m_paramTable->item(row, 0)->setData(Qt::UserRole, QJsonDocument(param).toJson(QJsonDocument::Compact));
-
-    m_paramTable->resizeColumnsToContents();
     markModified();
 }
 
 void MetadataEditorWidget::onRemoveParameter()
 {
-    const int row = m_paramTable->currentRow();
-    if (row < 0) {
+    const auto* item = m_paramTree->currentItem();
+    if (!item) {
         return;
     }
-
-    m_paramTable->removeRow(row);
+    delete item;
     markModified();
 }
 
 void MetadataEditorWidget::onInsertUniform()
 {
-    const int row = m_paramTable->currentRow();
-    if (row < 0) {
+    const auto* item = m_paramTree->currentItem();
+    if (!item) {
         return;
     }
 
-    const QTableWidgetItem* typeItem = m_paramTable->item(row, 2);
-    const QTableWidgetItem* slotItem = m_paramTable->item(row, 3);
-    if (!typeItem || !slotItem) {
-        return;
-    }
-
-    const QString uniformName = computeUniformName(typeItem->text(), slotItem->text().toInt());
+    const QString type = item->text(1);
+    const int slot = item->text(2).toInt();
+    const QString uniformName = computeUniformName(type, slot);
     if (!uniformName.isEmpty()) {
         Q_EMIT insertUniformRequested(uniformName);
     }
+}
+
+void MetadataEditorWidget::onMoveParameterUp()
+{
+    const int index = m_paramTree->indexOfTopLevelItem(m_paramTree->currentItem());
+    if (index <= 0) {
+        return;
+    }
+    auto* item = m_paramTree->takeTopLevelItem(index);
+    m_paramTree->insertTopLevelItem(index - 1, item);
+    m_paramTree->setCurrentItem(item);
+    markModified();
+}
+
+void MetadataEditorWidget::onMoveParameterDown()
+{
+    const int index = m_paramTree->indexOfTopLevelItem(m_paramTree->currentItem());
+    if (index < 0 || index >= m_paramTree->topLevelItemCount() - 1) {
+        return;
+    }
+    auto* item = m_paramTree->takeTopLevelItem(index);
+    m_paramTree->insertTopLevelItem(index + 1, item);
+    m_paramTree->setCurrentItem(item);
+    markModified();
 }
 
 QString MetadataEditorWidget::computeUniformName(const QString& type, int slot)
@@ -414,7 +406,6 @@ QString MetadataEditorWidget::computeUniformName(const QString& type, int slot)
         return QStringLiteral("customColor%1").arg(slot + 1);
     }
 
-    // float, int, bool
     if (slot < 0 || slot > 31) {
         return {};
     }
