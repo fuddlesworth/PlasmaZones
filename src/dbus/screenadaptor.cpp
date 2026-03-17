@@ -52,26 +52,25 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenName)
         return QString();
     }
 
-    for (const auto* screen : Utils::allScreens()) {
-        if (screen->name() == screenName) {
-            QJsonObject info;
-            info[JsonKeys::Name] = screen->name();
-            info[JsonKeys::Manufacturer] = screen->manufacturer();
-            info[JsonKeys::Model] = screen->model();
-            info[JsonKeys::Geometry] = QJsonObject{{JsonKeys::X, screen->geometry().x()},
-                                                   {JsonKeys::Y, screen->geometry().y()},
-                                                   {JsonKeys::Width, screen->geometry().width()},
-                                                   {JsonKeys::Height, screen->geometry().height()}};
-            info[JsonKeys::PhysicalSize] = QJsonObject{{JsonKeys::Width, screen->physicalSize().width()},
-                                                       {JsonKeys::Height, screen->physicalSize().height()}};
-            info[JsonKeys::DevicePixelRatio] = screen->devicePixelRatio();
-            info[JsonKeys::RefreshRate] = screen->refreshRate();
-            info[JsonKeys::Depth] = screen->depth();
-            info[JsonKeys::ScreenId] = Utils::screenIdentifier(screen);
-            info[QLatin1String("serialNumber")] = screen->serialNumber();
+    const QScreen* screen = Utils::findScreenByIdOrName(screenName);
+    if (screen) {
+        QJsonObject info;
+        info[JsonKeys::Name] = screen->name();
+        info[JsonKeys::Manufacturer] = screen->manufacturer();
+        info[JsonKeys::Model] = screen->model();
+        info[JsonKeys::Geometry] = QJsonObject{{JsonKeys::X, screen->geometry().x()},
+                                               {JsonKeys::Y, screen->geometry().y()},
+                                               {JsonKeys::Width, screen->geometry().width()},
+                                               {JsonKeys::Height, screen->geometry().height()}};
+        info[JsonKeys::PhysicalSize] = QJsonObject{{JsonKeys::Width, screen->physicalSize().width()},
+                                                   {JsonKeys::Height, screen->physicalSize().height()}};
+        info[JsonKeys::DevicePixelRatio] = screen->devicePixelRatio();
+        info[JsonKeys::RefreshRate] = screen->refreshRate();
+        info[JsonKeys::Depth] = screen->depth();
+        info[JsonKeys::ScreenId] = Utils::screenIdentifier(screen);
+        info[QLatin1String("serialNumber")] = screen->serialNumber();
 
-            return QString::fromUtf8(QJsonDocument(info).toJson());
-        }
+        return QString::fromUtf8(QJsonDocument(info).toJson());
     }
 
     qCWarning(lcDbus) << "Screen not found:" << screenName;
