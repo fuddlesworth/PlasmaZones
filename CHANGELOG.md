@@ -12,6 +12,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - **Stable EDID-based screen identifiers**: All screen identification now uses stable EDID-based IDs (e.g., `LG Electronics:LG Ultra HD:115107`) instead of connector names (`DP-2`). Monitors survive replug/reboot without losing layout assignments.
 - **Per-screen layout filtering**: Layout cycle shortcuts, layout picker popup, and zone selector now filter layouts based on the focused screen's mode. Snapping screens only show zone layouts; autotile screens only show tiling algorithms.
+- **Per-screen layout locking**: Lock the current layout or tiling algorithm per screen/desktop/activity context. Prevents accidental changes from layout cycling, zone selector, or keyboard shortcuts. Toggle with `Meta+Ctrl+L` shortcut. OSD notification shows lock/unlock state.
+- **Per-mode context-aware locking**: Locking is mode-aware — locking on a snapping screen locks the zone layout, locking on an autotile screen locks the tiling algorithm. Each screen/desktop combination has independent lock state.
+- **Shader parameter locking**: Lock individual shader parameters in the editor to preserve their values during randomize. Locked parameters show a lock icon and are excluded from random generation.
 - **Quick Layout slot labels**: KCM now shows "Quick Layout 1" / "Quick Tiling 1" instead of raw shortcut keys (`Meta+Alt+1`). Shortcut key shown as secondary text.
 - **Hot reload for shaders**: System and user shaders reload automatically on file changes.
 
