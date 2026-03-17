@@ -488,6 +488,15 @@ void WindowTrackingAdaptor::loadState()
     // on the next layout switch. Without this, the daemon starts with defaultLayout()
     // which may differ from the layout the user was on, causing resnap to build its
     // zone-position map from the wrong layout's zones (all entries get pos=0 → empty buffer).
+    //
+    // CRITICAL: Use QSignalBlocker to suppress activeLayoutChanged during restore.
+    // At this point in init, m_layoutManager->currentVirtualDesktop() is still the
+    // default (1) — the real desktop hasn't been set yet (done in Daemon::start()).
+    // If activeLayoutChanged fires, onLayoutChanged() runs stale-assignment removal
+    // using resolveLayoutForScreen() with the wrong desktop, which falls back to
+    // defaultLayout() instead of the restored layout. Zone assignments from the
+    // saved layout get purged because those zones don't exist in defaultLayout().
+    // This is a state restoration, not a real layout switch — no signal needed.
     QString savedActiveLayoutId = tracking.readEntry(QStringLiteral("ActiveLayoutId"), QString());
     if (!savedActiveLayoutId.isEmpty() && m_layoutManager) {
         auto savedUuid = Utils::parseUuid(savedActiveLayoutId);
@@ -495,6 +504,7 @@ void WindowTrackingAdaptor::loadState()
             Layout* savedLayout = m_layoutManager->layoutById(*savedUuid);
             if (savedLayout && savedLayout != m_layoutManager->activeLayout()) {
                 qCInfo(lcDbusWindow) << "Restoring active layout from previous session:" << savedLayout->name();
+                QSignalBlocker blocker(m_layoutManager);
                 m_layoutManager->setActiveLayoutById(*savedUuid);
             }
         }
