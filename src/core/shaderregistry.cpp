@@ -152,37 +152,77 @@ void ShaderRegistry::setupFileWatcher()
 {
     m_watcher = new QFileSystemWatcher(this);
 
-    const QString sysDir = systemShaderDir();
-    if (QDir(sysDir).exists()) {
-        m_watcher->addPath(sysDir);
-        // Watch subdirectories too — QFileSystemWatcher only fires for direct children
-        QDir sysDirObj(sysDir);
-        for (const QString& entry : sysDirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-            m_watcher->addPath(sysDirObj.filePath(entry));
+    auto watchShaderDir = [this](const QString& dir) {
+        if (!QDir(dir).exists()) {
+            return;
         }
-        qCDebug(lcCore) << "Watching system shader directory=" << sysDir;
-    }
+        m_watcher->addPath(dir);
+        QDir dirObj(dir);
+        for (const QString& subdir : dirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            const QString subPath = dirObj.filePath(subdir);
+            m_watcher->addPath(subPath);
+            // Watch individual shader files so content modifications trigger fileChanged.
+            // Directory-level inotify only fires for create/delete/rename, not in-place writes.
+            QDir sub(subPath);
+            const QStringList shaderFiles =
+                sub.entryList(QStringList{QStringLiteral("*.frag"), QStringLiteral("*.vert"), QStringLiteral("*.glsl"),
+                                          QStringLiteral("*.json")},
+                              QDir::Files);
+            for (const QString& file : shaderFiles) {
+                m_watcher->addPath(sub.filePath(file));
+            }
+        }
+        // Also watch top-level shared includes (common.glsl, audio.glsl, etc.)
+        const QStringList topFiles =
+            dirObj.entryList(QStringList{QStringLiteral("*.glsl"), QStringLiteral("*.json")}, QDir::Files);
+        for (const QString& file : topFiles) {
+            m_watcher->addPath(dirObj.filePath(file));
+        }
+        qCInfo(lcCore) << "Watching shader directory=" << dir
+                       << "paths=" << m_watcher->files().size() + m_watcher->directories().size();
+    };
 
+    // Watch ALL shader directories (system + user). locateAll() returns them
+    // in priority order (user first, system last). locate() only returns the
+    // first match which is the user dir — that's why we use locateAll() here.
+    const QStringList allDirs = QStandardPaths::locateAll(
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory);
+    for (const QString& dir : allDirs) {
+        watchShaderDir(dir);
+    }
+    // Also watch the writable user dir even if it has no shaders yet
+    // (user may add custom shaders later)
     const QString userDir = userShaderDir();
-    if (QDir(userDir).exists()) {
-        m_watcher->addPath(userDir);
-        // Watch subdirectories for individual shader changes
-        QDir userDirObj(userDir);
-        for (const QString& entry : userDirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-            m_watcher->addPath(userDirObj.filePath(entry));
-        }
-        qCDebug(lcCore) << "Watching user shader directory=" << userDir;
+    if (!allDirs.contains(userDir)) {
+        watchShaderDir(userDir);
     }
 
     connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, &ShaderRegistry::onUserShaderDirChanged);
-    connect(m_watcher, &QFileSystemWatcher::fileChanged, this, &ShaderRegistry::onUserShaderDirChanged);
+    connect(m_watcher, &QFileSystemWatcher::fileChanged, this, &ShaderRegistry::onShaderFileChanged);
 }
 
 void ShaderRegistry::onUserShaderDirChanged(const QString& path)
 {
-    Q_UNUSED(path)
+    qCInfo(lcCore) << "Shader directory change detected:" << path;
+    scheduleRefresh();
+}
 
-    // Debounce rapid changes (e.g., editor auto-save)
+void ShaderRegistry::onShaderFileChanged(const QString& path)
+{
+    qCInfo(lcCore) << "Shader file change detected:" << path;
+
+    // QFileSystemWatcher drops the watch after atomic rename (new inode).
+    // Re-add the path if the file still exists so future edits are caught.
+    if (QFile::exists(path) && m_watcher && !m_watcher->files().contains(path)) {
+        m_watcher->addPath(path);
+    }
+
+    scheduleRefresh();
+}
+
+void ShaderRegistry::scheduleRefresh()
+{
+    // Debounce rapid changes (e.g., editor auto-save, cmake --install batch)
     if (!m_refreshTimer) {
         m_refreshTimer = new QTimer(this);
         m_refreshTimer->setSingleShot(true);
@@ -197,6 +237,53 @@ void ShaderRegistry::performDebouncedRefresh()
 {
     qCInfo(lcCore) << "Shader directory changed, refreshing...";
     refresh();
+    reWatchShaderFiles();
+}
+
+void ShaderRegistry::reWatchShaderFiles()
+{
+    if (!m_watcher) {
+        return;
+    }
+
+    // After a refresh (which may follow delete+recreate installs), re-add any
+    // shader files that lost their inotify watch due to inode replacement.
+    auto reWatch = [this](const QString& dir) {
+        if (!QDir(dir).exists()) {
+            return;
+        }
+        QDir dirObj(dir);
+        for (const QString& subdir : dirObj.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            QDir sub(dirObj.filePath(subdir));
+            const QStringList files = sub.entryList(QStringList{QStringLiteral("*.frag"), QStringLiteral("*.vert"),
+                                                                QStringLiteral("*.glsl"), QStringLiteral("*.json")},
+                                                    QDir::Files);
+            for (const QString& file : files) {
+                const QString fullPath = sub.filePath(file);
+                if (!m_watcher->files().contains(fullPath)) {
+                    m_watcher->addPath(fullPath);
+                }
+            }
+        }
+        const QStringList topFiles =
+            dirObj.entryList(QStringList{QStringLiteral("*.glsl"), QStringLiteral("*.json")}, QDir::Files);
+        for (const QString& file : topFiles) {
+            const QString fullPath = dirObj.filePath(file);
+            if (!m_watcher->files().contains(fullPath)) {
+                m_watcher->addPath(fullPath);
+            }
+        }
+    };
+
+    const QStringList allDirs = QStandardPaths::locateAll(
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory);
+    for (const QString& dir : allDirs) {
+        reWatch(dir);
+    }
+    const QString userDir = userShaderDir();
+    if (!allDirs.contains(userDir)) {
+        reWatch(userDir);
+    }
 }
 
 void ShaderRegistry::refresh()

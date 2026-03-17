@@ -21,6 +21,11 @@ Item {
 
     signal shaderError(string log)
 
+    // Force re-read of shader source from disk (hot-reload)
+    function loadShader() {
+        zoneShaderItem.loadShader();
+    }
+
     ZoneShaderItem {
         id: zoneShaderItem
 

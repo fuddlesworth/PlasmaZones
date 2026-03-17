@@ -213,6 +213,7 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void onUserShaderDirChanged(const QString& path);
+    void onShaderFileChanged(const QString& path);
     void performDebouncedRefresh();
 
 private:
@@ -222,6 +223,8 @@ private:
     ShaderInfo loadShaderMetadata(const QString& shaderDir);
     bool validateParameterValue(const ParameterInfo& param, const QVariant& value) const;
     void setupFileWatcher();
+    void scheduleRefresh();
+    void reWatchShaderFiles();
     void ensureUserShaderDirExists() const;
     QVariantMap shaderInfoToVariantMap(const ShaderInfo& info) const;
     QVariantMap parameterInfoToVariantMap(const ParameterInfo& param) const;

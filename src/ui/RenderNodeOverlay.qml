@@ -95,6 +95,11 @@ Window {
         return -1;
     }
 
+    // Force shader re-read from disk (called by C++ on file change)
+    function loadShader() {
+        zoneShaderRenderer.loadShader();
+    }
+
     // Window flags - LayerShellQt handles the overlay behavior on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"

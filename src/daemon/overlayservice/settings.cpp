@@ -7,6 +7,7 @@
 #include "../../core/logging.h"
 #include "../../core/layout.h"
 #include "../../core/layoutmanager.h"
+#include "../../core/shaderregistry.h"
 #include "../../core/utils.h"
 #include <QQuickWindow>
 #include <QScreen>
@@ -23,6 +24,10 @@ void OverlayService::setSettings(ISettings* settings)
             disconnect(m_settings, &ISettings::enableAudioVisualizerChanged, this, nullptr);
             disconnect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, nullptr);
             disconnect(m_settings, &ISettings::shaderFrameRateChanged, this, nullptr);
+        }
+        // Disconnect old ShaderRegistry connection (if any) to prevent duplicates
+        if (auto* registry = ShaderRegistry::instance()) {
+            disconnect(registry, &ShaderRegistry::shadersChanged, this, nullptr);
         }
 
         m_settings = settings;
@@ -118,6 +123,27 @@ void OverlayService::setSettings(ISettings* settings)
                     m_cavaService->setFramerate(m_settings->shaderFrameRate());
                 }
             });
+
+            // Hot-reload shaders when files change on disk.
+            // ShaderRegistry detects file changes via QFileSystemWatcher and emits
+            // shadersChanged(). We tell each overlay window's ZoneShaderItem to
+            // re-read its source from disk by invoking loadShader().
+            if (auto* registry = ShaderRegistry::instance()) {
+                connect(registry, &ShaderRegistry::shadersChanged, this, [this]() {
+                    if (!m_settings || !m_settings->enableShaderEffects()) {
+                        return;
+                    }
+                    qCInfo(lcOverlay) << "Shader files changed on disk, triggering hot-reload";
+                    for (auto* window : std::as_const(m_overlayWindows)) {
+                        if (window && window->property("isShaderOverlay").toBool()) {
+                            QMetaObject::invokeMethod(window, "loadShader");
+                        }
+                    }
+                    if (m_shaderPreviewWindow && m_shaderPreviewWindow->property("isShaderOverlay").toBool()) {
+                        QMetaObject::invokeMethod(m_shaderPreviewWindow, "loadShader");
+                    }
+                });
+            }
 
             // Eagerly start CAVA at daemon boot so spectrum data is warm when overlay shows
             if (m_settings->enableAudioVisualizer() && m_cavaService) {
