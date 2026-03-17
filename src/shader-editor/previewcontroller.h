@@ -64,6 +64,7 @@ public:
     Q_INVOKABLE void recompile();
     Q_INVOKABLE void setPreviewSize(int width, int height);
     void loadDefaultParamsFromMetadata(const QString& metadataJson);
+    void setShaderParams(const QVariantMap& params);
 
     // Called from QML when ZoneShaderItem status/error changes
     Q_INVOKABLE void onShaderStatus(int status, const QString& error);

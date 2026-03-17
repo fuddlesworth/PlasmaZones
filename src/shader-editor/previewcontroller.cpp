@@ -215,6 +215,14 @@ void PreviewController::recompile()
     writeExpandedShader();
 }
 
+void PreviewController::setShaderParams(const QVariantMap& params)
+{
+    if (m_shaderParams != params) {
+        m_shaderParams = params;
+        Q_EMIT shaderParamsChanged();
+    }
+}
+
 void PreviewController::onShaderStatus(int status, const QString& error)
 {
     bool changed = false;
@@ -424,7 +432,8 @@ void PreviewController::loadDefaultParamsFromMetadata(const QString& metadataJso
 
 void PreviewController::setPreviewSize(int width, int height)
 {
-    if (width <= 0 || height <= 0) {
+    constexpr int minSize = 20;
+    if (width < minSize || height < minSize) {
         return;
     }
     if (m_previewWidth == width && m_previewHeight == height) {

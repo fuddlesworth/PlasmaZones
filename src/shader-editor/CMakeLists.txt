@@ -9,6 +9,12 @@ set(plasmazones_shader_editor_SRCS
     shaderpackageio.h
     previewcontroller.cpp
     previewcontroller.h
+    metadataeditorwidget.cpp
+    metadataeditorwidget.h
+    addparameterdialog.cpp
+    addparameterdialog.h
+    parameterpanel.cpp
+    parameterpanel.h
 )
 
 # QML resources for live preview pane

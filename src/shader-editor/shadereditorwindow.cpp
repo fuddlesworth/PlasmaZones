@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "shadereditorwindow.h"
+#include "metadataeditorwidget.h"
+#include "parameterpanel.h"
 #include "previewcontroller.h"
 #include "shaderpackageio.h"
 
@@ -70,17 +72,17 @@ ShaderEditorWindow::ShaderEditorWindow(QWidget* parent)
         m_tabWidget->removeTab(index);
         if (doc) {
             m_ownedDocuments.removeOne(doc);
-            delete doc; // deleting doc also deletes its views
+            delete doc;
         }
 
         updateWindowTitle();
     });
 
-    setupPreview();
+    setupLayout();
     setupMenuBar();
     setupStatusBar();
 
-    resize(1400, 800);
+    resize(1400, 900);
     updateWindowTitle();
 }
 
@@ -93,7 +95,6 @@ bool ShaderEditorWindow::isValid() const
 
 void ShaderEditorWindow::setupMenuBar()
 {
-    // File menu
     auto* fileMenu = menuBar()->addMenu(i18n("&File"));
 
     auto* newAction = fileMenu->addAction(i18n("&New Shader Package"));
@@ -127,10 +128,6 @@ void ShaderEditorWindow::setupMenuBar()
     auto* quitAction = fileMenu->addAction(i18n("&Quit"));
     quitAction->setShortcut(QKeySequence::Quit);
     connect(quitAction, &QAction::triggered, this, &QMainWindow::close);
-
-    // Edit menu — KTextEditor views provide their own edit actions (undo, redo,
-    // cut, copy, paste, find, replace) via the right-click context menu and
-    // standard keyboard shortcuts. No need to duplicate them here.
 }
 
 void ShaderEditorWindow::setupStatusBar()
@@ -145,10 +142,12 @@ void ShaderEditorWindow::setupStatusBar()
     m_cursorLabel->setText(QString());
 }
 
-void ShaderEditorWindow::setupPreview()
+void ShaderEditorWindow::setupLayout()
 {
+    // ── Preview controller (shared between preview pane and metadata editor) ──
     m_previewController = new PreviewController(this);
 
+    // ── Preview widget (QQuickWidget hosting QML with ZoneShaderItem) ──
     m_previewWidget = new QQuickWidget(this);
     m_previewWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
     m_previewWidget->engine()->rootContext()->setContextProperty(
@@ -159,23 +158,27 @@ void ShaderEditorWindow::setupPreview()
             for (const auto& error : errors) {
                 qCWarning(lcShaderEditor) << "Preview QML error:" << error.toString();
             }
-        } else if (status == QQuickWidget::Ready) {
-            qCInfo(lcShaderEditor) << "Preview QML loaded successfully";
         }
     });
-
     m_previewWidget->setSource(QUrl(QStringLiteral("qrc:/qml/PreviewPane.qml")));
+    m_previewWidget->setMinimumHeight(200);
 
-    m_previewWidget->setMinimumWidth(300);
+    // ── Right vertical splitter: preview (top) + metadata editor (bottom) ──
+    m_rightSplitter = new QSplitter(Qt::Vertical, this);
+    m_rightSplitter->addWidget(m_previewWidget);
+    // Right panel tabs added later when a package is opened (setupRightPanel)
+    m_rightSplitter->setStretchFactor(0, 3);  // preview gets more space initially
 
-    // Use splitter for editor tabs + live preview
-    m_splitter = new QSplitter(Qt::Horizontal, this);
-    m_splitter->addWidget(m_tabWidget);
-    m_splitter->addWidget(m_previewWidget);
-    m_splitter->setStretchFactor(0, 3); // editor gets ~60%
-    m_splitter->setStretchFactor(1, 2); // preview gets ~40%
+    // ── Main horizontal splitter: code (left) + right panel ──
+    m_mainSplitter = new QSplitter(Qt::Horizontal, this);
+    m_mainSplitter->addWidget(m_tabWidget);
+    m_mainSplitter->addWidget(m_rightSplitter);
+    m_mainSplitter->setStretchFactor(0, 3);  // code editor ~55%
+    m_mainSplitter->setStretchFactor(1, 2);  // right panel ~45%
 
-    setCentralWidget(m_splitter);
+    m_rightSplitter->setMinimumWidth(350);
+
+    setCentralWidget(m_mainSplitter);
 }
 
 void ShaderEditorWindow::connectDocumentToPreview(const QString& filename, KTextEditor::Document* doc)
@@ -206,8 +209,93 @@ void ShaderEditorWindow::addDocumentTab(const QString& filename, const QString& 
         updateWindowTitle();
     });
 
-    // Connect document to live preview if it's a shader file
     connectDocumentToPreview(filename, doc);
+}
+
+void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
+{
+    // Remove old tab widget if any (this deletes m_parameterPanel and m_metadataEditor as children)
+    if (m_rightTabWidget) {
+        delete m_rightTabWidget;
+        m_rightTabWidget = nullptr;
+        m_parameterPanel = nullptr;
+        m_metadataEditor = nullptr;
+    }
+
+    m_rightTabWidget = new QTabWidget(m_rightSplitter);
+    m_rightSplitter->addWidget(m_rightTabWidget);
+    m_rightSplitter->setStretchFactor(0, 3);  // preview
+    m_rightSplitter->setStretchFactor(1, 2);  // tabs
+
+    // Parameters tab
+    m_parameterPanel = new ParameterPanel(m_rightTabWidget);
+    m_parameterPanel->loadFromMetadata(metadataJson);
+    m_rightTabWidget->addTab(m_parameterPanel, i18n("Parameters"));
+
+    // Metadata tab
+    m_metadataEditor = new MetadataEditorWidget(m_rightTabWidget);
+    m_metadataEditor->loadFromJson(metadataJson);
+    m_rightTabWidget->addTab(m_metadataEditor, i18n("Metadata"));
+
+    // Presets tab (stub)
+    auto* presetsWidget = new QWidget(m_rightTabWidget);
+    auto* presetsLayout = new QVBoxLayout(presetsWidget);
+    presetsLayout->addWidget(new QLabel(i18n("Presets coming soon..."), presetsWidget));
+    presetsLayout->addStretch();
+    m_rightTabWidget->addTab(presetsWidget, i18n("Presets"));
+
+    // Connect parameter changes to live preview
+    connect(m_parameterPanel, &ParameterPanel::parameterChanged, this, [this]() {
+        m_previewController->setShaderParams(m_parameterPanel->currentUniformValues());
+    });
+
+    // Connect insert uniform from both panels
+    connect(m_parameterPanel, &ParameterPanel::insertUniformRequested,
+            this, &ShaderEditorWindow::insertTextAtCursor);
+    connect(m_metadataEditor, &MetadataEditorWidget::insertUniformRequested,
+            this, &ShaderEditorWindow::insertTextAtCursor);
+
+    // Connect metadata changes -> update preview params + parameter panel
+    connect(m_metadataEditor, &MetadataEditorWidget::modified, this, [this]() {
+        updateWindowTitle();
+        if (m_metadataEditor && m_parameterPanel) {
+            const QString json = m_metadataEditor->toJson();
+            m_previewController->loadDefaultParamsFromMetadata(json);
+            m_parameterPanel->loadFromMetadata(json);
+        }
+    });
+
+    // Reset All -> reload defaults from metadata
+    connect(m_parameterPanel, &ParameterPanel::resetRequested, this, [this]() {
+        if (m_metadataEditor) {
+            m_parameterPanel->loadFromMetadata(m_metadataEditor->toJson());
+            m_previewController->setShaderParams(m_parameterPanel->currentUniformValues());
+        }
+    });
+
+    // Apply button -> update preview with current param values
+    connect(m_parameterPanel, &ParameterPanel::applyRequested, this, [this]() {
+        m_previewController->setShaderParams(m_parameterPanel->currentUniformValues());
+    });
+}
+
+void ShaderEditorWindow::insertTextAtCursor(const QString& text)
+{
+    const int idx = m_tabWidget->currentIndex();
+    auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->widget(idx));
+    if (!view) {
+        // Try the first shader tab
+        for (int i = 0; i < m_tabWidget->count(); ++i) {
+            view = qobject_cast<KTextEditor::View*>(m_tabWidget->widget(i));
+            if (view) {
+                m_tabWidget->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+    if (view) {
+        view->document()->insertText(view->cursorPosition(), text);
+    }
 }
 
 void ShaderEditorWindow::newShaderPackage()
@@ -229,7 +317,6 @@ void ShaderEditorWindow::newShaderPackage()
         return;
     }
 
-    // Generate a filesystem-safe ID from the name
     QString shaderId = shaderName.toLower();
     static const QRegularExpression nonAlnum(QStringLiteral("[^a-z0-9]+"));
     static const QRegularExpression leadTrailDash(QStringLiteral("^-|-$"));
@@ -243,20 +330,21 @@ void ShaderEditorWindow::newShaderPackage()
 
     const ShaderPackageContents contents = ShaderPackageIO::createTemplate(shaderId, shaderName);
 
-    // Add metadata.json tab
-    addDocumentTab(QStringLiteral("metadata.json"), contents.metadataJson, QStringLiteral("JSON"));
+    // Metadata editor in the right panel (below preview)
+    setupRightPanel(contents.metadataJson);
 
-    // Add shader file tabs
+    // Shader file tabs in the left panel
     for (const ShaderFile& sf : contents.files) {
         addDocumentTab(sf.filename, sf.content, QStringLiteral("GLSL"));
     }
 
     m_packagePath.clear();
     m_isNewPackage = true;
-    m_tabWidget->setCurrentIndex(0);
+    if (m_tabWidget->count() > 0) {
+        m_tabWidget->setCurrentIndex(0);
+    }
     updateWindowTitle();
 
-    // New package has no directory yet; includes resolve from system dir only
     m_previewController->setShaderDirectory(QString());
 
     qCInfo(lcShaderEditor) << "Created new shader package name=" << shaderName << "id=" << shaderId;
@@ -268,7 +356,6 @@ void ShaderEditorWindow::openShaderPackage(const QString& path)
         return;
     }
 
-    // Resolve to absolute path (handles relative CLI paths like "data/shaders/cosmic-flow")
     const QString absPath = QFileInfo(path).absoluteFilePath();
 
     const ShaderPackageContents contents = ShaderPackageIO::loadPackage(absPath);
@@ -280,25 +367,25 @@ void ShaderEditorWindow::openShaderPackage(const QString& path)
 
     closeAllTabs();
 
-    // Add metadata.json tab
+    // Metadata editor in the right panel (below preview)
     if (!contents.metadataJson.isEmpty()) {
-        addDocumentTab(QStringLiteral("metadata.json"), contents.metadataJson, QStringLiteral("JSON"));
+        setupRightPanel(contents.metadataJson);
     }
 
-    // Add shader file tabs
+    // Shader file tabs in the left panel
     for (const ShaderFile& sf : contents.files) {
         addDocumentTab(sf.filename, sf.content, QStringLiteral("GLSL"));
     }
 
     m_packagePath = absPath;
     m_isNewPackage = false;
-    m_tabWidget->setCurrentIndex(0);
+    if (m_tabWidget->count() > 0) {
+        m_tabWidget->setCurrentIndex(0);
+    }
     updateWindowTitle();
 
-    // Set shader directory for #include resolution in live preview
     m_previewController->setShaderDirectory(absPath);
 
-    // Load default shader parameters from metadata.json for preview
     if (!contents.metadataJson.isEmpty()) {
         m_previewController->loadDefaultParamsFromMetadata(contents.metadataJson);
     }
@@ -327,26 +414,28 @@ void ShaderEditorWindow::saveShaderPackage()
     ShaderPackageContents contents;
     contents.dirPath = m_packagePath;
 
+    if (m_metadataEditor) {
+        contents.metadataJson = m_metadataEditor->toJson();
+    }
+
     for (int i = 0; i < m_tabWidget->count(); ++i) {
         auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->widget(i));
         if (!view) continue;
         auto* doc = view->document();
         if (!doc) continue;
 
-        const QString tabName = m_tabWidget->tabText(i);
-        if (tabName == QLatin1String("metadata.json")) {
-            contents.metadataJson = doc->text();
-        } else {
-            ShaderFile sf;
-            sf.filename = tabName;
-            sf.content = doc->text();
-            contents.files.append(sf);
-        }
+        ShaderFile sf;
+        sf.filename = m_tabWidget->tabText(i);
+        sf.content = doc->text();
+        contents.files.append(sf);
     }
 
     if (ShaderPackageIO::savePackage(m_packagePath, contents)) {
         for (auto* doc : m_ownedDocuments) {
             doc->setModified(false);
+        }
+        if (m_metadataEditor) {
+            m_metadataEditor->setModified(false);
         }
         statusBar()->showMessage(i18n("Shader package saved to %1", m_packagePath), 3000);
         qCInfo(lcShaderEditor) << "Saved shader package to=" << m_packagePath;
@@ -361,26 +450,19 @@ void ShaderEditorWindow::saveShaderPackageAs()
     QString startDir = m_packagePath;
     if (startDir.isEmpty()) {
         startDir = ShaderPackageIO::userShaderDirectory();
-        for (int i = 0; i < m_tabWidget->count(); ++i) {
-            if (m_tabWidget->tabText(i) == QLatin1String("metadata.json")) {
-                auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->widget(i));
-                if (view) {
-                    QJsonDocument jsonDoc = QJsonDocument::fromJson(view->document()->text().toUtf8());
-                    if (jsonDoc.isObject()) {
-                        const QString id = jsonDoc.object().value(QStringLiteral("id")).toString();
-                        if (!id.isEmpty()) startDir += QStringLiteral("/") + id;
-                    }
+        if (m_metadataEditor) {
+            QJsonDocument jsonDoc = QJsonDocument::fromJson(m_metadataEditor->toJson().toUtf8());
+            if (jsonDoc.isObject()) {
+                const QString id = jsonDoc.object().value(QStringLiteral("id")).toString();
+                if (!id.isEmpty()) {
+                    startDir += QStringLiteral("/") + id;
                 }
-                break;
             }
         }
     }
 
     const QString dir = QFileDialog::getExistingDirectory(
-        this,
-        i18n("Save Shader Package To Directory"),
-        startDir);
-
+        this, i18n("Save Shader Package To Directory"), startDir);
     if (dir.isEmpty()) {
         return;
     }
@@ -432,6 +514,8 @@ void ShaderEditorWindow::updateStatusBar()
     if (view) {
         auto cursor = view->cursorPosition();
         m_cursorLabel->setText(i18n("Line %1, Col %2", cursor.line() + 1, cursor.column() + 1));
+    } else {
+        m_cursorLabel->setText(QString());
     }
 }
 
@@ -459,6 +543,9 @@ bool ShaderEditorWindow::promptSaveIfModified()
 
 bool ShaderEditorWindow::hasUnsavedChanges() const
 {
+    if (m_metadataEditor && m_metadataEditor->isModified()) {
+        return true;
+    }
     for (auto* doc : m_ownedDocuments) {
         if (doc->isModified()) return true;
     }
@@ -467,9 +554,18 @@ bool ShaderEditorWindow::hasUnsavedChanges() const
 
 void ShaderEditorWindow::closeAllTabs()
 {
+    // Clear code editor tabs
     m_tabWidget->clear();
     qDeleteAll(m_ownedDocuments);
     m_ownedDocuments.clear();
+
+    // Remove right panel tab widget (deletes m_parameterPanel and m_metadataEditor as children)
+    if (m_rightTabWidget) {
+        delete m_rightTabWidget;
+        m_rightTabWidget = nullptr;
+        m_parameterPanel = nullptr;
+        m_metadataEditor = nullptr;
+    }
 }
 
 void ShaderEditorWindow::closeEvent(QCloseEvent* event)
@@ -488,13 +584,11 @@ QString ShaderEditorWindow::resolveShaderPath(const QString& shaderId) const
         return {};
     }
 
-    // Check user shader directory first
     const QString userDir = ShaderPackageIO::userShaderDirectory() + QStringLiteral("/") + shaderId;
     if (QDir(userDir).exists() && QFile::exists(userDir + QStringLiteral("/metadata.json"))) {
         return userDir;
     }
 
-    // Check system shader directory
     const QString sysDir = ShaderPackageIO::systemShaderDirectory();
     if (!sysDir.isEmpty()) {
         const QString systemPath = sysDir + QStringLiteral("/") + shaderId;
