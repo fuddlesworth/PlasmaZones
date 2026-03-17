@@ -7,7 +7,12 @@ set(plasmazones_shader_editor_SRCS
     shadereditorwindow.h
     shaderpackageio.cpp
     shaderpackageio.h
+    previewcontroller.cpp
+    previewcontroller.h
 )
+
+# QML resources for live preview pane
+qt_add_resources(plasmazones_shader_editor_SRCS qml/resources.qrc)
 
 add_executable(plasmazones-shader-editor ${plasmazones_shader_editor_SRCS})
 
@@ -16,6 +21,9 @@ target_link_libraries(plasmazones-shader-editor
         plasmazones_core
         plasmazones_rendering
         Qt6::Widgets
+        Qt6::Quick
+        Qt6::QuickWidgets
+        Qt6::QuickControls2
         KF6::TextEditor
         KF6::I18n
         KF6::CoreAddons

@@ -88,6 +88,7 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
     Core
     Quick
     QuickControls2
+    QuickWidgets
     Gui
     DBus
     Widgets

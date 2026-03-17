@@ -9,6 +9,8 @@
 #include <QString>
 
 class QLabel;
+class QQuickWidget;
+class QSplitter;
 class QTabWidget;
 
 namespace KTextEditor {
@@ -18,6 +20,8 @@ class View;
 }
 
 namespace PlasmaZones {
+
+class PreviewController;
 
 class ShaderEditorWindow : public QMainWindow
 {
@@ -41,7 +45,9 @@ protected:
 private:
     void setupMenuBar();
     void setupStatusBar();
+    void setupPreview();
     void addDocumentTab(const QString& filename, const QString& content, const QString& highlightMode);
+    void connectDocumentToPreview(const QString& filename, KTextEditor::Document* doc);
     void updateWindowTitle();
     void updateStatusBar();
     bool promptSaveIfModified();
@@ -51,9 +57,14 @@ private:
 
     KTextEditor::Editor* m_editor = nullptr;
     QTabWidget* m_tabWidget = nullptr;
+    QSplitter* m_splitter = nullptr;
     QList<KTextEditor::Document*> m_ownedDocuments;
     QString m_packagePath;
     bool m_isNewPackage = false;
+
+    // Live preview
+    PreviewController* m_previewController = nullptr;
+    QQuickWidget* m_previewWidget = nullptr;
 
     // Status bar widgets
     QLabel* m_fileLabel = nullptr;

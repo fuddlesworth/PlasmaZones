@@ -5,12 +5,15 @@
 
 #include "shadereditorwindow.h"
 #include "../core/constants.h"
+#include "../daemon/rendering/zoneshaderitem.h"
 #include "version.h"
 
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QFile>
 #include <QIcon>
+#include <QQuickStyle>
+#include <QtQml/qqml.h>
 
 #include <KAboutData>
 #include <KLocalizedString>
@@ -71,6 +74,12 @@ int main(int argc, char* argv[])
     if (modeCount > 1) {
         qWarning() << "--shader, --path, and --new are mutually exclusive; --shader takes precedence, then --path";
     }
+
+    // Set QML style for the embedded preview widget
+    QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
+
+    // Register ZoneShaderItem QML type (used by the live preview pane)
+    qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
     ShaderEditorWindow window;
     if (!window.isValid()) {

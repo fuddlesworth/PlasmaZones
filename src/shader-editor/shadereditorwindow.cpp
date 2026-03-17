@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "shadereditorwindow.h"
+#include "previewcontroller.h"
 #include "shaderpackageio.h"
 
 #include <QAction>
 #include <QDir>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QInputDialog>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -15,7 +17,11 @@
 #include <QLoggingCategory>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QQmlContext>
+#include <QQmlEngine>
+#include <QQuickWidget>
 #include <QRegularExpression>
+#include <QSplitter>
 #include <QStatusBar>
 #include <QTabWidget>
 
@@ -40,7 +46,6 @@ ShaderEditorWindow::ShaderEditorWindow(QWidget* parent)
     m_tabWidget = new QTabWidget(this);
     m_tabWidget->setTabsClosable(true);
     m_tabWidget->setMovable(true);
-    setCentralWidget(m_tabWidget);
 
     connect(m_tabWidget, &QTabWidget::currentChanged, this, &ShaderEditorWindow::updateStatusBar);
     connect(m_tabWidget, &QTabWidget::tabCloseRequested, this, [this](int index) {
@@ -71,10 +76,11 @@ ShaderEditorWindow::ShaderEditorWindow(QWidget* parent)
         updateWindowTitle();
     });
 
+    setupPreview();
     setupMenuBar();
     setupStatusBar();
 
-    resize(900, 700);
+    resize(1400, 800);
     updateWindowTitle();
 }
 
@@ -139,6 +145,48 @@ void ShaderEditorWindow::setupStatusBar()
     m_cursorLabel->setText(QString());
 }
 
+void ShaderEditorWindow::setupPreview()
+{
+    m_previewController = new PreviewController(this);
+
+    m_previewWidget = new QQuickWidget(this);
+    m_previewWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
+    m_previewWidget->engine()->rootContext()->setContextProperty(
+        QStringLiteral("previewController"), m_previewController);
+    connect(m_previewWidget, &QQuickWidget::statusChanged, this, [this](QQuickWidget::Status status) {
+        if (status == QQuickWidget::Error) {
+            const auto errors = m_previewWidget->errors();
+            for (const auto& error : errors) {
+                qCWarning(lcShaderEditor) << "Preview QML error:" << error.toString();
+            }
+        } else if (status == QQuickWidget::Ready) {
+            qCInfo(lcShaderEditor) << "Preview QML loaded successfully";
+        }
+    });
+
+    m_previewWidget->setSource(QUrl(QStringLiteral("qrc:/qml/PreviewPane.qml")));
+
+    m_previewWidget->setMinimumWidth(300);
+
+    // Use splitter for editor tabs + live preview
+    m_splitter = new QSplitter(Qt::Horizontal, this);
+    m_splitter->addWidget(m_tabWidget);
+    m_splitter->addWidget(m_previewWidget);
+    m_splitter->setStretchFactor(0, 3); // editor gets ~60%
+    m_splitter->setStretchFactor(1, 2); // preview gets ~40%
+
+    setCentralWidget(m_splitter);
+}
+
+void ShaderEditorWindow::connectDocumentToPreview(const QString& filename, KTextEditor::Document* doc)
+{
+    if (filename.endsWith(QLatin1String(".frag"))) {
+        m_previewController->setFragmentDocument(doc);
+    } else if (filename.endsWith(QLatin1String(".vert"))) {
+        m_previewController->setVertexDocument(doc);
+    }
+}
+
 void ShaderEditorWindow::addDocumentTab(const QString& filename, const QString& content,
                                         const QString& highlightMode)
 {
@@ -157,6 +205,9 @@ void ShaderEditorWindow::addDocumentTab(const QString& filename, const QString& 
     connect(doc, &KTextEditor::Document::modifiedChanged, this, [this](KTextEditor::Document*) {
         updateWindowTitle();
     });
+
+    // Connect document to live preview if it's a shader file
+    connectDocumentToPreview(filename, doc);
 }
 
 void ShaderEditorWindow::newShaderPackage()
@@ -205,6 +256,9 @@ void ShaderEditorWindow::newShaderPackage()
     m_tabWidget->setCurrentIndex(0);
     updateWindowTitle();
 
+    // New package has no directory yet; includes resolve from system dir only
+    m_previewController->setShaderDirectory(QString());
+
     qCInfo(lcShaderEditor) << "Created new shader package name=" << shaderName << "id=" << shaderId;
 }
 
@@ -214,10 +268,13 @@ void ShaderEditorWindow::openShaderPackage(const QString& path)
         return;
     }
 
-    const ShaderPackageContents contents = ShaderPackageIO::loadPackage(path);
+    // Resolve to absolute path (handles relative CLI paths like "data/shaders/cosmic-flow")
+    const QString absPath = QFileInfo(path).absoluteFilePath();
+
+    const ShaderPackageContents contents = ShaderPackageIO::loadPackage(absPath);
     if (contents.metadataJson.isEmpty() && contents.files.isEmpty()) {
         QMessageBox::warning(this, i18n("Error"),
-                             i18n("Failed to load shader package from:\n%1", path));
+                             i18n("Failed to load shader package from:\n%1", absPath));
         return;
     }
 
@@ -233,12 +290,20 @@ void ShaderEditorWindow::openShaderPackage(const QString& path)
         addDocumentTab(sf.filename, sf.content, QStringLiteral("GLSL"));
     }
 
-    m_packagePath = path;
+    m_packagePath = absPath;
     m_isNewPackage = false;
     m_tabWidget->setCurrentIndex(0);
     updateWindowTitle();
 
-    qCInfo(lcShaderEditor) << "Opened shader package from=" << path;
+    // Set shader directory for #include resolution in live preview
+    m_previewController->setShaderDirectory(absPath);
+
+    // Load default shader parameters from metadata.json for preview
+    if (!contents.metadataJson.isEmpty()) {
+        m_previewController->loadDefaultParamsFromMetadata(contents.metadataJson);
+    }
+
+    qCInfo(lcShaderEditor) << "Opened shader package from=" << absPath;
 }
 
 void ShaderEditorWindow::openShaderById(const QString& shaderId)
