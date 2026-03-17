@@ -77,12 +77,21 @@ Kirigami.Card {
                     anchors.margins: Kirigami.Units.smallSpacing
                     spacing: Kirigami.Units.smallSpacing
 
-                    // Shortcut display
-                    Label {
-                        text: slotDelegate.shortcutText !== "" ? slotDelegate.shortcutText : i18n("Not assigned")
+                    // Slot label + shortcut
+                    ColumnLayout {
                         Layout.preferredWidth: Kirigami.Units.gridUnit * 14
-                        font.family: "monospace"
-                        opacity: slotDelegate.shortcutText !== "" ? 1 : 0.6
+                        spacing: 0
+
+                        Label {
+                            text: root.viewMode === 1 ? i18n("Quick Tiling %1", slotDelegate.slotNumber) : i18n("Quick Layout %1", slotDelegate.slotNumber)
+                        }
+
+                        Label {
+                            text: slotDelegate.shortcutText !== "" ? slotDelegate.shortcutText : i18n("No shortcut assigned")
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            opacity: slotDelegate.shortcutText !== "" ? 0.7 : 0.4
+                        }
+
                     }
 
                     Item {

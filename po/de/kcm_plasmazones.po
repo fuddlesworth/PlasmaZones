@@ -6,8 +6,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: kcm_plasmazones\n"
-"Report-Msgid-Bugs-To: https://github.com/fuddlesworth/PlasmaZones/issues\n"
-"POT-Creation-Date: 2026-03-16 10:59-0500\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-03-17 11:39-0500\n"
 "PO-Revision-Date: 2026-03-14 18:00-0500\n"
 "Last-Translator: \n"
 "Language-Team: German <kde-i18n-de@kde.org>\n"
@@ -358,9 +358,9 @@ msgstr "Farbiger Rand um gekachelte Fenster (0 zum Deaktivieren)"
 #: kcm/autotiling/ui/main.qml:204 kcm/autotiling/ui/main.qml:224
 #: kcm/autotiling/ui/main.qml:352 kcm/autotiling/ui/main.qml:374
 #: kcm/general/ui/EasingSettings.qml:520 kcm/snapping/ui/AppearanceCard.qml:229
-#: kcm/snapping/ui/AppearanceCard.qml:247
+#: kcm/snapping/ui/AppearanceCard.qml:247 kcm/snapping/ui/main.qml:223
 #: kcm/snapping/ui/ZoneSelectorCard.qml:74
-#: kcm/snapping/ui/ZoneSelectorCard.qml:95 kcm/snapping/ui/main.qml:223
+#: kcm/snapping/ui/ZoneSelectorCard.qml:95
 msgid "px"
 msgstr "px"
 
@@ -914,6 +914,22 @@ msgstr ""
 msgid "(always animate)"
 msgstr "(immer animieren)"
 
+#: kcm/general/ui/main.qml:37
+msgid "Animations"
+msgstr "Animationen"
+
+#: kcm/general/ui/main.qml:49
+msgid "Smooth window geometry transitions"
+msgstr "Weiche Fenstergeometrie-Übergänge"
+
+#: kcm/general/ui/main.qml:53
+msgid ""
+"Animate windows when snapping to zones or tiling. Applies to both manual "
+"snapping and autotiling."
+msgstr ""
+"Fenster beim Einrasten in Zonen oder bei Kachelung animieren. Gilt sowohl "
+"für manuelles Einrasten als auch für Autotiling."
+
 #: kcm/general/ui/OsdCard.qml:32
 msgid "On-Screen Display"
 msgstr "Bildschirmanzeige"
@@ -938,7 +954,7 @@ msgstr "Bildschirmanzeige bei Tastaturnavigation anzeigen"
 msgid "OSD style:"
 msgstr "Bildschirmanzeige-Stil:"
 
-#: kcm/general/ui/OsdCard.qml:63 kcm/ui/tabs/QuickLayoutSlotsCard.qml:98
+#: kcm/general/ui/OsdCard.qml:63 kcm/ui/tabs/QuickLayoutSlotsCard.qml:108
 msgid "None"
 msgstr "Keine"
 
@@ -986,22 +1002,6 @@ msgstr ""
 msgid "Show a small layout thumbnail inside each zone while dragging"
 msgstr "Beim Ziehen ein kleines Layout-Vorschaubild in jeder Zone anzeigen"
 
-#: kcm/general/ui/main.qml:37
-msgid "Animations"
-msgstr "Animationen"
-
-#: kcm/general/ui/main.qml:49
-msgid "Smooth window geometry transitions"
-msgstr "Weiche Fenstergeometrie-Übergänge"
-
-#: kcm/general/ui/main.qml:53
-msgid ""
-"Animate windows when snapping to zones or tiling. Applies to both manual "
-"snapping and autotiling."
-msgstr ""
-"Fenster beim Einrasten in Zonen oder bei Kachelung animieren. Gilt sowohl "
-"für manuelles Einrasten als auch für Autotiling."
-
 #: kcm/layouts/ui/main.qml:67
 msgid "Primary Monitor"
 msgstr "Primärer Bildschirm"
@@ -1045,6 +1045,11 @@ msgstr "Löschen"
 #: kcm/layouts/ui/main.qml:297
 msgid "Cancel"
 msgstr "Abbrechen"
+
+#: kcm/plasmazonesmoduledata.cpp:15
+msgctxt "@info:tooltip"
+msgid "Enable PlasmaZones"
+msgstr "PlasmaZones aktivieren"
 
 #: kcm/snapping/ui/AppearanceCard.qml:68
 msgid "Highlight:"
@@ -1235,22 +1240,6 @@ msgstr "Farbimport fehlgeschlagen"
 #: kcm/snapping/ui/AppearanceCard.qml:548
 msgid "Colors imported successfully"
 msgstr "Farben erfolgreich importiert"
-
-#: kcm/snapping/ui/ZoneSelectorCard.qml:60
-msgid "Zone padding:"
-msgstr "Zonenabstand:"
-
-#: kcm/snapping/ui/ZoneSelectorCard.qml:70
-msgid "Zone padding"
-msgstr "Zonenabstand"
-
-#: kcm/snapping/ui/ZoneSelectorCard.qml:80
-msgid "Edge gap:"
-msgstr "Randabstand:"
-
-#: kcm/snapping/ui/ZoneSelectorCard.qml:91
-msgid "Edge gap"
-msgstr "Randabstand"
 
 #: kcm/snapping/ui/main.qml:77
 msgid "Enable Zone Snapping"
@@ -1471,6 +1460,22 @@ msgid ""
 msgstr ""
 "Klebende Fenster erscheinen auf allen Arbeitsflächen. Wählen Sie, wie das "
 "Einrasten sich verhalten soll."
+
+#: kcm/snapping/ui/ZoneSelectorCard.qml:60
+msgid "Zone padding:"
+msgstr "Zonenabstand:"
+
+#: kcm/snapping/ui/ZoneSelectorCard.qml:70
+msgid "Zone padding"
+msgstr "Zonenabstand"
+
+#: kcm/snapping/ui/ZoneSelectorCard.qml:80
+msgid "Edge gap:"
+msgstr "Randabstand:"
+
+#: kcm/snapping/ui/ZoneSelectorCard.qml:91
+msgid "Edge gap"
+msgstr "Randabstand"
 
 #: kcm/ui/AssignmentRow.qml:25 kcm/ui/LayoutComboBox.qml:31
 #: kcm/ui/tabs/AppRulesCard.qml:142 kcm/ui/tabs/MonitorAssignmentsCard.qml:145
@@ -2206,15 +2211,23 @@ msgstr "Weisen Sie Tastenkombinationen Layouts zu, um sofort zu wechseln."
 msgid "Quick layout shortcuts list"
 msgstr "Liste der Schnellwechsel-Tastenkombinationen"
 
-#: kcm/ui/tabs/QuickLayoutSlotsCard.qml:82
-msgid "Not assigned"
-msgstr "Nicht zugewiesen"
+#: kcm/ui/tabs/QuickLayoutSlotsCard.qml:87
+msgid "Quick Tiling %1"
+msgstr "Schnell-Kachelung %1"
 
-#: kcm/ui/tabs/QuickLayoutSlotsCard.qml:131
+#: kcm/ui/tabs/QuickLayoutSlotsCard.qml:88
+msgid "Quick Layout %1"
+msgstr "Schnell-Layout %1"
+
+#: kcm/ui/tabs/QuickLayoutSlotsCard.qml:92
+msgid "No shortcut assigned"
+msgstr "Kein Kürzel zugewiesen"
+
+#: kcm/ui/tabs/QuickLayoutSlotsCard.qml:141
 msgid "Clear shortcut"
 msgstr "Tastenkombination entfernen"
 
-#: kcm/ui/tabs/QuickLayoutSlotsCard.qml:132
+#: kcm/ui/tabs/QuickLayoutSlotsCard.qml:142
 msgid "Clear shortcut %1"
 msgstr "Tastenkombination %1 entfernen"
 
@@ -2364,20 +2377,20 @@ msgid "Preview size adjusts automatically based on your screen resolution."
 msgstr ""
 "Die Vorschaugröße passt sich automatisch an Ihre Bildschirmauflösung an."
 
-#: src/shared/CategoryBadge.qml:44
-msgctxt "@label:badge"
-msgid "Dynamic"
-msgstr "Dynamisch"
+#~ msgid "Not assigned"
+#~ msgstr "Nicht zugewiesen"
 
-#: src/shared/CategoryBadge.qml:46
-msgctxt "@label:badge"
-msgid "Auto"
-msgstr "Automatisch"
+#~ msgctxt "@label:badge"
+#~ msgid "Dynamic"
+#~ msgstr "Dynamisch"
 
-#: src/shared/CategoryBadge.qml:46
-msgctxt "@label:badge"
-msgid "Manual"
-msgstr "Manuell"
+#~ msgctxt "@label:badge"
+#~ msgid "Auto"
+#~ msgstr "Automatisch"
+
+#~ msgctxt "@label:badge"
+#~ msgid "Manual"
+#~ msgstr "Manuell"
 
 #~ msgid "Border color:"
 #~ msgstr "Randfarbe:"
