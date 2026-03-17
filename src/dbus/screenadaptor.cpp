@@ -17,21 +17,21 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
 {
     // Connect to screen change signals
     connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
-        Q_EMIT screenAdded(screen->name());
+        Q_EMIT screenAdded(Utils::screenIdentifier(screen));
 
         connect(screen, &QScreen::geometryChanged, this, [this, screen]() {
-            Q_EMIT screenGeometryChanged(screen->name());
+            Q_EMIT screenGeometryChanged(Utils::screenIdentifier(screen));
         });
     });
 
     connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this](QScreen* screen) {
-        Q_EMIT screenRemoved(screen->name());
+        Q_EMIT screenRemoved(Utils::screenIdentifier(screen));
     });
 
     // Connect existing screens
     for (auto* screen : Utils::allScreens()) {
         connect(screen, &QScreen::geometryChanged, this, [this, screen]() {
-            Q_EMIT screenGeometryChanged(screen->name());
+            Q_EMIT screenGeometryChanged(Utils::screenIdentifier(screen));
         });
     }
 }
@@ -40,7 +40,7 @@ QStringList ScreenAdaptor::getScreens()
 {
     QStringList result;
     for (const auto* screen : Utils::allScreens()) {
-        result.append(screen->name());
+        result.append(Utils::screenIdentifier(screen));
     }
     return result;
 }
@@ -86,11 +86,11 @@ QString ScreenAdaptor::getPrimaryScreen()
     if (!m_primaryScreenOverride.isEmpty()) {
         QScreen* overrideScreen = Utils::findScreenByName(m_primaryScreenOverride);
         if (overrideScreen) {
-            return overrideScreen->name();
+            return Utils::screenIdentifier(overrideScreen);
         }
     }
     auto* primary = Utils::primaryScreen();
-    return primary ? primary->name() : QString();
+    return primary ? Utils::screenIdentifier(primary) : QString();
 }
 
 void ScreenAdaptor::setPrimaryScreenFromKWin(const QString& screenName)

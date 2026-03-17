@@ -357,28 +357,28 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
     // Determine which screen the zone selector is on from the sender window
     // Primary: look up in our window-to-screen map (authoritative assignment)
     // Fallback: use Qt's screen assignment on the window itself
-    QString screenName;
+    QString screenId;
     auto* senderWindow = qobject_cast<QQuickWindow*>(sender());
     if (senderWindow) {
         for (auto it = m_zoneSelectorWindows.constBegin(); it != m_zoneSelectorWindows.constEnd(); ++it) {
             if (it.value() == senderWindow) {
-                screenName = it.key()->name();
+                screenId = Utils::screenIdentifier(it.key());
                 break;
             }
         }
-        if (screenName.isEmpty() && senderWindow->screen()) {
-            screenName = senderWindow->screen()->name();
+        if (screenId.isEmpty() && senderWindow->screen()) {
+            screenId = Utils::screenIdentifier(senderWindow->screen());
         }
     }
 
     // Route to the correct signal based on whether this is an autotile algorithm or manual layout
     if (LayoutId::isAutotile(layoutId)) {
         const QString algoId = LayoutId::extractAlgorithmId(layoutId);
-        qCInfo(lcOverlay) << "Zone selector: autotile algorithm selected, algoId=" << algoId << "screen=" << screenName;
-        Q_EMIT autotileLayoutSelected(algoId, screenName);
+        qCInfo(lcOverlay) << "Zone selector: autotile algorithm selected, algoId=" << algoId << "screen=" << screenId;
+        Q_EMIT autotileLayoutSelected(algoId, screenId);
     } else {
-        qCInfo(lcOverlay) << "Zone selector: layout selected, layoutId=" << layoutId << "screen=" << screenName;
-        Q_EMIT manualLayoutSelected(layoutId, screenName);
+        qCInfo(lcOverlay) << "Zone selector: layout selected, layoutId=" << layoutId << "screen=" << screenId;
+        Q_EMIT manualLayoutSelected(layoutId, screenId);
     }
 }
 

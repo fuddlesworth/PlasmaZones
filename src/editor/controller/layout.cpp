@@ -10,6 +10,7 @@
 #include "../../core/layoututils.h"
 #include "../../core/shaderregistry.h"
 #include "../../core/logging.h"
+#include "../../core/utils.h"
 
 #include <KLocalizedString>
 #include <QCoreApplication>
@@ -73,7 +74,7 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
     if (!m_targetScreen.isEmpty()) {
         const auto screens = QGuiApplication::screens();
         for (auto* screen : screens) {
-            if (screen->name() == m_targetScreen) {
+            if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
                 // Already on the correct screen — nothing to do
                 if (window->screen() == screen && window->isVisible()) {
                     return;

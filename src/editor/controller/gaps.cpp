@@ -11,6 +11,7 @@
 #include "../helpers/SettingsDbusQueries.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
+#include "../../core/utils.h"
 
 #include <KLocalizedString>
 #include <QGuiApplication>
@@ -374,7 +375,7 @@ QSize EditorController::targetScreenSize() const
     // Get the target screen size for fixed geometry coordinate conversion
     if (!m_targetScreen.isEmpty()) {
         for (QScreen* screen : QGuiApplication::screens()) {
-            if (screen->name() == m_targetScreen) {
+            if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
                 return screen->geometry().size();
             }
         }
