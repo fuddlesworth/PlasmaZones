@@ -116,6 +116,18 @@ QString screenIdentifier(const QScreen* screen)
     // Prefer Qt's text serial descriptor (from EDID descriptor blocks)
     QString serial = screen->serialNumber();
 
+    // KWin on Wayland exposes the EDID header serial (bytes 12-15) as hex via
+    // QScreen::serialNumber() (e.g. "0x0001C1A3").  The effect side normalizes
+    // this to decimal (e.g. "115107") so both sides produce identical IDs.
+    // Apply the same normalization here.
+    if (!serial.isEmpty() && serial.startsWith(QLatin1String("0x"), Qt::CaseInsensitive)) {
+        bool ok = false;
+        uint32_t numericSerial = serial.toUInt(&ok, 16);
+        if (ok && numericSerial != 0) {
+            serial = QString::number(numericSerial);
+        }
+    }
+
     // Fallback: read the EDID header serial from sysfs (always present, what KDE shows)
     if (serial.isEmpty()) {
         serial = readEdidHeaderSerial(screen->name());
