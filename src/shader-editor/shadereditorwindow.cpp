@@ -23,7 +23,6 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickWidget>
-#include <QRegularExpression>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTabWidget>
@@ -162,7 +161,7 @@ void ShaderEditorWindow::setupLayout()
         }
     });
     m_previewWidget->setSource(QUrl(QStringLiteral("qrc:/qml/PreviewPane.qml")));
-    m_previewWidget->setMinimumHeight(300);
+    m_previewWidget->setMinimumHeight(120);
 
     // ── Right vertical splitter: preview (top) + metadata editor (bottom) ──
     m_rightSplitter = new QSplitter(Qt::Vertical, this);
@@ -187,7 +186,7 @@ void ShaderEditorWindow::setupLayout()
     // Animation stops on error (no oscillation), so direct connection is safe.
     auto updateOutputPanel = [this]() {
         const int status = m_previewController->status();
-        if (status == 2) { // Ready
+        if (status == PreviewController::StatusReady) {
             int lineCount = 0;
             for (int i = 0; i < m_tabWidget->count(); ++i) {
                 if (m_tabWidget->tabText(i).endsWith(QLatin1String(".frag"))) {
@@ -199,7 +198,7 @@ void ShaderEditorWindow::setupLayout()
                 }
             }
             m_outputPanel->setCompilationSuccess(lineCount, {}, {});
-        } else if (status == 3) { // Error
+        } else if (status == PreviewController::StatusError) {
             m_outputPanel->setCompilationError(m_previewController->errorLog());
         }
     };
@@ -267,22 +266,22 @@ void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
     }
 
     m_rightTabWidget = new QTabWidget(m_rightSplitter);
+    m_rightTabWidget->setMinimumHeight(200);
     m_rightSplitter->addWidget(m_rightTabWidget);
-    // Mockup shows ~55% preview / ~45% parameter panel
-    m_rightSplitter->setStretchFactor(0, 11);
-    m_rightSplitter->setStretchFactor(1, 9);
+    // 60% preview / 40% tabs — preview is primary, tabs are secondary
+    m_rightSplitter->setStretchFactor(0, 3);
+    m_rightSplitter->setStretchFactor(1, 2);
     m_rightSplitter->setCollapsible(0, false);
     m_rightSplitter->setCollapsible(1, false);
 
-    // Force explicit initial size distribution.
-    // QQuickWidget's sizeHint (from QML implicitHeight) is modest, so without
-    // setSizes the tab widget's larger sizeHint would steal preview space.
+    // Force explicit initial distribution. QQuickWidget's sizeHint
+    // and QTabWidget's sizeHint compete; setSizes overrides both.
     const int totalHeight = m_rightSplitter->height();
     if (totalHeight > 0) {
-        const int previewHeight = totalHeight * 55 / 100;
+        const int previewHeight = totalHeight * 60 / 100;
         m_rightSplitter->setSizes({previewHeight, totalHeight - previewHeight});
     } else {
-        m_rightSplitter->setSizes({440, 360});
+        m_rightSplitter->setSizes({480, 320});
     }
 
     // Parameters tab
@@ -375,14 +374,7 @@ void ShaderEditorWindow::newShaderPackage()
         return;
     }
 
-    QString shaderId = shaderName.toLower();
-    static const QRegularExpression nonAlnum(QStringLiteral("[^a-z0-9]+"));
-    static const QRegularExpression leadTrailDash(QStringLiteral("^-|-$"));
-    shaderId.replace(nonAlnum, QStringLiteral("-"));
-    shaderId.remove(leadTrailDash);
-    if (shaderId.isEmpty()) {
-        shaderId = QStringLiteral("custom-shader");
-    }
+    const QString shaderId = ShaderPackageIO::sanitizeId(shaderName);
 
     closeAllTabs();
 

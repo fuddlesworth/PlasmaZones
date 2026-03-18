@@ -63,8 +63,6 @@ private:
     QWidget* createColorControl(const QString& name, const QString& uniformName,
                                 const QString& defaultColor, int slot);
 
-    static QString computeUniformName(const QString& type, int slot);
-
     QVBoxLayout* m_groupsLayout = nullptr;
     QList<ParamControl> m_controls;
     QList<QWidget*> m_groupWidgets; // for cleanup

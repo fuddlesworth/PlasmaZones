@@ -4,8 +4,10 @@
 #pragma once
 
 #include <QElapsedTimer>
+#include <QFontDatabase>
 #include <QImage>
 #include <QObject>
+#include <QPointer>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QUrl>
@@ -35,8 +37,15 @@ class PreviewController : public QObject
     Q_PROPERTY(int status READ status NOTIFY statusChanged)
     Q_PROPERTY(int fps READ fps NOTIFY fpsChanged)
     Q_PROPERTY(QString zoneLayoutName READ zoneLayoutName NOTIFY zoneLayoutNameChanged)
+    Q_PROPERTY(QString fixedFontFamily READ fixedFontFamily CONSTANT)
 
 public:
+    // ZoneShaderItem::Status values (avoids header dependency in shader-editor)
+    static constexpr int StatusNull = 0;
+    static constexpr int StatusLoading = 1;
+    static constexpr int StatusReady = 2;
+    static constexpr int StatusError = 3;
+
     explicit PreviewController(QObject* parent = nullptr);
     ~PreviewController() override;
 
@@ -56,6 +65,7 @@ public:
     int status() const;
     int fps() const;
     QString zoneLayoutName() const;
+    QString fixedFontFamily() const { return QFontDatabase::systemFont(QFontDatabase::FixedFont).family(); }
 
     void setAnimating(bool animating);
 
@@ -93,8 +103,8 @@ private:
     void buildLabelsTexture();
     void writeExpandedShader();
 
-    KTextEditor::Document* m_fragDoc = nullptr;
-    KTextEditor::Document* m_vertDoc = nullptr;
+    QPointer<KTextEditor::Document> m_fragDoc;
+    QPointer<KTextEditor::Document> m_vertDoc;
     QString m_shaderDir; // for #include resolution
 
     QTimer m_recompileTimer; // 300ms debounce
@@ -112,7 +122,7 @@ private:
     int m_iFrame = 0;
     bool m_animating = false;
     QString m_errorLog;
-    int m_status = 0; // ZoneShaderItem::Status::Null
+    int m_status = StatusNull;
     int m_fps = 0;
     int m_fpsCounter = 0;
     QTimer m_fpsTimer;

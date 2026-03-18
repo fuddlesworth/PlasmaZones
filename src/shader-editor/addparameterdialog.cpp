@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "addparameterdialog.h"
+#include "shaderpackageio.h"
 
 #include <QCheckBox>
 #include <QColor>
@@ -14,8 +15,8 @@
 #include <QLineEdit>
 #include <QLoggingCategory>
 #include <QMessageBox>
+#include <QPalette>
 #include <QPushButton>
-#include <QRegularExpression>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QVBoxLayout>
@@ -66,15 +67,14 @@ void AddParameterDialog::setupUi()
 
     m_groupCombo = new QComboBox(this);
     m_groupCombo->setEditable(true);
-    m_groupCombo->addItems({
-        QStringLiteral("Animation"),
-        QStringLiteral("Colors"),
-        QStringLiteral("Pattern"),
-        QStringLiteral("Appearance"),
-        QStringLiteral("Zone"),
-        QStringLiteral("Audio"),
-        QStringLiteral("Labels"),
-    });
+    // Store English values as data for serialization, i18n'd text for display
+    m_groupCombo->addItem(i18n("Animation"), QStringLiteral("Animation"));
+    m_groupCombo->addItem(i18n("Colors"), QStringLiteral("Colors"));
+    m_groupCombo->addItem(i18n("Pattern"), QStringLiteral("Pattern"));
+    m_groupCombo->addItem(i18n("Appearance"), QStringLiteral("Appearance"));
+    m_groupCombo->addItem(i18n("Zone"), QStringLiteral("Zone"));
+    m_groupCombo->addItem(i18n("Audio"), QStringLiteral("Audio"));
+    m_groupCombo->addItem(i18n("Labels"), QStringLiteral("Labels"));
     formLayout->addRow(i18n("Group:"), m_groupCombo);
 
     // Default value — stacked widget for different types
@@ -100,10 +100,13 @@ void AddParameterDialog::setupUi()
     // Index 3: color default
     m_defaultColorBtn = new QPushButton(this);
     m_defaultColorBtn->setText(m_selectedColor.name());
-    m_defaultColorBtn->setStyleSheet(
-        QStringLiteral("background-color: %1; color: %2;")
-            .arg(m_selectedColor.name(),
-                 m_selectedColor.lightnessF() > 0.5 ? QStringLiteral("black") : QStringLiteral("white")));
+    m_defaultColorBtn->setAutoFillBackground(true);
+    {
+        QPalette colorPal = m_defaultColorBtn->palette();
+        colorPal.setColor(QPalette::Button, m_selectedColor);
+        colorPal.setColor(QPalette::ButtonText, m_selectedColor.lightnessF() > 0.5 ? Qt::black : Qt::white);
+        m_defaultColorBtn->setPalette(colorPal);
+    }
     m_defaultStack->addWidget(m_defaultColorBtn);
 
     formLayout->addRow(i18n("Default:"), m_defaultStack);
@@ -191,12 +194,8 @@ void AddParameterDialog::onTypeChanged()
 
 void AddParameterDialog::onNameChanged(const QString& name)
 {
-    // Auto-generate ID from name: lowercase, replace non-alnum with hyphen
-    QString id = name.toLower().trimmed();
-    static const QRegularExpression nonAlnum(QStringLiteral("[^a-z0-9]+"));
-    static const QRegularExpression leadTrailDash(QStringLiteral("^-|-$"));
-    id.replace(nonAlnum, QStringLiteral("-"));
-    id.remove(leadTrailDash);
+    // Auto-generate ID from name using shared sanitizer, then convert to camelCase
+    const QString id = ShaderPackageIO::sanitizeId(name.trimmed());
 
     // Convert to camelCase: split on hyphens, capitalize first letter of each part after the first
     const QStringList parts = id.split(QLatin1Char('-'), Qt::SkipEmptyParts);
@@ -221,10 +220,12 @@ void AddParameterDialog::onColorButtonClicked()
     if (color.isValid()) {
         m_selectedColor = color;
         m_defaultColorBtn->setText(color.name());
-        m_defaultColorBtn->setStyleSheet(
-            QStringLiteral("background-color: %1; color: %2;")
-                .arg(color.name(),
-                     color.lightnessF() > 0.5 ? QStringLiteral("black") : QStringLiteral("white")));
+        {
+            QPalette colorPal = m_defaultColorBtn->palette();
+            colorPal.setColor(QPalette::Button, color);
+            colorPal.setColor(QPalette::ButtonText, color.lightnessF() > 0.5 ? Qt::black : Qt::white);
+            m_defaultColorBtn->setPalette(colorPal);
+        }
     }
 }
 
@@ -257,7 +258,9 @@ QJsonObject AddParameterDialog::parameterJson() const
     param[QStringLiteral("id")] = m_idEdit->text().trimmed();
     param[QStringLiteral("name")] = m_nameEdit->text().trimmed();
     param[QStringLiteral("type")] = m_typeCombo->currentText();
-    param[QStringLiteral("group")] = m_groupCombo->currentText();
+    // Use data role (English) if available, otherwise use edited text
+    const QVariant groupData = m_groupCombo->currentData();
+    param[QStringLiteral("group")] = groupData.isValid() ? groupData.toString() : m_groupCombo->currentText();
     param[QStringLiteral("slot")] = m_slotSpin->value();
 
     const QString type = m_typeCombo->currentText();

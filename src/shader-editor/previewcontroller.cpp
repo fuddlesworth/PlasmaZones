@@ -9,10 +9,12 @@
 #include <QColor>
 #include <QCryptographicHash>
 #include <QFile>
+#include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QPalette>
 #include <QUuid>
 
 #include <KTextEditor/Document>
@@ -237,12 +239,12 @@ void PreviewController::onShaderStatus(int status, const QString& error)
     Q_EMIT this->statusChanged();
     Q_EMIT errorLogChanged();
 
-    if (status == 2) {
+    if (status == StatusReady) {
         m_compilePending = false;
         if (!m_animating) {
             setAnimating(true);
         }
-    } else if (status == 3) {
+    } else if (status == StatusError) {
         m_lastCompiledHash.clear();
         // Only stop animation if no new compile has been dispatched since this error.
         // A stale error from a previous compile's updatePaintNode must not stop
@@ -325,7 +327,7 @@ void PreviewController::writeExpandedShader()
     if (expandedFrag.isNull()) {
         m_errorLog = fragError.isEmpty() ? QStringLiteral("Fragment shader include expansion failed") : fragError;
         Q_EMIT errorLogChanged();
-        m_status = 3; // Error
+        m_status = StatusError;
         Q_EMIT statusChanged();
         qCWarning(lcPreview) << "Fragment include expansion failed:" << m_errorLog;
         return;
@@ -344,7 +346,6 @@ void PreviewController::writeExpandedShader()
 
     // Expand and write vertex shader (if document is available)
     if (m_vertDoc) {
-        const QString vertSource = m_vertDoc->text();
         QString vertError;
         const QString expandedVert =
             ShaderIncludeResolver::expandIncludes(vertSource, currentFileDir, includePaths, &vertError);
@@ -352,7 +353,7 @@ void PreviewController::writeExpandedShader()
         if (expandedVert.isNull()) {
             m_errorLog = vertError.isEmpty() ? QStringLiteral("Vertex shader include expansion failed") : vertError;
             Q_EMIT errorLogChanged();
-            m_status = 3; // Error
+            m_status = StatusError;
             Q_EMIT statusChanged();
             qCWarning(lcPreview) << "Vertex include expansion failed:" << m_errorLog;
             return;
@@ -417,27 +418,20 @@ void PreviewController::loadDefaultParamsFromMetadata(const QString& metadataJso
             continue;
         }
 
-        if (type == QLatin1String("color") && slot < 16) {
-            // Color: convert hex to "r,g,b,a" format expected by setShaderParams
+        const QString uniformName = ShaderPackageIO::computeUniformName(type, slot);
+        if (uniformName.isEmpty()) {
+            continue;
+        }
+
+        if (type == QLatin1String("color")) {
             const QColor color(defaultVal.toString());
             if (color.isValid()) {
-                const QString uniformName = QStringLiteral("customColor%1").arg(slot + 1);
                 uniforms[uniformName] = color.name(QColor::HexArgb);
             }
-        } else if ((type == QLatin1String("float") || type == QLatin1String("int") || type == QLatin1String("bool"))
-                   && slot < 32) {
-            // Float/int/bool: packed into customParams vec4s
-            const int vecIndex = slot / 4;
-            const int component = slot % 4;
-            static const char* components[] = {"x", "y", "z", "w"};
-            const QString uniformName =
-                QStringLiteral("customParams%1_%2").arg(vecIndex + 1).arg(QLatin1String(components[component]));
-
-            if (type == QLatin1String("bool")) {
-                uniforms[uniformName] = defaultVal.toBool() ? 1.0 : 0.0;
-            } else {
-                uniforms[uniformName] = defaultVal.toDouble();
-            }
+        } else if (type == QLatin1String("bool")) {
+            uniforms[uniformName] = defaultVal.toBool() ? 1.0 : 0.0;
+        } else {
+            uniforms[uniformName] = defaultVal.toDouble();
         }
     }
 
@@ -480,24 +474,28 @@ void PreviewController::buildZoneLayout()
     const qreal monW = W - 2 * pad;
     const qreal monH = H - headerH - infoBarH - 2 * pad;
 
-    auto makeZone = [](int zoneNumber, qreal x, qreal y, qreal w, qreal h) -> QVariantMap {
+    // Derive zone colors from the system palette highlight color
+    const QPalette pal = QGuiApplication::palette();
+    const QColor highlight = pal.color(QPalette::Highlight);
+
+    auto makeZone = [&highlight](int zoneNumber, qreal x, qreal y, qreal w, qreal h) -> QVariantMap {
         QVariantMap zone;
-        zone[QStringLiteral("id")] = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        zone[QStringLiteral("id")] = QUuid::createUuid().toString();
         zone[QStringLiteral("x")] = x;
         zone[QStringLiteral("y")] = y;
         zone[QStringLiteral("width")] = w;
         zone[QStringLiteral("height")] = h;
         zone[QStringLiteral("zoneNumber")] = zoneNumber;
         zone[QStringLiteral("isHighlighted")] = false;
-        // Fill: very subtle tint (shader content shows through)
-        zone[QStringLiteral("fillR")] = 0.1;
-        zone[QStringLiteral("fillG")] = 0.15;
-        zone[QStringLiteral("fillB")] = 0.35;
-        zone[QStringLiteral("fillA")] = 0.2;
-        // Border: thin subtle accent
-        zone[QStringLiteral("borderR")] = 0.35;
-        zone[QStringLiteral("borderG")] = 0.55;
-        zone[QStringLiteral("borderB")] = 0.9;
+        // Fill: very transparent tint of highlight (shader content shows through)
+        zone[QStringLiteral("fillR")] = highlight.redF();
+        zone[QStringLiteral("fillG")] = highlight.greenF();
+        zone[QStringLiteral("fillB")] = highlight.blueF();
+        zone[QStringLiteral("fillA")] = 0.15;
+        // Border: semi-transparent highlight accent
+        zone[QStringLiteral("borderR")] = highlight.redF();
+        zone[QStringLiteral("borderG")] = highlight.greenF();
+        zone[QStringLiteral("borderB")] = highlight.blueF();
         zone[QStringLiteral("borderA")] = 0.5;
         zone[QStringLiteral("shaderBorderRadius")] = 8.0;
         zone[QStringLiteral("shaderBorderWidth")] = 1.5;

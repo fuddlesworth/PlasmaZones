@@ -2,16 +2,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "parameterpanel.h"
+#include "shaderpackageio.h"
 
 #include <QCheckBox>
 #include <QColor>
 #include <QColorDialog>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
 #include <QLoggingCategory>
+#include <QPalette>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSlider>
@@ -124,14 +127,21 @@ void ParameterPanel::loadFromMetadata(const QString& metadataJson)
         groupLayout->setContentsMargins(0, 0, 0, 0);
         groupLayout->setSpacing(0);
 
-        // Header button
+        // Header button — use palette colors instead of hardcoded stylesheet
         auto* headerBtn = new QPushButton(groupContainer);
         headerBtn->setCheckable(true);
         headerBtn->setChecked(isFirstGroup);
-        headerBtn->setStyleSheet(
-            QStringLiteral("QPushButton { background: #333; color: #ccc; border: none; border-radius: 4px; "
-                           "padding: 6px 8px; text-align: left; font-weight: bold; }"
-                           "QPushButton:hover { background: #3a3a3a; }"));
+        headerBtn->setFlat(true);
+        {
+            QPalette headerPal = headerBtn->palette();
+            headerPal.setColor(QPalette::Button, palette().color(QPalette::AlternateBase));
+            headerPal.setColor(QPalette::ButtonText, palette().color(QPalette::Text));
+            headerBtn->setPalette(headerPal);
+            headerBtn->setAutoFillBackground(true);
+            QFont boldFont = headerBtn->font();
+            boldFont.setBold(true);
+            headerBtn->setFont(boldFont);
+        }
 
         const int paramCount = groupParams.size();
         const QString expandedText = QStringLiteral("\u25BE %1").arg(groupName);
@@ -157,7 +167,7 @@ void ParameterPanel::loadFromMetadata(const QString& metadataJson)
                 continue;
             }
 
-            const QString uniformName = computeUniformName(type, slot);
+            const QString uniformName = ShaderPackageIO::computeUniformName(type, slot);
 
             QWidget* control = nullptr;
             if (type == QLatin1String("float")) {
@@ -221,7 +231,7 @@ QWidget* ParameterPanel::createFloatControl(const QString& name, const QString& 
     valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
     auto* insertBtn = new QPushButton(i18n("Insert \u2192"), row);
-    insertBtn->setFixedWidth(70);
+    insertBtn->setMinimumWidth(60);
 
     layout->addWidget(label);
     layout->addWidget(slider, 1);
@@ -270,7 +280,7 @@ QWidget* ParameterPanel::createIntControl(const QString& name, const QString& un
     spinBox->setValue(defaultVal);
 
     auto* insertBtn = new QPushButton(i18n("Insert \u2192"), row);
-    insertBtn->setFixedWidth(70);
+    insertBtn->setMinimumWidth(60);
 
     layout->addWidget(label);
     layout->addWidget(spinBox, 1);
@@ -308,7 +318,7 @@ QWidget* ParameterPanel::createBoolControl(const QString& name, const QString& u
     checkBox->setChecked(defaultVal);
 
     auto* insertBtn = new QPushButton(i18n("Insert \u2192"), row);
-    insertBtn->setFixedWidth(70);
+    insertBtn->setMinimumWidth(60);
 
     layout->addWidget(label);
     layout->addWidget(checkBox, 1);
@@ -349,14 +359,18 @@ QWidget* ParameterPanel::createColorControl(const QString& name, const QString& 
 
     auto* colorBtn = new QPushButton(row);
     colorBtn->setFixedSize(28, 22);
-    colorBtn->setStyleSheet(
-        QStringLiteral("background-color: %1; border: 1px solid #666; border-radius: 4px;").arg(color.name()));
+    colorBtn->setAutoFillBackground(true);
+    {
+        QPalette swatchPal = colorBtn->palette();
+        swatchPal.setColor(QPalette::Button, color);
+        colorBtn->setPalette(swatchPal);
+    }
 
     auto* hexLabel = new QLabel(color.name().toUpper(), row);
     hexLabel->setFixedWidth(70);
 
     auto* insertBtn = new QPushButton(i18n("Insert \u2192"), row);
-    insertBtn->setFixedWidth(70);
+    insertBtn->setMinimumWidth(60);
 
     layout->addWidget(label);
     layout->addWidget(colorBtn);
@@ -381,8 +395,11 @@ QWidget* ParameterPanel::createColorControl(const QString& name, const QString& 
         if (!chosen.isValid() || controlIndex >= m_controls.size()) return;
         ParamControl& c2 = m_controls[controlIndex];
         c2.currentColor = chosen;
-        c2.colorBtn->setStyleSheet(
-            QStringLiteral("background-color: %1; border: 1px solid #666; border-radius: 4px;").arg(chosen.name()));
+        {
+            QPalette swatchPal = c2.colorBtn->palette();
+            swatchPal.setColor(QPalette::Button, chosen);
+            c2.colorBtn->setPalette(swatchPal);
+        }
         c2.valueLabel->setText(chosen.name().toUpper());
         Q_EMIT parameterChanged();
     });
@@ -416,26 +433,6 @@ QVariantMap ParameterPanel::currentUniformValues() const
     }
 
     return uniforms;
-}
-
-QString ParameterPanel::computeUniformName(const QString& type, int slot)
-{
-    if (type == QLatin1String("color")) {
-        if (slot < 0 || slot > 15) {
-            return {};
-        }
-        return QStringLiteral("customColor%1").arg(slot + 1);
-    }
-
-    // float, int, bool
-    if (slot < 0 || slot > 31) {
-        return {};
-    }
-
-    const int vecIndex = slot / 4;
-    const int component = slot % 4;
-    static const char* components[] = {"x", "y", "z", "w"};
-    return QStringLiteral("customParams%1_%2").arg(vecIndex + 1).arg(QLatin1String(components[component]));
 }
 
 } // namespace PlasmaZones

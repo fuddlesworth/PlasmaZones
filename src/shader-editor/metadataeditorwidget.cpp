@@ -3,6 +3,7 @@
 
 #include "metadataeditorwidget.h"
 #include "addparameterdialog.h"
+#include "shaderpackageio.h"
 
 #include <QCheckBox>
 #include <QFormLayout>
@@ -56,7 +57,7 @@ void MetadataEditorWidget::setupUi()
     m_idLabel->setTextFormat(Qt::PlainText);
     m_idLabel->setVisible(false);
     m_idEdit = new QLineEdit(this);
-    m_idEdit->setPlaceholderText(QStringLiteral("my-custom-shader"));
+    m_idEdit->setPlaceholderText(i18nc("@info:placeholder example shader ID", "my-custom-shader"));
     m_idEdit->setVisible(false);
     // Stack both in a container — only one is visible at a time
     auto* idContainer = new QWidget(this);
@@ -227,7 +228,7 @@ void MetadataEditorWidget::addParameterRow(const QJsonObject& param)
 
     // Tooltip shows ID and uniform name
     const QString id = param.value(QStringLiteral("id")).toString();
-    const QString uniformName = computeUniformName(type, slot);
+    const QString uniformName = ShaderPackageIO::computeUniformName(type, slot);
     QString tooltip = QStringLiteral("ID: %1").arg(id);
     if (!uniformName.isEmpty()) {
         tooltip += QStringLiteral("\nUniform: %1").arg(uniformName);
@@ -367,7 +368,7 @@ void MetadataEditorWidget::onInsertUniform()
 
     const QString type = item->text(1);
     const int slot = item->text(2).toInt();
-    const QString uniformName = computeUniformName(type, slot);
+    const QString uniformName = ShaderPackageIO::computeUniformName(type, slot);
     if (!uniformName.isEmpty()) {
         Q_EMIT insertUniformRequested(uniformName);
     }
@@ -395,25 +396,6 @@ void MetadataEditorWidget::onMoveParameterDown()
     m_paramTree->insertTopLevelItem(index + 1, item);
     m_paramTree->setCurrentItem(item);
     markModified();
-}
-
-QString MetadataEditorWidget::computeUniformName(const QString& type, int slot)
-{
-    if (type == QLatin1String("color")) {
-        if (slot < 0 || slot > 15) {
-            return {};
-        }
-        return QStringLiteral("customColor%1").arg(slot + 1);
-    }
-
-    if (slot < 0 || slot > 31) {
-        return {};
-    }
-
-    const int vecIndex = slot / 4;
-    const int component = slot % 4;
-    static const char* components[] = {"x", "y", "z", "w"};
-    return QStringLiteral("customParams%1_%2").arg(vecIndex + 1).arg(QLatin1String(components[component]));
 }
 
 } // namespace PlasmaZones

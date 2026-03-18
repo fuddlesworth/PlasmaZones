@@ -3,10 +3,13 @@
 
 #include "outputpanel.h"
 
+#include <QFontDatabase>
+#include <QGuiApplication>
 #include <QHBoxLayout>
-#include <QRegularExpression>
 #include <QHeaderView>
 #include <QLabel>
+#include <QPalette>
+#include <QRegularExpression>
 #include <QTabWidget>
 #include <QTextEdit>
 #include <QTreeWidget>
@@ -47,15 +50,18 @@ OutputPanel::OutputPanel(QWidget* parent)
     m_tabWidget->addTab(m_problemsTree, i18n("Problems"));
 
     // ── Output tab ──
+    QFont monoFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    monoFont.setPointSize(9);
+
     m_outputText = new QTextEdit;
     m_outputText->setReadOnly(true);
-    m_outputText->setFont(QFont(QStringLiteral("monospace"), 9));
+    m_outputText->setFont(monoFont);
     m_tabWidget->addTab(m_outputText, i18n("Output"));
 
     // ── Compiler tab ──
     m_compilerText = new QTextEdit;
     m_compilerText->setReadOnly(true);
-    m_compilerText->setFont(QFont(QStringLiteral("monospace"), 9));
+    m_compilerText->setFont(monoFont);
     m_tabWidget->addTab(m_compilerText, i18n("Compiler"));
 
     layout->addWidget(m_tabWidget);
@@ -68,8 +74,10 @@ void OutputPanel::setCompilationSuccess(int lineCount, const QStringList& unifor
     m_tabWidget->setTabText(0, i18n("Problems"));
 
     // Output: compilation summary
+    const QColor successColor = palette().color(QPalette::Active, QPalette::Link);
     m_outputText->clear();
-    m_outputText->append(QStringLiteral("<span style='color:#4ec9b0'>&#10003; Shader compiled successfully (GLSL 450, %1 lines)</span>").arg(lineCount));
+    m_outputText->append(QStringLiteral("<span style='color:%1'>&#10003; Shader compiled successfully (GLSL 450, %2 lines)</span>")
+        .arg(successColor.name(), QString::number(lineCount)));
     if (!uniforms.isEmpty()) {
         m_outputText->append(QStringLiteral("  Uniforms: %1").arg(uniforms.join(QStringLiteral(", "))));
     }
@@ -100,12 +108,16 @@ void OutputPanel::setCompilationError(const QString& errorLog)
     for (const QString& line : lines) {
         auto* item = new QTreeWidgetItem(m_problemsTree);
 
-        // Try to extract line number from patterns like "0:42:" or "line 42"
+        // Extract line number from GLSL error formats:
+        // "ERROR: 0:42: ..." (string:line), "line 42: ..."
         int errorLine = 0;
-        static const QRegularExpression linePattern(QStringLiteral("(?:^|:)(\\d+):"));
+        static const QRegularExpression linePattern(QStringLiteral("(?:\\b\\d+:(\\d+):|\\bline\\s+(\\d+))"));
         const auto match = linePattern.match(line);
         if (match.hasMatch()) {
             errorLine = match.captured(1).toInt();
+            if (errorLine == 0) {
+                errorLine = match.captured(2).toInt();
+            }
         }
 
         const bool isError = line.contains(QLatin1String("ERROR"), Qt::CaseInsensitive)
@@ -115,11 +127,12 @@ void OutputPanel::setCompilationError(const QString& errorLog)
 
         if (isError) {
             item->setText(0, i18n("Error"));
-            item->setForeground(0, QColor(QStringLiteral("#ff4444")));
+            item->setForeground(0, QGuiApplication::palette().color(QPalette::Active, QPalette::ToolTipText));
+            item->setBackground(0, QColor(255, 68, 68, 40));
             errorCount++;
         } else if (isWarning) {
             item->setText(0, i18n("Warning"));
-            item->setForeground(0, QColor(QStringLiteral("#ffaa00")));
+            item->setForeground(0, QGuiApplication::palette().color(QPalette::Active, QPalette::Link));
         } else {
             item->setText(0, i18n("Info"));
             errorCount++;
@@ -137,12 +150,15 @@ void OutputPanel::setCompilationError(const QString& errorLog)
     m_tabWidget->setCurrentIndex(0);
 
     // Compiler: raw error output
+    const QColor errorColor = QGuiApplication::palette().color(QPalette::Active, QPalette::ToolTipText);
     m_compilerText->clear();
-    m_compilerText->append(QStringLiteral("<span style='color:#ff6666'>%1</span>").arg(errorLog.toHtmlEscaped()));
+    m_compilerText->append(QStringLiteral("<span style='color:%1'>%2</span>")
+        .arg(errorColor.name(), errorLog.toHtmlEscaped()));
 
     // Output
     m_outputText->clear();
-    m_outputText->append(QStringLiteral("<span style='color:#ff4444'>&#10007; Shader compilation failed</span>"));
+    m_outputText->append(QStringLiteral("<span style='color:%1'>&#10007; Shader compilation failed</span>")
+        .arg(errorColor.name()));
 }
 
 void OutputPanel::clearOutput()

@@ -46,7 +46,6 @@ private:
     void showParameterContextMenu(const QPoint& pos);
     void addParameterRow(const QJsonObject& param);
 
-    static QString computeUniformName(const QString& type, int slot);
     static QString formatDefaultValue(const QJsonObject& param);
 
     // Shader Info fields

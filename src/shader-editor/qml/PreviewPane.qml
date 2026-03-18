@@ -16,13 +16,17 @@ Item {
     readonly property var pc: previewController ?? null
 
     // Heights of the overlay bars — used by C++ to offset zones
-    readonly property int headerHeight: 36
-    readonly property int infoBarHeight: 24
+    readonly property int headerHeight: Math.round(Kirigami.Units.gridUnit * 2.5)
+    readonly property int infoBarHeight: Math.round(Kirigami.Units.gridUnit * 1.5)
+
+    // ZoneShaderItem status constants (mirror PreviewController::Status*)
+    readonly property int statusReady: 2
+    readonly property int statusError: 3
 
     // ── Dark background ──
     Rectangle {
         anchors.fill: parent
-        color: "#0a0a1a"
+        color: Kirigami.Theme.backgroundColor
     }
 
     // ── Shader preview — fills entire widget so the render node's
@@ -52,11 +56,11 @@ Item {
         }
 
         onStatusChanged: {
-            if (root.pc && (shaderPreview.status === 2 || shaderPreview.status === 3))
+            if (root.pc && (shaderPreview.status === root.statusReady || shaderPreview.status === root.statusError))
                 root.pc.onShaderStatus(shaderPreview.status, shaderPreview.errorLog)
         }
         onErrorLogChanged: {
-            if (root.pc && shaderPreview.status === 2)
+            if (root.pc && shaderPreview.status === root.statusReady)
                 root.pc.onShaderStatus(shaderPreview.status, shaderPreview.errorLog)
         }
     }
@@ -71,9 +75,9 @@ Item {
     Label {
         anchors.centerIn: parent
         visible: !root.pc || root.pc.shaderSource.toString() === ""
-        text: qsTr("No shader loaded")
-        color: "#666666"
-        font.pixelSize: 14
+        text: i18n("No shader loaded")
+        color: Kirigami.Theme.disabledTextColor
+        font.pointSize: Kirigami.Theme.defaultFont.pointSize + 1
     }
 
     // ── Header bar (renders ON TOP of shader) ──
@@ -83,64 +87,56 @@ Item {
         anchors.right: parent.right
         anchors.top: parent.top
         height: root.headerHeight
-        color: "#252526"
+        color: Kirigami.Theme.alternateBackgroundColor
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            spacing: 6
+            anchors.leftMargin: Kirigami.Units.smallSpacing * 2
+            anchors.rightMargin: Kirigami.Units.smallSpacing * 2
+            spacing: Kirigami.Units.smallSpacing
 
             Label {
-                text: "Live Preview"
-                font.pixelSize: 13
+                text: i18n("Live Preview")
+                font.pointSize: Kirigami.Theme.defaultFont.pointSize
                 font.bold: true
-                color: "#cccccc"
+                color: Kirigami.Theme.textColor
             }
 
             Item { Layout.fillWidth: true }
 
             Label {
                 text: (root.pc ? root.pc.fps : 0) + " FPS"
-                font.family: "monospace"
-                font.pixelSize: 12
-                color: "#6a9955"
+                font.family: root.pc ? root.pc.fixedFontFamily : "monospace"
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                color: Kirigami.Theme.positiveTextColor
                 visible: root.pc ? root.pc.animating : false
             }
 
             ToolButton {
-                implicitWidth: Kirigami.Units.gridUnit * 2; implicitHeight: Kirigami.Units.gridUnit * 2
                 icon.name: (root.pc && root.pc.animating) ? "media-playback-pause" : "media-playback-start"
-                icon.width: Kirigami.Units.iconSizes.smallMedium; icon.height: Kirigami.Units.iconSizes.smallMedium
                 onClicked: { if (root.pc) root.pc.animating = !root.pc.animating }
-                ToolTip.text: (root.pc && root.pc.animating) ? qsTr("Pause") : qsTr("Play")
+                ToolTip.text: (root.pc && root.pc.animating) ? i18n("Pause") : i18n("Play")
                 ToolTip.visible: hovered; ToolTip.delay: 500
             }
 
             ToolButton {
-                implicitWidth: Kirigami.Units.gridUnit * 2; implicitHeight: Kirigami.Units.gridUnit * 2
                 icon.name: "view-refresh"
-                icon.width: Kirigami.Units.iconSizes.smallMedium; icon.height: Kirigami.Units.iconSizes.smallMedium
                 onClicked: { if (root.pc) root.pc.resetTime() }
-                ToolTip.text: qsTr("Reset time")
+                ToolTip.text: i18n("Reset time")
                 ToolTip.visible: hovered; ToolTip.delay: 500
             }
 
             ToolButton {
-                implicitWidth: Kirigami.Units.gridUnit * 2; implicitHeight: Kirigami.Units.gridUnit * 2
                 icon.name: "view-grid"
-                icon.width: Kirigami.Units.iconSizes.smallMedium; icon.height: Kirigami.Units.iconSizes.smallMedium
                 onClicked: { if (root.pc) root.pc.cycleZoneLayout() }
                 ToolTip.text: root.pc ? root.pc.zoneLayoutName : ""
                 ToolTip.visible: hovered; ToolTip.delay: 500
             }
 
             ToolButton {
-                implicitWidth: Kirigami.Units.gridUnit * 2; implicitHeight: Kirigami.Units.gridUnit * 2
                 icon.name: "run-build"
-                icon.width: Kirigami.Units.iconSizes.smallMedium; icon.height: Kirigami.Units.iconSizes.smallMedium
                 onClicked: { if (root.pc) root.pc.recompile() }
-                ToolTip.text: qsTr("Force recompile")
+                ToolTip.text: i18n("Force recompile")
                 ToolTip.visible: hovered; ToolTip.delay: 500
             }
         }
@@ -153,16 +149,16 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         height: root.infoBarHeight
-        color: "#1a1a2e"
+        color: Kirigami.Theme.alternateBackgroundColor
 
         Label {
             anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
+            anchors.leftMargin: Kirigami.Units.smallSpacing * 2
+            anchors.rightMargin: Kirigami.Units.smallSpacing * 2
             verticalAlignment: Text.AlignVCenter
-            font.family: "monospace"
-            font.pixelSize: 11
-            color: "#888888"
+            font.family: root.pc ? root.pc.fixedFontFamily : "monospace"
+            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            color: Kirigami.Theme.disabledTextColor
             text: {
                 if (!root.pc) return "";
                 var t = root.pc.iTime ? root.pc.iTime.toFixed(2) : "0.00";

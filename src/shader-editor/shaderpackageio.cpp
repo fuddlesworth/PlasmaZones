@@ -10,6 +10,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QRegularExpression>
 #include <QStandardPaths>
 
 Q_LOGGING_CATEGORY(lcShaderEditorIO, "plasmazones.shadereditor.io")
@@ -193,6 +194,39 @@ QString systemShaderDirectory()
     return QStandardPaths::locate(QStandardPaths::GenericDataLocation,
                                   QStringLiteral("plasmazones/shaders"),
                                   QStandardPaths::LocateDirectory);
+}
+
+QString computeUniformName(const QString& type, int slot)
+{
+    if (type == QLatin1String("color")) {
+        if (slot < 0 || slot > 15) {
+            return {};
+        }
+        return QStringLiteral("customColor%1").arg(slot + 1);
+    }
+
+    // float, int, bool
+    if (slot < 0 || slot > 31) {
+        return {};
+    }
+
+    const int vecIndex = slot / 4;
+    const int component = slot % 4;
+    static const char* components[] = {"x", "y", "z", "w"};
+    return QStringLiteral("customParams%1_%2").arg(vecIndex + 1).arg(QLatin1String(components[component]));
+}
+
+QString sanitizeId(const QString& name)
+{
+    QString id = name.toLower();
+    static const QRegularExpression nonAlnum(QStringLiteral("[^a-z0-9]+"));
+    static const QRegularExpression leadTrailDash(QStringLiteral("^-|-$"));
+    id.replace(nonAlnum, QStringLiteral("-"));
+    id.remove(leadTrailDash);
+    if (id.isEmpty()) {
+        id = QStringLiteral("custom-shader");
+    }
+    return id;
 }
 
 } // namespace ShaderPackageIO
