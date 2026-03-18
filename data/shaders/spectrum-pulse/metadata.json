@@ -17,6 +17,7 @@
         {"id": "colorMix", "name": "Audio Color Shift", "group": "Audio", "type": "float", "slot": 6, "default": 0.5, "min": 0, "max": 1},
         {"id": "idleAnimation", "name": "Idle Animation", "group": "Animation", "type": "float", "slot": 7, "default": 1.0, "min": 0, "max": 2},
         {"id": "veinIntensity", "name": "Energy Vein Intensity", "group": "Effects", "type": "float", "slot": 8, "default": 0.5, "min": 0.0, "max": 1.0},
+        {"id": "radialWaves", "name": "Bass Radial Waves", "group": "Audio", "type": "float", "slot": 9, "default": 1.0, "min": 0.0, "max": 1.0},
         {"id": "gridOpacity", "name": "Grid Opacity", "group": "Effects", "type": "float", "slot": 10, "default": 0.15, "min": 0.0, "max": 0.5},
         {"id": "fillOpacity", "name": "Fill Opacity", "group": "Appearance", "type": "float", "slot": 11, "default": 0.85, "min": 0.4, "max": 1.0},
         {"id": "neonSpread", "name": "Neon Glow Spread", "group": "Labels", "type": "float", "slot": 12, "default": 1.5, "min": 1.0, "max": 5.0},

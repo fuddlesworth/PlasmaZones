@@ -28,7 +28,7 @@ layout(location = 0) out vec4 fragColor;
  *   [1].z = colorMix         — audio-driven primary↔accent shift (0–1)
  *   [1].w = idleAnimation    — animation when silent (0–2)
  *   [2].x = veinIntensity    — energy vein / tendril brightness (0–1)
- *   [2].y = radialWaves      — bass radial wave strength (0–1)
+ *   [2].y = radialWaves      — bass radial concentric wave strength (0–1)
  *   [2].z = gridIntensity    — grid / mesh overlay brightness (0–0.5)
  *   [2].w = fillOpacity      — zone interior fill opacity (0–1)
  *
@@ -258,6 +258,15 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
             float gridBright = (0.03 + 0.02 * energy) * (gridOpacity / 0.15);
             result.rgb += activeColor * grid * gridBright;
+        }
+
+        // ── Bass radial waves (concentric rings from screen center) ─
+        if (radialWaveStr > 0.01 && hasAudio && bass > 0.05) {
+            float r = length(sp) / min(iResolution.x, iResolution.y) * 2.0;
+            float wave = sin((r - iTime * flowSpeed * 0.4) * PI * 12.0) * 0.5 + 0.5;
+            wave *= exp(-r * 1.5);  // fade toward edges
+            float waveBright = wave * bass * radialWaveStr * reactivity * 0.15;
+            result.rgb += mix(primary, bassCol, 0.4) * waveBright;
         }
 
         // ── Idle interior shimmer ─────────────────────────────

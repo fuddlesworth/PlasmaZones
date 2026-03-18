@@ -14,6 +14,7 @@
         {"id": "glitchAmount", "name": "Digital Glitch", "group": "Effects", "type": "float", "slot": 3, "default": 0.08, "min": 0.0, "max": 0.5},
         {"id": "glowStrength", "name": "Neon Glow", "group": "Appearance", "type": "float", "slot": 4, "default": 1.0, "min": 0.3, "max": 3.0},
         {"id": "smogDensity", "name": "Smog Haze", "group": "Effects", "type": "float", "slot": 5, "default": 0.1, "min": 0.0, "max": 0.5},
+        {"id": "chromaShift", "name": "Chromatic Aberration", "group": "Effects", "type": "float", "slot": 6, "default": 3.0, "min": 0.0, "max": 15.0},
         {"id": "fillOpacity", "name": "Fill Opacity", "group": "Appearance", "type": "float", "slot": 7, "default": 0.7, "min": 0.3, "max": 0.9},
         {"id": "edgeGlowStrength", "name": "Edge Glow", "group": "Appearance", "type": "float", "slot": 8, "default": 0.35, "min": 0.0, "max": 0.8},
         {"id": "mouseInfluenceStrength", "name": "Mouse Influence", "group": "Interaction", "type": "float", "slot": 9, "default": 1.5, "min": 0.5, "max": 3.0},

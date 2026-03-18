@@ -28,6 +28,7 @@ layout(location = 0) out vec4 fragColor;
  *   [0].y = ringCount        — how many spectrum rings to draw
  *   [0].z = (unused)
  *   [0].w = ringSpeed        — ring expansion speed
+ *   mids  → ring density: mid-frequency audio thickens and brightens rings
  *   [1].x = rotationSpeed    — slow rotation of the pattern
  *   [1].y = idleAnimation    — animation when no audio
  *   [1].z = glowIntensity    — overall glow brightness
@@ -159,18 +160,25 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 // Highlighted: fat vivid rings; dormant: thin ghost rings
                 float baseWidth = mix(0.004, 0.008, vitality) + specVal * mix(0.012, 0.03, vitality);
 
+                // Mids thicken all rings uniformly — drives visible ring density.
+                // Stronger mids → fatter rings → more of the radial space is "ring",
+                // giving the impression of higher density without changing ringCount.
+                float midsWidthBoost = mids * reactivity * 0.008;
+
                 // Bass makes bass-frequency rings physically wider/fatter.
                 // exp(-t * 6.0) ensures only inner rings (low t) are affected;
                 // the boost decays to near-zero by the mid-range.
                 float freqWidthBoost = exp(-t * 6.0) * bassEnv * 0.015;
-                float thickness = baseWidth + freqWidthBoost;
+                float thickness = baseWidth + freqWidthBoost + midsWidthBoost;
 
                 // Angular wobble: the ring isn't a perfect circle (seamless around the circle)
                 float wobble = angularNoise(angle, 3.0, t * 20.0 + iTime * 0.5) * specVal * 0.03;
                 float ringDist = abs(r - ringR - wobble);
 
                 // Ring intensity: gaussian falloff from center of ring
-                float ring = exp(-pow(ringDist / thickness, 2.0)) * specVal;
+                // Mids boost ring brightness proportional to mid-band energy
+                float midsBright = 1.0 + mids * reactivity * 0.5;
+                float ring = exp(-pow(ringDist / thickness, 2.0)) * specVal * midsBright;
 
                 // Rings brighten near cursor (screen-space distance)
                 if (mouseInZone) {
