@@ -192,6 +192,7 @@ private:
     QImage m_labelsTexture;
     qreal m_iTime = 0.0;
     qreal m_iTimeDelta = 0.0;
+    qreal m_timeOffset = 0.0; // accumulated time before last pause
     int m_iFrame = 0;
     bool m_animating = false;
     QString m_errorLog;

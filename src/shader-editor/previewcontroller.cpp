@@ -324,8 +324,12 @@ void PreviewController::setAnimating(bool animating)
     m_animating = animating;
 
     if (m_animating) {
+        // Resume from current iTime rather than resetting to 0.
+        // Restart the elapsed clock and adjust so the first frame
+        // picks up where we left off (m_iTime is preserved across pause).
         m_clock.start();
         m_lastTime = 0.0;
+        m_timeOffset = m_iTime;
         m_animationTimer.start();
         m_fpsTimer.start();
         if (m_audioEnabled && !m_audioLive) m_audioTimer.start(33);
@@ -368,6 +372,7 @@ void PreviewController::resetTime()
 {
     m_iTime = 0.0;
     m_lastTime = 0.0;
+    m_timeOffset = 0.0;
     m_iFrame = 0;
     m_clock.restart();
     Q_EMIT iTimeChanged();
@@ -555,7 +560,7 @@ void PreviewController::onAnimationTimerFired()
     const qreal now = m_clock.elapsed() / 1000.0;
     m_iTimeDelta = qMin(now - m_lastTime, 0.1);
     m_lastTime = now;
-    m_iTime = now;
+    m_iTime = m_timeOffset + now;
     m_iFrame = (m_iFrame + 1) % 1000000000;
     m_fpsCounter++;
 
