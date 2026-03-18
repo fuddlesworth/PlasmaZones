@@ -509,7 +509,8 @@ void PreviewController::writeExpandedShader()
 
     // Expand fragment shader includes
     QString fragError;
-    const QString expandedFrag = ShaderIncludeResolver::expandIncludes(fragSource, currentFileDir, includePaths, &fragError);
+    const QString expandedFrag = ShaderIncludeResolver::expandIncludes(
+        fragSource, currentFileDir, includePaths, &fragError, QStringLiteral("effect.frag"));
 
     if (expandedFrag.isNull()) {
         m_errorLog = fragError.isEmpty() ? QStringLiteral("Fragment shader include expansion failed") : fragError;
@@ -534,8 +535,8 @@ void PreviewController::writeExpandedShader()
     // Expand and write vertex shader (if document is available)
     if (m_vertDoc) {
         QString vertError;
-        const QString expandedVert =
-            ShaderIncludeResolver::expandIncludes(vertSource, currentFileDir, includePaths, &vertError);
+        const QString expandedVert = ShaderIncludeResolver::expandIncludes(
+            vertSource, currentFileDir, includePaths, &vertError, QStringLiteral("zone.vert"));
 
         if (expandedVert.isNull()) {
             m_errorLog = vertError.isEmpty() ? QStringLiteral("Vertex shader include expansion failed") : vertError;
@@ -565,7 +566,7 @@ void PreviewController::writeExpandedShader()
 
         QString bufError;
         const QString expandedBuf = ShaderIncludeResolver::expandIncludes(
-            bufDoc->text(), currentFileDir, includePaths, &bufError);
+            bufDoc->text(), currentFileDir, includePaths, &bufError, bufName);
 
         if (expandedBuf.isNull()) {
             m_errorLog = bufError.isEmpty()

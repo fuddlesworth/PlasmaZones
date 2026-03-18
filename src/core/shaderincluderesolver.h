@@ -31,10 +31,11 @@ public:
      * @param currentFileDir Directory of the file that contains @p source (for relative "path")
      * @param includePaths List of directories to search for &lt;path&gt; and for "path" after currentFileDir
      * @param outError If non-null, set on error (file not found, depth exceeded, read error)
+     * @param sourceFilename Name of the source file (used in #line directives for error mapping)
      * @return Expanded source, or empty string on error (check outError)
      */
     static QString expandIncludes(const QString& source, const QString& currentFileDir, const QStringList& includePaths,
-                                  QString* outError = nullptr);
+                                  QString* outError = nullptr, const QString& sourceFilename = QString());
 };
 
 } // namespace PlasmaZones

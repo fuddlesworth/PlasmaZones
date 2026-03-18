@@ -30,7 +30,8 @@ QString tryReadFile(const QString& path, QString* outError)
     return QTextStream(&file).readAll();
 }
 
-QString expandIncludesRecursive(const QString& source, const QString& currentFileDir, const QStringList& includePaths,
+QString expandIncludesRecursive(const QString& source, const QString& sourceFilename,
+                                const QString& currentFileDir, const QStringList& includePaths,
                                 int depth, QSet<QString>& seenCanonical, QString* outError)
 {
     if (depth > ShaderIncludeResolver::MaxIncludeDepth) {
@@ -42,8 +43,11 @@ QString expandIncludesRecursive(const QString& source, const QString& currentFil
 
     QString result;
     const QStringList lines = source.split(QLatin1Char('\n'));
+    int lineNumber = 0;
 
     for (const QString& line : lines) {
+        ++lineNumber;
+
         QRegularExpressionMatch match = includeRegex.match(line);
         if (!match.hasMatch()) {
             result += line + QLatin1Char('\n');
@@ -97,18 +101,25 @@ QString expandIncludesRecursive(const QString& source, const QString& currentFil
             return QString();
         }
 
-        QString newCurrentDir = QFileInfo(resolvedPath).absolutePath();
-        QString expanded =
-            expandIncludesRecursive(included, newCurrentDir, includePaths, depth + 1, seenCanonical, outError);
+        const QString includeFilename = QFileInfo(resolvedPath).fileName();
+        const QString newCurrentDir = QFileInfo(resolvedPath).absolutePath();
+        QString expanded = expandIncludesRecursive(
+            included, includeFilename, newCurrentDir, includePaths, depth + 1, seenCanonical, outError);
         if (expanded.isNull()) {
             return QString();
         }
         seenCanonical.remove(resolvedPath);
 
+        // Emit #line directives so GLSL errors reference original source files.
+        // #line sets the line number for the NEXT line of source.
+        result += QStringLiteral("#line 1 // %1\n").arg(includeFilename);
         result += expanded;
         if (!expanded.endsWith(QLatin1Char('\n'))) {
             result += QLatin1Char('\n');
         }
+        // Restore parent file's line counter after the include.
+        // lineNumber+1 because #line sets the number for the NEXT line.
+        result += QStringLiteral("#line %1 // %2\n").arg(lineNumber + 1).arg(sourceFilename);
     }
 
     return result;
@@ -117,13 +128,15 @@ QString expandIncludesRecursive(const QString& source, const QString& currentFil
 } // namespace
 
 QString ShaderIncludeResolver::expandIncludes(const QString& source, const QString& currentFileDir,
-                                              const QStringList& includePaths, QString* outError)
+                                              const QStringList& includePaths, QString* outError,
+                                              const QString& sourceFilename)
 {
     if (outError) {
         outError->clear();
     }
     QSet<QString> seenCanonical;
-    return expandIncludesRecursive(source, currentFileDir, includePaths, 0, seenCanonical, outError);
+    const QString filename = sourceFilename.isEmpty() ? QStringLiteral("main") : sourceFilename;
+    return expandIncludesRecursive(source, filename, currentFileDir, includePaths, 0, seenCanonical, outError);
 }
 
 } // namespace PlasmaZones
