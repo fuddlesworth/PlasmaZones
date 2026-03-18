@@ -912,6 +912,9 @@ NavigationHandler::BatchSnapResult NavigationHandler::applyBatchSnapFromJson(con
         }
     }
 
+    // Apply geometry per-window via stagger, but defer D-Bus snap confirmations
+    // to onComplete so all windows are announced in a single batch call instead
+    // of individual D-Bus round-trips per window on the compositor thread.
     m_effect->applyStaggeredOrImmediate(
         pending.size(),
         [this, pending](int i) {
@@ -920,18 +923,32 @@ NavigationHandler::BatchSnapResult NavigationHandler::applyBatchSnapFromJson(con
                 return;
             }
             m_effect->applySnapGeometry(p.window, p.geometry);
+        },
+        [this, pending, onComplete]() {
+            // Batch all snap confirmations into one D-Bus call
             auto* wiface = m_effect->windowTrackingInterface();
             if (wiface && wiface->isValid()) {
-                if (p.isRestore) {
-                    // Window's zone exceeded the new layout — unsnap and clear pre-tile geometry
-                    wiface->asyncCall(QStringLiteral("windowUnsnapped"), p.snapWindowId);
-                    wiface->asyncCall(QStringLiteral("clearPreTileGeometry"), p.snapWindowId);
-                } else {
-                    wiface->asyncCall(QStringLiteral("windowSnapped"), p.snapWindowId, p.targetZoneId, p.windowScreen);
+                QJsonArray batchArr;
+                for (const PendingSnap& p : pending) {
+                    if (!p.window) {
+                        continue;
+                    }
+                    QJsonObject obj;
+                    obj[QLatin1String("windowId")] = p.snapWindowId;
+                    obj[QLatin1String("zoneId")] = p.targetZoneId;
+                    obj[QLatin1String("screenId")] = p.windowScreen;
+                    obj[QLatin1String("isRestore")] = p.isRestore;
+                    batchArr.append(obj);
+                }
+                if (!batchArr.isEmpty()) {
+                    QString json = QString::fromUtf8(QJsonDocument(batchArr).toJson(QJsonDocument::Compact));
+                    wiface->asyncCall(QStringLiteral("windowsSnappedBatch"), json);
                 }
             }
-        },
-        onComplete);
+            if (onComplete) {
+                onComplete();
+            }
+        });
 
     return result;
 }

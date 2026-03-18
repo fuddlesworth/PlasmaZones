@@ -13,6 +13,7 @@
 #include <memory>
 
 #include "shortcutmanager.h"
+#include "../core/types.h"
 
 namespace PlasmaZones {
 
@@ -221,6 +222,8 @@ private:
      */
     void restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows = {}, int desktop = -1,
                                        const QString& activity = QString());
+    QVector<RotationEntry> buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
+                                                       const QString& activity);
 
     /** @brief Show layout OSD deferred (avoids blocking on first-time QML compilation) */
     void showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenName);
@@ -320,6 +323,10 @@ private:
     // Keyed by DesktopContextKey (not plain screen name) so cross-desktop toggles
     // don't overwrite each other's ordering.
     QHash<DesktopContextKey, QStringList> m_lastAutotileOrders;
+
+    // Snap-float restore entries collected during windowsReleasedFromTiling.
+    // Consumed by the toggle handler to batch geometry restores into the resnap signal.
+    QVector<RotationEntry> m_pendingSnapFloatRestores;
 
     // State tracking for settingsChanged delta detection (replaces individual signal handlers)
     // Initialized from m_settings in init() before settingsChanged is connected.

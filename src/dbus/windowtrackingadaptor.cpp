@@ -14,6 +14,9 @@
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/types.h"
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -236,6 +239,39 @@ void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
     m_service->unassignWindow(windowId);
 
     qCInfo(lcDbusWindow) << "Window" << windowId << "unsnapped from zone" << previousZoneId;
+}
+
+void WindowTrackingAdaptor::windowsSnappedBatch(const QString& batchJson)
+{
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(batchJson.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        qCWarning(lcDbusWindow) << "windowsSnappedBatch: invalid JSON:" << parseError.errorString();
+        return;
+    }
+
+    const QJsonArray entries = doc.array();
+    qCInfo(lcDbusWindow) << "windowsSnappedBatch: processing" << entries.size() << "entries";
+
+    for (const QJsonValue& val : entries) {
+        QJsonObject obj = val.toObject();
+        QString windowId = obj.value(QLatin1String("windowId")).toString();
+        bool isRestore = obj.value(QLatin1String("isRestore")).toBool(false);
+
+        if (windowId.isEmpty()) {
+            continue;
+        }
+
+        if (isRestore) {
+            // Window's zone exceeded the new layout — unsnap and clear pre-tile geometry
+            windowUnsnapped(windowId);
+            clearPreTileGeometry(windowId);
+        } else {
+            QString zoneId = obj.value(QLatin1String("zoneId")).toString();
+            QString screenId = obj.value(QLatin1String("screenId")).toString();
+            windowSnapped(windowId, zoneId, screenId);
+        }
+    }
 }
 
 void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const QString& newScreenId)

@@ -683,6 +683,18 @@ Q_SIGNALS:
     void windowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
 
     /**
+     * @brief Emitted when overflow windows are batch-floated during applyTiling
+     *
+     * Replaces per-window windowFloatingChanged for overflow. The daemon handler
+     * updates WTS state directly (no D-Bus signals) since the effect processes
+     * float entries from the windowsTileRequested batch.
+     *
+     * @param windowIds Overflow window IDs that were just floated
+     * @param screenId Screen where tiling occurred
+     */
+    void windowsBatchFloated(const QStringList& windowIds, const QString& screenId);
+
+    /**
      * @brief Emitted when windows are tiled to new geometries (batch)
      *
      * JSON array of objects with windowId, x, y, width, height.

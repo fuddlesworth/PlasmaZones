@@ -976,13 +976,10 @@ void PlasmaZonesEffect::slotDaemonReady()
     }
     m_autotileHandler->onDaemonReady();
 
-    // Re-announce all existing windows on autotile screens
+    // Re-announce all existing windows on autotile screens in one batch D-Bus
+    // call instead of per-window windowOpened round-trips.
     const auto windows = KWin::effects->stackingOrder();
-    for (KWin::EffectWindow* w : windows) {
-        if (w && shouldHandleWindow(w)) {
-            m_autotileHandler->notifyWindowAdded(w);
-        }
-    }
+    m_autotileHandler->notifyWindowsAddedBatch(windows);
 
     // Restore snap state for non-autotile windows.
     // pendingRestoresAvailable may have fired BEFORE daemonReady, causing

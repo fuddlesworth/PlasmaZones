@@ -43,6 +43,22 @@ public:
     // ═══════════════════════════════════════════════════════════════════
 
     void notifyWindowAdded(KWin::EffectWindow* w);
+
+    /**
+     * @brief Batch-notify windows added to autotile screens
+     *
+     * Filters windows the same way as notifyWindowAdded, then sends one
+     * windowsOpenedBatch D-Bus call instead of per-window windowOpened calls.
+     * Used on daemon startup/restart and autotile toggle-on.
+     *
+     * @param windows List of candidate windows to process
+     * @param screenFilter If non-empty, only process windows on these screens
+     * @param resetNotified If true, remove windowId from m_notifiedWindows before processing
+     *        (for re-announce on daemon restart / screen change)
+     */
+    void notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows, const QSet<QString>& screenFilter = {},
+                                 bool resetNotified = false);
+
     void onWindowClosed(const QString& windowId, const QString& screenId);
     void onDaemonReady();
     void savePreAutotileForDesktopMove(const QString& windowId, const QString& screenId);
@@ -165,6 +181,25 @@ private:
 
     void setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless);
     void unmaximizeMonocleWindow(const QString& windowId);
+
+    /**
+     * @brief Shared float-state cleanup for a window being floated
+     *
+     * Updates float cache, removes from tiled/borderless sets, restores title bars,
+     * removes border, and unmaximizes monocle. Used by both slotWindowFloatingChanged
+     * (per-window D-Bus signal path) and slotWindowsTileRequested (batch float path).
+     */
+    void applyFloatCleanup(const QString& windowId);
+
+    /**
+     * @brief Check if a window is eligible for autotile notification
+     *
+     * Shared predicate used by both notifyWindowAdded and notifyWindowsAddedBatch
+     * to keep filtering logic in sync.
+     *
+     * @return true if the window should be notified to the autotile daemon
+     */
+    bool isEligibleForAutotileNotify(KWin::EffectWindow* w) const;
     bool saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenName, const QRectF& frame);
     bool shouldApplyBorderInset(const QString& windowId) const;
     void reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight);

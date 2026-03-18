@@ -161,6 +161,18 @@ public Q_SLOTS:
     void windowOpened(const QString& windowId, const QString& screenName, int minWidth, int minHeight);
 
     /**
+     * @brief Batch window-opened notifications
+     *
+     * Processes multiple windowOpened in one D-Bus call. Used on daemon
+     * startup/restart and autotile toggle-on to avoid per-window D-Bus
+     * round-trips. Entries may include preTileGeometry to eliminate
+     * separate storePreTileGeometry calls.
+     *
+     * @param batchJson JSON array of {windowId, screenId, minWidth, minHeight, preTileGeometry?}
+     */
+    void windowsOpenedBatch(const QString& batchJson);
+
+    /**
      * @brief Update a window's minimum size at runtime
      *
      * Called by KWin effect when a window's minimum size changes after

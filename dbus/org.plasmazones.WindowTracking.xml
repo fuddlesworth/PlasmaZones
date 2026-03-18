@@ -34,6 +34,12 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
         </method>
+        <method name="windowsSnappedBatch">
+            <annotation name="org.gtk.GDBus.DocString" value="Batch snap confirmations: process multiple windowSnapped/windowUnsnapped in one D-Bus call. Used by the KWin effect after resnap stagger completes. JSON array of {windowId, zoneId, screenId, isRestore}."/>
+            <arg name="batchJson" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of snap confirmations."/>
+            </arg>
+        </method>
         <method name="getZoneForWindow">
             <annotation name="org.gtk.GDBus.DocString" value="Return the zone UUID a window is snapped to, or empty string."/>
             <arg name="windowId" type="s" direction="in">

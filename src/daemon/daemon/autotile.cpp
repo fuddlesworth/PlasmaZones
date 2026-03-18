@@ -290,6 +290,8 @@ QHash<Daemon::DesktopContextKey, QStringList> Daemon::captureAutotileOrders() co
 
 void Daemon::restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows, int desktop, const QString& activity)
 {
+    // Legacy path — emits individual D-Bus signals. Prefer buildAutotileRestoreEntries()
+    // + emitBatchedResnap() to batch float-restores into the resnap signal.
     if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
         return;
     }
@@ -298,9 +300,6 @@ void Daemon::restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows, 
         return;
     }
     for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
-        // Only process entries for the specified desktop/activity context.
-        // Without this filter, windows from other desktops could get stale
-        // geometry restores that overwrite their current position.
         if (desktop >= 0 && (it.key().desktop != desktop || it.key().activity != activity)) {
             continue;
         }
@@ -311,10 +310,49 @@ void Daemon::restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows, 
             if (wts->isWindowSnapped(windowId))
                 continue;
             if (wts->isWindowFloating(windowId))
-                continue; // Already restored by windowsReleasedFromTiling
+                continue;
             m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenName);
         }
     }
+}
+
+QVector<RotationEntry> Daemon::buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
+                                                           const QString& activity)
+{
+    QVector<RotationEntry> entries;
+    if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
+        return entries;
+    }
+    WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    if (!wts) {
+        return entries;
+    }
+    static const QString restoreSentinel = QStringLiteral("__restore__");
+    for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
+        if (desktop >= 0 && (it.key().desktop != desktop || it.key().activity != activity)) {
+            continue;
+        }
+        const QString& screenName = it.key().screenId;
+        for (const QString& windowId : it.value()) {
+            if (excludeWindows.contains(windowId))
+                continue;
+            if (wts->isWindowSnapped(windowId))
+                continue;
+            if (wts->isWindowFloating(windowId))
+                continue;
+            auto geo = wts->validatedPreTileGeometry(windowId, screenName);
+            if (geo) {
+                RotationEntry entry;
+                entry.windowId = windowId;
+                entry.targetZoneId = restoreSentinel;
+                entry.targetGeometry = *geo;
+                entries.append(entry);
+                qCInfo(lcDaemon) << "Batched float-restore: windowId=" << windowId << "geo=" << *geo
+                                 << "screen=" << screenName;
+            }
+        }
+    }
+    return entries;
 }
 
 void Daemon::presaveSnapFloats()

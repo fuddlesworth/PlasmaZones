@@ -1578,6 +1578,17 @@ void AutotileEngine::applyTiling(const QString& screenId)
         }
         arr.append(obj);
     }
+    // Include overflow windows in the batch with "floating" flag so the effect
+    // can restore their pre-autotile geometry in one pass, instead of receiving
+    // individual D-Bus windowFloatingChanged + applyGeometryRequested per window.
+    for (const QString& wid : std::as_const(newlyOverflowed)) {
+        QJsonObject obj;
+        obj[QLatin1String("windowId")] = wid;
+        obj[QLatin1String("floating")] = true;
+        obj[QLatin1String("screenId")] = screenId;
+        arr.append(obj);
+    }
+
     Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
 
     // Emit deferred focus AFTER windowsTiled so KWin processes tiles first
@@ -1587,10 +1598,12 @@ void AutotileEngine::applyTiling(const QString& screenId)
         m_pendingFocusWindowId.clear();
     }
 
-    // Emit overflow signals AFTER geometry batch — prevents re-entrant signal
-    // handlers from triggering retile on partially-complete state.
-    for (const QString& wid : std::as_const(newlyOverflowed)) {
-        Q_EMIT windowFloatingChanged(wid, true, screenId);
+    // Batch-notify daemon of overflow float state (replaces per-window
+    // windowFloatingChanged). The daemon handler updates WTS state without
+    // emitting per-window D-Bus signals since the effect processes float entries
+    // from the windowsTileRequested batch.
+    if (!newlyOverflowed.isEmpty()) {
+        Q_EMIT windowsBatchFloated(newlyOverflowed, screenId);
     }
 }
 

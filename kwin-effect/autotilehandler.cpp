@@ -17,6 +17,9 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLoggingCategory>
 #include <QtMath>
 
@@ -292,21 +295,7 @@ bool AutotileHandler::isAutotileScreen(const QString& screenName) const
 
 void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
 {
-    if (!w || !m_effect->shouldHandleWindow(w)) {
-        return;
-    }
-
-    if (!m_effect->isTileableWindow(w)) {
-        return;
-    }
-
-    if (w->isMinimized()) {
-        return;
-    }
-
-    // Only notify windows on the current desktop/activity — prevents windows from
-    // other desktops being added to the autotile engine on desktop switch.
-    if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+    if (!isEligibleForAutotileNotify(w)) {
         return;
     }
 
@@ -364,6 +353,88 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
         qCDebug(lcEffect) << "Notified autotile: windowOpened" << windowId << "on screen" << screenId
                           << "minSize:" << minWidth << "x" << minHeight;
     }
+}
+
+void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows,
+                                              const QSet<QString>& screenFilter, bool resetNotified)
+{
+    // Collect eligible windows using the same filtering as notifyWindowAdded,
+    // then send one batch D-Bus call instead of per-window round-trips.
+    QJsonArray batchArr;
+    QStringList batchWindowIds; // for error rollback
+
+    for (KWin::EffectWindow* w : windows) {
+        if (!isEligibleForAutotileNotify(w)) {
+            continue;
+        }
+
+        const QString screenId = m_effect->getWindowScreenId(w);
+        if (!screenFilter.isEmpty() && !screenFilter.contains(screenId)) {
+            continue;
+        }
+        if (!m_autotileScreens.contains(screenId)) {
+            continue;
+        }
+
+        const QString windowId = m_effect->getWindowId(w);
+
+        if (m_pendingCloses.remove(windowId)) {
+            continue;
+        }
+
+        if (resetNotified) {
+            m_notifiedWindows.remove(windowId);
+        }
+        if (m_notifiedWindows.contains(windowId)) {
+            continue;
+        }
+        m_notifiedWindows.insert(windowId);
+        m_notifiedWindowScreens[windowId] = screenId;
+
+        saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry());
+
+        int minWidth = 0;
+        int minHeight = 0;
+        KWin::Window* kw = w->window();
+        if (kw) {
+            const QSizeF minSize = kw->minSize();
+            if (minSize.isValid()) {
+                minWidth = qCeil(minSize.width());
+                minHeight = qCeil(minSize.height());
+            }
+        }
+
+        QJsonObject obj;
+        obj[QLatin1String("windowId")] = windowId;
+        obj[QLatin1String("screenId")] = screenId;
+        obj[QLatin1String("minWidth")] = minWidth;
+        obj[QLatin1String("minHeight")] = minHeight;
+        batchArr.append(obj);
+        batchWindowIds.append(windowId);
+    }
+
+    if (batchArr.isEmpty()) {
+        return;
+    }
+
+    QString json = QString::fromUtf8(QJsonDocument(batchArr).toJson(QJsonDocument::Compact));
+    QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+                                                      QStringLiteral("windowsOpenedBatch"));
+    msg << json;
+
+    QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, batchWindowIds](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        if (w->isError()) {
+            qCWarning(lcEffect) << "windowsOpenedBatch D-Bus call failed:" << w->error().message();
+            for (const QString& wid : batchWindowIds) {
+                m_notifiedWindows.remove(wid);
+                m_notifiedWindowScreens.remove(wid);
+            }
+        }
+    });
+    qCInfo(lcEffect) << "Notified autotile: windowsOpenedBatch with" << batchArr.size() << "windows";
 }
 
 void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
@@ -606,6 +677,37 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     }
 }
 
+bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
+{
+    if (!w || !m_effect->shouldHandleWindow(w)) {
+        return false;
+    }
+    if (!m_effect->isTileableWindow(w)) {
+        return false;
+    }
+    if (w->isMinimized()) {
+        return false;
+    }
+    if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+        return false;
+    }
+    return true;
+}
+
+void AutotileHandler::applyFloatCleanup(const QString& windowId)
+{
+    m_effect->m_navigationHandler->setWindowFloating(windowId, true);
+    m_border.tiledWindows.remove(windowId);
+    if (m_border.borderlessWindows.contains(windowId)) {
+        KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+        if (w) {
+            setWindowBorderless(w, windowId, false);
+        }
+    }
+    m_effect->removeWindowBorder(windowId);
+    unmaximizeMonocleWindow(windowId);
+}
+
 void AutotileHandler::onDaemonReady()
 {
     loadSettings();
@@ -666,24 +768,9 @@ void AutotileHandler::loadSettings()
 
             if (!added.isEmpty()) {
                 const auto windows = KWin::effects->stackingOrder();
-                for (KWin::EffectWindow* win : windows) {
-                    if (win && m_effect->shouldHandleWindow(win)) {
-                        // Only process windows on the current desktop/activity
-                        // (prevents cross-desktop geometry pollution on daemon restart)
-                        if (!win->isOnCurrentDesktop() || !win->isOnCurrentActivity()) {
-                            continue;
-                        }
-                        const QString screenId = m_effect->getWindowScreenId(win);
-                        if (added.contains(screenId)) {
-                            const QString windowId = m_effect->getWindowId(win);
-                            saveAndRecordPreAutotileGeometry(windowId, screenId, win->frameGeometry());
-                            if (!win->isMinimized()) {
-                                m_notifiedWindows.remove(windowId);
-                                notifyWindowAdded(win);
-                            }
-                        }
-                    }
-                }
+                // Batch-notify all windows on autotile screens in one D-Bus call
+                // instead of per-window windowOpened round-trips.
+                notifyWindowsAddedBatch(windows, added, /*resetNotified=*/true);
             }
         } else {
             qCDebug(lcEffect) << "Autotile screens: query failed, daemon may not be running";

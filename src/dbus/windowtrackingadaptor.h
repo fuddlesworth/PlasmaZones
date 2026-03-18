@@ -104,6 +104,13 @@ public Q_SLOTS:
     void windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenId);
     void windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds, const QString& screenId);
     void windowUnsnapped(const QString& windowId);
+
+    /**
+     * Batch snap confirmations: process multiple snap/unsnap in one D-Bus call.
+     * Used by KWin effect after resnap stagger completes to avoid per-window D-Bus round-trips.
+     * @param batchJson JSON array of {windowId, zoneId, screenId, isRestore}
+     */
+    void windowsSnappedBatch(const QString& batchJson);
     /**
      * Handle window screen change: unsnap only if the new screen differs
      * from the stored assignment (user-initiated move). Programmatic moves

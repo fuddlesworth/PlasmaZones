@@ -9,6 +9,7 @@
 
 #include "core/logging.h"
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -194,6 +195,37 @@ void AutotileAdaptor::windowOpened(const QString& windowId, const QString& scree
     m_engine->windowOpened(windowId, screenName, qMax(0, minWidth), qMax(0, minHeight));
 }
 
+void AutotileAdaptor::windowsOpenedBatch(const QString& batchJson)
+{
+    if (!ensureEngine("windowsOpenedBatch")) {
+        return;
+    }
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(batchJson.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        qCWarning(lcDbusAutotile) << "windowsOpenedBatch: invalid JSON:" << parseError.errorString();
+        return;
+    }
+
+    const QJsonArray entries = doc.array();
+    qCInfo(lcDbusAutotile) << "windowsOpenedBatch: processing" << entries.size() << "windows";
+
+    for (const QJsonValue& val : entries) {
+        QJsonObject obj = val.toObject();
+        QString windowId = obj.value(QLatin1String("windowId")).toString();
+        QString screenId = obj.value(QLatin1String("screenId")).toString();
+        int minWidth = obj.value(QLatin1String("minWidth")).toInt(0);
+        int minHeight = obj.value(QLatin1String("minHeight")).toInt(0);
+
+        if (windowId.isEmpty() || screenId.isEmpty()) {
+            continue;
+        }
+
+        m_engine->windowOpened(windowId, screenId, qMax(0, minWidth), qMax(0, minHeight));
+    }
+}
+
 void AutotileAdaptor::windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight)
 {
     if (!ensureEngine("windowMinSizeUpdated")) {
@@ -293,6 +325,11 @@ void AutotileAdaptor::onWindowsTiled(const QString& tileRequestsJson)
     QJsonArray outArr;
     for (const QJsonValue& val : doc.array()) {
         QJsonObject obj = val.toObject();
+        // Float entries (overflow windows) have no geometry — pass through as-is
+        if (obj.value(QLatin1String("floating")).toBool(false)) {
+            outArr.append(obj);
+            continue;
+        }
         QString windowId = obj.value(QLatin1String("windowId")).toString();
         QRect geo(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
                   obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
