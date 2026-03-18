@@ -4,8 +4,9 @@
 #include "cavaservice.h"
 
 #include <QDir>
-#include <QStandardPaths>
 #include <QFileInfo>
+#include <QStandardPaths>
+#include <QTimer>
 
 #include "../core/constants.h"
 #include "../core/logging.h"
@@ -23,7 +24,15 @@ CavaService::CavaService(QObject* parent)
 
 CavaService::~CavaService()
 {
-    stop();
+    // Must block in destructor to ensure CAVA is dead before we're destroyed.
+    if (m_process && m_process->state() != QProcess::NotRunning) {
+        m_stopping = true;
+        m_process->terminate();
+        if (!m_process->waitForFinished(500)) {
+            m_process->kill();
+            m_process->waitForFinished(500);
+        }
+    }
 }
 
 bool CavaService::isAvailable()
@@ -75,13 +84,15 @@ void CavaService::stop()
 {
     if (m_process && m_process->state() != QProcess::NotRunning) {
         m_stopping = true;
-        // Graceful: SIGTERM first, then SIGKILL if unresponsive
         m_process->terminate();
-        if (!m_process->waitForFinished(500)) {
-            m_process->kill();
-            m_process->waitForFinished(500);
-        }
-        m_stopping = false;
+        // Non-blocking: if SIGTERM doesn't work within 500ms, escalate to SIGKILL.
+        // The one-shot timer avoids blocking the GUI thread with waitForFinished().
+        QTimer::singleShot(500, this, [this]() {
+            if (m_process && m_process->state() != QProcess::NotRunning) {
+                m_process->kill();
+            }
+            m_stopping = false;
+        });
     }
     m_spectrum.clear();
     m_smoothedSpectrum.clear();

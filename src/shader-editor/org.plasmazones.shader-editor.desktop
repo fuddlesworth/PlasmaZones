@@ -9,4 +9,6 @@ Terminal=false
 Categories=Qt;KDE;Development;Utility;
 Keywords=shader;glsl;effect;zone;plasmazones;
 StartupWMClass=plasmazones-shader-editor
+StartupNotify=true
 SingleMainWindow=true
+X-KDE-WaylandEntryId=org.plasmazones.shader-editor
