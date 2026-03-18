@@ -242,11 +242,16 @@ bool Daemon::init()
             handleAutotileDisabled();
         }
 
-        // Handle snapping toggle → autotile activation.
+        // Handle activation of autotile mode.
+        // Fires when either:
+        //   (a) Snapping toggled OFF while autotile is already enabled, OR
+        //   (b) Autotile toggled ON (regardless of snapping state)
+        // Both paths need per-screen autotile assignments created.
         // Guard: skip if already in autotile mode to avoid resetting per-screen
         // algorithm customizations with the global algorithm.
-        if (snappingToggled && !snappingNow && autotileNow
-            && !(m_modeTracker && m_modeTracker->isAnyScreenAutotile())) {
+        const bool enteringAutotile =
+            (snappingToggled && !snappingNow && autotileNow) || (autotileToggled && autotileNow && !snappingNow);
+        if (enteringAutotile && !(m_modeTracker && m_modeTracker->isAnyScreenAutotile())) {
             handleSnappingToAutotile();
         }
 
