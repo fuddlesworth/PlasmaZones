@@ -3,6 +3,7 @@
 
 #include "previewcontroller.h"
 #include "../core/shaderincluderesolver.h"
+#include "../core/shaderregistry.h"
 #include "../daemon/rendering/zonelabeltexturebuilder.h"
 #include "shaderpackageio.h"
 
@@ -152,6 +153,17 @@ void PreviewController::updateMultipassConfig(const QString& metadataJson)
     }
 
     const QJsonObject root = doc.object();
+
+    // Parse wallpaper flag (independent of multipass)
+    const bool newUseWallpaper = root.value(QStringLiteral("wallpaper")).toBool(false);
+    if (newUseWallpaper != m_useWallpaper) {
+        m_useWallpaper = newUseWallpaper;
+        Q_EMIT useWallpaperChanged();
+
+        if (m_useWallpaper && m_wallpaperTexture.isNull()) {
+            loadWallpaperTexture();
+        }
+    }
 
     // Check if multipass is explicitly disabled
     if (root.contains(QStringLiteral("multipass")) && !root.value(QStringLiteral("multipass")).toBool()) {
@@ -766,6 +778,19 @@ void PreviewController::buildLabelsTexture()
 {
     m_labelsTexture = ZoneLabelTextureBuilder::build(m_zones, QSize(m_previewWidth, m_previewHeight), Qt::white, true);
     Q_EMIT labelsTextureChanged();
+}
+
+void PreviewController::loadWallpaperTexture()
+{
+    const QImage image = ShaderRegistry::loadWallpaperImage();
+    if (image.isNull()) {
+        qCDebug(lcPreview) << "No desktop wallpaper available for preview";
+        return;
+    }
+
+    m_wallpaperTexture = image;
+    Q_EMIT wallpaperTextureChanged();
+    qCDebug(lcPreview) << "Loaded wallpaper texture:" << image.size();
 }
 
 } // namespace PlasmaZones

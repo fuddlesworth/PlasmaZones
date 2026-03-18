@@ -54,6 +54,8 @@ Item {
         bufferScale: root.pc ? root.pc.bufferScale : 1.0
         bufferWrap: root.pc ? root.pc.bufferWrap : "clamp"
 
+        useWallpaper: root.pc ? root.pc.useWallpaper : false
+
         onWidthChanged: updatePreviewSize()
         onHeightChanged: updatePreviewSize()
 
@@ -95,6 +97,9 @@ Item {
         }
         function onAudioSpectrumChanged() {
             shaderPreview.audioSpectrum = root.pc.audioSpectrum;
+        }
+        function onWallpaperTextureChanged() {
+            shaderPreview.wallpaperTexture = root.pc.wallpaperTexture;
         }
     }
 

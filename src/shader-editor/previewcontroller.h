@@ -51,6 +51,10 @@ class PreviewController : public QObject
     Q_PROPERTY(qreal bufferScale READ bufferScale NOTIFY bufferScaleChanged)
     Q_PROPERTY(QString bufferWrap READ bufferWrap NOTIFY bufferWrapChanged)
 
+    // Wallpaper texture
+    Q_PROPERTY(QImage wallpaperTexture READ wallpaperTexture NOTIFY wallpaperTextureChanged)
+    Q_PROPERTY(bool useWallpaper READ useWallpaper NOTIFY useWallpaperChanged)
+
 public:
     // ZoneShaderItem::Status values (avoids header dependency in shader-editor)
     static constexpr int StatusNull = 0;
@@ -91,6 +95,9 @@ public:
     bool bufferFeedback() const { return m_bufferFeedback; }
     qreal bufferScale() const { return m_bufferScale; }
     QString bufferWrap() const { return m_bufferWrap; }
+
+    QImage wallpaperTexture() const { return m_wallpaperTexture; }
+    bool useWallpaper() const { return m_useWallpaper; }
 
     void setAnimating(bool animating);
     void setShowLabels(bool show);
@@ -133,6 +140,8 @@ Q_SIGNALS:
     void bufferFeedbackChanged();
     void bufferScaleChanged();
     void bufferWrapChanged();
+    void wallpaperTextureChanged();
+    void useWallpaperChanged();
 
 private Q_SLOTS:
     void onDocumentTextChanged();
@@ -143,6 +152,7 @@ private:
     void buildZoneLayout();
     void buildLabelsTexture();
     void writeExpandedShader();
+    void loadWallpaperTexture();
 
     QPointer<KTextEditor::Document> m_fragDoc;
     QPointer<KTextEditor::Document> m_vertDoc;
@@ -152,6 +162,8 @@ private:
     bool m_bufferFeedback = false;
     qreal m_bufferScale = 1.0;
     QString m_bufferWrap = QStringLiteral("clamp");
+    QImage m_wallpaperTexture;
+    bool m_useWallpaper = false;
     QString m_shaderDir; // for #include resolution
 
     QTimer m_recompileTimer; // 300ms debounce
