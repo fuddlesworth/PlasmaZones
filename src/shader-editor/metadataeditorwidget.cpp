@@ -151,6 +151,7 @@ void MetadataEditorWidget::setupUi()
 
 void MetadataEditorWidget::connectSignals()
 {
+    connect(m_idEdit, &QLineEdit::textChanged, this, &MetadataEditorWidget::markModified);
     connect(m_nameEdit, &QLineEdit::textChanged, this, &MetadataEditorWidget::markModified);
     connect(m_categoryEdit, &QLineEdit::textChanged, this, &MetadataEditorWidget::markModified);
     connect(m_authorEdit, &QLineEdit::textChanged, this, &MetadataEditorWidget::markModified);
@@ -396,6 +397,43 @@ void MetadataEditorWidget::onMoveParameterDown()
     m_paramTree->insertTopLevelItem(index + 1, item);
     m_paramTree->setCurrentItem(item);
     markModified();
+}
+
+void MetadataEditorWidget::updateParameterDefaults(const QVariantMap& uniformValues)
+{
+    bool changed = false;
+
+    for (int i = 0; i < m_paramTree->topLevelItemCount(); ++i) {
+        auto* item = m_paramTree->topLevelItem(i);
+        const QByteArray storedJson = item->data(0, Qt::UserRole).toByteArray();
+        QJsonDocument paramDoc = QJsonDocument::fromJson(storedJson);
+        if (!paramDoc.isObject()) continue;
+
+        QJsonObject param = paramDoc.object();
+        const QString type = param.value(QStringLiteral("type")).toString();
+        const int slot = param.value(QStringLiteral("slot")).toInt(-1);
+        const QString uniformName = ShaderPackageIO::computeUniformName(type, slot);
+        if (uniformName.isEmpty()) continue;
+
+        auto it = uniformValues.find(uniformName);
+        if (it == uniformValues.end()) continue;
+
+        if (type == QLatin1String("float") || type == QLatin1String("int")) {
+            param[QStringLiteral("default")] = it->toDouble();
+        } else if (type == QLatin1String("bool")) {
+            param[QStringLiteral("default")] = it->toDouble() > 0.5;
+        } else if (type == QLatin1String("color")) {
+            param[QStringLiteral("default")] = it->toString();
+        }
+
+        item->setData(0, Qt::UserRole, QJsonDocument(param).toJson(QJsonDocument::Compact));
+        item->setText(3, formatDefaultValue(param));
+        changed = true;
+    }
+
+    if (changed) {
+        markModified();
+    }
 }
 
 } // namespace PlasmaZones

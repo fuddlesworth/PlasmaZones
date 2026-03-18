@@ -60,7 +60,7 @@ Item {
                 root.pc.onShaderStatus(shaderPreview.status, shaderPreview.errorLog)
         }
         onErrorLogChanged: {
-            if (root.pc && shaderPreview.status === root.statusReady)
+            if (root.pc && (shaderPreview.status === root.statusReady || shaderPreview.status === root.statusError))
                 root.pc.onShaderStatus(shaderPreview.status, shaderPreview.errorLog)
         }
     }

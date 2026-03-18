@@ -4,6 +4,7 @@
 #pragma once
 
 #include <QJsonObject>
+#include <QVariantMap>
 #include <QWidget>
 
 class QCheckBox;
@@ -28,6 +29,7 @@ public:
 
     bool isModified() const;
     void setModified(bool modified);
+    void updateParameterDefaults(const QVariantMap& uniformValues);
 
 Q_SIGNALS:
     void modified();

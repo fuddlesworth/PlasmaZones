@@ -89,6 +89,29 @@ bool savePackage(const QString& dirPath, const ShaderPackageContents& contents)
         file.flush();
     }
 
+    // Remove shader files that are no longer in the package
+    {
+        const QStringList shaderFilters = {
+            QStringLiteral("*.vert"),
+            QStringLiteral("*.frag"),
+            QStringLiteral("*.glsl"),
+        };
+        QSet<QString> keepFiles;
+        for (const ShaderFile& sf : contents.files) {
+            keepFiles.insert(sf.filename);
+        }
+        const QFileInfoList existing = dir.entryInfoList(shaderFilters, QDir::Files);
+        for (const QFileInfo& fi : existing) {
+            if (!keepFiles.contains(fi.fileName())) {
+                if (QFile::remove(fi.absoluteFilePath())) {
+                    qCDebug(lcShaderEditorIO) << "Removed orphaned shader file:" << fi.fileName();
+                } else {
+                    qCWarning(lcShaderEditorIO) << "Failed to remove orphaned file:" << fi.absoluteFilePath();
+                }
+            }
+        }
+    }
+
     // Write shader files
     for (const ShaderFile& sf : contents.files) {
         if (sf.filename.contains(QLatin1Char('/')) || sf.filename.contains(QLatin1Char('\\'))) {

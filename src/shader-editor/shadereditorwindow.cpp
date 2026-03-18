@@ -505,6 +505,13 @@ void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
     connect(m_metadataEditor, &MetadataEditorWidget::insertUniformRequested,
             this, &ShaderEditorWindow::insertTextAtCursor);
 
+    // Copy as Defaults -> write current param values back into metadata defaults
+    connect(m_parameterPanel, &ParameterPanel::copyDefaultsRequested, this, [this]() {
+        if (!m_metadataEditor) return;
+        const QVariantMap values = m_parameterPanel->currentUniformValues();
+        m_metadataEditor->updateParameterDefaults(values);
+    });
+
     // Connect metadata changes -> update preview params + parameter panel
     connect(m_metadataEditor, &MetadataEditorWidget::modified, this, [this]() {
         updateWindowTitle();
@@ -711,16 +718,38 @@ void ShaderEditorWindow::saveShaderPackageAs()
         return;
     }
 
-    const QString previousPath = m_packagePath;
-    const bool wasNew = m_isNewPackage;
+    // Build contents for the target directory without modifying m_packagePath yet
+    ShaderPackageContents contents;
+    contents.dirPath = dir;
 
-    m_packagePath = dir;
-    m_isNewPackage = false;
-    saveShaderPackage();
+    if (m_metadataEditor) {
+        contents.metadataJson = m_metadataEditor->toJson();
+    }
 
-    if (hasUnsavedChanges()) {
-        m_packagePath = previousPath;
-        m_isNewPackage = wasNew;
+    for (int i = 0; i < m_tabWidget->count(); ++i) {
+        auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->widget(i));
+        if (!view || !view->document()) continue;
+        ShaderFile sf;
+        sf.filename = m_tabWidget->tabText(i);
+        sf.content = view->document()->text();
+        contents.files.append(sf);
+    }
+
+    if (ShaderPackageIO::savePackage(dir, contents)) {
+        m_packagePath = dir;
+        m_isNewPackage = false;
+        for (auto* doc : m_ownedDocuments) {
+            doc->setModified(false);
+        }
+        if (m_metadataEditor) {
+            m_metadataEditor->setModified(false);
+        }
+        m_previewController->setShaderDirectory(dir);
+        statusBar()->showMessage(i18n("Shader package saved to %1", dir), 3000);
+        qCInfo(lcShaderEditor) << "Saved shader package to=" << dir;
+    } else {
+        QMessageBox::warning(this, i18n("Error"),
+                             i18n("Failed to save shader package to:\n%1", dir));
     }
 
     updateWindowTitle();
