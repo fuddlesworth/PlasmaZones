@@ -466,11 +466,19 @@ void PreviewController::buildZoneLayout()
 {
     m_zones.clear();
 
-    // Use actual preview widget dimensions so zones normalize correctly
-    // against iResolution (which is bound to the ZoneShaderItem's pixel size)
     const qreal W = m_previewWidth;
     const qreal H = m_previewHeight;
-    constexpr qreal gap = 4.0;
+    constexpr qreal gap = 6.0;
+
+    // The ZoneShaderItem fills the entire QQuickWidget; the header bar (28px)
+    // and info bar (20px) render on top. Position zones between them with padding.
+    constexpr qreal headerH = 36.0;
+    constexpr qreal infoBarH = 24.0;
+    constexpr qreal pad = 4.0;
+    const qreal monX = pad;
+    const qreal monY = headerH + pad;
+    const qreal monW = W - 2 * pad;
+    const qreal monH = H - headerH - infoBarH - 2 * pad;
 
     auto makeZone = [](int zoneNumber, qreal x, qreal y, qreal w, qreal h) -> QVariantMap {
         QVariantMap zone;
@@ -481,58 +489,55 @@ void PreviewController::buildZoneLayout()
         zone[QStringLiteral("height")] = h;
         zone[QStringLiteral("zoneNumber")] = zoneNumber;
         zone[QStringLiteral("isHighlighted")] = false;
-        // Fill: semi-transparent blue
-        zone[QStringLiteral("fillR")] = 100.0 / 255.0;
-        zone[QStringLiteral("fillG")] = 100.0 / 255.0;
-        zone[QStringLiteral("fillB")] = 255.0 / 255.0;
-        zone[QStringLiteral("fillA")] = 0.3;
-        // Border: opaque blue
-        zone[QStringLiteral("borderR")] = 100.0 / 255.0;
-        zone[QStringLiteral("borderG")] = 100.0 / 255.0;
-        zone[QStringLiteral("borderB")] = 255.0 / 255.0;
-        zone[QStringLiteral("borderA")] = 0.8;
+        // Fill: very subtle tint (shader content shows through)
+        zone[QStringLiteral("fillR")] = 0.1;
+        zone[QStringLiteral("fillG")] = 0.15;
+        zone[QStringLiteral("fillB")] = 0.35;
+        zone[QStringLiteral("fillA")] = 0.2;
+        // Border: thin subtle accent
+        zone[QStringLiteral("borderR")] = 0.35;
+        zone[QStringLiteral("borderG")] = 0.55;
+        zone[QStringLiteral("borderB")] = 0.9;
+        zone[QStringLiteral("borderA")] = 0.5;
         zone[QStringLiteral("shaderBorderRadius")] = 8.0;
-        zone[QStringLiteral("shaderBorderWidth")] = 2.0;
+        zone[QStringLiteral("shaderBorderWidth")] = 1.5;
         return zone;
     };
 
     switch (m_zoneLayoutIndex) {
     case 0: // Single zone
-        m_zones.append(makeZone(1, gap, gap, W - 2 * gap, H - 2 * gap));
+        m_zones.append(makeZone(1, monX, monY, monW, monH));
         break;
 
-    case 1: { // 2-column split
-        const qreal colW = (W - 3 * gap) / 2.0;
-        m_zones.append(makeZone(1, gap, gap, colW, H - 2 * gap));
-        m_zones.append(makeZone(2, 2 * gap + colW, gap, colW, H - 2 * gap));
+    case 1: { // 2-column split (default — matches mockup)
+        const qreal colW = (monW - gap) / 2.0;
+        m_zones.append(makeZone(1, monX, monY, colW, monH));
+        m_zones.append(makeZone(2, monX + colW + gap, monY, colW, monH));
         break;
     }
 
     case 2: { // 3-column
-        const qreal colW = (W - 4 * gap) / 3.0;
+        const qreal colW = (monW - 2 * gap) / 3.0;
         for (int i = 0; i < 3; ++i) {
-            const qreal x = gap + i * (colW + gap);
-            m_zones.append(makeZone(i + 1, x, gap, colW, H - 2 * gap));
+            m_zones.append(makeZone(i + 1, monX + i * (colW + gap), monY, colW, monH));
         }
         break;
     }
 
     case 3: { // 4-grid (2x2)
-        const qreal cellW = (W - 3 * gap) / 2.0;
-        const qreal cellH = (H - 3 * gap) / 2.0;
+        const qreal cellW = (monW - gap) / 2.0;
+        const qreal cellH = (monH - gap) / 2.0;
         int num = 1;
         for (int row = 0; row < 2; ++row) {
             for (int col = 0; col < 2; ++col) {
-                const qreal x = gap + col * (cellW + gap);
-                const qreal y = gap + row * (cellH + gap);
-                m_zones.append(makeZone(num++, x, y, cellW, cellH));
+                m_zones.append(makeZone(num++, monX + col * (cellW + gap), monY + row * (cellH + gap), cellW, cellH));
             }
         }
         break;
     }
 
     default:
-        m_zones.append(makeZone(1, gap, gap, W - 2 * gap, H - 2 * gap));
+        m_zones.append(makeZone(1, monX, monY, monW, monH));
         break;
     }
 

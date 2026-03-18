@@ -162,7 +162,7 @@ void ShaderEditorWindow::setupLayout()
         }
     });
     m_previewWidget->setSource(QUrl(QStringLiteral("qrc:/qml/PreviewPane.qml")));
-    m_previewWidget->setMinimumHeight(200);
+    m_previewWidget->setMinimumHeight(300);
 
     // ── Right vertical splitter: preview (top) + metadata editor (bottom) ──
     m_rightSplitter = new QSplitter(Qt::Vertical, this);
@@ -268,8 +268,22 @@ void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
 
     m_rightTabWidget = new QTabWidget(m_rightSplitter);
     m_rightSplitter->addWidget(m_rightTabWidget);
-    m_rightSplitter->setStretchFactor(0, 3);  // preview
-    m_rightSplitter->setStretchFactor(1, 2);  // tabs
+    // Mockup shows ~55% preview / ~45% parameter panel
+    m_rightSplitter->setStretchFactor(0, 11);
+    m_rightSplitter->setStretchFactor(1, 9);
+    m_rightSplitter->setCollapsible(0, false);
+    m_rightSplitter->setCollapsible(1, false);
+
+    // Force explicit initial size distribution.
+    // QQuickWidget's sizeHint (from QML implicitHeight) is modest, so without
+    // setSizes the tab widget's larger sizeHint would steal preview space.
+    const int totalHeight = m_rightSplitter->height();
+    if (totalHeight > 0) {
+        const int previewHeight = totalHeight * 55 / 100;
+        m_rightSplitter->setSizes({previewHeight, totalHeight - previewHeight});
+    } else {
+        m_rightSplitter->setSizes({440, 360});
+    }
 
     // Parameters tab
     m_parameterPanel = new ParameterPanel(m_rightTabWidget);
@@ -390,6 +404,7 @@ void ShaderEditorWindow::newShaderPackage()
     updateWindowTitle();
 
     m_previewController->setShaderDirectory(QString());
+    m_previewController->loadDefaultParamsFromMetadata(contents.metadataJson);
 
     qCInfo(lcShaderEditor) << "Created new shader package name=" << shaderName << "id=" << shaderId;
 }

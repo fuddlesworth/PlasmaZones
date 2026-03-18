@@ -4,134 +4,172 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
 import PlasmaZones 1.0
 
 Item {
     id: root
 
-    // Bound from C++ context property; null until QQuickWidget finishes loading
+    implicitWidth: 400
+    implicitHeight: 400
+
     readonly property var pc: previewController ?? null
 
-    ColumnLayout {
+    // Heights of the overlay bars — used by C++ to offset zones
+    readonly property int headerHeight: 36
+    readonly property int infoBarHeight: 24
+
+    // ── Dark background ──
+    Rectangle {
         anchors.fill: parent
-        spacing: 0
-        visible: root.pc !== null
+        color: "#0a0a1a"
+    }
 
-        // Preview header bar
-        ToolBar {
-            Layout.fillWidth: true
+    // ── Shader preview — fills entire widget so the render node's
+    //    fullscreen-quad viewport matches the render target exactly.
+    //    Header and info bars render on top (declared after). ──
+    ZoneShaderItem {
+        id: shaderPreview
+        anchors.fill: parent
+        visible: root.pc && root.pc.shaderSource.toString() !== ""
 
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 8
+        zones: root.pc ? root.pc.zones : []
+        shaderParams: root.pc ? root.pc.shaderParams : ({})
 
-                Label {
-                    text: qsTr("Live Preview")
-                    font.bold: true
-                }
+        iTime: root.pc ? root.pc.iTime : 0
+        iTimeDelta: root.pc ? root.pc.iTimeDelta : 0
+        iFrame: root.pc ? root.pc.iFrame : 0
+        iResolution: Qt.size(width, height)
 
-                Item { Layout.fillWidth: true }
+        shaderSource: root.pc ? root.pc.shaderSource : ""
 
-                Label {
-                    text: (root.pc ? root.pc.fps : 0) + " FPS"
-                    font.family: "monospace"
-                    opacity: 0.7
-                    visible: root.pc ? root.pc.animating : false
-                }
+        onWidthChanged: updatePreviewSize()
+        onHeightChanged: updatePreviewSize()
 
-                ToolButton {
-                    icon.name: (root.pc && root.pc.animating) ? "media-playback-pause" : "media-playback-start"
-                    onClicked: { if (root.pc) root.pc.animating = !root.pc.animating }
-                    ToolTip.text: (root.pc && root.pc.animating) ? qsTr("Pause") : qsTr("Play")
-                    ToolTip.visible: hovered
-                }
-
-                ToolButton {
-                    icon.name: "view-refresh"
-                    onClicked: { if (root.pc) root.pc.resetTime() }
-                    ToolTip.text: qsTr("Reset time")
-                    ToolTip.visible: hovered
-                }
-
-                ToolButton {
-                    icon.name: "view-grid"
-                    onClicked: { if (root.pc) root.pc.cycleZoneLayout() }
-                    ToolTip.text: root.pc ? root.pc.zoneLayoutName : ""
-                    ToolTip.visible: hovered
-                }
-
-                ToolButton {
-                    icon.name: "view-refresh-symbolic"
-                    onClicked: { if (root.pc) root.pc.recompile() }
-                    ToolTip.text: qsTr("Force recompile")
-                    ToolTip.visible: hovered
-                }
-            }
+        function updatePreviewSize() {
+            if (root.pc && width > 20 && height > 20)
+                root.pc.setPreviewSize(Math.floor(width), Math.floor(height));
         }
 
-        // Preview area
-        Rectangle {
-            id: previewBackground
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            color: "#0a0a1a"
+        onStatusChanged: {
+            if (root.pc && (shaderPreview.status === 2 || shaderPreview.status === 3))
+                root.pc.onShaderStatus(shaderPreview.status, shaderPreview.errorLog)
+        }
+        onErrorLogChanged: {
+            if (root.pc && shaderPreview.status === 2)
+                root.pc.onShaderStatus(shaderPreview.status, shaderPreview.errorLog)
+        }
+    }
 
-            onWidthChanged: if (root.pc && width > 0 && height > 0) root.pc.setPreviewSize(Math.floor(width), Math.floor(height))
-            onHeightChanged: if (root.pc && width > 0 && height > 0) root.pc.setPreviewSize(Math.floor(width), Math.floor(height))
+    Binding {
+        target: shaderPreview
+        property: "labelsTexture"
+        value: root.pc ? root.pc.labelsTexture : undefined
+        when: root.pc && root.pc.labelsTexture && root.pc.labelsTexture.width > 0
+    }
 
-            ZoneShaderItem {
-                id: shaderPreview
-                anchors.fill: parent
-                visible: root.pc && root.pc.shaderSource.toString() !== ""
+    Label {
+        anchors.centerIn: parent
+        visible: !root.pc || root.pc.shaderSource.toString() === ""
+        text: qsTr("No shader loaded")
+        color: "#666666"
+        font.pixelSize: 14
+    }
 
-                // Render to a private layer FBO so multipass shaders work correctly
-                layer.enabled: true
-                // Our render node outputs correct top-down orientation;
-                // disable default MirrorVertically to prevent double-flip.
-                layer.textureMirroring: ShaderEffectSource.NoMirroring
+    // ── Header bar (renders ON TOP of shader) ──
+    Rectangle {
+        id: headerBar
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: root.headerHeight
+        color: "#252526"
 
-                zones: root.pc ? root.pc.zones : []
-                shaderParams: root.pc ? root.pc.shaderParams : ({})
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
+            spacing: 6
 
-                iTime: root.pc ? root.pc.iTime : 0
-                iTimeDelta: root.pc ? root.pc.iTimeDelta : 0
-                iFrame: root.pc ? root.pc.iFrame : 0
-                iResolution: Qt.size(width, height)
-
-                // shaderSource bound last (ZoneShaderItem compiles on shaderSource change
-                // and reads other properties at that point)
-                shaderSource: root.pc ? root.pc.shaderSource : ""
-
-                onStatusChanged: {
-                    // Only forward terminal states — skip Loading (1) to avoid
-                    // flooding from updatePaintNode retrying broken shaders every frame
-                    if (root.pc && (shaderPreview.status === 2 || shaderPreview.status === 3))
-                        root.pc.onShaderStatus(shaderPreview.status, shaderPreview.errorLog)
-                }
-                onErrorLogChanged: {
-                    // Re-forward when errorLog clears after status already transitioned to Ready
-                    // (status and errorLog are separate property notifications)
-                    if (root.pc && shaderPreview.status === 2)
-                        root.pc.onShaderStatus(shaderPreview.status, shaderPreview.errorLog)
-                }
-            }
-
-            // Bind labelsTexture separately with a guard
-            Binding {
-                target: shaderPreview
-                property: "labelsTexture"
-                value: root.pc ? root.pc.labelsTexture : undefined
-                when: root.pc && root.pc.labelsTexture && root.pc.labelsTexture.width > 0
-            }
-
-            // Status overlay when no shader loaded
             Label {
-                anchors.centerIn: parent
-                visible: !root.pc || root.pc.shaderSource.toString() === ""
-                text: qsTr("No shader loaded")
-                color: "#666666"
-                font.pixelSize: 14
+                text: "Live Preview"
+                font.pixelSize: 13
+                font.bold: true
+                color: "#cccccc"
+            }
+
+            Item { Layout.fillWidth: true }
+
+            Label {
+                text: (root.pc ? root.pc.fps : 0) + " FPS"
+                font.family: "monospace"
+                font.pixelSize: 12
+                color: "#6a9955"
+                visible: root.pc ? root.pc.animating : false
+            }
+
+            ToolButton {
+                implicitWidth: Kirigami.Units.gridUnit * 2; implicitHeight: Kirigami.Units.gridUnit * 2
+                icon.name: (root.pc && root.pc.animating) ? "media-playback-pause" : "media-playback-start"
+                icon.width: Kirigami.Units.iconSizes.smallMedium; icon.height: Kirigami.Units.iconSizes.smallMedium
+                onClicked: { if (root.pc) root.pc.animating = !root.pc.animating }
+                ToolTip.text: (root.pc && root.pc.animating) ? qsTr("Pause") : qsTr("Play")
+                ToolTip.visible: hovered; ToolTip.delay: 500
+            }
+
+            ToolButton {
+                implicitWidth: Kirigami.Units.gridUnit * 2; implicitHeight: Kirigami.Units.gridUnit * 2
+                icon.name: "view-refresh"
+                icon.width: Kirigami.Units.iconSizes.smallMedium; icon.height: Kirigami.Units.iconSizes.smallMedium
+                onClicked: { if (root.pc) root.pc.resetTime() }
+                ToolTip.text: qsTr("Reset time")
+                ToolTip.visible: hovered; ToolTip.delay: 500
+            }
+
+            ToolButton {
+                implicitWidth: Kirigami.Units.gridUnit * 2; implicitHeight: Kirigami.Units.gridUnit * 2
+                icon.name: "view-grid"
+                icon.width: Kirigami.Units.iconSizes.smallMedium; icon.height: Kirigami.Units.iconSizes.smallMedium
+                onClicked: { if (root.pc) root.pc.cycleZoneLayout() }
+                ToolTip.text: root.pc ? root.pc.zoneLayoutName : ""
+                ToolTip.visible: hovered; ToolTip.delay: 500
+            }
+
+            ToolButton {
+                implicitWidth: Kirigami.Units.gridUnit * 2; implicitHeight: Kirigami.Units.gridUnit * 2
+                icon.name: "run-build"
+                icon.width: Kirigami.Units.iconSizes.smallMedium; icon.height: Kirigami.Units.iconSizes.smallMedium
+                onClicked: { if (root.pc) root.pc.recompile() }
+                ToolTip.text: qsTr("Force recompile")
+                ToolTip.visible: hovered; ToolTip.delay: 500
+            }
+        }
+    }
+
+    // ── Info bar (renders ON TOP of shader) ──
+    Rectangle {
+        id: infoBar
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: root.infoBarHeight
+        color: "#1a1a2e"
+
+        Label {
+            anchors.fill: parent
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
+            verticalAlignment: Text.AlignVCenter
+            font.family: "monospace"
+            font.pixelSize: 11
+            color: "#888888"
+            text: {
+                if (!root.pc) return "";
+                var t = root.pc.iTime ? root.pc.iTime.toFixed(2) : "0.00";
+                var w = Math.floor(shaderPreview.width);
+                var h = Math.floor(shaderPreview.height);
+                var zones = root.pc.zones ? root.pc.zones.length : 0;
+                return "t = " + t + "s | " + w + "\u00d7" + h + " | " + zones + " zones";
             }
         }
     }

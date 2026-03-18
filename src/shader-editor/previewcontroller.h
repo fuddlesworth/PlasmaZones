@@ -123,7 +123,7 @@ private:
     QByteArray m_lastCompiledHash; // hash of last compiled frag+vert source to skip redundant recompiles
     bool m_compilePending = false; // true between dispatching new source and receiving first Ready/Error
 
-    int m_zoneLayoutIndex = 0;
+    int m_zoneLayoutIndex = 1; // default: 2-column split (matches mockup)
     static constexpr int ZoneLayoutCount = 4;
     QStringList m_zoneLayoutNames;
     int m_previewWidth = 800;
