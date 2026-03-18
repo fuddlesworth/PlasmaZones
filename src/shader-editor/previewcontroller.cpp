@@ -6,6 +6,8 @@
 #include "../daemon/rendering/zonelabeltexturebuilder.h"
 #include "shaderpackageio.h"
 
+#include <cmath>
+
 #include <QColor>
 #include <QCryptographicHash>
 #include <QFile>
@@ -43,6 +45,22 @@ PreviewController::PreviewController(QObject* parent)
             Q_EMIT fpsChanged();
         }
         m_fpsCounter = 0;
+    });
+
+    // Audio test spectrum timer — generates synthetic data when audio is enabled
+    connect(&m_audioTimer, &QTimer::timeout, this, [this]() {
+        QList<float> spectrum(32);
+        const qreal t = m_iTime;
+        for (int i = 0; i < 32; ++i) {
+            spectrum[i] = static_cast<float>(0.5 + 0.5 * std::sin(t * 3.0 + i * 0.4));
+        }
+        QVariantList vl;
+        vl.reserve(32);
+        for (float v : spectrum) {
+            vl.append(v);
+        }
+        m_audioSpectrum = QVariant::fromValue(vl);
+        Q_EMIT audioSpectrumChanged();
     });
 
     // Zone layout names
@@ -119,7 +137,7 @@ QVariantMap PreviewController::shaderParams() const
 
 QImage PreviewController::labelsTexture() const
 {
-    return m_labelsTexture;
+    return m_showLabels ? m_labelsTexture : QImage();
 }
 
 qreal PreviewController::iTime() const
@@ -177,9 +195,11 @@ void PreviewController::setAnimating(bool animating)
         m_lastTime = 0.0;
         m_animationTimer.start();
         m_fpsTimer.start();
+        if (m_audioEnabled) m_audioTimer.start(33);
     } else {
         m_animationTimer.stop();
         m_fpsTimer.stop();
+        m_audioTimer.stop();
         if (m_fps != 0) {
             m_fps = 0;
             Q_EMIT fpsChanged();
@@ -223,6 +243,57 @@ void PreviewController::resetTime()
 void PreviewController::recompile()
 {
     writeExpandedShader();
+}
+
+void PreviewController::setShowLabels(bool show)
+{
+    if (m_showLabels == show) return;
+    m_showLabels = show;
+    Q_EMIT showLabelsChanged();
+    Q_EMIT labelsTextureChanged();
+}
+
+void PreviewController::setAudioEnabled(bool enabled)
+{
+    if (m_audioEnabled == enabled) return;
+    m_audioEnabled = enabled;
+
+    if (enabled && m_animating) {
+        // Generate synthetic test audio spectrum at ~30Hz
+        m_audioTimer.start(33);
+    } else {
+        m_audioTimer.stop();
+        m_audioSpectrum = QVariant();
+        Q_EMIT audioSpectrumChanged();
+    }
+    Q_EMIT audioEnabledChanged();
+}
+
+void PreviewController::setMousePos(const QPointF& pos)
+{
+    if (m_mousePos == pos) return;
+    m_mousePos = pos;
+    Q_EMIT mousePosChanged();
+
+    // Hit-test zones to find which one the mouse is over
+    int newIndex = -1;
+    if (pos.x() >= 0 && pos.y() >= 0) {
+        for (int i = 0; i < m_zones.size(); ++i) {
+            const QVariantMap z = m_zones.at(i).toMap();
+            const qreal zx = z.value(QStringLiteral("x")).toDouble();
+            const qreal zy = z.value(QStringLiteral("y")).toDouble();
+            const qreal zw = z.value(QStringLiteral("width")).toDouble();
+            const qreal zh = z.value(QStringLiteral("height")).toDouble();
+            if (pos.x() >= zx && pos.x() < zx + zw && pos.y() >= zy && pos.y() < zy + zh) {
+                newIndex = i;
+                break;
+            }
+        }
+    }
+    if (m_hoveredZoneIndex != newIndex) {
+        m_hoveredZoneIndex = newIndex;
+        Q_EMIT hoveredZoneIndexChanged();
+    }
 }
 
 void PreviewController::setShaderParams(const QVariantMap& params)
@@ -466,6 +537,11 @@ void PreviewController::setPreviewSize(int width, int height)
 void PreviewController::buildZoneLayout()
 {
     m_zones.clear();
+
+    if (m_hoveredZoneIndex != -1) {
+        m_hoveredZoneIndex = -1;
+        Q_EMIT hoveredZoneIndexChanged();
+    }
 
     const qreal W = m_previewWidth;
     const qreal H = m_previewHeight;

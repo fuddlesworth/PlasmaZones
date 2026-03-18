@@ -29,6 +29,7 @@ class PreviewController : public QObject
     Q_PROPERTY(QVariantList zones READ zones NOTIFY zonesChanged)
     Q_PROPERTY(QVariantMap shaderParams READ shaderParams NOTIFY shaderParamsChanged)
     Q_PROPERTY(QImage labelsTexture READ labelsTexture NOTIFY labelsTextureChanged)
+    Q_PROPERTY(bool hasLabelsTexture READ hasLabelsTexture NOTIFY labelsTextureChanged)
     Q_PROPERTY(qreal iTime READ iTime NOTIFY iTimeChanged)
     Q_PROPERTY(qreal iTimeDelta READ iTimeDelta NOTIFY iTimeDeltaChanged)
     Q_PROPERTY(int iFrame READ iFrame NOTIFY iFrameChanged)
@@ -38,6 +39,11 @@ class PreviewController : public QObject
     Q_PROPERTY(int fps READ fps NOTIFY fpsChanged)
     Q_PROPERTY(QString zoneLayoutName READ zoneLayoutName NOTIFY zoneLayoutNameChanged)
     Q_PROPERTY(QString fixedFontFamily READ fixedFontFamily CONSTANT)
+    Q_PROPERTY(bool showLabels READ showLabels WRITE setShowLabels NOTIFY showLabelsChanged)
+    Q_PROPERTY(bool audioEnabled READ audioEnabled WRITE setAudioEnabled NOTIFY audioEnabledChanged)
+    Q_PROPERTY(QVariant audioSpectrum READ audioSpectrum NOTIFY audioSpectrumChanged)
+    Q_PROPERTY(QPointF mousePos READ mousePos WRITE setMousePos NOTIFY mousePosChanged)
+    Q_PROPERTY(int hoveredZoneIndex READ hoveredZoneIndex NOTIFY hoveredZoneIndexChanged)
 
 public:
     // ZoneShaderItem::Status values (avoids header dependency in shader-editor)
@@ -57,6 +63,7 @@ public:
     QVariantList zones() const;
     QVariantMap shaderParams() const;
     QImage labelsTexture() const;
+    bool hasLabelsTexture() const { return m_showLabels && !m_labelsTexture.isNull(); }
     qreal iTime() const;
     qreal iTimeDelta() const;
     int iFrame() const;
@@ -66,8 +73,16 @@ public:
     int fps() const;
     QString zoneLayoutName() const;
     QString fixedFontFamily() const { return QFontDatabase::systemFont(QFontDatabase::FixedFont).family(); }
+    bool showLabels() const { return m_showLabels; }
+    bool audioEnabled() const { return m_audioEnabled; }
+    QVariant audioSpectrum() const { return m_audioEnabled ? m_audioSpectrum : QVariant(); }
+    QPointF mousePos() const { return m_mousePos; }
+    int hoveredZoneIndex() const { return m_hoveredZoneIndex; }
 
     void setAnimating(bool animating);
+    void setShowLabels(bool show);
+    void setAudioEnabled(bool enabled);
+    void setMousePos(const QPointF& pos);
 
     Q_INVOKABLE void cycleZoneLayout();
     Q_INVOKABLE void resetTime();
@@ -96,6 +111,11 @@ Q_SIGNALS:
     void statusChanged();
     void fpsChanged();
     void zoneLayoutNameChanged();
+    void showLabelsChanged();
+    void audioEnabledChanged();
+    void audioSpectrumChanged();
+    void mousePosChanged();
+    void hoveredZoneIndexChanged();
 
 private Q_SLOTS:
     void onDocumentTextChanged();
@@ -142,6 +162,13 @@ private:
     QStringList m_zoneLayoutNames;
     int m_previewWidth = 800;
     int m_previewHeight = 600;
+
+    bool m_showLabels = true;
+    bool m_audioEnabled = false;
+    QVariant m_audioSpectrum;
+    QPointF m_mousePos;
+    int m_hoveredZoneIndex = -1;
+    QTimer m_audioTimer; // generates test audio data when enabled
 };
 
 } // namespace PlasmaZones

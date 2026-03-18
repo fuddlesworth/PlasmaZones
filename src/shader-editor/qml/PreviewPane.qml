@@ -44,6 +44,8 @@ Item {
         iTimeDelta: root.pc ? root.pc.iTimeDelta : 0
         iFrame: root.pc ? root.pc.iFrame : 0
         iResolution: Qt.size(width, height)
+        iMouse: root.pc ? root.pc.mousePos : Qt.point(0, 0)
+        hoveredZoneIndex: root.pc ? root.pc.hoveredZoneIndex : -1
 
         shaderSource: root.pc ? root.pc.shaderSource : ""
 
@@ -65,11 +67,30 @@ Item {
         }
     }
 
-    Binding {
-        target: shaderPreview
-        property: "labelsTexture"
-        value: root.pc ? root.pc.labelsTexture : undefined
-        when: root.pc && root.pc.labelsTexture && root.pc.labelsTexture.width > 0
+    // ── Mouse tracking — only in the shader render area (between header and info bar) ──
+    MouseArea {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: headerBar.bottom
+        anchors.bottom: infoBar.top
+        hoverEnabled: true
+        acceptedButtons: Qt.NoButton
+        onPositionChanged: function(mouse) {
+            if (root.pc) root.pc.mousePos = Qt.point(mouse.x, mouse.y + headerBar.height);
+        }
+        onExited: {
+            if (root.pc) root.pc.mousePos = Qt.point(-1, -1);
+        }
+    }
+
+    Connections {
+        target: root.pc
+        function onLabelsTextureChanged() {
+            shaderPreview.labelsTexture = root.pc.labelsTexture;
+        }
+        function onAudioSpectrumChanged() {
+            shaderPreview.audioSpectrum = root.pc.audioSpectrum;
+        }
     }
 
     Label {
@@ -109,6 +130,24 @@ Item {
                 ToolTip.delay: Kirigami.Units.toolTipDelay
             }
 
+            ToolButton {
+                icon.name: "label"
+                checkable: true
+                checked: root.pc ? root.pc.showLabels : true
+                onToggled: { if (root.pc) root.pc.showLabels = checked }
+                ToolTip.text: checked ? i18n("Hide zone labels") : i18n("Show zone labels")
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+            }
+
+            ToolButton {
+                icon.name: "audio-volume-high"
+                checkable: true
+                checked: root.pc ? root.pc.audioEnabled : false
+                onToggled: { if (root.pc) root.pc.audioEnabled = checked }
+                ToolTip.text: checked ? i18n("Disable test audio") : i18n("Enable test audio")
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+            }
+
             Item { Layout.fillWidth: true }
 
             Label {
@@ -144,7 +183,11 @@ Item {
                 var w = Math.floor(shaderPreview.width);
                 var h = Math.floor(shaderPreview.height);
                 var zones = root.pc.zones ? root.pc.zones.length : 0;
-                return "t = " + t + "s | " + w + "\u00d7" + h + " | " + zones + " zones";
+                var s = "t = " + t + "s | " + w + "\u00d7" + h + " | " + zones + " zones";
+                var mp = root.pc.mousePos;
+                if (mp && mp.x >= 0 && mp.y >= 0)
+                    s += " | mouse " + Math.floor(mp.x) + "," + Math.floor(mp.y);
+                return s;
             }
         }
     }
