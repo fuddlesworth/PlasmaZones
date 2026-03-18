@@ -9,6 +9,7 @@
 #include "shaderpackageio.h"
 
 #include <QAction>
+#include <QComboBox>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -23,9 +24,11 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickWidget>
+#include <QSignalBlocker>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTabWidget>
+#include <QToolBar>
 
 #include <KLocalizedString>
 #include <KTextEditor/Document>
@@ -79,7 +82,9 @@ ShaderEditorWindow::ShaderEditorWindow(QWidget* parent)
     });
 
     setupLayout();
+    createActions();
     setupMenuBar();
+    setupToolBar();
     setupStatusBar();
 
     resize(1400, 900);
@@ -93,41 +98,107 @@ bool ShaderEditorWindow::isValid() const
     return m_editor != nullptr;
 }
 
+void ShaderEditorWindow::openShaderPackageDialog()
+{
+    const QString dir = QFileDialog::getExistingDirectory(
+        this,
+        i18n("Open Shader Package Directory"),
+        ShaderPackageIO::userShaderDirectory());
+    if (!dir.isEmpty()) {
+        openShaderPackage(dir);
+    }
+}
+
+void ShaderEditorWindow::createActions()
+{
+    m_newAction = new QAction(QIcon::fromTheme(QStringLiteral("document-new")), i18n("&New Shader Package"), this);
+    m_newAction->setShortcut(QKeySequence::New);
+    m_newAction->setToolTip(i18n("New Shader Package"));
+    connect(m_newAction, &QAction::triggered, this, &ShaderEditorWindow::newShaderPackage);
+
+    m_openAction = new QAction(QIcon::fromTheme(QStringLiteral("document-open")), i18n("&Open Shader Package..."), this);
+    m_openAction->setShortcut(QKeySequence::Open);
+    m_openAction->setToolTip(i18n("Open Shader Package"));
+    connect(m_openAction, &QAction::triggered, this, &ShaderEditorWindow::openShaderPackageDialog);
+
+    m_saveAction = new QAction(QIcon::fromTheme(QStringLiteral("document-save")), i18n("&Save"), this);
+    m_saveAction->setShortcut(QKeySequence::Save);
+    m_saveAction->setToolTip(i18n("Save Shader Package"));
+    connect(m_saveAction, &QAction::triggered, this, &ShaderEditorWindow::saveShaderPackage);
+
+    m_saveAsAction = new QAction(QIcon::fromTheme(QStringLiteral("document-save-as")), i18n("Save &As..."), this);
+    m_saveAsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S));
+    connect(m_saveAsAction, &QAction::triggered, this, &ShaderEditorWindow::saveShaderPackageAs);
+
+    m_compileAction = new QAction(QIcon::fromTheme(QStringLiteral("run-build")), i18n("&Compile"), this);
+    m_compileAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_B));
+    m_compileAction->setToolTip(i18n("Compile shader (Ctrl+B)"));
+    connect(m_compileAction, &QAction::triggered, this, [this]() {
+        m_previewController->recompile();
+    });
+
+    m_validateAction = new QAction(QIcon::fromTheme(QStringLiteral("dialog-ok-apply")), i18n("&Validate"), this);
+    m_validateAction->setToolTip(i18n("Validate shader for errors"));
+    connect(m_validateAction, &QAction::triggered, this, [this]() {
+        m_previewController->recompile();
+    });
+}
+
 void ShaderEditorWindow::setupMenuBar()
 {
     auto* fileMenu = menuBar()->addMenu(i18n("&File"));
-
-    auto* newAction = fileMenu->addAction(i18n("&New Shader Package"));
-    newAction->setShortcut(QKeySequence::New);
-    connect(newAction, &QAction::triggered, this, &ShaderEditorWindow::newShaderPackage);
-
-    auto* openAction = fileMenu->addAction(i18n("&Open Shader Package..."));
-    openAction->setShortcut(QKeySequence::Open);
-    connect(openAction, &QAction::triggered, this, [this]() {
-        const QString dir = QFileDialog::getExistingDirectory(
-            this,
-            i18n("Open Shader Package Directory"),
-            ShaderPackageIO::userShaderDirectory());
-        if (!dir.isEmpty()) {
-            openShaderPackage(dir);
-        }
-    });
-
+    fileMenu->addAction(m_newAction);
+    fileMenu->addAction(m_openAction);
     fileMenu->addSeparator();
-
-    auto* saveAction = fileMenu->addAction(i18n("&Save"));
-    saveAction->setShortcut(QKeySequence::Save);
-    connect(saveAction, &QAction::triggered, this, &ShaderEditorWindow::saveShaderPackage);
-
-    auto* saveAsAction = fileMenu->addAction(i18n("Save &As..."));
-    saveAsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S));
-    connect(saveAsAction, &QAction::triggered, this, &ShaderEditorWindow::saveShaderPackageAs);
-
+    fileMenu->addAction(m_saveAction);
+    fileMenu->addAction(m_saveAsAction);
     fileMenu->addSeparator();
 
     auto* quitAction = fileMenu->addAction(i18n("&Quit"));
     quitAction->setShortcut(QKeySequence::Quit);
     connect(quitAction, &QAction::triggered, this, &QMainWindow::close);
+}
+
+void ShaderEditorWindow::setupToolBar()
+{
+    auto* toolbar = addToolBar(i18n("Main"));
+    toolbar->setObjectName(QStringLiteral("mainToolBar"));
+    toolbar->setMovable(false);
+    toolbar->setIconSize(QSize(22, 22));
+
+    toolbar->addAction(m_newAction);
+    toolbar->addAction(m_openAction);
+    toolbar->addAction(m_saveAction);
+    toolbar->addSeparator();
+    toolbar->addAction(m_compileAction);
+    toolbar->addAction(m_validateAction);
+    toolbar->addSeparator();
+
+    // Test layout dropdown
+    auto* layoutLabel = new QLabel(i18n("Test Layout:"), toolbar);
+    layoutLabel->setContentsMargins(4, 0, 4, 0);
+    toolbar->addWidget(layoutLabel);
+
+    m_layoutCombo = new QComboBox(toolbar);
+    {
+        // Block signals while populating to avoid spurious layout changes
+        QSignalBlocker blocker(m_layoutCombo);
+        const QStringList layoutNames = m_previewController->zoneLayoutNames();
+        for (const QString& name : layoutNames) {
+            m_layoutCombo->addItem(name);
+        }
+        m_layoutCombo->setCurrentIndex(m_previewController->zoneLayoutIndex());
+    }
+    connect(m_layoutCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
+        m_previewController->setZoneLayoutIndex(index);
+    });
+    toolbar->addWidget(m_layoutCombo);
+
+    // Keep combo in sync when layout changes from QML (preview header cycle button)
+    connect(m_previewController, &PreviewController::zoneLayoutNameChanged, this, [this]() {
+        QSignalBlocker blocker(m_layoutCombo);
+        m_layoutCombo->setCurrentIndex(m_previewController->zoneLayoutIndex());
+    });
 }
 
 void ShaderEditorWindow::setupStatusBar()

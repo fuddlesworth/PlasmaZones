@@ -8,6 +8,7 @@
 #include <QMainWindow>
 #include <QString>
 
+class QComboBox;
 class QLabel;
 class QQuickWidget;
 class QSplitter;
@@ -46,9 +47,12 @@ protected:
     void closeEvent(QCloseEvent* event) override;
 
 private:
+    void createActions();
     void setupMenuBar();
+    void setupToolBar();
     void setupStatusBar();
     void setupLayout();
+    void openShaderPackageDialog();
     void addDocumentTab(const QString& filename, const QString& content, const QString& highlightMode);
     void connectDocumentToPreview(const QString& filename, KTextEditor::Document* doc);
     void setupRightPanel(const QString& metadataJson);
@@ -85,6 +89,17 @@ private:
     QList<KTextEditor::Document*> m_ownedDocuments;
     QString m_packagePath;
     bool m_isNewPackage = false;
+
+    // Shared actions (used in both menu bar and toolbar)
+    QAction* m_newAction = nullptr;
+    QAction* m_openAction = nullptr;
+    QAction* m_saveAction = nullptr;
+    QAction* m_saveAsAction = nullptr;
+    QAction* m_compileAction = nullptr;
+    QAction* m_validateAction = nullptr;
+
+    // Toolbar widgets
+    QComboBox* m_layoutCombo = nullptr;
 
     // Status bar widgets
     QLabel* m_fileLabel = nullptr;

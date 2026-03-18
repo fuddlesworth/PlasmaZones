@@ -72,6 +72,10 @@ public:
     Q_INVOKABLE void cycleZoneLayout();
     Q_INVOKABLE void resetTime();
     Q_INVOKABLE void recompile();
+
+    int zoneLayoutIndex() const { return m_zoneLayoutIndex; }
+    void setZoneLayoutIndex(int index);
+    QStringList zoneLayoutNames() const { return m_zoneLayoutNames; }
     Q_INVOKABLE void setPreviewSize(int width, int height);
     void loadDefaultParamsFromMetadata(const QString& metadataJson);
     void setShaderParams(const QVariantMap& params);

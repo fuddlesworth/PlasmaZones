@@ -192,11 +192,18 @@ void PreviewController::setAnimating(bool animating)
 
 void PreviewController::cycleZoneLayout()
 {
-    m_zoneLayoutIndex = (m_zoneLayoutIndex + 1) % ZoneLayoutCount;
+    setZoneLayoutIndex((m_zoneLayoutIndex + 1) % ZoneLayoutCount);
+}
+
+void PreviewController::setZoneLayoutIndex(int index)
+{
+    if (index < 0 || index >= ZoneLayoutCount || index == m_zoneLayoutIndex) {
+        return;
+    }
+    m_zoneLayoutIndex = index;
     buildZoneLayout();
     Q_EMIT zoneLayoutNameChanged();
 
-    // Recompile to update shader with new zone data
     if (m_fragDoc) {
         m_recompileTimer.start();
     }
