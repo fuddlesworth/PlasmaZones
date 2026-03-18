@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.3.3] - 2026-03-17
+
+### Fixed
+- **Autotile not activating when snapping disabled first**: When users disabled snapping (Apply) then enabled autotiling (Apply) in separate steps, per-screen autotile assignments were never created — the activation guard required both changes in the same settings event. Windows fell through to fullscreen stacking instead of tiling. Now also fires when autotile is toggled on while snapping is already off.
+
 ## [2.3.2] - 2026-03-17
 
 ### Changed
@@ -808,7 +813,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.2...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.3...HEAD
+[2.3.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.2...v2.3.3
 [2.3.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.1...v2.3.2
 [2.3.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.2.1...v2.3.0
