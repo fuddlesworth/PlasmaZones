@@ -30,6 +30,8 @@
 #include <QTabWidget>
 #include <QToolBar>
 
+#include <KAboutData>
+#include <KActionCollection>
 #include <KLocalizedString>
 #include <KTextEditor/Document>
 #include <KTextEditor/Editor>
@@ -98,6 +100,11 @@ bool ShaderEditorWindow::isValid() const
     return m_editor != nullptr;
 }
 
+KTextEditor::View* ShaderEditorWindow::activeView() const
+{
+    return qobject_cast<KTextEditor::View*>(m_tabWidget->currentWidget());
+}
+
 void ShaderEditorWindow::openShaderPackageDialog()
 {
     const QString dir = QFileDialog::getExistingDirectory(
@@ -142,10 +149,74 @@ void ShaderEditorWindow::createActions()
     connect(m_validateAction, &QAction::triggered, this, [this]() {
         m_previewController->recompile();
     });
+
+    m_resetParamsAction = new QAction(QIcon::fromTheme(QStringLiteral("edit-reset")), i18n("&Reset Parameters"), this);
+    connect(m_resetParamsAction, &QAction::triggered, this, [this]() {
+        if (m_parameterPanel && m_metadataEditor) {
+            m_parameterPanel->loadFromMetadata(m_metadataEditor->toJson());
+            m_previewController->setShaderParams(m_parameterPanel->currentUniformValues());
+        }
+    });
+
+    // View toggle actions
+    m_toggleOutputAction = new QAction(i18n("&Problems Panel"), this);
+    m_toggleOutputAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_J));
+    m_toggleOutputAction->setCheckable(true);
+    m_toggleOutputAction->setChecked(true);
+    connect(m_toggleOutputAction, &QAction::toggled, this, [this](bool visible) {
+        m_outputPanel->setVisible(visible);
+    });
+
+    m_togglePreviewAction = new QAction(i18n("Live &Preview"), this);
+    m_togglePreviewAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P));
+    m_togglePreviewAction->setCheckable(true);
+    m_togglePreviewAction->setChecked(true);
+    connect(m_togglePreviewAction, &QAction::toggled, this, [this](bool visible) {
+        m_previewWidget->setVisible(visible);
+    });
+
+    m_toggleRightTabsAction = new QAction(i18n("Pa&rameter Panel"), this);
+    m_toggleRightTabsAction->setCheckable(true);
+    m_toggleRightTabsAction->setChecked(true);
+    connect(m_toggleRightTabsAction, &QAction::toggled, this, [this](bool visible) {
+        if (m_rightTabWidget) {
+            m_rightTabWidget->setVisible(visible);
+        }
+    });
+}
+
+void ShaderEditorWindow::populateEditMenu()
+{
+    m_editMenu->clear();
+
+    auto* view = activeView();
+    if (!view) {
+        auto* noEditorAction = m_editMenu->addAction(i18n("No editor active"));
+        noEditorAction->setEnabled(false);
+        return;
+    }
+
+    // Pull standard editing actions from the active KTextEditor::View
+    auto* ac = view->actionCollection();
+    static const char* const editActions[] = {
+        "edit_undo", "edit_redo", nullptr,
+        "edit_cut", "edit_copy", "edit_paste", nullptr,
+        "edit_select_all", nullptr,
+        "edit_find", "edit_find_next", "edit_replace",
+    };
+
+    for (const char* const* p = editActions; p < editActions + sizeof(editActions) / sizeof(*editActions); ++p) {
+        if (!*p) {
+            m_editMenu->addSeparator();
+        } else if (auto* action = ac->action(QString::fromLatin1(*p))) {
+            m_editMenu->addAction(action);
+        }
+    }
 }
 
 void ShaderEditorWindow::setupMenuBar()
 {
+    // ── File ──
     auto* fileMenu = menuBar()->addMenu(i18n("&File"));
     fileMenu->addAction(m_newAction);
     fileMenu->addAction(m_openAction);
@@ -157,6 +228,57 @@ void ShaderEditorWindow::setupMenuBar()
     auto* quitAction = fileMenu->addAction(i18n("&Quit"));
     quitAction->setShortcut(QKeySequence::Quit);
     connect(quitAction, &QAction::triggered, this, &QMainWindow::close);
+
+    // ── Edit (populated dynamically from active KTextEditor::View) ──
+    m_editMenu = menuBar()->addMenu(i18n("&Edit"));
+    connect(m_editMenu, &QMenu::aboutToShow, this, &ShaderEditorWindow::populateEditMenu);
+
+    // ── Shader ──
+    auto* shaderMenu = menuBar()->addMenu(i18n("&Shader"));
+    shaderMenu->addAction(m_compileAction);
+    shaderMenu->addAction(m_validateAction);
+    shaderMenu->addAction(m_resetParamsAction);
+
+    // ── View ──
+    auto* viewMenu = menuBar()->addMenu(i18n("&View"));
+    viewMenu->addAction(m_toggleOutputAction);
+    viewMenu->addAction(m_togglePreviewAction);
+    viewMenu->addAction(m_toggleRightTabsAction);
+
+    viewMenu->addSeparator();
+
+    // Font size actions — proxy to active KTextEditor::View's built-in zoom.
+    // No shortcut set here: KTextEditor already owns Ctrl+Plus/Ctrl+Minus.
+    auto* incFontAction = viewMenu->addAction(QIcon::fromTheme(QStringLiteral("zoom-in")), i18n("Increase Font Size"));
+    connect(incFontAction, &QAction::triggered, this, [this]() {
+        if (auto* view = activeView()) {
+            if (auto* action = view->actionCollection()->action(QStringLiteral("view_inc_font_sizes"))) {
+                action->trigger();
+            }
+        }
+    });
+
+    auto* decFontAction = viewMenu->addAction(QIcon::fromTheme(QStringLiteral("zoom-out")), i18n("Decrease Font Size"));
+    connect(decFontAction, &QAction::triggered, this, [this]() {
+        if (auto* view = activeView()) {
+            if (auto* action = view->actionCollection()->action(QStringLiteral("view_dec_font_sizes"))) {
+                action->trigger();
+            }
+        }
+    });
+
+    // ── Help ──
+    auto* helpMenu = menuBar()->addMenu(i18n("&Help"));
+
+    auto* aboutAction = helpMenu->addAction(QIcon::fromTheme(QStringLiteral("help-about")), i18n("&About PlasmaZones Shader Editor"));
+    connect(aboutAction, &QAction::triggered, this, [this]() {
+        const auto about = KAboutData::applicationData();
+        QMessageBox::about(this, i18n("About PlasmaZones Shader Editor"),
+            i18n("<h3>PlasmaZones Shader Editor</h3>"
+                 "<p>%1</p>"
+                 "<p>A visual editor for creating and testing GLSL shader packages "
+                 "for PlasmaZones window tiling effects.</p>", about.version()));
+    });
 }
 
 void ShaderEditorWindow::setupToolBar()

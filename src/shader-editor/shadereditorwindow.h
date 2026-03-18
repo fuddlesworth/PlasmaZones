@@ -10,6 +10,7 @@
 
 class QComboBox;
 class QLabel;
+class QMenu;
 class QQuickWidget;
 class QSplitter;
 class QTabWidget;
@@ -53,6 +54,8 @@ private:
     void setupStatusBar();
     void setupLayout();
     void openShaderPackageDialog();
+    void populateEditMenu();
+    KTextEditor::View* activeView() const;
     void addDocumentTab(const QString& filename, const QString& content, const QString& highlightMode);
     void connectDocumentToPreview(const QString& filename, KTextEditor::Document* doc);
     void setupRightPanel(const QString& metadataJson);
@@ -97,6 +100,15 @@ private:
     QAction* m_saveAsAction = nullptr;
     QAction* m_compileAction = nullptr;
     QAction* m_validateAction = nullptr;
+    QAction* m_resetParamsAction = nullptr;
+
+    // Menus
+    QMenu* m_editMenu = nullptr;
+
+    // View toggle actions
+    QAction* m_toggleOutputAction = nullptr;
+    QAction* m_togglePreviewAction = nullptr;
+    QAction* m_toggleRightTabsAction = nullptr;
 
     // Toolbar widgets
     QComboBox* m_layoutCombo = nullptr;
