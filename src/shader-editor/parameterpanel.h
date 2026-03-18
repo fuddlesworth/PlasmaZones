@@ -5,6 +5,7 @@
 
 #include <QColor>
 #include <QMap>
+#include <QSet>
 #include <QVariantMap>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -51,6 +52,9 @@ private:
         double floatMax = 1.0;
         // Current color (for color type)
         QColor currentColor;
+        // Lock toggle
+        QPushButton* lockBtn = nullptr;
+        bool locked = false;
     };
 
     void clearControls();
@@ -63,9 +67,13 @@ private:
     QWidget* createColorControl(const QString& name, const QString& uniformName,
                                 const QString& defaultColor, int slot);
 
+    void addLockButton(QHBoxLayout* layout, QWidget* parent, int controlIndex);
+    void setControlEnabled(ParamControl& ctrl, bool enabled);
+
     QVBoxLayout* m_groupsLayout = nullptr;
     QList<ParamControl> m_controls;
     QList<QWidget*> m_groupWidgets; // for cleanup
+    QSet<QString> m_lockedUniforms; // persists across reloads
 };
 
 } // namespace PlasmaZones

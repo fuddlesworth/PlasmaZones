@@ -68,6 +68,47 @@ ParameterPanel::ParameterPanel(QWidget* parent)
 
 ParameterPanel::~ParameterPanel() = default;
 
+void ParameterPanel::addLockButton(QHBoxLayout* layout, QWidget* parent, int controlIndex)
+{
+    auto* lockBtn = new QPushButton(parent);
+    lockBtn->setIcon(QIcon::fromTheme(QStringLiteral("object-unlocked")));
+    lockBtn->setCheckable(true);
+    lockBtn->setFlat(true);
+    lockBtn->setFixedSize(24, 22);
+    lockBtn->setToolTip(i18n("Lock parameter"));
+    layout->addWidget(lockBtn);
+
+    m_controls[controlIndex].lockBtn = lockBtn;
+
+    // Connect before restoring state so setChecked triggers the handler
+    connect(lockBtn, &QPushButton::toggled, this, [this, controlIndex](bool locked) {
+        if (controlIndex >= m_controls.size()) return;
+        ParamControl& c = m_controls[controlIndex];
+        c.locked = locked;
+        setControlEnabled(c, !locked);
+        c.lockBtn->setIcon(QIcon::fromTheme(locked ? QStringLiteral("object-locked") : QStringLiteral("object-unlocked")));
+        c.lockBtn->setToolTip(locked ? i18n("Unlock parameter") : i18n("Lock parameter"));
+        if (locked) {
+            m_lockedUniforms.insert(c.uniformName);
+        } else {
+            m_lockedUniforms.remove(c.uniformName);
+        }
+    });
+
+    // Restore lock state from previous session (triggers the handler above)
+    if (m_lockedUniforms.contains(m_controls.at(controlIndex).uniformName)) {
+        lockBtn->setChecked(true);
+    }
+}
+
+void ParameterPanel::setControlEnabled(ParamControl& ctrl, bool enabled)
+{
+    if (ctrl.slider) ctrl.slider->setEnabled(enabled);
+    if (ctrl.spinBox) ctrl.spinBox->setEnabled(enabled);
+    if (ctrl.checkBox) ctrl.checkBox->setEnabled(enabled);
+    if (ctrl.colorBtn) ctrl.colorBtn->setEnabled(enabled);
+}
+
 void ParameterPanel::clearControls()
 {
     m_controls.clear();
@@ -82,6 +123,24 @@ void ParameterPanel::clearControls()
 
 void ParameterPanel::loadFromMetadata(const QString& metadataJson)
 {
+    // Preserve current values of locked parameters across reload
+    QVariantMap lockedValues;
+    if (!m_lockedUniforms.isEmpty()) {
+        const QVariantMap allValues = currentUniformValues();
+        for (const QString& uniform : m_lockedUniforms) {
+            auto it = allValues.find(uniform);
+            if (it != allValues.end()) {
+                lockedValues.insert(uniform, *it);
+            }
+        }
+        // Also preserve color objects (currentUniformValues stores HexArgb strings)
+        for (const ParamControl& ctrl : m_controls) {
+            if (ctrl.locked && ctrl.type == QLatin1String("color")) {
+                lockedValues[ctrl.uniformName] = ctrl.currentColor;
+            }
+        }
+    }
+
     clearControls();
 
     QJsonParseError parseError;
@@ -208,6 +267,37 @@ void ParameterPanel::loadFromMetadata(const QString& metadataJson)
 
         isFirstGroup = false;
     }
+
+    // Restore locked parameter values (lock state is restored in addLockButton)
+    QSignalBlocker blocker(this); // suppress parameterChanged during restore
+    for (ParamControl& ctrl : m_controls) {
+        if (!ctrl.locked || ctrl.uniformName.isEmpty()) {
+            continue;
+        }
+        auto it = lockedValues.find(ctrl.uniformName);
+        if (it == lockedValues.end()) {
+            continue;
+        }
+        if (ctrl.type == QLatin1String("float") && ctrl.slider) {
+            const double val = it->toDouble();
+            const int pos = (ctrl.floatMax > ctrl.floatMin)
+                ? qRound((val - ctrl.floatMin) / (ctrl.floatMax - ctrl.floatMin) * 10000.0) : 0;
+            ctrl.slider->setValue(pos);
+            if (ctrl.valueLabel) ctrl.valueLabel->setText(QString::number(val, 'f', 2));
+        } else if (ctrl.type == QLatin1String("int") && ctrl.spinBox) {
+            ctrl.spinBox->setValue(it->toInt());
+        } else if (ctrl.type == QLatin1String("bool") && ctrl.checkBox) {
+            ctrl.checkBox->setChecked(it->toBool());
+        } else if (ctrl.type == QLatin1String("color")) {
+            ctrl.currentColor = it->value<QColor>();
+            if (ctrl.colorBtn) {
+                QPalette swatchPal = ctrl.colorBtn->palette();
+                swatchPal.setColor(QPalette::Button, ctrl.currentColor);
+                ctrl.colorBtn->setPalette(swatchPal);
+            }
+            if (ctrl.valueLabel) ctrl.valueLabel->setText(ctrl.currentColor.name().toUpper());
+        }
+    }
 }
 
 QWidget* ParameterPanel::createFloatControl(const QString& name, const QString& uniformName,
@@ -236,7 +326,6 @@ QWidget* ParameterPanel::createFloatControl(const QString& name, const QString& 
     layout->addWidget(label);
     layout->addWidget(slider, 1);
     layout->addWidget(valueLabel);
-    layout->addWidget(insertBtn);
 
     // Store control info
     ParamControl ctrl;
@@ -250,6 +339,8 @@ QWidget* ParameterPanel::createFloatControl(const QString& name, const QString& 
     m_controls.append(ctrl);
 
     const int controlIndex = m_controls.size() - 1;
+    addLockButton(layout, row, controlIndex);
+    layout->addWidget(insertBtn);
 
     connect(slider, &QSlider::valueChanged, this, [this, controlIndex](int pos) {
         const ParamControl& c = m_controls.at(controlIndex);
@@ -284,7 +375,6 @@ QWidget* ParameterPanel::createIntControl(const QString& name, const QString& un
 
     layout->addWidget(label);
     layout->addWidget(spinBox, 1);
-    layout->addWidget(insertBtn);
 
     ParamControl ctrl;
     ctrl.type = QStringLiteral("int");
@@ -292,6 +382,9 @@ QWidget* ParameterPanel::createIntControl(const QString& name, const QString& un
     ctrl.uniformName = uniformName;
     ctrl.spinBox = spinBox;
     m_controls.append(ctrl);
+
+    addLockButton(layout, row, m_controls.size() - 1);
+    layout->addWidget(insertBtn);
 
     connect(spinBox, &QSpinBox::valueChanged, this, [this]() {
         Q_EMIT parameterChanged();
@@ -322,7 +415,6 @@ QWidget* ParameterPanel::createBoolControl(const QString& name, const QString& u
 
     layout->addWidget(label);
     layout->addWidget(checkBox, 1);
-    layout->addWidget(insertBtn);
 
     ParamControl ctrl;
     ctrl.type = QStringLiteral("bool");
@@ -330,6 +422,9 @@ QWidget* ParameterPanel::createBoolControl(const QString& name, const QString& u
     ctrl.uniformName = uniformName;
     ctrl.checkBox = checkBox;
     m_controls.append(ctrl);
+
+    addLockButton(layout, row, m_controls.size() - 1);
+    layout->addWidget(insertBtn);
 
     connect(checkBox, &QCheckBox::toggled, this, [this]() {
         Q_EMIT parameterChanged();
@@ -375,7 +470,6 @@ QWidget* ParameterPanel::createColorControl(const QString& name, const QString& 
     layout->addWidget(label);
     layout->addWidget(colorBtn);
     layout->addWidget(hexLabel, 1);
-    layout->addWidget(insertBtn);
 
     ParamControl ctrl;
     ctrl.type = QStringLiteral("color");
@@ -387,6 +481,8 @@ QWidget* ParameterPanel::createColorControl(const QString& name, const QString& 
     m_controls.append(ctrl);
 
     const int controlIndex = m_controls.size() - 1;
+    addLockButton(layout, row, controlIndex);
+    layout->addWidget(insertBtn);
 
     connect(colorBtn, &QPushButton::clicked, this, [this, controlIndex]() {
         if (controlIndex >= m_controls.size()) return;
