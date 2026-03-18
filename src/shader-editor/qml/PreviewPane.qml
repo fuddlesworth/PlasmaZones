@@ -154,8 +154,39 @@ Item {
                 checkable: true
                 checked: root.pc ? root.pc.audioEnabled : false
                 onToggled: { if (root.pc) root.pc.audioEnabled = checked }
-                ToolTip.text: checked ? i18n("Disable test audio") : i18n("Enable test audio")
+                ToolTip.text: checked ? i18n("Disable audio") : i18n("Enable audio")
                 ToolTip.delay: Kirigami.Units.toolTipDelay
+            }
+
+            ToolButton {
+                visible: root.pc ? root.pc.audioEnabled && root.pc.cavaAvailable : false
+                icon.name: root.pc && root.pc.audioLive ? "media-playback-start" : "media-record"
+                checkable: true
+                checked: root.pc ? root.pc.audioLive : false
+                onToggled: { if (root.pc) root.pc.audioLive = checked }
+                ToolTip.text: checked ? i18n("Live audio (CAVA) — click for test") : i18n("Test audio — click for live (CAVA)")
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+            }
+
+            Slider {
+                id: barCountSlider
+                visible: root.pc ? root.pc.audioEnabled : false
+                from: 8
+                to: 256
+                stepSize: 2
+                value: root.pc ? root.pc.audioBarCount : 64
+                onMoved: { if (root.pc) root.pc.audioBarCount = value }
+                implicitWidth: Kirigami.Units.gridUnit * 4
+                ToolTip.text: i18n("Spectrum bars: %1", Math.round(value))
+                ToolTip.visible: hovered
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+            }
+
+            Label {
+                visible: root.pc ? root.pc.audioEnabled : false
+                text: Math.round(barCountSlider.value)
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                color: Kirigami.Theme.disabledTextColor
             }
 
             Item { Layout.fillWidth: true }

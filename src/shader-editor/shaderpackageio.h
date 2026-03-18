@@ -3,10 +3,20 @@
 
 #pragma once
 
+#include <QFlags>
 #include <QList>
 #include <QString>
 
 namespace PlasmaZones {
+
+enum class ShaderFeature {
+    None          = 0,
+    Multipass     = 1 << 0,
+    AudioReactive = 1 << 1,
+    Wallpaper     = 1 << 2,
+};
+Q_DECLARE_FLAGS(ShaderFeatures, ShaderFeature)
+Q_DECLARE_OPERATORS_FOR_FLAGS(ShaderFeatures)
 
 struct ShaderFile {
     QString filename;
@@ -22,7 +32,8 @@ struct ShaderPackageContents {
 namespace ShaderPackageIO {
     ShaderPackageContents loadPackage(const QString& dirPath);
     bool savePackage(const QString& dirPath, const ShaderPackageContents& contents);
-    ShaderPackageContents createTemplate(const QString& shaderId, const QString& shaderName);
+    ShaderPackageContents createTemplate(const QString& shaderId, const QString& shaderName,
+                                         ShaderFeatures features = ShaderFeature::None);
     QString userShaderDirectory();
     QString systemShaderDirectory();
 

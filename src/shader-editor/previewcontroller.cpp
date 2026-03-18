@@ -4,6 +4,7 @@
 #include "previewcontroller.h"
 #include "../core/shaderincluderesolver.h"
 #include "../core/shaderregistry.h"
+#include "../daemon/cavaservice.h"
 #include "../daemon/rendering/zonelabeltexturebuilder.h"
 #include "shaderpackageio.h"
 
@@ -18,6 +19,7 @@
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QPalette>
+#include <QStandardPaths>
 #include <QUuid>
 
 #include <KTextEditor/Document>
@@ -48,15 +50,44 @@ PreviewController::PreviewController(QObject* parent)
         m_fpsCounter = 0;
     });
 
-    // Audio test spectrum timer — generates synthetic data when audio is enabled
+    // Audio test spectrum timer — generates synthetic "music-like" data when audio is enabled.
+    // Simulates bass kicks, mid-range variation, and treble sparkle to look like real audio.
     connect(&m_audioTimer, &QTimer::timeout, this, [this]() {
-        QList<float> spectrum(32);
+        const int barCount = m_audioBarCount;
+        QList<float> spectrum(barCount);
         const qreal t = m_iTime;
-        for (int i = 0; i < 32; ++i) {
-            spectrum[i] = static_cast<float>(0.5 + 0.5 * std::sin(t * 3.0 + i * 0.4));
+
+        // Simulated bass kick (bars 0-7): periodic thumps
+        const float kick = static_cast<float>(std::max(0.0, std::sin(t * 4.2)) * 0.8);
+        const float kickDecay = static_cast<float>(std::max(0.0, 1.0 - std::fmod(t * 2.1, 1.0) * 2.5));
+        const float bassLevel = kick * kickDecay;
+
+        for (int i = 0; i < barCount; ++i) {
+            const float freq = static_cast<float>(i) / std::max(barCount - 1.0f, 1.0f); // 0=bass, 1=treble
+            float val = 0.0f;
+
+            if (freq < 0.25f) {
+                // Bass: kick-driven with slow wobble
+                val = bassLevel * (1.0f - freq * 3.0f)
+                    + 0.15f * static_cast<float>(0.5 + 0.5 * std::sin(t * 1.7 + i * 0.3));
+            } else if (freq < 0.65f) {
+                // Mids: rhythmic variation, multiple overlapping patterns
+                val = 0.2f + 0.4f * static_cast<float>(
+                    0.5 + 0.5 * std::sin(t * 5.3 + i * 0.8))
+                    * static_cast<float>(0.5 + 0.5 * std::sin(t * 3.1 + i * 1.3));
+                val += bassLevel * 0.15f; // bass leaks into mids
+            } else {
+                // Treble: fast flickering sparkle
+                val = 0.1f + 0.3f * static_cast<float>(
+                    std::max(0.0, std::sin(t * 11.0 + i * 2.1) * std::sin(t * 7.3 + i * 1.7)));
+                val += 0.1f * static_cast<float>(0.5 + 0.5 * std::sin(t * 13.7 + i * 3.1));
+            }
+
+            spectrum[i] = std::clamp(val, 0.0f, 1.0f);
         }
+
         QVariantList vl;
-        vl.reserve(32);
+        vl.reserve(barCount);
         for (float v : spectrum) {
             vl.append(v);
         }
@@ -297,11 +328,13 @@ void PreviewController::setAnimating(bool animating)
         m_lastTime = 0.0;
         m_animationTimer.start();
         m_fpsTimer.start();
-        if (m_audioEnabled) m_audioTimer.start(33);
+        if (m_audioEnabled && !m_audioLive) m_audioTimer.start(33);
+        if (m_audioEnabled && m_audioLive && m_cavaService) m_cavaService->start();
     } else {
         m_animationTimer.stop();
         m_fpsTimer.stop();
         m_audioTimer.stop();
+        if (m_cavaService) m_cavaService->stop();
         if (m_fps != 0) {
             m_fps = 0;
             Q_EMIT fpsChanged();
@@ -361,14 +394,82 @@ void PreviewController::setAudioEnabled(bool enabled)
     m_audioEnabled = enabled;
 
     if (enabled && m_animating) {
-        // Generate synthetic test audio spectrum at ~30Hz
-        m_audioTimer.start(33);
+        if (m_audioLive) {
+            // Real audio via CAVA
+            ensureCavaService();
+            m_cavaService->setBarCount(m_audioBarCount);
+            m_cavaService->start();
+        } else {
+            // Synthetic test audio at ~30Hz
+            m_audioTimer.start(33);
+        }
     } else {
         m_audioTimer.stop();
+        if (m_cavaService) {
+            m_cavaService->stop();
+        }
         m_audioSpectrum = QVariant();
         Q_EMIT audioSpectrumChanged();
     }
     Q_EMIT audioEnabledChanged();
+}
+
+void PreviewController::setAudioBarCount(int count)
+{
+    count = qBound(8, count, 256);
+    // Stereo only — force even (CAVA outputs L/R interleaved pairs)
+    count = count & ~1;
+    if (m_audioBarCount == count) return;
+    m_audioBarCount = count;
+    // CavaService::setBarCount() internally calls restartAsync() if running
+    if (m_cavaService) {
+        m_cavaService->setBarCount(count);
+    }
+    Q_EMIT audioBarCountChanged();
+}
+
+void PreviewController::ensureCavaService()
+{
+    if (m_cavaService) return;
+    m_cavaService = new CavaService(this);
+    connect(m_cavaService, &CavaService::spectrumUpdated, this, [this](const QVector<float>& spectrum) {
+        QVariantList vl;
+        vl.reserve(spectrum.size());
+        for (float v : spectrum) {
+            vl.append(v);
+        }
+        m_audioSpectrum = QVariant::fromValue(vl);
+        Q_EMIT audioSpectrumChanged();
+    });
+}
+
+bool PreviewController::cavaAvailable() const
+{
+    return CavaService::isAvailable();
+}
+
+void PreviewController::setAudioLive(bool live)
+{
+    if (m_audioLive == live) return;
+    m_audioLive = live;
+
+    if (live && m_audioEnabled) {
+        // Switch to real audio: stop synthetic timer, start CAVA
+        m_audioTimer.stop();
+        ensureCavaService();
+        m_cavaService->setBarCount(m_audioBarCount);
+        m_cavaService->start();
+    } else if (!live && m_audioEnabled) {
+        // Switch to synthetic: stop CAVA, start synthetic timer
+        if (m_cavaService) {
+            m_cavaService->stop();
+        }
+        if (m_animating) {
+            m_audioTimer.start(33);
+        }
+    }
+
+    Q_EMIT audioLiveChanged();
 }
 
 void PreviewController::setMousePos(const QPointF& pos)
@@ -473,6 +574,7 @@ void PreviewController::writeExpandedShader()
     // 1. The shader package dir itself (for local includes)
     // 2. The parent of the shader package dir (where common.glsl, audio.glsl live)
     // 3. The system shader directory (installed shared includes)
+    // 4. The user shader directory (for user-installed shared includes)
     QStringList includePaths;
     if (!m_shaderDir.isEmpty()) {
         includePaths.append(m_shaderDir);
@@ -483,9 +585,17 @@ void PreviewController::writeExpandedShader()
             includePaths.append(parentDir.absolutePath());
         }
     }
-    const QString systemDir = ShaderPackageIO::systemShaderDirectory();
-    if (!systemDir.isEmpty()) {
-        includePaths.append(systemDir);
+    // Add ALL standard shader directories as include paths so that shared
+    // includes (common.glsl, audio.glsl, etc.) are found regardless of
+    // whether the user dir or system dir is checked first.
+    const QStringList shaderDirs = QStandardPaths::locateAll(
+        QStandardPaths::GenericDataLocation,
+        QStringLiteral("plasmazones/shaders"),
+        QStandardPaths::LocateDirectory);
+    for (const QString& dir : shaderDirs) {
+        if (!includePaths.contains(dir)) {
+            includePaths.append(dir);
+        }
     }
 
     // The current file directory for relative includes: use shader dir if set, else temp dir

@@ -13,12 +13,15 @@
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QVector>
 
 namespace KTextEditor {
 class Document;
 }
 
 namespace PlasmaZones {
+
+class CavaService;
 
 class PreviewController : public QObject
 {
@@ -41,6 +44,9 @@ class PreviewController : public QObject
     Q_PROPERTY(QString fixedFontFamily READ fixedFontFamily CONSTANT)
     Q_PROPERTY(bool showLabels READ showLabels WRITE setShowLabels NOTIFY showLabelsChanged)
     Q_PROPERTY(bool audioEnabled READ audioEnabled WRITE setAudioEnabled NOTIFY audioEnabledChanged)
+    Q_PROPERTY(int audioBarCount READ audioBarCount WRITE setAudioBarCount NOTIFY audioBarCountChanged)
+    Q_PROPERTY(bool audioLive READ audioLive WRITE setAudioLive NOTIFY audioLiveChanged)
+    Q_PROPERTY(bool cavaAvailable READ cavaAvailable CONSTANT)
     Q_PROPERTY(QVariant audioSpectrum READ audioSpectrum NOTIFY audioSpectrumChanged)
     Q_PROPERTY(QPointF mousePos READ mousePos WRITE setMousePos NOTIFY mousePosChanged)
     Q_PROPERTY(int hoveredZoneIndex READ hoveredZoneIndex NOTIFY hoveredZoneIndexChanged)
@@ -87,6 +93,9 @@ public:
     QString fixedFontFamily() const { return QFontDatabase::systemFont(QFontDatabase::FixedFont).family(); }
     bool showLabels() const { return m_showLabels; }
     bool audioEnabled() const { return m_audioEnabled; }
+    int audioBarCount() const { return m_audioBarCount; }
+    bool audioLive() const { return m_audioLive; }
+    bool cavaAvailable() const;
     QVariant audioSpectrum() const { return m_audioEnabled ? m_audioSpectrum : QVariant(); }
     QPointF mousePos() const { return m_mousePos; }
     int hoveredZoneIndex() const { return m_hoveredZoneIndex; }
@@ -102,6 +111,8 @@ public:
     void setAnimating(bool animating);
     void setShowLabels(bool show);
     void setAudioEnabled(bool enabled);
+    void setAudioBarCount(int count);
+    void setAudioLive(bool live);
     void setMousePos(const QPointF& pos);
 
     Q_INVOKABLE void cycleZoneLayout();
@@ -133,6 +144,8 @@ Q_SIGNALS:
     void zoneLayoutNameChanged();
     void showLabelsChanged();
     void audioEnabledChanged();
+    void audioBarCountChanged();
+    void audioLiveChanged();
     void audioSpectrumChanged();
     void mousePosChanged();
     void hoveredZoneIndexChanged();
@@ -153,6 +166,7 @@ private:
     void buildLabelsTexture();
     void writeExpandedShader();
     void loadWallpaperTexture();
+    void ensureCavaService();
 
     QPointer<KTextEditor::Document> m_fragDoc;
     QPointer<KTextEditor::Document> m_vertDoc;
@@ -200,6 +214,9 @@ private:
 
     bool m_showLabels = true;
     bool m_audioEnabled = false;
+    int m_audioBarCount = 64;
+    bool m_audioLive = true; // default to real audio when CAVA is available
+    CavaService* m_cavaService = nullptr;
     QVariant m_audioSpectrum;
     QPointF m_mousePos;
     int m_hoveredZoneIndex = -1;

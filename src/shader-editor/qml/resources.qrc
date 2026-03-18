@@ -2,5 +2,6 @@
 <RCC version="1.0">
     <qresource prefix="/qml">
         <file>PreviewPane.qml</file>
+        <file>NewPackageWizard.qml</file>
     </qresource>
 </RCC>

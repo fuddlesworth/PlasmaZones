@@ -3,6 +3,7 @@
 
 #include "shadereditorwindow.h"
 #include "metadataeditorwidget.h"
+#include "newpackagedialog.h"
 #include "outputpanel.h"
 #include "parameterpanel.h"
 #include "previewcontroller.h"
@@ -13,11 +14,9 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QInputDialog>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
-#include <QLineEdit>
 #include <QLoggingCategory>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -33,6 +32,7 @@
 
 #include <KAboutData>
 #include <KActionCollection>
+#include <KLocalizedContext>
 #include <KLocalizedString>
 #include <KConfigGroup>
 #include <KRecentFilesAction>
@@ -374,6 +374,8 @@ void ShaderEditorWindow::setupLayout()
     // ── Preview widget (QQuickWidget hosting QML with ZoneShaderItem) ──
     m_previewWidget = new QQuickWidget(this);
     m_previewWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
+    m_previewWidget->engine()->rootContext()->setContextObject(
+        new KLocalizedContext(m_previewWidget->engine()));
     m_previewWidget->engine()->rootContext()->setContextProperty(
         QStringLiteral("previewController"), m_previewController);
     connect(m_previewWidget, &QQuickWidget::statusChanged, this, [this](QQuickWidget::Status status) {
@@ -595,24 +597,40 @@ void ShaderEditorWindow::newShaderPackage()
         return;
     }
 
-    bool ok = false;
-    const QString shaderName = QInputDialog::getText(
-        this,
-        i18n("New Shader Package"),
-        i18n("Shader name:"),
-        QLineEdit::Normal,
-        i18n("My Custom Shader"),
-        &ok);
-
-    if (!ok || shaderName.isEmpty()) {
+    NewPackageDialog dialog(this);
+    if (dialog.exec() != QDialog::Accepted) {
         return;
     }
 
-    const QString shaderId = ShaderPackageIO::sanitizeId(shaderName);
+    const QString shaderName = dialog.shaderName();
+    if (shaderName.isEmpty()) {
+        return;
+    }
+    const QString shaderId = dialog.shaderId();
 
     closeAllTabs();
 
-    const ShaderPackageContents contents = ShaderPackageIO::createTemplate(shaderId, shaderName);
+    ShaderPackageContents contents = ShaderPackageIO::createTemplate(
+        shaderId, shaderName, dialog.selectedFeatures());
+
+    // Apply metadata overrides from the dialog (category, description, author)
+    {
+        QJsonDocument doc = QJsonDocument::fromJson(contents.metadataJson.toUtf8());
+        QJsonObject obj = doc.object();
+        const QString category = dialog.category();
+        const QString description = dialog.description();
+        const QString author = dialog.author();
+        if (!category.isEmpty()) {
+            obj[QStringLiteral("category")] = category;
+        }
+        if (!description.isEmpty()) {
+            obj[QStringLiteral("description")] = description;
+        }
+        if (!author.isEmpty()) {
+            obj[QStringLiteral("author")] = author;
+        }
+        contents.metadataJson = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Indented));
+    }
 
     // Metadata editor in the right panel (below preview)
     setupRightPanel(contents.metadataJson);
@@ -632,6 +650,12 @@ void ShaderEditorWindow::newShaderPackage()
     m_previewController->setShaderDirectory(QString());
     m_previewController->loadDefaultParamsFromMetadata(contents.metadataJson);
     m_previewController->updateMultipassConfig(contents.metadataJson);
+
+    // Auto-enable test audio when the template includes audio reactivity,
+    // so the user immediately sees the visualizer working instead of static idle bars.
+    if (dialog.selectedFeatures().testFlag(ShaderFeature::AudioReactive)) {
+        m_previewController->setAudioEnabled(true);
+    }
 
     qCInfo(lcShaderEditor) << "Created new shader package name=" << shaderName << "id=" << shaderId;
 }

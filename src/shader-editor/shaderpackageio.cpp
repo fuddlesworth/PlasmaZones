@@ -136,11 +136,15 @@ bool savePackage(const QString& dirPath, const ShaderPackageContents& contents)
     return true;
 }
 
-ShaderPackageContents createTemplate(const QString& shaderId, const QString& shaderName)
+ShaderPackageContents createTemplate(const QString& shaderId, const QString& shaderName,
+                                     ShaderFeatures features)
 {
     ShaderPackageContents contents;
+    const bool hasMultipass = features.testFlag(ShaderFeature::Multipass);
+    const bool hasAudio = features.testFlag(ShaderFeature::AudioReactive);
+    const bool hasWallpaper = features.testFlag(ShaderFeature::Wallpaper);
 
-    // metadata.json
+    // ── Metadata ──
     QJsonObject metadata;
     metadata[QStringLiteral("id")] = shaderId;
     metadata[QStringLiteral("name")] = shaderName;
@@ -150,16 +154,81 @@ ShaderPackageContents createTemplate(const QString& shaderId, const QString& sha
     metadata[QStringLiteral("version")] = QStringLiteral("1.0");
     metadata[QStringLiteral("fragmentShader")] = QStringLiteral("effect.frag");
     metadata[QStringLiteral("vertexShader")] = QStringLiteral("zone.vert");
-    metadata[QStringLiteral("multipass")] = false;
-    metadata[QStringLiteral("parameters")] = QJsonArray();
+    metadata[QStringLiteral("multipass")] = hasMultipass;
+    if (hasMultipass) {
+        metadata[QStringLiteral("bufferShaders")] = QJsonArray({QStringLiteral("pass0.frag")});
+    }
+    if (hasWallpaper) {
+        metadata[QStringLiteral("wallpaper")] = true;
+    }
 
+    // ── Parameters (slots assigned sequentially to avoid collisions) ──
+    QJsonArray params;
+    int nextScalarSlot = 0;
+    int nextColorSlot = 0;
+
+    if (hasMultipass) {
+        QJsonObject speed;
+        speed[QStringLiteral("name")] = QStringLiteral("Speed");
+        speed[QStringLiteral("type")] = QStringLiteral("float");
+        speed[QStringLiteral("default")] = 1.0;
+        speed[QStringLiteral("min")] = 0.0;
+        speed[QStringLiteral("max")] = 5.0;
+        speed[QStringLiteral("slot")] = nextScalarSlot++;
+        params.append(speed);
+    }
+    if (hasAudio) {
+        QJsonObject reactivity;
+        reactivity[QStringLiteral("name")] = QStringLiteral("Reactivity");
+        reactivity[QStringLiteral("type")] = QStringLiteral("float");
+        reactivity[QStringLiteral("default")] = 1.0;
+        reactivity[QStringLiteral("min")] = 0.0;
+        reactivity[QStringLiteral("max")] = 3.0;
+        reactivity[QStringLiteral("slot")] = nextScalarSlot++;
+        params.append(reactivity);
+
+        QJsonObject bassBoost;
+        bassBoost[QStringLiteral("name")] = QStringLiteral("Bass Boost");
+        bassBoost[QStringLiteral("type")] = QStringLiteral("float");
+        bassBoost[QStringLiteral("default")] = 1.5;
+        bassBoost[QStringLiteral("min")] = 0.0;
+        bassBoost[QStringLiteral("max")] = 5.0;
+        bassBoost[QStringLiteral("slot")] = nextScalarSlot++;
+        params.append(bassBoost);
+
+        QJsonObject colorShift;
+        colorShift[QStringLiteral("name")] = QStringLiteral("Color Shift");
+        colorShift[QStringLiteral("type")] = QStringLiteral("color");
+        colorShift[QStringLiteral("default")] = QStringLiteral("#00ccff");
+        colorShift[QStringLiteral("slot")] = nextColorSlot++;
+        params.append(colorShift);
+    }
+    if (hasWallpaper) {
+        QJsonObject blend;
+        blend[QStringLiteral("name")] = QStringLiteral("Blend");
+        blend[QStringLiteral("type")] = QStringLiteral("float");
+        blend[QStringLiteral("default")] = 0.5;
+        blend[QStringLiteral("min")] = 0.0;
+        blend[QStringLiteral("max")] = 1.0;
+        blend[QStringLiteral("slot")] = nextScalarSlot++;
+        params.append(blend);
+
+        QJsonObject tint;
+        tint[QStringLiteral("name")] = QStringLiteral("Tint");
+        tint[QStringLiteral("type")] = QStringLiteral("color");
+        tint[QStringLiteral("default")] = QStringLiteral("#ffffff");
+        tint[QStringLiteral("slot")] = nextColorSlot++;
+        params.append(tint);
+    }
+
+    metadata[QStringLiteral("parameters")] = params;
     QJsonDocument doc(metadata);
     contents.metadataJson = QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
 
-    // zone.vert
-    ShaderFile vertexShader;
-    vertexShader.filename = QStringLiteral("zone.vert");
-    vertexShader.content = QStringLiteral(
+    // ── zone.vert (always the same) ──
+    ShaderFile vs;
+    vs.filename = QStringLiteral("zone.vert");
+    vs.content = QStringLiteral(
         "#version 450\n"
         "\n"
         "layout(location = 0) in vec2 position;\n"
@@ -175,12 +244,62 @@ ShaderPackageContents createTemplate(const QString& shaderId, const QString& sha
         "    vFragCoord = vec2(texCoord.x, 1.0 - texCoord.y) * iResolution;\n"
         "    gl_Position = vec4(position, 0.0, 1.0);\n"
         "}\n");
-    contents.files.append(vertexShader);
+    contents.files.append(vs);
 
-    // effect.frag
-    ShaderFile fragmentShader;
-    fragmentShader.filename = QStringLiteral("effect.frag");
-    fragmentShader.content = QStringLiteral(
+    // ── Build GLSL accessor names for each parameter slot ──
+    // In GLSL source code, custom parameters are accessed via the UBO arrays:
+    //   customParams[vecIndex].component  (e.g. customParams[0].x for slot 0)
+    //   customColors[colorSlot]           (e.g. customColors[0] for color slot 0)
+    // NOTE: The C++ host side uses a different naming convention (computeUniformName):
+    //   customParams1_x (1-indexed, underscore-separated) for setting values via the API.
+    // These two naming schemes map to the same UBO data — do not confuse them.
+    auto scalarAccessor = [](int slot) -> QString {
+        static const char* comp[] = {"x", "y", "z", "w"};
+        return QStringLiteral("customParams[%1].%2").arg(slot / 4).arg(QLatin1String(comp[slot % 4]));
+    };
+    auto colorAccessor = [](int slot) -> QString {
+        return QStringLiteral("customColors[%1]").arg(slot);
+    };
+
+    int sc = 0, cc = 0; // slot cursors matching metadata param order
+    QString speedA, reactivityA, bassBoostA, colorShiftA, blendA, tintA;
+    if (hasMultipass) { speedA = scalarAccessor(sc++); }
+    if (hasAudio) { reactivityA = scalarAccessor(sc++); bassBoostA = scalarAccessor(sc++); colorShiftA = colorAccessor(cc++); }
+    if (hasWallpaper) { blendA = scalarAccessor(sc++); tintA = colorAccessor(cc++); }
+
+    // ── pass0.frag (only if multipass) ──
+    if (hasMultipass) {
+        ShaderFile pass0;
+        pass0.filename = QStringLiteral("pass0.frag");
+        pass0.content = QStringLiteral(
+            "#version 450\n"
+            "\n"
+            "layout(location = 0) in vec2 vTexCoord;\n"
+            "layout(location = 1) in vec2 vFragCoord;\n"
+            "\n"
+            "layout(location = 0) out vec4 fragColor;\n"
+            "\n"
+            "#include <common.glsl>\n"
+            "#include <multipass.glsl>\n"
+            "\n"
+            "void main() {\n"
+            "    vec2 uv = vFragCoord / iResolution;\n"
+            "    float speed = %1 >= 0.0 ? %1 : 1.0; // Speed (default 1.0)\n"
+            "\n"
+            "    // Flow field: write velocity/data to buffer\n"
+            "    float angle = atan(uv.y - 0.5, uv.x - 0.5) + iTime * speed;\n"
+            "    vec2 flow = vec2(cos(angle), sin(angle));\n"
+            "    float mag = 0.3 + 0.2 * sin(iTime * speed * 0.5);\n"
+            "\n"
+            "    // Encode: direction [-1,1] -> [0,1], magnitude in blue\n"
+            "    fragColor = vec4(flow * 0.5 + 0.5, mag, 1.0);\n"
+            "}\n").arg(speedA);
+        contents.files.append(pass0);
+    }
+
+    // ── effect.frag (composed from active features) ──
+    QString fragSrc;
+    fragSrc += QStringLiteral(
         "#version 450\n"
         "\n"
         "layout(location = 0) in vec2 vTexCoord;\n"
@@ -188,21 +307,193 @@ ShaderPackageContents createTemplate(const QString& shaderId, const QString& sha
         "\n"
         "layout(location = 0) out vec4 fragColor;\n"
         "\n"
-        "#include <common.glsl>\n"
+        "#include <common.glsl>\n");
+    if (hasMultipass) {
+        fragSrc += QStringLiteral("#include <multipass.glsl>\n");
+    }
+    if (hasAudio) {
+        fragSrc += QStringLiteral("#include <audio.glsl>\n");
+    }
+    if (hasWallpaper) {
+        fragSrc += QStringLiteral("#include <wallpaper.glsl>\n");
+    }
+
+    // ── Helper function: render the effect for one zone ──
+    fragSrc += QStringLiteral(
+        "\n"
+        "vec4 renderEffect(vec2 fragCoord, vec4 rect, vec4 fillColor,\n"
+        "                   vec4 borderColor, vec4 params, bool isHighlighted");
+    if (hasAudio) {
+        fragSrc += QStringLiteral(", float bass, float mids, float treble, bool hasAudio");
+    }
+    fragSrc += QStringLiteral(
+        ") {\n"
+        "    vec2 pos = zoneRectPos(rect);\n"
+        "    vec2 size = zoneRectSize(rect);\n"
+        "    vec2 localUv = zoneLocalUV(fragCoord, pos, size);\n"
+        "    vec2 center = fragCoord - pos - size * 0.5;\n"
+        "    float borderRadius = max(params.x, 6.0);\n"
+        "    float borderWidth = max(params.y, 1.5);\n"
+        "\n"
+        "    // Zone shape (rounded rectangle SDF)\n"
+        "    float d = sdRoundedBox(center, size * 0.5, borderRadius);\n"
+        "    if (d > 1.0) return vec4(0.0); // outside zone\n"
+        "\n"
+        "    float vitality = isHighlighted ? 1.0 : 0.3;\n");
+
+    // ── Wallpaper ──
+    if (hasWallpaper) {
+        fragSrc += QStringLiteral(
+            "\n"
+            "    // Wallpaper sampling\n"
+            "    vec2 wpSize = vec2(textureSize(uWallpaper, 0));\n"
+            "    bool wpAvailable = wpSize.x > 1.0 && wpSize.y > 1.0;\n");
+    }
+
+    // ── Effect color ──
+    if (hasAudio && !hasWallpaper && !hasMultipass) {
+        // Audio-only: dark backdrop so spectrum bars are the focus
+        fragSrc += QStringLiteral(
+            "\n"
+            "    // Dark backdrop for visualizer\n"
+            "    vec3 col = fillColor.rgb * 0.08;\n");
+    } else {
+        fragSrc += QStringLiteral(
+            "\n"
+            "    // Animated gradient base\n"
+            "    vec3 col = vec3(\n"
+            "        0.5 + 0.5 * sin(localUv.x * 6.28 + iTime * vitality),\n"
+            "        0.5 + 0.5 * sin(localUv.y * 6.28 + iTime * vitality * 1.3),\n"
+            "        0.5 + 0.5 * sin((localUv.x + localUv.y) * 3.14 + iTime * vitality * 0.7));\n"
+            "    col *= fillColor.rgb;\n");
+    }
+
+    if (hasMultipass) {
+        fragSrc += QStringLiteral(
+            "\n"
+            "    // Buffer pass blend\n"
+            "    vec4 buf = texture(iChannel0, channelUv(0, fragCoord));\n"
+            "    vec2 flow = buf.rg * 2.0 - 1.0;\n"
+            "    col += vec3(flow * 0.3, buf.b * 0.2) * vitality;\n");
+    }
+
+    if (hasWallpaper) {
+        fragSrc += QStringLiteral(
+            "\n"
+            "    // Wallpaper blend\n"
+            "    if (wpAvailable) {\n"
+            "        vec2 wpUv = wallpaperUv(fragCoord, iResolution);\n"
+            "        vec3 wp = texture(uWallpaper, wpUv).rgb * %1.rgb;\n"
+            "        float blendVal = %2 >= 0.0 ? %2 : 0.5;\n"
+            "        col = mix(col, wp, blendVal);\n"
+            "    }\n").arg(tintA, blendA);
+    }
+
+    if (hasAudio) {
+        fragSrc += QStringLiteral(
+            "\n"
+            "    // Audio spectrum histogram\n"
+            "    float reactivity = %1 >= 0.0 ? %1 : 1.0;\n"
+            "    float bassBoostVal = %2 >= 0.0 ? %2 : 1.5;\n"
+            "    vec3 audioTint = %3.rgb;\n"
+            "\n"
+            "    {\n"
+            "        // Y axis: 0 = bottom, 1 = top\n"
+            "        float y = 1.0 - localUv.y;\n"
+            "\n"
+            "        // Discrete bar columns\n"
+            "        float numBars = 20.0;\n"
+            "        float barIndex = floor(localUv.x * numBars);\n"
+            "        float barCenter = (barIndex + 0.5) / numBars;\n"
+            "        float barEdge = abs(localUv.x - barCenter) * numBars;\n"
+            "        float barGap = smoothstep(0.42, 0.3, barEdge);\n"
+            "\n"
+            "        // Bar height — use audio if available, otherwise idle bounce\n"
+            "        float specVal;\n"
+            "        if (hasAudio) {\n"
+            "            specVal = audioBarSmooth(barCenter) * reactivity * 2.0;\n"
+            "            specVal = pow(specVal, 0.7); // compress dynamic range so bars are visible\n"
+            "            specVal *= (0.6 + bass * bassBoostVal);\n"
+            "        } else {\n"
+            "            // Idle: static bar silhouette so it's obvious this is a visualizer\n"
+            "            specVal = 0.08 + 0.12 * sin(barCenter * 12.0 + 0.5);\n"
+            "        }\n"
+            "        specVal = clamp(specVal, 0.0, 0.95);\n"
+            "\n"
+            "        float barMask = step(y, specVal) * barGap;\n"
+            "\n"
+            "        // Color: gradient from tint at base to bright at peak\n"
+            "        float peakRatio = y / max(specVal, 0.01);\n"
+            "        vec3 barColor = mix(audioTint, audioTint * 2.0, peakRatio);\n"
+            "        barColor = mix(barColor, vec3(1.0), smoothstep(0.8, 1.0, peakRatio) * 0.6);\n"
+            "\n"
+            "        col = mix(col, barColor, barMask * vitality);\n"
+            "\n"
+            "        // Bass glow on background\n"
+            "        float glowAmount = hasAudio ? bass * bassBoostVal * 0.15 : 0.03;\n"
+            "        col += audioTint * glowAmount * vitality;\n"
+            "    }\n").arg(reactivityA, bassBoostA, colorShiftA);
+    }
+
+    // Zone border + final alpha
+    fragSrc += QStringLiteral(
+        "\n"
+        "    // Border\n"
+        "    float borderMask = smoothstep(0.0, 1.5, abs(d) - borderWidth);\n"
+        "    col = mix(borderColor.rgb, col, borderMask);\n"
+        "\n"
+        "    // Zone alpha (anti-aliased edge)\n"
+        "    float alpha = smoothstep(1.0, -0.5, d);\n"
+        "    col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.4 + 0.6 * vitality);\n"
+        "    return vec4(col, alpha);\n"
+        "}\n");
+
+    // ── Main function ──
+    fragSrc += QStringLiteral(
         "\n"
         "void main() {\n"
-        "    vec2 uv = vFragCoord / iResolution;\n"
-        "\n"
-        "    // Your shader code here\n"
-        "    vec3 col = vec3(uv.x, uv.y, 0.5 + 0.5 * sin(iTime));\n"
-        "\n"
-        "    // Zone masking (renders only inside zone boundaries)\n"
-        "    float mask = zoneMask(vFragCoord);\n"
-        "    fragColor = vec4(col * mask, mask);\n"
-        "}\n");
-    contents.files.append(fragmentShader);
+        "    vec2 fragCoord = vFragCoord;\n"
+        "    vec4 color = vec4(0.0);\n");
 
-    qCDebug(lcShaderEditorIO) << "Created shader template id=" << shaderId << "name=" << shaderName;
+    if (hasAudio) {
+        fragSrc += QStringLiteral(
+            "\n"
+            "    bool hasAudio = iAudioSpectrumSize > 0;\n"
+            "    float bass = hasAudio ? getBassSoft() : 0.0;\n"
+            "    float mids = hasAudio ? getMidsSoft() : 0.0;\n"
+            "    float treble = hasAudio ? getTrebleSoft() : 0.0;\n");
+    }
+
+    fragSrc += QStringLiteral(
+        "\n"
+        "    for (int i = 0; i < zoneCount && i < 64; i++) {\n"
+        "        vec4 rect = zoneRects[i];\n"
+        "        if (rect.z <= 0.0 || rect.w <= 0.0) continue;\n"
+        "\n"
+        "        vec4 zoneColor = renderEffect(fragCoord, rect,\n"
+        "            zoneFillColors[i], zoneBorderColors[i],\n"
+        "            zoneParams[i], zoneParams[i].z > 0.5");
+    if (hasAudio) {
+        fragSrc += QStringLiteral(",\n            bass, mids, treble, hasAudio");
+    }
+    fragSrc += QStringLiteral(
+        ");\n"
+        "        color = blendOver(color, zoneColor);\n"
+        "    }\n"
+        "\n"
+        "    // Zone labels overlay\n"
+        "    color = compositeLabels(color, labelsUv(fragCoord), uZoneLabels);\n"
+        "\n"
+        "    fragColor = clampFragColor(color);\n"
+        "}\n");
+
+    ShaderFile frag;
+    frag.filename = QStringLiteral("effect.frag");
+    frag.content = fragSrc;
+    contents.files.append(frag);
+
+    qCDebug(lcShaderEditorIO) << "Created shader template id=" << shaderId
+                              << "name=" << shaderName << "features=" << static_cast<int>(features);
     return contents;
 }
 

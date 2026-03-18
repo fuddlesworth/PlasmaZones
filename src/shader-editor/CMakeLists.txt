@@ -13,10 +13,15 @@ set(plasmazones_shader_editor_SRCS
     metadataeditorwidget.h
     addparameterdialog.cpp
     addparameterdialog.h
+    newpackagedialog.cpp
+    newpackagedialog.h
     parameterpanel.cpp
     parameterpanel.h
     outputpanel.cpp
     outputpanel.h
+    # CAVA integration for real audio spectrum in preview
+    ../daemon/cavaservice.cpp
+    ../daemon/cavaservice.h
 )
 
 # QML resources for live preview pane
