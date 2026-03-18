@@ -11,6 +11,7 @@
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QLoggingCategory>
@@ -36,8 +37,9 @@ AddParameterDialog::AddParameterDialog(const QSet<int>& usedScalarSlots,
     , m_usedColorSlots(usedColorSlots)
 {
     setWindowTitle(i18n("Add Parameter"));
+    setMinimumWidth(420);
     setupUi();
-    onTypeChanged(); // set initial visibility
+    onTypeChanged();
     updateAutoSlot();
 }
 
@@ -47,15 +49,14 @@ void AddParameterDialog::setupUi()
 {
     auto* mainLayout = new QVBoxLayout(this);
     auto* formLayout = new QFormLayout;
+    formLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
+    // Name
     m_nameEdit = new QLineEdit(this);
     m_nameEdit->setPlaceholderText(i18n("e.g. Animation Speed"));
     formLayout->addRow(i18n("Name:"), m_nameEdit);
 
-    m_idEdit = new QLineEdit(this);
-    m_idEdit->setPlaceholderText(i18n("auto-generated from name"));
-    formLayout->addRow(i18n("ID:"), m_idEdit);
-
+    // Type
     m_typeCombo = new QComboBox(this);
     m_typeCombo->addItems({
         QStringLiteral("float"),
@@ -65,9 +66,10 @@ void AddParameterDialog::setupUi()
     });
     formLayout->addRow(i18n("Type:"), m_typeCombo);
 
+    // Group
     m_groupCombo = new QComboBox(this);
     m_groupCombo->setEditable(true);
-    // Store English values as data for serialization, i18n'd text for display
+    m_groupCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_groupCombo->addItem(i18n("Animation"), QStringLiteral("Animation"));
     m_groupCombo->addItem(i18n("Colors"), QStringLiteral("Colors"));
     m_groupCombo->addItem(i18n("Pattern"), QStringLiteral("Pattern"));
@@ -80,56 +82,76 @@ void AddParameterDialog::setupUi()
     // Default value — stacked widget for different types
     m_defaultStack = new QStackedWidget(this);
 
-    // Index 0: float default
+    // Index 0: float
     m_defaultFloat = new QDoubleSpinBox(this);
     m_defaultFloat->setRange(-9999.0, 9999.0);
-    m_defaultFloat->setDecimals(4);
+    m_defaultFloat->setDecimals(2);
     m_defaultFloat->setValue(0.0);
     m_defaultStack->addWidget(m_defaultFloat);
 
-    // Index 1: int default
+    // Index 1: int
     m_defaultInt = new QSpinBox(this);
     m_defaultInt->setRange(-9999, 9999);
     m_defaultInt->setValue(0);
     m_defaultStack->addWidget(m_defaultInt);
 
-    // Index 2: bool default
+    // Index 2: bool
     m_defaultBool = new QCheckBox(i18n("Enabled"), this);
     m_defaultStack->addWidget(m_defaultBool);
 
-    // Index 3: color default
+    // Index 3: color
     m_defaultColorBtn = new QPushButton(this);
     m_defaultColorBtn->setText(m_selectedColor.name());
     m_defaultColorBtn->setAutoFillBackground(true);
     {
         QPalette colorPal = m_defaultColorBtn->palette();
         colorPal.setColor(QPalette::Button, m_selectedColor);
-        colorPal.setColor(QPalette::ButtonText, m_selectedColor.lightnessF() > 0.5 ? Qt::black : Qt::white);
+        colorPal.setColor(QPalette::ButtonText, Qt::black);
         m_defaultColorBtn->setPalette(colorPal);
     }
     m_defaultStack->addWidget(m_defaultColorBtn);
 
     formLayout->addRow(i18n("Default:"), m_defaultStack);
 
-    // Min/Max
-    m_minLabel = new QLabel(i18n("Min:"), this);
-    m_minSpin = new QDoubleSpinBox(this);
-    m_minSpin->setRange(-9999.0, 9999.0);
-    m_minSpin->setDecimals(4);
-    m_minSpin->setValue(0.0);
-    formLayout->addRow(m_minLabel, m_minSpin);
+    // Range row — float uses QDoubleSpinBox, int uses QSpinBox
+    m_rangeRow = new QWidget(this);
+    auto* rangeLayout = new QHBoxLayout(m_rangeRow);
+    rangeLayout->setContentsMargins(0, 0, 0, 0);
 
-    m_maxLabel = new QLabel(i18n("Max:"), this);
-    m_maxSpin = new QDoubleSpinBox(this);
-    m_maxSpin->setRange(-9999.0, 9999.0);
-    m_maxSpin->setDecimals(4);
-    m_maxSpin->setValue(1.0);
-    formLayout->addRow(m_maxLabel, m_maxSpin);
+    m_minFloat = new QDoubleSpinBox(this);
+    m_minFloat->setRange(-9999.0, 9999.0);
+    m_minFloat->setDecimals(2);
+    m_minFloat->setValue(0.0);
 
-    // Slot
-    m_slotSpin = new QSpinBox(this);
-    m_slotSpin->setRange(0, 31);
-    formLayout->addRow(i18n("Slot:"), m_slotSpin);
+    m_maxFloat = new QDoubleSpinBox(this);
+    m_maxFloat->setRange(-9999.0, 9999.0);
+    m_maxFloat->setDecimals(2);
+    m_maxFloat->setValue(1.0);
+
+    m_minInt = new QSpinBox(this);
+    m_minInt->setRange(-9999, 9999);
+    m_minInt->setValue(0);
+
+    m_maxInt = new QSpinBox(this);
+    m_maxInt->setRange(-9999, 9999);
+    m_maxInt->setValue(100);
+
+    m_floatDash = new QLabel(QStringLiteral("–"), this);
+    m_intDash = new QLabel(QStringLiteral("–"), this);
+
+    rangeLayout->addWidget(m_minFloat, 1);
+    rangeLayout->addWidget(m_floatDash);
+    rangeLayout->addWidget(m_maxFloat, 1);
+    rangeLayout->addWidget(m_minInt, 1);
+    rangeLayout->addWidget(m_intDash);
+    rangeLayout->addWidget(m_maxInt, 1);
+
+    m_rangeLabel = new QLabel(i18n("Range:"), this);
+    formLayout->addRow(m_rangeLabel, m_rangeRow);
+
+    // Slot (read-only, auto-assigned)
+    m_slotLabel = new QLabel(this);
+    formLayout->addRow(i18n("Slot:"), m_slotLabel);
 
     mainLayout->addLayout(formLayout);
 
@@ -142,15 +164,6 @@ void AddParameterDialog::setupUi()
             m_nameEdit->setFocus();
             return;
         }
-        const QString type = m_typeCombo->currentText();
-        const int slot = m_slotSpin->value();
-        const QSet<int>& usedSlots = (type == QLatin1String("color")) ? m_usedColorSlots : m_usedScalarSlots;
-        if (usedSlots.contains(slot)) {
-            QMessageBox::warning(this, i18n("Slot Conflict"),
-                i18n("Slot %1 is already in use by another %2 parameter. Choose a different slot.", slot, type));
-            m_slotSpin->setFocus();
-            return;
-        }
         accept();
     });
     connect(m_buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -160,58 +173,39 @@ void AddParameterDialog::setupUi()
         updateAutoSlot();
     });
     connect(m_defaultColorBtn, &QPushButton::clicked, this, &AddParameterDialog::onColorButtonClicked);
-
-    resize(400, 350);
 }
 
 void AddParameterDialog::onTypeChanged()
 {
     const QString type = m_typeCombo->currentText();
-    const bool isBool = (type == QLatin1String("bool"));
-    const bool isColor = (type == QLatin1String("color"));
+    const bool isFloat = (type == QLatin1String("float"));
     const bool isInt = (type == QLatin1String("int"));
-    const bool hideMinMax = isBool || isColor;
+    const bool showRange = isFloat || isInt;
 
-    if (isColor) {
+    if (type == QLatin1String("color")) {
         m_defaultStack->setCurrentIndex(3);
-        m_slotSpin->setRange(0, 15);
-    } else if (isBool) {
+    } else if (type == QLatin1String("bool")) {
         m_defaultStack->setCurrentIndex(2);
-        m_slotSpin->setRange(0, 31);
     } else if (isInt) {
         m_defaultStack->setCurrentIndex(1);
-        m_slotSpin->setRange(0, 31);
     } else {
         m_defaultStack->setCurrentIndex(0);
-        m_slotSpin->setRange(0, 31);
     }
 
-    m_minLabel->setVisible(!hideMinMax);
-    m_minSpin->setVisible(!hideMinMax);
-    m_maxLabel->setVisible(!hideMinMax);
-    m_maxSpin->setVisible(!hideMinMax);
+    m_rangeLabel->setVisible(showRange);
+    m_rangeRow->setVisible(showRange);
+    m_minFloat->setVisible(isFloat);
+    m_floatDash->setVisible(isFloat);
+    m_maxFloat->setVisible(isFloat);
+    m_minInt->setVisible(isInt);
+    m_intDash->setVisible(isInt);
+    m_maxInt->setVisible(isInt);
 }
 
 void AddParameterDialog::onNameChanged(const QString& name)
 {
-    // Auto-generate ID from name using shared sanitizer, then convert to camelCase
-    const QString id = ShaderPackageIO::sanitizeId(name.trimmed());
-
-    // Convert to camelCase: split on hyphens, capitalize first letter of each part after the first
-    const QStringList parts = id.split(QLatin1Char('-'), Qt::SkipEmptyParts);
-    if (!parts.isEmpty()) {
-        QString camelId = parts.first();
-        for (int i = 1; i < parts.size(); ++i) {
-            QString part = parts[i];
-            if (!part.isEmpty()) {
-                part[0] = part[0].toUpper();
-            }
-            camelId += part;
-        }
-        m_idEdit->setText(camelId);
-    } else {
-        m_idEdit->clear();
-    }
+    Q_UNUSED(name);
+    // Name is used directly; ID is auto-generated at parameterJson() time
 }
 
 void AddParameterDialog::onColorButtonClicked()
@@ -232,51 +226,63 @@ void AddParameterDialog::onColorButtonClicked()
 void AddParameterDialog::updateAutoSlot()
 {
     const QString type = m_typeCombo->currentText();
+    const bool isColor = (type == QLatin1String("color"));
+    const QSet<int>& usedSlots = isColor ? m_usedColorSlots : m_usedScalarSlots;
+    const int maxSlot = isColor ? 15 : 31;
 
-    if (type == QLatin1String("color")) {
-        for (int s = 0; s < 16; ++s) {
-            if (!m_usedColorSlots.contains(s)) {
-                m_slotSpin->setValue(s);
-                return;
-            }
+    m_autoSlot = 0;
+    for (int s = 0; s <= maxSlot; ++s) {
+        if (!usedSlots.contains(s)) {
+            m_autoSlot = s;
+            break;
         }
-        m_slotSpin->setValue(0);
-    } else {
-        for (int s = 0; s < 32; ++s) {
-            if (!m_usedScalarSlots.contains(s)) {
-                m_slotSpin->setValue(s);
-                return;
-            }
-        }
-        m_slotSpin->setValue(0);
     }
+
+    const QString uniformName = ShaderPackageIO::computeUniformName(type, m_autoSlot);
+    m_slotLabel->setText(i18n("%1 (%2)", m_autoSlot, uniformName));
 }
 
 QJsonObject AddParameterDialog::parameterJson() const
 {
+    const QString name = m_nameEdit->text().trimmed();
+    const QString type = m_typeCombo->currentText();
+
+    // Auto-generate ID from name
+    const QString id = ShaderPackageIO::sanitizeId(name);
+    const QStringList parts = id.split(QLatin1Char('-'), Qt::SkipEmptyParts);
+    QString camelId;
+    if (!parts.isEmpty()) {
+        camelId = parts.first();
+        for (int i = 1; i < parts.size(); ++i) {
+            QString part = parts[i];
+            if (!part.isEmpty()) {
+                part[0] = part[0].toUpper();
+            }
+            camelId += part;
+        }
+    }
+
     QJsonObject param;
-    param[QStringLiteral("id")] = m_idEdit->text().trimmed();
-    param[QStringLiteral("name")] = m_nameEdit->text().trimmed();
-    param[QStringLiteral("type")] = m_typeCombo->currentText();
-    // Use data role (English) if available, otherwise use edited text
+    param[QStringLiteral("id")] = camelId;
+    param[QStringLiteral("name")] = name;
+    param[QStringLiteral("type")] = type;
+
     const QVariant groupData = m_groupCombo->currentData();
     param[QStringLiteral("group")] = groupData.isValid() ? groupData.toString() : m_groupCombo->currentText();
-    param[QStringLiteral("slot")] = m_slotSpin->value();
+    param[QStringLiteral("slot")] = m_autoSlot;
 
-    const QString type = m_typeCombo->currentText();
     if (type == QLatin1String("bool")) {
         param[QStringLiteral("default")] = m_defaultBool->isChecked();
     } else if (type == QLatin1String("color")) {
         param[QStringLiteral("default")] = m_selectedColor.name();
     } else if (type == QLatin1String("int")) {
         param[QStringLiteral("default")] = m_defaultInt->value();
-        param[QStringLiteral("min")] = static_cast<int>(m_minSpin->value());
-        param[QStringLiteral("max")] = static_cast<int>(m_maxSpin->value());
+        param[QStringLiteral("min")] = m_minInt->value();
+        param[QStringLiteral("max")] = m_maxInt->value();
     } else {
-        // float
         param[QStringLiteral("default")] = m_defaultFloat->value();
-        param[QStringLiteral("min")] = m_minSpin->value();
-        param[QStringLiteral("max")] = m_maxSpin->value();
+        param[QStringLiteral("min")] = m_minFloat->value();
+        param[QStringLiteral("max")] = m_maxFloat->value();
     }
 
     return param;

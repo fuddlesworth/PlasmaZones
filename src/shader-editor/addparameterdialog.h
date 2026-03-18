@@ -34,11 +34,10 @@ public:
 private:
     void setupUi();
     void onTypeChanged();
-    void onNameChanged(const QString& name);
+    void onNameChanged(const QString& text);
     void onColorButtonClicked();
     void updateAutoSlot();
 
-    QLineEdit* m_idEdit = nullptr;
     QLineEdit* m_nameEdit = nullptr;
     QComboBox* m_typeCombo = nullptr;
     QComboBox* m_groupCombo = nullptr;
@@ -51,14 +50,19 @@ private:
     QPushButton* m_defaultColorBtn = nullptr;
     QColor m_selectedColor;
 
-    // Min/Max
-    QDoubleSpinBox* m_minSpin = nullptr;
-    QDoubleSpinBox* m_maxSpin = nullptr;
-    QLabel* m_minLabel = nullptr;
-    QLabel* m_maxLabel = nullptr;
+    // Min/Max (float/int only)
+    QDoubleSpinBox* m_minFloat = nullptr;
+    QDoubleSpinBox* m_maxFloat = nullptr;
+    QSpinBox* m_minInt = nullptr;
+    QSpinBox* m_maxInt = nullptr;
+    QLabel* m_floatDash = nullptr;
+    QLabel* m_intDash = nullptr;
+    QLabel* m_rangeLabel = nullptr;
+    QWidget* m_rangeRow = nullptr;
 
-    // Slot
-    QSpinBox* m_slotSpin = nullptr;
+    // Slot (auto-assigned, read-only display)
+    QLabel* m_slotLabel = nullptr;
+    int m_autoSlot = 0;
 
     QDialogButtonBox* m_buttonBox = nullptr;
 
