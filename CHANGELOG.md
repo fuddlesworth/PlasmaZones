@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-03-17
+
+### Changed
+- **Batched D-Bus signals for autotile transitions**: Overflow float notifications, resnap snap confirmations, and window-opened announcements are now batched into single D-Bus calls instead of per-window round-trips. On a 15-window autotile toggle this reduces D-Bus messages from ~45 to 3, eliminating compositor-thread stalls during mode switches and daemon restarts.
+
 ## [2.3.1] - 2026-03-17
 
 ### Fixed
@@ -803,7 +808,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.1...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.2...HEAD
+[2.3.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.1...v2.3.2
 [2.3.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.2.0...v2.2.1
