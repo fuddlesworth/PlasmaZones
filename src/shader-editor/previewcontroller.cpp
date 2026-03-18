@@ -473,7 +473,7 @@ void PreviewController::buildZoneLayout()
 
     // The ZoneShaderItem fills the entire QQuickWidget; the header bar (28px)
     // and info bar (20px) render on top. Position zones between them with padding.
-    constexpr qreal headerH = 36.0;
+    constexpr qreal headerH = 28.0;
     constexpr qreal infoBarH = 24.0;
     constexpr qreal pad = 4.0;
     const qreal monX = pad;

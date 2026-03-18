@@ -16,7 +16,7 @@ Item {
     readonly property var pc: previewController ?? null
 
     // Heights of the overlay bars — used by C++ to offset zones
-    readonly property int headerHeight: Math.round(Kirigami.Units.gridUnit * 2.5)
+    readonly property int headerHeight: Math.round(Kirigami.Units.gridUnit * 1.75)
     readonly property int infoBarHeight: Math.round(Kirigami.Units.gridUnit * 1.5)
 
     // ZoneShaderItem status constants (mirror PreviewController::Status*)
@@ -95,11 +95,18 @@ Item {
             anchors.rightMargin: Kirigami.Units.smallSpacing * 2
             spacing: Kirigami.Units.smallSpacing
 
-            Label {
-                text: i18n("Live Preview")
-                font.pointSize: Kirigami.Theme.defaultFont.pointSize
-                font.bold: true
-                color: Kirigami.Theme.textColor
+            ToolButton {
+                icon.name: (root.pc && root.pc.animating) ? "media-playback-pause" : "media-playback-start"
+                onClicked: { if (root.pc) root.pc.animating = !root.pc.animating }
+                ToolTip.text: (root.pc && root.pc.animating) ? i18n("Pause") : i18n("Play")
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+            }
+
+            ToolButton {
+                icon.name: "view-refresh"
+                onClicked: { if (root.pc) root.pc.resetTime() }
+                ToolTip.text: i18n("Reset time")
+                ToolTip.delay: Kirigami.Units.toolTipDelay
             }
 
             Item { Layout.fillWidth: true }
@@ -110,34 +117,6 @@ Item {
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                 color: Kirigami.Theme.positiveTextColor
                 visible: root.pc ? root.pc.animating : false
-            }
-
-            ToolButton {
-                icon.name: (root.pc && root.pc.animating) ? "media-playback-pause" : "media-playback-start"
-                onClicked: { if (root.pc) root.pc.animating = !root.pc.animating }
-                ToolTip.text: (root.pc && root.pc.animating) ? i18n("Pause") : i18n("Play")
-                ToolTip.visible: hovered; ToolTip.delay: 500
-            }
-
-            ToolButton {
-                icon.name: "view-refresh"
-                onClicked: { if (root.pc) root.pc.resetTime() }
-                ToolTip.text: i18n("Reset time")
-                ToolTip.visible: hovered; ToolTip.delay: 500
-            }
-
-            ToolButton {
-                icon.name: "view-grid"
-                onClicked: { if (root.pc) root.pc.cycleZoneLayout() }
-                ToolTip.text: root.pc ? root.pc.zoneLayoutName : ""
-                ToolTip.visible: hovered; ToolTip.delay: 500
-            }
-
-            ToolButton {
-                icon.name: "run-build"
-                onClicked: { if (root.pc) root.pc.recompile() }
-                ToolTip.text: i18n("Force recompile")
-                ToolTip.visible: hovered; ToolTip.delay: 500
             }
         }
     }
