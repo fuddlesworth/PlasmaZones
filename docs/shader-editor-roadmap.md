@@ -2,9 +2,9 @@
 
 ## Quick Wins
 
-- [ ] **Ctrl+Tab tab switching** — Wire keyboard shortcuts for cycling between code editor tabs
-- [ ] **File > Recent Packages** — Add `KRecentFilesAction` submenu for recently opened shader packages
-- [ ] **Screenshot preview** — Save button in preview header bar, uses `QQuickWidget::grabFramebuffer()` + save dialog
+- [x] **Ctrl+Tab tab switching** — Ctrl+Tab / Ctrl+Shift+Tab cycle through code editor tabs
+- [x] **File > Recent Packages** — KRecentFilesAction submenu, persisted via KSharedConfig
+- [ ] **Screenshot preview** — Requires QQuickRenderControl offscreen rendering with QSGRenderNode; deferred pending Qt upstream investigation
 
 ## Medium Effort
 

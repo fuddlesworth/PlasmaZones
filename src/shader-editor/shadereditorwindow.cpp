@@ -24,6 +24,7 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickWidget>
+#include <QShortcut>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStatusBar>
@@ -33,6 +34,9 @@
 #include <KAboutData>
 #include <KActionCollection>
 #include <KLocalizedString>
+#include <KConfigGroup>
+#include <KRecentFilesAction>
+#include <KSharedConfig>
 #include <KTextEditor/Document>
 #include <KTextEditor/Editor>
 #include <KTextEditor/View>
@@ -89,6 +93,20 @@ ShaderEditorWindow::ShaderEditorWindow(QWidget* parent)
     setupToolBar();
     setupStatusBar();
 
+    // Tab switching: Ctrl+Tab / Ctrl+Shift+Tab
+    auto* nextTab = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Tab), this);
+    connect(nextTab, &QShortcut::activated, this, [this]() {
+        if (m_tabWidget->count() > 1) {
+            m_tabWidget->setCurrentIndex((m_tabWidget->currentIndex() + 1) % m_tabWidget->count());
+        }
+    });
+    auto* prevTab = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab), this);
+    connect(prevTab, &QShortcut::activated, this, [this]() {
+        if (m_tabWidget->count() > 1) {
+            m_tabWidget->setCurrentIndex((m_tabWidget->currentIndex() - 1 + m_tabWidget->count()) % m_tabWidget->count());
+        }
+    });
+
     resize(1400, 900);
     updateWindowTitle();
 }
@@ -127,6 +145,18 @@ void ShaderEditorWindow::createActions()
     m_openAction->setShortcut(QKeySequence::Open);
     m_openAction->setToolTip(i18n("Open Shader Package"));
     connect(m_openAction, &QAction::triggered, this, &ShaderEditorWindow::openShaderPackageDialog);
+
+    m_recentAction = new KRecentFilesAction(QIcon::fromTheme(QStringLiteral("document-open-recent")),
+                                            i18n("Open &Recent"), this);
+    m_recentAction->setMaxItems(10);
+    connect(m_recentAction, &KRecentFilesAction::urlSelected, this, [this](const QUrl& url) {
+        if (url.isLocalFile()) {
+            openShaderPackage(url.toLocalFile());
+        }
+    });
+    // Load saved recent entries
+    const KSharedConfig::Ptr config = KSharedConfig::openConfig();
+    m_recentAction->loadEntries(config->group(QStringLiteral("RecentPackages")));
 
     m_saveAction = new QAction(QIcon::fromTheme(QStringLiteral("document-save")), i18n("&Save"), this);
     m_saveAction->setShortcut(QKeySequence::Save);
@@ -220,6 +250,7 @@ void ShaderEditorWindow::setupMenuBar()
     auto* fileMenu = menuBar()->addMenu(i18n("&File"));
     fileMenu->addAction(m_newAction);
     fileMenu->addAction(m_openAction);
+    fileMenu->addAction(m_recentAction);
     fileMenu->addSeparator();
     fileMenu->addAction(m_saveAction);
     fileMenu->addAction(m_saveAsAction);
@@ -646,6 +677,11 @@ void ShaderEditorWindow::openShaderPackage(const QString& path)
         m_previewController->updateMultipassConfig(contents.metadataJson);
     }
 
+    // Track in recent files
+    if (m_recentAction) {
+        m_recentAction->addUrl(QUrl::fromLocalFile(absPath), QDir(absPath).dirName());
+    }
+
     qCInfo(lcShaderEditor) << "Opened shader package from=" << absPath;
 }
 
@@ -849,6 +885,12 @@ void ShaderEditorWindow::closeAllTabs()
 void ShaderEditorWindow::closeEvent(QCloseEvent* event)
 {
     if (promptSaveIfModified()) {
+        // Persist recent files
+        if (m_recentAction) {
+            const KSharedConfig::Ptr config = KSharedConfig::openConfig();
+            m_recentAction->saveEntries(config->group(QStringLiteral("RecentPackages")));
+            config->sync();
+        }
         event->accept();
     } else {
         event->ignore();

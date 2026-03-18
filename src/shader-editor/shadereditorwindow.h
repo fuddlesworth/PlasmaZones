@@ -6,6 +6,7 @@
 #include <QCloseEvent>
 #include <QList>
 #include <QMainWindow>
+#include <QShortcut>
 #include <QString>
 
 class QComboBox;
@@ -14,6 +15,8 @@ class QMenu;
 class QQuickWidget;
 class QSplitter;
 class QTabWidget;
+
+class KRecentFilesAction;
 
 namespace KTextEditor {
 class Document;
@@ -101,6 +104,9 @@ private:
     QAction* m_compileAction = nullptr;
     QAction* m_validateAction = nullptr;
     QAction* m_resetParamsAction = nullptr;
+
+    // Recent files
+    KRecentFilesAction* m_recentAction = nullptr;
 
     // Menus
     QMenu* m_editMenu = nullptr;
