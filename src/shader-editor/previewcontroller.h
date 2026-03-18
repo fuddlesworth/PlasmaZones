@@ -45,6 +45,12 @@ class PreviewController : public QObject
     Q_PROPERTY(QPointF mousePos READ mousePos WRITE setMousePos NOTIFY mousePosChanged)
     Q_PROPERTY(int hoveredZoneIndex READ hoveredZoneIndex NOTIFY hoveredZoneIndexChanged)
 
+    // Multipass rendering
+    Q_PROPERTY(QStringList bufferShaderPaths READ bufferShaderPaths NOTIFY bufferShaderPathsChanged)
+    Q_PROPERTY(bool bufferFeedback READ bufferFeedback NOTIFY bufferFeedbackChanged)
+    Q_PROPERTY(qreal bufferScale READ bufferScale NOTIFY bufferScaleChanged)
+    Q_PROPERTY(QString bufferWrap READ bufferWrap NOTIFY bufferWrapChanged)
+
 public:
     // ZoneShaderItem::Status values (avoids header dependency in shader-editor)
     static constexpr int StatusNull = 0;
@@ -57,7 +63,9 @@ public:
 
     void setFragmentDocument(KTextEditor::Document* doc);
     void setVertexDocument(KTextEditor::Document* doc);
+    void setBufferDocument(const QString& filename, KTextEditor::Document* doc);
     void setShaderDirectory(const QString& dir);
+    void updateMultipassConfig(const QString& metadataJson);
 
     QUrl shaderSource() const;
     QVariantList zones() const;
@@ -78,6 +86,11 @@ public:
     QVariant audioSpectrum() const { return m_audioEnabled ? m_audioSpectrum : QVariant(); }
     QPointF mousePos() const { return m_mousePos; }
     int hoveredZoneIndex() const { return m_hoveredZoneIndex; }
+
+    QStringList bufferShaderPaths() const { return m_bufferShaderPaths; }
+    bool bufferFeedback() const { return m_bufferFeedback; }
+    qreal bufferScale() const { return m_bufferScale; }
+    QString bufferWrap() const { return m_bufferWrap; }
 
     void setAnimating(bool animating);
     void setShowLabels(bool show);
@@ -116,6 +129,10 @@ Q_SIGNALS:
     void audioSpectrumChanged();
     void mousePosChanged();
     void hoveredZoneIndexChanged();
+    void bufferShaderPathsChanged();
+    void bufferFeedbackChanged();
+    void bufferScaleChanged();
+    void bufferWrapChanged();
 
 private Q_SLOTS:
     void onDocumentTextChanged();
@@ -129,6 +146,12 @@ private:
 
     QPointer<KTextEditor::Document> m_fragDoc;
     QPointer<KTextEditor::Document> m_vertDoc;
+    QMap<QString, QPointer<KTextEditor::Document>> m_bufferDocs;
+    QStringList m_bufferShaderOrder; // filenames in execution order from metadata
+    QStringList m_bufferShaderPaths; // expanded temp-dir paths
+    bool m_bufferFeedback = false;
+    qreal m_bufferScale = 1.0;
+    QString m_bufferWrap = QStringLiteral("clamp");
     QString m_shaderDir; // for #include resolution
 
     QTimer m_recompileTimer; // 300ms debounce

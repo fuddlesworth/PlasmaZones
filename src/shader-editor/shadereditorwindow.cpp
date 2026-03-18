@@ -419,8 +419,10 @@ void ShaderEditorWindow::setupLayout()
 
 void ShaderEditorWindow::connectDocumentToPreview(const QString& filename, KTextEditor::Document* doc)
 {
-    if (filename.endsWith(QLatin1String(".frag"))) {
+    if (filename == QLatin1String("effect.frag")) {
         m_previewController->setFragmentDocument(doc);
+    } else if (filename.startsWith(QLatin1String("pass")) && filename.endsWith(QLatin1String(".frag"))) {
+        m_previewController->setBufferDocument(filename, doc);
     } else if (filename.endsWith(QLatin1String(".vert"))) {
         m_previewController->setVertexDocument(doc);
     }
@@ -512,12 +514,13 @@ void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
         m_metadataEditor->updateParameterDefaults(values);
     });
 
-    // Connect metadata changes -> update preview params + parameter panel
+    // Connect metadata changes -> update preview params, parameter panel, and multipass config
     connect(m_metadataEditor, &MetadataEditorWidget::modified, this, [this]() {
         updateWindowTitle();
         if (m_metadataEditor && m_parameterPanel) {
             const QString json = m_metadataEditor->toJson();
             m_previewController->loadDefaultParamsFromMetadata(json);
+            m_previewController->updateMultipassConfig(json);
             m_parameterPanel->loadFromMetadata(json);
         }
     });
@@ -597,6 +600,7 @@ void ShaderEditorWindow::newShaderPackage()
 
     m_previewController->setShaderDirectory(QString());
     m_previewController->loadDefaultParamsFromMetadata(contents.metadataJson);
+    m_previewController->updateMultipassConfig(contents.metadataJson);
 
     qCInfo(lcShaderEditor) << "Created new shader package name=" << shaderName << "id=" << shaderId;
 }
@@ -639,6 +643,7 @@ void ShaderEditorWindow::openShaderPackage(const QString& path)
 
     if (!contents.metadataJson.isEmpty()) {
         m_previewController->loadDefaultParamsFromMetadata(contents.metadataJson);
+        m_previewController->updateMultipassConfig(contents.metadataJson);
     }
 
     qCInfo(lcShaderEditor) << "Opened shader package from=" << absPath;

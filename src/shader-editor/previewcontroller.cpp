@@ -91,6 +91,15 @@ void PreviewController::setFragmentDocument(KTextEditor::Document* doc)
         disconnect(m_fragDoc, &KTextEditor::Document::textChanged, this, &PreviewController::onDocumentTextChanged);
     }
 
+    // Clear buffer docs when switching to a new fragment (new package load).
+    // Buffer docs from the previous package are about to be deleted.
+    for (auto it = m_bufferDocs.begin(); it != m_bufferDocs.end(); ++it) {
+        if (it.value()) {
+            disconnect(it.value(), &KTextEditor::Document::textChanged, this, &PreviewController::onDocumentTextChanged);
+        }
+    }
+    m_bufferDocs.clear();
+
     m_fragDoc = doc;
 
     if (m_fragDoc) {
@@ -111,6 +120,87 @@ void PreviewController::setVertexDocument(KTextEditor::Document* doc)
     if (m_vertDoc) {
         connect(m_vertDoc, &KTextEditor::Document::textChanged, this, &PreviewController::onDocumentTextChanged);
         // Trigger recompilation with new vertex shader
+        m_recompileTimer.start();
+    }
+}
+
+void PreviewController::setBufferDocument(const QString& filename, KTextEditor::Document* doc)
+{
+    // Disconnect old document if replacing
+    if (m_bufferDocs.contains(filename)) {
+        KTextEditor::Document* oldDoc = m_bufferDocs.value(filename);
+        if (oldDoc) {
+            disconnect(oldDoc, &KTextEditor::Document::textChanged, this, &PreviewController::onDocumentTextChanged);
+        }
+    }
+
+    if (doc) {
+        m_bufferDocs[filename] = doc;
+        connect(doc, &KTextEditor::Document::textChanged, this, &PreviewController::onDocumentTextChanged);
+        m_recompileTimer.start();
+    } else {
+        m_bufferDocs.remove(filename);
+    }
+}
+
+void PreviewController::updateMultipassConfig(const QString& metadataJson)
+{
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(metadataJson.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        return;
+    }
+
+    const QJsonObject root = doc.object();
+
+    // Check if multipass is explicitly disabled
+    if (root.contains(QStringLiteral("multipass")) && !root.value(QStringLiteral("multipass")).toBool()) {
+        bool changed = false;
+        if (!m_bufferShaderOrder.isEmpty()) { m_bufferShaderOrder.clear(); changed = true; }
+        if (!m_bufferShaderPaths.isEmpty()) { m_bufferShaderPaths.clear(); changed = true; Q_EMIT bufferShaderPathsChanged(); }
+        if (m_bufferFeedback) { m_bufferFeedback = false; Q_EMIT bufferFeedbackChanged(); }
+        if (m_bufferScale != 1.0) { m_bufferScale = 1.0; Q_EMIT bufferScaleChanged(); }
+        if (m_bufferWrap != QLatin1String("clamp")) { m_bufferWrap = QStringLiteral("clamp"); Q_EMIT bufferWrapChanged(); }
+        if (changed) m_recompileTimer.start();
+        return;
+    }
+
+    bool needsRecompile = false;
+
+    // Parse bufferShaders array (ordered filenames)
+    const QJsonArray bufferArray = root.value(QStringLiteral("bufferShaders")).toArray();
+    QStringList newOrder;
+    newOrder.reserve(bufferArray.size());
+    for (const QJsonValue& v : bufferArray) {
+        newOrder.append(v.toString());
+    }
+    if (newOrder != m_bufferShaderOrder) {
+        m_bufferShaderOrder = newOrder;
+        needsRecompile = true;
+    }
+
+    // Parse bufferFeedback
+    const bool newFeedback = root.value(QStringLiteral("bufferFeedback")).toBool(false);
+    if (newFeedback != m_bufferFeedback) {
+        m_bufferFeedback = newFeedback;
+        Q_EMIT bufferFeedbackChanged();
+    }
+
+    // Parse bufferScale
+    const qreal newScale = root.value(QStringLiteral("bufferScale")).toDouble(1.0);
+    if (!qFuzzyCompare(1.0 + newScale, 1.0 + m_bufferScale)) {
+        m_bufferScale = newScale;
+        Q_EMIT bufferScaleChanged();
+    }
+
+    // Parse bufferWrap
+    const QString newWrap = root.value(QStringLiteral("bufferWrap")).toString(QStringLiteral("clamp"));
+    if (newWrap != m_bufferWrap) {
+        m_bufferWrap = newWrap;
+        Q_EMIT bufferWrapChanged();
+    }
+
+    if (needsRecompile) {
         m_recompileTimer.start();
     }
 }
@@ -389,11 +479,18 @@ void PreviewController::writeExpandedShader()
     // The current file directory for relative includes: use shader dir if set, else temp dir
     const QString currentFileDir = m_shaderDir.isEmpty() ? m_tempDir.path() : m_shaderDir;
 
-    // Skip recompile if source hasn't changed
+    // Skip recompile if source hasn't changed (include buffer docs in hash)
     const QString fragSource = m_fragDoc->text();
     const QString vertSource = m_vertDoc ? m_vertDoc->text() : QString();
-    const QByteArray sourceHash = QCryptographicHash::hash(
-        (fragSource + vertSource).toUtf8(), QCryptographicHash::Md5);
+    QCryptographicHash hasher(QCryptographicHash::Md5);
+    hasher.addData((fragSource + vertSource).toUtf8());
+    for (const QString& bufName : m_bufferShaderOrder) {
+        KTextEditor::Document* bufDoc = m_bufferDocs.value(bufName);
+        if (bufDoc) {
+            hasher.addData(bufDoc->text().toUtf8());
+        }
+    }
+    const QByteArray sourceHash = hasher.result();
     if (sourceHash == m_lastCompiledHash) {
         return;
     }
@@ -444,6 +541,45 @@ void PreviewController::writeExpandedShader()
         }
         file.write(expandedVert.toUtf8());
         file.flush();
+    }
+
+    // Expand and write buffer pass shaders (in metadata-declared order)
+    QStringList newBufferPaths;
+    for (const QString& bufName : m_bufferShaderOrder) {
+        KTextEditor::Document* bufDoc = m_bufferDocs.value(bufName);
+        if (!bufDoc) {
+            continue;
+        }
+
+        QString bufError;
+        const QString expandedBuf = ShaderIncludeResolver::expandIncludes(
+            bufDoc->text(), currentFileDir, includePaths, &bufError);
+
+        if (expandedBuf.isNull()) {
+            m_errorLog = bufError.isEmpty()
+                ? QStringLiteral("Buffer pass %1 include expansion failed").arg(bufName)
+                : bufError;
+            Q_EMIT errorLogChanged();
+            m_status = StatusError;
+            Q_EMIT statusChanged();
+            qCWarning(lcPreview) << "Buffer pass include expansion failed:" << bufName << m_errorLog;
+            return;
+        }
+
+        const QString bufPath = m_tempDir.filePath(bufName);
+        QFile bufFile(bufPath);
+        if (!bufFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+            qCWarning(lcPreview) << "Failed to write buffer pass:" << bufFile.errorString();
+            return;
+        }
+        bufFile.write(expandedBuf.toUtf8());
+        bufFile.flush();
+        newBufferPaths.append(QFileInfo(bufPath).absoluteFilePath());
+    }
+
+    if (newBufferPaths != m_bufferShaderPaths) {
+        m_bufferShaderPaths = newBufferPaths;
+        Q_EMIT bufferShaderPathsChanged();
     }
 
     // Clear previous error

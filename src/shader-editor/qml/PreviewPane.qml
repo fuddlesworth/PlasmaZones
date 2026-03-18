@@ -49,6 +49,11 @@ Item {
 
         shaderSource: root.pc ? root.pc.shaderSource : ""
 
+        bufferShaderPaths: root.pc ? root.pc.bufferShaderPaths : []
+        bufferFeedback: root.pc ? root.pc.bufferFeedback : false
+        bufferScale: root.pc ? root.pc.bufferScale : 1.0
+        bufferWrap: root.pc ? root.pc.bufferWrap : "clamp"
+
         onWidthChanged: updatePreviewSize()
         onHeightChanged: updatePreviewSize()
 
@@ -183,7 +188,10 @@ Item {
                 var w = Math.floor(shaderPreview.width);
                 var h = Math.floor(shaderPreview.height);
                 var zones = root.pc.zones ? root.pc.zones.length : 0;
+                var passes = root.pc.bufferShaderPaths ? root.pc.bufferShaderPaths.length : 0;
                 var s = "t = " + t + "s | " + w + "\u00d7" + h + " | " + zones + " zones";
+                if (passes > 0)
+                    s += " | " + (passes + 1) + " passes";
                 var mp = root.pc.mousePos;
                 if (mp && mp.x >= 0 && mp.y >= 0)
                     s += " | mouse " + Math.floor(mp.x) + "," + Math.floor(mp.y);
