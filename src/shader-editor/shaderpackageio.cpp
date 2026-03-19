@@ -575,6 +575,13 @@ QString systemShaderDirectory()
 
 QString computeUniformName(const QString& type, int slot)
 {
+    if (type == QLatin1String("image")) {
+        if (slot < 0 || slot > 3) {
+            return {};
+        }
+        return QStringLiteral("uTexture%1").arg(slot);
+    }
+
     if (type == QLatin1String("color")) {
         if (slot < 0 || slot > 15) {
             return {};

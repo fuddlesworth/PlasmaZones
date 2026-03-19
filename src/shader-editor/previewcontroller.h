@@ -5,7 +5,6 @@
 
 #include <QElapsedTimer>
 #include <QFontDatabase>
-#include <array>
 #include <QImage>
 #include <QObject>
 #include <QPointer>
@@ -97,7 +96,6 @@ public:
     int audioBarCount() const { return m_audioBarCount; }
     bool audioLive() const { return m_audioLive; }
     bool cavaAvailable() const;
-    QStringList userTexturePaths() const;
     QVariant audioSpectrum() const { return m_audioEnabled ? m_audioSpectrum : QVariant(); }
     QPointF mousePos() const { return m_mousePos; }
     int hoveredZoneIndex() const { return m_hoveredZoneIndex; }
@@ -118,10 +116,6 @@ public:
     void setMousePos(const QPointF& pos);
 
     Q_INVOKABLE void cycleZoneLayout();
-    Q_INVOKABLE void setUserTexture(int slot, const QUrl& fileUrl);
-    Q_INVOKABLE void clearUserTexture(int slot);
-
-    Q_PROPERTY(QStringList userTexturePaths READ userTexturePaths NOTIFY userTexturePathsChanged)
     Q_INVOKABLE void resetTime();
     Q_INVOKABLE void recompile();
 
@@ -152,7 +146,6 @@ Q_SIGNALS:
     void audioEnabledChanged();
     void audioBarCountChanged();
     void audioLiveChanged();
-    void userTexturePathsChanged();
     void audioSpectrumChanged();
     void mousePosChanged();
     void hoveredZoneIndexChanged();
@@ -227,7 +220,6 @@ private:
     CavaService* m_cavaService = nullptr;
     QVariant m_audioSpectrum;
     QPointF m_mousePos;
-    std::array<QString, 4> m_userTexturePaths;
     int m_hoveredZoneIndex = -1;
     QTimer m_audioTimer; // generates test audio data when enabled
 };

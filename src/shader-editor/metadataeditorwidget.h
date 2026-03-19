@@ -59,6 +59,7 @@ private:
     QLineEdit* m_versionEdit = nullptr;
     QLineEdit* m_descriptionEdit = nullptr;
     QCheckBox* m_multipassCheck = nullptr;
+    QCheckBox* m_wallpaperCheck = nullptr;
 
     // Parameters
     QTreeWidget* m_paramTree = nullptr;

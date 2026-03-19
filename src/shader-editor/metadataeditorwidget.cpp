@@ -93,6 +93,9 @@ void MetadataEditorWidget::setupUi()
     m_multipassCheck = new QCheckBox(i18n("Enable multipass rendering"), this);
     infoLayout->addRow(QString(), m_multipassCheck);
 
+    m_wallpaperCheck = new QCheckBox(i18n("Enable wallpaper texture (uWallpaper, binding 11)"), this);
+    infoLayout->addRow(QString(), m_wallpaperCheck);
+
     mainLayout->addLayout(infoLayout);
 
     // ── Parameters ──
@@ -158,6 +161,7 @@ void MetadataEditorWidget::connectSignals()
     connect(m_versionEdit, &QLineEdit::textChanged, this, &MetadataEditorWidget::markModified);
     connect(m_descriptionEdit, &QLineEdit::textChanged, this, &MetadataEditorWidget::markModified);
     connect(m_multipassCheck, &QCheckBox::toggled, this, &MetadataEditorWidget::markModified);
+    connect(m_wallpaperCheck, &QCheckBox::toggled, this, &MetadataEditorWidget::markModified);
 }
 
 void MetadataEditorWidget::loadFromJson(const QString& json)
@@ -194,6 +198,7 @@ void MetadataEditorWidget::loadFromJson(const QString& json)
     m_versionEdit->setText(obj.value(QStringLiteral("version")).toString());
     m_descriptionEdit->setText(obj.value(QStringLiteral("description")).toString());
     m_multipassCheck->setChecked(obj.value(QStringLiteral("multipass")).toBool(false));
+    m_wallpaperCheck->setChecked(obj.value(QStringLiteral("wallpaper")).toBool(false));
 
     // Load parameters
     m_paramTree->clear();
@@ -275,6 +280,11 @@ QString MetadataEditorWidget::toJson() const
     obj[QStringLiteral("author")] = m_authorEdit->text().trimmed();
     obj[QStringLiteral("version")] = m_versionEdit->text().trimmed();
     obj[QStringLiteral("multipass")] = m_multipassCheck->isChecked();
+    if (m_wallpaperCheck->isChecked()) {
+        obj[QStringLiteral("wallpaper")] = true;
+    } else {
+        obj.remove(QStringLiteral("wallpaper"));
+    }
 
     // Build parameters array from tree items
     QJsonArray params;
@@ -324,6 +334,7 @@ void MetadataEditorWidget::onAddParameter()
     // Collect used slots
     QSet<int> usedScalarSlots;
     QSet<int> usedColorSlots;
+    QSet<int> usedImageSlots;
 
     for (int i = 0; i < m_paramTree->topLevelItemCount(); ++i) {
         const auto* item = m_paramTree->topLevelItem(i);
@@ -331,12 +342,14 @@ void MetadataEditorWidget::onAddParameter()
         const int slot = item->text(2).toInt();
         if (type == QLatin1String("color")) {
             usedColorSlots.insert(slot);
+        } else if (type == QLatin1String("image")) {
+            usedImageSlots.insert(slot);
         } else {
             usedScalarSlots.insert(slot);
         }
     }
 
-    AddParameterDialog dialog(usedScalarSlots, usedColorSlots, this);
+    AddParameterDialog dialog(usedScalarSlots, usedColorSlots, usedImageSlots, this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }

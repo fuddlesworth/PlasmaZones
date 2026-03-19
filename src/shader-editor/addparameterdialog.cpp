@@ -10,6 +10,8 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -19,7 +21,6 @@
 #include <QPalette>
 #include <QPushButton>
 #include <QSpinBox>
-#include <QStackedWidget>
 #include <QVBoxLayout>
 
 #include <KLocalizedString>
@@ -30,11 +31,13 @@ namespace PlasmaZones {
 
 AddParameterDialog::AddParameterDialog(const QSet<int>& usedScalarSlots,
                                        const QSet<int>& usedColorSlots,
+                                       const QSet<int>& usedImageSlots,
                                        QWidget* parent)
     : QDialog(parent)
     , m_selectedColor(Qt::white)
     , m_usedScalarSlots(usedScalarSlots)
     , m_usedColorSlots(usedColorSlots)
+    , m_usedImageSlots(usedImageSlots)
 {
     setWindowTitle(i18n("Add Parameter"));
     setMinimumWidth(420);
@@ -63,6 +66,7 @@ void AddParameterDialog::setupUi()
         QStringLiteral("int"),
         QStringLiteral("bool"),
         QStringLiteral("color"),
+        QStringLiteral("image"),
     });
     formLayout->addRow(i18n("Type:"), m_typeCombo);
 
@@ -79,27 +83,24 @@ void AddParameterDialog::setupUi()
     m_groupCombo->addItem(i18n("Labels"), QStringLiteral("Labels"));
     formLayout->addRow(i18n("Group:"), m_groupCombo);
 
-    // Default value — stacked widget for different types
-    m_defaultStack = new QStackedWidget(this);
-
-    // Index 0: float
+    // Default value — one widget per type, shown/hidden by onTypeChanged()
     m_defaultFloat = new QDoubleSpinBox(this);
     m_defaultFloat->setRange(-9999.0, 9999.0);
     m_defaultFloat->setDecimals(2);
     m_defaultFloat->setValue(0.0);
-    m_defaultStack->addWidget(m_defaultFloat);
+    m_defaultFloatLabel = new QLabel(i18n("Default:"), this);
+    formLayout->addRow(m_defaultFloatLabel, m_defaultFloat);
 
-    // Index 1: int
     m_defaultInt = new QSpinBox(this);
     m_defaultInt->setRange(-9999, 9999);
     m_defaultInt->setValue(0);
-    m_defaultStack->addWidget(m_defaultInt);
+    m_defaultIntLabel = new QLabel(i18n("Default:"), this);
+    formLayout->addRow(m_defaultIntLabel, m_defaultInt);
 
-    // Index 2: bool
     m_defaultBool = new QCheckBox(i18n("Enabled"), this);
-    m_defaultStack->addWidget(m_defaultBool);
+    m_defaultBoolLabel = new QLabel(i18n("Default:"), this);
+    formLayout->addRow(m_defaultBoolLabel, m_defaultBool);
 
-    // Index 3: color
     m_defaultColorBtn = new QPushButton(this);
     m_defaultColorBtn->setText(m_selectedColor.name());
     m_defaultColorBtn->setAutoFillBackground(true);
@@ -109,9 +110,25 @@ void AddParameterDialog::setupUi()
         colorPal.setColor(QPalette::ButtonText, Qt::black);
         m_defaultColorBtn->setPalette(colorPal);
     }
-    m_defaultStack->addWidget(m_defaultColorBtn);
+    m_defaultColorLabel = new QLabel(i18n("Default:"), this);
+    formLayout->addRow(m_defaultColorLabel, m_defaultColorBtn);
 
-    formLayout->addRow(i18n("Default:"), m_defaultStack);
+    m_defaultImageRow = new QWidget(this);
+    auto* imageLayout = new QHBoxLayout(m_defaultImageRow);
+    imageLayout->setContentsMargins(0, 0, 0, 0);
+    m_imagePathLabel = new QLabel(i18n("(none)"), m_defaultImageRow);
+    m_imagePathLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
+    m_defaultImageBtn = new QPushButton(i18n("Browse..."), m_defaultImageRow);
+    m_defaultImageBtn->setFixedWidth(80);
+    m_imageClearBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-clear")), QString(), m_defaultImageRow);
+    m_imageClearBtn->setFixedSize(22, 22);
+    m_imageClearBtn->setToolTip(i18n("Clear"));
+    m_imageClearBtn->setVisible(false);
+    imageLayout->addWidget(m_defaultImageBtn);
+    imageLayout->addWidget(m_imagePathLabel, 1);
+    imageLayout->addWidget(m_imageClearBtn);
+    m_defaultImageLabel = new QLabel(i18n("Default:"), this);
+    formLayout->addRow(m_defaultImageLabel, m_defaultImageRow);
 
     // Range row — float uses QDoubleSpinBox, int uses QSpinBox
     m_rangeRow = new QWidget(this);
@@ -173,6 +190,25 @@ void AddParameterDialog::setupUi()
         updateAutoSlot();
     });
     connect(m_defaultColorBtn, &QPushButton::clicked, this, &AddParameterDialog::onColorButtonClicked);
+    connect(m_defaultImageBtn, &QPushButton::clicked, this, [this]() {
+        const QString path = QFileDialog::getOpenFileName(
+            this, i18n("Select Default Image"), QString(),
+            i18n("Images") + QStringLiteral(" (*.png *.jpg *.jpeg *.bmp *.webp *.tga)"));
+        if (!path.isEmpty()) {
+            m_selectedImagePath = path;
+            m_imagePathLabel->setText(QFileInfo(path).fileName());
+            m_imagePathLabel->setToolTip(path);
+            m_imagePathLabel->setStyleSheet(QString());
+            m_imageClearBtn->setVisible(true);
+        }
+    });
+    connect(m_imageClearBtn, &QPushButton::clicked, this, [this]() {
+        m_selectedImagePath.clear();
+        m_imagePathLabel->setText(i18n("(none)"));
+        m_imagePathLabel->setToolTip(QString());
+        m_imagePathLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
+        m_imageClearBtn->setVisible(false);
+    });
 }
 
 void AddParameterDialog::onTypeChanged()
@@ -180,17 +216,22 @@ void AddParameterDialog::onTypeChanged()
     const QString type = m_typeCombo->currentText();
     const bool isFloat = (type == QLatin1String("float"));
     const bool isInt = (type == QLatin1String("int"));
+    const bool isBool = (type == QLatin1String("bool"));
+    const bool isColor = (type == QLatin1String("color"));
+    const bool isImage = (type == QLatin1String("image"));
     const bool showRange = isFloat || isInt;
 
-    if (type == QLatin1String("color")) {
-        m_defaultStack->setCurrentIndex(3);
-    } else if (type == QLatin1String("bool")) {
-        m_defaultStack->setCurrentIndex(2);
-    } else if (isInt) {
-        m_defaultStack->setCurrentIndex(1);
-    } else {
-        m_defaultStack->setCurrentIndex(0);
-    }
+    // Show only the default row for the selected type
+    m_defaultFloatLabel->setVisible(isFloat);
+    m_defaultFloat->setVisible(isFloat);
+    m_defaultInt->setVisible(isInt);
+    m_defaultIntLabel->setVisible(isInt);
+    m_defaultBool->setVisible(isBool);
+    m_defaultBoolLabel->setVisible(isBool);
+    m_defaultColorBtn->setVisible(isColor);
+    m_defaultColorLabel->setVisible(isColor);
+    m_defaultImageRow->setVisible(isImage);
+    m_defaultImageLabel->setVisible(isImage);
 
     m_rangeLabel->setVisible(showRange);
     m_rangeRow->setVisible(showRange);
@@ -227,8 +268,9 @@ void AddParameterDialog::updateAutoSlot()
 {
     const QString type = m_typeCombo->currentText();
     const bool isColor = (type == QLatin1String("color"));
-    const QSet<int>& usedSlots = isColor ? m_usedColorSlots : m_usedScalarSlots;
-    const int maxSlot = isColor ? 15 : 31;
+    const bool isImage = (type == QLatin1String("image"));
+    const QSet<int>& usedSlots = isImage ? m_usedImageSlots : (isColor ? m_usedColorSlots : m_usedScalarSlots);
+    const int maxSlot = isImage ? 3 : (isColor ? 15 : 31);
 
     m_autoSlot = 0;
     for (int s = 0; s <= maxSlot; ++s) {
@@ -271,7 +313,11 @@ QJsonObject AddParameterDialog::parameterJson() const
     param[QStringLiteral("group")] = groupData.isValid() ? groupData.toString() : m_groupCombo->currentText();
     param[QStringLiteral("slot")] = m_autoSlot;
 
-    if (type == QLatin1String("bool")) {
+    if (type == QLatin1String("image")) {
+        if (!m_selectedImagePath.isEmpty()) {
+            param[QStringLiteral("default")] = m_selectedImagePath;
+        }
+    } else if (type == QLatin1String("bool")) {
         param[QStringLiteral("default")] = m_defaultBool->isChecked();
     } else if (type == QLatin1String("color")) {
         param[QStringLiteral("default")] = m_selectedColor.name();

@@ -368,36 +368,6 @@ void PreviewController::setZoneLayoutIndex(int index)
     }
 }
 
-void PreviewController::setUserTexture(int slot, const QUrl& fileUrl)
-{
-    if (slot < 0 || slot >= 4) return;
-    const QString path = fileUrl.toLocalFile();
-    if (path.isEmpty() || !QFileInfo::exists(path)) return;
-    if (m_userTexturePaths[slot] == path) return;
-    m_userTexturePaths[slot] = path;
-    const QString key = QStringLiteral("uTexture%1").arg(slot);
-    m_shaderParams[key] = path;
-    Q_EMIT userTexturePathsChanged();
-    Q_EMIT shaderParamsChanged();
-}
-
-void PreviewController::clearUserTexture(int slot)
-{
-    if (slot < 0 || slot >= 4) return;
-    if (m_userTexturePaths[slot].isEmpty()) return;
-    m_userTexturePaths[slot].clear();
-    const QString key = QStringLiteral("uTexture%1").arg(slot);
-    m_shaderParams.remove(key);
-    Q_EMIT userTexturePathsChanged();
-    Q_EMIT shaderParamsChanged();
-}
-
-QStringList PreviewController::userTexturePaths() const
-{
-    return {m_userTexturePaths[0], m_userTexturePaths[1],
-            m_userTexturePaths[2], m_userTexturePaths[3]};
-}
-
 void PreviewController::resetTime()
 {
     m_iTime = 0.0;
@@ -536,14 +506,10 @@ void PreviewController::setMousePos(const QPointF& pos)
 
 void PreviewController::setShaderParams(const QVariantMap& params)
 {
-    m_shaderParams = params;
-    // Re-inject user texture paths so they survive parameter resets
-    for (int i = 0; i < 4; ++i) {
-        if (!m_userTexturePaths[i].isEmpty()) {
-            m_shaderParams[QStringLiteral("uTexture%1").arg(i)] = m_userTexturePaths[i];
-        }
+    if (m_shaderParams != params) {
+        m_shaderParams = params;
+        Q_EMIT shaderParamsChanged();
     }
-    Q_EMIT shaderParamsChanged();
 }
 
 void PreviewController::onShaderStatus(int status, const QString& error)

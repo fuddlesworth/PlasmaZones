@@ -38,7 +38,7 @@ Q_SIGNALS:
 
 private:
     struct ParamControl {
-        QString type;       // "float", "int", "bool", "color"
+        QString type;       // "float", "int", "bool", "color", "image"
         int slot = -1;
         QString uniformName;
         // One of these is set depending on type
@@ -46,12 +46,15 @@ private:
         QSpinBox* spinBox = nullptr;
         QCheckBox* checkBox = nullptr;
         QPushButton* colorBtn = nullptr;
+        QPushButton* imageBtn = nullptr;
         QLabel* valueLabel = nullptr;
         // For float: min/max range
         double floatMin = 0.0;
         double floatMax = 1.0;
         // Current color (for color type)
         QColor currentColor;
+        // Current path (for image type)
+        QString imagePath;
         // Lock toggle
         QPushButton* lockBtn = nullptr;
         bool locked = false;
@@ -66,6 +69,8 @@ private:
                                bool defaultVal, int slot);
     QWidget* createColorControl(const QString& name, const QString& uniformName,
                                 const QString& defaultColor, int slot);
+    QWidget* createImageControl(const QString& name, const QString& uniformName,
+                                int slot, const QString& defaultPath = {});
 
     void addLockButton(QHBoxLayout* layout, QWidget* parent, int controlIndex);
     void setControlEnabled(ParamControl& ctrl, bool enabled);

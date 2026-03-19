@@ -7,6 +7,8 @@
 #include <QCheckBox>
 #include <QColor>
 #include <QColorDialog>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QJsonArray>
@@ -245,6 +247,9 @@ void ParameterPanel::loadFromMetadata(const QString& metadataJson)
             } else if (type == QLatin1String("color")) {
                 const QString defaultColor = param.value(QStringLiteral("default")).toString();
                 control = createColorControl(name, uniformName, defaultColor, slot);
+            } else if (type == QLatin1String("image")) {
+                const QString defaultPath = param.value(QStringLiteral("default")).toString();
+                control = createImageControl(name, uniformName, slot, defaultPath);
             }
 
             if (control) {
@@ -507,6 +512,88 @@ QWidget* ParameterPanel::createColorControl(const QString& name, const QString& 
     return row;
 }
 
+QWidget* ParameterPanel::createImageControl(const QString& name, const QString& uniformName,
+                                            int slot, const QString& defaultPath)
+{
+    auto* row = new QWidget;
+    auto* layout = new QHBoxLayout(row);
+    layout->setContentsMargins(0, 2, 0, 2);
+
+    auto* label = new QLabel(name, row);
+    label->setMinimumWidth(100);
+
+    const bool hasDefault = !defaultPath.isEmpty() && QFileInfo::exists(defaultPath);
+
+    auto* pathLabel = new QLabel(hasDefault ? QFileInfo(defaultPath).fileName() : i18n("(none)"), row);
+    if (hasDefault) {
+        pathLabel->setToolTip(defaultPath);
+    } else {
+        pathLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
+    }
+
+    auto* browseBtn = new QPushButton(i18n("Browse..."), row);
+    browseBtn->setFixedWidth(80);
+
+    auto* clearBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-clear")), QString(), row);
+    clearBtn->setFixedSize(22, 22);
+    clearBtn->setToolTip(i18n("Clear texture"));
+    clearBtn->setVisible(hasDefault);
+
+    auto* insertBtn = new QPushButton(i18n("Insert \u2192"), row);
+    insertBtn->setMinimumWidth(60);
+
+    layout->addWidget(label);
+    layout->addWidget(pathLabel, 1);
+    layout->addWidget(browseBtn);
+    layout->addWidget(clearBtn);
+
+    ParamControl ctrl;
+    ctrl.type = QStringLiteral("image");
+    ctrl.slot = slot;
+    ctrl.uniformName = uniformName;
+    ctrl.imageBtn = browseBtn;
+    ctrl.valueLabel = pathLabel;
+    ctrl.imagePath = hasDefault ? defaultPath : QString();
+    m_controls.append(ctrl);
+
+    const int controlIndex = m_controls.size() - 1;
+    addLockButton(layout, row, controlIndex);
+    layout->addWidget(insertBtn);
+
+    connect(browseBtn, &QPushButton::clicked, this, [this, controlIndex, pathLabel, clearBtn]() {
+        if (controlIndex >= m_controls.size()) return;
+        const QString path = QFileDialog::getOpenFileName(
+            this, i18n("Select Image"),
+            QString(),
+            i18n("Images") + QStringLiteral(" (*.png *.jpg *.jpeg *.bmp *.webp *.tga)"));
+        if (path.isEmpty() || controlIndex >= m_controls.size()) return;
+        ParamControl& c = m_controls[controlIndex];
+        c.imagePath = path;
+        pathLabel->setText(QFileInfo(path).fileName());
+        pathLabel->setToolTip(path);
+        pathLabel->setStyleSheet(QString());
+        clearBtn->setVisible(true);
+        Q_EMIT parameterChanged();
+    });
+
+    connect(clearBtn, &QPushButton::clicked, this, [this, controlIndex, pathLabel, clearBtn]() {
+        if (controlIndex >= m_controls.size()) return;
+        ParamControl& c = m_controls[controlIndex];
+        c.imagePath.clear();
+        pathLabel->setText(i18n("(none)"));
+        pathLabel->setToolTip(QString());
+        pathLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
+        clearBtn->setVisible(false);
+        Q_EMIT parameterChanged();
+    });
+
+    connect(insertBtn, &QPushButton::clicked, this, [this, uniformName]() {
+        Q_EMIT insertUniformRequested(uniformName);
+    });
+
+    return row;
+}
+
 QVariantMap ParameterPanel::currentUniformValues() const
 {
     QVariantMap uniforms;
@@ -525,6 +612,8 @@ QVariantMap ParameterPanel::currentUniformValues() const
             uniforms[ctrl.uniformName] = ctrl.checkBox->isChecked() ? 1.0 : 0.0;
         } else if (ctrl.type == QLatin1String("color")) {
             uniforms[ctrl.uniformName] = ctrl.currentColor.name(QColor::HexArgb);
+        } else if (ctrl.type == QLatin1String("image") && !ctrl.imagePath.isEmpty()) {
+            uniforms[ctrl.uniformName] = ctrl.imagePath;
         }
     }
 

@@ -15,7 +15,6 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QSpinBox;
-class QStackedWidget;
 
 namespace PlasmaZones {
 
@@ -26,6 +25,7 @@ class AddParameterDialog : public QDialog
 public:
     explicit AddParameterDialog(const QSet<int>& usedScalarSlots,
                                 const QSet<int>& usedColorSlots,
+                                const QSet<int>& usedImageSlots = {},
                                 QWidget* parent = nullptr);
     ~AddParameterDialog() override;
 
@@ -42,13 +42,22 @@ private:
     QComboBox* m_typeCombo = nullptr;
     QComboBox* m_groupCombo = nullptr;
 
-    // Default value widgets
-    QStackedWidget* m_defaultStack = nullptr;
+    // Default value widgets (one per type, shown/hidden)
     QDoubleSpinBox* m_defaultFloat = nullptr;
+    QLabel* m_defaultFloatLabel = nullptr;
     QSpinBox* m_defaultInt = nullptr;
+    QLabel* m_defaultIntLabel = nullptr;
     QCheckBox* m_defaultBool = nullptr;
+    QLabel* m_defaultBoolLabel = nullptr;
     QPushButton* m_defaultColorBtn = nullptr;
+    QLabel* m_defaultColorLabel = nullptr;
+    QWidget* m_defaultImageRow = nullptr;
+    QLabel* m_defaultImageLabel = nullptr;
+    QPushButton* m_defaultImageBtn = nullptr;
+    QPushButton* m_imageClearBtn = nullptr;
+    QLabel* m_imagePathLabel = nullptr;
     QColor m_selectedColor;
+    QString m_selectedImagePath;
 
     // Min/Max (float/int only)
     QDoubleSpinBox* m_minFloat = nullptr;
@@ -68,6 +77,7 @@ private:
 
     QSet<int> m_usedScalarSlots;
     QSet<int> m_usedColorSlots;
+    QSet<int> m_usedImageSlots;
 };
 
 } // namespace PlasmaZones
