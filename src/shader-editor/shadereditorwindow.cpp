@@ -386,6 +386,7 @@ void ShaderEditorWindow::setupLayout()
     // ── Preview dock (right) ──
     m_previewWidget = new QQuickWidget(this);
     m_previewWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
+    m_previewWidget->setClearColor(QColor(30, 30, 30));
     m_previewWidget->engine()->rootContext()->setContextObject(
         new KLocalizedContext(m_previewWidget->engine()));
     m_previewWidget->engine()->rootContext()->setContextProperty(
