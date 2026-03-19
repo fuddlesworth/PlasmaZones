@@ -119,8 +119,9 @@ find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
     ColorScheme
 )
 
-# KTextEditor for shader editor (optional)
+# KTextEditor + KArchive for shader editor (optional)
 find_package(KF6TextEditor ${KF_MIN_VERSION} QUIET)
+find_package(KF6Archive ${KF_MIN_VERSION} QUIET)
 if(KF6TextEditor_FOUND)
     message(STATUS "KF6::TextEditor found - shader editor will be built")
 else()

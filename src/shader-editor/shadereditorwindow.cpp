@@ -19,7 +19,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
-#include <QProcess>
 #include <QLabel>
 #include <QLoggingCategory>
 #include <QMenuBar>
@@ -39,6 +38,7 @@
 #include <KActionCollection>
 #include <KLocalizedContext>
 #include <KLocalizedString>
+#include <KTar>
 #include <KConfigGroup>
 #include <KRecentFilesAction>
 #include <KSharedConfig>
@@ -897,28 +897,29 @@ void ShaderEditorWindow::exportShaderPackage()
         defaultPath, i18n("Compressed Archive") + QStringLiteral(" (*.tar.gz)"));
     if (outPath.isEmpty()) return;
 
-    // Use tar to create the archive from the parent directory so the package
-    // directory name is the top-level entry in the archive.
-    const QString parentDir = QFileInfo(m_packagePath).absolutePath();
-    const QString dirName = packageDir.dirName();
-
-    QProcess tar;
-    tar.setWorkingDirectory(parentDir);
-    tar.start(QStringLiteral("tar"), {
-        QStringLiteral("czf"), outPath, dirName
-    });
-    tar.waitForFinished(10000);
-
-    if (tar.exitCode() == 0) {
-        const QFileInfo outInfo(outPath);
-        const QString sizeStr = QLocale().formattedDataSize(outInfo.size());
-        statusBar()->showMessage(i18n("Exported to %1 (%2)", outPath, sizeStr), 5000);
-        qCInfo(lcShaderEditor) << "Exported shader package to=" << outPath << "size=" << outInfo.size();
-    } else {
-        const QString err = QString::fromUtf8(tar.readAllStandardError());
+    // Create tar.gz archive using KArchive (no external process needed)
+    KTar archive(outPath, QStringLiteral("application/x-gzip"));
+    if (!archive.open(QIODevice::WriteOnly)) {
         QMessageBox::warning(this, i18n("Export Failed"),
-            i18n("Failed to create archive:\n%1", err.isEmpty() ? tar.errorString() : err));
+            i18n("Failed to create archive:\n%1", outPath));
+        return;
     }
+
+    const QString dirName = QDir(m_packagePath).dirName();
+    const QDir dir(m_packagePath);
+    const QFileInfoList files = dir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot);
+    for (const QFileInfo& fi : files) {
+        QFile file(fi.absoluteFilePath());
+        if (file.open(QIODevice::ReadOnly)) {
+            archive.writeFile(dirName + QLatin1Char('/') + fi.fileName(), file.readAll());
+        }
+    }
+    archive.close();
+
+    const QFileInfo outInfo(outPath);
+    const QString sizeStr = QLocale().formattedDataSize(outInfo.size());
+    statusBar()->showMessage(i18n("Exported to %1 (%2)", outPath, sizeStr), 5000);
+    qCInfo(lcShaderEditor) << "Exported shader package to=" << outPath << "size=" << outInfo.size();
 }
 
 void ShaderEditorWindow::updateWindowTitle()

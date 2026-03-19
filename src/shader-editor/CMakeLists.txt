@@ -43,6 +43,7 @@ target_link_libraries(plasmazones-shader-editor
         Qt6::QuickControls2
         KF6::TextEditor
         KF6::I18n
+        KF6::Archive
         KF6::CoreAddons
         KF6::ConfigWidgets
         KF6::WindowSystem
