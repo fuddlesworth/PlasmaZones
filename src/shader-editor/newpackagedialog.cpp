@@ -37,7 +37,7 @@ static const PresetDef s_presets[] = {
      "#34d399", "#10b981",
      static_cast<int>(ShaderFeature::AudioReactive)},
     {"Multipass Feedback",
-     "Two-pass buffer chain for trails and flow",
+     "Flow field + distortion bloom (2 buffer passes)",
      "view-split-left-right",
      "#fb923c", "#f97316",
      static_cast<int>(ShaderFeature::Multipass)},

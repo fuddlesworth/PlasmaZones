@@ -30,7 +30,7 @@ layout(location = 0) out vec4 fragColor;
  * Parameters (customParams[1]):
  *   x = particleCount (10-100) - Number of field particles
  *   y = particleSize (0.5-3.0) - Size of particles
- *   z = trailLength (0.0-1.0) - Length of particle trails
+ *   z = (unused)
  *   w = distortionAmount (0.0-1.0) - Amount of field distortion
  */
 

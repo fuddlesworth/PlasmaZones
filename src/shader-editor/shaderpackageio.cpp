@@ -157,7 +157,10 @@ ShaderPackageContents createTemplate(const QString& shaderId, const QString& sha
     metadata[QStringLiteral("vertexShader")] = QStringLiteral("zone.vert");
     metadata[QStringLiteral("multipass")] = hasMultipass;
     if (hasMultipass) {
-        metadata[QStringLiteral("bufferShaders")] = QJsonArray({QStringLiteral("pass0.frag")});
+        metadata[QStringLiteral("bufferShaders")] = QJsonArray({
+            QStringLiteral("pass0.frag"),
+            QStringLiteral("pass1.frag"),
+        });
     }
     if (hasWallpaper) {
         metadata[QStringLiteral("wallpaper")] = true;
@@ -324,6 +327,52 @@ ShaderPackageContents createTemplate(const QString& shaderId, const QString& sha
             "    fragColor = vec4(flow * 0.5 + 0.5, mag, 1.0);\n"
             "}\n").arg(speedA);
         contents.files.append(pass0);
+
+        // ── pass1.frag: read pass0 flow field, apply distortion + bloom ──
+        ShaderFile pass1;
+        pass1.filename = QStringLiteral("pass1.frag");
+        pass1.content = QStringLiteral(
+            "#version 450\n"
+            "\n"
+            "layout(location = 0) in vec2 vTexCoord;\n"
+            "layout(location = 1) in vec2 vFragCoord;\n"
+            "\n"
+            "layout(location = 0) out vec4 fragColor;\n"
+            "\n"
+            "#include <common.glsl>\n"
+            "#include <multipass.glsl>\n"
+            "\n"
+            "void main() {\n"
+            "    vec2 uv = vFragCoord / iResolution;\n"
+            "    float speed = %1 >= 0.0 ? %1 : 1.0;\n"
+            "\n"
+            "    // Read flow field from pass0\n"
+            "    vec4 flowData = texture(iChannel0, channelUv(0, vFragCoord));\n"
+            "    vec2 flow = flowData.rg * 2.0 - 1.0;\n"
+            "    float mag = flowData.b;\n"
+            "\n"
+            "    // Distort UV along flow direction\n"
+            "    vec2 distortedUv = uv + flow * mag * 0.02;\n"
+            "\n"
+            "    // Accumulate soft bloom from neighboring pixels along flow\n"
+            "    vec3 col = vec3(0.0);\n"
+            "    float total = 0.0;\n"
+            "    for (int i = -3; i <= 3; i++) {\n"
+            "        float w = exp(-float(i * i) * 0.3);\n"
+            "        vec2 sampleUv = distortedUv + flow * float(i) * 0.005;\n"
+            "        col += texture(iChannel0, clamp(sampleUv, 0.0, 1.0)).rgb * w;\n"
+            "        total += w;\n"
+            "    }\n"
+            "    col /= total;\n"
+            "\n"
+            "    // Color the distortion field\n"
+            "    float phase = distortedUv.x * 3.14 + iTime * speed;\n"
+            "    vec3 tint = vec3(0.5 + 0.5 * sin(phase), 0.5 + 0.5 * sin(phase + 2.09), 0.5 + 0.5 * sin(phase + 4.19));\n"
+            "    col = mix(col, tint * mag, 0.4);\n"
+            "\n"
+            "    fragColor = vec4(col, 1.0);\n"
+            "}\n").arg(speedA);
+        contents.files.append(pass1);
     }
 
     // ── effect.frag (composed from active features) ──
@@ -400,10 +449,12 @@ ShaderPackageContents createTemplate(const QString& shaderId, const QString& sha
     if (hasMultipass) {
         fragSrc += QStringLiteral(
             "\n"
-            "    // Buffer pass blend\n"
-            "    vec4 buf = texture(iChannel0, channelUv(0, fragCoord));\n"
-            "    vec2 flow = buf.rg * 2.0 - 1.0;\n"
-            "    col += vec3(flow * 0.3, buf.b * 0.2) * vitality;\n");
+            "    // Buffer pass blend: iChannel0 = flow field, iChannel1 = distorted bloom\n"
+            "    vec4 buf0 = texture(iChannel0, channelUv(0, fragCoord));\n"
+            "    vec4 buf1 = texture(iChannel1, channelUv(1, fragCoord));\n"
+            "    vec2 flow = buf0.rg * 2.0 - 1.0;\n"
+            "    col += buf1.rgb * 0.4 * vitality;\n"
+            "    col += vec3(flow * 0.15, buf0.b * 0.1) * vitality;\n");
     }
 
     if (hasWallpaper) {

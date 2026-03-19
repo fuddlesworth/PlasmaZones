@@ -26,7 +26,7 @@ layout(location = 0) out vec4 fragColor;
  * Parameters (customParams):
  *   [0].x = reactivity       — audio sensitivity multiplier
  *   [0].y = ringCount        — how many spectrum rings to draw
- *   [0].z = (unused)
+ *   [0].z = ringRotation     — ring wobble rotation speed
  *   [0].w = ringSpeed        — ring expansion speed
  *   mids  → ring density: mid-frequency audio thickens and brightens rings
  *   [1].x = rotationSpeed    — slow rotation of the pattern
@@ -54,6 +54,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // Parameters with defaults
     float reactivity    = customParams[0].x >= 0.0 ? customParams[0].x : 1.5;
     float ringCount     = customParams[0].y >= 0.0 ? customParams[0].y : 24.0;
+    float ringRotation  = customParams[0].z >= 0.0 ? customParams[0].z : 0.5;
     float ringSpeed     = customParams[0].w >= 0.0 ? customParams[0].w : 1.0;
     float rotSpeed      = customParams[1].x >= 0.0 ? customParams[1].x : 0.15;
     float idleAnim      = customParams[1].y >= 0.0 ? customParams[1].y : 1.0;
@@ -172,7 +173,8 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 float thickness = baseWidth + freqWidthBoost + midsWidthBoost;
 
                 // Angular wobble: the ring isn't a perfect circle (seamless around the circle)
-                float wobble = angularNoise(angle, 3.0, t * 20.0 + iTime * 0.5) * specVal * 0.03;
+                // ringRotation controls how fast the wobble pattern rotates
+                float wobble = angularNoise(angle, 3.0, t * 20.0 + iTime * ringRotation) * specVal * 0.03;
                 float ringDist = abs(r - ringR - wobble);
 
                 // Ring intensity: gaussian falloff from center of ring
