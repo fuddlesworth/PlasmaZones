@@ -587,22 +587,30 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
     // Stop any pending debounced save — we will save synchronously below
     m_saveTimer->stop();
 
+    // Block settingsChanged during the batch — each setter emits it individually,
+    // which would trigger N daemon handler invocations (autotile transitions, KWin
+    // effect reloads) mid-batch with partially-applied state. Block all signals
+    // during iteration, save once, then the KCM's notifyReload() triggers load()
+    // which emits settingsChanged once with all values committed.
     bool allOk = true;
-    for (auto it = settings.constBegin(); it != settings.constEnd(); ++it) {
-        const QString& key = it.key();
-        auto setter = m_setters.find(key);
-        if (setter == m_setters.end()) {
-            qCWarning(lcDbusSettings) << "setSettings: unknown key" << key;
-            allOk = false;
-            continue;
-        }
-        if (!setter.value()(it.value())) {
-            qCWarning(lcDbusSettings) << "setSettings: setter failed for key" << key;
-            allOk = false;
+    {
+        QSignalBlocker blocker(m_settings);
+        for (auto it = settings.constBegin(); it != settings.constEnd(); ++it) {
+            const QString& key = it.key();
+            auto setter = m_setters.find(key);
+            if (setter == m_setters.end()) {
+                qCWarning(lcDbusSettings) << "setSettings: unknown key" << key;
+                allOk = false;
+                continue;
+            }
+            if (!setter.value()(it.value())) {
+                qCWarning(lcDbusSettings) << "setSettings: setter failed for key" << key;
+                allOk = false;
+            }
         }
     }
 
-    // Single synchronous save for the entire batch
+    // Save once with all values applied
     m_settings->save();
     qCInfo(lcDbusSettings) << "setSettings: batch applied" << settings.size() << "keys, allOk:" << allOk;
 
