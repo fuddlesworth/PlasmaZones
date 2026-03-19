@@ -18,6 +18,8 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
+#include <QProcess>
 #include <QLabel>
 #include <QLoggingCategory>
 #include <QMenuBar>
@@ -170,6 +172,10 @@ void ShaderEditorWindow::createActions()
     m_saveAsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S));
     connect(m_saveAsAction, &QAction::triggered, this, &ShaderEditorWindow::saveShaderPackageAs);
 
+    m_exportAction = new QAction(QIcon::fromTheme(QStringLiteral("package-x-generic")), i18n("&Export as tar.gz..."), this);
+    m_exportAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_E));
+    connect(m_exportAction, &QAction::triggered, this, &ShaderEditorWindow::exportShaderPackage);
+
     m_compileAction = new QAction(QIcon::fromTheme(QStringLiteral("run-build")), i18n("&Compile"), this);
     m_compileAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_B));
     m_compileAction->setToolTip(i18n("Compile shader (Ctrl+B)"));
@@ -257,6 +263,8 @@ void ShaderEditorWindow::setupMenuBar()
     fileMenu->addSeparator();
     fileMenu->addAction(m_saveAction);
     fileMenu->addAction(m_saveAsAction);
+    fileMenu->addSeparator();
+    fileMenu->addAction(m_exportAction);
     fileMenu->addSeparator();
 
     auto* quitAction = fileMenu->addAction(i18n("&Quit"));
@@ -861,6 +869,56 @@ void ShaderEditorWindow::saveShaderPackageAs()
     }
 
     updateWindowTitle();
+}
+
+void ShaderEditorWindow::exportShaderPackage()
+{
+    // Ensure package is saved to disk first
+    if (m_packagePath.isEmpty()) {
+        QMessageBox::information(this, i18n("Export"),
+            i18n("Save the shader package first before exporting."));
+        return;
+    }
+    if (hasUnsavedChanges()) {
+        const int result = QMessageBox::question(this, i18n("Export"),
+            i18n("Save changes before exporting?"),
+            QMessageBox::Save | QMessageBox::Cancel);
+        if (result == QMessageBox::Cancel) return;
+        saveShaderPackage();
+        if (hasUnsavedChanges()) return;
+    }
+
+    // Derive default filename from the package directory name
+    const QDir packageDir(m_packagePath);
+    const QString defaultName = packageDir.dirName() + QStringLiteral(".tar.gz");
+    const QString defaultPath = QDir::homePath() + QStringLiteral("/") + defaultName;
+
+    const QString outPath = QFileDialog::getSaveFileName(this, i18n("Export Shader Package"),
+        defaultPath, i18n("Compressed Archive") + QStringLiteral(" (*.tar.gz)"));
+    if (outPath.isEmpty()) return;
+
+    // Use tar to create the archive from the parent directory so the package
+    // directory name is the top-level entry in the archive.
+    const QString parentDir = QFileInfo(m_packagePath).absolutePath();
+    const QString dirName = packageDir.dirName();
+
+    QProcess tar;
+    tar.setWorkingDirectory(parentDir);
+    tar.start(QStringLiteral("tar"), {
+        QStringLiteral("czf"), outPath, dirName
+    });
+    tar.waitForFinished(10000);
+
+    if (tar.exitCode() == 0) {
+        const QFileInfo outInfo(outPath);
+        const QString sizeStr = QLocale().formattedDataSize(outInfo.size());
+        statusBar()->showMessage(i18n("Exported to %1 (%2)", outPath, sizeStr), 5000);
+        qCInfo(lcShaderEditor) << "Exported shader package to=" << outPath << "size=" << outInfo.size();
+    } else {
+        const QString err = QString::fromUtf8(tar.readAllStandardError());
+        QMessageBox::warning(this, i18n("Export Failed"),
+            i18n("Failed to create archive:\n%1", err.isEmpty() ? tar.errorString() : err));
+    }
 }
 
 void ShaderEditorWindow::updateWindowTitle()

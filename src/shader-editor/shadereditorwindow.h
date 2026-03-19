@@ -48,6 +48,7 @@ public:
     void openShaderById(const QString& shaderId);
     void saveShaderPackage();
     void saveShaderPackageAs();
+    void exportShaderPackage();
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -110,6 +111,7 @@ private:
     QAction* m_saveAsAction = nullptr;
     QAction* m_compileAction = nullptr;
     QAction* m_validateAction = nullptr;
+    QAction* m_exportAction = nullptr;
     QAction* m_resetParamsAction = nullptr;
 
     // Recent files
