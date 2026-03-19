@@ -157,7 +157,7 @@ Kirigami.Card {
                                 iconSource: "video-display"
                                 iconOpacity: 0.7
                                 layoutFilter: root.viewMode === 1 ? 1 : 0
-                                showPreview: root.viewMode === 0
+                                showPreview: true
                                 labelText: {
                                     let mfr = activityScreenRow.modelData.manufacturer || "";
                                     let mdl = activityScreenRow.modelData.model || "";

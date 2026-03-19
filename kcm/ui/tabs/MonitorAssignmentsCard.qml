@@ -143,7 +143,7 @@ Kirigami.Card {
                             }
                             kcm: root.kcm
                             noneText: i18n("Default")
-                            showPreview: root.viewMode === 0
+                            showPreview: true
                             layoutFilter: root.viewMode === 1 ? 1 : 0
                             currentLayoutId: {
                                 void (monitorDelegate._assignmentRevision); // force re-evaluate on data change
@@ -308,7 +308,7 @@ Kirigami.Card {
                                     iconSource: "preferences-desktop-virtual"
                                     labelText: desktopRowContainer.desktopName
                                     layoutFilter: root.viewMode === 1 ? 1 : 0
-                                    showPreview: root.viewMode === 0
+                                    showPreview: true
                                     noneText: i18n("Use default")
                                     resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.kcm.defaultLayoutId || "")
                                     currentLayoutId: {
