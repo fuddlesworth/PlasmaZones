@@ -104,11 +104,12 @@ void CavaService::stop()
         m_process->terminate();
         // Non-blocking: if SIGTERM doesn't work within 500ms, escalate to SIGKILL.
         // The one-shot timer avoids blocking the GUI thread with waitForFinished().
+        // Escalate to SIGKILL if SIGTERM doesn't work within 500ms.
+        // m_stopping is cleared in onProcessFinished, not here.
         QTimer::singleShot(500, this, [this]() {
             if (m_process && m_process->state() != QProcess::NotRunning) {
                 m_process->kill();
             }
-            m_stopping = false;
         });
     }
     m_spectrum.clear();
@@ -258,7 +259,10 @@ void CavaService::onProcessStateChanged(QProcess::ProcessState state)
 
 void CavaService::onProcessFinished(int exitCode, QProcess::ExitStatus /*exitStatus*/)
 {
-    if (m_stopping || m_pendingRestart) {
+    const bool wasStopping = m_stopping;
+    m_stopping = false;
+    m_pendingRestart = false;
+    if (wasStopping) {
         return;
     }
     if (exitCode != 0) {
@@ -284,15 +288,11 @@ void CavaService::restartAsync()
         start();
         return;
     }
+    // Reuse the start() queueing mechanism — it sets m_wantRunning and
+    // connects a one-shot on finished. Then terminate to trigger it.
     m_pendingRestart = true;
-    // One-shot: restart after the current process exits
-    connect(
-        m_process, &QProcess::finished, this,
-        [this]() {
-            m_pendingRestart = false;
-            start();
-        },
-        Qt::SingleShotConnection);
+    m_stopping = true;
+    start(); // queues restart via m_pendingStart if process is still running
     m_process->terminate();
 }
 

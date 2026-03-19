@@ -669,6 +669,6 @@ install(FILES
 # ═══════════════════════════════════════════════════════════════════════════════
 # Shader Editor
 # ═══════════════════════════════════════════════════════════════════════════════
-if(KF6TextEditor_FOUND)
+if(KF6TextEditor_FOUND AND KF6Archive_FOUND)
     add_subdirectory(shader-editor)
 endif()
