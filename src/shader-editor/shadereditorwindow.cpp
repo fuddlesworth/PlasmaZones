@@ -33,6 +33,7 @@
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QToolBar>
+#include <QToolTip>
 
 #include <KAboutData>
 #include <KActionCollection>
@@ -42,7 +43,6 @@
 #include <KConfigGroup>
 #include <KRecentFilesAction>
 #include <KSharedConfig>
-#include <KTextEditor/AnnotationInterface>
 #include <KTextEditor/Attribute>
 #include <KTextEditor/Document>
 #include <KTextEditor/Editor>
@@ -50,37 +50,6 @@
 #include <KTextEditor/View>
 
 Q_LOGGING_CATEGORY(lcShaderEditor, "plasmazones.shadereditor")
-
-namespace PlasmaZones {
-
-// Simple annotation model for showing error messages in the editor margin
-class ShaderAnnotationModel : public KTextEditor::AnnotationModel
-{
-    Q_OBJECT
-public:
-    explicit ShaderAnnotationModel(QObject* parent = nullptr) : KTextEditor::AnnotationModel() { setParent(parent); }
-
-    void clear() {
-        m_annotations.clear();
-        Q_EMIT lineChanged(-1); // reset all
-    }
-
-    void addAnnotation(int line, const QString& text) {
-        m_annotations[line] = text;
-        Q_EMIT lineChanged(line);
-    }
-
-    QVariant data(int line, Qt::ItemDataRole role) const override {
-        if (!m_annotations.contains(line)) return {};
-        if (role == Qt::DisplayRole || role == Qt::ToolTipRole) return m_annotations.value(line);
-        return {};
-    }
-
-private:
-    QHash<int, QString> m_annotations;
-};
-
-} // namespace PlasmaZones
 
 namespace PlasmaZones {
 
@@ -119,6 +88,8 @@ ShaderEditorWindow::ShaderEditorWindow(QWidget* parent)
 
         m_tabWidget->removeTab(index);
         if (doc) {
+            // Clear error ranges before deleting the document to avoid dangling pointers
+            clearErrorMarks();
             m_ownedDocuments.removeOne(doc);
             delete doc;
         }
@@ -559,13 +530,6 @@ void ShaderEditorWindow::addDocumentTab(const QString& filename, const QString& 
     view->setConfigValue(QStringLiteral("line-numbers"), true);     // line numbers
     view->setConfigValue(QStringLiteral("auto-brackets"), true);    // auto-close (){}[]
 
-    // Annotation border for inline error messages
-    if (!m_annotationModel) {
-        m_annotationModel = new ShaderAnnotationModel(this);
-    }
-    view->setAnnotationModel(m_annotationModel);
-    view->setAnnotationBorderVisible(true);
-
     // Register GLSL completion model for shader files
     if (filename.endsWith(QLatin1String(".frag")) || filename.endsWith(QLatin1String(".vert"))
         || filename.endsWith(QLatin1String(".glsl"))) {
@@ -585,6 +549,16 @@ void ShaderEditorWindow::addDocumentTab(const QString& filename, const QString& 
     connect(doc, &KTextEditor::Document::modifiedChanged, this, [this](KTextEditor::Document*) {
         updateWindowTitle();
     });
+
+    // Error mark tooltip: show error message when hovering gutter marks
+    connect(doc, &KTextEditor::Document::markToolTipRequested, this,
+        [this](KTextEditor::Document*, KTextEditor::Mark mark, QPoint, bool& handled) {
+            constexpr uint errorWarningMask = KTextEditor::Document::Error | KTextEditor::Document::Warning;
+            if ((mark.type & errorWarningMask) && m_errorMessages.contains(mark.line)) {
+                QToolTip::showText(QCursor::pos(), m_errorMessages.value(mark.line));
+                handled = true;
+            }
+        });
 
     connectDocumentToPreview(filename, doc);
 }
@@ -1082,6 +1056,10 @@ bool ShaderEditorWindow::hasUnsavedChanges() const
 
 void ShaderEditorWindow::closeAllTabs()
 {
+    // Clear error marks before deleting documents (MovingRanges are owned by us
+    // but reference document internals — must delete before document destruction)
+    clearErrorMarks();
+
     // Clear code editor tabs
     m_tabWidget->clear();
     qDeleteAll(m_ownedDocuments);
@@ -1163,13 +1141,10 @@ void ShaderEditorWindow::clearErrorMarks()
             }
         }
     }
-    // Clear inline annotations
-    if (m_annotationModel) {
-        m_annotationModel->clear();
-    }
-    // Clear red underline ranges
+    // Clear red underline ranges and error tooltips
     qDeleteAll(m_errorRanges);
     m_errorRanges.clear();
+    m_errorMessages.clear();
 }
 
 void ShaderEditorWindow::updateErrorMarks()
@@ -1240,14 +1215,11 @@ void ShaderEditorWindow::updateErrorMarks()
                         : KTextEditor::Document::Warning;
                     doc->addMark(line0, markType);
 
-                    // Inline annotation (error message in margin)
-                    if (m_annotationModel) {
-                        // Extract just the message portion after the line number
-                        static const QRegularExpression msgPattern(QStringLiteral(":\\d+:\\s*(.*)$"));
-                        const auto msgMatch = msgPattern.match(errLine);
-                        const QString msg = msgMatch.hasMatch() ? msgMatch.captured(1).trimmed() : errLine.trimmed();
-                        m_annotationModel->addAnnotation(line0, msg);
-                    }
+                    // Store error message for tooltip
+                    static const QRegularExpression msgPattern(QStringLiteral(":\\d+:\\s*(.*)$"));
+                    const auto msgMatch = msgPattern.match(errLine);
+                    const QString msg = msgMatch.hasMatch() ? msgMatch.captured(1).trimmed() : errLine.trimmed();
+                    m_errorMessages[line0] = msg;
 
                     // Red underline on the entire error line
                     const int lineLength = doc->lineLength(line0);
@@ -1269,6 +1241,3 @@ void ShaderEditorWindow::updateErrorMarks()
 }
 
 } // namespace PlasmaZones
-
-// ShaderAnnotationModel is defined in this .cpp with Q_OBJECT
-#include "shadereditorwindow.moc"
