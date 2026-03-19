@@ -131,6 +131,8 @@ private:
     // Status bar widgets
     QLabel* m_fileLabel = nullptr;
     QLabel* m_cursorLabel = nullptr;
+    QLabel* m_shaderInfoLabel = nullptr;
+    QLabel* m_compileStatusLabel = nullptr;
 };
 
 } // namespace PlasmaZones

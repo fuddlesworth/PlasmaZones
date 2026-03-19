@@ -367,11 +367,22 @@ void ShaderEditorWindow::setupToolBar()
 
 void ShaderEditorWindow::setupStatusBar()
 {
+    // Left: file name + cursor position
     m_fileLabel = new QLabel(this);
     m_cursorLabel = new QLabel(this);
 
-    statusBar()->addWidget(m_fileLabel, 1);
-    statusBar()->addPermanentWidget(m_cursorLabel);
+    // Center: shader info (name, version, category)
+    m_shaderInfoLabel = new QLabel(this);
+    m_shaderInfoLabel->setAlignment(Qt::AlignCenter);
+
+    // Right: compile status + FPS
+    m_compileStatusLabel = new QLabel(this);
+    m_compileStatusLabel->setAlignment(Qt::AlignRight);
+
+    statusBar()->addWidget(m_fileLabel);
+    statusBar()->addWidget(m_cursorLabel);
+    statusBar()->addWidget(m_shaderInfoLabel, 1);
+    statusBar()->addPermanentWidget(m_compileStatusLabel);
 
     m_fileLabel->setText(i18n("No file open"));
     m_cursorLabel->setText(QString());
@@ -443,6 +454,25 @@ void ShaderEditorWindow::setupLayout()
     };
     connect(m_previewController, &PreviewController::statusChanged, this, updateOutputPanel);
     connect(m_previewController, &PreviewController::errorLogChanged, this, updateOutputPanel);
+
+    // Status bar: compile status + FPS
+    auto updateCompileStatus = [this]() {
+        if (!m_compileStatusLabel) return;
+        const int status = m_previewController->status();
+        const int fps = m_previewController->fps();
+        QString text;
+        if (status == PreviewController::StatusReady) {
+            text = QStringLiteral("GLSL 450 \u2713");
+        } else if (status == PreviewController::StatusError) {
+            text = QStringLiteral("GLSL 450 \u2717");
+        }
+        if (fps > 0) {
+            text += QStringLiteral("  |  %1 FPS").arg(fps);
+        }
+        m_compileStatusLabel->setText(text);
+    };
+    connect(m_previewController, &PreviewController::statusChanged, this, updateCompileStatus);
+    connect(m_previewController, &PreviewController::fpsChanged, this, updateCompileStatus);
 
     // ── Left vertical splitter: code tabs (top) + output panel (bottom) ──
     m_leftSplitter = new QSplitter(Qt::Vertical, this);
@@ -947,15 +977,30 @@ void ShaderEditorWindow::updateStatusBar()
     if (idx < 0) {
         m_fileLabel->setText(i18n("No file open"));
         m_cursorLabel->setText(QString());
+        m_shaderInfoLabel->setText(QString());
         return;
     }
     m_fileLabel->setText(m_tabWidget->tabText(idx));
     auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->widget(idx));
     if (view) {
         auto cursor = view->cursorPosition();
-        m_cursorLabel->setText(i18n("Line %1, Col %2", cursor.line() + 1, cursor.column() + 1));
+        m_cursorLabel->setText(i18n("Ln %1, Col %2", cursor.line() + 1, cursor.column() + 1));
     } else {
         m_cursorLabel->setText(QString());
+    }
+
+    // Shader info from metadata editor
+    if (m_metadataEditor) {
+        const QString json = m_metadataEditor->toJson();
+        const QJsonObject obj = QJsonDocument::fromJson(json.toUtf8()).object();
+        const QString name = obj.value(QStringLiteral("name")).toString();
+        const QString version = obj.value(QStringLiteral("version")).toString();
+        const QString category = obj.value(QStringLiteral("category")).toString();
+        QStringList parts;
+        if (!name.isEmpty()) parts << name;
+        if (!version.isEmpty()) parts << QStringLiteral("v%1").arg(version);
+        if (!category.isEmpty()) parts << category;
+        m_shaderInfoLabel->setText(parts.join(QStringLiteral("  |  ")));
     }
 }
 
