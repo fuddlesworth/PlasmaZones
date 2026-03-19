@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "shadereditorwindow.h"
+#include "glslcolorpicker.h"
 #include "glslcompletionmodel.h"
 #include "metadataeditorwidget.h"
 #include "newpackagedialog.h"
@@ -538,6 +539,10 @@ void ShaderEditorWindow::addDocumentTab(const QString& filename, const QString& 
         }
         view->registerCompletionModel(m_completionModel);
         view->setAutomaticInvocationEnabled(true);
+
+        // Inline color swatches for vec3/vec4/hex colors
+        auto* colorPicker = new GlslColorPicker(doc, view);
+        view->registerInlineNoteProvider(colorPicker);
     }
 
     m_tabWidget->addTab(view, filename);
