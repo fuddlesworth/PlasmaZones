@@ -109,9 +109,9 @@ void OutputPanel::setCompilationError(const QString& errorLog)
         auto* item = new QTreeWidgetItem(m_problemsTree);
 
         // Extract line number from GLSL error formats:
-        // "ERROR: 0:42: ..." (string:line), "line 42: ..."
+        // "ERROR: 0:42: ..." (string:line), "ERROR: :42: ..." (no string ID), "line 42: ..."
         int errorLine = 0;
-        static const QRegularExpression linePattern(QStringLiteral("(?:\\b\\d+:(\\d+):|\\bline\\s+(\\d+))"));
+        static const QRegularExpression linePattern(QStringLiteral("(?:\\d*:(\\d+):|\\bline\\s+(\\d+))"));
         const auto match = linePattern.match(line);
         if (match.hasMatch()) {
             errorLine = match.captured(1).toInt();

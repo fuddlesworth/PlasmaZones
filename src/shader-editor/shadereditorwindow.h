@@ -69,6 +69,8 @@ private:
     bool hasUnsavedChanges() const;
     void closeAllTabs();
     QString resolveShaderPath(const QString& shaderId) const;
+    void updateErrorMarks();
+    void clearErrorMarks();
 
     KTextEditor::Editor* m_editor = nullptr;
 

@@ -96,6 +96,7 @@ public:
     int audioBarCount() const { return m_audioBarCount; }
     bool audioLive() const { return m_audioLive; }
     bool cavaAvailable() const;
+    QString shaderDirectory() const { return m_shaderDir; }
     QVariant audioSpectrum() const { return m_audioEnabled ? m_audioSpectrum : QVariant(); }
     QPointF mousePos() const { return m_mousePos; }
     int hoveredZoneIndex() const { return m_hoveredZoneIndex; }

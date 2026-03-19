@@ -20,6 +20,7 @@
 #include <QLoggingCategory>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QRegularExpression>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickWidget>
@@ -413,6 +414,7 @@ void ShaderEditorWindow::setupLayout()
     auto updateOutputPanel = [this]() {
         const int status = m_previewController->status();
         if (status == PreviewController::StatusReady) {
+            clearErrorMarks();
             int lineCount = 0;
             for (int i = 0; i < m_tabWidget->count(); ++i) {
                 if (m_tabWidget->tabText(i).endsWith(QLatin1String(".frag"))) {
@@ -426,6 +428,7 @@ void ShaderEditorWindow::setupLayout()
             m_outputPanel->setCompilationSuccess(lineCount, {}, {});
         } else if (status == PreviewController::StatusError) {
             m_outputPanel->setCompilationError(m_previewController->errorLog());
+            updateErrorMarks();
         }
     };
     connect(m_previewController, &PreviewController::statusChanged, this, updateOutputPanel);
@@ -469,7 +472,17 @@ void ShaderEditorWindow::addDocumentTab(const QString& filename, const QString& 
     doc->setModified(false);
     doc->setHighlightingMode(highlightMode);
 
+    // Configure mark types for error highlighting (before creating view)
+    doc->setMarkDescription(KTextEditor::Document::Error, i18n("Error"));
+    doc->setMarkDescription(KTextEditor::Document::Warning, i18n("Warning"));
+    doc->setMarkIcon(KTextEditor::Document::Error, QIcon::fromTheme(QStringLiteral("dialog-error")));
+    doc->setMarkIcon(KTextEditor::Document::Warning, QIcon::fromTheme(QStringLiteral("dialog-warning")));
+
     auto* view = doc->createView(m_tabWidget);
+
+    // Enable icon border (gutter) so error/warning marks are visible
+    view->setConfigValue(QStringLiteral("icon-bar"), true);
+
     m_tabWidget->addTab(view, filename);
     m_ownedDocuments.append(doc);
 
@@ -943,6 +956,76 @@ QString ShaderEditorWindow::resolveShaderPath(const QString& shaderId) const
 
     qCWarning(lcShaderEditor) << "Shader not found id=" << shaderId;
     return {};
+}
+
+void ShaderEditorWindow::clearErrorMarks()
+{
+    for (auto* doc : m_ownedDocuments) {
+        doc->clearMarks();
+    }
+}
+
+void ShaderEditorWindow::updateErrorMarks()
+{
+    clearErrorMarks();
+
+    const int status = m_previewController->status();
+    if (status != PreviewController::StatusError) {
+        return;
+    }
+
+    if (m_tabWidget->count() == 0) {
+        return;
+    }
+
+    // Parse the error log and apply marks.
+    // Because ShaderIncludeResolver emits #line directives, the GPU compiler
+    // reports line numbers in the ORIGINAL source file's coordinate space,
+    // not the expanded file. So we use the error line number directly.
+    const QString errorLog = m_previewController->errorLog();
+    static const QRegularExpression errorPattern(QStringLiteral("(?:\\d*:(\\d+):|\\bline\\s+(\\d+))"));
+    const QStringList errorLines = errorLog.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+
+    // Determine which file the errors belong to by checking the error prefix.
+    // "Fragment shader:" → effect.frag, "Vertex shader:" → zone.vert
+    // Default to effect.frag if not specified.
+    for (const QString& errLine : errorLines) {
+        const auto match = errorPattern.match(errLine);
+        if (!match.hasMatch()) {
+            continue;
+        }
+
+        int errorLine = match.captured(1).toInt();
+        if (errorLine == 0) {
+            errorLine = match.captured(2).toInt();
+        }
+        if (errorLine <= 0) {
+            continue;
+        }
+
+        // Determine target file from error prefix
+        QString targetFile = QStringLiteral("effect.frag");
+        if (errLine.contains(QLatin1String("Vertex shader"), Qt::CaseInsensitive)) {
+            targetFile = QStringLiteral("zone.vert");
+        }
+
+        // Find the KTextEditor::Document for this file
+        for (int i = 0; i < m_tabWidget->count(); ++i) {
+            if (m_tabWidget->tabText(i) == targetFile) {
+                auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->widget(i));
+                if (view && view->document() && errorLine > 0 && errorLine <= view->document()->lines()) {
+                    const bool isError = errLine.contains(QLatin1String("ERROR"), Qt::CaseInsensitive)
+                                      || errLine.contains(QLatin1String("error"), Qt::CaseSensitive);
+                    const auto markType = isError
+                        ? KTextEditor::Document::Error
+                        : KTextEditor::Document::Warning;
+                    view->document()->addMark(errorLine - 1, markType);
+                    qCDebug(lcShaderEditor) << "Error mark on" << targetFile << "line" << errorLine;
+                }
+                break;
+            }
+        }
+    }
 }
 
 } // namespace PlasmaZones
