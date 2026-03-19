@@ -54,6 +54,7 @@ private:
     void updateButtons();
 
     QListWidget* m_listWidget = nullptr;
+    QPushButton* m_applyBtn = nullptr;
     QPushButton* m_saveBtn = nullptr;
     QPushButton* m_deleteBtn = nullptr;
     QPushButton* m_renameBtn = nullptr;

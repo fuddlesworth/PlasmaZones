@@ -594,6 +594,40 @@ QWidget* ParameterPanel::createImageControl(const QString& name, const QString& 
     return row;
 }
 
+void ParameterPanel::applyUniformValues(const QVariantMap& values)
+{
+    for (auto& ctrl : m_controls) {
+        if (ctrl.uniformName.isEmpty() || !values.contains(ctrl.uniformName)) {
+            continue;
+        }
+        const QVariant val = values.value(ctrl.uniformName);
+
+        if (ctrl.type == QLatin1String("float") && ctrl.slider) {
+            const double v = val.toDouble();
+            const int sliderVal = qRound((v - ctrl.floatMin) / qMax(ctrl.floatMax - ctrl.floatMin, 0.0001) * 10000.0);
+            ctrl.slider->setValue(qBound(0, sliderVal, 10000));
+            if (ctrl.valueLabel) {
+                ctrl.valueLabel->setText(QString::number(v, 'f', 2));
+            }
+        } else if (ctrl.type == QLatin1String("int") && ctrl.spinBox) {
+            ctrl.spinBox->setValue(qRound(val.toDouble()));
+        } else if (ctrl.type == QLatin1String("bool") && ctrl.checkBox) {
+            ctrl.checkBox->setChecked(val.toDouble() > 0.5);
+        } else if (ctrl.type == QLatin1String("color") && ctrl.colorBtn) {
+            QColor color(val.toString());
+            if (color.isValid()) {
+                ctrl.currentColor = color;
+                QPalette pal = ctrl.colorBtn->palette();
+                pal.setColor(QPalette::Button, color);
+                ctrl.colorBtn->setPalette(pal);
+                if (ctrl.valueLabel) {
+                    ctrl.valueLabel->setText(color.name().toUpper());
+                }
+            }
+        }
+    }
+}
+
 QVariantMap ParameterPanel::currentUniformValues() const
 {
     QVariantMap uniforms;

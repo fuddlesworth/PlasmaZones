@@ -27,6 +27,7 @@ public:
     ~ParameterPanel() override;
 
     void loadFromMetadata(const QString& metadataJson);
+    void applyUniformValues(const QVariantMap& values);
     QVariantMap currentUniformValues() const;
 
 Q_SIGNALS:

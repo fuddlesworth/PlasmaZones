@@ -6,6 +6,7 @@
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QJsonArray>
+#include <QLineEdit>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
@@ -53,6 +54,7 @@ void PresetPanel::setupUi()
     auto* buttonRow = new QHBoxLayout;
     buttonRow->setSpacing(4);
 
+    m_applyBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("dialog-ok-apply")), i18n("Apply"), this);
     m_saveBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")), i18n("Save Current"), this);
     m_deleteBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("list-remove")), i18n("Delete"), this);
     m_renameBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-rename")), i18n("Rename"), this);
@@ -61,9 +63,15 @@ void PresetPanel::setupUi()
     buttonRow->addWidget(m_renameBtn);
     buttonRow->addWidget(m_deleteBtn);
     buttonRow->addStretch();
+    buttonRow->addWidget(m_applyBtn);
 
     layout->addLayout(buttonRow);
 
+    connect(m_applyBtn, &QPushButton::clicked, this, [this]() {
+        if (auto* item = m_listWidget->currentItem()) {
+            onPresetClicked(item);
+        }
+    });
     connect(m_saveBtn, &QPushButton::clicked, this, &PresetPanel::onSavePreset);
     connect(m_deleteBtn, &QPushButton::clicked, this, &PresetPanel::onDeletePreset);
     connect(m_renameBtn, &QPushButton::clicked, this, &PresetPanel::onRenamePreset);
@@ -116,11 +124,16 @@ void PresetPanel::onSavePreset()
 
 void PresetPanel::saveCurrentValues(const QVariantMap& uniformValues)
 {
-    bool ok = false;
-    QString name = QInputDialog::getText(this, i18n("Save Preset"),
-                                          i18n("Preset name:"), QLineEdit::Normal,
-                                          QString(), &ok);
-    if (!ok || name.trimmed().isEmpty()) {
+    QInputDialog dlg(this);
+    dlg.setWindowTitle(i18n("Save Preset"));
+    dlg.setLabelText(i18n("Preset name:"));
+    dlg.setInputMode(QInputDialog::TextInput);
+    dlg.resize(320, 120);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+    QString name = dlg.textValue();
+    if (name.trimmed().isEmpty()) {
         return;
     }
     name = name.trimmed();
@@ -160,11 +173,16 @@ void PresetPanel::onRenamePreset()
     if (!item) return;
 
     const QString oldName = item->text();
-    bool ok = false;
-    QString newName = QInputDialog::getText(this, i18n("Rename Preset"),
-                                             i18n("New name:"), QLineEdit::Normal,
-                                             oldName, &ok);
-    if (!ok || newName.trimmed().isEmpty() || newName.trimmed() == oldName) {
+    QInputDialog dlg(this);
+    dlg.setWindowTitle(i18n("Rename Preset"));
+    dlg.setLabelText(i18n("New name:"));
+    dlg.setTextValue(oldName);
+    dlg.resize(320, 120);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+    QString newName = dlg.textValue();
+    if (newName.trimmed().isEmpty() || newName.trimmed() == oldName) {
         return;
     }
     newName = newName.trimmed();
@@ -192,6 +210,7 @@ void PresetPanel::onPresetClicked(QListWidgetItem* item)
 void PresetPanel::updateButtons()
 {
     const bool hasSelection = m_listWidget->currentItem() != nullptr;
+    m_applyBtn->setEnabled(hasSelection);
     m_deleteBtn->setEnabled(hasSelection);
     m_renameBtn->setEnabled(hasSelection);
 }

@@ -597,12 +597,10 @@ void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
 
     // Preset panel: load selected preset into parameters
     connect(m_presetPanel, &PresetPanel::presetSelected, this, [this](const QVariantMap& values) {
-        m_previewController->setShaderParams(values);
-        // Reload param panel from metadata first, then override with preset values
-        if (m_metadataEditor) {
-            m_parameterPanel->loadFromMetadata(m_metadataEditor->toJson());
+        if (m_parameterPanel) {
+            m_parameterPanel->applyUniformValues(values);
         }
-        m_previewController->setShaderParams(values);
+        m_previewController->setShaderParams(m_parameterPanel->currentUniformValues());
     });
 
     // Preset panel: save current — request values from parameter panel
@@ -779,20 +777,7 @@ void ShaderEditorWindow::saveShaderPackage()
     ShaderPackageContents contents;
     contents.dirPath = m_packagePath;
 
-    if (m_metadataEditor) {
-        // Inject presets into metadata JSON before saving
-        QJsonDocument doc = QJsonDocument::fromJson(m_metadataEditor->toJson().toUtf8());
-        QJsonObject obj = doc.object();
-        if (m_presetPanel) {
-            const QJsonObject presets = m_presetPanel->presetsJson();
-            if (!presets.isEmpty()) {
-                obj[QStringLiteral("presets")] = presets;
-            } else {
-                obj.remove(QStringLiteral("presets"));
-            }
-        }
-        contents.metadataJson = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Indented));
-    }
+    contents.metadataJson = buildMetadataJsonForSave();
 
     for (int i = 0; i < m_tabWidget->count(); ++i) {
         auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->widget(i));
@@ -847,9 +832,7 @@ void ShaderEditorWindow::saveShaderPackageAs()
     ShaderPackageContents contents;
     contents.dirPath = dir;
 
-    if (m_metadataEditor) {
-        contents.metadataJson = m_metadataEditor->toJson();
-    }
+    contents.metadataJson = buildMetadataJsonForSave();
 
     for (int i = 0; i < m_tabWidget->count(); ++i) {
         auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->widget(i));
@@ -1004,6 +987,22 @@ QString ShaderEditorWindow::resolveShaderPath(const QString& shaderId) const
 
     qCWarning(lcShaderEditor) << "Shader not found id=" << shaderId;
     return {};
+}
+
+QString ShaderEditorWindow::buildMetadataJsonForSave() const
+{
+    if (!m_metadataEditor) return {};
+    QJsonDocument doc = QJsonDocument::fromJson(m_metadataEditor->toJson().toUtf8());
+    QJsonObject obj = doc.object();
+    if (m_presetPanel) {
+        const QJsonObject presets = m_presetPanel->presetsJson();
+        if (!presets.isEmpty()) {
+            obj[QStringLiteral("presets")] = presets;
+        } else {
+            obj.remove(QStringLiteral("presets"));
+        }
+    }
+    return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Indented));
 }
 
 void ShaderEditorWindow::clearErrorMarks()

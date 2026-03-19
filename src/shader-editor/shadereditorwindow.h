@@ -73,6 +73,7 @@ private:
     QString resolveShaderPath(const QString& shaderId) const;
     void updateErrorMarks();
     void clearErrorMarks();
+    QString buildMetadataJsonForSave() const;
 
     KTextEditor::Editor* m_editor = nullptr;
 
