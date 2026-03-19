@@ -387,6 +387,8 @@ void ShaderEditorWindow::setupLayout()
     m_previewWidget = new QQuickWidget(this);
     m_previewWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
     m_previewWidget->setClearColor(QColor(30, 30, 30));
+    m_previewWidget->setAttribute(Qt::WA_OpaquePaintEvent);
+    m_previewWidget->setAttribute(Qt::WA_AlwaysStackOnTop, false);
     m_previewWidget->engine()->rootContext()->setContextObject(
         new KLocalizedContext(m_previewWidget->engine()));
     m_previewWidget->engine()->rootContext()->setContextProperty(
