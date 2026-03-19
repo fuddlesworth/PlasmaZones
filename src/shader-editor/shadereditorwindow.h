@@ -26,6 +26,7 @@ class View;
 
 namespace PlasmaZones {
 
+class GlslCompletionModel;
 class MetadataEditorWidget;
 class OutputPanel;
 class ParameterPanel;
@@ -94,6 +95,7 @@ private:
     // Live preview
     PreviewController* m_previewController = nullptr;
 
+    GlslCompletionModel* m_completionModel = nullptr;
     QList<KTextEditor::Document*> m_ownedDocuments;
     QString m_packagePath;
     bool m_isNewPackage = false;

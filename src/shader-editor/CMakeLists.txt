@@ -19,6 +19,8 @@ set(plasmazones_shader_editor_SRCS
     parameterpanel.h
     outputpanel.cpp
     outputpanel.h
+    glslcompletionmodel.cpp
+    glslcompletionmodel.h
     # CAVA integration for real audio spectrum in preview
     ../daemon/cavaservice.cpp
     ../daemon/cavaservice.h

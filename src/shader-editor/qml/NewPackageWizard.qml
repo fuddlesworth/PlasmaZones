@@ -508,10 +508,10 @@ Item {
                         // Quick file count
                         Kirigami.Heading { level: 4; text: i18n("Generated Files") }
                         Label {
-                            property int fileCount: (root.selectedFeatures & FeatureMultipass) ? 4 : 3
+                            property int fileCount: (root.selectedFeatures & FeatureMultipass) ? 5 : 3
                             text: i18n("%1 files (metadata.json, zone.vert, effect.frag%2)",
                                 fileCount,
-                                (root.selectedFeatures & FeatureMultipass) ? ", pass0.frag" : "")
+                                (root.selectedFeatures & FeatureMultipass) ? ", pass0.frag, pass1.frag" : "")
                             color: Kirigami.Theme.disabledTextColor
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true
@@ -561,7 +561,7 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 1
                             Label { text: i18n("Multipass"); font.bold: true }
-                            Label { text: i18n("Two-pass buffer chain for feedback, trails, and simulations. Adds pass0.frag and a Speed parameter."); color: Kirigami.Theme.disabledTextColor; font.pointSize: Kirigami.Theme.smallFont.pointSize; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                            Label { text: i18n("Two-pass buffer chain: flow field + distortion bloom. Adds pass0.frag, pass1.frag, and a Speed parameter."); color: Kirigami.Theme.disabledTextColor; font.pointSize: Kirigami.Theme.smallFont.pointSize; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                         }
                         Switch { checked: root.featureMultipass; onCheckedChanged: root.featureMultipass = checked }
                     }
@@ -624,7 +624,7 @@ Item {
                             Repeater {
                                 model: {
                                     var files = ["metadata.json", "zone.vert", "effect.frag"]
-                                    if (root.selectedFeatures & FeatureMultipass) files.push("pass0.frag")
+                                    if (root.selectedFeatures & FeatureMultipass) { files.push("pass0.frag"); files.push("pass1.frag") }
                                     return files
                                 }
                                 Label {

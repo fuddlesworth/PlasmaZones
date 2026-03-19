@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "shadereditorwindow.h"
+#include "glslcompletionmodel.h"
 #include "metadataeditorwidget.h"
 #include "newpackagedialog.h"
 #include "outputpanel.h"
@@ -483,6 +484,16 @@ void ShaderEditorWindow::addDocumentTab(const QString& filename, const QString& 
     // Enable icon border (gutter) so error/warning marks are visible
     view->setConfigValue(QStringLiteral("icon-bar"), true);
 
+    // Register GLSL completion model for shader files
+    if (filename.endsWith(QLatin1String(".frag")) || filename.endsWith(QLatin1String(".vert"))
+        || filename.endsWith(QLatin1String(".glsl"))) {
+        if (!m_completionModel) {
+            m_completionModel = new GlslCompletionModel(this);
+        }
+        view->registerCompletionModel(m_completionModel);
+        view->setAutomaticInvocationEnabled(true);
+    }
+
     m_tabWidget->addTab(view, filename);
     m_ownedDocuments.append(doc);
 
@@ -960,8 +971,14 @@ QString ShaderEditorWindow::resolveShaderPath(const QString& shaderId) const
 
 void ShaderEditorWindow::clearErrorMarks()
 {
+    constexpr uint errorWarningMask = KTextEditor::Document::Error | KTextEditor::Document::Warning;
     for (auto* doc : m_ownedDocuments) {
-        doc->clearMarks();
+        const auto marks = doc->marks();
+        for (auto it = marks.begin(); it != marks.end(); ++it) {
+            if (it.value()->type & errorWarningMask) {
+                doc->removeMark(it.key(), errorWarningMask);
+            }
+        }
     }
 }
 
@@ -1003,10 +1020,19 @@ void ShaderEditorWindow::updateErrorMarks()
             continue;
         }
 
-        // Determine target file from error prefix
+        // Determine target file from error prefix.
+        // QShaderBaker prefixes: "Fragment shader:", "Vertex shader:"
+        // PreviewController prefixes buffer pass errors: "Buffer pass pass0.frag ..."
         QString targetFile = QStringLiteral("effect.frag");
         if (errLine.contains(QLatin1String("Vertex shader"), Qt::CaseInsensitive)) {
             targetFile = QStringLiteral("zone.vert");
+        } else {
+            // Check for buffer pass filename in the error message
+            static const QRegularExpression bufferPassPattern(QStringLiteral("\\b(pass\\d+\\.frag)\\b"));
+            const auto passMatch = bufferPassPattern.match(errLine);
+            if (passMatch.hasMatch()) {
+                targetFile = passMatch.captured(1);
+            }
         }
 
         // Find the KTextEditor::Document for this file
@@ -1014,8 +1040,7 @@ void ShaderEditorWindow::updateErrorMarks()
             if (m_tabWidget->tabText(i) == targetFile) {
                 auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->widget(i));
                 if (view && view->document() && errorLine > 0 && errorLine <= view->document()->lines()) {
-                    const bool isError = errLine.contains(QLatin1String("ERROR"), Qt::CaseInsensitive)
-                                      || errLine.contains(QLatin1String("error"), Qt::CaseSensitive);
+                    const bool isError = errLine.contains(QLatin1String("ERROR"), Qt::CaseInsensitive);
                     const auto markType = isError
                         ? KTextEditor::Document::Error
                         : KTextEditor::Document::Warning;
