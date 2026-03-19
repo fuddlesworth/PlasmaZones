@@ -14,10 +14,10 @@ class MovingRange;
 #include <QString>
 
 class QComboBox;
+class QDockWidget;
 class QLabel;
 class QMenu;
 class QQuickWidget;
-class QSplitter;
 class QTabWidget;
 
 class KRecentFilesAction;
@@ -82,23 +82,22 @@ private:
 
     KTextEditor::Editor* m_editor = nullptr;
 
-    // Left panel: code editor tabs (top) + output panel (bottom)
+    // Central widget: code editor tabs
     QTabWidget* m_tabWidget = nullptr;
-    OutputPanel* m_outputPanel = nullptr;
-    QSplitter* m_leftSplitter = nullptr;  // vertical: code on top, output on bottom
 
-    // Right panel: preview (top) + tabbed panel (bottom)
+    // Dock widgets
+    QDockWidget* m_previewDock = nullptr;
+    QDockWidget* m_outputDock = nullptr;
+    QDockWidget* m_paramsDock = nullptr;
+    QDockWidget* m_metadataDock = nullptr;
+    QDockWidget* m_presetsDock = nullptr;
+
+    // Panel contents (owned by their dock widgets)
     QQuickWidget* m_previewWidget = nullptr;
-    QSplitter* m_rightSplitter = nullptr;  // vertical: preview on top, tabs on bottom
-
-    // Right bottom tab widget: Parameters | Metadata | Presets
-    QTabWidget* m_rightTabWidget = nullptr;
+    OutputPanel* m_outputPanel = nullptr;
     ParameterPanel* m_parameterPanel = nullptr;
     MetadataEditorWidget* m_metadataEditor = nullptr;
     PresetPanel* m_presetPanel = nullptr;
-
-    // Main splitter: left (code) + right (preview+tabs)
-    QSplitter* m_mainSplitter = nullptr;
 
     // Live preview
     PreviewController* m_previewController = nullptr;
@@ -126,10 +125,6 @@ private:
     // Menus
     QMenu* m_editMenu = nullptr;
 
-    // View toggle actions
-    QAction* m_toggleOutputAction = nullptr;
-    QAction* m_togglePreviewAction = nullptr;
-    QAction* m_toggleRightTabsAction = nullptr;
 
     // Toolbar widgets
     QComboBox* m_layoutCombo = nullptr;

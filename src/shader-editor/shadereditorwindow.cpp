@@ -30,7 +30,7 @@
 #include <QQuickWidget>
 #include <QShortcut>
 #include <QSignalBlocker>
-#include <QSplitter>
+#include <QDockWidget>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QToolBar>
@@ -203,31 +203,7 @@ void ShaderEditorWindow::createActions()
         }
     });
 
-    // View toggle actions
-    m_toggleOutputAction = new QAction(i18n("&Problems Panel"), this);
-    m_toggleOutputAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_J));
-    m_toggleOutputAction->setCheckable(true);
-    m_toggleOutputAction->setChecked(true);
-    connect(m_toggleOutputAction, &QAction::toggled, this, [this](bool visible) {
-        m_outputPanel->setVisible(visible);
-    });
-
-    m_togglePreviewAction = new QAction(i18n("Live &Preview"), this);
-    m_togglePreviewAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P));
-    m_togglePreviewAction->setCheckable(true);
-    m_togglePreviewAction->setChecked(true);
-    connect(m_togglePreviewAction, &QAction::toggled, this, [this](bool visible) {
-        m_previewWidget->setVisible(visible);
-    });
-
-    m_toggleRightTabsAction = new QAction(i18n("Pa&rameter Panel"), this);
-    m_toggleRightTabsAction->setCheckable(true);
-    m_toggleRightTabsAction->setChecked(true);
-    connect(m_toggleRightTabsAction, &QAction::toggled, this, [this](bool visible) {
-        if (m_rightTabWidget) {
-            m_rightTabWidget->setVisible(visible);
-        }
-    });
+    // View toggle actions are provided by QDockWidget::toggleViewAction()
 }
 
 void ShaderEditorWindow::populateEditMenu()
@@ -289,9 +265,11 @@ void ShaderEditorWindow::setupMenuBar()
 
     // ── View ──
     auto* viewMenu = menuBar()->addMenu(i18n("&View"));
-    viewMenu->addAction(m_toggleOutputAction);
-    viewMenu->addAction(m_togglePreviewAction);
-    viewMenu->addAction(m_toggleRightTabsAction);
+    viewMenu->addAction(m_previewDock->toggleViewAction());
+    viewMenu->addAction(m_outputDock->toggleViewAction());
+    if (m_paramsDock) viewMenu->addAction(m_paramsDock->toggleViewAction());
+    if (m_metadataDock) viewMenu->addAction(m_metadataDock->toggleViewAction());
+    if (m_presetsDock) viewMenu->addAction(m_presetsDock->toggleViewAction());
 
     viewMenu->addSeparator();
 
@@ -396,10 +374,16 @@ void ShaderEditorWindow::setupStatusBar()
 
 void ShaderEditorWindow::setupLayout()
 {
-    // ── Preview controller (shared between preview pane and metadata editor) ──
+    // ── Preview controller ──
     m_previewController = new PreviewController(this);
 
-    // ── Preview widget (QQuickWidget hosting QML with ZoneShaderItem) ──
+    // ── Central widget: code editor tabs ──
+    setCentralWidget(m_tabWidget);
+
+    // Allow dock widgets to be tabbed together
+    setDockNestingEnabled(true);
+
+    // ── Preview dock (right) ──
     m_previewWidget = new QQuickWidget(this);
     m_previewWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
     m_previewWidget->engine()->rootContext()->setContextObject(
@@ -416,18 +400,15 @@ void ShaderEditorWindow::setupLayout()
     });
     m_previewWidget->setSource(QUrl(QStringLiteral("qrc:/qml/PreviewPane.qml")));
     m_previewWidget->setMinimumHeight(120);
+    m_previewWidget->setMinimumWidth(300);
 
-    // ── Right vertical splitter: preview (top) + metadata editor (bottom) ──
-    m_rightSplitter = new QSplitter(Qt::Vertical, this);
-    m_rightSplitter->addWidget(m_previewWidget);
-    // Right panel tabs added later when a package is opened (setupRightPanel)
-    m_rightSplitter->setStretchFactor(0, 3);  // preview gets more space initially
+    m_previewDock = new QDockWidget(i18n("Preview"), this);
+    m_previewDock->setObjectName(QStringLiteral("previewDock"));
+    m_previewDock->setWidget(m_previewWidget);
+    addDockWidget(Qt::RightDockWidgetArea, m_previewDock);
 
-    // ── Output panel (bottom of code editor) ──
+    // ── Output dock (bottom) ──
     m_outputPanel = new OutputPanel(this);
-    m_outputPanel->setMaximumHeight(200);
-
-    // Connect problem double-click to jump to line in code editor
     connect(m_outputPanel, &OutputPanel::problemDoubleClicked, this, [this](int line) {
         auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->currentWidget());
         if (view) {
@@ -436,8 +417,12 @@ void ShaderEditorWindow::setupLayout()
         }
     });
 
-    // Connect preview controller status to output panel.
-    // Animation stops on error (no oscillation), so direct connection is safe.
+    m_outputDock = new QDockWidget(i18n("Problems"), this);
+    m_outputDock->setObjectName(QStringLiteral("outputDock"));
+    m_outputDock->setWidget(m_outputPanel);
+    addDockWidget(Qt::BottomDockWidgetArea, m_outputDock);
+
+    // ── Connect preview controller status to output panel ──
     auto updateOutputPanel = [this]() {
         const int status = m_previewController->status();
         if (status == PreviewController::StatusReady) {
@@ -480,23 +465,13 @@ void ShaderEditorWindow::setupLayout()
     connect(m_previewController, &PreviewController::statusChanged, this, updateCompileStatus);
     connect(m_previewController, &PreviewController::fpsChanged, this, updateCompileStatus);
 
-    // ── Left vertical splitter: code tabs (top) + output panel (bottom) ──
-    m_leftSplitter = new QSplitter(Qt::Vertical, this);
-    m_leftSplitter->addWidget(m_tabWidget);
-    m_leftSplitter->addWidget(m_outputPanel);
-    m_leftSplitter->setStretchFactor(0, 4);  // code editor gets most space
-    m_leftSplitter->setStretchFactor(1, 1);  // output panel compact
-
-    // ── Main horizontal splitter: left (code+output) + right (preview+tabs) ──
-    m_mainSplitter = new QSplitter(Qt::Horizontal, this);
-    m_mainSplitter->addWidget(m_leftSplitter);
-    m_mainSplitter->addWidget(m_rightSplitter);
-    m_mainSplitter->setStretchFactor(0, 3);  // code editor ~55%
-    m_mainSplitter->setStretchFactor(1, 2);  // right panel ~45%
-
-    m_rightSplitter->setMinimumWidth(350);
-
-    setCentralWidget(m_mainSplitter);
+    // ── Restore saved layout state ──
+    const KSharedConfig::Ptr config = KSharedConfig::openConfig();
+    const KConfigGroup layoutGroup = config->group(QStringLiteral("WindowLayout"));
+    const QByteArray savedState = layoutGroup.readEntry("DockState", QByteArray());
+    if (!savedState.isEmpty()) {
+        restoreState(savedState);
+    }
 }
 
 void ShaderEditorWindow::connectDocumentToPreview(const QString& filename, KTextEditor::Document* doc)
@@ -570,48 +545,54 @@ void ShaderEditorWindow::addDocumentTab(const QString& filename, const QString& 
 
 void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
 {
-    // Remove old tab widget if any (this deletes m_parameterPanel and m_metadataEditor as children)
-    if (m_rightTabWidget) {
-        delete m_rightTabWidget;
-        m_rightTabWidget = nullptr;
+    // Remove old panel contents if any
+    if (m_parameterPanel) {
+        delete m_parameterPanel;
         m_parameterPanel = nullptr;
+    }
+    if (m_metadataEditor) {
+        delete m_metadataEditor;
         m_metadataEditor = nullptr;
+    }
+    if (m_presetPanel) {
+        delete m_presetPanel;
         m_presetPanel = nullptr;
     }
 
-    m_rightTabWidget = new QTabWidget(m_rightSplitter);
-    m_rightTabWidget->setMinimumHeight(200);
-    m_rightSplitter->addWidget(m_rightTabWidget);
-    // 60% preview / 40% tabs — preview is primary, tabs are secondary
-    m_rightSplitter->setStretchFactor(0, 3);
-    m_rightSplitter->setStretchFactor(1, 2);
-    m_rightSplitter->setCollapsible(0, false);
-    m_rightSplitter->setCollapsible(1, false);
-
-    // Force explicit initial distribution. QQuickWidget's sizeHint
-    // and QTabWidget's sizeHint compete; setSizes overrides both.
-    const int totalHeight = m_rightSplitter->height();
-    if (totalHeight > 0) {
-        const int previewHeight = totalHeight * 60 / 100;
-        m_rightSplitter->setSizes({previewHeight, totalHeight - previewHeight});
-    } else {
-        m_rightSplitter->setSizes({480, 320});
-    }
-
-    // Parameters tab
-    m_parameterPanel = new ParameterPanel(m_rightTabWidget);
+    // Parameters dock
+    m_parameterPanel = new ParameterPanel(this);
     m_parameterPanel->loadFromMetadata(metadataJson);
-    m_rightTabWidget->addTab(m_parameterPanel, i18n("Parameters"));
+    if (!m_paramsDock) {
+        m_paramsDock = new QDockWidget(i18n("Parameters"), this);
+        m_paramsDock->setObjectName(QStringLiteral("paramsDock"));
+        addDockWidget(Qt::RightDockWidgetArea, m_paramsDock);
+    }
+    m_paramsDock->setWidget(m_parameterPanel);
 
-    // Metadata tab
-    m_metadataEditor = new MetadataEditorWidget(m_rightTabWidget);
+    // Metadata dock
+    m_metadataEditor = new MetadataEditorWidget(this);
     m_metadataEditor->loadFromJson(metadataJson);
-    m_rightTabWidget->addTab(m_metadataEditor, i18n("Metadata"));
+    if (!m_metadataDock) {
+        m_metadataDock = new QDockWidget(i18n("Metadata"), this);
+        m_metadataDock->setObjectName(QStringLiteral("metadataDock"));
+        addDockWidget(Qt::RightDockWidgetArea, m_metadataDock);
+    }
+    m_metadataDock->setWidget(m_metadataEditor);
 
-    // Presets tab
-    m_presetPanel = new PresetPanel(m_rightTabWidget);
+    // Presets dock
+    m_presetPanel = new PresetPanel(this);
     m_presetPanel->loadFromMetadata(metadataJson);
-    m_rightTabWidget->addTab(m_presetPanel, i18n("Presets"));
+    if (!m_presetsDock) {
+        m_presetsDock = new QDockWidget(i18n("Presets"), this);
+        m_presetsDock->setObjectName(QStringLiteral("presetsDock"));
+        addDockWidget(Qt::RightDockWidgetArea, m_presetsDock);
+    }
+    m_presetsDock->setWidget(m_presetPanel);
+
+    // Tab the right-side docks together (Parameters on top by default)
+    tabifyDockWidget(m_paramsDock, m_metadataDock);
+    tabifyDockWidget(m_metadataDock, m_presetsDock);
+    m_paramsDock->raise(); // show Parameters tab first
 
     // Connect parameter changes to live preview
     connect(m_parameterPanel, &ParameterPanel::parameterChanged, this, [this]() {
@@ -1070,25 +1051,23 @@ void ShaderEditorWindow::closeAllTabs()
     qDeleteAll(m_ownedDocuments);
     m_ownedDocuments.clear();
 
-    // Remove right panel tab widget (deletes m_parameterPanel and m_metadataEditor as children)
-    if (m_rightTabWidget) {
-        delete m_rightTabWidget;
-        m_rightTabWidget = nullptr;
-        m_parameterPanel = nullptr;
-        m_metadataEditor = nullptr;
-        m_presetPanel = nullptr;
-    }
+    // Clear panel contents (dock widgets persist, panels are recreated on next open)
+    if (m_parameterPanel) { delete m_parameterPanel; m_parameterPanel = nullptr; }
+    if (m_metadataEditor) { delete m_metadataEditor; m_metadataEditor = nullptr; }
+    if (m_presetPanel) { delete m_presetPanel; m_presetPanel = nullptr; }
 }
 
 void ShaderEditorWindow::closeEvent(QCloseEvent* event)
 {
     if (promptSaveIfModified()) {
-        // Persist recent files
+        // Persist recent files and dock layout
+        const KSharedConfig::Ptr config = KSharedConfig::openConfig();
         if (m_recentAction) {
-            const KSharedConfig::Ptr config = KSharedConfig::openConfig();
             m_recentAction->saveEntries(config->group(QStringLiteral("RecentPackages")));
-            config->sync();
         }
+        KConfigGroup layoutGroup = config->group(QStringLiteral("WindowLayout"));
+        layoutGroup.writeEntry("DockState", saveState());
+        config->sync();
         event->accept();
     } else {
         event->ignore();
