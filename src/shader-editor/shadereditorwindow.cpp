@@ -42,11 +42,45 @@
 #include <KConfigGroup>
 #include <KRecentFilesAction>
 #include <KSharedConfig>
+#include <KTextEditor/AnnotationInterface>
+#include <KTextEditor/Attribute>
 #include <KTextEditor/Document>
 #include <KTextEditor/Editor>
+#include <KTextEditor/MovingRange>
 #include <KTextEditor/View>
 
 Q_LOGGING_CATEGORY(lcShaderEditor, "plasmazones.shadereditor")
+
+namespace PlasmaZones {
+
+// Simple annotation model for showing error messages in the editor margin
+class ShaderAnnotationModel : public KTextEditor::AnnotationModel
+{
+    Q_OBJECT
+public:
+    explicit ShaderAnnotationModel(QObject* parent = nullptr) : KTextEditor::AnnotationModel() { setParent(parent); }
+
+    void clear() {
+        m_annotations.clear();
+        Q_EMIT lineChanged(-1); // reset all
+    }
+
+    void addAnnotation(int line, const QString& text) {
+        m_annotations[line] = text;
+        Q_EMIT lineChanged(line);
+    }
+
+    QVariant data(int line, Qt::ItemDataRole role) const override {
+        if (!m_annotations.contains(line)) return {};
+        if (role == Qt::DisplayRole || role == Qt::ToolTipRole) return m_annotations.value(line);
+        return {};
+    }
+
+private:
+    QHash<int, QString> m_annotations;
+};
+
+} // namespace PlasmaZones
 
 namespace PlasmaZones {
 
@@ -520,8 +554,17 @@ void ShaderEditorWindow::addDocumentTab(const QString& filename, const QString& 
 
     auto* view = doc->createView(m_tabWidget);
 
-    // Enable icon border (gutter) so error/warning marks are visible
-    view->setConfigValue(QStringLiteral("icon-bar"), true);
+    // ── Editor configuration ──
+    view->setConfigValue(QStringLiteral("icon-bar"), true);         // gutter marks
+    view->setConfigValue(QStringLiteral("line-numbers"), true);     // line numbers
+    view->setConfigValue(QStringLiteral("auto-brackets"), true);    // auto-close (){}[]
+
+    // Annotation border for inline error messages
+    if (!m_annotationModel) {
+        m_annotationModel = new ShaderAnnotationModel(this);
+    }
+    view->setAnnotationModel(m_annotationModel);
+    view->setAnnotationBorderVisible(true);
 
     // Register GLSL completion model for shader files
     if (filename.endsWith(QLatin1String(".frag")) || filename.endsWith(QLatin1String(".vert"))
@@ -1120,6 +1163,13 @@ void ShaderEditorWindow::clearErrorMarks()
             }
         }
     }
+    // Clear inline annotations
+    if (m_annotationModel) {
+        m_annotationModel->clear();
+    }
+    // Clear red underline ranges
+    qDeleteAll(m_errorRanges);
+    m_errorRanges.clear();
 }
 
 void ShaderEditorWindow::updateErrorMarks()
@@ -1180,12 +1230,37 @@ void ShaderEditorWindow::updateErrorMarks()
             if (m_tabWidget->tabText(i) == targetFile) {
                 auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->widget(i));
                 if (view && view->document() && errorLine > 0 && errorLine <= view->document()->lines()) {
+                    auto* doc = view->document();
+                    const int line0 = errorLine - 1;
                     const bool isError = errLine.contains(QLatin1String("ERROR"), Qt::CaseInsensitive);
+
+                    // Gutter mark
                     const auto markType = isError
                         ? KTextEditor::Document::Error
                         : KTextEditor::Document::Warning;
-                    view->document()->addMark(errorLine - 1, markType);
-                    qCDebug(lcShaderEditor) << "Error mark on" << targetFile << "line" << errorLine;
+                    doc->addMark(line0, markType);
+
+                    // Inline annotation (error message in margin)
+                    if (m_annotationModel) {
+                        // Extract just the message portion after the line number
+                        static const QRegularExpression msgPattern(QStringLiteral(":\\d+:\\s*(.*)$"));
+                        const auto msgMatch = msgPattern.match(errLine);
+                        const QString msg = msgMatch.hasMatch() ? msgMatch.captured(1).trimmed() : errLine.trimmed();
+                        m_annotationModel->addAnnotation(line0, msg);
+                    }
+
+                    // Red underline on the entire error line
+                    const int lineLength = doc->lineLength(line0);
+                    if (lineLength > 0) {
+                        auto* range = doc->newMovingRange(
+                            KTextEditor::Range(line0, 0, line0, lineLength));
+                        KTextEditor::Attribute::Ptr attr(new KTextEditor::Attribute());
+                        attr->setUnderlineStyle(QTextCharFormat::WaveUnderline);
+                        attr->setUnderlineColor(isError ? QColor(255, 80, 80) : QColor(255, 180, 50));
+                        range->setAttribute(attr);
+                        range->setAttributeOnlyForViews(true);
+                        m_errorRanges.append(range);
+                    }
                 }
                 break;
             }
@@ -1194,3 +1269,6 @@ void ShaderEditorWindow::updateErrorMarks()
 }
 
 } // namespace PlasmaZones
+
+// ShaderAnnotationModel is defined in this .cpp with Q_OBJECT
+#include "shadereditorwindow.moc"

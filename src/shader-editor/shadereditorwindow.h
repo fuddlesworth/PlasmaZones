@@ -6,6 +6,10 @@
 #include <QCloseEvent>
 #include <QList>
 #include <QMainWindow>
+
+namespace KTextEditor {
+class MovingRange;
+}
 #include <QShortcut>
 #include <QString>
 
@@ -26,6 +30,7 @@ class View;
 
 namespace PlasmaZones {
 
+class ShaderAnnotationModel;
 class GlslCompletionModel;
 class MetadataEditorWidget;
 class OutputPanel;
@@ -100,6 +105,8 @@ private:
     PreviewController* m_previewController = nullptr;
 
     GlslCompletionModel* m_completionModel = nullptr;
+    ShaderAnnotationModel* m_annotationModel = nullptr;
+    QList<KTextEditor::MovingRange*> m_errorRanges;
     QList<KTextEditor::Document*> m_ownedDocuments;
     QString m_packagePath;
     bool m_isNewPackage = false;
