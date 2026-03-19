@@ -7,6 +7,7 @@
 #include "newpackagedialog.h"
 #include "outputpanel.h"
 #include "parameterpanel.h"
+#include "presetpanel.h"
 #include "previewcontroller.h"
 #include "shaderpackageio.h"
 
@@ -515,6 +516,7 @@ void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
         m_rightTabWidget = nullptr;
         m_parameterPanel = nullptr;
         m_metadataEditor = nullptr;
+        m_presetPanel = nullptr;
     }
 
     m_rightTabWidget = new QTabWidget(m_rightSplitter);
@@ -546,12 +548,10 @@ void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
     m_metadataEditor->loadFromJson(metadataJson);
     m_rightTabWidget->addTab(m_metadataEditor, i18n("Metadata"));
 
-    // Presets tab (stub)
-    auto* presetsWidget = new QWidget(m_rightTabWidget);
-    auto* presetsLayout = new QVBoxLayout(presetsWidget);
-    presetsLayout->addWidget(new QLabel(i18n("Presets coming soon..."), presetsWidget));
-    presetsLayout->addStretch();
-    m_rightTabWidget->addTab(presetsWidget, i18n("Presets"));
+    // Presets tab
+    m_presetPanel = new PresetPanel(m_rightTabWidget);
+    m_presetPanel->loadFromMetadata(metadataJson);
+    m_rightTabWidget->addTab(m_presetPanel, i18n("Presets"));
 
     // Connect parameter changes to live preview
     connect(m_parameterPanel, &ParameterPanel::parameterChanged, this, [this]() {
@@ -593,6 +593,31 @@ void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
     // Apply button -> update preview with current param values
     connect(m_parameterPanel, &ParameterPanel::applyRequested, this, [this]() {
         m_previewController->setShaderParams(m_parameterPanel->currentUniformValues());
+    });
+
+    // Preset panel: load selected preset into parameters
+    connect(m_presetPanel, &PresetPanel::presetSelected, this, [this](const QVariantMap& values) {
+        m_previewController->setShaderParams(values);
+        // Reload param panel from metadata first, then override with preset values
+        if (m_metadataEditor) {
+            m_parameterPanel->loadFromMetadata(m_metadataEditor->toJson());
+        }
+        m_previewController->setShaderParams(values);
+    });
+
+    // Preset panel: save current — request values from parameter panel
+    connect(m_presetPanel, &PresetPanel::captureRequested, this, [this]() {
+        if (m_parameterPanel) {
+            m_presetPanel->saveCurrentValues(m_parameterPanel->currentUniformValues());
+        }
+    });
+
+    // Preset panel: modified — mark metadata as dirty so hasUnsavedChanges() triggers
+    connect(m_presetPanel, &PresetPanel::modified, this, [this]() {
+        if (m_metadataEditor) {
+            m_metadataEditor->setModified(true);
+        }
+        updateWindowTitle();
     });
 }
 
@@ -755,7 +780,18 @@ void ShaderEditorWindow::saveShaderPackage()
     contents.dirPath = m_packagePath;
 
     if (m_metadataEditor) {
-        contents.metadataJson = m_metadataEditor->toJson();
+        // Inject presets into metadata JSON before saving
+        QJsonDocument doc = QJsonDocument::fromJson(m_metadataEditor->toJson().toUtf8());
+        QJsonObject obj = doc.object();
+        if (m_presetPanel) {
+            const QJsonObject presets = m_presetPanel->presetsJson();
+            if (!presets.isEmpty()) {
+                obj[QStringLiteral("presets")] = presets;
+            } else {
+                obj.remove(QStringLiteral("presets"));
+            }
+        }
+        contents.metadataJson = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Indented));
     }
 
     for (int i = 0; i < m_tabWidget->count(); ++i) {
@@ -927,6 +963,7 @@ void ShaderEditorWindow::closeAllTabs()
         m_rightTabWidget = nullptr;
         m_parameterPanel = nullptr;
         m_metadataEditor = nullptr;
+        m_presetPanel = nullptr;
     }
 }
 

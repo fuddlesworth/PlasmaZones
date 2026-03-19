@@ -1,0 +1,199 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "presetpanel.h"
+
+#include <QHBoxLayout>
+#include <QInputDialog>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLabel>
+#include <QListWidget>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QVBoxLayout>
+
+#include <KLocalizedString>
+
+namespace PlasmaZones {
+
+PresetPanel::PresetPanel(QWidget* parent)
+    : QWidget(parent)
+{
+    setupUi();
+}
+
+PresetPanel::~PresetPanel() = default;
+
+void PresetPanel::setupUi()
+{
+    auto* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(8);
+
+    auto* header = new QLabel(QStringLiteral("<b>%1</b>").arg(i18n("Parameter Presets")), this);
+    layout->addWidget(header);
+
+    auto* desc = new QLabel(i18n("Save and load named parameter configurations."), this);
+    desc->setWordWrap(true);
+    QPalette descPal = desc->palette();
+    descPal.setColor(QPalette::WindowText, palette().color(QPalette::PlaceholderText));
+    desc->setPalette(descPal);
+    layout->addWidget(desc);
+
+    m_listWidget = new QListWidget(this);
+    m_listWidget->setAlternatingRowColors(true);
+    layout->addWidget(m_listWidget, 1);
+
+    connect(m_listWidget, &QListWidget::itemDoubleClicked, this, &PresetPanel::onPresetClicked);
+    connect(m_listWidget, &QListWidget::currentRowChanged, this, [this]() { updateButtons(); });
+
+    // Buttons
+    auto* buttonRow = new QHBoxLayout;
+    buttonRow->setSpacing(4);
+
+    m_saveBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")), i18n("Save Current"), this);
+    m_deleteBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("list-remove")), i18n("Delete"), this);
+    m_renameBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-rename")), i18n("Rename"), this);
+
+    buttonRow->addWidget(m_saveBtn);
+    buttonRow->addWidget(m_renameBtn);
+    buttonRow->addWidget(m_deleteBtn);
+    buttonRow->addStretch();
+
+    layout->addLayout(buttonRow);
+
+    connect(m_saveBtn, &QPushButton::clicked, this, &PresetPanel::onSavePreset);
+    connect(m_deleteBtn, &QPushButton::clicked, this, &PresetPanel::onDeletePreset);
+    connect(m_renameBtn, &QPushButton::clicked, this, &PresetPanel::onRenamePreset);
+
+    updateButtons();
+}
+
+void PresetPanel::loadFromMetadata(const QString& metadataJson)
+{
+    m_presets.clear();
+    m_listWidget->clear();
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(metadataJson.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        return;
+    }
+
+    const QJsonObject presetsObj = doc.object().value(QStringLiteral("presets")).toObject();
+    for (auto it = presetsObj.begin(); it != presetsObj.end(); ++it) {
+        const QJsonObject values = it.value().toObject();
+        QVariantMap map;
+        for (auto vit = values.begin(); vit != values.end(); ++vit) {
+            map[vit.key()] = vit.value().toVariant();
+        }
+        m_presets[it.key()] = map;
+        m_listWidget->addItem(it.key());
+    }
+
+    updateButtons();
+}
+
+QJsonObject PresetPanel::presetsJson() const
+{
+    QJsonObject result;
+    for (auto it = m_presets.begin(); it != m_presets.end(); ++it) {
+        QJsonObject values;
+        for (auto vit = it.value().begin(); vit != it.value().end(); ++vit) {
+            values[vit.key()] = QJsonValue::fromVariant(vit.value());
+        }
+        result[it.key()] = values;
+    }
+    return result;
+}
+
+void PresetPanel::onSavePreset()
+{
+    Q_EMIT captureRequested();
+}
+
+void PresetPanel::saveCurrentValues(const QVariantMap& uniformValues)
+{
+    bool ok = false;
+    QString name = QInputDialog::getText(this, i18n("Save Preset"),
+                                          i18n("Preset name:"), QLineEdit::Normal,
+                                          QString(), &ok);
+    if (!ok || name.trimmed().isEmpty()) {
+        return;
+    }
+    name = name.trimmed();
+
+    if (m_presets.contains(name)) {
+        const int result = QMessageBox::question(this, i18n("Overwrite Preset"),
+            i18n("A preset named \"%1\" already exists. Overwrite?", name));
+        if (result != QMessageBox::Yes) {
+            return;
+        }
+    } else {
+        m_listWidget->addItem(name);
+    }
+
+    m_presets[name] = uniformValues;
+    Q_EMIT modified();
+}
+
+void PresetPanel::onDeletePreset()
+{
+    auto* item = m_listWidget->currentItem();
+    if (!item) return;
+
+    const QString name = item->text();
+    const int result = QMessageBox::question(this, i18n("Delete Preset"),
+        i18n("Delete preset \"%1\"?", name));
+    if (result != QMessageBox::Yes) return;
+
+    m_presets.remove(name);
+    delete m_listWidget->takeItem(m_listWidget->row(item));
+    Q_EMIT modified();
+}
+
+void PresetPanel::onRenamePreset()
+{
+    auto* item = m_listWidget->currentItem();
+    if (!item) return;
+
+    const QString oldName = item->text();
+    bool ok = false;
+    QString newName = QInputDialog::getText(this, i18n("Rename Preset"),
+                                             i18n("New name:"), QLineEdit::Normal,
+                                             oldName, &ok);
+    if (!ok || newName.trimmed().isEmpty() || newName.trimmed() == oldName) {
+        return;
+    }
+    newName = newName.trimmed();
+
+    if (m_presets.contains(newName)) {
+        QMessageBox::warning(this, i18n("Rename Preset"),
+            i18n("A preset named \"%1\" already exists.", newName));
+        return;
+    }
+
+    m_presets[newName] = m_presets.take(oldName);
+    item->setText(newName);
+    Q_EMIT modified();
+}
+
+void PresetPanel::onPresetClicked(QListWidgetItem* item)
+{
+    if (!item) return;
+    const QString name = item->text();
+    if (m_presets.contains(name)) {
+        Q_EMIT presetSelected(m_presets[name]);
+    }
+}
+
+void PresetPanel::updateButtons()
+{
+    const bool hasSelection = m_listWidget->currentItem() != nullptr;
+    m_deleteBtn->setEnabled(hasSelection);
+    m_renameBtn->setEnabled(hasSelection);
+}
+
+} // namespace PlasmaZones

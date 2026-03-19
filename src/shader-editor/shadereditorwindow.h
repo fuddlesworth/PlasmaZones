@@ -29,6 +29,7 @@ namespace PlasmaZones {
 class GlslCompletionModel;
 class MetadataEditorWidget;
 class OutputPanel;
+class PresetPanel;
 class ParameterPanel;
 class PreviewController;
 
@@ -88,6 +89,7 @@ private:
     QTabWidget* m_rightTabWidget = nullptr;
     ParameterPanel* m_parameterPanel = nullptr;
     MetadataEditorWidget* m_metadataEditor = nullptr;
+    PresetPanel* m_presetPanel = nullptr;
 
     // Main splitter: left (code) + right (preview+tabs)
     QSplitter* m_mainSplitter = nullptr;
