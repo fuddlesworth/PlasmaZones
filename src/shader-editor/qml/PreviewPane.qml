@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import PlasmaZones 1.0
@@ -111,6 +112,17 @@ Item {
         font.pointSize: Kirigami.Theme.defaultFont.pointSize + 1
     }
 
+    // ── File dialog for user texture loading ──
+    FileDialog {
+        id: textureDialog
+        property int currentSlot: 0
+        title: i18n("Select Image for uTexture%1", currentSlot)
+        nameFilters: [i18n("Images") + " (*.png *.jpg *.jpeg *.bmp *.webp *.tga)"]
+        onAccepted: {
+            if (root.pc) root.pc.setUserTexture(currentSlot, selectedFile)
+        }
+    }
+
     // ── Header bar (renders ON TOP of shader) ──
     Rectangle {
         id: headerBar
@@ -187,6 +199,40 @@ Item {
                 text: Math.round(barCountSlider.value)
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                 color: Kirigami.Theme.disabledTextColor
+            }
+
+            ToolSeparator {}
+
+            ToolButton {
+                icon.name: "insert-image"
+                onClicked: textureMenu.open()
+                ToolTip.text: i18n("User textures (uTexture0–3)")
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+
+                Menu {
+                    id: textureMenu
+                    Repeater {
+                        model: 4
+                        MenuItem {
+                            readonly property var paths: root.pc ? root.pc.userTexturePaths : []
+                            readonly property string texPath: (paths && paths.length > index) ? paths[index] : ""
+                            readonly property bool hasTexture: texPath !== ""
+                            text: hasTexture
+                                ? "uTexture" + index + ": " + texPath.substring(texPath.lastIndexOf("/") + 1)
+                                : "uTexture" + index + ": " + i18n("(empty)")
+                            icon.name: hasTexture ? "edit-clear" : "document-open"
+                            onTriggered: {
+                                if (!root.pc) return
+                                if (hasTexture) {
+                                    root.pc.clearUserTexture(index)
+                                } else {
+                                    textureDialog.currentSlot = index
+                                    textureDialog.open()
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             Item { Layout.fillWidth: true }
