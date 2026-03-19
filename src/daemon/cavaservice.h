@@ -79,6 +79,8 @@ private:
     QVector<float> m_smoothedSpectrum; // EMA-filtered spectrum to reduce frame-to-frame jitter
     bool m_stopping = false; // suppress error reporting during intentional stop
     bool m_pendingRestart = false; // suppress error reporting during async restart
+    bool m_pendingStart = false; // start() queued while process is still shutting down
+    bool m_wantRunning = false; // desired state — prevents stop→start race from resurrecting
 };
 
 } // namespace PlasmaZones

@@ -42,7 +42,22 @@ bool CavaService::isAvailable()
 
 void CavaService::start()
 {
+    m_wantRunning = true;
+
     if (m_process && m_process->state() != QProcess::NotRunning) {
+        // Process is still running or shutting down — queue a restart after it exits.
+        if (!m_pendingStart) {
+            m_pendingStart = true;
+            connect(
+                m_process, &QProcess::finished, this,
+                [this]() {
+                    m_pendingStart = false;
+                    if (m_wantRunning) {
+                        start();
+                    }
+                },
+                Qt::SingleShotConnection);
+        }
         return;
     }
 
@@ -82,6 +97,8 @@ void CavaService::start()
 
 void CavaService::stop()
 {
+    m_wantRunning = false;
+
     if (m_process && m_process->state() != QProcess::NotRunning) {
         m_stopping = true;
         m_process->terminate();
