@@ -25,6 +25,7 @@ Item {
     property bool featureMultipass: false
     property bool featureAudio: false
     property bool featureWallpaper: false
+    property bool featureMouse: false
     property bool featuresInitialized: false
 
     property var presets: typeof initialPresets !== "undefined" ? initialPresets : []
@@ -39,6 +40,7 @@ Item {
             if (featureMultipass) f |= FeatureMultipass
             if (featureAudio)     f |= FeatureAudio
             if (featureWallpaper) f |= FeatureWallpaper
+            if (featureMouse)     f |= FeatureMouse
             selectedFeatures = f
         }
     }
@@ -47,6 +49,7 @@ Item {
     onFeatureMultipassChanged: computeFeatures()
     onFeatureAudioChanged: computeFeatures()
     onFeatureWallpaperChanged: computeFeatures()
+    onFeatureMouseChanged: computeFeatures()
 
     function goForward() {
         if (currentStep === 0) {
@@ -61,6 +64,7 @@ Item {
                 featureMultipass = (f & FeatureMultipass) !== 0
                 featureAudio = (f & FeatureAudio) !== 0
                 featureWallpaper = (f & FeatureWallpaper) !== 0
+                featureMouse = (f & FeatureMouse) !== 0
                 featuresInitialized = true
                 computeFeatures()
             }
@@ -492,6 +496,11 @@ Item {
                                 text: "\u2022  " + i18n("Wallpaper sampling")
                                 font.pointSize: Kirigami.Theme.smallFont.pointSize + 0.5
                             }
+                            Label {
+                                visible: (root.selectedFeatures & FeatureMouse) !== 0
+                                text: "\u2022  " + i18n("Mouse interaction")
+                                font.pointSize: Kirigami.Theme.smallFont.pointSize + 0.5
+                            }
                         }
 
                         Kirigami.Separator { Layout.fillWidth: true }
@@ -577,6 +586,17 @@ Item {
                             Label { text: i18n("Sample the desktop wallpaper via uWallpaper. Adds Blend and Tint parameters."); color: Kirigami.Theme.disabledTextColor; font.pointSize: Kirigami.Theme.smallFont.pointSize; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                         }
                         Switch { checked: root.featureWallpaper; onCheckedChanged: root.featureWallpaper = checked }
+                    }
+                    Kirigami.Separator { Layout.fillWidth: true }
+
+                    RowLayout {
+                        spacing: Kirigami.Units.largeSpacing; Layout.fillWidth: true
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 1
+                            Label { text: i18n("Mouse-Reactive"); font.bold: true }
+                            Label { text: i18n("Cursor glow, gravitational warping, and ripple rings via iMouse. Adds Mouse Influence, Cursor Glow, and Cursor Color parameters."); color: Kirigami.Theme.disabledTextColor; font.pointSize: Kirigami.Theme.smallFont.pointSize; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                        }
+                        Switch { checked: root.featureMouse; onCheckedChanged: root.featureMouse = checked }
                     }
 
                     Item { Layout.fillHeight: true }

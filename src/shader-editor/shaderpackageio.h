@@ -14,6 +14,7 @@ enum class ShaderFeature {
     Multipass     = 1 << 0,
     AudioReactive = 1 << 1,
     Wallpaper     = 1 << 2,
+    MouseReactive = 1 << 3,
 };
 Q_DECLARE_FLAGS(ShaderFeatures, ShaderFeature)
 Q_DECLARE_OPERATORS_FOR_FLAGS(ShaderFeatures)

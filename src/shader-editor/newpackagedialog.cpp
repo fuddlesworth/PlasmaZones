@@ -46,6 +46,11 @@ static const PresetDef s_presets[] = {
      "preferences-desktop-wallpaper",
      "#fb7185", "#f43f5e",
      static_cast<int>(ShaderFeature::Wallpaper)},
+    {"Interactive",
+     "Mouse-reactive glow, ripples, and warping",
+     "input-mouse",
+     "#38bdf8", "#0ea5e9",
+     static_cast<int>(ShaderFeature::MouseReactive)},
     {"Multipass + Audio",
      "Feedback loops driven by audio input",
      "media-playlist-shuffle",
@@ -55,7 +60,7 @@ static const PresetDef s_presets[] = {
      "Every feature enabled \u2014 maximum freedom",
      "applications-all",
      "#f472b6", "#ec4899",
-     static_cast<int>(ShaderFeature::Multipass | ShaderFeature::AudioReactive | ShaderFeature::Wallpaper)},
+     static_cast<int>(ShaderFeature::Multipass | ShaderFeature::AudioReactive | ShaderFeature::Wallpaper | ShaderFeature::MouseReactive)},
 };
 
 NewPackageDialog::NewPackageDialog(QWidget* parent)
@@ -157,9 +162,11 @@ void NewPackageDialog::setupUi()
     const int fMultipass = static_cast<int>(ShaderFeature::Multipass);
     const int fAudio = static_cast<int>(ShaderFeature::AudioReactive);
     const int fWallpaper = static_cast<int>(ShaderFeature::Wallpaper);
+    const int fMouse = static_cast<int>(ShaderFeature::MouseReactive);
     m_quickWidget->engine()->rootContext()->setContextProperty(QStringLiteral("FeatureMultipass"), fMultipass);
     m_quickWidget->engine()->rootContext()->setContextProperty(QStringLiteral("FeatureAudio"), fAudio);
     m_quickWidget->engine()->rootContext()->setContextProperty(QStringLiteral("FeatureWallpaper"), fWallpaper);
+    m_quickWidget->engine()->rootContext()->setContextProperty(QStringLiteral("FeatureMouse"), fMouse);
 
     // Parameter definitions per feature — single source of truth for QML manifest display
     QVariantList featureParams;
@@ -177,6 +184,9 @@ void NewPackageDialog::setupUi()
     addParam(fAudio, i18n("Color Shift"), QStringLiteral("color"), QString());
     addParam(fWallpaper, i18n("Blend"), QStringLiteral("float"), QStringLiteral("0 .. 1"));
     addParam(fWallpaper, i18n("Tint"), QStringLiteral("color"), QString());
+    addParam(fMouse, i18n("Mouse Influence"), QStringLiteral("float"), QStringLiteral("0 .. 5"));
+    addParam(fMouse, i18n("Cursor Glow"), QStringLiteral("float"), QStringLiteral("0 .. 0.5"));
+    addParam(fMouse, i18n("Cursor Color"), QStringLiteral("color"), QString());
     m_quickWidget->engine()->rootContext()->setContextProperty(QStringLiteral("featureParamDefs"), featureParams);
     m_quickWidget->engine()->rootContext()->setContextProperty(
         QStringLiteral("categoryList"), QStringList{

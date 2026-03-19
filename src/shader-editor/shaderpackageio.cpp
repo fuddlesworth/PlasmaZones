@@ -143,6 +143,7 @@ ShaderPackageContents createTemplate(const QString& shaderId, const QString& sha
     const bool hasMultipass = features.testFlag(ShaderFeature::Multipass);
     const bool hasAudio = features.testFlag(ShaderFeature::AudioReactive);
     const bool hasWallpaper = features.testFlag(ShaderFeature::Wallpaper);
+    const bool hasMouse = features.testFlag(ShaderFeature::MouseReactive);
 
     // ── Metadata ──
     QJsonObject metadata;
@@ -221,6 +222,33 @@ ShaderPackageContents createTemplate(const QString& shaderId, const QString& sha
         params.append(tint);
     }
 
+    if (hasMouse) {
+        QJsonObject influence;
+        influence[QStringLiteral("name")] = QStringLiteral("Mouse Influence");
+        influence[QStringLiteral("type")] = QStringLiteral("float");
+        influence[QStringLiteral("default")] = 1.5;
+        influence[QStringLiteral("min")] = 0.0;
+        influence[QStringLiteral("max")] = 5.0;
+        influence[QStringLiteral("slot")] = nextScalarSlot++;
+        params.append(influence);
+
+        QJsonObject glowRadius;
+        glowRadius[QStringLiteral("name")] = QStringLiteral("Cursor Glow");
+        glowRadius[QStringLiteral("type")] = QStringLiteral("float");
+        glowRadius[QStringLiteral("default")] = 0.15;
+        glowRadius[QStringLiteral("min")] = 0.0;
+        glowRadius[QStringLiteral("max")] = 0.5;
+        glowRadius[QStringLiteral("slot")] = nextScalarSlot++;
+        params.append(glowRadius);
+
+        QJsonObject cursorColor;
+        cursorColor[QStringLiteral("name")] = QStringLiteral("Cursor Color");
+        cursorColor[QStringLiteral("type")] = QStringLiteral("color");
+        cursorColor[QStringLiteral("default")] = QStringLiteral("#ffffff");
+        cursorColor[QStringLiteral("slot")] = nextColorSlot++;
+        params.append(cursorColor);
+    }
+
     metadata[QStringLiteral("parameters")] = params;
     QJsonDocument doc(metadata);
     contents.metadataJson = QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
@@ -262,10 +290,11 @@ ShaderPackageContents createTemplate(const QString& shaderId, const QString& sha
     };
 
     int sc = 0, cc = 0; // slot cursors matching metadata param order
-    QString speedA, reactivityA, bassBoostA, colorShiftA, blendA, tintA;
+    QString speedA, reactivityA, bassBoostA, colorShiftA, blendA, tintA, mouseInflA, cursorGlowA, cursorColA;
     if (hasMultipass) { speedA = scalarAccessor(sc++); }
     if (hasAudio) { reactivityA = scalarAccessor(sc++); bassBoostA = scalarAccessor(sc++); colorShiftA = colorAccessor(cc++); }
     if (hasWallpaper) { blendA = scalarAccessor(sc++); tintA = colorAccessor(cc++); }
+    if (hasMouse) { mouseInflA = scalarAccessor(sc++); cursorGlowA = scalarAccessor(sc++); cursorColA = colorAccessor(cc++); }
 
     // ── pass0.frag (only if multipass) ──
     if (hasMultipass) {
@@ -387,6 +416,40 @@ ShaderPackageContents createTemplate(const QString& shaderId, const QString& sha
             "        float blendVal = %2 >= 0.0 ? %2 : 0.5;\n"
             "        col = mix(col, wp, blendVal);\n"
             "    }\n").arg(tintA, blendA);
+    }
+
+    if (hasMouse) {
+        fragSrc += QStringLiteral(
+            "\n"
+            "    // Mouse interaction\n"
+            "    float mouseInfl = %1 >= 0.0 ? %1 : 1.5;\n"
+            "    float cursorGlow = %2 >= 0.0 ? %2 : 0.15;\n"
+            "    vec3 cursorCol = %3.rgb;\n"
+            "    {\n"
+            "        // Cursor position in zone-local UV\n"
+            "        vec2 mouseUv = zoneLocalUV(iMouse.xy, pos, size);\n"
+            "        bool mouseInZone = mouseUv.x >= 0.0 && mouseUv.x <= 1.0 &&\n"
+            "                           mouseUv.y >= 0.0 && mouseUv.y <= 1.0;\n"
+            "        if (mouseInZone) {\n"
+            "            float dist = length(localUv - mouseUv);\n"
+            "\n"
+            "            // Gravitational lens: warp color toward cursor\n"
+            "            float warpStr = exp(-dist * 8.0 / max(mouseInfl, 0.01)) * 0.05 * mouseInfl;\n"
+            "            vec2 toCursor = normalize(mouseUv - localUv + vec2(0.001));\n"
+            "            vec2 warpedUv = localUv + toCursor * warpStr;\n"
+            "            float warpNoise = sin(warpedUv.x * 20.0 + iTime) * sin(warpedUv.y * 20.0 + iTime * 1.3);\n"
+            "            col += col * warpNoise * warpStr * 3.0;\n"
+            "\n"
+            "            // Cursor glow: soft radial light\n"
+            "            float glow = exp(-dist * dist / max(cursorGlow * cursorGlow, 0.001)) * cursorGlow * 2.0;\n"
+            "            col += cursorCol * glow * vitality;\n"
+            "\n"
+            "            // Ripple ring expanding from cursor\n"
+            "            float ripple = sin((dist - iTime * 0.5) * 30.0) * 0.5 + 0.5;\n"
+            "            ripple *= exp(-dist * 6.0) * 0.15 * mouseInfl;\n"
+            "            col += cursorCol * ripple * vitality;\n"
+            "        }\n"
+            "    }\n").arg(mouseInflA, cursorGlowA, cursorColA);
     }
 
     if (hasAudio) {
