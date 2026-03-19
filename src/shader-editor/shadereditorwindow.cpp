@@ -172,7 +172,7 @@ void ShaderEditorWindow::createActions()
     m_saveAsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S));
     connect(m_saveAsAction, &QAction::triggered, this, &ShaderEditorWindow::saveShaderPackageAs);
 
-    m_exportAction = new QAction(QIcon::fromTheme(QStringLiteral("package-x-generic")), i18n("&Export as tar.gz..."), this);
+    m_exportAction = new QAction(QIcon::fromTheme(QStringLiteral("package-x-generic")), i18n("&Export Package..."), this);
     m_exportAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_E));
     connect(m_exportAction, &QAction::triggered, this, &ShaderEditorWindow::exportShaderPackage);
 
