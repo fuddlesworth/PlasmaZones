@@ -28,6 +28,28 @@ AssignmentManager::AssignmentManager(Settings* settings, ScreenListProvider scre
 {
 }
 
+AssignmentEntry AssignmentManager::resolveDesktopEntry(const QString& key) const
+{
+    auto pendIt = m_pendingDesktopEntries.constFind(key);
+    if (pendIt != m_pendingDesktopEntries.constEnd())
+        return *pendIt;
+    auto cacheIt = m_cachedDesktopAssignments.constFind(key);
+    if (cacheIt != m_cachedDesktopAssignments.constEnd())
+        return *cacheIt;
+    return {};
+}
+
+AssignmentEntry AssignmentManager::resolveActivityEntry(const QString& key) const
+{
+    auto pendIt = m_pendingActivityEntries.constFind(key);
+    if (pendIt != m_pendingActivityEntries.constEnd())
+        return *pendIt;
+    auto cacheIt = m_cachedActivityAssignments.constFind(key);
+    if (cacheIt != m_cachedActivityAssignments.constEnd())
+        return *cacheIt;
+    return {};
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Screen assignments (snapping)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -41,6 +63,22 @@ void AssignmentManager::assignLayoutToScreen(const QString& screenName, const QS
         } else {
             m_screenAssignments[screenName] = layoutId;
         }
+        m_screenModes[screenName] = AssignmentEntry::Snapping;
+
+        // Build full entry for save — update snapping field only, preserve tiling
+        AssignmentEntry entry;
+        auto it = m_pendingScreenEntries.constFind(screenName);
+        if (it != m_pendingScreenEntries.constEnd()) {
+            entry = *it; // Start from existing pending entry
+        } else {
+            // Preserve tiling from the daemon's cached state
+            entry.tilingAlgorithm =
+                LayoutId::extractAlgorithmId(m_tilingScreenAssignments.value(screenName).toString());
+        }
+        entry.mode = AssignmentEntry::Snapping;
+        entry.snappingLayout = layoutId;
+        m_pendingScreenEntries[screenName] = entry;
+
         Q_EMIT screenAssignmentsChanged();
         Q_EMIT needsSave();
     }
@@ -48,11 +86,31 @@ void AssignmentManager::assignLayoutToScreen(const QString& screenName, const QS
 
 void AssignmentManager::clearScreenAssignment(const QString& screenName)
 {
-    if (m_screenAssignments.contains(screenName)) {
-        m_screenAssignments.remove(screenName);
-        Q_EMIT screenAssignmentsChanged();
-        Q_EMIT needsSave();
+    m_screenAssignments.remove(screenName);
+
+    // Clear only the snapping field, preserve mode and tiling algorithm
+    AssignmentEntry entry;
+    auto it = m_pendingScreenEntries.constFind(screenName);
+    if (it != m_pendingScreenEntries.constEnd()) {
+        entry = *it;
+    } else {
+        entry.tilingAlgorithm = LayoutId::extractAlgorithmId(m_tilingScreenAssignments.value(screenName).toString());
+        entry.mode = m_screenModes.value(screenName, AssignmentEntry::Snapping);
     }
+    entry.snappingLayout.clear();
+
+    if (entry.tilingAlgorithm.isEmpty()) {
+        // No tiling either — truly clear this screen (remove from daemon)
+        m_pendingScreenEntries.remove(screenName);
+        m_clearedScreenAssignments.insert(screenName);
+    } else {
+        // Keep entry with tiling preserved, snapping cleared
+        m_pendingScreenEntries[screenName] = entry;
+        m_clearedScreenAssignments.remove(screenName);
+    }
+
+    Q_EMIT screenAssignmentsChanged();
+    Q_EMIT needsSave();
 }
 
 QString AssignmentManager::getLayoutForScreen(const QString& screenName) const
@@ -73,6 +131,20 @@ void AssignmentManager::assignTilingLayoutToScreen(const QString& screenName, co
         } else {
             m_tilingScreenAssignments[screenName] = layoutId;
         }
+        m_screenModes[screenName] = AssignmentEntry::Autotile;
+
+        // Build full entry — update tiling field only, preserve snapping
+        AssignmentEntry entry;
+        auto it = m_pendingScreenEntries.constFind(screenName);
+        if (it != m_pendingScreenEntries.constEnd()) {
+            entry = *it;
+        } else {
+            entry.snappingLayout = m_screenAssignments.value(screenName).toString();
+        }
+        entry.mode = AssignmentEntry::Autotile;
+        entry.tilingAlgorithm = LayoutId::extractAlgorithmId(layoutId);
+        m_pendingScreenEntries[screenName] = entry;
+
         Q_EMIT tilingScreenAssignmentsChanged();
         Q_EMIT needsSave();
     }
@@ -80,11 +152,29 @@ void AssignmentManager::assignTilingLayoutToScreen(const QString& screenName, co
 
 void AssignmentManager::clearTilingScreenAssignment(const QString& screenName)
 {
-    if (m_tilingScreenAssignments.contains(screenName)) {
-        m_tilingScreenAssignments.remove(screenName);
-        Q_EMIT tilingScreenAssignmentsChanged();
-        Q_EMIT needsSave();
+    m_tilingScreenAssignments.remove(screenName);
+
+    // Clear only tiling, preserve mode and snapping
+    AssignmentEntry entry;
+    auto it = m_pendingScreenEntries.constFind(screenName);
+    if (it != m_pendingScreenEntries.constEnd()) {
+        entry = *it;
+    } else {
+        entry.snappingLayout = m_screenAssignments.value(screenName).toString();
+        entry.mode = m_screenModes.value(screenName, AssignmentEntry::Snapping);
     }
+    entry.tilingAlgorithm.clear();
+
+    if (entry.snappingLayout.isEmpty()) {
+        m_pendingScreenEntries.remove(screenName);
+        m_clearedTilingScreenAssignments.insert(screenName);
+    } else {
+        m_pendingScreenEntries[screenName] = entry;
+        m_clearedTilingScreenAssignments.remove(screenName);
+    }
+
+    Q_EMIT tilingScreenAssignmentsChanged();
+    Q_EMIT needsSave();
 }
 
 QString AssignmentManager::getTilingLayoutForScreen(const QString& screenName) const
@@ -106,13 +196,7 @@ void AssignmentManager::assignLayoutToScreenDesktop(const QString& screenName, i
     QString screenId = Utils::screenIdForName(screenName);
     QString key = QStringLiteral("%1|%2").arg(screenId).arg(virtualDesktop);
 
-    if (layoutId.isEmpty()) {
-        m_pendingDesktopAssignments.remove(key);
-        m_clearedDesktopAssignments.insert(key);
-    } else {
-        m_pendingDesktopAssignments[key] = layoutId;
-        m_clearedDesktopAssignments.remove(key);
-    }
+    m_clearedDesktopAssignments.remove(key);
 
     if (virtualDesktop == 0) {
         if (layoutId.isEmpty()) {
@@ -121,6 +205,12 @@ void AssignmentManager::assignLayoutToScreenDesktop(const QString& screenName, i
             m_screenAssignments[screenName] = layoutId;
         }
     }
+
+    // Build full entry — update snapping, preserve tiling from cache
+    AssignmentEntry entry = resolveDesktopEntry(key);
+    entry.mode = AssignmentEntry::Snapping;
+    entry.snappingLayout = layoutId;
+    m_pendingDesktopEntries[key] = entry;
 
     Q_EMIT screenAssignmentsChanged();
     Q_EMIT needsSave();
@@ -134,11 +224,31 @@ void AssignmentManager::clearScreenDesktopAssignment(const QString& screenName, 
     }
     QString screenId = Utils::screenIdForName(screenName);
     QString key = QStringLiteral("%1|%2").arg(screenId).arg(virtualDesktop);
-    m_pendingDesktopAssignments.remove(key);
-    m_clearedDesktopAssignments.insert(key);
 
     if (virtualDesktop == 0 && m_screenAssignments.contains(screenName)) {
         m_screenAssignments.remove(screenName);
+    }
+
+    // Clear only the snapping field — preserve mode and tiling
+    AssignmentEntry entry = resolveDesktopEntry(key);
+
+    entry.snappingLayout.clear();
+
+    if (!entry.tilingAlgorithm.isEmpty()) {
+        // Entry still meaningful (has tiling) — keep it
+        m_pendingDesktopEntries[key] = entry;
+        m_clearedDesktopAssignments.remove(key);
+    } else {
+        // Check if base has a DIFFERENT mode — if so, keep this entry to prevent inheritance
+        auto baseMode = m_screenModes.value(screenName, AssignmentEntry::Snapping);
+        if (baseMode != entry.mode) {
+            m_pendingDesktopEntries[key] = entry;
+            m_clearedDesktopAssignments.remove(key);
+        } else {
+            // Same mode as base, no tiling, no snapping — safe to clear entirely
+            m_pendingDesktopEntries.remove(key);
+            m_clearedDesktopAssignments.insert(key);
+        }
     }
 
     Q_EMIT screenAssignmentsChanged();
@@ -148,51 +258,42 @@ void AssignmentManager::clearScreenDesktopAssignment(const QString& screenName, 
 QString AssignmentManager::getLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
     QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName)).arg(virtualDesktop);
-    if (m_pendingDesktopAssignments.contains(key)) {
-        return m_pendingDesktopAssignments.value(key);
-    }
-    if (m_clearedDesktopAssignments.contains(key)) {
+    auto pendIt = m_pendingDesktopEntries.constFind(key);
+    if (pendIt != m_pendingDesktopEntries.constEnd())
+        return pendIt->activeLayoutId();
+    if (m_clearedDesktopAssignments.contains(key))
         return QString();
-    }
-    // Check cached KConfig entry
     auto cacheIt = m_cachedDesktopAssignments.constFind(key);
-    if (cacheIt != m_cachedDesktopAssignments.constEnd()) {
+    if (cacheIt != m_cachedDesktopAssignments.constEnd())
         return cacheIt->activeLayoutId();
-    }
     return QString();
 }
 
 bool AssignmentManager::hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
     QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName)).arg(virtualDesktop);
-    if (m_pendingDesktopAssignments.contains(key))
-        return !LayoutId::isAutotile(m_pendingDesktopAssignments.value(key));
+    auto pendIt = m_pendingDesktopEntries.constFind(key);
+    if (pendIt != m_pendingDesktopEntries.constEnd())
+        return !pendIt->snappingLayout.isEmpty();
     if (m_clearedDesktopAssignments.contains(key))
         return false;
-    // Check cached KConfig entry for explicit snapping layout
     auto cacheIt = m_cachedDesktopAssignments.constFind(key);
-    if (cacheIt != m_cachedDesktopAssignments.constEnd()) {
+    if (cacheIt != m_cachedDesktopAssignments.constEnd())
         return !cacheIt->snappingLayout.isEmpty();
-    }
     return false;
 }
 
 QString AssignmentManager::getSnappingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
     QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName)).arg(virtualDesktop);
-    // Check pending first
-    if (m_pendingDesktopAssignments.contains(key)) {
-        const QString id = m_pendingDesktopAssignments.value(key);
-        if (!LayoutId::isAutotile(id))
-            return id;
-    }
+    auto pendIt = m_pendingDesktopEntries.constFind(key);
+    if (pendIt != m_pendingDesktopEntries.constEnd())
+        return pendIt->snappingLayout;
     if (m_clearedDesktopAssignments.contains(key))
         return QString();
-    // Check cached KConfig entry
     auto cacheIt = m_cachedDesktopAssignments.constFind(key);
-    if (cacheIt != m_cachedDesktopAssignments.constEnd()) {
+    if (cacheIt != m_cachedDesktopAssignments.constEnd())
         return cacheIt->snappingLayout;
-    }
     return QString();
 }
 
@@ -208,8 +309,20 @@ void AssignmentManager::assignTilingLayoutToScreenDesktop(const QString& screenN
         qCWarning(lcKcm) << "Cannot assign tiling layout - invalid desktop number:" << virtualDesktop;
         return;
     }
-    assignLayoutToScreenDesktop(screenName, virtualDesktop, layoutId);
+    QString screenId = Utils::screenIdForName(screenName);
+    QString key = QStringLiteral("%1|%2").arg(screenId).arg(virtualDesktop);
+
+    m_clearedDesktopAssignments.remove(key);
+
+    // Build full entry — update tiling, preserve snapping from cache
+    AssignmentEntry entry = resolveDesktopEntry(key);
+    entry.mode = AssignmentEntry::Autotile;
+    entry.tilingAlgorithm = LayoutId::extractAlgorithmId(layoutId);
+    m_pendingDesktopEntries[key] = entry;
+
     Q_EMIT tilingDesktopAssignmentsChanged();
+    Q_EMIT screenAssignmentsChanged();
+    Q_EMIT needsSave();
 }
 
 void AssignmentManager::clearTilingScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
@@ -218,41 +331,54 @@ void AssignmentManager::clearTilingScreenDesktopAssignment(const QString& screen
         qCWarning(lcKcm) << "Cannot clear tiling assignment - invalid desktop number:" << virtualDesktop;
         return;
     }
-    clearScreenDesktopAssignment(screenName, virtualDesktop);
+    QString screenId = Utils::screenIdForName(screenName);
+    QString key = QStringLiteral("%1|%2").arg(screenId).arg(virtualDesktop);
+
+    AssignmentEntry entry = resolveDesktopEntry(key);
+    entry.tilingAlgorithm.clear();
+
+    auto baseMode = m_screenModes.value(screenName, AssignmentEntry::Snapping);
+    if (!entry.snappingLayout.isEmpty() || (entry.mode == AssignmentEntry::Autotile && baseMode != entry.mode)) {
+        m_pendingDesktopEntries[key] = entry;
+        m_clearedDesktopAssignments.remove(key);
+    } else {
+        m_pendingDesktopEntries.remove(key);
+        m_clearedDesktopAssignments.insert(key);
+    }
+
     Q_EMIT tilingDesktopAssignmentsChanged();
+    Q_EMIT screenAssignmentsChanged();
+    Q_EMIT needsSave();
 }
 
 QString AssignmentManager::getTilingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
     QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName)).arg(virtualDesktop);
-    // Check pending first
-    if (m_pendingDesktopAssignments.contains(key)) {
-        const QString id = m_pendingDesktopAssignments.value(key);
-        if (LayoutId::isAutotile(id))
-            return id;
+    auto pendIt = m_pendingDesktopEntries.constFind(key);
+    if (pendIt != m_pendingDesktopEntries.constEnd()) {
+        if (!pendIt->tilingAlgorithm.isEmpty())
+            return LayoutId::makeAutotileId(pendIt->tilingAlgorithm);
+        return QString();
     }
     if (m_clearedDesktopAssignments.contains(key))
         return QString();
-    // Check cached KConfig entry
     auto cacheIt = m_cachedDesktopAssignments.constFind(key);
-    if (cacheIt != m_cachedDesktopAssignments.constEnd() && !cacheIt->tilingAlgorithm.isEmpty()) {
+    if (cacheIt != m_cachedDesktopAssignments.constEnd() && !cacheIt->tilingAlgorithm.isEmpty())
         return LayoutId::makeAutotileId(cacheIt->tilingAlgorithm);
-    }
     return QString();
 }
 
 bool AssignmentManager::hasExplicitTilingAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
     QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName)).arg(virtualDesktop);
-    if (m_pendingDesktopAssignments.contains(key))
-        return LayoutId::isAutotile(m_pendingDesktopAssignments.value(key));
+    auto pendIt = m_pendingDesktopEntries.constFind(key);
+    if (pendIt != m_pendingDesktopEntries.constEnd())
+        return !pendIt->tilingAlgorithm.isEmpty();
     if (m_clearedDesktopAssignments.contains(key))
         return false;
-    // Check cached KConfig entry for explicit tiling algorithm
     auto cacheIt = m_cachedDesktopAssignments.constFind(key);
-    if (cacheIt != m_cachedDesktopAssignments.constEnd()) {
+    if (cacheIt != m_cachedDesktopAssignments.constEnd())
         return !cacheIt->tilingAlgorithm.isEmpty();
-    }
     return false;
 }
 
@@ -269,12 +395,29 @@ void AssignmentManager::assignLayoutToScreenActivity(const QString& screenName, 
     }
     QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
     if (layoutId.isEmpty()) {
-        m_pendingActivityAssignments.remove(key);
         m_clearedActivityAssignments.insert(key);
     } else {
-        m_pendingActivityAssignments[key] = layoutId;
         m_clearedActivityAssignments.remove(key);
     }
+
+    // Build full entry
+    AssignmentEntry entry = resolveActivityEntry(key);
+
+    if (LayoutId::isAutotile(layoutId)) {
+        entry.mode = AssignmentEntry::Autotile;
+        entry.tilingAlgorithm = LayoutId::extractAlgorithmId(layoutId);
+    } else {
+        entry.mode = AssignmentEntry::Snapping;
+        entry.snappingLayout = layoutId;
+    }
+    if (!layoutId.isEmpty()) {
+        m_pendingActivityEntries[key] = entry;
+    } else {
+        // Empty layoutId = clear. Remove stale pending entry so it doesn't
+        // override the clear during save.
+        m_pendingActivityEntries.remove(key);
+    }
+
     Q_EMIT activityAssignmentsChanged();
     Q_EMIT screenAssignmentsChanged();
     Q_EMIT needsSave();
@@ -282,23 +425,38 @@ void AssignmentManager::assignLayoutToScreenActivity(const QString& screenName, 
 
 void AssignmentManager::clearScreenActivityAssignment(const QString& screenName, const QString& activityId)
 {
-    assignLayoutToScreenActivity(screenName, activityId, QString());
+    if (screenName.isEmpty() || activityId.isEmpty())
+        return;
+    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
+
+    // Clear snapping field, preserve tiling
+    AssignmentEntry entry = resolveActivityEntry(key);
+    entry.snappingLayout.clear();
+
+    if (!entry.tilingAlgorithm.isEmpty()) {
+        m_pendingActivityEntries[key] = entry;
+        m_clearedActivityAssignments.remove(key);
+    } else {
+        m_pendingActivityEntries.remove(key);
+        m_clearedActivityAssignments.insert(key);
+    }
+
+    Q_EMIT activityAssignmentsChanged();
+    Q_EMIT screenAssignmentsChanged();
+    Q_EMIT needsSave();
 }
 
 QString AssignmentManager::getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
 {
     QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
-    if (m_pendingActivityAssignments.contains(key)) {
-        return m_pendingActivityAssignments.value(key);
-    }
-    if (m_clearedActivityAssignments.contains(key)) {
+    auto pendIt = m_pendingActivityEntries.constFind(key);
+    if (pendIt != m_pendingActivityEntries.constEnd())
+        return pendIt->activeLayoutId();
+    if (m_clearedActivityAssignments.contains(key))
         return QString();
-    }
-    // Check cached KConfig entry
     auto cacheIt = m_cachedActivityAssignments.constFind(key);
-    if (cacheIt != m_cachedActivityAssignments.constEnd()) {
+    if (cacheIt != m_cachedActivityAssignments.constEnd())
         return cacheIt->activeLayoutId();
-    }
     return QString();
 }
 
@@ -306,15 +464,14 @@ bool AssignmentManager::hasExplicitAssignmentForScreenActivity(const QString& sc
                                                                const QString& activityId) const
 {
     QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
-    if (m_pendingActivityAssignments.contains(key))
-        return !LayoutId::isAutotile(m_pendingActivityAssignments.value(key));
+    auto pendIt = m_pendingActivityEntries.constFind(key);
+    if (pendIt != m_pendingActivityEntries.constEnd())
+        return !pendIt->snappingLayout.isEmpty();
     if (m_clearedActivityAssignments.contains(key))
         return false;
-    // Check cached KConfig entry for explicit snapping layout
     auto cacheIt = m_cachedActivityAssignments.constFind(key);
-    if (cacheIt != m_cachedActivityAssignments.constEnd()) {
+    if (cacheIt != m_cachedActivityAssignments.constEnd())
         return !cacheIt->snappingLayout.isEmpty();
-    }
     return false;
 }
 
@@ -322,19 +479,14 @@ QString AssignmentManager::getSnappingLayoutForScreenActivity(const QString& scr
                                                               const QString& activityId) const
 {
     QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
-    // Check pending first
-    if (m_pendingActivityAssignments.contains(key)) {
-        const QString id = m_pendingActivityAssignments.value(key);
-        if (!LayoutId::isAutotile(id))
-            return id;
-    }
+    auto pendIt = m_pendingActivityEntries.constFind(key);
+    if (pendIt != m_pendingActivityEntries.constEnd())
+        return pendIt->snappingLayout;
     if (m_clearedActivityAssignments.contains(key))
         return QString();
-    // Check cached KConfig entry
     auto cacheIt = m_cachedActivityAssignments.constFind(key);
-    if (cacheIt != m_cachedActivityAssignments.constEnd()) {
+    if (cacheIt != m_cachedActivityAssignments.constEnd())
         return cacheIt->snappingLayout;
-    }
     return QString();
 }
 
@@ -346,32 +498,63 @@ QString AssignmentManager::getSnappingLayoutForScreenActivity(const QString& scr
 void AssignmentManager::assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId,
                                                            const QString& layoutId)
 {
-    assignLayoutToScreenActivity(screenName, activityId, layoutId);
+    if (screenName.isEmpty() || activityId.isEmpty()) {
+        qCWarning(lcKcm) << "Cannot assign tiling layout - empty screen name or activity ID";
+        return;
+    }
+    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
+
+    m_clearedActivityAssignments.remove(key);
+
+    // Build full entry — update tiling, preserve snapping
+    AssignmentEntry entry = resolveActivityEntry(key);
+    entry.mode = AssignmentEntry::Autotile;
+    entry.tilingAlgorithm = LayoutId::extractAlgorithmId(layoutId);
+    m_pendingActivityEntries[key] = entry;
+
     Q_EMIT tilingActivityAssignmentsChanged();
+    Q_EMIT activityAssignmentsChanged();
+    Q_EMIT screenAssignmentsChanged();
+    Q_EMIT needsSave();
 }
 
 void AssignmentManager::clearTilingScreenActivityAssignment(const QString& screenName, const QString& activityId)
 {
-    clearScreenActivityAssignment(screenName, activityId);
+    if (screenName.isEmpty() || activityId.isEmpty())
+        return;
+    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
+
+    AssignmentEntry entry = resolveActivityEntry(key);
+    entry.tilingAlgorithm.clear();
+
+    if (!entry.snappingLayout.isEmpty()) {
+        m_pendingActivityEntries[key] = entry;
+        m_clearedActivityAssignments.remove(key);
+    } else {
+        m_pendingActivityEntries.remove(key);
+        m_clearedActivityAssignments.insert(key);
+    }
+
     Q_EMIT tilingActivityAssignmentsChanged();
+    Q_EMIT activityAssignmentsChanged();
+    Q_EMIT screenAssignmentsChanged();
+    Q_EMIT needsSave();
 }
 
 QString AssignmentManager::getTilingLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
 {
     QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
-    // Check pending first
-    if (m_pendingActivityAssignments.contains(key)) {
-        const QString id = m_pendingActivityAssignments.value(key);
-        if (LayoutId::isAutotile(id))
-            return id;
+    auto pendIt = m_pendingActivityEntries.constFind(key);
+    if (pendIt != m_pendingActivityEntries.constEnd()) {
+        if (!pendIt->tilingAlgorithm.isEmpty())
+            return LayoutId::makeAutotileId(pendIt->tilingAlgorithm);
+        return QString();
     }
     if (m_clearedActivityAssignments.contains(key))
         return QString();
-    // Check cached KConfig entry
     auto cacheIt = m_cachedActivityAssignments.constFind(key);
-    if (cacheIt != m_cachedActivityAssignments.constEnd() && !cacheIt->tilingAlgorithm.isEmpty()) {
+    if (cacheIt != m_cachedActivityAssignments.constEnd() && !cacheIt->tilingAlgorithm.isEmpty())
         return LayoutId::makeAutotileId(cacheIt->tilingAlgorithm);
-    }
     return QString();
 }
 
@@ -379,15 +562,14 @@ bool AssignmentManager::hasExplicitTilingAssignmentForScreenActivity(const QStri
                                                                      const QString& activityId) const
 {
     QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
-    if (m_pendingActivityAssignments.contains(key))
-        return LayoutId::isAutotile(m_pendingActivityAssignments.value(key));
+    auto pendIt = m_pendingActivityEntries.constFind(key);
+    if (pendIt != m_pendingActivityEntries.constEnd())
+        return !pendIt->tilingAlgorithm.isEmpty();
     if (m_clearedActivityAssignments.contains(key))
         return false;
-    // Check cached KConfig entry for explicit tiling algorithm
     auto cacheIt = m_cachedActivityAssignments.constFind(key);
-    if (cacheIt != m_cachedActivityAssignments.constEnd()) {
+    if (cacheIt != m_cachedActivityAssignments.constEnd())
         return !cacheIt->tilingAlgorithm.isEmpty();
-    }
     return false;
 }
 
@@ -568,10 +750,13 @@ void AssignmentManager::onScreenLayoutChanged(const QString& screenName, const Q
         if (layoutId.isEmpty()) {
             m_screenAssignments.remove(connectorName);
             m_tilingScreenAssignments.remove(connectorName);
+            m_screenModes.remove(connectorName);
         } else if (isAutotile) {
             m_tilingScreenAssignments[connectorName] = layoutId;
+            m_screenModes[connectorName] = AssignmentEntry::Autotile;
         } else {
             m_screenAssignments[connectorName] = layoutId;
+            m_screenModes[connectorName] = AssignmentEntry::Snapping;
         }
     }
 

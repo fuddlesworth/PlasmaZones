@@ -81,6 +81,15 @@ public:
                                   Layout* layout) override;
     Q_INVOKABLE void assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
                                       const QString& layoutId) override;
+
+    /**
+     * @brief Set a full AssignmentEntry directly (from KCM via D-Bus)
+     *
+     * Stores the entry in m_assignments regardless of isValid() — mode-only
+     * entries are valid when explicitly set by the KCM.
+     */
+    void setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
+                                  const AssignmentEntry& entry);
     Q_INVOKABLE Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                         const QString& activity = QString()) const override;
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,

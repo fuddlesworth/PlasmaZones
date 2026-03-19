@@ -276,10 +276,11 @@ void LayoutManager::loadAssignments()
         entry.snappingLayout = grp.readEntry(QStringLiteral("SnappingLayout"), QString());
         entry.tilingAlgorithm = grp.readEntry(QStringLiteral("TilingAlgorithm"), QString());
 
-        if (entry.isValid()) {
-            LayoutAssignmentKey key{screenId, virtualDesktop, activity};
-            m_assignments[key] = entry;
-        }
+        // Accept all entries from KConfig — the group's existence is the explicit flag.
+        // Mode-only entries (empty snapping + empty tiling) are valid when explicitly
+        // set by the KCM to preserve mode without an explicit layout.
+        LayoutAssignmentKey key{screenId, virtualDesktop, activity};
+        m_assignments[key] = entry;
     }
 
     // ── Quick layout shortcuts from [QuickLayouts] group ───────────────────

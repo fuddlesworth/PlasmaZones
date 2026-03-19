@@ -89,6 +89,14 @@ public Q_SLOTS:
     QString getTilingAlgorithmForScreenDesktop(const QString& screenName, int virtualDesktop);
     void setAllDesktopAssignments(const QVariantMap& assignments); // Batch set - key: "screen:desktop", value: layoutId
 
+    // Individual full-entry assignment (KCM sends complete AssignmentEntry per context)
+    void setAssignmentEntry(const QString& screenName, int virtualDesktop, const QString& activity, int mode,
+                            const QString& snappingLayout, const QString& tilingAlgorithm);
+
+    // Suppress screenLayoutChanged D-Bus signals during KCM save batch.
+    // The KCM sets this before pushing assignments and clears after.
+    void setSaveBatchMode(bool enabled);
+
     // Virtual desktop information
     int getVirtualDesktopCount();
     QStringList getVirtualDesktopNames();
@@ -276,6 +284,10 @@ private:
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     ActivityManager* m_activityManager = nullptr;
     ISettings* m_settings = nullptr;
+
+    // Suppress screenLayoutChanged D-Bus signal during setAssignmentEntry —
+    // the KCM initiated the change and doesn't need the echo back.
+    bool m_suppressScreenLayoutSignal = false;
 
     // JSON caching for performance
     QString m_cachedActiveLayoutJson;

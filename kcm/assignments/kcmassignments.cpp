@@ -152,20 +152,38 @@ void KCMAssignments::save()
         qWarning() << "Failed operations during save:" << failedOperations;
     }
 
+    // notifyReload() is synchronous — the daemon reloads settings before it
+    // returns. However, the daemon's settingsChanged D-Bus signal is queued
+    // and delivered on the next event loop pass. We must keep m_saving true
+    // until that signal has been received and discarded by onExternalSettingsChanged().
     KCMDBus::notifyReload();
 
     m_layoutManager->setSaveInProgress(false);
     m_layoutManager->loadSync();
 
+    // Reload assignments from KConfig (written by daemon via saveAssignments()).
+    // This ensures the KCM's cached state matches the daemon's authoritative
+    // state — clearing stale entries, resolving any dual-writer conflicts,
+    // and picking up daemon-side normalizations.
+    m_assignmentManager->load();
+    emitAllChanged();
+
     KQuickConfigModule::save();
     setNeedsSave(false);
-    QTimer::singleShot(0, this, [this]() {
-        m_saving = false;
-    });
+
+    // Ignore the next settingsChanged signal from the daemon — it's a response
+    // to our own notifyReload(). We already reloaded above, so a second reload
+    // would re-read stale KConfig state and undo our changes.
+    m_ignoreNextSettingsChanged = true;
+    m_saving = false;
 }
 
 void KCMAssignments::onExternalSettingsChanged()
 {
+    if (m_ignoreNextSettingsChanged) {
+        m_ignoreNextSettingsChanged = false;
+        return;
+    }
     if (!m_saving) {
         load();
     }

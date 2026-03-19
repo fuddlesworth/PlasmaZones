@@ -268,6 +268,12 @@ bool Daemon::init()
             m_windowTrackingAdaptor->resnapCurrentAssignments();
             restoreAutotileOnlyGeometries();
         }
+
+        // Re-resolve the active layout from assignments for the current context
+        // (screen, desktop, activity). Without this, batch assignment changes from
+        // the KCM (setAllScreenAssignments, setAllDesktopAssignments, etc.) update
+        // the stored assignments but leave the on-screen layout stale.
+        syncModeFromAssignments();
     });
 
     // Initialize domain-specific D-Bus adaptors

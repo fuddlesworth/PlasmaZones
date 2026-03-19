@@ -101,13 +101,17 @@ void KCMLayouts::save()
 
     KQuickConfigModule::save();
     setNeedsSave(false);
-    QTimer::singleShot(0, this, [this]() {
-        m_saving = false;
-    });
+
+    m_ignoreNextSettingsChanged = true;
+    m_saving = false;
 }
 
 void KCMLayouts::onExternalSettingsChanged()
 {
+    if (m_ignoreNextSettingsChanged) {
+        m_ignoreNextSettingsChanged = false;
+        return;
+    }
     if (!m_saving) {
         load();
     }

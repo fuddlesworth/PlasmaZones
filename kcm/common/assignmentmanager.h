@@ -138,9 +138,14 @@ private:
     // Screens and assignments
     QVariantMap m_screenAssignments;
     QVariantMap m_tilingScreenAssignments;
+    QSet<QString> m_clearedScreenAssignments; // tracks snapping screens cleared to "Use default"
+    QSet<QString> m_clearedTilingScreenAssignments; // tracks tiling screens cleared to "Use default"
     QMap<int, QString> m_quickLayoutSlots;
     QMap<int, QString> m_tilingQuickLayoutSlots;
     int m_assignmentViewMode = 0;
+
+    // Active mode per base screen assignment (determines which ID to send in save merge)
+    QMap<QString, AssignmentEntry::Mode> m_screenModes;
 
     // Cached per-desktop assignments loaded from KConfig [Assignment:*:Desktop:*]
     // Key: "screenId|desktop" (same as D-Bus composite key format)
@@ -150,13 +155,18 @@ private:
     // Key: "screenId|activityId"
     QMap<QString, AssignmentEntry> m_cachedActivityAssignments;
 
-    // Pending per-desktop assignments (shared by snapping and tiling)
-    QMap<QString, QString> m_pendingDesktopAssignments;
     QSet<QString> m_clearedDesktopAssignments;
-
-    // Pending per-activity assignments (shared by snapping and tiling)
-    QMap<QString, QString> m_pendingActivityAssignments;
     QSet<QString> m_clearedActivityAssignments;
+
+    // Resolve the current AssignmentEntry for a desktop/activity key.
+    // Checks pending entries first, falls back to cached.
+    AssignmentEntry resolveDesktopEntry(const QString& key) const;
+    AssignmentEntry resolveActivityEntry(const QString& key) const;
+
+    // Pending full-entry changes (mode + snappingLayout + tilingAlgorithm per context)
+    QMap<QString, AssignmentEntry> m_pendingScreenEntries;
+    QMap<QString, AssignmentEntry> m_pendingDesktopEntries;
+    QMap<QString, AssignmentEntry> m_pendingActivityEntries;
 
     // Pending app-to-zone rules
     QHash<QString, QVariantList> m_pendingAppRules;

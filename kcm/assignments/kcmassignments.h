@@ -185,6 +185,7 @@ private:
 
     Settings* m_settings = nullptr;
     bool m_saving = false;
+    bool m_ignoreNextSettingsChanged = false;
     std::unique_ptr<AssignmentManager> m_assignmentManager;
     std::unique_ptr<LayoutManager> m_layoutManager;
     std::unique_ptr<ScreenHelper> m_screenHelper;

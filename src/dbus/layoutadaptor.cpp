@@ -71,6 +71,12 @@ void LayoutAdaptor::onLayoutsChanged()
 
 void LayoutAdaptor::onLayoutAssigned(const QString& screen, int virtualDesktop, Layout* layout)
 {
+    // Don't echo back to the KCM during setAssignmentEntry — the KCM initiated the
+    // change and will reload from KConfig. The daemon's internal layoutAssigned signal
+    // still fires for geometry recalc, but the D-Bus screenLayoutChanged is suppressed.
+    if (m_suppressScreenLayoutSignal)
+        return;
+
     if (layout) {
         Q_EMIT screenLayoutChanged(screen, layout->id().toString(), virtualDesktop);
     } else {

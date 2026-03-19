@@ -24,13 +24,18 @@ inline QDBusMessage callDaemon(const QString& interface, const QString& method, 
     return QDBusConnection::sessionBus().call(msg, QDBus::Block, TimeoutMs);
 }
 
-/// Send an async reloadSettings notification to the daemon
+/// Send a synchronous reloadSettings call to the daemon.
+/// Must be synchronous so the daemon processes the reload (and emits
+/// its settingsChanged D-Bus signal) before the KCM clears its
+/// m_saving guard.  An async call here races: the settingsChanged
+/// signal can arrive after m_saving is false, triggering a spurious
+/// load() that reverts just-saved assignments.
 inline void notifyReload()
 {
     QDBusMessage msg =
         QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                        QString(DBus::Interface::Settings), QStringLiteral("reloadSettings"));
-    QDBusConnection::sessionBus().asyncCall(msg);
+    QDBusConnection::sessionBus().call(msg, QDBus::Block, TimeoutMs);
 }
 
 } // namespace PlasmaZones::KCMDBus

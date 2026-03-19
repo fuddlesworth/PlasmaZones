@@ -497,18 +497,24 @@ private Q_SLOTS:
         QVERIFY(entry.tilingAlgorithm.isEmpty());
     }
 
-    void testAssignmentEntry_fromLayoutId_preservesExisting()
+    void testAssignmentEntry_fromLayoutId_setsModeSetsField_preservesOther()
     {
         AssignmentEntry existing;
         existing.mode = AssignmentEntry::Autotile;
         existing.tilingAlgorithm = QStringLiteral("dwindle");
         existing.snappingLayout = QStringLiteral("{some-uuid}");
 
-        // Flip to snapping — should preserve tilingAlgorithm
+        // Update snapping field — mode switches to Snapping, tiling preserved
         auto entry = AssignmentEntry::fromLayoutId(QStringLiteral("{new-uuid}"), existing);
         QCOMPARE(entry.mode, AssignmentEntry::Snapping);
         QCOMPARE(entry.snappingLayout, QStringLiteral("{new-uuid}"));
         QCOMPARE(entry.tilingAlgorithm, QStringLiteral("dwindle")); // preserved
+
+        // Update tiling field — mode switches to Autotile, snapping preserved
+        auto entry2 = AssignmentEntry::fromLayoutId(QStringLiteral("autotile:wide"), existing);
+        QCOMPARE(entry2.mode, AssignmentEntry::Autotile);
+        QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("wide"));
+        QCOMPARE(entry2.snappingLayout, QStringLiteral("{some-uuid}")); // preserved
     }
 };
 

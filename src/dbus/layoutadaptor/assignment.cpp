@@ -9,6 +9,7 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../core/constants.h"
+#include "../../autotile/AlgorithmRegistry.h"
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -514,6 +515,49 @@ void LayoutAdaptor::clearAssignmentForScreenDesktopActivity(const QString& scree
     m_layoutManager->saveAssignments();
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenName << "desktop" << virtualDesktop << "activity"
                          << activityId;
+}
+
+void LayoutAdaptor::setAssignmentEntry(const QString& screenName, int virtualDesktop, const QString& activity, int mode,
+                                       const QString& snappingLayout, const QString& tilingAlgorithm)
+{
+    QString screenId = Utils::screenIdForName(screenName);
+    if (screenId.isEmpty()) {
+        qCWarning(lcDbusLayout) << "setAssignmentEntry: empty screen ID for" << screenName;
+        return;
+    }
+
+    // Validate snapping layout UUID if non-empty
+    if (!snappingLayout.isEmpty()) {
+        QUuid uuid = QUuid::fromString(snappingLayout);
+        if (uuid.isNull()) {
+            qCWarning(lcDbusLayout) << "setAssignmentEntry: invalid snapping layout UUID:" << snappingLayout;
+            return;
+        }
+    }
+
+    // Validate tiling algorithm if non-empty
+    if (!tilingAlgorithm.isEmpty()) {
+        if (!AlgorithmRegistry::instance()->algorithm(tilingAlgorithm)) {
+            qCWarning(lcDbusLayout) << "setAssignmentEntry: unknown tiling algorithm:" << tilingAlgorithm;
+            return;
+        }
+    }
+
+    AssignmentEntry entry;
+    entry.mode = static_cast<AssignmentEntry::Mode>(qBound(0, mode, 1));
+    entry.snappingLayout = snappingLayout;
+    entry.tilingAlgorithm = tilingAlgorithm;
+
+    m_layoutManager->setAssignmentEntryDirect(screenId, virtualDesktop, activity, entry);
+
+    qCInfo(lcDbusLayout) << "setAssignmentEntry: screen=" << screenId << "desktop=" << virtualDesktop
+                         << "activity=" << activity << "mode=" << mode << "snapping=" << snappingLayout
+                         << "tiling=" << tilingAlgorithm;
+}
+
+void LayoutAdaptor::setSaveBatchMode(bool enabled)
+{
+    m_suppressScreenLayoutSignal = enabled;
 }
 
 } // namespace PlasmaZones
