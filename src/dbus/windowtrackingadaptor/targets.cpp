@@ -113,10 +113,13 @@ QString WindowTrackingAdaptor::getMoveTargetForWindow(const QString& windowId, c
     // with the daemon after a snap (e.g. when two monitors share similar coordinates),
     // causing geometry to be computed for the wrong screen → window lands on a third
     // screen → windowScreenChanged fires → unsnap.
+    // Only use the stored screen if it's still connected — when a monitor enters standby
+    // KWin rehomes windows but the daemon's stored assignment still points at the dead
+    // output, which would produce garbage geometry.
     QString effectiveScreenId = screenId;
     if (!currentZoneId.isEmpty()) {
         QString storedScreen = m_service->screenAssignments().value(windowId);
-        if (!storedScreen.isEmpty()) {
+        if (!storedScreen.isEmpty() && Utils::findScreenByIdOrName(storedScreen)) {
             effectiveScreenId = storedScreen;
         }
     }
@@ -326,7 +329,7 @@ QString WindowTrackingAdaptor::getSwapTargetForWindow(const QString& windowId, c
     QString effectiveScreenId = screenId;
     {
         QString storedScreen = m_service->screenAssignments().value(windowId);
-        if (!storedScreen.isEmpty()) {
+        if (!storedScreen.isEmpty() && Utils::findScreenByIdOrName(storedScreen)) {
             effectiveScreenId = storedScreen;
         }
     }
