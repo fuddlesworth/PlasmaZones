@@ -63,19 +63,17 @@ void AssignmentManager::assignLayoutToScreen(const QString& screenName, const QS
         } else {
             m_screenAssignments[screenName] = layoutId;
         }
-        m_screenModes[screenName] = AssignmentEntry::Snapping;
-
-        // Build full entry for save — update snapping field only, preserve tiling
+        // Update snapping field only — mode is NEVER changed by assignment edits.
+        // Mode changes only through global snapping/autotile toggle.
         AssignmentEntry entry;
         auto it = m_pendingScreenEntries.constFind(screenName);
         if (it != m_pendingScreenEntries.constEnd()) {
-            entry = *it; // Start from existing pending entry
+            entry = *it;
         } else {
-            // Preserve tiling from the daemon's cached state
             entry.tilingAlgorithm =
                 LayoutId::extractAlgorithmId(m_tilingScreenAssignments.value(screenName).toString());
+            entry.mode = m_screenModes.value(screenName, AssignmentEntry::Snapping);
         }
-        entry.mode = AssignmentEntry::Snapping;
         entry.snappingLayout = layoutId;
         m_pendingScreenEntries[screenName] = entry;
 
@@ -131,17 +129,15 @@ void AssignmentManager::assignTilingLayoutToScreen(const QString& screenName, co
         } else {
             m_tilingScreenAssignments[screenName] = layoutId;
         }
-        m_screenModes[screenName] = AssignmentEntry::Autotile;
-
-        // Build full entry — update tiling field only, preserve snapping
+        // Update tiling field only — mode is NEVER changed by assignment edits.
         AssignmentEntry entry;
         auto it = m_pendingScreenEntries.constFind(screenName);
         if (it != m_pendingScreenEntries.constEnd()) {
             entry = *it;
         } else {
             entry.snappingLayout = m_screenAssignments.value(screenName).toString();
+            entry.mode = m_screenModes.value(screenName, AssignmentEntry::Snapping);
         }
-        entry.mode = AssignmentEntry::Autotile;
         entry.tilingAlgorithm = LayoutId::extractAlgorithmId(layoutId);
         m_pendingScreenEntries[screenName] = entry;
 
@@ -206,9 +202,8 @@ void AssignmentManager::assignLayoutToScreenDesktop(const QString& screenName, i
         }
     }
 
-    // Build full entry — update snapping, preserve tiling from cache
+    // Update snapping field only — mode preserved from existing entry
     AssignmentEntry entry = resolveDesktopEntry(key);
-    entry.mode = AssignmentEntry::Snapping;
     entry.snappingLayout = layoutId;
     m_pendingDesktopEntries[key] = entry;
 
@@ -314,9 +309,8 @@ void AssignmentManager::assignTilingLayoutToScreenDesktop(const QString& screenN
 
     m_clearedDesktopAssignments.remove(key);
 
-    // Build full entry — update tiling, preserve snapping from cache
+    // Update tiling field only — mode preserved from existing entry
     AssignmentEntry entry = resolveDesktopEntry(key);
-    entry.mode = AssignmentEntry::Autotile;
     entry.tilingAlgorithm = LayoutId::extractAlgorithmId(layoutId);
     m_pendingDesktopEntries[key] = entry;
 
@@ -400,14 +394,12 @@ void AssignmentManager::assignLayoutToScreenActivity(const QString& screenName, 
         m_clearedActivityAssignments.remove(key);
     }
 
-    // Build full entry
+    // Update the matching field only — mode preserved from existing entry
     AssignmentEntry entry = resolveActivityEntry(key);
 
     if (LayoutId::isAutotile(layoutId)) {
-        entry.mode = AssignmentEntry::Autotile;
         entry.tilingAlgorithm = LayoutId::extractAlgorithmId(layoutId);
-    } else {
-        entry.mode = AssignmentEntry::Snapping;
+    } else if (!layoutId.isEmpty()) {
         entry.snappingLayout = layoutId;
     }
     if (!layoutId.isEmpty()) {
@@ -506,9 +498,8 @@ void AssignmentManager::assignTilingLayoutToScreenActivity(const QString& screen
 
     m_clearedActivityAssignments.remove(key);
 
-    // Build full entry — update tiling, preserve snapping
+    // Update tiling field only — mode preserved from existing entry
     AssignmentEntry entry = resolveActivityEntry(key);
-    entry.mode = AssignmentEntry::Autotile;
     entry.tilingAlgorithm = LayoutId::extractAlgorithmId(layoutId);
     m_pendingActivityEntries[key] = entry;
 

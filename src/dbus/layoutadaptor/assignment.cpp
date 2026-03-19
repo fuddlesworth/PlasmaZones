@@ -560,4 +560,9 @@ void LayoutAdaptor::setSaveBatchMode(bool enabled)
     m_suppressScreenLayoutSignal = enabled;
 }
 
+void LayoutAdaptor::applyAssignmentChanges()
+{
+    Q_EMIT assignmentChangesApplied();
+}
+
 } // namespace PlasmaZones

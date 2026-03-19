@@ -92,22 +92,30 @@ Layout* LayoutManager::layoutForScreen(const QString& screenId, int virtualDeskt
         return layoutById(QUuid::fromString(entry.snappingLayout));
     };
 
-    // Try exact match first
+    // Try exact match first — continue cascading if resolveEntry returns nullptr
+    // (mode-only entries have empty snapping, so resolveEntry returns nullptr;
+    // the mode is preserved but the layout cascades to the parent scope)
     LayoutAssignmentKey exactKey{screenId, virtualDesktop, activity};
     if (m_assignments.contains(exactKey)) {
-        return resolveEntry(m_assignments[exactKey]);
+        Layout* layout = resolveEntry(m_assignments[exactKey]);
+        if (layout)
+            return layout;
     }
 
     // Try screen + desktop (any activity)
     LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
     if (m_assignments.contains(desktopKey)) {
-        return resolveEntry(m_assignments[desktopKey]);
+        Layout* layout = resolveEntry(m_assignments[desktopKey]);
+        if (layout)
+            return layout;
     }
 
     // Try screen only (any desktop, any activity) — the "display default"
     LayoutAssignmentKey screenKey{screenId, 0, QString()};
     if (m_assignments.contains(screenKey)) {
-        return resolveEntry(m_assignments[screenKey]);
+        Layout* layout = resolveEntry(m_assignments[screenKey]);
+        if (layout)
+            return layout;
     }
 
     // Fallback: if screenId looks like a connector name (no colons), try resolving

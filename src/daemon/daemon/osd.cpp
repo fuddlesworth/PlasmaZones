@@ -317,10 +317,11 @@ void Daemon::syncModeFromAssignments()
             // assignment. Without this, LayoutManager::activeLayout() returns the
             // previous desktop's layout, causing zone detection, overlay, and
             // onLayoutChanged to operate on the wrong zones.
-            // Use QSignalBlocker to prevent activeLayoutChanged from firing
-            // onLayoutChanged → resnap buffer population. Desktop switch is not
-            // a layout change — the resnap buffer entries would be stale and corrupt
-            // the next real manual layout switch.
+            // Block activeLayoutChanged to prevent resnap buffer corruption.
+            // Desktop switches and KCM saves both route through here — neither
+            // should trigger resnap via the global active layout signal. KCM saves
+            // use populateResnapBufferForAllScreens() + resnapToNewLayout()
+            // (per-screen, independent of global active layout) instead.
             if (!LayoutId::isAutotile(focusedAssignmentId)) {
                 Layout* desktopLayout = m_layoutManager->layoutForScreen(focusedScreenId, desktop, activity);
                 if (desktopLayout && desktopLayout != m_layoutManager->activeLayout()) {

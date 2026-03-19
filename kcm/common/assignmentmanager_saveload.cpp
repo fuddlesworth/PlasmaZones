@@ -200,6 +200,11 @@ void AssignmentManager::save(QStringList& failedOperations)
 
     // batchGuard (RAII) calls setSaveBatchMode(false) when save() exits.
 
+    // Trigger resnap/retile + OSD for all screens. This is a separate D-Bus call
+    // that runs AFTER all assignments are committed, avoiding feedback loops with
+    // the daemon's settingsChanged handler.
+    KCMDBus::callDaemon(layoutInterface, QStringLiteral("applyAssignmentChanges"));
+
     // ── App-to-zone rules ──────────────────────────────────────────────────
     if (!m_pendingAppRules.isEmpty()) {
         for (auto it = m_pendingAppRules.cbegin(); it != m_pendingAppRules.cend(); ++it) {

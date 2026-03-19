@@ -94,8 +94,11 @@ public Q_SLOTS:
                             const QString& snappingLayout, const QString& tilingAlgorithm);
 
     // Suppress screenLayoutChanged D-Bus signals during KCM save batch.
-    // The KCM sets this before pushing assignments and clears after.
     void setSaveBatchMode(bool enabled);
+
+    // Trigger resnap/retile + OSD after KCM assignment changes.
+    // Called ONCE after all setAssignmentEntry/clear calls complete.
+    void applyAssignmentChanges();
 
     // Virtual desktop information
     int getVirtualDesktopCount();
@@ -203,6 +206,11 @@ Q_SIGNALS:
      * @brief Emitted when the list of KDE Activities changes (added/removed)
      */
     void activitiesChanged();
+
+    /**
+     * @brief Emitted when the KCM requests resnap/retile after assignment changes
+     */
+    void assignmentChangesApplied();
 
 private Q_SLOTS:
     // String-based connection slots for LayoutManager signals

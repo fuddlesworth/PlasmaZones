@@ -269,10 +269,9 @@ bool Daemon::init()
             restoreAutotileOnlyGeometries();
         }
 
-        // Re-resolve the active layout from assignments for the current context
-        // (screen, desktop, activity). Without this, batch assignment changes from
-        // the KCM (setAllScreenAssignments, setAllDesktopAssignments, etc.) update
-        // the stored assignments but leave the on-screen layout stale.
+        // Re-resolve the active layout from assignments for the current context.
+        // Resnap/retile/OSD is triggered separately by applyAssignmentChanges()
+        // after the KCM's batch save completes — NOT here in the settings handler.
         syncModeFromAssignments();
     });
 
@@ -350,6 +349,58 @@ bool Daemon::init()
     // connects signals in its constructor (unified pattern for both engines)
     m_snapAdaptor = new SnapAdaptor(m_snapEngine.get(), m_windowTrackingAdaptor, this);
     m_autotileAdaptor = new AutotileAdaptor(m_autotileEngine.get(), this);
+
+    // Handle KCM assignment change resnap/OSD. This runs AFTER the KCM's batch
+    // save completes (all setAssignmentEntry + notifyReload finished), so all
+    // assignments and settings are fully committed. Separated from settingsChanged
+    // handler to avoid feedback loops with autotile/snapping transitions.
+    connect(m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this, [this]() {
+        if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager)
+            return;
+
+        const int desktop = currentDesktop();
+        const QString activity = currentActivity();
+
+        // Collect autotile screens and per-screen OSD data in one pass
+        QSet<QString> autotileScreens;
+        struct ScreenOsd
+        {
+            QString screenId;
+            bool isAutotile;
+            QString algoId;
+        };
+        QVector<ScreenOsd> osdEntries;
+        for (QScreen* screen : m_screenManager->screens()) {
+            const QString screenId = Utils::screenIdentifier(screen);
+            const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+            if (LayoutId::isAutotile(assignmentId)) {
+                autotileScreens.insert(screenId);
+                osdEntries.append({screenId, true, LayoutId::extractAlgorithmId(assignmentId)});
+            } else {
+                osdEntries.append({screenId, false, {}});
+            }
+        }
+
+        // Resnap snapping-mode screens (autotile screens excluded)
+        // Suppress all resnap/retile navigation OSD feedback from this batch.
+        // The counter is decremented per feedback event (one per screen that has
+        // resnapped windows). Set it to the screen count to cover all of them.
+        m_suppressResnapOsd = m_screenManager->screens().size();
+        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens);
+        m_snapEngine->resnapToNewLayout();
+
+        // Show OSD for all screens
+        for (const auto& osd : std::as_const(osdEntries)) {
+            if (osd.isAutotile) {
+                if (!osd.algoId.isEmpty())
+                    showLayoutOsdForAlgorithm(osd.algoId, osd.algoId, osd.screenId);
+            } else {
+                Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
+                if (layout)
+                    showLayoutOsd(layout, osd.screenId);
+            }
+        }
+    });
 
     // Register D-Bus service and object with error handling and retry logic
     auto bus = QDBusConnection::sessionBus();

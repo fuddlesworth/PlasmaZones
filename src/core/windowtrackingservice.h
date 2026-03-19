@@ -485,6 +485,21 @@ public:
     QVector<RotationEntry> calculateResnapFromPreviousLayout();
 
     /**
+     * @brief Populate the resnap buffer for all screens independently.
+     *
+     * For each window, looks up its current zone assignment and determines
+     * the zone position using a global zoneId→position map built from all
+     * loaded layouts. This avoids relying on the global activeLayout/previousLayout
+     * which only tracks one layout at a time.
+     *
+     * Used by the KCM save path where multiple screens can have different
+     * layout assignments changed simultaneously.
+     *
+     * @param excludeScreens Screens to skip (e.g. autotile screens handled separately)
+     */
+    void populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens = {});
+
+    /**
      * @brief Calculate resnap data from current zone assignments
      *
      * Used when restoring windows after autotile toggle-off: the autotile engine
