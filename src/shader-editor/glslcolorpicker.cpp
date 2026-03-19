@@ -49,21 +49,25 @@ QList<GlslColorPicker::ColorMatch> GlslColorPicker::findColors(int line) const
 
     const QString text = m_doc->line(line);
 
-    // vec3(r, g, b) or vec3(v) (grayscale)
+    // Helper: check if all values are in 0.0-1.0 range (color-plausible)
+    auto isColorRange = [](float v) { return v >= 0.0f && v <= 1.0f; };
+
+    // vec3(r, g, b) or vec3(v) (grayscale) — only if all components are 0.0-1.0
     auto it3 = s_vec3Pattern.globalMatch(text);
     while (it3.hasNext()) {
         const auto m = it3.next();
         const float r = m.captured(1).toFloat();
         const float g = m.captured(2).isEmpty() ? r : m.captured(2).toFloat();
         const float b = m.captured(3).isEmpty() ? r : m.captured(3).toFloat();
+        if (!isColorRange(r) || !isColorRange(g) || !isColorRange(b)) continue;
         results.append({
             static_cast<int>(m.capturedEnd()),
-            QColor::fromRgbF(qBound(0.0f, r, 1.0f), qBound(0.0f, g, 1.0f), qBound(0.0f, b, 1.0f)),
+            QColor::fromRgbF(r, g, b),
             static_cast<int>(m.capturedStart()), static_cast<int>(m.capturedEnd())
         });
     }
 
-    // vec4(r, g, b, a)
+    // vec4(r, g, b, a) — only if all components are 0.0-1.0
     auto it4 = s_vec4Pattern.globalMatch(text);
     while (it4.hasNext()) {
         const auto m = it4.next();
@@ -71,10 +75,10 @@ QList<GlslColorPicker::ColorMatch> GlslColorPicker::findColors(int line) const
         const float g = m.captured(2).toFloat();
         const float b = m.captured(3).toFloat();
         const float a = m.captured(4).toFloat();
+        if (!isColorRange(r) || !isColorRange(g) || !isColorRange(b) || !isColorRange(a)) continue;
         results.append({
             static_cast<int>(m.capturedEnd()),
-            QColor::fromRgbF(qBound(0.0f, r, 1.0f), qBound(0.0f, g, 1.0f),
-                             qBound(0.0f, b, 1.0f), qBound(0.0f, a, 1.0f)),
+            QColor::fromRgbF(r, g, b, a),
             static_cast<int>(m.capturedStart()), static_cast<int>(m.capturedEnd())
         });
     }
