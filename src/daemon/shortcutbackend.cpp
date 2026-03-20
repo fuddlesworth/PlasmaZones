@@ -14,19 +14,22 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QGuiApplication>
+
+#ifdef USE_KDE_FRAMEWORKS
 #include <KGlobalAccel>
+#endif
 
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // KGlobalAccel Backend (KDE Plasma)
 //
-// Wraps org.kde.kglobalaccel D-Bus service directly.  One synchronous
-// setShortcut call bootstraps the component signal connection, then
-// remaining grabs are async.  Dispatches globalShortcutPressed signals
-// to the registered QAction::triggered().
+// Uses the KGlobalAccel C++ library for Wayland key grab protocol,
+// component registration, and signal routing.  Only available when
+// built with USE_KDE_FRAMEWORKS=ON.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+#ifdef USE_KDE_FRAMEWORKS
 class KGlobalAccelBackend : public IShortcutBackend
 {
     Q_OBJECT
@@ -40,7 +43,6 @@ public:
     {
         if (!action)
             return;
-        // KGlobalAccel library handles Wayland protocol, component registration, signal routing
         KGlobalAccel::self()->setDefaultShortcut(action, {defaultShortcut});
     }
 
@@ -48,7 +50,6 @@ public:
     {
         if (!action)
             return;
-        // Synchronous — establishes component connection + key grab
         KGlobalAccel::self()->setShortcut(action, {shortcut});
     }
 
@@ -56,7 +57,6 @@ public:
     {
         if (!action)
             return;
-        // Full registration + grab (handles Wayland key grab protocol internally)
         KGlobalAccel::setGlobalShortcut(action, shortcut);
     }
 
@@ -72,6 +72,7 @@ public:
         Q_EMIT shortcutsReady();
     }
 };
+#endif // USE_KDE_FRAMEWORKS
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // XDG Desktop Portal GlobalShortcuts Backend
@@ -314,18 +315,19 @@ private:
 
 std::unique_ptr<IShortcutBackend> createShortcutBackend(QObject* parent)
 {
-    qWarning() << "createShortcutBackend: detecting backend...";
     auto* bus = QDBusConnection::sessionBus().interface();
     if (!bus) {
         qCWarning(lcShortcuts) << "No D-Bus session bus — using trigger fallback";
         return std::make_unique<DBusTriggerBackend>(parent);
     }
 
+#ifdef USE_KDE_FRAMEWORKS
     // Lightweight service name check (no introspection)
     if (bus->isServiceRegistered(QStringLiteral("org.kde.kglobalaccel"))) {
         qCInfo(lcShortcuts) << "Using KGlobalAccel shortcut backend";
         return std::make_unique<KGlobalAccelBackend>(parent);
     }
+#endif
 
     if (bus->isServiceRegistered(QStringLiteral("org.freedesktop.portal.Desktop"))) {
         // Verify the portal actually supports GlobalShortcuts

@@ -193,11 +193,14 @@ target_link_libraries(plasmazones_core
         Qt6::Quick
         Qt6::Gui
         Qt6::DBus
-        KF6::GlobalAccel
 )
 
+# KDE-specific link dependencies (only when building with KDE Frameworks)
+if(USE_KDE_FRAMEWORKS)
+    target_link_libraries(plasmazones_core PUBLIC KF6::GlobalAccel)
+endif()
+
 # Conditionally link PlasmaActivities/KActivities if available
-# Plasma 6 uses Plasma::Activities, KF6 uses KF6::Activities, KF5 uses KActivities
 if(PlasmaActivities_FOUND)
     # Check for Plasma 6 target first
     if(TARGET Plasma::Activities)
