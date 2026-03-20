@@ -227,7 +227,7 @@ private:
     DaemonController m_daemonController;
     ScreenHelper m_screenHelper;
     std::unique_ptr<IConfigBackend> m_editorConfig;
-    QString m_activePage = QStringLiteral("about");
+    QString m_activePage = QStringLiteral("layouts");
     bool m_needsSave = false;
     bool m_saving = false;
 

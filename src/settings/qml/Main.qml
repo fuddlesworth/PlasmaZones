@@ -17,45 +17,53 @@ ApplicationWindow {
     ListModel {
         id: pageModel
 
-        // Order matches KCM X-KDE-Weight values
-        ListElement {
-            name: "about"
-            label: "About"
-        }
-
+        // Order and names match KCM X-KDE-Weight + metadata
         ListElement {
             name: "layouts"
             label: "Layouts"
+            icon: "view-grid"
         }
 
         ListElement {
             name: "editor"
             label: "Editor"
+            icon: "document-edit"
         }
 
         ListElement {
             name: "assignments"
             label: "Assignments"
+            icon: "view-list-details"
         }
 
         ListElement {
             name: "snapping"
             label: "Snapping"
+            icon: "view-split-left-right"
         }
 
         ListElement {
             name: "autotiling"
-            label: "Autotiling"
+            label: "Tiling"
+            icon: "window-duplicate"
         }
 
         ListElement {
             name: "general"
             label: "General"
+            icon: "configure"
         }
 
         ListElement {
             name: "exclusions"
             label: "Exclusions"
+            icon: "dialog-cancel"
+        }
+
+        ListElement {
+            name: "about"
+            label: "About"
+            icon: "help-about"
         }
 
     }
@@ -70,16 +78,42 @@ ApplicationWindow {
             padding: 0
 
             ColumnLayout {
+                // Daemon status is shown in the header toggle above
+
                 anchors.fill: parent
                 spacing: 0
 
-                Kirigami.Heading {
-                    level: 2
-                    text: "PlasmaZones"
-                    leftPadding: Kirigami.Units.largeSpacing
-                    topPadding: Kirigami.Units.largeSpacing
-                    bottomPadding: Kirigami.Units.largeSpacing
+                // Header: icon + title + daemon toggle (matches KCM sidebar)
+                RowLayout {
                     Layout.fillWidth: true
+                    Layout.margins: Kirigami.Units.largeSpacing
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Kirigami.Icon {
+                        source: "plasmazones"
+                        Layout.preferredWidth: Kirigami.Units.iconSizes.medium
+                        Layout.preferredHeight: Kirigami.Units.iconSizes.medium
+                    }
+
+                    Label {
+                        text: "PlasmaZones"
+                        font.bold: true
+                        font.pixelSize: 14
+                        Layout.fillWidth: true
+                    }
+
+                    Switch {
+                        checked: settingsController.daemonRunning
+                        onToggled: {
+                            if (checked)
+                                settingsController.daemonController.startDaemon();
+                            else
+                                settingsController.daemonController.stopDaemon();
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: settingsController.daemonRunning ? i18n("Daemon running — click to stop") : i18n("Daemon stopped — click to start")
+                    }
+
                 }
 
                 Kirigami.Separator {
@@ -103,33 +137,25 @@ ApplicationWindow {
 
                     delegate: ItemDelegate {
                         width: sidebar.width
-                        text: model.label
                         highlighted: ListView.isCurrentItem
                         onClicked: settingsController.activePage = model.name
-                    }
 
-                }
+                        contentItem: RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
 
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
+                            Kirigami.Icon {
+                                source: model.icon
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            }
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.margins: Kirigami.Units.largeSpacing
-                    spacing: Kirigami.Units.smallSpacing
+                            Label {
+                                text: model.label
+                                Layout.fillWidth: true
+                            }
 
-                    Rectangle {
-                        width: 8
-                        height: 8
-                        radius: 4
-                        color: settingsController.daemonRunning ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
-                    }
+                        }
 
-                    Label {
-                        text: settingsController.daemonRunning ? i18n("Daemon running") : i18n("Daemon stopped")
-                        font: Kirigami.Theme.smallFont
-                        opacity: 0.7
                     }
 
                 }
@@ -153,9 +179,6 @@ ApplicationWindow {
                 currentIndex: sidebar.currentIndex
 
                 // Order must match pageModel
-                AboutPage {
-                }
-
                 LayoutsPage {
                 }
 
@@ -175,6 +198,9 @@ ApplicationWindow {
                 }
 
                 ExclusionsPage {
+                }
+
+                AboutPage {
                 }
 
             }
