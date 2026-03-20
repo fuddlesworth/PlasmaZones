@@ -315,6 +315,10 @@ bool Daemon::init()
     // Zone selector methods are called directly from WindowDragAdaptor; QDBusAbstractAdaptor
     // signals are for D-Bus, not Qt connections.
 
+    // Give the window drag adaptor access to the shortcut backend for
+    // registering/unregistering the Escape cancel shortcut during drags
+    m_windowDragAdaptor->setShortcutBackend(m_shortcutManager->shortcutBackend());
+
     // Initialize autotile engine
     m_autotileEngine = std::make_unique<AutotileEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(),
                                                         m_screenManager.get(), this);

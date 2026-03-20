@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../shortcutmanager.h"
+#include "../shortcutbackend.h"
 #include "../config/settings.h"
 #include "../../core/logging.h"
-#include <KGlobalAccel>
 
 namespace PlasmaZones {
 
@@ -24,7 +24,7 @@ namespace PlasmaZones {
             return;                                                                                                    \
         }                                                                                                              \
         if (actionMember) {                                                                                            \
-            KGlobalAccel::setGlobalShortcut(actionMember, QKeySequence(m_settings->settingsGetter()));                 \
+            m_shortcutBackend->setGlobalShortcut(actionMember, QKeySequence(m_settings->settingsGetter()));            \
         }                                                                                                              \
     } while (0)
 
@@ -216,8 +216,8 @@ void ShortcutManager::updateQuickLayoutShortcut(int index)
         return;
     }
     if (index >= 0 && index < m_quickLayoutActions.size()) {
-        KGlobalAccel::setGlobalShortcut(m_quickLayoutActions[index],
-                                        QKeySequence(m_settings->quickLayoutShortcut(index)));
+        m_shortcutBackend->setGlobalShortcut(m_quickLayoutActions[index],
+                                             QKeySequence(m_settings->quickLayoutShortcut(index)));
     }
 }
 
@@ -263,8 +263,8 @@ void ShortcutManager::updateSnapToZoneShortcut(int index)
         return;
     }
     if (index >= 0 && index < m_snapToZoneActions.size()) {
-        KGlobalAccel::setGlobalShortcut(m_snapToZoneActions[index],
-                                        QKeySequence(m_settings->snapToZoneShortcut(index)));
+        m_shortcutBackend->setGlobalShortcut(m_snapToZoneActions[index],
+                                             QKeySequence(m_settings->snapToZoneShortcut(index)));
     }
 }
 

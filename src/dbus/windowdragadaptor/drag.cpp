@@ -5,7 +5,6 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <cmath>
-#include <KGlobalAccel>
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
 #include "../../core/layoutmanager.h"

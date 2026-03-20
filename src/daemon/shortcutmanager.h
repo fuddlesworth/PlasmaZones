@@ -8,6 +8,8 @@
 #include <QKeySequence>
 #include <QPointer>
 #include <QQueue>
+#include <memory>
+#include "shortcutbackend.h"
 
 namespace PlasmaZones {
 
@@ -53,6 +55,14 @@ public:
      * @brief Clear all registered shortcuts
      */
     void unregisterShortcuts();
+
+    /**
+     * @brief Access the shortcut backend (for sharing with other components)
+     */
+    IShortcutBackend* shortcutBackend() const
+    {
+        return m_shortcutBackend.get();
+    }
 
 Q_SIGNALS:
     /**
@@ -287,10 +297,6 @@ private:
     void setupLayoutPickerShortcut();
     void setupToggleLayoutLockShortcut();
     void setupAutotileShortcuts();
-    void queueGlobalShortcut(QAction* action, const QKeySequence& shortcut);
-    void activateKeyGrabs();
-    void onKeyGrabReply();
-
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
 
@@ -351,14 +357,9 @@ private:
     QAction* m_decMasterCountAction = nullptr;
     QAction* m_retileAction = nullptr;
 
-    // Deferred registration state
-    struct DeferredShortcut
-    {
-        QPointer<QAction> action;
-        QKeySequence shortcut;
-    };
-    QQueue<DeferredShortcut> m_deferredQueue;
-    int m_pendingAsyncCalls = 0;
+    // Shortcut backend (KGlobalAccel, Portal, or D-Bus trigger fallback)
+    std::unique_ptr<IShortcutBackend> m_shortcutBackend;
+
     bool m_registrationInProgress = false;
     bool m_settingsDirty = false;
 };

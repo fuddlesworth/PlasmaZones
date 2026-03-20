@@ -120,6 +120,8 @@ set(plasmazones_core_SRCS
     dbus/windowdragadaptor/drag.cpp
     dbus/windowdragadaptor/drop.cpp
     dbus/windowdragadaptor.h
+    daemon/shortcutbackend.h
+    daemon/shortcutbackend.cpp
     dbus/autotileadaptor.cpp
     dbus/autotileadaptor/config.cpp
     dbus/autotileadaptor.h
@@ -200,7 +202,6 @@ target_link_libraries(plasmazones_core
         Qt6::DBus
         KF6::ConfigCore
         KF6::ConfigGui
-        KF6::GlobalAccel
         KF6::WindowSystem
 )
 
@@ -399,7 +400,6 @@ target_link_libraries(plasmazonesd
         Qt6::QuickControls2
         Qt6::Concurrent  # Pre-load shader bake cache on registry refresh
         Qt6::ShaderTools  # QShaderBaker for ZoneShaderNodeRhi (runtime GLSL bake)
-        KF6::GlobalAccel
         KF6::Notifications
 )
 

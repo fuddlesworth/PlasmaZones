@@ -18,6 +18,7 @@ class QScreen;
 
 namespace PlasmaZones {
 
+class IShortcutBackend;
 class IOverlayService;
 class IZoneDetector;
 class LayoutManager; // Concrete type needed for signal connections
@@ -58,6 +59,17 @@ public:
     void setAutotileEngine(AutotileEngine* engine)
     {
         m_autotileEngine = engine;
+    }
+
+    /**
+     * @brief Set the shortcut backend for registering/unregistering shortcuts
+     *
+     * Must be called after construction, before any drag operations.
+     * The backend is owned by ShortcutManager — this is a non-owning pointer.
+     */
+    void setShortcutBackend(IShortcutBackend* backend)
+    {
+        m_shortcutBackend = backend;
     }
 
 public Q_SLOTS:
@@ -169,6 +181,7 @@ private:
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
     AutotileEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
+    IShortcutBackend* m_shortcutBackend = nullptr; // Non-owning: owned by ShortcutManager
 
     // Current drag state
     QString m_draggedWindowId;
@@ -227,7 +240,7 @@ private Q_SLOTS:
 
     /**
      * Called when snap assist is dismissed (selection, timeout, click-away, etc.)
-     * Unregisters the KGlobalAccel Escape shortcut that was kept alive for snap assist
+     * Unregisters the Escape shortcut that was kept alive for snap assist
      */
     void onSnapAssistDismissed();
 };

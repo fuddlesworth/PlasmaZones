@@ -102,7 +102,6 @@ Requires:       kf6-kconfig >= 6.6.0
 Requires:       kf6-kconfigwidgets >= 6.6.0
 Requires:       kf6-kcmutils >= 6.6.0
 Requires:       kf6-kwindowsystem >= 6.6.0
-Requires:       kf6-kglobalaccel >= 6.6.0
 Requires:       kf6-knotifications >= 6.6.0
 Requires:       layer-shell-qt >= 6.6.0
 Requires:       kwin >= 6.6.0

@@ -7,8 +7,8 @@
 #include <QKeySequence>
 #include <QScreen>
 #include <cmath>
-#include <KGlobalAccel>
 #include "pz_i18n.h"
+#include "../daemon/shortcutbackend.h"
 #include "windowtrackingadaptor.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
@@ -210,19 +210,19 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
 
 void WindowDragAdaptor::registerCancelOverlayShortcut()
 {
-    if (m_cancelOverlayAction) {
-        KGlobalAccel::setGlobalShortcut(m_cancelOverlayAction, QKeySequence(Qt::Key_Escape));
+    if (m_cancelOverlayAction && m_shortcutBackend) {
+        m_shortcutBackend->setGlobalShortcut(m_cancelOverlayAction, QKeySequence(Qt::Key_Escape));
     }
 }
 
 void WindowDragAdaptor::unregisterCancelOverlayShortcut()
 {
-    if (m_cancelOverlayAction) {
-        // removeAllShortcuts() fully deregisters the action from the kglobalaccel daemon,
+    if (m_cancelOverlayAction && m_shortcutBackend) {
+        // removeAllShortcuts() fully deregisters the action from the backend,
         // releasing the compositor-level key grab. The previous approach of setting an empty
         // QKeySequence left the action registered with a stale grab on Wayland, causing Escape
         // to remain intercepted system-wide after every window drag (see discussion #155).
-        KGlobalAccel::self()->removeAllShortcuts(m_cancelOverlayAction);
+        m_shortcutBackend->removeAllShortcuts(m_cancelOverlayAction);
     }
 }
 
