@@ -203,7 +203,6 @@ target_link_libraries(plasmazones_core
         KF6::ConfigCore
         KF6::ConfigGui
         KF6::GlobalAccel
-        KF6::WindowSystem
 )
 
 # Conditionally link PlasmaActivities/KActivities if available
@@ -401,7 +400,6 @@ target_link_libraries(plasmazonesd
         Qt6::QuickControls2
         Qt6::Concurrent  # Pre-load shader bake cache on registry refresh
         Qt6::ShaderTools  # QShaderBaker for ZoneShaderNodeRhi (runtime GLSL bake)
-        KF6::Notifications
 )
 
 # Qt6::GuiPrivate (QRhi) for daemon's include of zoneshadernoderhi.h (warmShaderBakeCacheForPaths)
@@ -617,7 +615,6 @@ target_link_libraries(plasmazones-editor
         Qt6::QuickControls2
         Qt6::Widgets
         Qt6::DBus
-        KF6::WindowSystem
 )
 
 # Qt6::GuiPrivate and Qt6::ShaderToolsPrivate for ZoneShaderItem (shader preview)
