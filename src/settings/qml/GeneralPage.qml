@@ -9,7 +9,12 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
+    // Layout constants
+    readonly property int sliderPreferredWidth: 200
+    readonly property int sliderValueLabelWidth: 40
+
     contentHeight: content.implicitHeight
+    clip: true
 
     ColumnLayout {
         id: content
@@ -17,80 +22,600 @@ Flickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
+        // =================================================================
+        // ANIMATIONS CARD
+        // =================================================================
         Kirigami.Card {
+            // ─────────────────────────────────────────────────────
+            // Easing Settings (inlined from EasingSettings.qml)
+            // ─────────────────────────────────────────────────────
+
             Layout.fillWidth: true
 
             header: Kirigami.Heading {
+                level: 3
                 text: i18n("Animations")
-                level: 2
                 padding: Kirigami.Units.smallSpacing
             }
 
             contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+                spacing: Kirigami.Units.largeSpacing
 
+                // Enable toggle
                 CheckBox {
-                    text: i18n("Enable animations")
+                    id: animationsEnabledCheck
+
+                    Layout.fillWidth: true
+                    text: i18n("Smooth window geometry transitions")
                     checked: kcm.animationsEnabled
                     onToggled: kcm.animationsEnabled = checked
+                    ToolTip.visible: hovered
+                    ToolTip.text: i18n("Animate windows when snapping to zones or tiling. Applies to both manual snapping and autotiling.")
                 }
 
+                Kirigami.Separator {
+                    Layout.fillWidth: true
+                }
+
+                // Easing curve lookup table
+                QtObject {
+                    id: easingData
+
+                    readonly property var styles: [{
+                        "label": i18n("Custom"),
+                        "key": "custom"
+                    }, {
+                        "label": i18n("Linear"),
+                        "key": "linear"
+                    }, {
+                        "label": i18n("Gentle (Sine)"),
+                        "key": "sine"
+                    }, {
+                        "label": i18n("Smooth (Quad)"),
+                        "key": "quad"
+                    }, {
+                        "label": i18n("Standard (Cubic)"),
+                        "key": "cubic"
+                    }, {
+                        "label": i18n("Snappy (Quart)"),
+                        "key": "quart"
+                    }, {
+                        "label": i18n("Sharp (Quint)"),
+                        "key": "quint"
+                    }, {
+                        "label": i18n("Aggressive (Expo)"),
+                        "key": "expo"
+                    }, {
+                        "label": i18n("Circular (Circ)"),
+                        "key": "circ"
+                    }, {
+                        "label": i18n("Overshoot (Back)"),
+                        "key": "back"
+                    }, {
+                        "label": i18n("Elastic"),
+                        "key": "elastic"
+                    }, {
+                        "label": i18n("Bounce"),
+                        "key": "bounce"
+                    }]
+                    readonly property var directions: [{
+                        "label": i18n("Ease In"),
+                        "key": "in"
+                    }, {
+                        "label": i18n("Ease Out"),
+                        "key": "out"
+                    }, {
+                        "label": i18n("Ease In-Out"),
+                        "key": "in-out"
+                    }]
+                    readonly property var curves: ({
+                        "linear": {
+                            "in": "0.00,0.00,1.00,1.00",
+                            "out": "0.00,0.00,1.00,1.00",
+                            "in-out": "0.00,0.00,1.00,1.00"
+                        },
+                        "sine": {
+                            "in": "0.12,0.00,0.39,0.00",
+                            "out": "0.61,1.00,0.88,1.00",
+                            "in-out": "0.37,0.00,0.63,1.00"
+                        },
+                        "quad": {
+                            "in": "0.11,0.00,0.50,0.00",
+                            "out": "0.50,1.00,0.89,1.00",
+                            "in-out": "0.45,0.00,0.55,1.00"
+                        },
+                        "cubic": {
+                            "in": "0.32,0.00,0.67,0.00",
+                            "out": "0.33,1.00,0.68,1.00",
+                            "in-out": "0.65,0.00,0.35,1.00"
+                        },
+                        "quart": {
+                            "in": "0.50,0.00,0.75,0.00",
+                            "out": "0.25,1.00,0.50,1.00",
+                            "in-out": "0.76,0.00,0.24,1.00"
+                        },
+                        "quint": {
+                            "in": "0.64,0.00,0.78,0.00",
+                            "out": "0.23,1.00,0.32,1.00",
+                            "in-out": "0.83,0.00,0.17,1.00"
+                        },
+                        "expo": {
+                            "in": "0.70,0.00,0.84,0.00",
+                            "out": "0.16,1.00,0.30,1.00",
+                            "in-out": "0.87,0.00,0.13,1.00"
+                        },
+                        "circ": {
+                            "in": "0.55,0.00,1.00,0.45",
+                            "out": "0.00,0.55,0.45,1.00",
+                            "in-out": "0.85,0.00,0.15,1.00"
+                        },
+                        "back": {
+                            "in": "0.36,0.00,0.66,-0.56",
+                            "out": "0.18,0.89,0.32,1.28",
+                            "in-out": "0.68,-0.55,0.27,1.55"
+                        },
+                        "elastic": {
+                            "in": "elastic-in:1.0,0.30",
+                            "out": "elastic-out:1.0,0.30",
+                            "in-out": "elastic-in-out:1.0,0.30"
+                        },
+                        "bounce": {
+                            "in": "bounce-in:1.0,3",
+                            "out": "bounce-out:1.0,3",
+                            "in-out": "bounce-in-out:1.0,3"
+                        }
+                    })
+
+                    function normalizeCurve(curve) {
+                        if (!curve || curve === "")
+                            return "";
+
+                        var hasLetter = false;
+                        for (var i = 0; i < curve.length; i++) {
+                            var c = curve.charAt(i);
+                            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+                                if (c !== 'e' && c !== 'E') {
+                                    hasLetter = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (hasLetter) {
+                            var colonIdx = curve.indexOf(':');
+                            var name = colonIdx >= 0 ? curve.substring(0, colonIdx).trim() : curve.trim();
+                            var params = colonIdx >= 0 ? curve.substring(colonIdx + 1).trim() : "";
+                            var isElastic = name.startsWith("elastic");
+                            var isBounce = name.startsWith("bounce");
+                            if (params) {
+                                var parts = params.split(",");
+                                var amp = parts.length >= 1 ? parseFloat(parts[0]) : 1;
+                                if (!isFinite(amp))
+                                    amp = 1;
+
+                                if (isElastic) {
+                                    var per = parts.length >= 2 ? parseFloat(parts[1]) : 0.3;
+                                    if (!isFinite(per))
+                                        per = 0.3;
+
+                                    return name + ":" + amp.toFixed(2) + "," + per.toFixed(2);
+                                }
+                                if (isBounce) {
+                                    var bn = parts.length >= 2 ? Math.round(parseFloat(parts[1])) : 3;
+                                    if (!isFinite(bn))
+                                        bn = 3;
+
+                                    return name + ":" + amp.toFixed(2) + "," + bn;
+                                }
+                            }
+                            if (isBounce)
+                                return name + ":1.00,3";
+
+                            if (isElastic)
+                                return name + ":1.00,0.30";
+
+                            return name;
+                        }
+                        var bparts = curve.split(",");
+                        if (bparts.length !== 4)
+                            return "";
+
+                        var x1 = parseFloat(bparts[0]), y1 = parseFloat(bparts[1]);
+                        var x2 = parseFloat(bparts[2]), y2 = parseFloat(bparts[3]);
+                        if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2))
+                            return "";
+
+                        return x1.toFixed(2) + "," + y1.toFixed(2) + "," + x2.toFixed(2) + "," + y2.toFixed(2);
+                    }
+
+                    function findIndices(curve) {
+                        var norm = normalizeCurve(curve);
+                        if (norm === "")
+                            return {
+                            "styleIndex": 0,
+                            "dirIndex": 1
+                        };
+
+                        for (var si = 1; si < styles.length; si++) {
+                            var key = styles[si].key;
+                            if (!curves[key])
+                                continue;
+
+                            for (var di = 0; di < directions.length; di++) {
+                                var dirKey = directions[di].key;
+                                if (normalizeCurve(curves[key][dirKey]) === norm)
+                                    return {
+                                    "styleIndex": si,
+                                    "dirIndex": di
+                                };
+
+                            }
+                        }
+                        return {
+                            "styleIndex": 0,
+                            "dirIndex": 1
+                        };
+                    }
+
+                    function curveForSelection(styleIndex, dirIndex) {
+                        if (styleIndex <= 0 || styleIndex >= styles.length)
+                            return "";
+
+                        var key = styles[styleIndex].key;
+                        var dirKey = directions[dirIndex].key;
+                        return curves[key] ? curves[key][dirKey] : "";
+                    }
+
+                    // Parse the current curve to extract named-curve parameters
+                    function parseCurve(curve) {
+                        var result = {
+                            "curveType": "",
+                            "amplitude": 1,
+                            "period": 0.3,
+                            "bounces": 3
+                        };
+                        if (!curve)
+                            return result;
+
+                        var colonIdx = curve.indexOf(':');
+                        if (colonIdx < 0)
+                            return result;
+
+                        result.curveType = curve.substring(0, colonIdx).trim();
+                        var params = curve.substring(colonIdx + 1).trim().split(",");
+                        if (params.length >= 1) {
+                            var amp = parseFloat(params[0]);
+                            if (isFinite(amp))
+                                result.amplitude = amp;
+
+                        }
+                        if (params.length >= 2) {
+                            var p2 = parseFloat(params[1]);
+                            if (isFinite(p2)) {
+                                if (result.curveType.startsWith("bounce"))
+                                    result.bounces = Math.round(p2);
+                                else
+                                    result.period = p2;
+                            }
+                        }
+                        return result;
+                    }
+
+                }
+
+                // Style selector
                 RowLayout {
                     spacing: Kirigami.Units.smallSpacing
+                    enabled: animationsEnabledCheck.checked
 
                     Label {
-                        text: i18n("Duration (ms):")
+                        text: i18n("Style:")
+                    }
+
+                    ComboBox {
+                        id: easingStyleCombo
+
+                        property bool updating: false
+
+                        Layout.fillWidth: true
+                        model: easingData.styles.map((s) => {
+                            return s.label;
+                        })
+                        currentIndex: easingData.findIndices(kcm.animationEasingCurve).styleIndex
+                        onActivated: (index) => {
+                            if (updating)
+                                return ;
+
+                            if (index <= 0)
+                                return ;
+
+                            var curve = easingData.curveForSelection(index, easingDirectionCombo.currentIndex);
+                            if (curve)
+                                kcm.animationEasingCurve = curve;
+
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("Animation curve style -- controls how acceleration feels")
+
+                        Connections {
+                            function onAnimationEasingCurveChanged() {
+                                easingStyleCombo.updating = true;
+                                var idx = easingData.findIndices(kcm.animationEasingCurve);
+                                easingStyleCombo.currentIndex = idx.styleIndex;
+                                easingStyleCombo.updating = false;
+                            }
+
+                            target: kcm
+                        }
+
+                    }
+
+                }
+
+                // Direction selector
+                RowLayout {
+                    spacing: Kirigami.Units.smallSpacing
+                    enabled: animationsEnabledCheck.checked && easingStyleCombo.currentIndex > 0
+                    opacity: easingStyleCombo.currentIndex > 0 ? 1 : 0.4
+
+                    Label {
+                        text: i18n("Direction:")
+                    }
+
+                    ComboBox {
+                        id: easingDirectionCombo
+
+                        property bool updating: false
+
+                        Layout.fillWidth: true
+                        model: easingData.directions.map((d) => {
+                            return d.label;
+                        })
+                        currentIndex: easingData.findIndices(kcm.animationEasingCurve).dirIndex
+                        onActivated: (index) => {
+                            if (updating)
+                                return ;
+
+                            var styleIdx = easingStyleCombo.currentIndex;
+                            if (styleIdx <= 0)
+                                return ;
+
+                            var curve = easingData.curveForSelection(styleIdx, index);
+                            if (curve)
+                                kcm.animationEasingCurve = curve;
+
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("Ease In accelerates from rest, Ease Out decelerates to rest, In-Out does both")
+
+                        Connections {
+                            function onAnimationEasingCurveChanged() {
+                                easingDirectionCombo.updating = true;
+                                var idx = easingData.findIndices(kcm.animationEasingCurve);
+                                easingDirectionCombo.currentIndex = idx.dirIndex;
+                                easingDirectionCombo.updating = false;
+                            }
+
+                            target: kcm
+                        }
+
+                    }
+
+                }
+
+                // Amplitude slider (for elastic and bounce)
+                RowLayout {
+                    id: amplitudeRow
+
+                    readonly property var parsed: easingData.parseCurve(kcm.animationEasingCurve)
+                    readonly property bool isElastic: parsed.curveType.startsWith("elastic")
+                    readonly property bool isBounce: parsed.curveType.startsWith("bounce")
+
+                    spacing: Kirigami.Units.smallSpacing
+                    visible: isElastic || isBounce
+                    enabled: animationsEnabledCheck.checked
+
+                    Label {
+                        text: i18n("Amplitude:")
                     }
 
                     Slider {
-                        Layout.fillWidth: true
+                        id: elasticAmplitudeSlider
+
+                        Layout.preferredWidth: root.sliderPreferredWidth
+                        from: amplitudeRow.isElastic ? 1 : 0.5
+                        to: 3
+                        stepSize: 0.1
+                        value: amplitudeRow.parsed.amplitude
+                        onMoved: {
+                            var ct = amplitudeRow.parsed.curveType;
+                            var amp = value.toFixed(2);
+                            if (amplitudeRow.isElastic) {
+                                var per = amplitudeRow.parsed.period.toFixed(2);
+                                kcm.animationEasingCurve = ct + ":" + amp + "," + per;
+                            } else {
+                                kcm.animationEasingCurve = ct + ":" + amp + "," + amplitudeRow.parsed.bounces;
+                            }
+                        }
+                    }
+
+                    Label {
+                        text: elasticAmplitudeSlider.value.toFixed(1)
+                        Layout.preferredWidth: root.sliderValueLabelWidth
+                    }
+
+                }
+
+                // Bounce count slider
+                RowLayout {
+                    visible: amplitudeRow.isBounce
+                    enabled: animationsEnabledCheck.checked
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Label {
+                        text: i18n("Bounces:")
+                    }
+
+                    Slider {
+                        id: bouncesSlider
+
+                        Layout.preferredWidth: root.sliderPreferredWidth
+                        from: 1
+                        to: 8
+                        stepSize: 1
+                        value: amplitudeRow.parsed.bounces
+                        onMoved: {
+                            var ct = amplitudeRow.parsed.curveType;
+                            var amp = amplitudeRow.parsed.amplitude.toFixed(2);
+                            kcm.animationEasingCurve = ct + ":" + amp + "," + Math.round(value);
+                        }
+                    }
+
+                    Label {
+                        text: Math.round(bouncesSlider.value).toString()
+                        Layout.preferredWidth: root.sliderValueLabelWidth
+                    }
+
+                }
+
+                // Elastic period slider
+                RowLayout {
+                    visible: amplitudeRow.isElastic
+                    enabled: animationsEnabledCheck.checked
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Label {
+                        text: i18n("Period:")
+                    }
+
+                    Slider {
+                        id: elasticPeriodSlider
+
+                        Layout.preferredWidth: root.sliderPreferredWidth
+                        from: 0.1
+                        to: 1
+                        stepSize: 0.05
+                        value: amplitudeRow.parsed.period
+                        onMoved: {
+                            var ct = amplitudeRow.parsed.curveType;
+                            var amp = amplitudeRow.parsed.amplitude.toFixed(2);
+                            var per = value.toFixed(2);
+                            kcm.animationEasingCurve = ct + ":" + amp + "," + per;
+                        }
+                    }
+
+                    Label {
+                        text: elasticPeriodSlider.value.toFixed(2)
+                        Layout.preferredWidth: root.sliderValueLabelWidth
+                    }
+
+                }
+
+                // Duration slider
+                RowLayout {
+                    enabled: animationsEnabledCheck.checked
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Label {
+                        text: i18n("Duration:")
+                    }
+
+                    Slider {
+                        id: animationDurationSlider
+
+                        Layout.preferredWidth: root.sliderPreferredWidth
                         from: 50
                         to: 500
                         stepSize: 10
                         value: kcm.animationDuration
-                        onMoved: kcm.animationDuration = value
+                        onMoved: kcm.animationDuration = Math.round(value)
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("How long window animations take to complete (milliseconds)")
                     }
 
                     Label {
-                        text: Math.round(kcm.animationDuration)
+                        text: Math.round(animationDurationSlider.value) + " ms"
+                        Layout.preferredWidth: root.sliderValueLabelWidth + 15
                     }
 
                 }
 
+                // Sequence mode
                 RowLayout {
+                    enabled: animationsEnabledCheck.checked
                     spacing: Kirigami.Units.smallSpacing
 
                     Label {
-                        text: i18n("Sequence mode:")
+                        text: i18n("Multiple windows:")
                     }
 
                     ComboBox {
                         Layout.fillWidth: true
-                        model: [i18n("Simultaneous"), i18n("Staggered")]
+                        model: [i18n("Animate all at once"), i18n("Animate one by one (zone order)")]
                         currentIndex: kcm.animationSequenceMode
-                        onActivated: kcm.animationSequenceMode = currentIndex
+                        onActivated: (index) => {
+                            kcm.animationSequenceMode = index;
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("When moving multiple windows, animate them all together or one after another.")
                     }
 
                 }
 
+                // Stagger interval (only when one by one)
                 RowLayout {
+                    visible: kcm.animationSequenceMode === 1
+                    enabled: animationsEnabledCheck.checked
                     spacing: Kirigami.Units.smallSpacing
 
                     Label {
-                        text: i18n("Min distance (px):")
+                        text: i18n("Delay between windows:")
                     }
 
                     Slider {
-                        Layout.fillWidth: true
-                        from: 0
-                        to: 200
-                        stepSize: 1
-                        value: kcm.animationMinDistance
-                        onMoved: kcm.animationMinDistance = value
+                        Layout.preferredWidth: root.sliderPreferredWidth
+                        from: 10
+                        to: 500
+                        stepSize: 10
+                        value: kcm.animationStaggerInterval
+                        onMoved: kcm.animationStaggerInterval = Math.round(value)
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("Milliseconds between each window starting its animation.")
                     }
 
                     Label {
-                        text: kcm.animationMinDistance
+                        text: i18n("%1 ms", kcm.animationStaggerInterval)
+                        Layout.preferredWidth: root.sliderValueLabelWidth + 15
+                    }
+
+                }
+
+                // Minimum distance threshold
+                RowLayout {
+                    enabled: animationsEnabledCheck.checked
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Label {
+                        text: i18n("Minimum distance:")
+                    }
+
+                    SpinBox {
+                        from: 0
+                        to: 200
+                        stepSize: 5
+                        value: kcm.animationMinDistance
+                        onValueModified: kcm.animationMinDistance = value
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("Skip animation when the geometry change is smaller than this many pixels.")
+                    }
+
+                    Label {
+                        text: i18n("px")
+                    }
+
+                    Label {
+                        text: kcm.animationMinDistance === 0 ? i18n("(always animate)") : ""
+                        opacity: 0.6
+                        font.italic: true
                     }
 
                 }
@@ -99,12 +624,15 @@ Flickable {
 
         }
 
+        // =================================================================
+        // ON-SCREEN DISPLAY CARD (inlined from OsdCard.qml)
+        // =================================================================
         Kirigami.Card {
             Layout.fillWidth: true
 
             header: Kirigami.Heading {
-                text: i18n("OSD")
-                level: 2
+                level: 3
+                text: i18n("On-Screen Display")
                 padding: Kirigami.Units.smallSpacing
             }
 
@@ -112,13 +640,15 @@ Flickable {
                 spacing: Kirigami.Units.smallSpacing
 
                 CheckBox {
-                    text: i18n("Show OSD on layout switch")
+                    id: showOsdCheckbox
+
+                    text: i18n("Show OSD when switching layouts")
                     checked: kcm.showOsdOnLayoutSwitch
                     onToggled: kcm.showOsdOnLayoutSwitch = checked
                 }
 
                 CheckBox {
-                    text: i18n("Show navigation OSD")
+                    text: i18n("Show OSD when using keyboard navigation")
                     checked: kcm.showNavigationOsd
                     onToggled: kcm.showNavigationOsd = checked
                 }
@@ -131,10 +661,17 @@ Flickable {
                     }
 
                     ComboBox {
+                        id: osdStyleCombo
+
                         Layout.fillWidth: true
-                        model: [i18n("None"), i18n("Minimal"), i18n("Full")]
-                        currentIndex: kcm.osdStyle
-                        onActivated: kcm.osdStyle = currentIndex
+                        enabled: showOsdCheckbox.checked || kcm.showNavigationOsd
+                        currentIndex: Math.max(0, Math.min(kcm.osdStyle, 2))
+                        model: [i18n("None"), i18n("Text only"), i18n("Visual preview")]
+                        onActivated: (index) => {
+                            kcm.osdStyle = index;
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: currentIndex === 0 ? i18n("No OSD shown.") : (currentIndex === 1 ? i18n("Show layout name as text only") : i18n("Show visual layout preview"))
                     }
 
                 }
@@ -143,14 +680,18 @@ Flickable {
                     spacing: Kirigami.Units.smallSpacing
 
                     Label {
-                        text: i18n("Overlay display mode:")
+                        text: i18n("Overlay style:")
                     }
 
                     ComboBox {
                         Layout.fillWidth: true
-                        model: [i18n("Overlay"), i18n("Full")]
-                        currentIndex: kcm.overlayDisplayMode
-                        onActivated: kcm.overlayDisplayMode = currentIndex
+                        currentIndex: Math.max(0, Math.min(kcm.overlayDisplayMode, 1))
+                        model: [i18n("Full zone highlight"), i18n("Compact preview")]
+                        onActivated: (index) => {
+                            kcm.overlayDisplayMode = index;
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: currentIndex === 0 ? i18n("Highlight each zone as a full-size translucent rectangle while dragging") : i18n("Show a small layout thumbnail inside each zone while dragging")
                     }
 
                 }

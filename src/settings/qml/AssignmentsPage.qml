@@ -10,6 +10,7 @@ Flickable {
     id: root
 
     contentHeight: content.implicitHeight
+    clip: true
 
     ColumnLayout {
         id: content
@@ -17,13 +18,21 @@ Flickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // --- Mode Selection ---
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            type: Kirigami.MessageType.Information
+            text: i18n("Assign layouts to monitors, activities, configure quick-switch shortcuts, and set up app-to-zone rules.")
+            visible: true
+        }
+
+        // ─── Mode Selector (visible only when autotiling is enabled) ─────
         Kirigami.Card {
             Layout.fillWidth: true
+            visible: kcm.autotileEnabled
 
             header: Kirigami.Heading {
-                text: i18n("Mode Selection")
-                level: 2
+                level: 3
+                text: i18n("Configuration Mode")
                 padding: Kirigami.Units.smallSpacing
             }
 
@@ -50,18 +59,19 @@ Flickable {
                     onToggled: kcm.autotileEnabled = checked
                 }
 
-                Label {
+                Kirigami.InlineMessage {
                     Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: i18n("Snapping mode uses predefined zone layouts. Autotiling mode arranges windows automatically using a tiling algorithm. Each screen can use either mode independently.")
-                    opacity: 0.7
+                    Layout.margins: Kirigami.Units.smallSpacing
+                    visible: true
+                    type: kcm.autotileEnabled ? Kirigami.MessageType.Positive : Kirigami.MessageType.Information
+                    text: kcm.autotileEnabled ? i18n("Tiling mode is active. Windows are arranged automatically using a tiling algorithm.") : i18n("Snapping mode is active. Windows are snapped to predefined zone layouts.")
                 }
 
             }
 
         }
 
-        // --- Default Layout ---
+        // ─── Default Layout ──────────────────────────────────────────────
         Kirigami.Card {
             Layout.fillWidth: true
 
@@ -99,7 +109,7 @@ Flickable {
 
         }
 
-        // --- Connected Screens ---
+        // ─── Connected Screens ───────────────────────────────────────────
         Kirigami.Card {
             Layout.fillWidth: true
 
@@ -219,7 +229,7 @@ Flickable {
 
         }
 
-        // --- Advanced Assignments ---
+        // ─── Advanced Assignments ────────────────────────────────────────
         Kirigami.Card {
             Layout.fillWidth: true
 
