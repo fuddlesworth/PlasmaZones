@@ -5,7 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <algorithm>
 
 namespace PlasmaZones {
@@ -24,12 +24,12 @@ WideAlgorithm::WideAlgorithm(QObject* parent)
 
 QString WideAlgorithm::name() const
 {
-    return i18n("Wide");
+    return PzI18n::tr("Wide");
 }
 
 QString WideAlgorithm::description() const
 {
-    return i18n("Master area on top, remaining windows stacked below");
+    return PzI18n::tr("Master area on top, remaining windows stacked below");
 }
 
 QString WideAlgorithm::icon() const noexcept

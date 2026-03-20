@@ -5,7 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <cmath>
 
 namespace PlasmaZones {
@@ -24,12 +24,12 @@ SpiralAlgorithm::SpiralAlgorithm(QObject* parent)
 
 QString SpiralAlgorithm::name() const
 {
-    return i18n("Spiral");
+    return PzI18n::tr("Spiral");
 }
 
 QString SpiralAlgorithm::description() const
 {
-    return i18n("Windows spiral inward from the edges");
+    return PzI18n::tr("Windows spiral inward from the edges");
 }
 
 QString SpiralAlgorithm::icon() const noexcept

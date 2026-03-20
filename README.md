@@ -617,11 +617,11 @@ packaging/
 ├── local-install/      # Portable tarball installer
 ├── nix/                # Nix flake package
 └── rpm/                # RPM spec
-cmake/                  # CMake helpers (extract-pot, format-qml, uninstall)
+cmake/                  # CMake helpers (format-qml, uninstall)
 tests/unit/             # Unit tests (autotile, config, core, helpers, ui)
 dbus/                   # D-Bus XML interface definitions (7 interfaces)
 icons/                  # Application icons (hicolor + hicolor-light)
-po/                     # Translations (KI18n/Gettext)
+translations/           # Qt Linguist translations (.ts/.qm)
 docs/                   # Documentation and media
 ```
 

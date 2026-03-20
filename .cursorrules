@@ -249,23 +249,31 @@ PlasmaZones is a window tiling and zone management tool for KDE Plasma. Features
 
 ### Error Handling
 - Show user-friendly error messages (use `Kirigami.OverlaySheet` or `MessageDialog`)
-- Use `i18n()` for all user-facing strings (never hardcode English)
+- Use `PzI18n::tr()` (C++) or `i18n()` (QML) for all user-facing strings (never hardcode English)
 - Provide actionable error messages (tell user how to fix issue)
 - Log errors to console for debugging (use `qWarning()`, `qCritical()` in C++)
 
 ## Internationalization (i18n)
 
-### QML i18n
-- Use `i18n()` function for all user-visible strings
-- Use `i18nc()` with context when needed: `i18nc("@title", "Layout Editor")`
-- Provide context comments for translators: `// TRANSLATORS: Tooltip for save button`
-- Never concatenate strings for translation (use `i18n("Text %1", variable)`)
+PlasmaZones uses Qt Linguist (`.ts`/`.qm`) for all translations. No KDE KI18n/gettext dependency.
 
 ### C++ i18n
-- Use `i18n()` from `KLocalizedString` (KF6::I18n)
-- Use `i18nc()` with context: `i18nc("@info", "Zone deleted")`
-- Mark strings in `Q_PROPERTY` with `QT_TR_NOOP()` if needed
-- Export translatable strings: `XGETTEXT_OPTIONS` in CMake
+- Use `PzI18n::tr()` for all translatable strings (include `pz_i18n.h`)
+- Use disambiguation (second arg) for translator context: `PzI18n::tr("Delete Zone", "@action")`
+- For substitution: `PzI18n::tr("Apply Layout %1").arg(i + 1)`
+- `PzI18n` uses `Q_DECLARE_TR_FUNCTIONS(plasmazones)` — `lupdate` extracts strings natively
+- **NEVER** use `KLocalizedString`, `i18n()`, or `i18nc()` in C++ code — those are removed
+
+### QML i18n
+- Use `i18n()` function for all user-visible strings (provided by `PzLocalizedContext`)
+- Use `i18nc()` with context when needed: `i18nc("@title", "Layout Editor")`
+- Never concatenate strings for translation: use `i18n("Text %1", variable)`
+
+### Translation workflow
+- Extract strings: `cmake --build build --target update-ts` (runs `lupdate`)
+- Source template: `translations/plasmazones_en.ts`
+- Per-language files: `translations/plasmazones_<lang>.ts`
+- Compiled to `.qm` at build time, loaded at runtime via `PlasmaZones::loadTranslations()`
 
 ## Settings & KConfigXT Conventions
 
@@ -459,8 +467,8 @@ void Settings::setQuickLayoutShortcut(int index, const QString &shortcut) {
 
 #### Registration Pattern (ShortcutManager)
 ```cpp
-// Create action with i18n name:
-auto *action = new QAction(i18n("Action Description"), this);
+// Create action with translated name:
+auto *action = new QAction(PzI18n::tr("Action Description"), this);
 action->setObjectName(QStringLiteral("unique_action_id"));
 
 // Register with shortcut from settings:
@@ -595,7 +603,8 @@ TODO: Consider having EditorController get zonePadding via D-Bus from Settings i
   ```
 
 ### KDE Frameworks
-- Required: `KF6::Config`, `KF6::CoreAddons`, `KF6::DBusAddons`, `KF6::I18n`, `KF6::WindowSystem`
+- Required: `KF6::Config`, `KF6::CoreAddons`, `KF6::DBusAddons`, `KF6::WindowSystem`
+- **NOT used**: `KF6::I18n` — translations use Qt Linguist (`PzI18n::tr()`) instead
 - Optional: `KF6::Activities` (for activity-based layouts)
 - Use `find_package(KF6 REQUIRED COMPONENTS ...)`
 - Use `kcoreaddons_desktop_to_json()` for `.desktop` files

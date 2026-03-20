@@ -23,7 +23,7 @@
 #include <QDBusPendingCall>
 #include <QScreen>
 #include <QTimer>
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 namespace PlasmaZones {
 
@@ -91,7 +91,7 @@ void Daemon::showLayoutOsd(Layout* layout, const QString& screenId)
                 QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
                 QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
 
-            QString displayText = i18n("Layout: %1", layoutName);
+            QString displayText = PzI18n::tr("Layout: %1").arg(layoutName);
             msg << QStringLiteral("plasmazones") << displayText;
 
             QDBusConnection::sessionBus().asyncCall(msg);
@@ -122,7 +122,7 @@ void Daemon::showLockedOsd(const QString& screenId)
         QDBusMessage::createMethodCall(QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
                                        QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
 
-    msg << QStringLiteral("object-locked") << i18n("Layout Locked");
+    msg << QStringLiteral("object-locked") << PzI18n::tr("Layout Locked");
     QDBusConnection::sessionBus().asyncCall(msg);
     qCInfo(lcDaemon) << "Showing locked text OSD for screen=" << screenId;
 }
@@ -169,7 +169,7 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             QDBusMessage::createMethodCall(QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
                                            QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
 
-        QString displayText = i18n("Tiling: %1", displayName);
+        QString displayText = PzI18n::tr("Tiling: %1").arg(displayName);
         msg << QStringLiteral("plasmazones") << displayText;
 
         QDBusConnection::sessionBus().asyncCall(msg);

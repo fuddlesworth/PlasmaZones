@@ -1,8 +1,6 @@
 # PlasmaZones KCM (KDE Control Module)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-add_definitions(-DTRANSLATION_DOMAIN=\"kcm_plasmazones\")
-
 # Shared library for helpers used by sub-KCMs
 add_subdirectory(common)
 

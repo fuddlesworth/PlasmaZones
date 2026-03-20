@@ -3,7 +3,7 @@
 
 #include "ToggleGeometryModeCommand.h"
 
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 #include "../../EditorController.h"
 
@@ -14,7 +14,7 @@ ToggleGeometryModeCommand::ToggleGeometryModeCommand(QPointer<EditorController> 
                                                      const QRectF& newRelativeGeo, const QRectF& oldFixedGeo,
                                                      const QRectF& newFixedGeo, const QString& text,
                                                      QUndoCommand* parent)
-    : QUndoCommand(text.isEmpty() ? i18nc("@action", "Toggle Relative/Fixed Size") : text, parent)
+    : QUndoCommand(text.isEmpty() ? PzI18n::tr("Toggle Relative/Fixed Size", "@action") : text, parent)
     , m_editorController(editorController)
     , m_zoneId(zoneId)
     , m_oldMode(oldMode)

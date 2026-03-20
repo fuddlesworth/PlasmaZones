@@ -3,7 +3,7 @@
 
 #include "UpdateVisibilityCommand.h"
 
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 #include "../../EditorController.h"
 
@@ -14,7 +14,7 @@ UpdateVisibilityCommand::UpdateVisibilityCommand(QPointer<EditorController> edit
                                                  const QList<int>& oldDesktops, const QList<int>& newDesktops,
                                                  const QStringList& oldActivities, const QStringList& newActivities,
                                                  const QString& text, QUndoCommand* parent)
-    : QUndoCommand(text.isEmpty() ? i18nc("@action", "Change Zone Visibility") : text, parent)
+    : QUndoCommand(text.isEmpty() ? PzI18n::tr("Change Zone Visibility", "@action") : text, parent)
     , m_editorController(editorController)
     , m_oldScreens(oldScreens)
     , m_newScreens(newScreens)

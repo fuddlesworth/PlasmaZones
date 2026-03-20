@@ -21,9 +21,12 @@ kconfig_add_kcfg_files(plasmazones_settings_SRCS
 
 # Core library sources
 set(plasmazones_core_SRCS
+    pz_qml_i18n.h
     core/constants.h
     core/logging.h
     core/logging.cpp
+    core/translationloader.h
+    core/translationloader.cpp
     core/enums.h
     core/interfaces.h
     core/interfaces.cpp
@@ -174,6 +177,8 @@ set(plasmazones_core_SRCS
 # Create core library
 add_library(plasmazones_core SHARED ${plasmazones_core_SRCS})
 
+target_sources(plasmazones_core PRIVATE pz_qml_i18n.cpp)
+
 # Generate export header
 generate_export_header(plasmazones_core
     EXPORT_FILE_NAME plasmazones_export.h
@@ -193,7 +198,6 @@ target_link_libraries(plasmazones_core
         KF6::CoreAddons
         KF6::GlobalAccel
         KF6::WindowSystem
-        KF6::I18n
         KF6::ColorScheme
 )
 
@@ -610,8 +614,6 @@ target_link_libraries(plasmazones-editor
         Qt6::QuickControls2
         Qt6::Widgets
         Qt6::DBus
-        KF6::I18n
-        KF6::I18nQml
         KF6::CoreAddons
         KF6::WindowSystem
 )

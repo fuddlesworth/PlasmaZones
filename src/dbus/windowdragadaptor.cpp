@@ -8,7 +8,7 @@
 #include <QScreen>
 #include <cmath>
 #include <KGlobalAccel>
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include "windowtrackingadaptor.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
@@ -58,7 +58,7 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* de
     });
 
     // Escape shortcut to cancel overlay during drag (registered when drag starts, unregistered when drag ends)
-    m_cancelOverlayAction = new QAction(i18n("Cancel Zone Overlay"), this);
+    m_cancelOverlayAction = new QAction(PzI18n::tr("Cancel Zone Overlay"), this);
     m_cancelOverlayAction->setObjectName(QStringLiteral("cancel_overlay_during_drag"));
     connect(m_cancelOverlayAction, &QAction::triggered, this, &WindowDragAdaptor::cancelSnap);
 

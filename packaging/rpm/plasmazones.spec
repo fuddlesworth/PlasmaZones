@@ -29,10 +29,8 @@ BuildRequires:  extra-cmake-modules >= 6.6.0
 BuildRequires:  gcc-c++
 %if 0%{?suse_version}
 BuildRequires:  ninja
-BuildRequires:  gettext-tools
 %else
 BuildRequires:  ninja-build
-BuildRequires:  gettext
 %endif
 
 # Qt6
@@ -63,7 +61,6 @@ BuildRequires:  cmake(KF6Config) >= 6.6.0
 BuildRequires:  cmake(KF6ConfigWidgets)
 BuildRequires:  cmake(KF6CoreAddons)
 BuildRequires:  cmake(KF6DBusAddons)
-BuildRequires:  cmake(KF6I18n)
 BuildRequires:  cmake(KF6KCMUtils)
 BuildRequires:  cmake(KF6WindowSystem)
 BuildRequires:  cmake(KF6GlobalAccel)
@@ -74,7 +71,6 @@ BuildRequires:  kf6-kconfig-devel >= 6.6.0
 BuildRequires:  kf6-kconfigwidgets-devel >= 6.6.0
 BuildRequires:  kf6-kcoreaddons-devel >= 6.6.0
 BuildRequires:  kf6-kdbusaddons-devel >= 6.6.0
-BuildRequires:  kf6-ki18n-devel >= 6.6.0
 BuildRequires:  kf6-kcmutils-devel >= 6.6.0
 BuildRequires:  kf6-kwindowsystem-devel >= 6.6.0
 BuildRequires:  kf6-kglobalaccel-devel >= 6.6.0
@@ -112,7 +108,6 @@ Requires:       kf6-kconfig >= 6.6.0
 Requires:       kf6-kconfigwidgets >= 6.6.0
 Requires:       kf6-kcoreaddons >= 6.6.0
 Requires:       kf6-kdbusaddons >= 6.6.0
-Requires:       kf6-ki18n >= 6.6.0
 Requires:       kf6-kcmutils >= 6.6.0
 Requires:       kf6-kwindowsystem >= 6.6.0
 Requires:       kf6-kglobalaccel >= 6.6.0
@@ -215,10 +210,8 @@ echo ""
 # Snap Assist: env.d config for KWin screenshot auth (system installs use .desktop; this is fallback)
 %{_libdir}/environment.d/99-plasmazones-screenshot.conf
 
-# Translations
-%{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
-%{_datadir}/locale/*/LC_MESSAGES/kcm_plasmazones.mo
-%{_datadir}/locale/*/LC_MESSAGES/plasmazones-editor.mo
+# Translations (Qt .qm files)
+%{_datadir}/plasmazones/translations/*.qm
 
 %changelog
 # Generated from CHANGELOG.md by packaging/generate-changelog.sh during CI.

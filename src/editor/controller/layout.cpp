@@ -12,7 +12,7 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusInterface>
@@ -141,7 +141,7 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
 void EditorController::createNewLayout()
 {
     m_layoutId = QUuid::createUuid().toString();
-    m_layoutName = i18n("New Layout");
+    m_layoutName = PzI18n::tr("New Layout");
     if (m_zoneManager) {
         m_zoneManager->clearAllZones();
     }
@@ -188,12 +188,12 @@ void EditorController::createNewLayout()
 void EditorController::loadLayout(const QString& layoutId)
 {
     if (layoutId.isEmpty()) {
-        Q_EMIT layoutLoadFailed(i18n("Layout ID cannot be empty"));
+        Q_EMIT layoutLoadFailed(PzI18n::tr("Layout ID cannot be empty"));
         return;
     }
 
     if (!m_layoutService) {
-        Q_EMIT layoutLoadFailed(i18n("Layout service not initialized"));
+        Q_EMIT layoutLoadFailed(PzI18n::tr("Layout service not initialized"));
         return;
     }
 
@@ -205,7 +205,7 @@ void EditorController::loadLayout(const QString& layoutId)
 
     QJsonDocument doc = QJsonDocument::fromJson(jsonLayout.toUtf8());
     if (doc.isNull() || !doc.isObject()) {
-        Q_EMIT layoutLoadFailed(i18n("Invalid layout data format"));
+        Q_EMIT layoutLoadFailed(PzI18n::tr("Invalid layout data format"));
         qCWarning(lcEditor) << "Invalid JSON for layout" << layoutId;
         return;
     }
@@ -451,7 +451,7 @@ void EditorController::loadLayout(const QString& layoutId)
 void EditorController::saveLayout()
 {
     if (!m_layoutService || !m_zoneManager) {
-        Q_EMIT layoutSaveFailed(i18n("Services not initialized"));
+        Q_EMIT layoutSaveFailed(PzI18n::tr("Services not initialized"));
         return;
     }
 

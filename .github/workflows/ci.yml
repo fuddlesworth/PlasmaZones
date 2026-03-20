@@ -29,11 +29,11 @@ jobs:
       - name: Install build dependencies
         run: |
           pacman -S --noconfirm --needed \
-            cmake ninja extra-cmake-modules gettext \
-            qt6-base qt6-declarative qt6-tools \
+            cmake ninja extra-cmake-modules \
+            qt6-base qt6-declarative qt6-tools qt6-shadertools \
             kwin \
             kconfig kconfigwidgets kcoreaddons kdbusaddons \
-            ki18n kcmutils kwindowsystem kglobalaccel \
+            kcmutils kwindowsystem kglobalaccel \
             knotifications kcolorscheme \
             layer-shell-qt plasma-activities
 

@@ -5,7 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <algorithm>
 #include <cmath>
 
@@ -25,12 +25,12 @@ CenteredMasterAlgorithm::CenteredMasterAlgorithm(QObject* parent)
 
 QString CenteredMasterAlgorithm::name() const
 {
-    return i18n("Centered Master");
+    return PzI18n::tr("Centered Master");
 }
 
 QString CenteredMasterAlgorithm::description() const
 {
-    return i18n("Master windows centered with stacks on both sides");
+    return PzI18n::tr("Master windows centered with stacks on both sides");
 }
 
 QString CenteredMasterAlgorithm::icon() const noexcept

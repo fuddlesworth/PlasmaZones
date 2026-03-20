@@ -4,7 +4,7 @@
 #include "plasmazonesmoduledata.h"
 #include "common/daemoncontroller.h"
 
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <QAction>
 
 namespace PlasmaZones {
@@ -12,7 +12,7 @@ namespace PlasmaZones {
 PlasmaZonesModuleData::PlasmaZonesModuleData(QObject* parent)
     : KCModuleData(parent)
     , m_daemonController(new DaemonController(this))
-    , m_toggleAction(new QAction(i18nc("@info:tooltip", "Enable PlasmaZones"), this))
+    , m_toggleAction(new QAction(PzI18n::tr("Enable PlasmaZones", "@info:tooltip"), this))
 {
     m_toggleAction->setCheckable(true);
     connect(m_toggleAction, &QAction::triggered, this, &PlasmaZonesModuleData::toggle);

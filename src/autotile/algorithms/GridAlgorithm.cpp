@@ -4,7 +4,7 @@
 #include "GridAlgorithm.h"
 #include "../AlgorithmRegistry.h"
 #include "core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <cmath>
 
 namespace PlasmaZones {
@@ -21,12 +21,12 @@ GridAlgorithm::GridAlgorithm(QObject* parent)
 
 QString GridAlgorithm::name() const
 {
-    return i18n("Grid");
+    return PzI18n::tr("Grid");
 }
 
 QString GridAlgorithm::description() const
 {
-    return i18n("Equal-sized grid layout");
+    return PzI18n::tr("Equal-sized grid layout");
 }
 
 QString GridAlgorithm::icon() const noexcept

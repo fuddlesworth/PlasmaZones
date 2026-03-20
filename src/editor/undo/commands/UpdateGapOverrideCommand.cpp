@@ -3,7 +3,7 @@
 
 #include "UpdateGapOverrideCommand.h"
 
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 #include "../../EditorController.h"
 
@@ -13,12 +13,12 @@ UpdateGapOverrideCommand::UpdateGapOverrideCommand(QPointer<EditorController> ed
                                                    int oldValue, int newValue, const QString& text,
                                                    QUndoCommand* parent)
     : QUndoCommand(text.isEmpty()
-                       ? (type == GapType::ZonePadding
-                              ? i18nc("@action", "Change Zone Padding")
-                              : (type == GapType::UsePerSideOuterGap
-                                     ? i18nc("@action", "Toggle Per-Side Edge Gap")
-                                     : (type == GapType::OverlayDisplayMode ? i18nc("@action", "Change Overlay Style")
-                                                                            : i18nc("@action", "Change Edge Gap"))))
+                       ? (type == GapType::ZonePadding ? PzI18n::tr("Change Zone Padding", "@action")
+                                                       : (type == GapType::UsePerSideOuterGap
+                                                              ? PzI18n::tr("Toggle Per-Side Edge Gap", "@action")
+                                                              : (type == GapType::OverlayDisplayMode
+                                                                     ? PzI18n::tr("Change Overlay Style", "@action")
+                                                                     : PzI18n::tr("Change Edge Gap", "@action"))))
                        : text,
                    parent)
     , m_editorController(editorController)

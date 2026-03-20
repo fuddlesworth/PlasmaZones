@@ -3,6 +3,7 @@
 
 #include "daemon.h"
 #include "../core/logging.h"
+#include "../core/translationloader.h"
 #include "version.h"
 #include "rendering/zoneshaderitem.h"
 #include <QGuiApplication>
@@ -12,7 +13,7 @@
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtQml/qqml.h>
 #include <KAboutData>
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <KDBusService>
 #include <signal.h>
 
@@ -34,6 +35,7 @@ void signalHandler(int /*signal*/)
 int main(int argc, char* argv[])
 {
     QGuiApplication app(argc, argv);
+    PlasmaZones::loadTranslations(&app);
 
     // Daemon must survive monitor power-off (DP disconnect destroys all overlay
     // windows; without this, Qt sees zero windows and calls quit()).
@@ -43,14 +45,11 @@ int main(int argc, char* argv[])
     // This enables RenderNodeOverlay.qml to use the GPU-accelerated shader item
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
-    // Set translation domain BEFORE any i18n() calls
-    KLocalizedString::setApplicationDomain("plasmazonesd");
-
     // Set up application metadata
-    KAboutData aboutData(QStringLiteral("plasmazonesd"), i18n("PlasmaZones Daemon"), PlasmaZones::VERSION_STRING,
-                         i18n("Window tiling and zone management for KDE Plasma"), KAboutLicense::GPL_V3,
-                         i18n("© 2026 fuddlesworth"));
-    aboutData.addAuthor(i18n("fuddlesworth"));
+    KAboutData aboutData(QStringLiteral("plasmazonesd"), PzI18n::tr("PlasmaZones Daemon"), PlasmaZones::VERSION_STRING,
+                         PzI18n::tr("Window tiling and zone management for KDE Plasma"), KAboutLicense::GPL_V3,
+                         PzI18n::tr("© 2026 fuddlesworth"));
+    aboutData.addAuthor(PzI18n::tr("fuddlesworth"));
     aboutData.setHomepage(QStringLiteral("https://github.com/plasmazones/plasmazones"));
     aboutData.setBugAddress(QByteArrayLiteral("https://github.com/plasmazones/plasmazones/issues"));
     aboutData.setDesktopFileName(QStringLiteral("org.plasmazones.daemon"));
@@ -62,7 +61,7 @@ int main(int argc, char* argv[])
     aboutData.setupCommandLine(&parser);
 
     QCommandLineOption replaceOption(QStringList{QStringLiteral("r"), QStringLiteral("replace")},
-                                     i18n("Replace existing daemon instance"));
+                                     PzI18n::tr("Replace existing daemon instance"));
     parser.addOption(replaceOption);
 
     parser.process(app);

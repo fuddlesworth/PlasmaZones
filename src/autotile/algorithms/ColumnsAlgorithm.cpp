@@ -5,7 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 namespace PlasmaZones {
 
@@ -21,12 +21,12 @@ ColumnsAlgorithm::ColumnsAlgorithm(QObject* parent)
 
 QString ColumnsAlgorithm::name() const
 {
-    return i18n("Columns");
+    return PzI18n::tr("Columns");
 }
 
 QString ColumnsAlgorithm::description() const
 {
-    return i18n("Equal-width vertical columns");
+    return PzI18n::tr("Equal-width vertical columns");
 }
 
 QString ColumnsAlgorithm::icon() const noexcept

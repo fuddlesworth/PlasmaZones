@@ -35,7 +35,6 @@ target_link_libraries(plasmazones_kcm_common
         plasmazones_core
         Qt6::Quick
         Qt6::DBus
-        KF6::I18n
         KF6::ConfigWidgets
         KF6::GlobalAccel
 )
