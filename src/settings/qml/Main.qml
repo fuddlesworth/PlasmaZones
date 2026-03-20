@@ -83,25 +83,13 @@ ApplicationWindow {
                 anchors.fill: parent
                 spacing: 0
 
-                // Header: icon + title
-                RowLayout {
+                // Header: title
+                Label {
+                    text: "PlasmaZones"
+                    font.bold: true
+                    font.pixelSize: 14
                     Layout.fillWidth: true
                     Layout.margins: Kirigami.Units.largeSpacing
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Kirigami.Icon {
-                        source: "plasmazones"
-                        Layout.preferredWidth: Kirigami.Units.iconSizes.medium
-                        Layout.preferredHeight: Kirigami.Units.iconSizes.medium
-                    }
-
-                    Label {
-                        text: "PlasmaZones"
-                        font.bold: true
-                        font.pixelSize: 14
-                        Layout.fillWidth: true
-                    }
-
                 }
 
                 Kirigami.Separator {
