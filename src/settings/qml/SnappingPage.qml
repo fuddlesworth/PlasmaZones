@@ -942,58 +942,61 @@ Flickable {
         }
 
         // =====================================================================
-        // ZONE SELECTOR
+        // ZONE SELECTOR — Enable toggle
+        // =====================================================================
+        CheckBox {
+            id: zoneSelectorEnabledCheck
+
+            Layout.fillWidth: true
+            Layout.margins: Kirigami.Units.largeSpacing
+            text: i18n("Enable zone selector popup")
+            checked: kcm.zoneSelectorEnabled
+            onToggled: kcm.zoneSelectorEnabled = checked
+            font.bold: true
+            enabled: kcm.snappingEnabled
+        }
+
+        // =====================================================================
+        // ZONE SELECTOR — Position & Trigger
         // =====================================================================
         Item {
             Layout.fillWidth: true
-            implicitHeight: zoneSelectorCard.implicitHeight
+            implicitHeight: positionTriggerCard.implicitHeight
 
             Kirigami.Card {
-                id: zoneSelectorCard
+                id: positionTriggerCard
 
                 anchors.fill: parent
-                enabled: kcm.snappingEnabled
+                enabled: zoneSelectorEnabledCheck.checked && kcm.snappingEnabled
 
                 header: Kirigami.Heading {
-                    text: i18n("Zone Selector")
                     level: 3
+                    text: i18n("Position & Trigger")
                     padding: Kirigami.Units.smallSpacing
                 }
 
-                contentItem: Kirigami.FormLayout {
-                    CheckBox {
-                        id: zoneSelectorEnabledCheck
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.largeSpacing
 
-                        Kirigami.FormData.label: i18n("Popup:")
-                        text: i18n("Enable zone selector popup")
-                        checked: kcm.zoneSelectorEnabled
-                        onToggled: kcm.zoneSelectorEnabled = checked
-                    }
-
-                    Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Position & Trigger")
-                    }
-
-                    // 3x3 position picker grid (matching KCM PositionPicker)
+                    // Centered position picker with description
                     Item {
                         id: positionPicker
 
                         readonly property var positionLabels: [i18n("Top-Left"), i18n("Top"), i18n("Top-Right"), i18n("Left"), i18n("Center"), i18n("Right"), i18n("Bottom-Left"), i18n("Bottom"), i18n("Bottom-Right")]
 
-                        Kirigami.FormData.label: i18n("Position:")
-                        enabled: zoneSelectorEnabledCheck.checked
-                        opacity: enabled ? 1 : 0.6
-                        implicitWidth: 160
-                        implicitHeight: 130
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: positionPickerGrid.height + Kirigami.Units.gridUnit * 4
 
-                        ColumnLayout {
-                            anchors.fill: parent
-                            spacing: 4
+                        Item {
+                            id: positionPickerGrid
+
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: parent.top
+                            width: 160
+                            height: 110
 
                             Rectangle {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
+                                anchors.fill: parent
                                 color: Kirigami.Theme.backgroundColor
                                 radius: Kirigami.Units.smallSpacing
                                 border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
@@ -1077,52 +1080,113 @@ Flickable {
 
                             }
 
+                        }
+
+                        Label {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: positionPickerGrid.bottom
+                            anchors.topMargin: Kirigami.Units.smallSpacing
+                            text: positionPicker.positionLabels[kcm.zoneSelectorPosition] || ""
+                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                            opacity: 0.7
+                        }
+
+                        Label {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: positionPickerGrid.bottom
+                            anchors.topMargin: Kirigami.Units.smallSpacing + Kirigami.Units.gridUnit
+                            text: i18n("Choose where the popup appears on screen")
+                            opacity: 0.7
+                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        }
+
+                    }
+
+                    // Trigger distance - centered like position picker
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: triggerColumn.implicitHeight + Kirigami.Units.gridUnit * 2
+
+                        ColumnLayout {
+                            id: triggerColumn
+
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: parent.top
+                            spacing: Kirigami.Units.smallSpacing
+                            width: Math.min(Kirigami.Units.gridUnit * 25, parent.width)
+
                             Label {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: positionPicker.positionLabels[kcm.zoneSelectorPosition] || ""
-                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                                text: i18n("Trigger Distance")
+                                font.bold: true
+                            }
+
+                            Label {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: i18n("How close to the screen edge before the popup appears")
                                 opacity: 0.7
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Slider {
+                                    id: triggerDistanceSlider
+
+                                    Layout.fillWidth: true
+                                    from: 10
+                                    to: root.zoneSelectorTriggerMax
+                                    stepSize: 10
+                                    value: kcm.zoneSelectorTriggerDistance
+                                    Accessible.name: i18n("Trigger distance")
+                                    onMoved: kcm.zoneSelectorTriggerDistance = value
+                                }
+
+                                Label {
+                                    text: Math.round(triggerDistanceSlider.value) + " px"
+                                    Layout.preferredWidth: root.sliderValueLabelWidth + 15
+                                    horizontalAlignment: Text.AlignRight
+                                    font: Kirigami.Theme.fixedWidthFont
+                                }
+
                             }
 
                         }
 
                     }
 
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Trigger distance:")
-                        enabled: zoneSelectorEnabledCheck.checked
-                        opacity: enabled ? 1 : 0.6
-                        spacing: Kirigami.Units.smallSpacing
+                }
 
-                        Slider {
-                            id: triggerDistanceSlider
+            }
 
-                            Layout.preferredWidth: root.sliderPreferredWidth
-                            from: 10
-                            to: root.zoneSelectorTriggerMax
-                            stepSize: 10
-                            value: kcm.zoneSelectorTriggerDistance
-                            onMoved: kcm.zoneSelectorTriggerDistance = value
-                        }
+        }
 
-                        Label {
-                            text: Math.round(triggerDistanceSlider.value) + " px"
-                            Layout.preferredWidth: root.sliderValueLabelWidth + 15
-                        }
+        // =====================================================================
+        // ZONE SELECTOR — Layout Arrangement
+        // =====================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: layoutArrangementCard.implicitHeight
 
-                    }
+            Kirigami.Card {
+                id: layoutArrangementCard
 
-                    Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Layout Arrangement")
-                    }
+                anchors.fill: parent
+                enabled: zoneSelectorEnabledCheck.checked && kcm.snappingEnabled
 
+                header: Kirigami.Heading {
+                    level: 3
+                    text: i18n("Layout Arrangement")
+                    padding: Kirigami.Units.smallSpacing
+                }
+
+                contentItem: Kirigami.FormLayout {
                     ComboBox {
                         id: layoutModeCombo
 
                         Kirigami.FormData.label: i18n("Arrangement:")
-                        enabled: zoneSelectorEnabledCheck.checked
-                        opacity: enabled ? 1 : 0.6
                         textRole: "text"
                         valueRole: "value"
                         model: [{
@@ -1142,8 +1206,6 @@ Flickable {
                     SpinBox {
                         Kirigami.FormData.label: i18n("Grid columns:")
                         visible: kcm.zoneSelectorLayoutMode === 0
-                        enabled: zoneSelectorEnabledCheck.checked
-                        opacity: enabled ? 1 : 0.6
                         from: 1
                         to: root.zoneSelectorGridColumnsMax
                         value: kcm.zoneSelectorGridColumns
@@ -1153,46 +1215,67 @@ Flickable {
                     SpinBox {
                         Kirigami.FormData.label: i18n("Max visible rows:")
                         visible: kcm.zoneSelectorLayoutMode === 0
-                        enabled: zoneSelectorEnabledCheck.checked
-                        opacity: enabled ? 1 : 0.6
                         from: 1
                         to: 10
                         value: kcm.zoneSelectorMaxRows
                         onValueModified: kcm.zoneSelectorMaxRows = value
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("Scrolling enabled when more rows exist")
                     }
 
-                    Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Preview Size")
-                    }
+                }
 
-                    // Live preview
+            }
+
+        }
+
+        // =====================================================================
+        // ZONE SELECTOR — Preview Size
+        // =====================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: previewSizeCard.implicitHeight
+
+            Kirigami.Card {
+                id: previewSizeCard
+
+                readonly property int effectivePreviewWidth: {
+                    if (kcm.zoneSelectorSizeMode === 0)
+                        return Math.round(180 * (root.screenAspectRatio / (16 / 9)));
+
+                    return kcm.zoneSelectorPreviewWidth;
+                }
+                readonly property int effectivePreviewHeight: {
+                    if (kcm.zoneSelectorSizeMode === 0)
+                        return Math.round(effectivePreviewWidth / root.screenAspectRatio);
+
+                    return kcm.zoneSelectorPreviewHeight;
+                }
+
+                anchors.fill: parent
+                enabled: zoneSelectorEnabledCheck.checked && kcm.snappingEnabled
+
+                header: Kirigami.Heading {
+                    level: 3
+                    text: i18n("Preview Size")
+                    padding: Kirigami.Units.smallSpacing
+                }
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.largeSpacing
+
+                    // Live preview - centered
                     Item {
-                        readonly property int effectivePreviewWidth: {
-                            if (kcm.zoneSelectorSizeMode === 0)
-                                return Math.round(180 * (root.screenAspectRatio / (16 / 9)));
-
-                            return kcm.zoneSelectorPreviewWidth;
-                        }
-                        readonly property int effectivePreviewHeight: {
-                            if (kcm.zoneSelectorSizeMode === 0)
-                                return Math.round(effectivePreviewWidth / root.screenAspectRatio);
-
-                            return kcm.zoneSelectorPreviewHeight;
-                        }
-
                         Layout.fillWidth: true
-                        Layout.preferredHeight: effectivePreviewHeight + 50
-                        visible: zoneSelectorEnabledCheck.checked
-                        enabled: zoneSelectorEnabledCheck.checked
+                        Layout.preferredHeight: previewSizeCard.effectivePreviewHeight + 50
 
                         Item {
                             id: previewContainer
 
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.top: parent.top
-                            width: parent.effectivePreviewWidth
-                            height: parent.effectivePreviewHeight
+                            width: previewSizeCard.effectivePreviewWidth
+                            height: previewSizeCard.effectivePreviewHeight
 
                             Rectangle {
                                 anchors.fill: parent
@@ -1222,6 +1305,7 @@ Flickable {
                                                 text: (index + 1).toString()
                                                 font.pixelSize: Math.min(parent.width, parent.height) * 0.3
                                                 font.bold: true
+                                                color: Kirigami.Theme.textColor
                                                 opacity: 0.6
                                                 visible: parent.width >= 20
                                             }
@@ -1238,7 +1322,7 @@ Flickable {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.top: parent.bottom
                                 anchors.topMargin: Kirigami.Units.smallSpacing
-                                text: parent.width + " \u00d7 " + parent.height + " px"
+                                text: previewSizeCard.effectivePreviewWidth + " \u00d7 " + previewSizeCard.effectivePreviewHeight + " px"
                                 font: Kirigami.Theme.fixedWidthFont
                                 opacity: 0.7
                             }
@@ -1247,7 +1331,7 @@ Flickable {
 
                     }
 
-                    // Size preset buttons (matching KCM segmented style)
+                    // Size selection - segmented button style
                     RowLayout {
                         id: sizeButtonRow
 
@@ -1272,9 +1356,7 @@ Flickable {
                             return 4;
                         }
 
-                        Kirigami.FormData.label: i18n("Size:")
-                        enabled: zoneSelectorEnabledCheck.checked
-                        opacity: enabled ? 1 : 0.6
+                        Layout.alignment: Qt.AlignHCenter
                         spacing: 0
 
                         Button {
@@ -1350,13 +1432,17 @@ Flickable {
 
                     }
 
-                    // Custom size slider
+                    // Custom size slider - only visible when Custom is selected
                     RowLayout {
-                        Kirigami.FormData.label: i18n("Width:")
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.maximumWidth: Kirigami.Units.gridUnit * 25
                         visible: sizeButtonRow.selectedSize === 4
-                        enabled: zoneSelectorEnabledCheck.checked
-                        opacity: enabled ? 1 : 0.6
                         spacing: Kirigami.Units.smallSpacing
+
+                        Label {
+                            text: i18n("Size:")
+                        }
 
                         Slider {
                             id: customSizeSlider
@@ -1387,10 +1473,12 @@ Flickable {
                     // Info text for auto mode
                     Label {
                         Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignHCenter
                         visible: kcm.zoneSelectorSizeMode === 0
                         text: i18n("Preview size adjusts automatically based on your screen resolution.")
                         opacity: 0.6
                         font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.WordWrap
                     }
 
