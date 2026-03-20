@@ -53,6 +53,11 @@ class SettingsController : public QObject
                    editorEdgeSnappingEnabledChanged)
     Q_PROPERTY(qreal editorSnapIntervalX READ editorSnapIntervalX WRITE setEditorSnapIntervalX NOTIFY
                    editorSnapIntervalXChanged)
+    Q_PROPERTY(int editorSnapOverrideModifier READ editorSnapOverrideModifier WRITE setEditorSnapOverrideModifier NOTIFY
+                   editorSnapOverrideModifierChanged)
+    Q_PROPERTY(bool fillOnDropEnabled READ fillOnDropEnabled WRITE setFillOnDropEnabled NOTIFY fillOnDropEnabledChanged)
+    Q_PROPERTY(
+        int fillOnDropModifier READ fillOnDropModifier WRITE setFillOnDropModifier NOTIFY fillOnDropModifierChanged)
     Q_PROPERTY(qreal editorSnapIntervalY READ editorSnapIntervalY WRITE setEditorSnapIntervalY NOTIFY
                    editorSnapIntervalYChanged)
 
@@ -96,6 +101,28 @@ public:
         return m_screenHelper.screens();
     }
 
+    // Virtual desktops / activities (D-Bus queries)
+    Q_INVOKABLE int virtualDesktopCount() const
+    {
+        return m_virtualDesktopCount;
+    }
+    Q_INVOKABLE QStringList virtualDesktopNames() const
+    {
+        return m_virtualDesktopNames;
+    }
+    Q_INVOKABLE bool activitiesAvailable() const
+    {
+        return m_activitiesAvailable;
+    }
+    Q_INVOKABLE QVariantList activities() const
+    {
+        return m_activities;
+    }
+    Q_INVOKABLE QString currentActivity() const
+    {
+        return m_currentActivity;
+    }
+
     // Layout CRUD (D-Bus to daemon)
     Q_INVOKABLE void createNewLayout();
     Q_INVOKABLE void deleteLayout(const QString& layoutId);
@@ -107,6 +134,12 @@ public:
     Q_INVOKABLE bool isMonitorDisabled(const QString& screenName) const;
     Q_INVOKABLE void setMonitorDisabled(const QString& screenName, bool disabled);
 
+    // Assignment helpers (D-Bus to daemon)
+    Q_INVOKABLE void assignLayoutToScreen(const QString& screenName, const QString& layoutId);
+    Q_INVOKABLE void clearScreenAssignment(const QString& screenName);
+    Q_INVOKABLE void assignTilingLayoutToScreen(const QString& screenName, const QString& layoutId);
+    Q_INVOKABLE void clearTilingScreenAssignment(const QString& screenName);
+
     // Editor settings accessors
     QString editorDuplicateShortcut() const;
     QString editorSplitHorizontalShortcut() const;
@@ -116,6 +149,9 @@ public:
     bool editorEdgeSnappingEnabled() const;
     qreal editorSnapIntervalX() const;
     qreal editorSnapIntervalY() const;
+    int editorSnapOverrideModifier() const;
+    bool fillOnDropEnabled() const;
+    int fillOnDropModifier() const;
 
     void setEditorDuplicateShortcut(const QString& shortcut);
     void setEditorSplitHorizontalShortcut(const QString& shortcut);
@@ -125,6 +161,9 @@ public:
     void setEditorEdgeSnappingEnabled(bool enabled);
     void setEditorSnapIntervalX(qreal interval);
     void setEditorSnapIntervalY(qreal interval);
+    void setEditorSnapOverrideModifier(int mod);
+    void setFillOnDropEnabled(bool enabled);
+    void setFillOnDropModifier(int mod);
 
     Q_INVOKABLE void resetEditorDefaults();
 
@@ -149,6 +188,9 @@ Q_SIGNALS:
     void editorEdgeSnappingEnabledChanged();
     void editorSnapIntervalXChanged();
     void editorSnapIntervalYChanged();
+    void editorSnapOverrideModifierChanged();
+    void fillOnDropEnabledChanged();
+    void fillOnDropModifierChanged();
 
 private Q_SLOTS:
     void onExternalSettingsChanged();
@@ -159,6 +201,8 @@ private:
     void scheduleLayoutLoad();
     void loadEditorSettings();
     void saveEditorSettings();
+    void refreshVirtualDesktops();
+    void refreshActivities();
 
     Settings m_settings;
     DaemonController m_daemonController;
@@ -172,6 +216,13 @@ private:
     QVariantList m_layouts;
     QTimer m_layoutLoadTimer;
 
+    // Virtual desktop / activity state
+    int m_virtualDesktopCount = 1;
+    QStringList m_virtualDesktopNames;
+    bool m_activitiesAvailable = false;
+    QVariantList m_activities;
+    QString m_currentActivity;
+
     // Editor settings cache
     QString m_editorDuplicateShortcut;
     QString m_editorSplitHorizontalShortcut;
@@ -181,6 +232,9 @@ private:
     bool m_editorEdgeSnappingEnabled = true;
     qreal m_editorSnapIntervalX = 0.05;
     qreal m_editorSnapIntervalY = 0.05;
+    int m_editorSnapOverrideModifier = 1; // Shift
+    bool m_fillOnDropEnabled = true;
+    int m_fillOnDropModifier = 2; // Ctrl
 };
 
 } // namespace PlasmaZones

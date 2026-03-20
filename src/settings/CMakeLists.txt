@@ -39,7 +39,32 @@ qt_add_qml_module(plasmazones-settings
         qml/LayoutsPage.qml
         qml/AssignmentsPage.qml
         qml/AboutPage.qml
+        # Sub-components (copied from KCM)
+        qml/MonitorAssignmentsCard.qml
+        qml/ActivityAssignmentsCard.qml
+        qml/AppRulesCard.qml
+        qml/QuickLayoutSlotsCard.qml
+        qml/WindowPickerDialog.qml
+        qml/AssignmentRow.qml
+        qml/LayoutComboBox.qml
+        qml/ScreenComboBox.qml
+        qml/WideComboBox.qml
     NO_PLUGIN
+)
+
+# Embed org.plasmazones.common QML module (ZonePreview, CategoryBadge)
+qt_add_resources(plasmazones-settings "shared_common_qml"
+    PREFIX "/qt/qml/org/plasmazones/common"
+    BASE "${CMAKE_SOURCE_DIR}/src/shared"
+    FILES
+        ${CMAKE_SOURCE_DIR}/src/shared/ZonePreview.qml
+        ${CMAKE_SOURCE_DIR}/src/shared/CategoryBadge.qml
+)
+qt_add_resources(plasmazones-settings "shared_common_qmldir"
+    PREFIX "/qt/qml/org/plasmazones/common"
+    BASE "${CMAKE_SOURCE_DIR}/kcm/common/org_plasmazones_common"
+    FILES
+        ${CMAKE_SOURCE_DIR}/kcm/common/org_plasmazones_common/qmldir
 )
 
 target_link_libraries(plasmazones-settings

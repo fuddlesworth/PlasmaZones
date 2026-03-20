@@ -121,9 +121,14 @@ Flickable {
                     }
 
                     Switch {
-                        checked: settingsController.daemonController.daemonEnabled
-                        onToggled: settingsController.daemonController.daemonEnabled = checked
-                        Accessible.name: i18n("Enable PlasmaZones daemon autostart")
+                        checked: settingsController.daemonRunning
+                        onToggled: {
+                            if (checked)
+                                settingsController.daemonController.startDaemon();
+                            else
+                                settingsController.daemonController.stopDaemon();
+                        }
+                        Accessible.name: i18n("Enable PlasmaZones daemon")
                     }
 
                 }

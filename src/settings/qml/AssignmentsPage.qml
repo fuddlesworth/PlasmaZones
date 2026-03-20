@@ -9,11 +9,205 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
-    contentHeight: content.implicitHeight
+    // Sub-components expect kcmModule with screens/layouts/settings properties.
+    // We create a bridge that combines Settings (kcm) + SettingsController properties.
+    readonly property var
+    kcmModule: QtObject {
+        // Forward all Settings properties that sub-components use
+        readonly property bool autotileEnabled: kcm.autotileEnabled
+        readonly property string autotileAlgorithm: kcm.autotileAlgorithm
+        readonly property string defaultLayoutId: kcm.defaultLayoutId
+        // Properties from SettingsController
+        readonly property var screens: settingsController.screens
+        readonly property var layouts: settingsController.layouts
+        // Properties from SettingsController (D-Bus queries)
+        readonly property int assignmentViewMode: 0
+        readonly property int virtualDesktopCount: settingsController.virtualDesktopCount()
+        readonly property var virtualDesktopNames: settingsController.virtualDesktopNames()
+        readonly property bool activitiesAvailable: settingsController.activitiesAvailable()
+        readonly property var activities: settingsController.activities()
+        readonly property string currentActivity: settingsController.currentActivity()
+        readonly property var disabledMonitors: kcm.disabledMonitors
+
+        // Signals for sub-component Connections blocks
+        signal screenAssignmentsChanged()
+        signal tilingScreenAssignmentsChanged()
+        signal tilingDesktopAssignmentsChanged()
+        signal lockedScreensChanged()
+        signal quickLayoutSlotsChanged()
+        signal tilingQuickLayoutSlotsChanged()
+        signal appRulesRefreshed()
+
+        // Methods
+        function isMonitorDisabled(name) {
+            return settingsController.isMonitorDisabled(name);
+        }
+
+        function setMonitorDisabled(name, disabled) {
+            settingsController.setMonitorDisabled(name, disabled);
+        }
+
+        function assignLayoutToScreen(screen, layout) {
+            settingsController.assignLayoutToScreen(screen, layout);
+        }
+
+        function clearScreenAssignment(screen) {
+            settingsController.clearScreenAssignment(screen);
+        }
+
+        function assignTilingLayoutToScreen(screen, layout) {
+            settingsController.assignTilingLayoutToScreen(screen, layout);
+        }
+
+        function clearTilingScreenAssignment(screen) {
+            settingsController.clearTilingScreenAssignment(screen);
+        }
+
+        function getLayoutForScreen(screen) {
+            return "";
+        }
+
+        function getTilingLayoutForScreen(screen) {
+            return "";
+        }
+
+        function isScreenLocked(screen, mode) {
+            return false;
+        }
+
+        function toggleScreenLock(screen, mode) {
+        }
+
+        function getQuickLayoutSlot(n) {
+            return "";
+        }
+
+        function setQuickLayoutSlot(n, id) {
+        }
+
+        function getQuickLayoutShortcut(n) {
+            return "";
+        }
+
+        function getTilingQuickLayoutSlot(n) {
+            return "";
+        }
+
+        function setTilingQuickLayoutSlot(n, id) {
+        }
+
+        function getAppRulesForLayout(id) {
+            return [];
+        }
+
+        function setAppRulesForLayout(id, rules) {
+        }
+
+        function addAppRuleToLayout(id, pattern, zone, screen) {
+        }
+
+        function removeAppRuleFromLayout(id, idx) {
+        }
+
+        function getRunningWindows() {
+            return [];
+        }
+
+        function hasExplicitAssignmentForScreenDesktop(screen, desktop) {
+            return false;
+        }
+
+        function hasExplicitTilingAssignmentForScreenDesktop(screen, desktop) {
+            return false;
+        }
+
+        function hasExplicitAssignmentForScreenActivity(screen, activity) {
+            return false;
+        }
+
+        function hasExplicitTilingAssignmentForScreenActivity(screen, activity) {
+            return false;
+        }
+
+        function isContextLocked(screen, desktop, activity, mode) {
+            return false;
+        }
+
+        function toggleContextLock(screen, desktop, activity, mode) {
+        }
+
+        function getLayoutForScreenDesktop(screen, desktop) {
+            return "";
+        }
+
+        function getSnappingLayoutForScreenDesktop(screen, desktop) {
+            return "";
+        }
+
+        function getTilingLayoutForScreenDesktop(screen, desktop) {
+            return "";
+        }
+
+        function clearScreenDesktopAssignment(screen, desktop) {
+        }
+
+        function assignLayoutToScreenDesktop(screen, desktop, layout) {
+        }
+
+        function assignTilingLayoutToScreenDesktop(screen, desktop, layout) {
+        }
+
+        function clearTilingScreenDesktopAssignment(screen, desktop) {
+        }
+
+        function getLayoutForScreenActivity(screen, activity) {
+            return "";
+        }
+
+        function getSnappingLayoutForScreenActivity(screen, activity) {
+            return "";
+        }
+
+        function getTilingLayoutForScreenActivity(screen, activity) {
+            return "";
+        }
+
+        function clearScreenActivityAssignment(screen, activity) {
+        }
+
+        function assignLayoutToScreenActivity(screen, activity, layout) {
+        }
+
+        function assignTilingLayoutToScreenActivity(screen, activity, layout) {
+        }
+
+        function clearTilingScreenActivityAssignment(screen, activity) {
+        }
+
+    }
+    // View mode: 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
+
+    readonly property int viewMode: kcm.autotileEnabled ? root.kcmModule.assignmentViewMode : 0
+
+    contentHeight: mainCol.implicitHeight
     clip: true
 
+    // Inline constants (from monolith Constants object)
+    QtObject {
+        id: constants
+
+        readonly property real labelSecondaryOpacity: 0.7
+        readonly property int quickLayoutSlotCount: 9
+    }
+
+    WindowPickerDialog {
+        id: windowPickerDialog
+
+        kcm: root.kcmModule
+    }
+
     ColumnLayout {
-        id: content
+        id: mainCol
 
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
@@ -25,202 +219,55 @@ Flickable {
             visible: true
         }
 
-        // ─── Mode Selector (visible only when autotiling is enabled) ─────
-        Kirigami.Card {
+        // Mode selector (visible only when autotiling is enabled)
+        Item {
             Layout.fillWidth: true
-            visible: kcm.autotileEnabled
+            implicitHeight: modeSelectorCard.implicitHeight
+            visible: root.kcmModule.autotileEnabled
 
-            header: Kirigami.Heading {
-                level: 3
-                text: i18n("Configuration Mode")
-                padding: Kirigami.Units.smallSpacing
-            }
+            Kirigami.Card {
+                id: modeSelectorCard
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+                anchors.fill: parent
 
-                RowLayout {
+                header: Kirigami.Heading {
+                    level: 3
+                    text: i18n("Configuration Mode")
+                    padding: Kirigami.Units.smallSpacing
+                }
+
+                contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
 
-                    Label {
-                        text: i18n("Active mode:")
-                    }
-
-                    Label {
-                        text: kcm.autotileEnabled ? i18n("Autotiling") : i18n("Manual Snapping")
-                        font.bold: true
-                    }
-
-                }
-
-                CheckBox {
-                    text: i18n("Enable autotiling")
-                    checked: kcm.autotileEnabled
-                    onToggled: kcm.autotileEnabled = checked
-                }
-
-                Kirigami.InlineMessage {
-                    Layout.fillWidth: true
-                    Layout.margins: Kirigami.Units.smallSpacing
-                    visible: true
-                    type: kcm.autotileEnabled ? Kirigami.MessageType.Positive : Kirigami.MessageType.Information
-                    text: kcm.autotileEnabled ? i18n("Tiling mode is active. Windows are arranged automatically using a tiling algorithm.") : i18n("Snapping mode is active. Windows are snapped to predefined zone layouts.")
-                }
-
-            }
-
-        }
-
-        // ─── Default Layout ──────────────────────────────────────────────
-        Kirigami.Card {
-            Layout.fillWidth: true
-
-            header: Kirigami.Heading {
-                text: i18n("Default Layout")
-                level: 2
-                padding: Kirigami.Units.smallSpacing
-            }
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: i18n("Current default:")
-                    }
-
-                    Label {
-                        text: kcm.defaultLayoutId || i18n("(none)")
-                        font.bold: true
-                    }
-
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: i18n("The default layout is used as a fallback when no explicit assignment exists for a screen, desktop, or activity.")
-                    opacity: 0.7
-                }
-
-            }
-
-        }
-
-        // ─── Connected Screens ───────────────────────────────────────────
-        Kirigami.Card {
-            Layout.fillWidth: true
-
-            header: Kirigami.Heading {
-                text: i18n("Connected Screens")
-                level: 2
-                padding: Kirigami.Units.smallSpacing
-            }
-
-            contentItem: ColumnLayout {
-                spacing: 0
-
-                Label {
-                    visible: settingsController.screens.length === 0
-                    Layout.fillWidth: true
-                    Layout.margins: Kirigami.Units.gridUnit
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.WordWrap
-                    text: i18n("No screens detected. Start the PlasmaZones daemon to see connected monitors.")
-                    opacity: 0.7
-                }
-
-                Repeater {
-                    id: screenRepeater
-
-                    model: settingsController.screens
-
-                    delegate: ItemDelegate {
-                        id: screenDelegate
-
-                        required property var modelData
-                        required property int index
-                        readonly property string screenName: modelData.name || ""
-                        readonly property bool isPrimary: modelData.isPrimary === true
-                        readonly property string resolution: modelData.resolution || ""
-                        readonly property string manufacturer: modelData.manufacturer || ""
-                        readonly property string screenModel: modelData.model || ""
-                        readonly property bool isDisabled: settingsController.isMonitorDisabled(screenName)
+                    WideComboBox {
+                        id: modeCombo
 
                         Layout.fillWidth: true
-                        width: parent ? parent.width : 0
-
-                        Kirigami.Separator {
-                            anchors.bottom: parent.bottom
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            visible: screenDelegate.index < screenRepeater.count - 1
+                        model: [{
+                            "text": i18n("Snapping — Zone layouts"),
+                            "value": 0
+                        }, {
+                            "text": i18n("Tiling — Autotile algorithms"),
+                            "value": 1
+                        }]
+                        textRole: "text"
+                        valueRole: "value"
+                        currentIndex: root.kcmModule.assignmentViewMode
+                        onActivated: {
+                            root.kcmModule.assignmentViewMode = model[currentIndex].value;
                         }
+                        ToolTip.visible: hovered
+                        ToolTip.delay: Kirigami.Units.toolTipDelay
+                        ToolTip.text: i18n("Switch between snapping and tiling configurations. Both are saved independently.")
+                    }
 
-                        contentItem: RowLayout {
-                            spacing: Kirigami.Units.smallSpacing
-
-                            Kirigami.Icon {
-                                source: screenDelegate.isPrimary ? "starred-symbolic" : "monitor"
-                                implicitWidth: Kirigami.Units.iconSizes.smallMedium
-                                implicitHeight: Kirigami.Units.iconSizes.smallMedium
-                            }
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
-
-                                Label {
-                                    Layout.fillWidth: true
-                                    text: {
-                                        let parts = [];
-                                        if (screenDelegate.manufacturer)
-                                            parts.push(screenDelegate.manufacturer);
-
-                                        if (screenDelegate.screenModel)
-                                            parts.push(screenDelegate.screenModel);
-
-                                        if (parts.length === 0)
-                                            parts.push(screenDelegate.screenName);
-
-                                        return parts.join(" ");
-                                    }
-                                    font.bold: screenDelegate.isPrimary
-                                    elide: Text.ElideRight
-                                }
-
-                                Label {
-                                    Layout.fillWidth: true
-                                    text: {
-                                        let parts = [screenDelegate.screenName];
-                                        if (screenDelegate.resolution)
-                                            parts.push(screenDelegate.resolution);
-
-                                        if (screenDelegate.isPrimary)
-                                            parts.push(i18n("Primary"));
-
-                                        if (screenDelegate.isDisabled)
-                                            parts.push(i18n("Disabled"));
-
-                                        return parts.join(" \u00b7 ");
-                                    }
-                                    font: Kirigami.Theme.smallFont
-                                    opacity: 0.7
-                                    elide: Text.ElideRight
-                                }
-
-                            }
-
-                            CheckBox {
-                                text: i18n("Enabled")
-                                checked: !screenDelegate.isDisabled
-                                onToggled: settingsController.setMonitorDisabled(screenDelegate.screenName, !checked)
-                            }
-
-                        }
-
+                    Kirigami.InlineMessage {
+                        Layout.fillWidth: true
+                        Layout.margins: Kirigami.Units.smallSpacing
+                        Layout.topMargin: Kirigami.Units.smallSpacing * 2
+                        visible: true
+                        type: root.viewMode === 1 ? Kirigami.MessageType.Positive : Kirigami.MessageType.Information
+                        text: root.viewMode === 1 ? i18n("Tiling mode: assign autotile algorithms to each monitor. These are used when tiling is active.") : i18n("Snapping mode: assign zone layouts to each monitor. These are used when dragging windows.")
                     }
 
                 }
@@ -229,50 +276,77 @@ Flickable {
 
         }
 
-        // ─── Advanced Assignments ────────────────────────────────────────
-        Kirigami.Card {
+        // Monitor Assignments
+        Item {
             Layout.fillWidth: true
+            implicitHeight: monitorCard.implicitHeight
 
-            header: Kirigami.Heading {
-                text: i18n("Advanced Assignments")
-                level: 2
-                padding: Kirigami.Units.smallSpacing
+            MonitorAssignmentsCard {
+                id: monitorCard
+
+                anchors.fill: parent
+                kcm: root.kcmModule
+                constants: constants
+                viewMode: root.viewMode
             }
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+        }
 
-                Kirigami.InlineMessage {
-                    Layout.fillWidth: true
-                    visible: true
-                    type: Kirigami.MessageType.Information
-                    text: i18n("Per-screen layout assignments, per-desktop overrides, per-activity overrides, and app-to-zone rules are managed in KDE System Settings for the full interactive experience.")
-                }
+        // Activity Assignments
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: activityCard.implicitHeight
+            visible: root.kcmModule.activitiesAvailable
 
-                Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: i18n("You can also edit assignments directly in the config file:")
-                    opacity: 0.7
-                }
+            ActivityAssignmentsCard {
+                id: activityCard
 
-                Label {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    wrapMode: Text.WordWrap
-                    font.family: "monospace"
-                    text: "[Assignment:HDMI-A-1]\nMode=0\nSnappingLayout=halves\nTilingAlgorithm=bsp\n\n[Assignment:DP-1:Desktop:2]\nMode=1\nTilingAlgorithm=master-stack"
-                    opacity: 0.7
-                }
+                anchors.fill: parent
+                kcm: root.kcmModule
+                constants: constants
+                viewMode: root.viewMode
+            }
 
-                Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: i18n("Resolution order: Desktop/Activity assignment > Screen assignment > Default layout.")
-                    topPadding: Kirigami.Units.smallSpacing
-                    opacity: 0.7
-                }
+        }
 
+        // Info when Activities not available
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            Layout.margins: Kirigami.Units.smallSpacing
+            visible: !root.kcmModule.activitiesAvailable && root.kcmModule.screens.length > 0
+            type: Kirigami.MessageType.Information
+            text: i18n("KDE Activities support is not available. Activity-based layout assignments require the KDE Activities service to be running.")
+        }
+
+        // App-to-zone rules
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: appRulesCard.implicitHeight
+
+            AppRulesCard {
+                id: appRulesCard
+
+                anchors.fill: parent
+                kcm: root.kcmModule
+                constants: constants
+                windowPickerDialog: windowPickerDialog
+                viewMode: root.viewMode
+            }
+
+        }
+
+        // Quick Layout Shortcuts
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: quickSlotsCard.implicitHeight
+
+            QuickLayoutSlotsCard {
+                id: quickSlotsCard
+
+                anchors.fill: parent
+                kcm: root.kcmModule
+                constants: constants
+                viewMode: root.viewMode
             }
 
         }

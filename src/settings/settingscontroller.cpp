@@ -11,6 +11,7 @@
 #include <QDBusPendingReply>
 #include <QDesktopServices>
 #include <QDir>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
@@ -62,6 +63,8 @@ SettingsController::SettingsController(QObject* parent)
     // Initial loads
     loadEditorSettings();
     scheduleLayoutLoad();
+    refreshVirtualDesktops();
+    refreshActivities();
 }
 
 void SettingsController::setActivePage(const QString& page)
@@ -242,6 +245,39 @@ void SettingsController::openLayoutsFolder()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Assignment helpers (D-Bus to daemon LayoutManager)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void SettingsController::assignLayoutToScreen(const QString& screenName, const QString& layoutId)
+{
+    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("assignLayoutByIdToScreen"),
+                        {layoutId, screenName, 0, QString()});
+    KCMDBus::notifyReload();
+}
+
+void SettingsController::clearScreenAssignment(const QString& screenName)
+{
+    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("clearAssignment"),
+                        {screenName, 0, QString()});
+    KCMDBus::notifyReload();
+}
+
+void SettingsController::assignTilingLayoutToScreen(const QString& screenName, const QString& layoutId)
+{
+    // For tiling, set assignment entry with mode=1 (Autotile) + algorithm
+    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("assignLayoutByIdToScreen"),
+                        {layoutId, screenName, 0, QString()});
+    KCMDBus::notifyReload();
+}
+
+void SettingsController::clearTilingScreenAssignment(const QString& screenName)
+{
+    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("clearAssignment"),
+                        {screenName, 0, QString()});
+    KCMDBus::notifyReload();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Screen helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -253,6 +289,55 @@ bool SettingsController::isMonitorDisabled(const QString& screenName) const
 void SettingsController::setMonitorDisabled(const QString& screenName, bool disabled)
 {
     m_screenHelper.setMonitorDisabled(screenName, disabled);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Virtual desktops / activities (D-Bus queries to daemon)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void SettingsController::refreshVirtualDesktops()
+{
+    QDBusMessage countReply =
+        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getVirtualDesktopCount"));
+    if (countReply.type() == QDBusMessage::ReplyMessage && !countReply.arguments().isEmpty()) {
+        m_virtualDesktopCount = countReply.arguments().first().toInt();
+    }
+
+    QDBusMessage namesReply =
+        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getVirtualDesktopNames"));
+    if (namesReply.type() == QDBusMessage::ReplyMessage && !namesReply.arguments().isEmpty()) {
+        m_virtualDesktopNames = namesReply.arguments().first().toStringList();
+    }
+}
+
+void SettingsController::refreshActivities()
+{
+    QDBusMessage availReply =
+        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("isActivitiesAvailable"));
+    if (availReply.type() == QDBusMessage::ReplyMessage && !availReply.arguments().isEmpty()) {
+        m_activitiesAvailable = availReply.arguments().first().toBool();
+    }
+
+    if (m_activitiesAvailable) {
+        QDBusMessage infoReply =
+            KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getAllActivitiesInfo"));
+        if (infoReply.type() == QDBusMessage::ReplyMessage && !infoReply.arguments().isEmpty()) {
+            QString json = infoReply.arguments().first().toString();
+            QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+            if (doc.isArray()) {
+                m_activities.clear();
+                for (const auto& val : doc.array()) {
+                    m_activities.append(val.toObject().toVariantMap());
+                }
+            }
+        }
+
+        QDBusMessage currentReply =
+            KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getCurrentActivity"));
+        if (currentReply.type() == QDBusMessage::ReplyMessage && !currentReply.arguments().isEmpty()) {
+            m_currentActivity = currentReply.arguments().first().toString();
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -292,8 +377,15 @@ void SettingsController::loadEditorSettings()
     Q_EMIT editorFillShortcutChanged();
     Q_EMIT editorGridSnappingEnabledChanged();
     Q_EMIT editorEdgeSnappingEnabledChanged();
+    m_editorSnapOverrideModifier = group->readInt(QStringLiteral("SnapOverrideModifier"), 1);
+    m_fillOnDropEnabled = group->readBool(QStringLiteral("FillOnDropEnabled"), true);
+    m_fillOnDropModifier = group->readInt(QStringLiteral("FillOnDropModifier"), 2);
+
     Q_EMIT editorSnapIntervalXChanged();
     Q_EMIT editorSnapIntervalYChanged();
+    Q_EMIT editorSnapOverrideModifierChanged();
+    Q_EMIT fillOnDropEnabledChanged();
+    Q_EMIT fillOnDropModifierChanged();
 }
 
 void SettingsController::saveEditorSettings()
@@ -311,6 +403,9 @@ void SettingsController::saveEditorSettings()
     group->writeBool(QStringLiteral("EdgeSnappingEnabled"), m_editorEdgeSnappingEnabled);
     group->writeDouble(QStringLiteral("SnapIntervalX"), m_editorSnapIntervalX);
     group->writeDouble(QStringLiteral("SnapIntervalY"), m_editorSnapIntervalY);
+    group->writeInt(QStringLiteral("SnapOverrideModifier"), m_editorSnapOverrideModifier);
+    group->writeBool(QStringLiteral("FillOnDropEnabled"), m_fillOnDropEnabled);
+    group->writeInt(QStringLiteral("FillOnDropModifier"), m_fillOnDropModifier);
 
     m_editorConfig->sync();
 }
@@ -426,6 +521,46 @@ void SettingsController::setEditorSnapIntervalY(qreal interval)
     }
 }
 
+int SettingsController::editorSnapOverrideModifier() const
+{
+    return m_editorSnapOverrideModifier;
+}
+bool SettingsController::fillOnDropEnabled() const
+{
+    return m_fillOnDropEnabled;
+}
+int SettingsController::fillOnDropModifier() const
+{
+    return m_fillOnDropModifier;
+}
+
+void SettingsController::setEditorSnapOverrideModifier(int mod)
+{
+    if (m_editorSnapOverrideModifier != mod) {
+        m_editorSnapOverrideModifier = mod;
+        Q_EMIT editorSnapOverrideModifierChanged();
+        setNeedsSave(true);
+    }
+}
+
+void SettingsController::setFillOnDropEnabled(bool enabled)
+{
+    if (m_fillOnDropEnabled != enabled) {
+        m_fillOnDropEnabled = enabled;
+        Q_EMIT fillOnDropEnabledChanged();
+        setNeedsSave(true);
+    }
+}
+
+void SettingsController::setFillOnDropModifier(int mod)
+{
+    if (m_fillOnDropModifier != mod) {
+        m_fillOnDropModifier = mod;
+        Q_EMIT fillOnDropModifierChanged();
+        setNeedsSave(true);
+    }
+}
+
 void SettingsController::resetEditorDefaults()
 {
     setEditorDuplicateShortcut(QStringLiteral("Ctrl+D"));
@@ -436,6 +571,9 @@ void SettingsController::resetEditorDefaults()
     setEditorEdgeSnappingEnabled(true);
     setEditorSnapIntervalX(0.05);
     setEditorSnapIntervalY(0.05);
+    setEditorSnapOverrideModifier(1);
+    setFillOnDropEnabled(true);
+    setFillOnDropModifier(2);
 }
 
 } // namespace PlasmaZones

@@ -204,7 +204,11 @@ public:
     Q_PROPERTY(bool autotileHideTitleBars READ autotileHideTitleBars WRITE setAutotileHideTitleBars NOTIFY
                    autotileHideTitleBarsChanged)
     Q_PROPERTY(
+        bool autotileShowBorder READ autotileShowBorder WRITE setAutotileShowBorder NOTIFY autotileShowBorderChanged)
+    Q_PROPERTY(
         int autotileBorderWidth READ autotileBorderWidth WRITE setAutotileBorderWidth NOTIFY autotileBorderWidthChanged)
+    Q_PROPERTY(int autotileBorderRadius READ autotileBorderRadius WRITE setAutotileBorderRadius NOTIFY
+                   autotileBorderRadiusChanged)
     Q_PROPERTY(QColor autotileBorderColor READ autotileBorderColor WRITE setAutotileBorderColor NOTIFY
                    autotileBorderColorChanged)
     Q_PROPERTY(QColor autotileInactiveBorderColor READ autotileInactiveBorderColor WRITE setAutotileInactiveBorderColor

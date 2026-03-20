@@ -11,6 +11,9 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
+    // Capture the context property so child components can access it via root.kcmModule
+    readonly property var kcmModule: kcm
+    // Inline constants matching monolith's Constants.qml
     readonly property int layoutListMinHeight: Kirigami.Units.gridUnit * 20
     // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms
     property int viewMode: 0
@@ -21,7 +24,7 @@ Flickable {
     // Reset to Snapping Layouts when autotiling is disabled
     Connections {
         function onAutotileEnabledChanged() {
-            if (!kcm.autotileEnabled && root.viewMode !== 0) {
+            if (!root.kcmModule.autotileEnabled && root.viewMode !== 0) {
                 root.viewMode = 0;
                 layoutGrid.currentIndex = -1;
                 layoutGrid.rebuildModel();
@@ -29,7 +32,7 @@ Flickable {
             }
         }
 
-        target: kcm
+        target: root.kcmModule
     }
 
     ColumnLayout {
@@ -38,34 +41,33 @@ Flickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // ─── Toolbar ─────────────────────────────────────────────────────
+        // ─── Toolbar (inlined from LayoutToolbar) ──────────────────────────
         RowLayout {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
 
+            // New Layout -- only in Snapping view
             Button {
-                text: i18n("Create New")
-                icon.name: "list-add"
                 visible: root.viewMode === 0
+                text: i18n("New Layout")
+                icon.name: "list-add"
                 onClicked: settingsController.createNewLayout()
             }
 
+            // Import -- only in Snapping view
             Button {
-                text: i18n("Launch Editor")
-                icon.name: "document-edit"
-                onClicked: settingsController.launchEditor()
-            }
-
-            Button {
+                visible: root.viewMode === 0
                 text: i18n("Import")
                 icon.name: "document-import"
-                visible: root.viewMode === 0
                 onClicked: importDialog.open()
             }
 
+            // Open Layouts Folder -- only in Snapping view
             Button {
+                visible: root.viewMode === 0
                 text: i18n("Open Folder")
                 icon.name: "folder-open"
+                flat: true
                 onClicked: settingsController.openLayoutsFolder()
             }
 
@@ -73,10 +75,10 @@ Flickable {
                 Layout.fillWidth: true
             }
 
-            // View mode selector (visible when autotiling is enabled)
+            // View switcher -- only visible when autotiling is enabled
             ComboBox {
-                visible: kcm.autotileEnabled
-                model: [i18n("Snapping Layouts"), i18n("Autotile Algorithms")]
+                visible: root.kcmModule.autotileEnabled
+                model: [i18n("Snapping"), i18n("Tiling")]
                 currentIndex: root.viewMode
                 onActivated: (index) => {
                     root.viewMode = index;
@@ -88,25 +90,87 @@ Flickable {
 
         }
 
-        // ─── Context Menu ────────────────────────────────────────────────
+        // ─── Context Menu ──────────────────────────────────────────────────
+        // Shared context menu -- single instance, avoids Qt6 per-delegate crash.
+        // Screen items are flat (no nested Menu) to avoid the Qt6 submenu crash.
         Menu {
             id: layoutContextMenu
 
             property var layout: null
+            property var _screenItems: []
             readonly property bool isAutotile: layout && layout.isAutotile === true
             readonly property string layoutId: layout ? (layout.id || "") : ""
 
             function showForLayout(layout) {
                 layoutContextMenu.layout = layout;
+                // Remove previously created screen items
+                for (let j = 0; j < _screenItems.length; j++) {
+                    layoutContextMenu.removeItem(_screenItems[j]);
+                    _screenItems[j].destroy();
+                }
+                _screenItems = [];
+                // Insert flat "Edit on <screen>" items when multi-monitor
+                if (settingsController.screens && settingsController.screens.length > 1) {
+                    let screens = settingsController.screens;
+                    // Find the index of postScreenSeparator so we can insert before it
+                    let insertIdx = -1;
+                    for (let k = 0; k < layoutContextMenu.count; k++) {
+                        if (layoutContextMenu.itemAt(k) === postScreenSeparator) {
+                            insertIdx = k;
+                            break;
+                        }
+                    }
+                    for (let i = 0; i < screens.length; i++) {
+                        let s = screens[i];
+                        let parts = [s.manufacturer || "", s.model || ""].filter((p) => {
+                            return p !== "";
+                        });
+                        let label = parts.length > 0 ? parts.join(" ") : (s.name || "");
+                        if (s.resolution)
+                            label += " (" + s.resolution + ")";
+
+                        let item = screenMenuItemComponent.createObject(layoutContextMenu, {
+                            "text": i18n("Edit on %1", label),
+                            "icon.name": s.isPrimary ? "starred-symbolic" : "monitor"
+                        });
+                        let lid = layout.id;
+                        item.triggered.connect(function() {
+                            settingsController.editLayout(lid);
+                        });
+                        if (insertIdx >= 0)
+                            layoutContextMenu.insertItem(insertIdx + i, item);
+                        else
+                            layoutContextMenu.addItem(item);
+                        _screenItems.push(item);
+                    }
+                }
+                // Hide screen separators when no screen items
+                screenSeparator.visible = _screenItems.length > 0;
+                postScreenSeparator.visible = _screenItems.length > 0;
                 layoutContextMenu.popup();
             }
 
+            // -- Edit --
             MenuItem {
                 text: i18n("Edit")
                 icon.name: "document-edit"
                 onTriggered: settingsController.editLayout(layoutContextMenu.layoutId)
             }
 
+            // Dynamic "Edit on <screen>" items are inserted here by showForLayout()
+            MenuSeparator {
+                id: screenSeparator
+
+                visible: false
+            }
+
+            MenuSeparator {
+                id: postScreenSeparator
+
+                visible: false
+            }
+
+            // -- State --
             MenuItem {
                 text: i18n("Set as Default")
                 icon.name: "favorite"
@@ -115,18 +179,40 @@ Flickable {
                         return false;
 
                     if (root.viewMode === 1)
-                        return layoutContextMenu.layoutId !== ("autotile:" + kcm.autotileAlgorithm);
+                        return layoutContextMenu.layoutId !== ("autotile:" + root.kcmModule.autotileAlgorithm);
 
-                    return layoutContextMenu.layoutId !== kcm.defaultLayoutId;
+                    return layoutContextMenu.layoutId !== root.kcmModule.defaultLayoutId;
                 }
                 onTriggered: {
                     if (root.viewMode === 1)
-                        kcm.autotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
+                        root.kcmModule.autotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
                     else
-                        kcm.defaultLayoutId = layoutContextMenu.layoutId;
+                        root.kcmModule.defaultLayoutId = layoutContextMenu.layoutId;
                 }
             }
 
+            MenuItem {
+                // root.kcmModule.setLayoutHidden(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector))
+
+                text: layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector ? i18n("Show in Zone Selector") : i18n("Hide from Zone Selector")
+                icon.name: layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector ? "view-visible" : "view-hidden"
+                // TODO: setLayoutHidden not yet on SettingsController
+                onTriggered: {
+                }
+            }
+
+            MenuItem {
+                // root.kcmModule.setLayoutAutoAssign(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true))
+
+                text: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign")
+                icon.name: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true ? "window-duplicate" : "window-new"
+                visible: !layoutContextMenu.isAutotile
+                // TODO: setLayoutAutoAssign not yet on SettingsController
+                onTriggered: {
+                }
+            }
+
+            // -- Manage --
             MenuSeparator {
                 visible: root.viewMode === 0 && !layoutContextMenu.isAutotile
             }
@@ -162,12 +248,21 @@ Flickable {
                 }
             }
 
+            Component {
+                id: screenMenuItemComponent
+
+                MenuItem {
+                }
+
+            }
+
         }
 
-        // ─── Layout Grid ─────────────────────────────────────────────────
+        // ─── Layout Grid ───────────────────────────────────────────────────
         GridView {
             id: layoutGrid
 
+            // Responsive cell sizing - aim for 2-4 columns
             readonly property real minCellWidth: Kirigami.Units.gridUnit * 14
             readonly property int columnCount: Math.max(2, Math.floor(width / minCellWidth))
             readonly property real actualCellWidth: width / columnCount
@@ -182,6 +277,7 @@ Flickable {
 
             function rebuildModel() {
                 let allLayouts = settingsController.layouts;
+                // Filter by view mode
                 let newLayouts = [];
                 for (let i = 0; i < allLayouts.length; i++) {
                     let isAutotile = allLayouts[i].isAutotile === true;
@@ -190,6 +286,7 @@ Flickable {
                     else if (root.viewMode === 1 && isAutotile)
                         newLayouts.push(allLayouts[i]);
                 }
+                // Compare by ID list -- skip swap if order hasn't changed
                 let oldIds = _extractIds(model);
                 let newIds = _extractIds(newLayouts);
                 if (oldIds.length === newIds.length) {
@@ -207,11 +304,12 @@ Flickable {
                         return ;
                     }
                 }
+                // ID list actually changed -- full swap
                 model = newLayouts;
             }
 
             function selectDefaultLayout(mode) {
-                let defaultId = (mode === 1) ? ("autotile:" + kcm.autotileAlgorithm) : kcm.defaultLayoutId;
+                let defaultId = (mode === 1) ? ("autotile:" + root.kcmModule.autotileAlgorithm) : root.kcmModule.defaultLayoutId;
                 if (defaultId)
                     Qt.callLater(() => {
                     return selectLayoutById(defaultId);
@@ -274,232 +372,275 @@ Flickable {
                 explanation: root.viewMode === 1 ? i18n("Enable autotiling to use tiling algorithms") : i18n("Start the PlasmaZones daemon or create a new layout")
             }
 
-            // ─── Inline Delegate ─────────────────────────────────────
+            // ─── Inline LayoutGridDelegate ──────────────────────────────
             delegate: Item {
                 id: delegateRoot
 
                 required property var modelData
                 required property int index
-                readonly property string layoutId: modelData.id || ""
-                readonly property string layoutName: modelData.name || i18n("Untitled")
-                readonly property int zoneCount: modelData.zoneCount || 0
-                readonly property bool isDefault: {
-                    if (root.viewMode === 1)
-                        return layoutId === ("autotile:" + kcm.autotileAlgorithm);
-
-                    return layoutId === kcm.defaultLayoutId;
-                }
-                readonly property bool isSystem: modelData.isSystem === true
-                readonly property bool isAutotile: modelData.isAutotile === true
-                readonly property bool isSelected: GridView.isCurrentItem
-                readonly property var zones: modelData.zones || []
+                // The full autotile default ID including prefix, for comparison
+                readonly property string autotileDefaultId: "autotile:" + root.kcmModule.autotileAlgorithm
+                // Selection state (bound from parent GridView)
+                property bool isSelected: GridView.isCurrentItem
+                property bool isHovered: false
 
                 width: layoutGrid.cellWidth
                 height: layoutGrid.cellHeight
+                Accessible.name: modelData.name || i18n("Unnamed Layout")
+                Accessible.description: i18n("Layout with %1 zones", modelData.zoneCount || 0)
+                Accessible.role: Accessible.ListItem
+                Keys.onReturnPressed: settingsController.editLayout(delegateRoot.modelData.id)
+                Keys.onDeletePressed: {
+                    if (!delegateRoot.modelData.isSystem && !delegateRoot.modelData.isAutotile) {
+                        deleteConfirmDialog.layoutToDelete = delegateRoot.modelData;
+                        deleteConfirmDialog.open();
+                    }
+                }
 
-                // Card background
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    hoverEnabled: true
+                    onContainsMouseChanged: delegateRoot.isHovered = containsMouse
+                    onClicked: (mouse) => {
+                        if (mouse.button === Qt.RightButton) {
+                            layoutGrid.currentIndex = delegateRoot.index;
+                            layoutContextMenu.showForLayout(delegateRoot.modelData);
+                        } else {
+                            layoutGrid.currentIndex = delegateRoot.index;
+                        }
+                    }
+                    onDoubleClicked: (mouse) => {
+                        if (mouse.button === Qt.LeftButton)
+                            settingsController.editLayout(delegateRoot.modelData.id);
+
+                    }
+                }
+
                 Rectangle {
-                    id: cardBg
+                    id: cardBackground
 
                     anchors.fill: parent
-                    anchors.margins: Kirigami.Units.smallSpacing
+                    anchors.margins: Kirigami.Units.smallSpacing / 2
                     radius: Kirigami.Units.smallSpacing
-                    color: delegateRoot.isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (delegateMouseArea.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05) : "transparent")
-                    border.color: delegateRoot.isSelected ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
-                    border.width: delegateRoot.isSelected ? 2 : 1
-
-                    MouseArea {
-                        id: delegateMouseArea
-
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        onClicked: (mouse) => {
-                            layoutGrid.currentIndex = delegateRoot.index;
-                            if (mouse.button === Qt.RightButton)
-                                layoutContextMenu.showForLayout(delegateRoot.modelData);
-
-                        }
-                        onDoubleClicked: settingsController.editLayout(delegateRoot.layoutId)
-                    }
+                    color: delegateRoot.isSelected ? Kirigami.Theme.highlightColor : delegateRoot.isHovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2) : "transparent"
+                    border.color: delegateRoot.isSelected ? Kirigami.Theme.highlightColor : delegateRoot.isHovered ? Kirigami.Theme.disabledTextColor : "transparent"
+                    border.width: 1
 
                     ColumnLayout {
                         anchors.fill: parent
                         anchors.margins: Kirigami.Units.smallSpacing
-                        spacing: Kirigami.Units.smallSpacing
+                        spacing: Kirigami.Units.smallSpacing / 2
 
-                        // Zone preview
+                        // Thumbnail area (inlined simplified LayoutThumbnail)
                         Item {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
+                            // Dim thumbnail when hidden
+                            opacity: delegateRoot.modelData.hiddenFromSelector ? 0.5 : 1
 
-                            // Simple zone preview rectangles
-                            Repeater {
-                                model: delegateRoot.zones
-
-                                Rectangle {
-                                    required property var modelData
-
-                                    x: (modelData.x || 0) * parent.width
-                                    y: (modelData.y || 0) * parent.height
-                                    width: (modelData.width || 0) * parent.width
-                                    height: (modelData.height || 0) * parent.height
-                                    color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2)
-                                    border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6)
-                                    border.width: 1
-                                    radius: 2
-                                }
-
-                            }
-
-                            // Fallback when no zones
+                            // Zone preview rectangles
                             Rectangle {
-                                anchors.fill: parent
-                                visible: delegateRoot.zones.length === 0
-                                color: "transparent"
-                                border.color: Kirigami.Theme.disabledTextColor
-                                border.width: 1
-                                radius: 2
+                                id: thumbnailBg
 
+                                readonly property var zones: delegateRoot.modelData.zones || []
+                                readonly property real previewOpacity: 0.2
+                                readonly property real borderOpacity: 0.9
+
+                                anchors.centerIn: parent
+                                width: Math.min(parent.width, parent.height * (16 / 9))
+                                height: Math.min(parent.height, parent.width / (16 / 9))
+                                radius: Kirigami.Units.smallSpacing
+                                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, previewOpacity)
+                                border.color: delegateRoot.isSelected ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, borderOpacity)
+                                border.width: delegateRoot.isSelected ? 2 : 1
+
+                                // Zone rectangles
+                                Item {
+                                    anchors.fill: parent
+                                    anchors.margins: Kirigami.Units.smallSpacing
+
+                                    Repeater {
+                                        model: thumbnailBg.zones
+
+                                        Rectangle {
+                                            required property var modelData
+                                            required property int index
+                                            // Zone geometry is nested: zones[i].relativeGeometry.{x,y,width,height}
+                                            readonly property var geo: modelData.relativeGeometry || modelData
+
+                                            x: (geo.x || 0) * parent.width
+                                            y: (geo.y || 0) * parent.height
+                                            width: (geo.width || geo.w || 0) * parent.width
+                                            height: (geo.height || geo.h || 0) * parent.height
+                                            color: delegateRoot.isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2)
+                                            border.color: delegateRoot.isSelected ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6)
+                                            border.width: 1
+                                            radius: 2
+
+                                            // Zone number label
+                                            Label {
+                                                anchors.centerIn: parent
+                                                text: (index + 1).toString()
+                                                font.pixelSize: Math.max(8, Math.min(parent.width, parent.height) * 0.4)
+                                                font.bold: true
+                                                color: delegateRoot.isSelected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                                                opacity: 0.7
+                                                visible: parent.width > 12 && parent.height > 12
+                                            }
+
+                                        }
+
+                                    }
+
+                                }
+
+                                // Layout name label at bottom
                                 Label {
-                                    anchors.centerIn: parent
-                                    text: delegateRoot.isAutotile ? delegateRoot.layoutName : i18n("No zones")
-                                    opacity: 0.5
-                                    font: Kirigami.Theme.smallFont
+                                    anchors.bottom: parent.bottom
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.margins: Kirigami.Units.smallSpacing
+                                    text: delegateRoot.modelData.name || i18n("Unnamed")
+                                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                                    font.bold: delegateRoot.isSelected
+                                    elide: Text.ElideRight
+                                    horizontalAlignment: Text.AlignHCenter
+
+                                    background: Rectangle {
+                                        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.9)
+                                        radius: Kirigami.Units.smallSpacing * 0.5
+                                    }
+
                                 }
 
                             }
 
-                        }
+                            // Top-left indicator row (default star + system badge)
+                            Row {
+                                anchors.top: parent.top
+                                anchors.left: parent.left
+                                anchors.margins: Kirigami.Units.smallSpacing
+                                spacing: Kirigami.Units.smallSpacing / 2
 
-                        // Name + info row
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Kirigami.Units.smallSpacing
+                                Kirigami.Icon {
+                                    id: defaultIcon
 
-                            Kirigami.Icon {
-                                source: "starred-symbolic"
-                                visible: delegateRoot.isDefault
-                                implicitWidth: Kirigami.Units.iconSizes.small
-                                implicitHeight: Kirigami.Units.iconSizes.small
-                                color: Kirigami.Theme.positiveTextColor
+                                    source: "favorite"
+                                    visible: root.viewMode === 1 ? delegateRoot.modelData.id === delegateRoot.autotileDefaultId : delegateRoot.modelData.id === root.kcmModule.defaultLayoutId
+                                    width: Kirigami.Units.iconSizes.small
+                                    height: Kirigami.Units.iconSizes.small
+                                    color: Kirigami.Theme.positiveTextColor
+                                    ToolTip.visible: defaultIconHover.hovered
+                                    ToolTip.text: root.viewMode === 1 ? i18n("Default autotile algorithm") : i18n("Default layout")
+
+                                    HoverHandler {
+                                        id: defaultIconHover
+                                    }
+
+                                }
+
+                                Kirigami.Icon {
+                                    source: delegateRoot.modelData.isSystem ? "lock" : "document-edit"
+                                    visible: delegateRoot.modelData.isSystem === true || delegateRoot.modelData.hasSystemOrigin === true
+                                    width: Kirigami.Units.iconSizes.small
+                                    height: Kirigami.Units.iconSizes.small
+                                    color: Kirigami.Theme.disabledTextColor
+                                    ToolTip.visible: systemIconHover.hovered
+                                    ToolTip.text: delegateRoot.modelData.isSystem ? i18n("System layout (read-only)") : i18n("Modified system layout")
+
+                                    HoverHandler {
+                                        id: systemIconHover
+                                    }
+
+                                }
+
+                                Kirigami.Icon {
+                                    source: "view-filter"
+                                    visible: {
+                                        var d = delegateRoot.modelData;
+                                        var s = d.allowedScreens;
+                                        var k = d.allowedDesktops;
+                                        var a = d.allowedActivities;
+                                        return (s !== undefined && s !== null && s.length > 0) || (k !== undefined && k !== null && k.length > 0) || (a !== undefined && a !== null && a.length > 0);
+                                    }
+                                    width: Kirigami.Units.iconSizes.small
+                                    height: Kirigami.Units.iconSizes.small
+                                    color: Kirigami.Theme.disabledTextColor
+                                    ToolTip.visible: filterIconHover.hovered
+                                    ToolTip.text: i18n("This layout is restricted to specific screens, desktops, or activities")
+
+                                    HoverHandler {
+                                        id: filterIconHover
+                                    }
+
+                                }
+
                             }
 
-                            ColumnLayout {
-                                Layout.fillWidth: true
+                            // Top-right toggle buttons
+                            Row {
+                                anchors.top: parent.top
+                                anchors.right: parent.right
+                                anchors.margins: Kirigami.Units.smallSpacing / 2
                                 spacing: 0
 
-                                Label {
-                                    Layout.fillWidth: true
-                                    text: delegateRoot.layoutName
-                                    font.bold: delegateRoot.isDefault
-                                    elide: Text.ElideRight
+                                // Auto-assign toggle (hidden for autotile)
+                                ToolButton {
+                                    width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
+                                    height: width
+                                    padding: 0
+                                    visible: delegateRoot.modelData.isAutotile !== true && (delegateRoot.isHovered || delegateRoot.modelData.autoAssign === true)
+                                    icon.name: delegateRoot.modelData.autoAssign === true ? "window-duplicate" : "window-new"
+                                    icon.width: Kirigami.Units.iconSizes.small
+                                    icon.height: Kirigami.Units.iconSizes.small
+                                    icon.color: delegateRoot.modelData.autoAssign === true ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
+                                    // TODO: setLayoutAutoAssign not yet on SettingsController
+                                    onClicked: {
+                                    }
+                                    // root.kcmModule.setLayoutAutoAssign(delegateRoot.modelData.id, !(delegateRoot.modelData.autoAssign === true))
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: delegateRoot.modelData.autoAssign === true ? i18n("Auto-assign enabled: new windows fill empty zones. Click to disable.") : i18n("Click to auto-assign new windows to empty zones")
                                 }
 
-                                Label {
-                                    Layout.fillWidth: true
-                                    text: {
-                                        let parts = [];
-                                        if (delegateRoot.zoneCount > 0)
-                                            parts.push(i18n("%1 zone(s)", delegateRoot.zoneCount));
-
-                                        if (delegateRoot.isSystem)
-                                            parts.push(i18n("Built-in"));
-
-                                        if (delegateRoot.isAutotile)
-                                            parts.push(i18n("Autotile"));
-
-                                        return parts.join(" \u00b7 ");
+                                // Visibility toggle
+                                ToolButton {
+                                    width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
+                                    height: width
+                                    padding: 0
+                                    visible: delegateRoot.isHovered || delegateRoot.modelData.hiddenFromSelector === true
+                                    icon.name: delegateRoot.modelData.hiddenFromSelector ? "view-hidden" : "view-visible"
+                                    icon.width: Kirigami.Units.iconSizes.small
+                                    icon.height: Kirigami.Units.iconSizes.small
+                                    icon.color: delegateRoot.modelData.hiddenFromSelector ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.textColor
+                                    // TODO: setLayoutHidden not yet on SettingsController
+                                    onClicked: {
                                     }
-                                    font: Kirigami.Theme.smallFont
-                                    opacity: 0.7
-                                    elide: Text.ElideRight
+                                    // root.kcmModule.setLayoutHidden(delegateRoot.modelData.id, !delegateRoot.modelData.hiddenFromSelector)
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: delegateRoot.modelData.hiddenFromSelector ? i18n("Hidden from zone selector. Click to show.") : i18n("Visible in zone selector. Click to hide.")
                                 }
 
                             }
 
                         }
 
-                        // Action buttons
+                        // Info row
                         RowLayout {
-                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignHCenter
                             spacing: Kirigami.Units.smallSpacing
 
-                            Button {
-                                text: i18n("Edit")
-                                icon.name: "document-edit"
-                                flat: true
-                                visible: !delegateRoot.isAutotile
-                                onClicked: settingsController.editLayout(delegateRoot.layoutId)
-                            }
-
-                            Item {
-                                Layout.fillWidth: true
-                            }
-
-                            Button {
-                                icon.name: "edit-copy"
-                                flat: true
-                                visible: !delegateRoot.isAutotile
-                                ToolTip.text: i18n("Duplicate")
-                                ToolTip.visible: hovered
-                                onClicked: settingsController.duplicateLayout(delegateRoot.layoutId)
-                            }
-
-                            Button {
-                                icon.name: "edit-delete"
-                                flat: true
-                                visible: !delegateRoot.isSystem && !delegateRoot.isAutotile
-                                ToolTip.text: i18n("Delete")
-                                ToolTip.visible: hovered
-                                onClicked: {
-                                    deleteConfirmDialog.layoutToDelete = delegateRoot.modelData;
-                                    deleteConfirmDialog.open();
-                                }
+                            Label {
+                                elide: Text.ElideRight
+                                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                color: delegateRoot.isSelected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
+                                text: i18n("%1 zones", delegateRoot.modelData.zoneCount || 0)
                             }
 
                         }
 
                     }
 
-                }
-
-            }
-
-        }
-
-        // ─── Default Layout Info ─────────────────────────────────────────
-        Kirigami.Card {
-            Layout.fillWidth: true
-
-            header: Kirigami.Heading {
-                text: i18n("Default Layout")
-                level: 2
-                padding: Kirigami.Units.smallSpacing
-            }
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: i18n("Current default:")
-                    }
-
-                    Label {
-                        text: kcm.defaultLayoutId || i18n("(none)")
-                        font.bold: true
-                    }
-
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: i18n("The default layout is applied to any screen or virtual desktop that does not have a specific assignment. Right-click a layout and choose \"Set as Default\" to change.")
-                    opacity: 0.7
                 }
 
             }
