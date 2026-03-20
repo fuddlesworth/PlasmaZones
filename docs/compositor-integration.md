@@ -245,13 +245,35 @@ exec-once = plasmazonesd
 
 ---
 
-## Limitations on non-KDE compositors
+## Compositor-specific features
 
-| Feature | KDE | Non-KDE |
-|---------|-----|---------|
-| Zone overlay during drag | KWin effect (native) | LayerShell overlay (works, slightly different feel) |
-| Modifier-key activation | KWin effect detects modifier during drag | Not available — use shortcut triggers instead |
-| System Settings (KCM) | Full GUI | Edit config file or use D-Bus API |
-| Activity-based layouts | Full support | Not available (activities are KDE-only) |
-| Desktop notifications | KDE OSD | Custom QML OSD overlay |
-| Wallpaper in shaders | Auto-detected | Auto-detected or manual config |
+The KWin effect plugin handles drag detection and modifier-key
+activation on KDE Plasma.  Other compositors need their own equivalent
+plugin or IPC handler — contributions welcome!
+
+| Feature | KDE | Other compositors |
+|---------|-----|-------------------|
+| Zone overlay during drag | KWin effect (native) | Needs compositor plugin (Hyprland IPC, wlroots plugin, etc.) |
+| Modifier-key activation | KWin effect detects modifier during drag | Needs compositor plugin — detect drag + modifier via compositor API |
+| System Settings (KCM) | Full GUI | Edit `~/.config/plasmazonesrc` or use D-Bus API |
+| Activity-based layouts | Full support | Not applicable (activities are a KDE concept) |
+| Desktop notifications | KDE OSD | Custom QML OSD overlay (works everywhere) |
+| Wallpaper in shaders | Auto-detected | Auto-detected or set `WallpaperPath` in config |
+
+### Writing a compositor plugin
+
+The KWin effect plugin (`kwin-effect/`) is a reference implementation.
+A compositor plugin for another WM needs to:
+
+1. **Detect window drag start/end** — notify the daemon via D-Bus
+   (`org.plasmazones.WindowDrag.StartDrag` / `EndDrag`)
+2. **Monitor modifier keys during drag** — check if the activation
+   modifier (Shift/Ctrl/Alt) is held and notify the daemon
+3. **Forward window geometry** — send the dragged window's position
+   so the daemon can highlight matching zones
+
+Each compositor has its own plugin/extension API:
+- **Hyprland:** [Plugin API](https://wiki.hyprland.org/Plugins/Development/Getting-Started/) or IPC events (`activewindow`, `movewindow`)
+- **wlroots/Sway:** wlroots C API for compositor modules
+- **niri:** IPC event stream (`EventStream` with window move events)
+- **COSMIC:** Plugin API (in development)
