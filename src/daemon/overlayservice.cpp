@@ -25,7 +25,7 @@
 #include <QTimer>
 #include <QMutexLocker>
 #include "../core/logging.h"
-#include <KLocalizedContext>
+#include "pz_qml_i18n.h"
 
 #include <LayerShellQt/Window>
 
@@ -54,7 +54,7 @@ OverlayService::OverlayService(QObject* parent)
     , m_engine(std::make_unique<QQmlEngine>()) // No parent - unique_ptr manages lifetime
 {
     // Set up i18n for QML (makes i18n() available in QML)
-    KLocalizedContext* localizedContext = new KLocalizedContext(m_engine.get());
+    auto* localizedContext = new PzLocalizedContext(m_engine.get());
     m_engine->rootContext()->setContextObject(localizedContext);
 
     // Connect to screen changes (with safety check for early initialization)

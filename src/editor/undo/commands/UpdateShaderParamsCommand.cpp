@@ -3,7 +3,7 @@
 
 #include "UpdateShaderParamsCommand.h"
 
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 #include "../../EditorController.h"
 #include "CommandId.h"
@@ -14,7 +14,7 @@ UpdateShaderParamsCommand::UpdateShaderParamsCommand(QPointer<EditorController> 
                                                      const QString& paramKey, const QVariant& oldValue,
                                                      const QVariant& newValue, const QString& text,
                                                      QUndoCommand* parent)
-    : QUndoCommand(text.isEmpty() ? i18nc("@action", "Change Shader Parameter") : text, parent)
+    : QUndoCommand(text.isEmpty() ? PzI18n::tr("Change Shader Parameter", "@action") : text, parent)
     , m_editorController(editorController)
     , m_isSingleParam(true)
     , m_paramKey(paramKey)
@@ -26,7 +26,7 @@ UpdateShaderParamsCommand::UpdateShaderParamsCommand(QPointer<EditorController> 
 UpdateShaderParamsCommand::UpdateShaderParamsCommand(QPointer<EditorController> editorController,
                                                      const QVariantMap& oldParams, const QVariantMap& newParams,
                                                      const QString& text, QUndoCommand* parent)
-    : QUndoCommand(text.isEmpty() ? i18nc("@action", "Change Shader Parameters") : text, parent)
+    : QUndoCommand(text.isEmpty() ? PzI18n::tr("Change Shader Parameters", "@action") : text, parent)
     , m_editorController(editorController)
     , m_isSingleParam(false)
     , m_oldParams(oldParams)

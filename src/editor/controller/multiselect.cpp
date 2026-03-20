@@ -9,7 +9,7 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <QGuiApplication>
 #include <QPointer>
 #include <QScreen>
@@ -31,7 +31,7 @@ void EditorController::deleteSelectedZones()
 
     {
         BatchOperationScope scope(m_undoController, m_zoneManager,
-                                  i18nc("@action", "Delete %1 Zones", zonesToDelete.count()));
+                                  PzI18n::tr("Delete %1 Zones", "@action").arg(zonesToDelete.count()));
         for (const QString& zoneId : zonesToDelete) {
             deleteZone(zoneId);
         }
@@ -59,7 +59,7 @@ QStringList EditorController::duplicateSelectedZones()
 
     {
         BatchOperationScope scope(m_undoController, m_zoneManager,
-                                  i18nc("@action", "Duplicate %1 Zones", zonesToDuplicate.count()));
+                                  PzI18n::tr("Duplicate %1 Zones", "@action").arg(zonesToDuplicate.count()));
         for (const QString& zoneId : zonesToDuplicate) {
             QString newId = duplicateZone(zoneId);
             if (!newId.isEmpty()) {
@@ -103,7 +103,7 @@ bool EditorController::moveSelectedZones(int direction, qreal step)
     // Apply movement using RAII scope for undo macro and batch update
     {
         BatchOperationScope scope(m_undoController, m_zoneManager,
-                                  i18nc("@action", "Move %1 Zones", zonesToMove.count()));
+                                  PzI18n::tr("Move %1 Zones", "@action").arg(zonesToMove.count()));
         for (const auto& pair : zonesToMove) {
             const QString& zoneId = pair.first;
             const QVariantMap& zone = pair.second;
@@ -184,7 +184,7 @@ bool EditorController::resizeSelectedZones(int direction, qreal step)
 
     {
         BatchOperationScope scope(m_undoController, m_zoneManager,
-                                  i18nc("@action", "Resize %1 Zones", zonesToResize.count()));
+                                  PzI18n::tr("Resize %1 Zones", "@action").arg(zonesToResize.count()));
         for (const auto& pair : zonesToResize) {
             const QString& zoneId = pair.first;
             const QVariantMap& zone = pair.second;
@@ -355,7 +355,8 @@ void EditorController::endMultiZoneDrag(bool commit)
 
             // Only create undo commands for other zones (primary zone already has its own)
             if (m_undoController && (qAbs(dx) > 0.0001 || qAbs(dy) > 0.0001)) {
-                m_undoController->beginMacro(i18nc("@action", "Move %1 Zones", m_dragInitialPositions.count()));
+                m_undoController->beginMacro(
+                    PzI18n::tr("Move %1 Zones", "@action").arg(m_dragInitialPositions.count()));
 
                 for (auto it = m_dragInitialPositions.constBegin(); it != m_dragInitialPositions.constEnd(); ++it) {
                     if (it.key() == m_dragPrimaryZoneId) {

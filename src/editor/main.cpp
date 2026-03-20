@@ -1,11 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#define TRANSLATION_DOMAIN "plasmazones-editor"
-
 #include "EditorController.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
+#include "../core/translationloader.h"
 #include "version.h"
 #include "../daemon/rendering/zoneshaderitem.h"
 
@@ -20,8 +19,8 @@
 #include <QCursor>
 #include <QObject>
 
-#include <KLocalizedString>
-#include <KLocalizedContext>
+#include "pz_i18n.h"
+#include "pz_qml_i18n.h"
 #include <KAboutData>
 #include <QtQml/qqml.h>
 
@@ -42,13 +41,12 @@ int main(int argc, char* argv[])
     }
 
     QGuiApplication app(argc, argv);
+    PlasmaZones::loadTranslations(&app);
 
-    KLocalizedString::setApplicationDomain("plasmazones-editor");
-
-    KAboutData aboutData(QStringLiteral("plasmazones-editor"), i18n("PlasmaZones Layout Editor"),
-                         PlasmaZones::VERSION_STRING, i18n("Visual layout editor for PlasmaZones"),
-                         KAboutLicense::GPL_V3, i18n("(c) 2026 fuddlesworth"));
-    aboutData.addAuthor(i18n("fuddlesworth"));
+    KAboutData aboutData(QStringLiteral("plasmazones-editor"), PzI18n::tr("PlasmaZones Layout Editor"),
+                         PlasmaZones::VERSION_STRING, PzI18n::tr("Visual layout editor for PlasmaZones"),
+                         KAboutLicense::GPL_V3, PzI18n::tr("(c) 2026 fuddlesworth"));
+    aboutData.addAuthor(PzI18n::tr("fuddlesworth"));
     aboutData.setDesktopFileName(QStringLiteral("org.plasmazones.editor"));
     KAboutData::setApplicationData(aboutData);
 
@@ -57,12 +55,12 @@ int main(int argc, char* argv[])
     aboutData.setupCommandLine(&parser);
 
     QCommandLineOption layoutIdOption(QStringList{QStringLiteral("l"), QStringLiteral("layout")},
-                                      i18n("Layout ID to edit"), QStringLiteral("uuid"));
+                                      PzI18n::tr("Layout ID to edit"), QStringLiteral("uuid"));
     QCommandLineOption screenOption(QStringList{QStringLiteral("s"), QStringLiteral("screen")},
-                                    i18n("Target screen name"), QStringLiteral("name"));
+                                    PzI18n::tr("Target screen name"), QStringLiteral("name"));
     QCommandLineOption newLayoutOption(QStringList{QStringLiteral("n"), QStringLiteral("new")},
-                                       i18n("Create new layout"));
-    QCommandLineOption previewOption(QStringLiteral("preview"), i18n("Open in read-only preview mode"));
+                                       PzI18n::tr("Create new layout"));
+    QCommandLineOption previewOption(QStringLiteral("preview"), PzI18n::tr("Open in read-only preview mode"));
 
     parser.addOptions({layoutIdOption, screenOption, newLayoutOption, previewOption});
     parser.process(app);
@@ -128,9 +126,8 @@ int main(int argc, char* argv[])
     // Set up QML engine
     QQmlApplicationEngine engine;
 
-    // Set up i18n for QML (this makes i18n() available in QML)
-    // Note: KLocalizedContext is deprecated in KF6 6.8+ but works in earlier versions
-    KLocalizedContext* localizedContext = new KLocalizedContext(&engine);
+    // Set up i18n for QML (makes i18n() available in QML)
+    auto* localizedContext = new PzLocalizedContext(&engine);
     engine.rootContext()->setContextObject(localizedContext);
 
     // Expose controller to QML

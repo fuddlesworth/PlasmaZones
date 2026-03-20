@@ -14,7 +14,7 @@
 #include "../../daemon/rendering/zonelabeltexturebuilder.h"
 #include "../../daemon/cavaservice.h"
 
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <QColor>
 #include <QDBusConnection>
 #include <QDBusInterface>
@@ -148,12 +148,12 @@ bool EditorController::saveShaderPreset(const QString& filePath, const QString& 
                                         const QVariantMap& shaderParams, const QString& presetName)
 {
     if (filePath.isEmpty()) {
-        Q_EMIT shaderPresetSaveFailed(i18nc("@info", "File path cannot be empty"));
+        Q_EMIT shaderPresetSaveFailed(PzI18n::tr("File path cannot be empty", "@info"));
         return false;
     }
 
     if (ShaderRegistry::isNoneShader(shaderId)) {
-        Q_EMIT shaderPresetSaveFailed(i18nc("@info", "No shader selected to save"));
+        Q_EMIT shaderPresetSaveFailed(PzI18n::tr("No shader selected to save", "@info"));
         return false;
     }
 
@@ -169,7 +169,7 @@ bool EditorController::saveShaderPreset(const QString& filePath, const QString& 
 
     QFile file(filePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QString error = i18nc("@info", "Failed to save preset: %1", file.errorString());
+        QString error = PzI18n::tr("Failed to save preset: %1", "@info").arg(file.errorString());
         Q_EMIT shaderPresetSaveFailed(error);
         qCWarning(lcEditor) << error;
         return false;
@@ -177,7 +177,7 @@ bool EditorController::saveShaderPreset(const QString& filePath, const QString& 
 
     QByteArray json = QJsonDocument(obj).toJson(QJsonDocument::Indented);
     if (file.write(json) != json.size()) {
-        QString error = i18nc("@info", "Failed to write preset file: %1", file.errorString());
+        QString error = PzI18n::tr("Failed to write preset file: %1", "@info").arg(file.errorString());
         Q_EMIT shaderPresetSaveFailed(error);
         qCWarning(lcEditor) << error;
         return false;
@@ -191,13 +191,13 @@ QVariantMap EditorController::loadShaderPreset(const QString& filePath)
     QVariantMap result;
 
     if (filePath.isEmpty()) {
-        Q_EMIT shaderPresetLoadFailed(i18nc("@info", "File path cannot be empty"));
+        Q_EMIT shaderPresetLoadFailed(PzI18n::tr("File path cannot be empty", "@info"));
         return result;
     }
 
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QString error = i18nc("@info", "Failed to open preset file: %1", file.errorString());
+        QString error = PzI18n::tr("Failed to open preset file: %1", "@info").arg(file.errorString());
         Q_EMIT shaderPresetLoadFailed(error);
         qCWarning(lcEditor) << error;
         return result;
@@ -206,14 +206,14 @@ QVariantMap EditorController::loadShaderPreset(const QString& filePath)
     QJsonParseError parseError;
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (parseError.error != QJsonParseError::NoError) {
-        QString error = i18nc("@info", "Invalid preset file: %1", parseError.errorString());
+        QString error = PzI18n::tr("Invalid preset file: %1", "@info").arg(parseError.errorString());
         Q_EMIT shaderPresetLoadFailed(error);
         qCWarning(lcEditor) << error;
         return result;
     }
 
     if (!doc.isObject()) {
-        QString error = i18nc("@info", "Preset file must contain a JSON object");
+        QString error = PzI18n::tr("Preset file must contain a JSON object", "@info");
         Q_EMIT shaderPresetLoadFailed(error);
         qCWarning(lcEditor) << error;
         return result;
@@ -222,7 +222,7 @@ QVariantMap EditorController::loadShaderPreset(const QString& filePath)
     QJsonObject obj = doc.object();
     QString shaderId = obj[QLatin1String(JsonKeys::ShaderId)].toString();
     if (shaderId.isEmpty()) {
-        QString error = i18nc("@info", "Preset file missing shader ID");
+        QString error = PzI18n::tr("Preset file missing shader ID", "@info");
         Q_EMIT shaderPresetLoadFailed(error);
         qCWarning(lcEditor) << error;
         return result;
@@ -238,7 +238,7 @@ QVariantMap EditorController::loadShaderPreset(const QString& filePath)
         }
     }
     if (!shaderFound) {
-        QString error = i18nc("@info", "Shader in preset is no longer available");
+        QString error = PzI18n::tr("Shader in preset is no longer available", "@info");
         Q_EMIT shaderPresetLoadFailed(error);
         qCWarning(lcEditor) << error;
         return result;
@@ -384,7 +384,7 @@ void EditorController::resetShaderParameters()
     if (!m_currentShaderParams.isEmpty()) {
         // Create undo command for reset (batch change to empty)
         auto* cmd = new UpdateShaderParamsCommand(this, m_currentShaderParams, QVariantMap(),
-                                                  i18nc("@action", "Reset Shader Parameters"));
+                                                  PzI18n::tr("Reset Shader Parameters", "@action"));
         m_undoController->push(cmd);
     }
 }
@@ -395,7 +395,7 @@ void EditorController::switchShader(const QString& id, const QVariantMap& params
         return;
     }
 
-    m_undoController->beginMacro(i18nc("@action", "Switch Shader Effect"));
+    m_undoController->beginMacro(PzI18n::tr("Switch Shader Effect", "@action"));
     setCurrentShaderId(id);
     setCurrentShaderParams(params);
     m_undoController->endMacro();

@@ -5,7 +5,7 @@
 #include "../../services/ZoneManager.h"
 #include "../../../core/constants.h"
 #include "../../../core/logging.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <QSet>
 
 using namespace PlasmaZones;
@@ -13,7 +13,7 @@ using namespace PlasmaZones;
 SplitZoneCommand::SplitZoneCommand(QPointer<ZoneManager> zoneManager, const QString& originalZoneId,
                                    const QVariantMap& originalZoneData, const QVariantList& newZonesData,
                                    const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? i18nc("@action", "Split Zone") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Split Zone", "@action") : text, parent)
     , m_originalZoneId(originalZoneId)
     , m_originalZoneData(originalZoneData)
     , m_newZonesData(newZonesData)

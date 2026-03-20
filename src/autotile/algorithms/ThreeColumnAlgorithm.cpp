@@ -5,7 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <cmath>
 
 namespace PlasmaZones {
@@ -24,12 +24,12 @@ ThreeColumnAlgorithm::ThreeColumnAlgorithm(QObject* parent)
 
 QString ThreeColumnAlgorithm::name() const
 {
-    return i18n("Three Column");
+    return PzI18n::tr("Three Column");
 }
 
 QString ThreeColumnAlgorithm::description() const
 {
-    return i18n("Master window centered with columns on each side");
+    return PzI18n::tr("Master window centered with columns on each side");
 }
 
 QString ThreeColumnAlgorithm::icon() const noexcept

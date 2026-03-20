@@ -4,14 +4,14 @@
 #include "PasteZonesCommand.h"
 #include "../../services/ZoneManager.h"
 #include "../../../core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 using namespace PlasmaZones;
 
 PasteZonesCommand::PasteZonesCommand(QPointer<ZoneManager> zoneManager, const QVariantList& zonesData,
                                      const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? i18nc("@action", "Paste %1 Zones", zonesData.count()) : text,
-                      parent)
+    : BaseZoneCommand(zoneManager,
+                      text.isEmpty() ? PzI18n::tr("Paste %1 Zones", "@action").arg(zonesData.count()) : text, parent)
     , m_zonesData(zonesData)
 {
     // Extract zone IDs from the data

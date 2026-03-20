@@ -84,7 +84,6 @@ stdenv.mkDerivation {
     kconfigwidgets
     kcoreaddons
     kdbusaddons
-    ki18n
     kcmutils
     kwindowsystem
     kglobalaccel

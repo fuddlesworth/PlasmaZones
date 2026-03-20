@@ -5,7 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 namespace PlasmaZones {
 
@@ -21,12 +21,12 @@ MonocleAlgorithm::MonocleAlgorithm(QObject* parent)
 
 QString MonocleAlgorithm::name() const
 {
-    return i18n("Monocle");
+    return PzI18n::tr("Monocle");
 }
 
 QString MonocleAlgorithm::description() const
 {
-    return i18n("One window fullscreen at a time, cycle through others");
+    return PzI18n::tr("One window fullscreen at a time, cycle through others");
 }
 
 QString MonocleAlgorithm::icon() const noexcept

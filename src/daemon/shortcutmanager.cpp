@@ -15,7 +15,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QGuiApplication>
 #include <KGlobalAccel>
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 namespace PlasmaZones {
 
@@ -29,7 +29,7 @@ namespace PlasmaZones {
 #define SETUP_SHORTCUT(actionMember, i18nName, objectName, getterName, slot)                                           \
     do {                                                                                                               \
         if (!actionMember) {                                                                                           \
-            actionMember = new QAction(i18n(i18nName), this);                                                          \
+            actionMember = new QAction(PzI18n::tr(i18nName), this);                                                    \
             actionMember->setObjectName(QStringLiteral(objectName));                                                   \
             const QKeySequence defaultShortcut(ConfigDefaults::getterName());                                          \
             const QKeySequence shortcut(m_settings->getterName());                                                     \
@@ -532,7 +532,7 @@ void ShortcutManager::setupQuickLayoutShortcuts()
         ConfigDefaults::quickLayout9Shortcut()};
 
     for (int i = 0; i < 9; ++i) {
-        auto* quickAction = new QAction(i18n("Apply Layout %1", i + 1), this);
+        auto* quickAction = new QAction(PzI18n::tr("Apply Layout %1").arg(i + 1), this);
         quickAction->setObjectName(QStringLiteral("quick_layout_%1").arg(i + 1));
         KGlobalAccel::self()->setDefaultShortcut(quickAction, {QKeySequence(quickLayoutDefaults[i])});
         queueGlobalShortcut(quickAction, QKeySequence(m_settings->quickLayoutShortcut(i)));
@@ -606,7 +606,7 @@ void ShortcutManager::setupSnapToZoneShortcuts()
                                           ConfigDefaults::snapToZone9Shortcut()};
 
     for (int i = 0; i < 9; ++i) {
-        auto* snapAction = new QAction(i18n("Snap to Zone %1", i + 1), this);
+        auto* snapAction = new QAction(PzI18n::tr("Snap to Zone %1").arg(i + 1), this);
         snapAction->setObjectName(QStringLiteral("snap_to_zone_%1").arg(i + 1));
         KGlobalAccel::self()->setDefaultShortcut(snapAction, {QKeySequence(snapToZoneDefaults[i])});
         queueGlobalShortcut(snapAction, QKeySequence(m_settings->snapToZoneShortcut(i)));

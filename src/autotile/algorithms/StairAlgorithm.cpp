@@ -5,7 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <cmath>
 
 namespace PlasmaZones {
@@ -21,12 +21,12 @@ StairAlgorithm::StairAlgorithm(QObject* parent)
 
 QString StairAlgorithm::name() const
 {
-    return i18n("Stair");
+    return PzI18n::tr("Stair");
 }
 
 QString StairAlgorithm::description() const
 {
-    return i18n("Stepped staircase arrangement");
+    return PzI18n::tr("Stepped staircase arrangement");
 }
 
 QString StairAlgorithm::icon() const noexcept

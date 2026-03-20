@@ -3,14 +3,15 @@
 
 #include "ApplyTemplateCommand.h"
 #include "../../services/ZoneManager.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 using namespace PlasmaZones;
 
 ApplyTemplateCommand::ApplyTemplateCommand(QPointer<ZoneManager> zoneManager, const QString& templateType,
                                            const QVariantList& oldZones, const QVariantList& newZones,
                                            const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? i18nc("@action", "Apply Template: %1", templateType) : text, parent)
+    : BaseZoneCommand(zoneManager,
+                      text.isEmpty() ? PzI18n::tr("Apply Template: %1", "@action").arg(templateType) : text, parent)
     , m_templateType(templateType)
     , m_oldZones(oldZones)
     , m_newZones(newZones)

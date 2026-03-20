@@ -5,7 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <cmath>
 
 namespace PlasmaZones {
@@ -24,12 +24,12 @@ BSPAlgorithm::BSPAlgorithm(QObject* parent)
 
 QString BSPAlgorithm::name() const
 {
-    return i18n("Binary Split");
+    return PzI18n::tr("Binary Split");
 }
 
 QString BSPAlgorithm::description() const
 {
-    return i18n("Balanced recursive splitting into equal regions");
+    return PzI18n::tr("Balanced recursive splitting into equal regions");
 }
 
 QString BSPAlgorithm::icon() const noexcept

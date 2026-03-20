@@ -3,7 +3,7 @@
 
 #include "UpdateFullScreenGeometryCommand.h"
 
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 #include "../../EditorController.h"
 
@@ -12,7 +12,7 @@ using namespace PlasmaZones;
 UpdateFullScreenGeometryCommand::UpdateFullScreenGeometryCommand(QPointer<EditorController> editorController,
                                                                  bool oldValue, bool newValue, const QString& text,
                                                                  QUndoCommand* parent)
-    : QUndoCommand(text.isEmpty() ? i18nc("@action", "Toggle Use Full Screen Area") : text, parent)
+    : QUndoCommand(text.isEmpty() ? PzI18n::tr("Toggle Use Full Screen Area", "@action") : text, parent)
     , m_editorController(editorController)
     , m_oldValue(oldValue)
     , m_newValue(newValue)

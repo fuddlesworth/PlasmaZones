@@ -5,7 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <cmath>
 
 namespace PlasmaZones {
@@ -24,12 +24,12 @@ DwindleAlgorithm::DwindleAlgorithm(QObject* parent)
 
 QString DwindleAlgorithm::name() const
 {
-    return i18n("Dwindle");
+    return PzI18n::tr("Dwindle");
 }
 
 QString DwindleAlgorithm::description() const
 {
-    return i18n("Each new window gets a smaller split, alternating direction");
+    return PzI18n::tr("Each new window gets a smaller split, alternating direction");
 }
 
 QString DwindleAlgorithm::icon() const noexcept

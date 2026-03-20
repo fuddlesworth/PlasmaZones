@@ -5,14 +5,14 @@
 #include "../../services/ZoneManager.h"
 #include "../../../core/constants.h"
 #include "../../../core/logging.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 using namespace PlasmaZones;
 
 DuplicateZoneCommand::DuplicateZoneCommand(QPointer<ZoneManager> zoneManager, const QString& sourceZoneId,
                                            const QString& duplicatedZoneId, const QVariantMap& duplicatedZoneData,
                                            const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? i18nc("@action", "Duplicate Zone") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Duplicate Zone", "@action") : text, parent)
     , m_sourceZoneId(sourceZoneId)
     , m_duplicatedZoneId(duplicatedZoneId)
     , m_duplicatedZoneData(duplicatedZoneData)
