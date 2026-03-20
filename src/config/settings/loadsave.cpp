@@ -169,12 +169,6 @@ void Settings::loadBehaviorConfig(IConfigBackend* backend)
                    static_cast<int>(StickyWindowHandling::IgnoreAll)));
         m_restoreWindowsToZonesOnLogin = behavior->readBool(QStringLiteral("RestoreWindowsToZonesOnLogin"),
                                                             ConfigDefaults::restoreWindowsToZonesOnLogin());
-        const QString snapAssistEnabledKey = QStringLiteral("SnapAssistEnabled");
-        const QString snapAssistTriggersKey = QStringLiteral("SnapAssistTriggers");
-        // Check behavior group first for snap assist (old location)
-        bool behaviorHasSnapAssist = behavior->hasKey(snapAssistEnabledKey);
-        bool behaviorSnapAssistVal = behavior->readBool(snapAssistEnabledKey, ConfigDefaults::snapAssistEnabled());
-        QString behaviorTriggersJson = behavior->readString(snapAssistTriggersKey);
         m_defaultLayoutId = normalizeUuidString(behavior->readString(QStringLiteral("DefaultLayoutId")));
     }
 
