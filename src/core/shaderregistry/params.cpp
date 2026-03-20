@@ -231,6 +231,7 @@ void ShaderRegistry::invalidateWallpaperCache()
     s_cachedWallpaperPath.clear();
     s_cachedWallpaperImage = QImage();
     s_cachedWallpaperMtime = 0;
+    s_wallpaperProvider.reset(); // force re-detection on next call
 }
 
 QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, const QVariantMap& storedParams) const
