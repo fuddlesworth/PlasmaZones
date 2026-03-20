@@ -128,6 +128,14 @@ else()
     message(STATUS "KF6::TextEditor not found - shader editor will NOT be built")
 endif()
 
+# Qt Advanced Docking System for shader editor (optional)
+find_package(qtadvanceddocking-qt6 QUIET)
+if(qtadvanceddocking-qt6_FOUND)
+    message(STATUS "Qt Advanced Docking System found - shader editor will use advanced docking")
+else()
+    message(STATUS "Qt Advanced Docking System not found - shader editor will use basic QDockWidget")
+endif()
+
 # KActivities/PlasmaActivities is optional (for activity-based layouts)
 # Plasma 6 renamed KActivities to PlasmaActivities
 find_package(PlasmaActivities QUIET)

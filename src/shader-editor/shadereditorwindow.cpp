@@ -27,10 +27,12 @@
 #include <QRegularExpression>
 #include <QQmlContext>
 #include <QQmlEngine>
-#include <QQuickWidget>
+#include <QQuickView>
 #include <QShortcut>
 #include <QSignalBlocker>
-#include <QDockWidget>
+#include <DockManager.h>
+#include <DockWidget.h>
+#include <DockAreaWidget.h>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QToolBar>
@@ -203,7 +205,7 @@ void ShaderEditorWindow::createActions()
         }
     });
 
-    // View toggle actions are provided by QDockWidget::toggleViewAction()
+    // View toggle actions are provided by ads::CDockWidget::toggleViewAction()
 }
 
 void ShaderEditorWindow::populateEditMenu()
@@ -377,38 +379,51 @@ void ShaderEditorWindow::setupLayout()
     // ── Preview controller ──
     m_previewController = new PreviewController(this);
 
-    // ── Central widget: code editor tabs ──
-    setCentralWidget(m_tabWidget);
+    // ── ads Dock Manager ──
+    // ads auto-detects KWin and uses QWidget-based title bars (KWin doesn't
+    // support native floating windows for docking).  On Wayland, floating docks
+    // have limited move/resize — panels can be rearranged by dragging tabs
+    // between dock areas, and auto-hide sidebars provide a space-efficient
+    // alternative to floating.
+    ads::CDockManager::setConfigFlags(ads::CDockManager::DefaultOpaqueConfig);
+    ads::CDockManager::setAutoHideConfigFlags(ads::CDockManager::DefaultAutoHideConfig);
+    m_dockManager = new ads::CDockManager(this);
 
-    // Allow dock widgets to be tabbed together
-    setDockNestingEnabled(true);
+    // ── Central widget: code editor tabs ──
+    auto* centralDock = new ads::CDockWidget(m_dockManager, i18n("Editor"));
+    centralDock->setObjectName(QStringLiteral("centralDock"));
+    centralDock->setWidget(m_tabWidget);
+    centralDock->setFeature(ads::CDockWidget::NoTab, true);
+    auto* centralArea = m_dockManager->setCentralWidget(centralDock);
 
     // ── Preview dock (right) ──
-    m_previewWidget = new QQuickWidget(this);
-    m_previewWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
-    m_previewWidget->setClearColor(QColor(30, 30, 30));
-    m_previewWidget->setAttribute(Qt::WA_OpaquePaintEvent);
-    m_previewWidget->setAttribute(Qt::WA_AlwaysStackOnTop, false);
-    m_previewWidget->engine()->rootContext()->setContextObject(
-        new KLocalizedContext(m_previewWidget->engine()));
-    m_previewWidget->engine()->rootContext()->setContextProperty(
+    // Use QQuickView + createWindowContainer instead of QQuickWidget to avoid
+    // the FBO alpha compositing issue on Wayland. QQuickView renders directly
+    // to its own native surface, which is always opaque.
+    m_previewView = new QQuickView;
+    m_previewView->setColor(QColor(30, 30, 30));
+    m_previewView->setResizeMode(QQuickView::SizeRootObjectToView);
+    m_previewView->engine()->rootContext()->setContextObject(
+        new KLocalizedContext(m_previewView->engine()));
+    m_previewView->engine()->rootContext()->setContextProperty(
         QStringLiteral("previewController"), m_previewController);
-    connect(m_previewWidget, &QQuickWidget::statusChanged, this, [this](QQuickWidget::Status status) {
-        if (status == QQuickWidget::Error) {
-            const auto errors = m_previewWidget->errors();
+    connect(m_previewView, &QQuickView::statusChanged, this, [this](QQuickView::Status status) {
+        if (status == QQuickView::Error) {
+            const auto errors = m_previewView->errors();
             for (const auto& error : errors) {
                 qCWarning(lcShaderEditor) << "Preview QML error:" << error.toString();
             }
         }
     });
-    m_previewWidget->setSource(QUrl(QStringLiteral("qrc:/qml/PreviewPane.qml")));
-    m_previewWidget->setMinimumHeight(120);
-    m_previewWidget->setMinimumWidth(300);
+    m_previewView->setSource(QUrl(QStringLiteral("qrc:/qml/PreviewPane.qml")));
 
-    m_previewDock = new QDockWidget(i18n("Preview"), this);
+    m_previewWidget = QWidget::createWindowContainer(m_previewView, this);
+
+    m_previewDock = new ads::CDockWidget(m_dockManager, i18n("Preview"));
     m_previewDock->setObjectName(QStringLiteral("previewDock"));
     m_previewDock->setWidget(m_previewWidget);
-    addDockWidget(Qt::RightDockWidgetArea, m_previewDock);
+    m_previewDock->setMinimumSizeHintMode(ads::CDockWidget::MinimumSizeHintFromContent);
+    m_previewArea = m_dockManager->addDockWidget(ads::RightDockWidgetArea, m_previewDock);
 
     // ── Output dock (bottom) ──
     m_outputPanel = new OutputPanel(this);
@@ -420,10 +435,10 @@ void ShaderEditorWindow::setupLayout()
         }
     });
 
-    m_outputDock = new QDockWidget(i18n("Problems"), this);
+    m_outputDock = new ads::CDockWidget(m_dockManager, i18n("Problems"));
     m_outputDock->setObjectName(QStringLiteral("outputDock"));
     m_outputDock->setWidget(m_outputPanel);
-    addDockWidget(Qt::BottomDockWidgetArea, m_outputDock);
+    m_dockManager->addDockWidget(ads::BottomDockWidgetArea, m_outputDock, centralArea);
 
     // ── Connect preview controller status to output panel ──
     auto updateOutputPanel = [this]() {
@@ -473,7 +488,7 @@ void ShaderEditorWindow::setupLayout()
     const KConfigGroup layoutGroup = config->group(QStringLiteral("WindowLayout"));
     const QByteArray savedState = layoutGroup.readEntry("DockState", QByteArray());
     if (!savedState.isEmpty()) {
-        restoreState(savedState);
+        m_dockManager->restoreState(savedState);
     }
 }
 
@@ -566,9 +581,8 @@ void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
     m_parameterPanel = new ParameterPanel(this);
     m_parameterPanel->loadFromMetadata(metadataJson);
     if (!m_paramsDock) {
-        m_paramsDock = new QDockWidget(i18n("Parameters"), this);
+        m_paramsDock = new ads::CDockWidget(m_dockManager, i18n("Parameters"));
         m_paramsDock->setObjectName(QStringLiteral("paramsDock"));
-        addDockWidget(Qt::RightDockWidgetArea, m_paramsDock);
     }
     m_paramsDock->setWidget(m_parameterPanel);
 
@@ -576,9 +590,8 @@ void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
     m_metadataEditor = new MetadataEditorWidget(this);
     m_metadataEditor->loadFromJson(metadataJson);
     if (!m_metadataDock) {
-        m_metadataDock = new QDockWidget(i18n("Metadata"), this);
+        m_metadataDock = new ads::CDockWidget(m_dockManager, i18n("Metadata"));
         m_metadataDock->setObjectName(QStringLiteral("metadataDock"));
-        addDockWidget(Qt::RightDockWidgetArea, m_metadataDock);
     }
     m_metadataDock->setWidget(m_metadataEditor);
 
@@ -586,15 +599,15 @@ void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
     m_presetPanel = new PresetPanel(this);
     m_presetPanel->loadFromMetadata(metadataJson);
     if (!m_presetsDock) {
-        m_presetsDock = new QDockWidget(i18n("Presets"), this);
+        m_presetsDock = new ads::CDockWidget(m_dockManager, i18n("Presets"));
         m_presetsDock->setObjectName(QStringLiteral("presetsDock"));
-        addDockWidget(Qt::RightDockWidgetArea, m_presetsDock);
     }
     m_presetsDock->setWidget(m_presetPanel);
 
-    // Tab the right-side docks together (Parameters on top by default)
-    tabifyDockWidget(m_paramsDock, m_metadataDock);
-    tabifyDockWidget(m_metadataDock, m_presetsDock);
+    // Add right-side panels tabbed together, below the preview in the right column
+    auto* paramsArea = m_dockManager->addDockWidget(ads::BottomDockWidgetArea, m_paramsDock, m_previewArea);
+    m_dockManager->addDockWidget(ads::CenterDockWidgetArea, m_metadataDock, paramsArea);
+    m_dockManager->addDockWidget(ads::CenterDockWidgetArea, m_presetsDock, paramsArea);
     m_paramsDock->raise(); // show Parameters tab first
 
     // Connect parameter changes to live preview
@@ -1069,7 +1082,7 @@ void ShaderEditorWindow::closeEvent(QCloseEvent* event)
             m_recentAction->saveEntries(config->group(QStringLiteral("RecentPackages")));
         }
         KConfigGroup layoutGroup = config->group(QStringLiteral("WindowLayout"));
-        layoutGroup.writeEntry("DockState", saveState());
+        layoutGroup.writeEntry("DockState", m_dockManager->saveState());
         config->sync();
         event->accept();
     } else {

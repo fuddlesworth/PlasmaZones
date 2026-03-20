@@ -7,6 +7,12 @@
 #include <QList>
 #include <QMainWindow>
 
+namespace ads {
+class CDockAreaWidget;
+class CDockManager;
+class CDockWidget;
+}
+
 namespace KTextEditor {
 class MovingRange;
 }
@@ -14,10 +20,9 @@ class MovingRange;
 #include <QString>
 
 class QComboBox;
-class QDockWidget;
 class QLabel;
 class QMenu;
-class QQuickWidget;
+class QQuickView;
 class QTabWidget;
 
 class KRecentFilesAction;
@@ -85,15 +90,20 @@ private:
     // Central widget: code editor tabs
     QTabWidget* m_tabWidget = nullptr;
 
-    // Dock widgets
-    QDockWidget* m_previewDock = nullptr;
-    QDockWidget* m_outputDock = nullptr;
-    QDockWidget* m_paramsDock = nullptr;
-    QDockWidget* m_metadataDock = nullptr;
-    QDockWidget* m_presetsDock = nullptr;
+    // Dock manager (ads)
+    ads::CDockManager* m_dockManager = nullptr;
+    ads::CDockAreaWidget* m_previewArea = nullptr;
+
+    // Dock widgets (ads)
+    ads::CDockWidget* m_previewDock = nullptr;
+    ads::CDockWidget* m_outputDock = nullptr;
+    ads::CDockWidget* m_paramsDock = nullptr;
+    ads::CDockWidget* m_metadataDock = nullptr;
+    ads::CDockWidget* m_presetsDock = nullptr;
 
     // Panel contents (owned by their dock widgets)
-    QQuickWidget* m_previewWidget = nullptr;
+    QQuickView* m_previewView = nullptr;
+    QWidget* m_previewWidget = nullptr;
     OutputPanel* m_outputPanel = nullptr;
     ParameterPanel* m_parameterPanel = nullptr;
     MetadataEditorWidget* m_metadataEditor = nullptr;

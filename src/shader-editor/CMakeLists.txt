@@ -33,6 +33,8 @@ set(plasmazones_shader_editor_SRCS
 # QML resources for live preview pane
 qt_add_resources(plasmazones_shader_editor_SRCS qml/resources.qrc)
 
+find_package(qtadvanceddocking-qt6 REQUIRED)
+
 add_executable(plasmazones-shader-editor ${plasmazones_shader_editor_SRCS})
 
 target_link_libraries(plasmazones-shader-editor
@@ -49,6 +51,7 @@ target_link_libraries(plasmazones-shader-editor
         KF6::CoreAddons
         KF6::ConfigWidgets
         KF6::WindowSystem
+        ads::qtadvanceddocking-qt6
 )
 
 install(TARGETS plasmazones-shader-editor DESTINATION ${KDE_INSTALL_BINDIR})

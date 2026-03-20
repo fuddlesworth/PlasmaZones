@@ -7,11 +7,12 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import PlasmaZones 1.0
 
-Item {
+Rectangle {
     id: root
 
     implicitWidth: 400
     implicitHeight: 400
+    color: Kirigami.Theme.backgroundColor
 
     readonly property var pc: previewController ?? null
 
@@ -22,12 +23,6 @@ Item {
     // ZoneShaderItem status constants (mirror PreviewController::Status*)
     readonly property int statusReady: 2
     readonly property int statusError: 3
-
-    // ── Dark background ──
-    Rectangle {
-        anchors.fill: parent
-        color: Kirigami.Theme.backgroundColor
-    }
 
     // ── Shader preview — fills entire widget so the render node's
     //    fullscreen-quad viewport matches the render target exactly.
