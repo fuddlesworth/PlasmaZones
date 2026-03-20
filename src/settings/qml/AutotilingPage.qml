@@ -101,6 +101,384 @@ Flickable {
         }
 
         // =====================================================================
+        // Appearance Card (Borders + Colors, matching KCM structure)
+        // =====================================================================
+        Kirigami.Card {
+            Layout.fillWidth: true
+            enabled: kcm.autotileEnabled
+
+            header: Kirigami.Heading {
+                text: i18n("Appearance")
+                level: 3
+                padding: Kirigami.Units.smallSpacing
+            }
+
+            contentItem: Kirigami.FormLayout {
+                Kirigami.Separator {
+                    Kirigami.FormData.isSection: true
+                    Kirigami.FormData.label: i18n("Colors")
+                }
+
+                CheckBox {
+                    id: useSystemColorsCheck
+
+                    Kirigami.FormData.label: i18n("Color scheme:")
+                    text: i18n("Use system accent color")
+                    checked: kcm.autotileUseSystemBorderColors
+                    onToggled: kcm.autotileUseSystemBorderColors = checked
+                }
+
+                RowLayout {
+                    Kirigami.FormData.label: i18n("Active color:")
+                    visible: !useSystemColorsCheck.checked
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Rectangle {
+                        width: 32
+                        height: 32
+                        radius: Kirigami.Units.smallSpacing
+                        color: kcm.autotileBorderColor
+                        border.color: Kirigami.Theme.disabledTextColor
+                        border.width: 1
+                        Accessible.name: i18n("Active border color picker")
+                        Accessible.role: Accessible.Button
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                activeBorderColorDialog.selectedColor = kcm.autotileBorderColor;
+                                activeBorderColorDialog.open();
+                            }
+                        }
+
+                    }
+
+                    Label {
+                        text: kcm.autotileBorderColor.toString().toUpperCase()
+                        font: Kirigami.Theme.fixedWidthFont
+                    }
+
+                }
+
+                RowLayout {
+                    Kirigami.FormData.label: i18n("Inactive color:")
+                    visible: !useSystemColorsCheck.checked
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Rectangle {
+                        width: 32
+                        height: 32
+                        radius: Kirigami.Units.smallSpacing
+                        color: kcm.autotileInactiveBorderColor
+                        border.color: Kirigami.Theme.disabledTextColor
+                        border.width: 1
+                        Accessible.name: i18n("Inactive border color picker")
+                        Accessible.role: Accessible.Button
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                inactiveBorderColorDialog.selectedColor = kcm.autotileInactiveBorderColor;
+                                inactiveBorderColorDialog.open();
+                            }
+                        }
+
+                    }
+
+                    Label {
+                        text: kcm.autotileInactiveBorderColor.toString().toUpperCase()
+                        font: Kirigami.Theme.fixedWidthFont
+                    }
+
+                }
+
+                Kirigami.Separator {
+                    Kirigami.FormData.isSection: true
+                    Kirigami.FormData.label: i18n("Decorations")
+                }
+
+                CheckBox {
+                    id: hideTitleBarsCheck
+
+                    Kirigami.FormData.label: i18n("Title bars:")
+                    text: i18n("Hide title bars on tiled windows")
+                    checked: kcm.autotileHideTitleBars
+                    onToggled: kcm.autotileHideTitleBars = checked
+                    ToolTip.visible: hovered
+                    ToolTip.text: i18n("Remove window title bars while autotiled. Restored when floating or leaving autotile mode.")
+                }
+
+                Kirigami.Separator {
+                    Kirigami.FormData.isSection: true
+                    Kirigami.FormData.label: i18n("Borders")
+                }
+
+                CheckBox {
+                    id: showBorderCheck
+
+                    Kirigami.FormData.label: i18n("Border:")
+                    text: i18n("Show borders in tiling mode")
+                    checked: kcm.autotileShowBorder
+                    onToggled: kcm.autotileShowBorder = checked
+                    ToolTip.visible: hovered
+                    ToolTip.text: i18n("Draw colored borders around all windows in tiling mode. Active color for focused, inactive for unfocused. Works with or without hidden title bars.")
+                }
+
+                RowLayout {
+                    Kirigami.FormData.label: i18n("Width:")
+                    visible: root.bordersActive
+                    spacing: Kirigami.Units.smallSpacing
+
+                    SpinBox {
+                        from: 0
+                        to: 10
+                        value: kcm.autotileBorderWidth
+                        onValueModified: kcm.autotileBorderWidth = value
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("Colored border drawn around tiled windows (0 to disable)")
+                    }
+
+                    Label {
+                        text: i18n("px")
+                    }
+
+                }
+
+                RowLayout {
+                    Kirigami.FormData.label: i18n("Corner radius:")
+                    visible: root.bordersActive
+                    spacing: Kirigami.Units.smallSpacing
+
+                    SpinBox {
+                        from: 0
+                        to: 20
+                        value: kcm.autotileBorderRadius
+                        onValueModified: kcm.autotileBorderRadius = value
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("Corner radius for the border (0 for square corners)")
+                    }
+
+                    Label {
+                        text: i18n("px")
+                    }
+
+                }
+
+            }
+
+        }
+
+        // =====================================================================
+        // Behavior Card
+        // =====================================================================
+        Kirigami.Card {
+            Layout.fillWidth: true
+            enabled: kcm.autotileEnabled
+
+            header: Kirigami.Heading {
+                text: i18n("Behavior")
+                level: 3
+                padding: Kirigami.Units.smallSpacing
+            }
+
+            contentItem: Kirigami.FormLayout {
+                ComboBox {
+                    Kirigami.FormData.label: i18n("New windows:")
+                    Layout.fillWidth: true
+                    textRole: "text"
+                    valueRole: "value"
+                    model: [{
+                        "text": i18n("Add after existing windows"),
+                        "value": 0
+                    }, {
+                        "text": i18n("Insert after focused"),
+                        "value": 1
+                    }, {
+                        "text": i18n("Add as main window"),
+                        "value": 2
+                    }]
+                    currentIndex: Math.max(0, indexOfValue(kcm.autotileInsertPosition))
+                    onActivated: kcm.autotileInsertPosition = currentValue
+                }
+
+                CheckBox {
+                    Kirigami.FormData.label: i18n("Focus:")
+                    text: i18n("Automatically focus newly opened windows")
+                    checked: kcm.autotileFocusNewWindows
+                    onToggled: kcm.autotileFocusNewWindows = checked
+                }
+
+                CheckBox {
+                    Kirigami.FormData.label: " "
+                    text: i18n("Focus follows mouse pointer")
+                    checked: kcm.autotileFocusFollowsMouse
+                    onToggled: kcm.autotileFocusFollowsMouse = checked
+                    ToolTip.visible: hovered
+                    ToolTip.text: i18n("When enabled, moving mouse over a window focuses it")
+                }
+
+                CheckBox {
+                    Kirigami.FormData.label: i18n("Constraints:")
+                    text: i18n("Respect window minimum size")
+                    checked: kcm.autotileRespectMinimumSize
+                    onToggled: kcm.autotileRespectMinimumSize = checked
+                    ToolTip.visible: hovered
+                    ToolTip.text: i18n("Windows will not be resized below their minimum size. This may leave gaps in the layout.")
+                }
+
+            }
+
+        }
+
+        // =====================================================================
+        // Gaps Card
+        // =====================================================================
+        Kirigami.Card {
+            Layout.fillWidth: true
+            enabled: kcm.autotileEnabled
+
+            header: Kirigami.Heading {
+                text: i18n("Gaps")
+                level: 3
+                padding: Kirigami.Units.smallSpacing
+            }
+
+            contentItem: Kirigami.FormLayout {
+                RowLayout {
+                    Kirigami.FormData.label: i18n("Inner gap:")
+                    spacing: Kirigami.Units.smallSpacing
+
+                    SpinBox {
+                        from: 0
+                        to: root.gapMax
+                        value: kcm.autotileInnerGap
+                        onValueModified: kcm.autotileInnerGap = value
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("Gap between tiled windows")
+                    }
+
+                    Label {
+                        text: i18n("px")
+                    }
+
+                }
+
+                RowLayout {
+                    Kirigami.FormData.label: i18n("Outer gap:")
+                    spacing: Kirigami.Units.smallSpacing
+
+                    SpinBox {
+                        from: 0
+                        to: root.gapMax
+                        value: kcm.autotileOuterGap
+                        enabled: !perSideCheck.checked
+                        onValueModified: kcm.autotileOuterGap = value
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("Gap from screen edges")
+                    }
+
+                    Label {
+                        text: i18n("px")
+                        visible: !perSideCheck.checked
+                    }
+
+                    CheckBox {
+                        id: perSideCheck
+
+                        text: i18n("Set per side")
+                        checked: kcm.autotileUsePerSideOuterGap
+                        onToggled: kcm.autotileUsePerSideOuterGap = checked
+                    }
+
+                }
+
+                GridLayout {
+                    Kirigami.FormData.label: i18n("Per-side gaps:")
+                    visible: perSideCheck.checked
+                    columns: 6
+                    columnSpacing: Kirigami.Units.smallSpacing
+                    rowSpacing: Kirigami.Units.smallSpacing
+
+                    Label {
+                        text: i18n("Top:")
+                    }
+
+                    SpinBox {
+                        from: 0
+                        to: root.gapMax
+                        value: kcm.autotileOuterGapTop
+                        onValueModified: kcm.autotileOuterGapTop = value
+                        Accessible.name: i18nc("@label", "Top edge gap")
+                    }
+
+                    Label {
+                        text: i18nc("@label", "px")
+                    }
+
+                    Label {
+                        text: i18n("Bottom:")
+                    }
+
+                    SpinBox {
+                        from: 0
+                        to: root.gapMax
+                        value: kcm.autotileOuterGapBottom
+                        onValueModified: kcm.autotileOuterGapBottom = value
+                        Accessible.name: i18nc("@label", "Bottom edge gap")
+                    }
+
+                    Label {
+                        text: i18nc("@label", "px")
+                    }
+
+                    Label {
+                        text: i18n("Left:")
+                    }
+
+                    SpinBox {
+                        from: 0
+                        to: root.gapMax
+                        value: kcm.autotileOuterGapLeft
+                        onValueModified: kcm.autotileOuterGapLeft = value
+                        Accessible.name: i18nc("@label", "Left edge gap")
+                    }
+
+                    Label {
+                        text: i18nc("@label", "px")
+                    }
+
+                    Label {
+                        text: i18n("Right:")
+                    }
+
+                    SpinBox {
+                        from: 0
+                        to: root.gapMax
+                        value: kcm.autotileOuterGapRight
+                        onValueModified: kcm.autotileOuterGapRight = value
+                        Accessible.name: i18nc("@label", "Right edge gap")
+                    }
+
+                    Label {
+                        text: i18nc("@label", "px")
+                    }
+
+                }
+
+                CheckBox {
+                    Kirigami.FormData.label: i18n("Smart gaps:")
+                    text: i18n("Hide gaps when only one window is tiled")
+                    checked: kcm.autotileSmartGaps
+                    onToggled: kcm.autotileSmartGaps = checked
+                }
+
+            }
+
+        }
+
+        // =====================================================================
         // Algorithm Card
         // =====================================================================
         Kirigami.Card {
@@ -368,384 +746,6 @@ Flickable {
 
             }
             // Card
-
-        }
-
-        // =====================================================================
-        // Gaps Card
-        // =====================================================================
-        Kirigami.Card {
-            Layout.fillWidth: true
-            enabled: kcm.autotileEnabled
-
-            header: Kirigami.Heading {
-                text: i18n("Gaps")
-                level: 3
-                padding: Kirigami.Units.smallSpacing
-            }
-
-            contentItem: Kirigami.FormLayout {
-                RowLayout {
-                    Kirigami.FormData.label: i18n("Inner gap:")
-                    spacing: Kirigami.Units.smallSpacing
-
-                    SpinBox {
-                        from: 0
-                        to: root.gapMax
-                        value: kcm.autotileInnerGap
-                        onValueModified: kcm.autotileInnerGap = value
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("Gap between tiled windows")
-                    }
-
-                    Label {
-                        text: i18n("px")
-                    }
-
-                }
-
-                RowLayout {
-                    Kirigami.FormData.label: i18n("Outer gap:")
-                    spacing: Kirigami.Units.smallSpacing
-
-                    SpinBox {
-                        from: 0
-                        to: root.gapMax
-                        value: kcm.autotileOuterGap
-                        enabled: !perSideCheck.checked
-                        onValueModified: kcm.autotileOuterGap = value
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("Gap from screen edges")
-                    }
-
-                    Label {
-                        text: i18n("px")
-                        visible: !perSideCheck.checked
-                    }
-
-                    CheckBox {
-                        id: perSideCheck
-
-                        text: i18n("Set per side")
-                        checked: kcm.autotileUsePerSideOuterGap
-                        onToggled: kcm.autotileUsePerSideOuterGap = checked
-                    }
-
-                }
-
-                GridLayout {
-                    Kirigami.FormData.label: i18n("Per-side gaps:")
-                    visible: perSideCheck.checked
-                    columns: 6
-                    columnSpacing: Kirigami.Units.smallSpacing
-                    rowSpacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: i18n("Top:")
-                    }
-
-                    SpinBox {
-                        from: 0
-                        to: root.gapMax
-                        value: kcm.autotileOuterGapTop
-                        onValueModified: kcm.autotileOuterGapTop = value
-                        Accessible.name: i18nc("@label", "Top edge gap")
-                    }
-
-                    Label {
-                        text: i18nc("@label", "px")
-                    }
-
-                    Label {
-                        text: i18n("Bottom:")
-                    }
-
-                    SpinBox {
-                        from: 0
-                        to: root.gapMax
-                        value: kcm.autotileOuterGapBottom
-                        onValueModified: kcm.autotileOuterGapBottom = value
-                        Accessible.name: i18nc("@label", "Bottom edge gap")
-                    }
-
-                    Label {
-                        text: i18nc("@label", "px")
-                    }
-
-                    Label {
-                        text: i18n("Left:")
-                    }
-
-                    SpinBox {
-                        from: 0
-                        to: root.gapMax
-                        value: kcm.autotileOuterGapLeft
-                        onValueModified: kcm.autotileOuterGapLeft = value
-                        Accessible.name: i18nc("@label", "Left edge gap")
-                    }
-
-                    Label {
-                        text: i18nc("@label", "px")
-                    }
-
-                    Label {
-                        text: i18n("Right:")
-                    }
-
-                    SpinBox {
-                        from: 0
-                        to: root.gapMax
-                        value: kcm.autotileOuterGapRight
-                        onValueModified: kcm.autotileOuterGapRight = value
-                        Accessible.name: i18nc("@label", "Right edge gap")
-                    }
-
-                    Label {
-                        text: i18nc("@label", "px")
-                    }
-
-                }
-
-                CheckBox {
-                    Kirigami.FormData.label: i18n("Smart gaps:")
-                    text: i18n("Hide gaps when only one window is tiled")
-                    checked: kcm.autotileSmartGaps
-                    onToggled: kcm.autotileSmartGaps = checked
-                }
-
-            }
-
-        }
-
-        // =====================================================================
-        // Behavior Card
-        // =====================================================================
-        Kirigami.Card {
-            Layout.fillWidth: true
-            enabled: kcm.autotileEnabled
-
-            header: Kirigami.Heading {
-                text: i18n("Behavior")
-                level: 3
-                padding: Kirigami.Units.smallSpacing
-            }
-
-            contentItem: Kirigami.FormLayout {
-                ComboBox {
-                    Kirigami.FormData.label: i18n("New windows:")
-                    Layout.fillWidth: true
-                    textRole: "text"
-                    valueRole: "value"
-                    model: [{
-                        "text": i18n("Add after existing windows"),
-                        "value": 0
-                    }, {
-                        "text": i18n("Insert after focused"),
-                        "value": 1
-                    }, {
-                        "text": i18n("Add as main window"),
-                        "value": 2
-                    }]
-                    currentIndex: Math.max(0, indexOfValue(kcm.autotileInsertPosition))
-                    onActivated: kcm.autotileInsertPosition = currentValue
-                }
-
-                CheckBox {
-                    Kirigami.FormData.label: i18n("Focus:")
-                    text: i18n("Automatically focus newly opened windows")
-                    checked: kcm.autotileFocusNewWindows
-                    onToggled: kcm.autotileFocusNewWindows = checked
-                }
-
-                CheckBox {
-                    Kirigami.FormData.label: " "
-                    text: i18n("Focus follows mouse pointer")
-                    checked: kcm.autotileFocusFollowsMouse
-                    onToggled: kcm.autotileFocusFollowsMouse = checked
-                    ToolTip.visible: hovered
-                    ToolTip.text: i18n("When enabled, moving mouse over a window focuses it")
-                }
-
-                CheckBox {
-                    Kirigami.FormData.label: i18n("Constraints:")
-                    text: i18n("Respect window minimum size")
-                    checked: kcm.autotileRespectMinimumSize
-                    onToggled: kcm.autotileRespectMinimumSize = checked
-                    ToolTip.visible: hovered
-                    ToolTip.text: i18n("Windows will not be resized below their minimum size. This may leave gaps in the layout.")
-                }
-
-            }
-
-        }
-
-        // =====================================================================
-        // Appearance Card (Borders + Colors, matching KCM structure)
-        // =====================================================================
-        Kirigami.Card {
-            Layout.fillWidth: true
-            enabled: kcm.autotileEnabled
-
-            header: Kirigami.Heading {
-                text: i18n("Appearance")
-                level: 3
-                padding: Kirigami.Units.smallSpacing
-            }
-
-            contentItem: Kirigami.FormLayout {
-                Kirigami.Separator {
-                    Kirigami.FormData.isSection: true
-                    Kirigami.FormData.label: i18n("Colors")
-                }
-
-                CheckBox {
-                    id: useSystemColorsCheck
-
-                    Kirigami.FormData.label: i18n("Color scheme:")
-                    text: i18n("Use system accent color")
-                    checked: kcm.autotileUseSystemBorderColors
-                    onToggled: kcm.autotileUseSystemBorderColors = checked
-                }
-
-                RowLayout {
-                    Kirigami.FormData.label: i18n("Active color:")
-                    visible: !useSystemColorsCheck.checked
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Rectangle {
-                        width: 32
-                        height: 32
-                        radius: Kirigami.Units.smallSpacing
-                        color: kcm.autotileBorderColor
-                        border.color: Kirigami.Theme.disabledTextColor
-                        border.width: 1
-                        Accessible.name: i18n("Active border color picker")
-                        Accessible.role: Accessible.Button
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                activeBorderColorDialog.selectedColor = kcm.autotileBorderColor;
-                                activeBorderColorDialog.open();
-                            }
-                        }
-
-                    }
-
-                    Label {
-                        text: kcm.autotileBorderColor.toString().toUpperCase()
-                        font: Kirigami.Theme.fixedWidthFont
-                    }
-
-                }
-
-                RowLayout {
-                    Kirigami.FormData.label: i18n("Inactive color:")
-                    visible: !useSystemColorsCheck.checked
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Rectangle {
-                        width: 32
-                        height: 32
-                        radius: Kirigami.Units.smallSpacing
-                        color: kcm.autotileInactiveBorderColor
-                        border.color: Kirigami.Theme.disabledTextColor
-                        border.width: 1
-                        Accessible.name: i18n("Inactive border color picker")
-                        Accessible.role: Accessible.Button
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                inactiveBorderColorDialog.selectedColor = kcm.autotileInactiveBorderColor;
-                                inactiveBorderColorDialog.open();
-                            }
-                        }
-
-                    }
-
-                    Label {
-                        text: kcm.autotileInactiveBorderColor.toString().toUpperCase()
-                        font: Kirigami.Theme.fixedWidthFont
-                    }
-
-                }
-
-                Kirigami.Separator {
-                    Kirigami.FormData.isSection: true
-                    Kirigami.FormData.label: i18n("Decorations")
-                }
-
-                CheckBox {
-                    id: hideTitleBarsCheck
-
-                    Kirigami.FormData.label: i18n("Title bars:")
-                    text: i18n("Hide title bars on tiled windows")
-                    checked: kcm.autotileHideTitleBars
-                    onToggled: kcm.autotileHideTitleBars = checked
-                    ToolTip.visible: hovered
-                    ToolTip.text: i18n("Remove window title bars while autotiled. Restored when floating or leaving autotile mode.")
-                }
-
-                Kirigami.Separator {
-                    Kirigami.FormData.isSection: true
-                    Kirigami.FormData.label: i18n("Borders")
-                }
-
-                CheckBox {
-                    id: showBorderCheck
-
-                    Kirigami.FormData.label: i18n("Border:")
-                    text: i18n("Show borders in tiling mode")
-                    checked: kcm.autotileShowBorder
-                    onToggled: kcm.autotileShowBorder = checked
-                    ToolTip.visible: hovered
-                    ToolTip.text: i18n("Draw colored borders around all windows in tiling mode. Active color for focused, inactive for unfocused. Works with or without hidden title bars.")
-                }
-
-                RowLayout {
-                    Kirigami.FormData.label: i18n("Width:")
-                    visible: root.bordersActive
-                    spacing: Kirigami.Units.smallSpacing
-
-                    SpinBox {
-                        from: 0
-                        to: 10
-                        value: kcm.autotileBorderWidth
-                        onValueModified: kcm.autotileBorderWidth = value
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("Colored border drawn around tiled windows (0 to disable)")
-                    }
-
-                    Label {
-                        text: i18n("px")
-                    }
-
-                }
-
-                RowLayout {
-                    Kirigami.FormData.label: i18n("Corner radius:")
-                    visible: root.bordersActive
-                    spacing: Kirigami.Units.smallSpacing
-
-                    SpinBox {
-                        from: 0
-                        to: 20
-                        value: kcm.autotileBorderRadius
-                        onValueModified: kcm.autotileBorderRadius = value
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("Corner radius for the border (0 for square corners)")
-                    }
-
-                    Label {
-                        text: i18n("px")
-                    }
-
-                }
-
-            }
 
         }
 

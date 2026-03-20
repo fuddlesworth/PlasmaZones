@@ -975,44 +975,115 @@ Flickable {
                         Kirigami.FormData.label: i18n("Position & Trigger")
                     }
 
-                    ComboBox {
-                        id: zoneSelectorPositionCombo
+                    // 3x3 position picker grid (matching KCM PositionPicker)
+                    Item {
+                        readonly property var positionLabels: [i18n("Top-Left"), i18n("Top"), i18n("Top-Right"), i18n("Left"), i18n("Center"), i18n("Right"), i18n("Bottom-Left"), i18n("Bottom"), i18n("Bottom-Right")]
 
                         Kirigami.FormData.label: i18n("Position:")
                         enabled: zoneSelectorEnabledCheck.checked
                         opacity: enabled ? 1 : 0.6
-                        textRole: "text"
-                        valueRole: "value"
-                        model: [{
-                            "text": i18n("Top-Left"),
-                            "value": 0
-                        }, {
-                            "text": i18n("Top"),
-                            "value": 1
-                        }, {
-                            "text": i18n("Top-Right"),
-                            "value": 2
-                        }, {
-                            "text": i18n("Left"),
-                            "value": 3
-                        }, {
-                            "text": i18n("Center"),
-                            "value": 4
-                        }, {
-                            "text": i18n("Right"),
-                            "value": 5
-                        }, {
-                            "text": i18n("Bottom-Left"),
-                            "value": 6
-                        }, {
-                            "text": i18n("Bottom"),
-                            "value": 7
-                        }, {
-                            "text": i18n("Bottom-Right"),
-                            "value": 8
-                        }]
-                        currentIndex: Math.max(0, indexOfValue(kcm.zoneSelectorPosition))
-                        onActivated: kcm.zoneSelectorPosition = currentValue
+                        implicitWidth: 160
+                        implicitHeight: 130
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 4
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                color: Kirigami.Theme.backgroundColor
+                                radius: Kirigami.Units.smallSpacing
+                                border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
+                                border.width: 1
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    anchors.margins: 4
+                                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
+                                    radius: Kirigami.Units.smallSpacing / 2
+
+                                    Grid {
+                                        id: positionGrid
+
+                                        anchors.fill: parent
+                                        anchors.margins: 6
+                                        columns: 3
+                                        rows: 3
+                                        spacing: 3
+
+                                        Repeater {
+                                            model: 9
+
+                                            Rectangle {
+                                                id: posCell
+
+                                                required property int index
+                                                property bool isSelected: index === kcm.zoneSelectorPosition
+                                                property bool isHovered: posCellMouse.containsMouse
+
+                                                width: (positionGrid.width - positionGrid.spacing * 2) / 3
+                                                height: (positionGrid.height - positionGrid.spacing * 2) / 3
+                                                radius: 3
+                                                color: {
+                                                    if (isSelected)
+                                                        return Kirigami.Theme.highlightColor;
+
+                                                    if (isHovered && zoneSelectorEnabledCheck.checked)
+                                                        return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4);
+
+                                                    return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15);
+                                                }
+                                                border.color: {
+                                                    if (isSelected)
+                                                        return Kirigami.Theme.highlightColor;
+
+                                                    if (isHovered && zoneSelectorEnabledCheck.checked)
+                                                        return Kirigami.Theme.highlightColor;
+
+                                                    return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3);
+                                                }
+                                                border.width: isSelected ? 2 : 1
+
+                                                MouseArea {
+                                                    id: posCellMouse
+
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    enabled: zoneSelectorEnabledCheck.checked
+                                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                    onClicked: kcm.zoneSelectorPosition = posCell.index
+                                                    ToolTip.visible: containsMouse && zoneSelectorEnabledCheck.checked
+                                                    ToolTip.delay: 500
+                                                    ToolTip.text: positionLabels[posCell.index]
+                                                }
+
+                                                Behavior on color {
+                                                    ColorAnimation {
+                                                        duration: 100
+                                                    }
+
+                                                }
+
+                                            }
+
+                                        }
+
+                                    }
+
+                                }
+
+                            }
+
+                            Label {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: positionLabels[kcm.zoneSelectorPosition] || ""
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                                opacity: 0.7
+                            }
+
+                        }
+
                     }
 
                     RowLayout {
@@ -1093,124 +1164,66 @@ Flickable {
                         Kirigami.FormData.label: i18n("Preview Size")
                     }
 
-                    ComboBox {
-                        id: sizeModeCombo
-
-                        Kirigami.FormData.label: i18n("Size mode:")
-                        enabled: zoneSelectorEnabledCheck.checked
-                        opacity: enabled ? 1 : 0.6
-                        textRole: "text"
-                        valueRole: "value"
-                        model: [{
-                            "text": i18n("Auto"),
-                            "value": 0
-                        }, {
-                            "text": i18n("Manual"),
-                            "value": 1
-                        }]
-                        currentIndex: Math.max(0, indexOfValue(kcm.zoneSelectorSizeMode))
-                        onActivated: kcm.zoneSelectorSizeMode = currentValue
-                    }
-
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Preview width:")
-                        visible: kcm.zoneSelectorSizeMode === 1
-                        enabled: zoneSelectorEnabledCheck.checked
-                        opacity: enabled ? 1 : 0.6
-                        spacing: Kirigami.Units.smallSpacing
-
-                        SpinBox {
-                            from: root.zoneSelectorPreviewWidthMin
-                            to: root.zoneSelectorPreviewWidthMax
-                            value: kcm.zoneSelectorPreviewWidth
-                            onValueModified: {
-                                kcm.zoneSelectorPreviewWidth = value;
-                                if (kcm.zoneSelectorPreviewLockAspect) {
-                                    var newHeight = Math.round(value / root.screenAspectRatio);
-                                    newHeight = Math.max(root.zoneSelectorPreviewHeightMin, Math.min(root.zoneSelectorPreviewHeightMax, newHeight));
-                                    kcm.zoneSelectorPreviewHeight = newHeight;
-                                }
-                            }
-                        }
-
-                        Label {
-                            text: i18n("px")
-                        }
-
-                    }
-
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Preview height:")
-                        visible: kcm.zoneSelectorSizeMode === 1
-                        enabled: zoneSelectorEnabledCheck.checked
-                        opacity: enabled ? 1 : 0.6
-                        spacing: Kirigami.Units.smallSpacing
-
-                        SpinBox {
-                            from: root.zoneSelectorPreviewHeightMin
-                            to: root.zoneSelectorPreviewHeightMax
-                            value: kcm.zoneSelectorPreviewHeight
-                            onValueModified: kcm.zoneSelectorPreviewHeight = value
-                            enabled: !kcm.zoneSelectorPreviewLockAspect
-                        }
-
-                        Label {
-                            text: i18n("px")
-                        }
-
-                    }
-
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("Aspect:")
-                        text: i18n("Lock aspect ratio")
-                        checked: kcm.zoneSelectorPreviewLockAspect
-                        onToggled: kcm.zoneSelectorPreviewLockAspect = checked
-                        visible: kcm.zoneSelectorSizeMode === 1
-                        enabled: zoneSelectorEnabledCheck.checked
-                        opacity: enabled ? 1 : 0.6
-                    }
-
                     // Live preview
                     Item {
+                        readonly property int effectivePreviewWidth: {
+                            if (kcm.zoneSelectorSizeMode === 0)
+                                return Math.round(180 * (root.screenAspectRatio / (16 / 9)));
+
+                            return kcm.zoneSelectorPreviewWidth;
+                        }
+                        readonly property int effectivePreviewHeight: {
+                            if (kcm.zoneSelectorSizeMode === 0)
+                                return Math.round(effectivePreviewWidth / root.screenAspectRatio);
+
+                            return kcm.zoneSelectorPreviewHeight;
+                        }
+
                         Layout.fillWidth: true
-                        Layout.preferredHeight: previewRect.height + 30
+                        Layout.preferredHeight: effectivePreviewHeight + 50
                         visible: zoneSelectorEnabledCheck.checked
                         enabled: zoneSelectorEnabledCheck.checked
 
-                        Rectangle {
-                            id: previewRect
+                        Item {
+                            id: previewContainer
 
                             anchors.horizontalCenter: parent.horizontalCenter
-                            width: kcm.zoneSelectorSizeMode === 0 ? Math.round(180 * (root.screenAspectRatio / (16 / 9))) : kcm.zoneSelectorPreviewWidth
-                            height: kcm.zoneSelectorSizeMode === 0 ? Math.round(width / root.screenAspectRatio) : kcm.zoneSelectorPreviewHeight
-                            color: "transparent"
-                            radius: Kirigami.Units.smallSpacing
-                            border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4)
-                            border.width: 1
+                            anchors.top: parent.top
+                            width: parent.effectivePreviewWidth
+                            height: parent.effectivePreviewHeight
 
-                            Row {
+                            Rectangle {
                                 anchors.fill: parent
-                                anchors.margins: 2
-                                spacing: 1
+                                color: "transparent"
+                                radius: Kirigami.Units.smallSpacing * 1.5
+                                border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4)
+                                border.width: 1
 
-                                Repeater {
-                                    model: 3
+                                Row {
+                                    anchors.fill: parent
+                                    anchors.margins: 2
+                                    spacing: 1
 
-                                    Rectangle {
-                                        width: (parent.width - 2) / 3
-                                        height: parent.height
-                                        radius: 2
-                                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.35)
-                                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.7)
-                                        border.width: 1
+                                    Repeater {
+                                        model: 3
 
-                                        Label {
-                                            anchors.centerIn: parent
-                                            text: (index + 1).toString()
-                                            font.pixelSize: Math.min(parent.width, parent.height) * 0.3
-                                            font.bold: true
-                                            opacity: 0.6
-                                            visible: parent.width >= 20
+                                        Rectangle {
+                                            width: (parent.width - 2) / 3
+                                            height: parent.height
+                                            radius: 2
+                                            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.35)
+                                            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.7)
+                                            border.width: 1
+
+                                            Label {
+                                                anchors.centerIn: parent
+                                                text: (index + 1).toString()
+                                                font.pixelSize: Math.min(parent.width, parent.height) * 0.3
+                                                font.bold: true
+                                                opacity: 0.6
+                                                visible: parent.width >= 20
+                                            }
+
                                         }
 
                                     }
@@ -1219,17 +1232,164 @@ Flickable {
 
                             }
 
+                            Label {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.top: parent.bottom
+                                anchors.topMargin: Kirigami.Units.smallSpacing
+                                text: parent.width + " \u00d7 " + parent.height + " px"
+                                font: Kirigami.Theme.fixedWidthFont
+                                opacity: 0.7
+                            }
+
+                        }
+
+                    }
+
+                    // Size preset buttons (matching KCM segmented style)
+                    RowLayout {
+                        id: sizeButtonRow
+
+                        property bool customModeActive: false
+                        property int selectedSize: {
+                            if (kcm.zoneSelectorSizeMode === 0)
+                                return 0;
+
+                            if (customModeActive)
+                                return 4;
+
+                            var w = kcm.zoneSelectorPreviewWidth;
+                            if (Math.abs(w - 120) <= 5)
+                                return 1;
+
+                            if (Math.abs(w - 180) <= 5)
+                                return 2;
+
+                            if (Math.abs(w - 260) <= 5)
+                                return 3;
+
+                            return 4;
+                        }
+
+                        Kirigami.FormData.label: i18n("Size:")
+                        enabled: zoneSelectorEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
+                        spacing: 0
+
+                        Button {
+                            text: i18n("Auto")
+                            flat: sizeButtonRow.selectedSize !== 0
+                            highlighted: sizeButtonRow.selectedSize === 0
+                            onClicked: {
+                                sizeButtonRow.customModeActive = false;
+                                kcm.zoneSelectorSizeMode = 0;
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
+                            ToolTip.text: i18n("Approximately 10% of screen width (120-280px)")
+                        }
+
+                        Button {
+                            text: i18n("Small")
+                            flat: sizeButtonRow.selectedSize !== 1
+                            highlighted: sizeButtonRow.selectedSize === 1
+                            onClicked: {
+                                sizeButtonRow.customModeActive = false;
+                                kcm.zoneSelectorSizeMode = 1;
+                                kcm.zoneSelectorPreviewWidth = 120;
+                                kcm.zoneSelectorPreviewHeight = Math.round(120 / root.screenAspectRatio);
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
+                            ToolTip.text: i18n("120px width")
+                        }
+
+                        Button {
+                            text: i18n("Medium")
+                            flat: sizeButtonRow.selectedSize !== 2
+                            highlighted: sizeButtonRow.selectedSize === 2
+                            onClicked: {
+                                sizeButtonRow.customModeActive = false;
+                                kcm.zoneSelectorSizeMode = 1;
+                                kcm.zoneSelectorPreviewWidth = 180;
+                                kcm.zoneSelectorPreviewHeight = Math.round(180 / root.screenAspectRatio);
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
+                            ToolTip.text: i18n("180px width")
+                        }
+
+                        Button {
+                            text: i18n("Large")
+                            flat: sizeButtonRow.selectedSize !== 3
+                            highlighted: sizeButtonRow.selectedSize === 3
+                            onClicked: {
+                                sizeButtonRow.customModeActive = false;
+                                kcm.zoneSelectorSizeMode = 1;
+                                kcm.zoneSelectorPreviewWidth = 260;
+                                kcm.zoneSelectorPreviewHeight = Math.round(260 / root.screenAspectRatio);
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
+                            ToolTip.text: i18n("260px width")
+                        }
+
+                        Button {
+                            text: i18n("Custom")
+                            flat: sizeButtonRow.selectedSize !== 4
+                            highlighted: sizeButtonRow.selectedSize === 4
+                            onClicked: {
+                                sizeButtonRow.customModeActive = true;
+                                kcm.zoneSelectorSizeMode = 1;
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
+                            ToolTip.text: i18n("Custom size with slider")
+                        }
+
+                    }
+
+                    // Custom size slider
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Width:")
+                        visible: sizeButtonRow.selectedSize === 4
+                        enabled: zoneSelectorEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Slider {
+                            id: customSizeSlider
+
+                            Layout.fillWidth: true
+                            from: root.zoneSelectorPreviewWidthMin
+                            to: root.zoneSelectorPreviewWidthMax
+                            stepSize: 10
+                            value: kcm.zoneSelectorPreviewWidth
+                            Accessible.name: i18n("Preview size")
+                            onMoved: {
+                                kcm.zoneSelectorPreviewWidth = value;
+                                var newHeight = Math.round(value / root.screenAspectRatio);
+                                newHeight = Math.max(root.zoneSelectorPreviewHeightMin, Math.min(root.zoneSelectorPreviewHeightMax, newHeight));
+                                kcm.zoneSelectorPreviewHeight = newHeight;
+                            }
                         }
 
                         Label {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.top: previewRect.bottom
-                            anchors.topMargin: Kirigami.Units.smallSpacing
-                            text: previewRect.width + " x " + previewRect.height + " px"
+                            text: kcm.zoneSelectorPreviewWidth + " px"
+                            Layout.preferredWidth: 55
+                            horizontalAlignment: Text.AlignRight
                             font: Kirigami.Theme.fixedWidthFont
-                            opacity: 0.7
                         }
 
+                    }
+
+                    // Info text for auto mode
+                    Label {
+                        Layout.fillWidth: true
+                        visible: kcm.zoneSelectorSizeMode === 0
+                        text: i18n("Preview size adjusts automatically based on your screen resolution.")
+                        opacity: 0.6
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        wrapMode: Text.WordWrap
                     }
 
                 }

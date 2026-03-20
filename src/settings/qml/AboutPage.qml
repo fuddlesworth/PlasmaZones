@@ -49,12 +49,12 @@ Flickable {
 
         Label {
             Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.smallSpacing
+            Layout.topMargin: Kirigami.Units.largeSpacing
             Layout.bottomMargin: Kirigami.Units.largeSpacing
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
             opacity: 0.7
-            text: i18n("Window tiling and zone management for Wayland compositors. " + "Define custom screen zones, snap windows with drag-and-drop or " + "keyboard shortcuts, and enjoy automatic tiling layouts.")
+            text: i18n("Window tiling and zone management for Wayland compositors")
         }
 
         // --- Daemon ---
