@@ -56,90 +56,44 @@ Flickable {
             wrapMode: Text.WordWrap
         }
 
-        // Daemon card
-        Item {
+        // Enable/disable section (matches KCM header pattern)
+        ColumnLayout {
             Layout.fillWidth: true
-            implicitHeight: daemonCard.implicitHeight
+            spacing: 0
 
-            Kirigami.Card {
-                id: daemonCard
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.margins: Kirigami.Units.largeSpacing
 
-                anchors.fill: parent
-
-                header: Kirigami.Heading {
-                    level: 3
-                    text: i18n("Daemon")
-                    padding: Kirigami.Units.smallSpacing
+                Label {
+                    text: i18n("Enable PlasmaZones")
+                    font.bold: true
                 }
 
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    RowLayout {
-                        spacing: Kirigami.Units.smallSpacing
-
-                        Rectangle {
-                            width: Kirigami.Units.gridUnit
-                            height: Kirigami.Units.gridUnit
-                            radius: width / 2
-                            color: settingsController.daemonRunning ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
-                        }
-
-                        Label {
-                            text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
-                            font.bold: true
-                        }
-
-                        Item {
-                            Layout.fillWidth: true
-                        }
-
-                        Button {
-                            text: i18n("Start")
-                            icon.name: "media-playback-start"
-                            enabled: !settingsController.daemonRunning
-                            onClicked: settingsController.daemonController.startDaemon()
-                        }
-
-                        Button {
-                            text: i18n("Stop")
-                            icon.name: "media-playback-stop"
-                            enabled: settingsController.daemonRunning
-                            onClicked: settingsController.daemonController.stopDaemon()
-                        }
-
-                    }
-
-                    Kirigami.Separator {
-                        Layout.fillWidth: true
-                    }
-
-                    RowLayout {
-                        spacing: Kirigami.Units.smallSpacing
-
-                        Label {
-                            text: i18n("Start daemon automatically")
-                        }
-
-                        Item {
-                            Layout.fillWidth: true
-                        }
-
-                        Switch {
-                            checked: settingsController.daemonRunning
-                            onToggled: {
-                                if (checked)
-                                    settingsController.daemonController.startDaemon();
-                                else
-                                    settingsController.daemonController.stopDaemon();
-                            }
-                            Accessible.name: i18n("Enable PlasmaZones daemon autostart")
-                        }
-
-                    }
-
+                Item {
+                    Layout.fillWidth: true
                 }
 
+                Label {
+                    text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
+                    opacity: 0.7
+                }
+
+                Switch {
+                    checked: settingsController.daemonRunning
+                    onToggled: {
+                        if (checked)
+                            settingsController.daemonController.startDaemon();
+                        else
+                            settingsController.daemonController.stopDaemon();
+                    }
+                    Accessible.name: i18n("Enable PlasmaZones")
+                }
+
+            }
+
+            Kirigami.Separator {
+                Layout.fillWidth: true
             }
 
         }
