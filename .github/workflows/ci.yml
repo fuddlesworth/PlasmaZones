@@ -33,8 +33,7 @@ jobs:
             qt6-base qt6-declarative qt6-tools qt6-shadertools \
             kwin \
             kconfig kconfigwidgets \
-            kcmutils kwindowsystem kglobalaccel \
-            knotifications \
+            kcmutils kglobalaccel \
             layer-shell-qt plasma-activities
 
       - name: Configure

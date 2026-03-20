@@ -16,9 +16,7 @@ depends=(
     'kconfigwidgets'
     'ki18n'
     'kcmutils'
-    'kwindowsystem'
     'kglobalaccel'
-    'knotifications'
     'layer-shell-qt'
 )
 optdepends=(

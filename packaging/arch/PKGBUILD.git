@@ -16,9 +16,7 @@ depends=(
     'kconfig'
     'kconfigwidgets'
     'kcmutils'
-    'kwindowsystem'
     'kglobalaccel'
-    'knotifications'
     'layer-shell-qt'
 )
 makedepends=(

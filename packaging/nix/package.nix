@@ -83,9 +83,7 @@ stdenv.mkDerivation {
     kconfig
     kconfigwidgets
     kcmutils
-    kwindowsystem
     kglobalaccel
-    knotifications
     # Wayland overlay support (required; 6.6+ for setScreen API)
     layer-shell-qt
 

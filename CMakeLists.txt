@@ -115,9 +115,7 @@ find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
     Config
     ConfigWidgets
     KCMUtils
-    WindowSystem
-    GlobalAccel   # Used by KCM for shortcut queries
-    Notifications
+    GlobalAccel   # Used by KCM + shortcut backend
 )
 
 # KActivities/PlasmaActivities is optional (for activity-based layouts)
