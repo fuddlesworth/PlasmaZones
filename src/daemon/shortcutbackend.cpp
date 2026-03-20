@@ -10,6 +10,7 @@
 #include <QDBusConnectionInterface>
 #include <QDBusInterface>
 #include <QDBusMessage>
+#include <QDBusObjectPath>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QGuiApplication>
@@ -126,9 +127,9 @@ public:
             return;
         m_actions.remove(action->objectName());
 
-        // cleanComponent removes a single action from the kglobalaccel daemon
+        // setInactive removes a single action's key grabs from kglobalacceld
         const QStringList actionId = buildActionId(action);
-        QDBusMessage msg = QDBusMessage::createMethodCall(s_service, s_path, s_iface, QStringLiteral("cleanComponent"));
+        QDBusMessage msg = QDBusMessage::createMethodCall(s_service, s_path, s_iface, QStringLiteral("setInactive"));
         msg.setArguments({QVariant::fromValue(actionId)});
         QDBusConnection::sessionBus().asyncCall(msg);
     }
@@ -141,8 +142,10 @@ public:
     }
 
 private Q_SLOTS:
-    // Dispatches kglobalacceld's globalShortcutPressed signal to the right QAction
-    void onGlobalShortcutPressed(const QString& /*componentUnique*/, const QString& shortcutUnique)
+    // Dispatches kglobalacceld's globalShortcutPressed signal to the right QAction.
+    // Signal signature: globalShortcutPressed(QString componentUnique, QString shortcutUnique, qlonglong timestamp)
+    void onGlobalShortcutPressed(const QString& /*componentUnique*/, const QString& shortcutUnique,
+                                 qlonglong /*timestamp*/)
     {
         QAction* action = m_actions.value(shortcutUnique);
         if (action) {
@@ -172,12 +175,33 @@ private:
     {
         if (m_componentConnected)
             return;
-        m_componentConnected = true;
 
-        // Connect to globalShortcutPressed — dispatches key presses to QActions
-        QDBusConnection::sessionBus().connect(s_service, {}, QStringLiteral("org.kde.KGlobalAccel.Component"),
-                                              QStringLiteral("globalShortcutPressed"), this,
-                                              SLOT(onGlobalShortcutPressed(QString, QString)));
+        // Call getComponent() — kglobalacceld uses this to register our process
+        // for signal delivery and returns the component object path.
+        const QString appName = QCoreApplication::applicationName();
+        QDBusMessage getComp =
+            QDBusMessage::createMethodCall(s_service, s_path, s_iface, QStringLiteral("getComponent"));
+        getComp.setArguments({QVariant::fromValue(appName)});
+
+        QDBusMessage reply = QDBusConnection::sessionBus().call(getComp);
+        if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+            qCWarning(lcShortcuts) << "getComponent failed:" << reply.errorMessage();
+            // Fall back to wildcard path
+            QDBusConnection::sessionBus().connect(s_service, {}, QStringLiteral("org.kde.KGlobalAccel.Component"),
+                                                  QStringLiteral("globalShortcutPressed"), this,
+                                                  SLOT(onGlobalShortcutPressed(QString, QString, qlonglong)));
+        } else {
+            QString componentPath = reply.arguments().first().value<QDBusObjectPath>().path();
+            qCDebug(lcShortcuts) << "Component path:" << componentPath;
+
+            // Connect to globalShortcutPressed on the specific component path
+            QDBusConnection::sessionBus().connect(s_service, componentPath,
+                                                  QStringLiteral("org.kde.KGlobalAccel.Component"),
+                                                  QStringLiteral("globalShortcutPressed"), this,
+                                                  SLOT(onGlobalShortcutPressed(QString, QString, qlonglong)));
+        }
+
+        m_componentConnected = true;
     }
 
     bool m_componentConnected = false;
