@@ -17,9 +17,25 @@ ApplicationWindow {
     ListModel {
         id: pageModel
 
+        // Order matches KCM X-KDE-Weight values
         ListElement {
-            name: "general"
-            label: "General"
+            name: "about"
+            label: "About"
+        }
+
+        ListElement {
+            name: "layouts"
+            label: "Layouts"
+        }
+
+        ListElement {
+            name: "editor"
+            label: "Editor"
+        }
+
+        ListElement {
+            name: "assignments"
+            label: "Assignments"
         }
 
         ListElement {
@@ -33,28 +49,13 @@ ApplicationWindow {
         }
 
         ListElement {
+            name: "general"
+            label: "General"
+        }
+
+        ListElement {
             name: "exclusions"
             label: "Exclusions"
-        }
-
-        ListElement {
-            name: "layouts"
-            label: "Layouts"
-        }
-
-        ListElement {
-            name: "assignments"
-            label: "Assignments"
-        }
-
-        ListElement {
-            name: "editor"
-            label: "Editor"
-        }
-
-        ListElement {
-            name: "about"
-            label: "About"
         }
 
     }
@@ -151,7 +152,17 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 currentIndex: sidebar.currentIndex
 
-                GeneralPage {
+                // Order must match pageModel
+                AboutPage {
+                }
+
+                LayoutsPage {
+                }
+
+                EditorPage {
+                }
+
+                AssignmentsPage {
                 }
 
                 SnappingPage {
@@ -160,16 +171,10 @@ ApplicationWindow {
                 AutotilingPage {
                 }
 
+                GeneralPage {
+                }
+
                 ExclusionsPage {
-                }
-
-                LayoutsPage {
-                }
-
-                AssignmentsPage {
-                }
-
-                EditorPage {
                 }
 
                 AboutPage {
