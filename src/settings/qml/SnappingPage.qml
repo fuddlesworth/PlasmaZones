@@ -977,6 +977,8 @@ Flickable {
 
                     // 3x3 position picker grid (matching KCM PositionPicker)
                     Item {
+                        id: positionPicker
+
                         readonly property var positionLabels: [i18n("Top-Left"), i18n("Top"), i18n("Top-Right"), i18n("Left"), i18n("Center"), i18n("Right"), i18n("Bottom-Left"), i18n("Bottom"), i18n("Bottom-Right")]
 
                         Kirigami.FormData.label: i18n("Position:")
@@ -1055,7 +1057,7 @@ Flickable {
                                                     onClicked: kcm.zoneSelectorPosition = posCell.index
                                                     ToolTip.visible: containsMouse && zoneSelectorEnabledCheck.checked
                                                     ToolTip.delay: 500
-                                                    ToolTip.text: positionLabels[posCell.index]
+                                                    ToolTip.text: positionPicker.positionLabels[posCell.index]
                                                 }
 
                                                 Behavior on color {
@@ -1077,7 +1079,7 @@ Flickable {
 
                             Label {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: positionLabels[kcm.zoneSelectorPosition] || ""
+                                text: positionPicker.positionLabels[kcm.zoneSelectorPosition] || ""
                                 font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                                 opacity: 0.7
                             }
