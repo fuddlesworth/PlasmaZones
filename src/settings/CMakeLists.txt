@@ -5,6 +5,12 @@
 
 find_package(KF6Kirigami REQUIRED)
 
+# NOTE: DaemonController, ScreenHelper, and ScreenProvider sources are compiled here
+# directly rather than linking plasmazones_kcm_common, because that static library
+# pulls in KF6::GlobalAccel and KF6::ConfigWidgets which the standalone app must avoid.
+# These three classes are Qt-only (no KDE Frameworks deps).
+# TODO: Extract them into a separate Qt-only static lib that both KCM and standalone
+# can link, eliminating this intentional duplication.
 set(plasmazones_settings_SRCS
     main.cpp
     settingscontroller.h

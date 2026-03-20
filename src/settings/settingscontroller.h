@@ -146,7 +146,14 @@ public:
     Q_INVOKABLE void assignTilingLayoutToScreen(const QString& screenName, const QString& layoutId);
     Q_INVOKABLE void clearTilingScreenAssignment(const QString& screenName);
 
-    // Editor settings accessors
+    // Assignment query helpers (D-Bus to daemon)
+    Q_INVOKABLE QString getLayoutForScreen(const QString& screenName) const;
+    Q_INVOKABLE QString getTilingLayoutForScreen(const QString& screenName) const;
+
+    // ── Editor settings ──────────────────────────────────────────────────────
+    // These duplicate the [Editor] config group handling from kcm/editor/kcmeditor.cpp.
+    // TODO: Extract shared EditorSettings helper to avoid duplication.
+    // Both read/write the same [Editor] group in plasmazonesrc.
     QString editorDuplicateShortcut() const;
     QString editorSplitHorizontalShortcut() const;
     QString editorSplitVerticalShortcut() const;

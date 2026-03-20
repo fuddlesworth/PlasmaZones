@@ -51,26 +51,30 @@ Flickable {
 
         function assignLayoutToScreen(screen, layout) {
             settingsController.assignLayoutToScreen(screen, layout);
+            screenAssignmentsChanged();
         }
 
         function clearScreenAssignment(screen) {
             settingsController.clearScreenAssignment(screen);
+            screenAssignmentsChanged();
         }
 
         function assignTilingLayoutToScreen(screen, layout) {
             settingsController.assignTilingLayoutToScreen(screen, layout);
+            tilingScreenAssignmentsChanged();
         }
 
         function clearTilingScreenAssignment(screen) {
             settingsController.clearTilingScreenAssignment(screen);
+            tilingScreenAssignmentsChanged();
         }
 
         function getLayoutForScreen(screen) {
-            return "";
+            return settingsController.getLayoutForScreen(screen);
         }
 
         function getTilingLayoutForScreen(screen) {
-            return "";
+            return settingsController.getTilingLayoutForScreen(screen);
         }
 
         function isScreenLocked(screen, mode) {
@@ -78,6 +82,7 @@ Flickable {
         }
 
         function toggleScreenLock(screen, mode) {
+            lockedScreensChanged();
         }
 
         function getQuickLayoutSlot(n) {
@@ -136,6 +141,7 @@ Flickable {
         }
 
         function toggleContextLock(screen, desktop, activity, mode) {
+            lockedScreensChanged();
         }
 
         function getLayoutForScreenDesktop(screen, desktop) {

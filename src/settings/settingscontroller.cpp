@@ -112,11 +112,12 @@ void SettingsController::save()
     // Notify daemon to reload settings (synchronous to avoid race)
     KCMDBus::notifyReload();
 
-    setNeedsSave(false);
+    // Safe to clear immediately: notifyReload() is synchronous, so the daemon
+    // has already processed the reload and emitted settingsChanged before we
+    // reach this line. No deferred reset needed.
+    m_saving = false;
 
-    QTimer::singleShot(0, this, [this]() {
-        m_saving = false;
-    });
+    setNeedsSave(false);
 }
 
 void SettingsController::defaults()
@@ -284,6 +285,28 @@ void SettingsController::clearTilingScreenAssignment(const QString& screenName)
     KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("clearAssignment"),
                         {screenName, 0, QString()});
     KCMDBus::notifyReload();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Assignment query helpers (D-Bus to daemon)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QString SettingsController::getLayoutForScreen(const QString& screenName) const
+{
+    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                                             QStringLiteral("getLayoutForScreen"), {screenName});
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+        return reply.arguments().first().toString();
+    return {};
+}
+
+QString SettingsController::getTilingLayoutForScreen(const QString& screenName) const
+{
+    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                                             QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, 0});
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+        return reply.arguments().first().toString();
+    return {};
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
