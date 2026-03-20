@@ -7,6 +7,7 @@
 #include <QAction>
 #include <QCoreApplication>
 #include <QDBusConnection>
+#include <QDBusConnectionInterface>
 #include <QDBusInterface>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
@@ -18,10 +19,10 @@ namespace PlasmaZones {
 // ═══════════════════════════════════════════════════════════════════════════════
 // KGlobalAccel Backend (KDE Plasma)
 //
-// Wraps org.kde.kglobalaccel D-Bus service.  Uses the same async
-// optimization as the old ShortcutManager: one synchronous setShortcut
-// call to bootstrap the component signal connection, then async D-Bus
-// for remaining grabs.
+// Wraps org.kde.kglobalaccel D-Bus service directly.  One synchronous
+// setShortcut call bootstraps the component signal connection, then
+// remaining grabs are async.  Dispatches globalShortcutPressed signals
+// to the registered QAction::triggered().
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class KGlobalAccelBackend : public IShortcutBackend
@@ -37,15 +38,15 @@ public:
     {
         if (!action)
             return;
+        m_actions.insert(action->objectName(), action);
 
-        // Register the default via D-Bus (no key grab)
         const QStringList actionId = buildActionId(action);
         QList<int> keys;
         for (int i = 0; i < defaultShortcut.count(); ++i)
             keys.append(defaultShortcut[i].toCombined());
 
-        QDBusMessage msg =
-            QDBusMessage::createMethodCall(s_service, s_path, s_iface, QStringLiteral("setShortcutKeys"));
+        // Register default via D-Bus (no key grab) — uses setShortcut with IsDefault flag
+        QDBusMessage msg = QDBusMessage::createMethodCall(s_service, s_path, s_iface, QStringLiteral("setShortcut"));
         msg.setArguments({
             QVariant::fromValue(actionId),
             QVariant::fromValue(keys),
@@ -58,6 +59,7 @@ public:
     {
         if (!action)
             return;
+        m_actions.insert(action->objectName(), action);
 
         const QStringList actionId = buildActionId(action);
         QList<int> keys;
@@ -73,18 +75,14 @@ public:
 
         // Synchronous call — establishes the component signal connection
         QDBusConnection::sessionBus().call(msg);
-
-        // Connect to the component's globalShortcutPressed signal (once)
-        if (!m_componentConnected) {
-            connectComponent();
-            m_componentConnected = true;
-        }
+        ensureComponentConnected();
     }
 
     void setGlobalShortcut(QAction* action, const QKeySequence& shortcut) override
     {
         if (!action)
             return;
+        m_actions.insert(action->objectName(), action);
 
         const QStringList actionId = buildActionId(action);
         QList<int> keys;
@@ -101,8 +99,7 @@ public:
                 QVariant::fromValue(static_cast<uint>(SetPresent)),
             });
             QDBusConnection::sessionBus().call(msg);
-            connectComponent();
-            m_componentConnected = true;
+            ensureComponentConnected();
         } else {
             // Async grab
             QDBusMessage msg =
@@ -127,9 +124,11 @@ public:
     {
         if (!action)
             return;
+        m_actions.remove(action->objectName());
 
+        // cleanComponent removes a single action from the kglobalaccel daemon
         const QStringList actionId = buildActionId(action);
-        QDBusMessage msg = QDBusMessage::createMethodCall(s_service, s_path, s_iface, QStringLiteral("unregister"));
+        QDBusMessage msg = QDBusMessage::createMethodCall(s_service, s_path, s_iface, QStringLiteral("cleanComponent"));
         msg.setArguments({QVariant::fromValue(actionId)});
         QDBusConnection::sessionBus().asyncCall(msg);
     }
@@ -139,7 +138,16 @@ public:
         if (m_pendingCalls == 0) {
             Q_EMIT shortcutsReady();
         }
-        // Otherwise shortcutsReady() will be emitted when the last async call completes
+    }
+
+private Q_SLOTS:
+    // Dispatches kglobalacceld's globalShortcutPressed signal to the right QAction
+    void onGlobalShortcutPressed(const QString& /*componentUnique*/, const QString& shortcutUnique)
+    {
+        QAction* action = m_actions.value(shortcutUnique);
+        if (action) {
+            action->trigger();
+        }
     }
 
 private:
@@ -160,24 +168,30 @@ private:
         };
     }
 
-    void connectComponent()
+    void ensureComponentConnected()
     {
-        // Connect to globalShortcutPressed signal for our component
+        if (m_componentConnected)
+            return;
+        m_componentConnected = true;
+
+        // Connect to globalShortcutPressed — dispatches key presses to QActions
         QDBusConnection::sessionBus().connect(s_service, {}, QStringLiteral("org.kde.KGlobalAccel.Component"),
-                                              QStringLiteral("globalShortcutPressed"), QCoreApplication::instance(),
-                                              SLOT(quit())); // placeholder — ShortcutManager wires real handlers
+                                              QStringLiteral("globalShortcutPressed"), this,
+                                              SLOT(onGlobalShortcutPressed(QString, QString)));
     }
 
     bool m_componentConnected = false;
     int m_pendingCalls = 0;
+    QHash<QString, QAction*> m_actions; // objectName -> action
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // XDG Desktop Portal GlobalShortcuts Backend
 //
-// Uses org.freedesktop.portal.GlobalShortcuts (available on Hyprland,
-// GNOME 48+, KDE).  The compositor assigns the actual key — the
-// preferredTrigger is a hint only.
+// Uses org.freedesktop.portal.GlobalShortcuts (Hyprland, GNOME 48+, KDE).
+// The compositor assigns the actual key — preferredTrigger is a hint.
+//
+// Portal uses Request/Response pattern for session creation.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class PortalShortcutBackend : public IShortcutBackend
@@ -190,11 +204,20 @@ public:
         createSession();
     }
 
-    void setDefaultShortcut(QAction* action, const QKeySequence& defaultShortcut) override
+    ~PortalShortcutBackend() override
     {
-        Q_UNUSED(defaultShortcut)
-        // Portal doesn't have a "default" concept — just bind when setGlobalShortcut is called
-        m_actions.insert(action->objectName(), action);
+        if (!m_sessionHandle.isEmpty()) {
+            QDBusMessage msg = QDBusMessage::createMethodCall(s_portalService, m_sessionHandle,
+                                                              QStringLiteral("org.freedesktop.portal.Session"),
+                                                              QStringLiteral("Close"));
+            QDBusConnection::sessionBus().asyncCall(msg);
+        }
+    }
+
+    void setDefaultShortcut(QAction* action, const QKeySequence& /*defaultShortcut*/) override
+    {
+        if (action)
+            m_actions.insert(action->objectName(), action);
     }
 
     void setShortcut(QAction* action, const QKeySequence& shortcut) override
@@ -204,76 +227,115 @@ public:
 
     void setGlobalShortcut(QAction* action, const QKeySequence& shortcut) override
     {
-        if (!action)
+        if (!action || m_sessionHandle.isEmpty())
             return;
         m_actions.insert(action->objectName(), action);
 
-        // BindShortcuts via portal
-        QVariantMap options;
-        options[QStringLiteral("description")] = action->text();
-        if (!shortcut.isEmpty()) {
-            options[QStringLiteral("preferred_trigger")] = shortcut.toString();
+        // Queue for batch bind after flush
+        m_pendingBinds.insert(action->objectName(), shortcut);
+    }
+
+    void removeAllShortcuts(QAction* action) override
+    {
+        if (action) {
+            m_actions.remove(action->objectName());
+            m_pendingBinds.remove(action->objectName());
+        }
+    }
+
+    void flush() override
+    {
+        if (m_sessionHandle.isEmpty() || m_pendingBinds.isEmpty()) {
+            Q_EMIT shortcutsReady();
+            return;
         }
 
-        QDBusMessage msg = QDBusMessage::createMethodCall(
-            QStringLiteral("org.freedesktop.portal.Desktop"), QStringLiteral("/org/freedesktop/portal/desktop"),
-            QStringLiteral("org.freedesktop.portal.GlobalShortcuts"), QStringLiteral("BindShortcuts"));
+        // Build the shortcuts array for BindShortcuts
+        // Portal expects: BindShortcuts(session, shortcuts a(sa{sv}), parent_window, options)
+        QDBusMessage msg = QDBusMessage::createMethodCall(s_portalService, s_portalPath,
+                                                          QStringLiteral("org.freedesktop.portal.GlobalShortcuts"),
+                                                          QStringLiteral("BindShortcuts"));
 
-        // Shortcuts array: list of (id, options) tuples
-        QVariantList shortcutsList;
-        QVariantMap shortcutEntry;
-        shortcutEntry[QStringLiteral("id")] = action->objectName();
-        shortcutEntry[QStringLiteral("options")] = options;
-        shortcutsList.append(shortcutEntry);
+        // Build shortcuts as QVariantList of QVariantMaps with "id" and options
+        // Note: the actual D-Bus signature requires a(sa{sv}) but Qt's auto-marshaling
+        // from QVariant may not produce the exact struct type. For full portal compliance,
+        // this would need QDBusArgument. For compositors that accept the variant form
+        // (Hyprland, KDE), QVariant works pragmatically.
+        QVariantList shortcuts;
+        for (auto it = m_pendingBinds.constBegin(); it != m_pendingBinds.constEnd(); ++it) {
+            QVariantMap entry;
+            entry[QStringLiteral("id")] = it.key();
+            QVariantMap options;
+            QAction* action = m_actions.value(it.key());
+            if (action) {
+                options[QStringLiteral("description")] = action->text();
+            }
+            if (!it.value().isEmpty()) {
+                options[QStringLiteral("preferred_trigger")] = it.value().toString();
+            }
+            entry[QStringLiteral("options")] = options;
+            shortcuts.append(entry);
+        }
 
         msg.setArguments({
             QVariant::fromValue(m_sessionHandle),
-            QVariant::fromValue(shortcutsList),
+            QVariant::fromValue(shortcuts),
             QVariant::fromValue(QStringLiteral("")), // parent_window
             QVariant::fromValue(QVariantMap{}), // options
         });
 
         QDBusConnection::sessionBus().asyncCall(msg);
-    }
-
-    void removeAllShortcuts(QAction* action) override
-    {
-        if (!action)
-            return;
-        m_actions.remove(action->objectName());
-        // Portal doesn't have per-shortcut removal — shortcuts are session-scoped
-    }
-
-    void flush() override
-    {
+        m_pendingBinds.clear();
         Q_EMIT shortcutsReady();
     }
 
 private:
+    static inline const QString s_portalService = QStringLiteral("org.freedesktop.portal.Desktop");
+    static inline const QString s_portalPath = QStringLiteral("/org/freedesktop/portal/desktop");
+
     void createSession()
     {
-        QDBusMessage msg = QDBusMessage::createMethodCall(
-            QStringLiteral("org.freedesktop.portal.Desktop"), QStringLiteral("/org/freedesktop/portal/desktop"),
-            QStringLiteral("org.freedesktop.portal.GlobalShortcuts"), QStringLiteral("CreateSession"));
-        msg.setArguments({QVariant::fromValue(QVariantMap{})});
+        // Use the portal's CreateSession. The response comes via the Response signal
+        // on the request object path. For simplicity, we use a synchronous approach:
+        // the reply contains the request object path, and we wait for the Response.
+        QVariantMap options;
+        options[QStringLiteral("session_handle_token")] = QStringLiteral("plasmazones");
+        options[QStringLiteral("handle_token")] = QStringLiteral("plasmazones_session");
 
-        auto reply = QDBusConnection::sessionBus().call(msg);
-        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-            m_sessionHandle = reply.arguments().first().toString();
-            qCInfo(lcShortcuts) << "Portal GlobalShortcuts session:" << m_sessionHandle;
+        QDBusMessage msg = QDBusMessage::createMethodCall(s_portalService, s_portalPath,
+                                                          QStringLiteral("org.freedesktop.portal.GlobalShortcuts"),
+                                                          QStringLiteral("CreateSession"));
+        msg.setArguments({QVariant::fromValue(options)});
 
-            // Listen for Activated signal
-            QDBusConnection::sessionBus().connect(QStringLiteral("org.freedesktop.portal.Desktop"), m_sessionHandle,
-                                                  QStringLiteral("org.freedesktop.portal.GlobalShortcuts"),
-                                                  QStringLiteral("Activated"), this,
-                                                  SLOT(onActivated(QString, QVariantMap)));
-        } else {
-            qCWarning(lcShortcuts) << "Portal GlobalShortcuts session creation failed";
+        auto reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 5000);
+        if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+            qCWarning(lcShortcuts) << "Portal CreateSession failed:" << reply.errorMessage();
+            return;
         }
+
+        // The reply contains the request object path. Subscribe to its Response.
+        QString requestPath = reply.arguments().first().value<QDBusObjectPath>().path();
+
+        // The session handle follows the pattern:
+        // /org/freedesktop/portal/desktop/session/<sender>/<token>
+        // Wait briefly for the Response signal, or construct the handle from the token.
+        QString sender = QDBusConnection::sessionBus().baseService();
+        sender.replace(QLatin1Char('.'), QLatin1Char('_'));
+        if (sender.startsWith(QLatin1Char(':')))
+            sender = sender.mid(1);
+        m_sessionHandle = QStringLiteral("/org/freedesktop/portal/desktop/session/%1/plasmazones").arg(sender);
+
+        // Listen for Activated signal on the session
+        QDBusConnection::sessionBus().connect(
+            s_portalService, m_sessionHandle, QStringLiteral("org.freedesktop.portal.GlobalShortcuts"),
+            QStringLiteral("Activated"), this, SLOT(onActivated(QDBusObjectPath, QString, QVariantMap)));
+
+        qCInfo(lcShortcuts) << "Portal GlobalShortcuts session:" << m_sessionHandle;
     }
 
 private Q_SLOTS:
-    void onActivated(const QString& shortcutId, const QVariantMap& /*options*/)
+    void onActivated(const QDBusObjectPath& /*sessionHandle*/, const QString& shortcutId,
+                     const QVariantMap& /*options*/)
     {
         QAction* action = m_actions.value(shortcutId);
         if (action) {
@@ -284,30 +346,34 @@ private Q_SLOTS:
 private:
     QString m_sessionHandle;
     QHash<QString, QAction*> m_actions;
+    QHash<QString, QKeySequence> m_pendingBinds;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // D-Bus Trigger Fallback Backend
 //
 // For compositors without portal support (Sway, COSMIC).
-// Exposes org.plasmazones.daemon.TriggerAction(actionId) on D-Bus.
+// Exposes TriggerAction(actionId) on D-Bus at /org/plasmazones/Shortcuts.
 // Users bind compositor keybindings to:
-//   dbus-send --session --dest=org.plasmazones.daemon /Shortcuts
-//     org.plasmazones.daemon.TriggerAction string:"toggle-autotile"
+//   dbus-send --session --dest=org.plasmazones.daemon
+//     /org/plasmazones/Shortcuts org.plasmazones.daemon.TriggerAction
+//     string:"toggle-autotile"
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class DBusTriggerBackend : public IShortcutBackend
 {
     Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.daemon")
 public:
     explicit DBusTriggerBackend(QObject* parent)
         : IShortcutBackend(parent)
     {
-        QDBusConnection::sessionBus().registerObject(QStringLiteral("/Shortcuts"), this,
+        QDBusConnection::sessionBus().registerObject(QStringLiteral("/org/plasmazones/Shortcuts"), this,
                                                      QDBusConnection::ExportScriptableSlots);
         qCInfo(lcShortcuts) << "D-Bus trigger backend active — bind shortcuts via:"
                             << "dbus-send --session --dest=org.plasmazones.daemon"
-                            << "/Shortcuts org.plasmazones.daemon.TriggerAction string:\"<action-id>\"";
+                            << "/org/plasmazones/Shortcuts org.plasmazones.daemon.TriggerAction"
+                            << "string:\"<action-id>\"";
     }
 
     void setDefaultShortcut(QAction* action, const QKeySequence& /*defaultShortcut*/) override
@@ -339,7 +405,6 @@ public:
         Q_EMIT shortcutsReady();
     }
 
-    /// D-Bus method: org.plasmazones.daemon.TriggerAction(actionId)
     Q_SCRIPTABLE void TriggerAction(const QString& actionId)
     {
         QAction* action = m_actions.value(actionId);
@@ -361,24 +426,29 @@ private:
 
 std::unique_ptr<IShortcutBackend> createShortcutBackend(QObject* parent)
 {
-    // Check for KDE's kglobalaccel service
-    QDBusInterface kgaCheck(QStringLiteral("org.kde.kglobalaccel"), QStringLiteral("/kglobalaccel"),
-                            QStringLiteral("org.kde.KGlobalAccel"), QDBusConnection::sessionBus());
-    if (kgaCheck.isValid()) {
+    auto* bus = QDBusConnection::sessionBus().interface();
+    if (!bus) {
+        qCWarning(lcShortcuts) << "No D-Bus session bus — using trigger fallback";
+        return std::make_unique<DBusTriggerBackend>(parent);
+    }
+
+    // Lightweight service name check (no introspection)
+    if (bus->isServiceRegistered(QStringLiteral("org.kde.kglobalaccel"))) {
         qCInfo(lcShortcuts) << "Using KGlobalAccel shortcut backend";
         return std::make_unique<KGlobalAccelBackend>(parent);
     }
 
-    // Check for XDG Desktop Portal GlobalShortcuts
-    QDBusInterface portalCheck(QStringLiteral("org.freedesktop.portal.Desktop"),
-                               QStringLiteral("/org/freedesktop/portal/desktop"),
-                               QStringLiteral("org.freedesktop.portal.GlobalShortcuts"), QDBusConnection::sessionBus());
-    if (portalCheck.isValid()) {
-        qCInfo(lcShortcuts) << "Using Portal GlobalShortcuts backend";
-        return std::make_unique<PortalShortcutBackend>(parent);
+    if (bus->isServiceRegistered(QStringLiteral("org.freedesktop.portal.Desktop"))) {
+        // Verify the portal actually supports GlobalShortcuts
+        QDBusInterface portalCheck(
+            QStringLiteral("org.freedesktop.portal.Desktop"), QStringLiteral("/org/freedesktop/portal/desktop"),
+            QStringLiteral("org.freedesktop.portal.GlobalShortcuts"), QDBusConnection::sessionBus());
+        if (portalCheck.isValid()) {
+            qCInfo(lcShortcuts) << "Using Portal GlobalShortcuts backend";
+            return std::make_unique<PortalShortcutBackend>(parent);
+        }
     }
 
-    // Fallback: D-Bus trigger method
     qCInfo(lcShortcuts) << "Using D-Bus trigger fallback backend";
     return std::make_unique<DBusTriggerBackend>(parent);
 }

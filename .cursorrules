@@ -465,7 +465,10 @@ void Settings::setQuickLayoutShortcut(int index, const QString &shortcut) {
 }
 ```
 
-### KGlobalAccel Shortcut Integration
+### Global Shortcut Integration (IShortcutBackend)
+
+Uses `IShortcutBackend` (pluggable: KGlobalAccel, XDG Portal, D-Bus fallback).
+Factory auto-detects at runtime. **NEVER** use `KGlobalAccel` directly.
 
 #### Registration Pattern (ShortcutManager)
 ```cpp
@@ -474,7 +477,7 @@ auto *action = new QAction(PzI18n::tr("Action Description"), this);
 action->setObjectName(QStringLiteral("unique_action_id"));
 
 // Register with shortcut from settings:
-KGlobalAccel::setGlobalShortcut(action, QKeySequence(m_settings->shortcutSetting()));
+m_shortcutBackend->setGlobalShortcut(action, QKeySequence(m_settings->shortcutSetting()));
 
 // Connect signal for dynamic updates:
 connect(m_settings, &Settings::shortcutSettingChanged,
@@ -485,7 +488,7 @@ connect(m_settings, &Settings::shortcutSettingChanged,
 ```cpp
 void ShortcutManager::updateShortcut() {
     if (m_action) {
-        KGlobalAccel::setGlobalShortcut(m_action,
+        m_shortcutBackend->setGlobalShortcut(m_action,
             QKeySequence(m_settings->shortcutSetting()));
     }
 }
