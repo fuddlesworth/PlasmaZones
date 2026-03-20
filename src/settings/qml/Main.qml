@@ -83,7 +83,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 spacing: 0
 
-                // Header: icon + title + daemon toggle (matches KCM sidebar)
+                // Header: icon + title
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.margins: Kirigami.Units.largeSpacing
@@ -100,18 +100,6 @@ ApplicationWindow {
                         font.bold: true
                         font.pixelSize: 14
                         Layout.fillWidth: true
-                    }
-
-                    Switch {
-                        checked: settingsController.daemonRunning
-                        onToggled: {
-                            if (checked)
-                                settingsController.daemonController.startDaemon();
-                            else
-                                settingsController.daemonController.stopDaemon();
-                        }
-                        ToolTip.visible: hovered
-                        ToolTip.text: settingsController.daemonRunning ? i18n("Daemon running — click to stop") : i18n("Daemon stopped — click to start")
                     }
 
                 }
@@ -156,6 +144,42 @@ ApplicationWindow {
 
                         }
 
+                    }
+
+                }
+
+                Kirigami.Separator {
+                    Layout.fillWidth: true
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.margins: Kirigami.Units.smallSpacing
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Rectangle {
+                        width: 8
+                        height: 8
+                        radius: 4
+                        color: settingsController.daemonRunning ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
+                    }
+
+                    Label {
+                        text: settingsController.daemonRunning ? i18n("Daemon running") : i18n("Daemon stopped")
+                        font: Kirigami.Theme.smallFont
+                        opacity: 0.7
+                        Layout.fillWidth: true
+                    }
+
+                    Switch {
+                        checked: settingsController.daemonRunning
+                        scale: 0.8
+                        onToggled: {
+                            if (checked)
+                                settingsController.daemonController.startDaemon();
+                            else
+                                settingsController.daemonController.stopDaemon();
+                        }
                     }
 
                 }
