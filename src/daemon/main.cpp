@@ -14,7 +14,6 @@
 #include <QTimer>
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtQml/qqml.h>
-#include <KAboutData>
 #include "pz_i18n.h"
 #include <signal.h>
 
@@ -47,26 +46,23 @@ int main(int argc, char* argv[])
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
     // Set up application metadata
-    KAboutData aboutData(QStringLiteral("plasmazonesd"), PzI18n::tr("PlasmaZones Daemon"), PlasmaZones::VERSION_STRING,
-                         PzI18n::tr("Window tiling and zone management for KDE Plasma"), KAboutLicense::GPL_V3,
-                         PzI18n::tr("© 2026 fuddlesworth"));
-    aboutData.addAuthor(PzI18n::tr("fuddlesworth"));
-    aboutData.setHomepage(QStringLiteral("https://github.com/plasmazones/plasmazones"));
-    aboutData.setBugAddress(QByteArrayLiteral("https://github.com/plasmazones/plasmazones/issues"));
-    aboutData.setDesktopFileName(QStringLiteral("org.plasmazones.daemon"));
-
-    KAboutData::setApplicationData(aboutData);
+    app.setApplicationName(QStringLiteral("plasmazonesd"));
+    app.setApplicationVersion(PlasmaZones::VERSION_STRING);
+    app.setOrganizationName(QStringLiteral("plasmazones"));
+    app.setOrganizationDomain(QStringLiteral("org.plasmazones"));
+    app.setDesktopFileName(QStringLiteral("org.plasmazones.daemon"));
 
     // Command line options
     QCommandLineParser parser;
-    aboutData.setupCommandLine(&parser);
+    parser.setApplicationDescription(PzI18n::tr("Window tiling and zone management"));
+    parser.addHelpOption();
+    parser.addVersionOption();
 
     QCommandLineOption replaceOption(QStringList{QStringLiteral("r"), QStringLiteral("replace")},
                                      PzI18n::tr("Replace existing daemon instance"));
     parser.addOption(replaceOption);
 
     parser.process(app);
-    aboutData.processCommandLine(&parser);
 
     // Ensure single instance via D-Bus service name registration
     const QString serviceName = QStringLiteral("org.plasmazones.daemon");

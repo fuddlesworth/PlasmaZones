@@ -21,7 +21,6 @@
 
 #include "pz_i18n.h"
 #include "pz_qml_i18n.h"
-#include <KAboutData>
 #include <QtQml/qqml.h>
 
 using namespace PlasmaZones;
@@ -43,16 +42,17 @@ int main(int argc, char* argv[])
     QGuiApplication app(argc, argv);
     PlasmaZones::loadTranslations(&app);
 
-    KAboutData aboutData(QStringLiteral("plasmazones-editor"), PzI18n::tr("PlasmaZones Layout Editor"),
-                         PlasmaZones::VERSION_STRING, PzI18n::tr("Visual layout editor for PlasmaZones"),
-                         KAboutLicense::GPL_V3, PzI18n::tr("(c) 2026 fuddlesworth"));
-    aboutData.addAuthor(PzI18n::tr("fuddlesworth"));
-    aboutData.setDesktopFileName(QStringLiteral("org.plasmazones.editor"));
-    KAboutData::setApplicationData(aboutData);
+    app.setApplicationName(QStringLiteral("plasmazones-editor"));
+    app.setApplicationVersion(PlasmaZones::VERSION_STRING);
+    app.setOrganizationName(QStringLiteral("plasmazones"));
+    app.setOrganizationDomain(QStringLiteral("org.plasmazones"));
+    app.setDesktopFileName(QStringLiteral("org.plasmazones.editor"));
 
     // Command line options
     QCommandLineParser parser;
-    aboutData.setupCommandLine(&parser);
+    parser.setApplicationDescription(PzI18n::tr("Visual layout editor for PlasmaZones"));
+    parser.addHelpOption();
+    parser.addVersionOption();
 
     QCommandLineOption layoutIdOption(QStringList{QStringLiteral("l"), QStringLiteral("layout")},
                                       PzI18n::tr("Layout ID to edit"), QStringLiteral("uuid"));
@@ -64,10 +64,11 @@ int main(int argc, char* argv[])
 
     parser.addOptions({layoutIdOption, screenOption, newLayoutOption, previewOption});
     parser.process(app);
-    aboutData.processCommandLine(&parser);
 
-    // Use Fusion style for consistent look
-    QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
+    // Use platform style if available, fall back to Fusion
+    if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
+        QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
+    }
 
     // Register ZoneShaderItem for QML (shader preview in ShaderSettingsDialog)
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");

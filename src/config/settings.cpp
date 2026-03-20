@@ -8,7 +8,8 @@
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
-#include <KColorScheme>
+#include <QGuiApplication>
+#include <QPalette>
 #include <QFile>
 #include <QTextStream>
 #include <QRegularExpression>
@@ -303,24 +304,23 @@ QString Settings::loadColorsFromFile(const QString& filePath)
 
 void Settings::applySystemColorScheme()
 {
-    // Selection set for highlight color (accent/selection background)
-    KColorScheme selectionScheme(QPalette::Active, KColorScheme::Selection);
-    QColor highlight = selectionScheme.background(KColorScheme::NormalBackground).color();
+    // QPalette respects QT_QPA_PLATFORMTHEME — on non-KDE desktops, Qt reads
+    // the platform theme (qt6ct, gnome, lxqt) to populate the palette.
+    const QPalette pal = QGuiApplication::palette();
+
+    QColor highlight = pal.color(QPalette::Active, QPalette::Highlight);
     highlight.setAlpha(Defaults::HighlightAlpha);
     m_highlightColor = highlight;
 
-    // View set for inactive/border/text (neutral non-accent colors)
-    // This matches QML defaults: highlightColor → Theme.highlightColor, inactiveColor → Theme.textColor
-    KColorScheme viewScheme(QPalette::Active, KColorScheme::View);
-    QColor inactive = viewScheme.foreground(KColorScheme::NormalText).color();
+    QColor inactive = pal.color(QPalette::Active, QPalette::Text);
     inactive.setAlpha(Defaults::InactiveAlpha);
     m_inactiveColor = inactive;
 
-    QColor border = viewScheme.foreground(KColorScheme::NormalText).color();
+    QColor border = pal.color(QPalette::Active, QPalette::Text);
     border.setAlpha(Defaults::BorderAlpha);
     m_borderColor = border;
 
-    m_labelFontColor = viewScheme.foreground(KColorScheme::NormalText).color();
+    m_labelFontColor = pal.color(QPalette::Active, QPalette::Text);
 
     Q_EMIT highlightColorChanged();
     Q_EMIT inactiveColorChanged();

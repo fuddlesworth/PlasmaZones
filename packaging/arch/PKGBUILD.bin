@@ -14,13 +14,11 @@ depends=(
     'qt6-shadertools'
     'kconfig'
     'kconfigwidgets'
-    'kcoreaddons'
     'ki18n'
     'kcmutils'
     'kwindowsystem'
     'kglobalaccel'
     'knotifications'
-    'kcolorscheme'
     'layer-shell-qt'
 )
 optdepends=(

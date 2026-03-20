@@ -605,7 +605,7 @@ TODO: Consider having EditorController get zonePadding via D-Bus from Settings i
   ```
 
 ### KDE Frameworks
-- Required: `KF6::Config`, `KF6::CoreAddons`, `KF6::WindowSystem`
+- Required: `KF6::Config` (KConfigXT/KCM only), `KF6::WindowSystem`
 - **NOT used**: `KF6::I18n` — translations use Qt Linguist (`PzI18n::tr()`) instead
 - Optional: `KF6::Activities` (for activity-based layouts)
 - Use `find_package(KF6 REQUIRED COMPONENTS ...)`

@@ -82,13 +82,10 @@ stdenv.mkDerivation {
     # KDE Frameworks 6 (6.6+ for Plasma 6.6)
     kconfig
     kconfigwidgets
-    kcoreaddons
     kcmutils
     kwindowsystem
     kglobalaccel
     knotifications
-    kcolorscheme
-
     # Wayland overlay support (required; 6.6+ for setScreen API)
     layer-shell-qt
 
