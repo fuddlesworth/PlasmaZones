@@ -34,6 +34,17 @@ SettingsController::SettingsController(QObject* parent)
     // Forward daemon running state changes
     connect(&m_daemonController, &DaemonController::runningChanged, this, &SettingsController::daemonRunningChanged);
 
+    // Mark needsSave when any Settings property changes (from QML edits)
+    // Use a meta-object connection to catch all NOTIFY signals
+    const QMetaObject* mo = m_settings.metaObject();
+    for (int i = mo->propertyOffset(); i < mo->propertyCount(); ++i) {
+        QMetaProperty prop = mo->property(i);
+        if (prop.hasNotifySignal()) {
+            connect(&m_settings, prop.notifySignal(), this,
+                    metaObject()->method(metaObject()->indexOfSlot("onSettingsPropertyChanged()")));
+        }
+    }
+
     // Screen helper signals
     m_screenHelper.connectToDaemonSignals();
     m_screenHelper.refreshScreens();
@@ -133,6 +144,13 @@ void SettingsController::defaults()
 void SettingsController::launchEditor()
 {
     QProcess::startDetached(QStringLiteral("plasmazones-editor"), {});
+}
+
+void SettingsController::onSettingsPropertyChanged()
+{
+    if (!m_saving) {
+        setNeedsSave(true);
+    }
 }
 
 void SettingsController::onExternalSettingsChanged()

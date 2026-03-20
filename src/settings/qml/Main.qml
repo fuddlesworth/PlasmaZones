@@ -228,14 +228,21 @@ ApplicationWindow {
                 RowLayout {
                     anchors.fill: parent
 
-                    Item {
-                        Layout.fillWidth: true
+                    Button {
+                        text: i18n("Reset")
+                        icon.name: "edit-undo"
+                        enabled: settingsController.needsSave
+                        onClicked: settingsController.load()
                     }
 
                     Button {
                         text: i18n("Defaults")
-                        icon.name: "edit-undo"
+                        icon.name: "document-revert"
                         onClicked: settingsController.defaults()
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
                     }
 
                     Button {

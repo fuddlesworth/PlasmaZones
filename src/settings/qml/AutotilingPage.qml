@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as QFZCommon
 
 Flickable {
     id: root
@@ -511,6 +512,8 @@ Flickable {
                         height: width * 9 / 16
 
                         Rectangle {
+                            id: previewBg
+
                             property var zones: {
                                 let algoId = "autotile:" + algoCombo.currentValue;
                                 let layouts = settingsController.layouts;
@@ -528,41 +531,23 @@ Flickable {
                             border.width: 1
                             radius: Kirigami.Units.smallSpacing
 
-                            Repeater {
-                                model: parent.zones
-
-                                Rectangle {
-                                    required property var modelData
-                                    required property int index
-                                    readonly property var geo: modelData.relativeGeometry || modelData
-
-                                    x: (geo.x || 0) * parent.width + 2
-                                    y: (geo.y || 0) * parent.height + 2
-                                    width: Math.max(4, (geo.width || geo.w || 0) * parent.width - 4)
-                                    height: Math.max(4, (geo.height || geo.h || 0) * parent.height - 4)
-                                    color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3)
-                                    border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.8)
-                                    border.width: 1
-                                    radius: 2
-
-                                    Label {
-                                        anchors.centerIn: parent
-                                        text: (index + 1).toString()
-                                        font.pixelSize: Math.max(8, Math.min(parent.width, parent.height) * 0.35)
-                                        font.bold: true
-                                        opacity: 0.6
-                                        visible: parent.width > 16 && parent.height > 16
-                                    }
-
-                                }
-
+                            QFZCommon.ZonePreview {
+                                anchors.fill: parent
+                                anchors.margins: Kirigami.Units.smallSpacing
+                                zones: previewBg.zones
+                                isHovered: true
+                                showZoneNumbers: true
+                                zonePadding: 1
+                                edgeGap: 0
+                                minZoneSize: 4
+                                animationDuration: 0
                             }
 
                             Label {
                                 anchors.centerIn: parent
                                 text: i18n("No preview available")
                                 opacity: 0.4
-                                visible: parent.zones.length === 0
+                                visible: previewBg.zones.length === 0
                             }
 
                         }

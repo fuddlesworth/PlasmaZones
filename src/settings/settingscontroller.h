@@ -211,6 +211,7 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void onExternalSettingsChanged();
+    void onSettingsPropertyChanged();
     void loadLayoutsAsync();
     void onVirtualDesktopsChanged();
     void onActivitiesChanged();
