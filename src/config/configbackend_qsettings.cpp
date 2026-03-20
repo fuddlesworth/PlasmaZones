@@ -4,9 +4,101 @@
 #include "configbackend_qsettings.h"
 #include <QColor>
 #include <QDir>
+#include <QFile>
 #include <QStandardPaths>
+#include <QTextStream>
 
 namespace PlasmaZones {
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// KConfig-compatible INI format for QSettings
+//
+// QSettings::IniFormat wraps string values in quotes and escapes internal
+// quotes with backslash. KConfig's INI format does NOT quote values.
+// Since KConfigXT (used by KCM/ConfigDefaults) reads the same file,
+// we must write in KConfig's format: Key=Value (no quotes, no escaping).
+//
+// We register a custom QSettings format via registerFormat() that reads
+// the standard INI format but writes without quoting.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+static bool readKConfigIni(QIODevice& device, QSettings::SettingsMap& map)
+{
+    QString currentGroup;
+    QTextStream in(&device);
+    while (!in.atEnd()) {
+        QString line = in.readLine().trimmed();
+        if (line.isEmpty() || line.startsWith(QLatin1Char('#')) || line.startsWith(QLatin1Char(';')))
+            continue;
+
+        if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']'))) {
+            currentGroup = line.mid(1, line.length() - 2);
+            continue;
+        }
+
+        int eqIdx = line.indexOf(QLatin1Char('='));
+        if (eqIdx < 0)
+            continue;
+
+        QString key = line.left(eqIdx).trimmed();
+        QString value = line.mid(eqIdx + 1); // Don't trim — preserve leading spaces in values
+
+        // KConfig uses [$d] and [$i] suffixes on group names — strip for lookup
+        // but they won't appear in our config since we don't use those features
+
+        QString fullKey = currentGroup.isEmpty() ? key : (currentGroup + QLatin1Char('/') + key);
+        map.insert(fullKey, value);
+    }
+    return true;
+}
+
+static bool writeKConfigIni(QIODevice& device, const QSettings::SettingsMap& map)
+{
+    // Group entries by their group prefix
+    QMap<QString, QMap<QString, QString>> groups;
+    for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+        int slashIdx = it.key().indexOf(QLatin1Char('/'));
+        if (slashIdx < 0) {
+            groups[QString()].insert(it.key(), it.value().toString());
+        } else {
+            QString group = it.key().left(slashIdx);
+            QString key = it.key().mid(slashIdx + 1);
+            groups[group].insert(key, it.value().toString());
+        }
+    }
+
+    QTextStream out(&device);
+
+    // Write ungrouped keys first (rare, but handle it)
+    if (groups.contains(QString())) {
+        const auto& entries = groups[QString()];
+        for (auto it = entries.constBegin(); it != entries.constEnd(); ++it) {
+            out << it.key() << '=' << it.value() << '\n';
+        }
+        if (!entries.isEmpty())
+            out << '\n';
+    }
+
+    // Write grouped entries — no quoting, no escaping (KConfig compatible)
+    for (auto git = groups.constBegin(); git != groups.constEnd(); ++git) {
+        if (git.key().isEmpty())
+            continue;
+        out << '[' << git.key() << "]\n";
+        for (auto it = git.value().constBegin(); it != git.value().constEnd(); ++it) {
+            out << it.key() << '=' << it.value() << '\n';
+        }
+        out << '\n';
+    }
+
+    return true;
+}
+
+static QSettings::Format kconfigIniFormat()
+{
+    // Register once, cache the format ID
+    static QSettings::Format fmt = QSettings::registerFormat(QStringLiteral("rc"), readKConfigIni, writeKConfigIni);
+    return fmt;
+}
 
 // ── QSettingsConfigGroup ─────────────────────────────────────────────────────
 
@@ -14,8 +106,6 @@ QSettingsConfigGroup::QSettingsConfigGroup(QSettings* settings, const QString& g
     : m_settings(settings)
     , m_group(groupName)
 {
-    // QSettings groups are a stack — only one ConfigGroup should be active at a time.
-    // Nested beginGroup would silently read from "OldGroup/NewGroup" instead of "NewGroup".
     Q_ASSERT_X(m_settings->group().isEmpty(), "QSettingsConfigGroup",
                "Another ConfigGroup is still active — destroy it before creating a new one");
     m_settings->beginGroup(m_group);
@@ -52,13 +142,12 @@ QColor QSettingsConfigGroup::readColor(const QString& key, const QColor& default
     if (!val.isValid())
         return defaultValue;
 
-    // KConfig stores colors as "r,g,b,a" or "#AARRGGBB"
     QString str = val.toString();
     if (str.startsWith(QLatin1Char('#'))) {
         QColor c(str);
         return c.isValid() ? c : defaultValue;
     }
-    // Try KConfig comma format: "r,g,b" or "r,g,b,a"
+    // KConfig comma format: "r,g,b" or "r,g,b,a"
     QStringList parts = str.split(QLatin1Char(','));
     if (parts.size() >= 3) {
         int r = parts[0].trimmed().toInt();
@@ -92,7 +181,7 @@ void QSettingsConfigGroup::writeDouble(const QString& key, double value)
 
 void QSettingsConfigGroup::writeColor(const QString& key, const QColor& value)
 {
-    // Write in KConfig-compatible format: "r,g,b,a"
+    // KConfig-compatible: r,g,b,a (no quotes — handled by custom format)
     m_settings->setValue(
         key, QStringLiteral("%1,%2,%3,%4").arg(value.red()).arg(value.green()).arg(value.blue()).arg(value.alpha()));
 }
@@ -106,7 +195,7 @@ bool QSettingsConfigGroup::hasKey(const QString& key) const
 
 QSettingsConfigBackend::QSettingsConfigBackend(const QString& filePath)
     : m_filePath(filePath)
-    , m_settings(std::make_unique<QSettings>(filePath, QSettings::IniFormat))
+    , m_settings(std::make_unique<QSettings>(filePath, kconfigIniFormat()))
 {
 }
 
@@ -117,8 +206,7 @@ std::unique_ptr<ConfigGroup> QSettingsConfigBackend::group(const QString& name)
 
 void QSettingsConfigBackend::reparseConfiguration()
 {
-    // QSettings caches values; re-create to force re-read from disk
-    m_settings = std::make_unique<QSettings>(m_filePath, QSettings::IniFormat);
+    m_settings = std::make_unique<QSettings>(m_filePath, kconfigIniFormat());
 }
 
 void QSettingsConfigBackend::sync()
