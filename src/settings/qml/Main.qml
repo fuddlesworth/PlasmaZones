@@ -177,9 +177,6 @@ ApplicationWindow {
                 ExclusionsPage {
                 }
 
-                AboutPage {
-                }
-
             }
 
             Kirigami.Separator {
