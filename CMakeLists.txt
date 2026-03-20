@@ -114,12 +114,10 @@ add_compile_definitions(USE_KDE_FRAMEWORKS)
 find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
     Config
     ConfigWidgets
-    CoreAddons
     KCMUtils
     WindowSystem
     GlobalAccel
     Notifications
-    ColorScheme
 )
 
 # KActivities/PlasmaActivities is optional (for activity-based layouts)

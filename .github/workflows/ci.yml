@@ -32,9 +32,9 @@ jobs:
             cmake ninja extra-cmake-modules \
             qt6-base qt6-declarative qt6-tools qt6-shadertools \
             kwin \
-            kconfig kconfigwidgets kcoreaddons \
+            kconfig kconfigwidgets \
             kcmutils kwindowsystem kglobalaccel \
-            knotifications kcolorscheme \
+            knotifications \
             layer-shell-qt plasma-activities
 
       - name: Configure

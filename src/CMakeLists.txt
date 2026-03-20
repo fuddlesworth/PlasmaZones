@@ -200,10 +200,8 @@ target_link_libraries(plasmazones_core
         Qt6::DBus
         KF6::ConfigCore
         KF6::ConfigGui
-        KF6::CoreAddons
         KF6::GlobalAccel
         KF6::WindowSystem
-        KF6::ColorScheme
 )
 
 # Conditionally link PlasmaActivities/KActivities if available
@@ -618,7 +616,6 @@ target_link_libraries(plasmazones-editor
         Qt6::QuickControls2
         Qt6::Widgets
         Qt6::DBus
-        KF6::CoreAddons
         KF6::WindowSystem
 )
 

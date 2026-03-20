@@ -17,7 +17,8 @@
 #include <QMutexLocker>
 #include <QTimer>
 #include <QImage>
-#include <KColorScheme>
+#include <QGuiApplication>
+#include <QPalette>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
@@ -61,8 +62,7 @@ QImage buildLabelsImageForPreviewZones(const QVariantList& zones, const QSize& s
     const QColor labelFontColor = settings ? settings->labelFontColor() : QColor(Qt::white);
     QColor backgroundColor = Qt::black;
     if (settings) {
-        KColorScheme scheme(QPalette::Active, KColorScheme::View);
-        backgroundColor = scheme.background(KColorScheme::NormalBackground).color();
+        backgroundColor = QGuiApplication::palette().color(QPalette::Active, QPalette::Base);
     }
     const QString fontFamily = settings ? settings->labelFontFamily() : QString();
     const qreal fontSizeScale = settings ? settings->labelFontSizeScale() : 1.0;

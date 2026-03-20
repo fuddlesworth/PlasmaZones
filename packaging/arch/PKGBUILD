@@ -16,12 +16,10 @@ depends=(
     'qt6-shadertools'
     'kconfig'
     'kconfigwidgets'
-    'kcoreaddons'
     'kcmutils'
     'kwindowsystem'
     'kglobalaccel'
     'knotifications'
-    'kcolorscheme'
     'layer-shell-qt'
 )
 makedepends=(

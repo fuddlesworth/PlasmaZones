@@ -15,7 +15,8 @@
 #include <QQuickWindow>
 #include <QScreen>
 #include <QMutexLocker>
-#include <KColorScheme>
+#include <QGuiApplication>
+#include <QPalette>
 
 namespace PlasmaZones {
 
@@ -31,8 +32,7 @@ void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QV
     const QColor labelFontColor = m_settings ? m_settings->labelFontColor() : QColor(Qt::white);
     QColor backgroundColor = Qt::black;
     if (m_settings) {
-        KColorScheme scheme(QPalette::Active, KColorScheme::View);
-        backgroundColor = scheme.background(KColorScheme::NormalBackground).color();
+        backgroundColor = QGuiApplication::palette().color(QPalette::Active, QPalette::Base);
     }
     const QString fontFamily = m_settings ? m_settings->labelFontFamily() : QString();
     const qreal fontSizeScale = m_settings ? m_settings->labelFontSizeScale() : 1.0;
