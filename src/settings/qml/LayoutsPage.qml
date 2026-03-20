@@ -678,27 +678,34 @@ Flickable {
     }
 
     // Delete confirmation dialog
-    Dialog {
+    Kirigami.PromptDialog {
         id: deleteConfirmDialog
 
         property var layoutToDelete: null
 
-        anchors.centerIn: parent
         title: i18n("Delete Layout")
-        standardButtons: Dialog.Yes | Dialog.No
-        onAccepted: {
-            if (layoutToDelete) {
-                settingsController.deleteLayout(layoutToDelete.id);
-                layoutToDelete = null;
-            }
-        }
+        subtitle: layoutToDelete ? i18n("Are you sure you want to delete \"%1\"?", layoutToDelete.name || "") : ""
+        standardButtons: Kirigami.Dialog.NoButton
         onRejected: layoutToDelete = null
-
-        Label {
-            text: deleteConfirmDialog.layoutToDelete ? i18n("Are you sure you want to delete \"%1\"?", deleteConfirmDialog.layoutToDelete.name || "") : ""
-            wrapMode: Text.WordWrap
-        }
-
+        onClosed: layoutToDelete = null
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Delete")
+                icon.name: "edit-delete"
+                onTriggered: {
+                    if (deleteConfirmDialog.layoutToDelete) {
+                        settingsController.deleteLayout(deleteConfirmDialog.layoutToDelete.id);
+                        deleteConfirmDialog.layoutToDelete = null;
+                    }
+                    deleteConfirmDialog.close();
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Cancel")
+                icon.name: "dialog-cancel"
+                onTriggered: deleteConfirmDialog.close()
+            }
+        ]
     }
 
 }
