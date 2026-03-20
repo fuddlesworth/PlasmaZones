@@ -42,15 +42,15 @@ QString PzLocalizedContext::i18nc(const QString& context, const QString& text, c
 
 QString PzLocalizedContext::i18np(const QString& singular, const QString& plural, int n) const
 {
-    QString result = QCoreApplication::translate(
-        "plasmazones", (n == 1) ? singular.toUtf8().constData() : plural.toUtf8().constData());
-    return result.arg(n);
+    // Qt numerus: pass plural as source key + n to select the correct form.
+    // translate() with the 4th arg (n) triggers numerus lookup in .ts files
+    // and auto-replaces %n with the count.
+    Q_UNUSED(singular) // Singular form is embedded in the .ts numerusform entries
+    return QCoreApplication::translate("plasmazones", plural.toUtf8().constData(), nullptr, n);
 }
 
 QString PzLocalizedContext::i18ncp(const QString& context, const QString& singular, const QString& plural, int n) const
 {
-    QString result = QCoreApplication::translate("plasmazones",
-                                                 (n == 1) ? singular.toUtf8().constData() : plural.toUtf8().constData(),
-                                                 context.toUtf8().constData());
-    return result.arg(n);
+    Q_UNUSED(singular)
+    return QCoreApplication::translate("plasmazones", plural.toUtf8().constData(), context.toUtf8().constData(), n);
 }

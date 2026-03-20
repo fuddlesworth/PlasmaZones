@@ -5282,4 +5282,44 @@ Seitenverhältnis: %3</translation>
         <translation type="vanished">Zonen-Layout</translation>
     </message>
 </context>
+<context>
+    <name>plasmazones</name>
+    <message numerus="yes">
+        <source>Rotated %n windows</source>
+        <translation>
+            <numerusform>%n Fenster rotiert</numerusform>
+            <numerusform>%n Fenster rotiert</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Rearranged %n windows</source>
+        <translation>
+            <numerusform>%n Fenster neu angeordnet</numerusform>
+            <numerusform>%n Fenster neu angeordnet</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Max %n windows</source>
+        <translation>
+            <numerusform>Max. %n Fenster</numerusform>
+            <numerusform>Max. %n Fenster</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n Zones Selected</source>
+        <comment>@title</comment>
+        <translation>
+            <numerusform>%n Zone ausgewählt</numerusform>
+            <numerusform>%n Zonen ausgewählt</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Delete %n selected zones</source>
+        <comment>@info</comment>
+        <translation>
+            <numerusform>%n ausgewählte Zone löschen</numerusform>
+            <numerusform>%n ausgewählte Zonen löschen</numerusform>
+        </translation>
+    </message>
+</context>
 </TS>

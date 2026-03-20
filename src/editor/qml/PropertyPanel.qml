@@ -90,7 +90,7 @@ Rectangle {
 
             Label {
                 Layout.fillWidth: true
-                text: panelMode === "single" ? i18nc("@title", "Zone Properties") : i18ncp("@title", "1 Zone Selected", "%1 Zones Selected", selectionCount)
+                text: panelMode === "single" ? i18nc("@title", "Zone Properties") : i18ncp("@title", "%n Zone Selected", "%n Zones Selected", selectionCount)
                 font.bold: true
                 font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.1
             }
@@ -283,7 +283,7 @@ Rectangle {
                     icon.name: "edit-delete"
                     enabled: editorController !== null
                     Accessible.name: text
-                    Accessible.description: i18ncp("@info", "Delete 1 selected zone", "Delete %1 selected zones", selectionCount)
+                    Accessible.description: i18ncp("@info", "Delete %n selected zone", "Delete %n selected zones", selectionCount)
                     onClicked: {
                         if (editorController)
                             editorController.deleteSelectedZones();

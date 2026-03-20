@@ -652,4 +652,44 @@
         <translation type="unfinished"></translation>
     </message>
 </context>
+<context>
+    <name>plasmazones</name>
+    <message numerus="yes">
+        <source>Rotated %n windows</source>
+        <translation>
+            <numerusform>Rotated %n window</numerusform>
+            <numerusform>Rotated %n windows</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Rearranged %n windows</source>
+        <translation>
+            <numerusform>Rearranged %n window</numerusform>
+            <numerusform>Rearranged %n windows</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Max %n windows</source>
+        <translation>
+            <numerusform>Max %n window</numerusform>
+            <numerusform>Max %n windows</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n Zones Selected</source>
+        <comment>@title</comment>
+        <translation>
+            <numerusform>%n Zone Selected</numerusform>
+            <numerusform>%n Zones Selected</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Delete %n selected zones</source>
+        <comment>@info</comment>
+        <translation>
+            <numerusform>Delete %n selected zone</numerusform>
+            <numerusform>Delete %n selected zones</numerusform>
+        </translation>
+    </message>
+</context>
 </TS>

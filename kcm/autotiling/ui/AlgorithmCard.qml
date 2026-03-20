@@ -80,7 +80,7 @@ Item {
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: parent.bottom
                         anchors.topMargin: Kirigami.Units.smallSpacing
-                        text: i18np("Max %1 window", "Max %1 windows", previewWindowSlider.value)
+                        text: i18np("Max %n window", "Max %n windows", previewWindowSlider.value)
                         font: Kirigami.Theme.fixedWidthFont
                         opacity: 0.7
                     }
