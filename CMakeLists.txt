@@ -104,41 +104,43 @@ message(STATUS "RenderNode shaders ENABLED (raw GLSL, no qsb compilation)")
 set(PLASMAZONES_SHADERS_ENABLED ON)
 add_compile_definitions(PLASMAZONES_SHADERS_ENABLED)
 
-# KDE Frameworks integration — always ON for now.
-# When the portable Qt-only backend is ready, this becomes a user option:
-#   option(USE_KDE_FRAMEWORKS "Build with KDE Frameworks integration" ON)
-set(USE_KDE_FRAMEWORKS ON)
-add_compile_definitions(USE_KDE_FRAMEWORKS)
+# KDE Frameworks integration.
+# ON (default): full KDE integration — KWin effect, KCM, KGlobalAccel shortcuts,
+#               PlasmaActivities, KConfigXT for KCM defaults.
+# OFF: portable Qt-only build — daemon + editor only, no KDE dependencies.
+#      Shortcuts use XDG Portal or D-Bus trigger fallback.
+option(USE_KDE_FRAMEWORKS "Build with KDE Frameworks integration" ON)
 
-# Find KDE Frameworks
-find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
-    KCMUtils
-    GlobalAccel   # Used by KCM + shortcut backend
-)
+if(USE_KDE_FRAMEWORKS)
+    add_compile_definitions(USE_KDE_FRAMEWORKS)
 
-# KActivities/PlasmaActivities is optional (for activity-based layouts)
-# Plasma 6 renamed KActivities to PlasmaActivities
-find_package(PlasmaActivities QUIET)
-if(NOT PlasmaActivities_FOUND)
-    # Try KF6 name (some distros)
-    find_package(KF6Activities QUIET COMPONENTS Activities)
-    if(KF6Activities_FOUND)
-        set(PlasmaActivities_FOUND TRUE)
+    find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
+        KCMUtils
+        GlobalAccel   # KGlobalAccel shortcut backend + KCM
+    )
+
+    # KActivities/PlasmaActivities is optional (for activity-based layouts)
+    find_package(PlasmaActivities QUIET)
+    if(NOT PlasmaActivities_FOUND)
+        find_package(KF6Activities QUIET COMPONENTS Activities)
+        if(KF6Activities_FOUND)
+            set(PlasmaActivities_FOUND TRUE)
+        endif()
     endif()
-endif()
-if(NOT PlasmaActivities_FOUND)
-    # Try older KF5 package name
-    find_package(KActivities QUIET)
-    if(KActivities_FOUND)
-        set(PlasmaActivities_FOUND TRUE)
+    if(NOT PlasmaActivities_FOUND)
+        find_package(KActivities QUIET)
+        if(KActivities_FOUND)
+            set(PlasmaActivities_FOUND TRUE)
+        endif()
     endif()
-endif()
 
-if(PlasmaActivities_FOUND)
-    message(STATUS "PlasmaActivities found - activity-based layouts enabled")
-    # Don't add global definitions here - set per-target instead
+    if(PlasmaActivities_FOUND)
+        message(STATUS "PlasmaActivities found - activity-based layouts enabled")
+    else()
+        message(STATUS "PlasmaActivities/KActivities not found - activity support disabled")
+    endif()
 else()
-    message(STATUS "PlasmaActivities/KActivities not found - activity support disabled")
+    message(STATUS "Building WITHOUT KDE Frameworks (portable Qt-only mode)")
 endif()
 
 # LayerShellQt for Wayland overlay support (REQUIRED, 6.6+ for setScreen/wantsToBeOnActiveScreen API)
@@ -297,8 +299,10 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 
 # Source directories
 add_subdirectory(src)
-add_subdirectory(kwin-effect)  # KWin C++ Effect with modifier detection (uses effects.mouseChanged)
-add_subdirectory(kcm)
+if(USE_KDE_FRAMEWORKS)
+    add_subdirectory(kwin-effect)  # KWin C++ Effect (KDE-only)
+    add_subdirectory(kcm)          # KDE System Settings modules (KDE-only)
+endif()
 
 # Tests - enable with -DBUILD_TESTING=ON
 option(BUILD_TESTING "Build tests" OFF)
