@@ -15,7 +15,8 @@ Flickable {
     ColumnLayout {
         id: content
 
-        width: parent.width
+        width: parent.width - Kirigami.Units.largeSpacing * 2
+        anchors.horizontalCenter: parent.horizontalCenter
         spacing: Kirigami.Units.largeSpacing
 
         // App header with icon and version (matches KCM)
@@ -60,6 +61,10 @@ Flickable {
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 0
+
+            Kirigami.Separator {
+                Layout.fillWidth: true
+            }
 
             RowLayout {
                 Layout.fillWidth: true
