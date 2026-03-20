@@ -620,6 +620,12 @@ Three interfaces enable compositor-agnostic operation:
 - **`IShortcutBackend`** (`shortcutbackend.h`): global shortcut registration (KGlobalAccel, XDG Portal, D-Bus fallback)
 - **`IWallpaperProvider`** (`wallpaperprovider.h`): desktop wallpaper path for shader textures (KDE, Hyprland, Sway, GNOME)
 
+### Standalone Settings App (`plasmazones-settings`)
+- A standalone Kirigami-based settings application in `src/settings/`
+- Reads/writes settings via the same `IConfigBackend` as the daemon (editor group, main settings)
+- Communicates with the daemon via D-Bus for layout CRUD, screen queries, virtual desktop/activity info
+- The KCM (`kcm/`) is now a minimal launcher: daemon toggle + "Open Settings" button that launches this app
+
 ### Export/Installation
 - Use `kf6_install_cmake_config_file()` for CMake config
 - Install desktop files: `install(FILES ... DESTINATION ${KDE_INSTALL_APPDIR})`
@@ -634,11 +640,12 @@ src/
   core/          # Core domain models (Zone, Layout, ScreenManager)
   daemon/        # Background daemon service
   editor/        # Layout editor application
+  settings/      # Standalone settings application (plasmazones-settings)
   dbus/          # D-Bus adaptors and interfaces
   config/        # Configuration (IConfigBackend / QSettings)
   ui/            # Shared QML components
   editor/qml/    # Editor-specific QML components
-kcm/             # System Settings module
+kcm/             # System Settings module (minimal launcher)
 kwin/            # KWin script integration
 tests/           # Test files
 data/layouts/    # Default layout templates (JSON)
