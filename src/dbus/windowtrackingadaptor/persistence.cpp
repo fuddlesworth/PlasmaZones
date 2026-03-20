@@ -17,9 +17,6 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
-#include <KConfig>
-#include <KConfigGroup>
-#include <KSharedConfig>
 #include <QTimer>
 
 namespace PlasmaZones {

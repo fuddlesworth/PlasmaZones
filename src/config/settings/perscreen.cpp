@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../settings.h"
+#include "../configbackend.h"
+#include "../configbackend_qsettings.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include <KConfig>
-#include <KConfigGroup>
-#include <KSharedConfig>
 
 namespace PlasmaZones {
 
@@ -115,18 +114,18 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     return QVariant();
 }
 
-QVariant readPerScreenAutotileEntry(const KConfigGroup& group, const QLatin1String& key)
+QVariant readPerScreenAutotileEntry(ConfigGroup& group, const QString& key)
 {
     if (key == QLatin1String("AutotileSplitRatio"))
-        return QVariant(group.readEntry(key, AutotileDefaults::DefaultSplitRatio));
+        return QVariant(group.readDouble(key, AutotileDefaults::DefaultSplitRatio));
     if (key == QLatin1String("AutotileAlgorithm") || key == QLatin1String("AnimationEasingCurve"))
-        return QVariant(group.readEntry(key, QString()));
+        return QVariant(group.readString(key));
     if (key == QLatin1String("AutotileUsePerSideOuterGap") || key == QLatin1String("AutotileFocusNewWindows")
         || key == QLatin1String("AutotileSmartGaps") || key == QLatin1String("AutotileFocusFollowsMouse")
         || key == QLatin1String("AutotileRespectMinimumSize") || key == QLatin1String("AutotileHideTitleBars")
         || key == QLatin1String("AnimationsEnabled"))
-        return QVariant(group.readEntry(key, false));
-    return QVariant(group.readEntry(key, 0));
+        return QVariant(group.readBool(key, false));
+    return QVariant(group.readInt(key, 0));
 }
 
 constexpr const char* kPerScreenSnappingKeys[] = {
@@ -158,37 +157,36 @@ QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& valu
     return QVariant();
 }
 
-QVariant readPerScreenSnappingEntry(const KConfigGroup& group, const QLatin1String& key)
+QVariant readPerScreenSnappingEntry(ConfigGroup& group, const QString& key)
 {
     if (key == QLatin1String("SnapAssistEnabled") || key == QLatin1String("ZoneSelectorEnabled"))
-        return QVariant(group.readEntry(key, false));
-    return QVariant(group.readEntry(key, 0));
+        return QVariant(group.readBool(key, false));
+    return QVariant(group.readInt(key, 0));
 }
 
-QVariant readPerScreenZoneSelectorEntry(const KConfigGroup& group, const QLatin1String& key)
+QVariant readPerScreenZoneSelectorEntry(ConfigGroup& group, const QString& key)
 {
     namespace K = ZoneSelectorConfigKey;
     if (key == QLatin1String(K::PreviewLockAspect))
-        return QVariant(group.readEntry(key, true));
-    return QVariant(group.readEntry(key, 0));
+        return QVariant(group.readBool(key, true));
+    return QVariant(group.readInt(key, 0));
 }
 
-void savePerScreenOverrides(KSharedConfigPtr config, const QLatin1String& prefix,
-                            const QHash<QString, QVariantMap>& source)
+void savePerScreenOverrides(IConfigBackend* backend, const QString& prefix, const QHash<QString, QVariantMap>& source)
 {
-    const QStringList groups = config->groupList();
+    const QStringList groups = backend->groupList();
     for (const QString& groupName : groups) {
         if (groupName.startsWith(prefix)) {
-            config->deleteGroup(groupName);
+            backend->deleteGroup(groupName);
         }
     }
     for (auto it = source.constBegin(); it != source.constEnd(); ++it) {
         const QVariantMap& overrides = it.value();
         if (overrides.isEmpty())
             continue;
-        KConfigGroup screenGroup = config->group(prefix + it.key());
+        auto screenGroup = backend->group(prefix + it.key());
         for (auto oit = overrides.constBegin(); oit != overrides.constEnd(); ++oit) {
-            screenGroup.writeEntry(oit.key(), oit.value());
+            screenGroup->writeString(oit.key(), oit.value().toString());
         }
     }
 }
@@ -216,10 +214,10 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
     }
 }
 
-using PerScreenReadFn = QVariant (*)(const KConfigGroup&, const QLatin1String&);
+using PerScreenReadFn = QVariant (*)(ConfigGroup&, const QString&);
 using PerScreenValidateFn = QVariant (*)(const QString&, const QVariant&);
 
-void loadPerScreenGroup(KSharedConfigPtr config, const QStringList& allGroups, const QLatin1String& prefix,
+void loadPerScreenGroup(IConfigBackend* backend, const QStringList& allGroups, const QString& prefix,
                         const char* const* keys, size_t keyCount, PerScreenReadFn readEntry,
                         PerScreenValidateFn validate, QHash<QString, QVariantMap>& dest)
 {
@@ -231,16 +229,16 @@ void loadPerScreenGroup(KSharedConfigPtr config, const QStringList& allGroups, c
         if (screenName.isEmpty())
             continue;
 
-        KConfigGroup screenGroup = config->group(groupName);
+        auto screenGroup = backend->group(groupName);
         QVariantMap overrides;
         for (size_t i = 0; i < keyCount; ++i) {
             const char* key = keys[i];
-            QLatin1String keyStr(key);
-            if (screenGroup.hasKey(keyStr)) {
-                QVariant raw = readEntry(screenGroup, keyStr);
+            QString keyStr = QString::fromLatin1(key);
+            if (screenGroup->hasKey(keyStr)) {
+                QVariant raw = readEntry(*screenGroup, keyStr);
                 QVariant validated = validate(keyStr, raw);
                 if (validated.isValid()) {
-                    overrides[QString::fromLatin1(key)] = validated;
+                    overrides[keyStr] = validated;
                 }
             }
         }
@@ -253,24 +251,24 @@ void loadPerScreenGroup(KSharedConfigPtr config, const QStringList& allGroups, c
 
 } // anonymous namespace
 
-void Settings::loadPerScreenOverrides(KSharedConfigPtr config)
+void Settings::loadPerScreenOverrides(IConfigBackend* backend)
 {
-    const QStringList allGroups = config->groupList();
-    loadPerScreenGroup(config, allGroups, QLatin1String("ZoneSelector:"), kPerScreenKeys, std::size(kPerScreenKeys),
+    const QStringList allGroups = backend->groupList();
+    loadPerScreenGroup(backend, allGroups, QStringLiteral("ZoneSelector:"), kPerScreenKeys, std::size(kPerScreenKeys),
                        readPerScreenZoneSelectorEntry, validatePerScreenValue, m_perScreenZoneSelectorSettings);
-    loadPerScreenGroup(config, allGroups, QLatin1String("AutotileScreen:"), kPerScreenAutotileKeys,
+    loadPerScreenGroup(backend, allGroups, QStringLiteral("AutotileScreen:"), kPerScreenAutotileKeys,
                        std::size(kPerScreenAutotileKeys), readPerScreenAutotileEntry, validatePerScreenAutotileValue,
                        m_perScreenAutotileSettings);
-    loadPerScreenGroup(config, allGroups, QLatin1String("SnappingScreen:"), kPerScreenSnappingKeys,
+    loadPerScreenGroup(backend, allGroups, QStringLiteral("SnappingScreen:"), kPerScreenSnappingKeys,
                        std::size(kPerScreenSnappingKeys), readPerScreenSnappingEntry, validatePerScreenSnappingValue,
                        m_perScreenSnappingSettings);
 }
 
-void Settings::saveAllPerScreenOverrides(KSharedConfigPtr config)
+void Settings::saveAllPerScreenOverrides(IConfigBackend* backend)
 {
-    savePerScreenOverrides(config, QLatin1String("ZoneSelector:"), m_perScreenZoneSelectorSettings);
-    savePerScreenOverrides(config, QLatin1String("AutotileScreen:"), m_perScreenAutotileSettings);
-    savePerScreenOverrides(config, QLatin1String("SnappingScreen:"), m_perScreenSnappingSettings);
+    savePerScreenOverrides(backend, QStringLiteral("ZoneSelector:"), m_perScreenZoneSelectorSettings);
+    savePerScreenOverrides(backend, QStringLiteral("AutotileScreen:"), m_perScreenAutotileSettings);
+    savePerScreenOverrides(backend, QStringLiteral("SnappingScreen:"), m_perScreenSnappingSettings);
 }
 
 template<typename T>

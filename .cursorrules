@@ -275,13 +275,15 @@ PlasmaZones uses Qt Linguist (`.ts`/`.qm`) for all translations. No KDE KI18n/ge
 - Per-language files: `translations/plasmazones_<lang>.ts`
 - Compiled to `.qm` at build time, loaded at runtime via `PlasmaZones::loadTranslations()`
 
-## Settings & KConfigXT Conventions
+## Settings & Config Conventions
 
 ### Architecture Overview
 - **ISettings interface** (`interfaces.h`): Abstract interface declaring all settings methods and signals
-- **Settings class** (`settings.h/cpp`): Concrete implementation with KConfig persistence
-- **kcfg schema** (`plasmazones.kcfg`): KConfigXT XML schema defining settings structure - **SINGLE SOURCE OF TRUTH for defaults**
-- **kcfgc config** (`plasmazones.kcfgc`): Code generator configuration (generates PlasmaZonesConfig)
+- **Settings class** (`settings.h/cpp`): Concrete implementation with `IConfigBackend` persistence
+- **IConfigBackend** (`configbackend.h`): Abstract config read/write interface — pluggable for different environments
+- **QSettingsConfigBackend** (`configbackend_qsettings.cpp`): Default backend, reads/writes `~/.config/plasmazonesrc` in INI format
+- **kcfg schema** (`plasmazones.kcfg`): KConfigXT XML schema — **KCM-only**, used by `ConfigDefaults` for default values
+- **kcfgc config** (`plasmazones.kcfgc`): Code generator configuration (generates PlasmaZonesConfig) — **KCM-only**
 - **ConfigDefaults class** (`configdefaults.h`): Static wrapper exposing .kcfg defaults via `ConfigDefaults::xxx()` methods
 
 **KConfigXT and ConfigDefaults Usage:**
@@ -345,18 +347,18 @@ When adding a new setting, you MUST update ALL of these files in order:
    }
 
    // In load() - use ConfigDefaults for default:
-   KConfigGroup group = config->group(QStringLiteral("GroupName"));
-   m_settingName = group.readEntry("SettingName", ConfigDefaults::settingName());
+   auto group = m_configBackend->group(QStringLiteral("GroupName"));
+   m_settingName = group->readString(QStringLiteral("SettingName"), ConfigDefaults::settingName());
 
    // In save():
-   KConfigGroup group = config->group(QStringLiteral("GroupName"));
-   group.writeEntry("SettingName", m_settingName);
+   auto group = m_configBackend->group(QStringLiteral("GroupName"));
+   group->writeString(QStringLiteral("SettingName"), m_settingName);
 
    // In reset() - use ConfigDefaults for default:
    m_settingName = ConfigDefaults::settingName();
    ```
 
-### KConfigXT (kcfg) Conventions
+### KConfigXT (kcfg) Conventions — KCM Only
 
 #### Key Naming
 - **Entry names**: `PascalCase` (e.g., `ShowOnAllMonitors`, `BorderWidth`, `OpenEditorShortcut`)
@@ -624,7 +626,7 @@ src/
   daemon/        # Background daemon service
   editor/        # Layout editor application
   dbus/          # D-Bus adaptors and interfaces
-  config/        # Configuration (KConfig)
+  config/        # Configuration (IConfigBackend / QSettings)
   ui/            # Shared QML components
   editor/qml/    # Editor-specific QML components
 kcm/             # System Settings module

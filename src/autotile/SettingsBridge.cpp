@@ -14,8 +14,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalBlocker>
-#include <KSharedConfig>
-#include <KConfigGroup>
+#include "config/configbackend.h"
+#include "config/configbackend_qsettings.h"
 
 namespace PlasmaZones {
 
@@ -325,13 +325,13 @@ void SettingsBridge::syncAlgorithmToSettings(const QString& algoId, qreal splitR
 
 void SettingsBridge::saveState()
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup group = config->group(QStringLiteral("AutoTileState"));
+    auto backend = PlasmaZones::createDefaultConfigBackend();
+    auto group = backend->group(QStringLiteral("AutoTileState"));
 
     // Save global state (algorithm only — autotile screens are derived from
     // layout assignments at startup by updateAutotileScreens(), not persisted
     // here, to avoid stale data overriding the authoritative layout assignments)
-    group.writeEntry(QStringLiteral("algorithm"), m_engine->m_algorithmId);
+    group->writeString(QStringLiteral("algorithm"), m_engine->m_algorithmId);
 
     // Save per-screen state as JSON array, including desktop/activity key
     QJsonArray screensArray;
@@ -349,43 +349,35 @@ void SettingsBridge::saveState()
         screenObj[QStringLiteral("masterCount")] = state->masterCount();
         screenObj[QStringLiteral("splitRatio")] = state->splitRatio();
 
-        // Note: Window order and floating state are NOT saved because window IDs
-        // (stableIds) may not match across sessions. Only per-screen parameters
-        // (masterCount, splitRatio) are persisted and restored by loadState().
-
         screensArray.append(screenObj);
     }
 
-    group.writeEntry("screenStates", QString::fromUtf8(QJsonDocument(screensArray).toJson(QJsonDocument::Compact)));
-    config->sync();
+    group->writeString(QStringLiteral("screenStates"),
+                       QString::fromUtf8(QJsonDocument(screensArray).toJson(QJsonDocument::Compact)));
+    group.reset(); // release group before sync
+    backend->sync();
 
     qCInfo(lcAutotile) << "Autotile state: saved," << m_engine->m_screenStates.size() << "states";
 }
 
 void SettingsBridge::loadState()
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup group = config->group(QStringLiteral("AutoTileState"));
+    auto backend = PlasmaZones::createDefaultConfigBackend();
+    auto group = backend->group(QStringLiteral("AutoTileState"));
 
-    if (!group.exists()) {
+    if (!group->hasKey(QStringLiteral("algorithm")) && !group->hasKey(QStringLiteral("screenStates"))) {
         qCDebug(lcAutotile) << "No saved autotile state found";
         return;
     }
 
     // Restore algorithm silently — do NOT emit algorithmChanged here.
-    // loadState() is called during Daemon::start() before the event loop runs.
-    // Emitting algorithmChanged triggers navigation OSD which creates a
-    // QML/LayerShellQt window. On Wayland, that surface creation can deadlock
-    // with the compositor if it's simultaneously performing synchronous D-Bus
-    // introspection against this daemon (QDBusInterface constructor blocks the
-    // compositor thread). See also: "Don't pre-create overlay windows at startup."
-    const QString savedAlgorithm = group.readEntry(QStringLiteral("algorithm"), m_engine->m_algorithmId);
+    const QString savedAlgorithm = group->readString(QStringLiteral("algorithm"), m_engine->m_algorithmId);
     if (AlgorithmRegistry::instance()->hasAlgorithm(savedAlgorithm)) {
         m_engine->m_algorithmId = savedAlgorithm;
     }
 
     // Parse per-screen state
-    const QString statesJson = group.readEntry(QStringLiteral("screenStates"), QString());
+    const QString statesJson = group->readString(QStringLiteral("screenStates"));
     if (statesJson.isEmpty()) {
         return;
     }

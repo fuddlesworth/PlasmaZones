@@ -5,8 +5,8 @@
 
 #include "../core/interfaces.h"
 #include "../core/constants.h"
-#include <KConfigGroup>
-#include <KSharedConfig>
+#include "configbackend.h"
+#include <memory>
 #include <optional>
 #include <QFont>
 #include <QHash>
@@ -17,7 +17,7 @@ namespace PlasmaZones {
 /**
  * @brief Global settings for PlasmaZones
  *
- * Implements the ISettings interface with KConfig integration.
+ * Implements the ISettings interface with IConfigBackend persistence.
  * Supports ricer-friendly customization with color themes, opacity,
  * and integration with system color schemes.
  *
@@ -1339,7 +1339,7 @@ private:
 
     /**
      * @brief Read and validate an integer from config with bounds checking
-     * @param group KConfigGroup to read from
+     * @param group ConfigGroup to read from
      * @param key Config key name
      * @param defaultValue Default if not found or invalid
      * @param min Minimum valid value
@@ -1347,28 +1347,27 @@ private:
      * @param settingName Human-readable name for warning messages
      * @return Validated integer value
      */
-    int readValidatedInt(const KConfigGroup& group, const char* key, int defaultValue, int min, int max,
+    int readValidatedInt(ConfigGroup& group, const char* key, int defaultValue, int min, int max,
                          const char* settingName);
 
     /**
      * @brief Read and validate a color from config
-     * @param group KConfigGroup to read from
+     * @param group ConfigGroup to read from
      * @param key Config key name
      * @param defaultValue Default if not found or invalid
      * @param settingName Human-readable name for warning messages
      * @return Validated QColor value
      */
-    QColor readValidatedColor(const KConfigGroup& group, const char* key, const QColor& defaultValue,
-                              const char* settingName);
+    QColor readValidatedColor(ConfigGroup& group, const char* key, const QColor& defaultValue, const char* settingName);
 
     /**
      * @brief Load indexed shortcuts (1-9) from config group
-     * @param group KConfigGroup to read from
+     * @param group ConfigGroup to read from
      * @param keyPattern Pattern with %1 placeholder (e.g., "QuickLayout%1Shortcut")
      * @param shortcuts Array of 9 QString to populate
      * @param defaults Array of 9 default values
      */
-    void loadIndexedShortcuts(const KConfigGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
+    void loadIndexedShortcuts(ConfigGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
                               const QString (&defaults)[9]);
 
     /**
@@ -1380,22 +1379,22 @@ private:
 
     /**
      * @brief Load a trigger list from config JSON, with error handling and cap-at-4
-     * @param group KConfigGroup to read from
+     * @param group ConfigGroup to read from
      * @param key Config key for the JSON trigger list
      * @param legacyModifier Fallback modifier enum value if no JSON exists
      * @param legacyMouseButton Fallback mouse button if no JSON exists
      * @return Parsed trigger list (capped at 4 entries)
      */
-    static QVariantList loadTriggerList(const KConfigGroup& group, const QString& key, int legacyModifier,
+    static QVariantList loadTriggerList(ConfigGroup& group, const QString& key, int legacyModifier,
                                         int legacyMouseButton);
 
     /**
      * @brief Save a trigger list to config as compact JSON
-     * @param group KConfigGroup to write to
+     * @param group ConfigGroup to write to
      * @param key Config key for the JSON trigger list
      * @param triggers The trigger list to serialize
      */
-    static void saveTriggerList(KConfigGroup& group, const QString& key, const QVariantList& triggers);
+    static void saveTriggerList(ConfigGroup& group, const QString& key, const QVariantList& triggers);
 
     /** @brief Shared dispatcher for indexed shortcut arrays (quick-layout, snap-to-zone) */
     using ShortcutSignalFn = void (Settings::*)();
@@ -1403,28 +1402,29 @@ private:
                             const ShortcutSignalFn (&signals)[9]);
 
     // ─── load() helpers (decomposed for SRP) ─────────────────────────────
-    void loadActivationConfig(KConfigGroup& activation);
-    void loadDisplayConfig(const KConfigGroup& display);
-    void loadAppearanceConfig(const KConfigGroup& appearance);
-    void loadZoneGeometryConfig(const KConfigGroup& zones);
-    void loadBehaviorConfig(const KConfigGroup& behavior, const KConfigGroup& exclusions,
-                            const KConfigGroup& activation);
-    void loadZoneSelectorConfig(const KConfigGroup& zoneSelector);
-    void loadPerScreenOverrides(KSharedConfigPtr config);
-    void loadShortcutConfig(const KConfigGroup& globalShortcuts);
-    void loadAutotilingConfig(const KConfigGroup& autotiling, const KConfigGroup& animations,
-                              const KConfigGroup& autotileShortcuts);
+    void loadActivationConfig(ConfigGroup& activation);
+    void loadDisplayConfig(ConfigGroup& display);
+    void loadAppearanceConfig(ConfigGroup& appearance);
+    void loadZoneGeometryConfig(ConfigGroup& zones);
+    void loadBehaviorConfig(IConfigBackend* backend);
+    void loadZoneSelectorConfig(ConfigGroup& zoneSelector);
+    void loadPerScreenOverrides(IConfigBackend* backend);
+    void loadShortcutConfig(ConfigGroup& globalShortcuts);
+    void loadAutotilingConfig(IConfigBackend* backend);
 
     // ─── save() helpers (decomposed for SRP) ────────────────────────────
-    void saveActivationConfig(KConfigGroup& activation);
-    void saveDisplayConfig(KConfigGroup& display);
-    void saveAppearanceConfig(KConfigGroup& appearance);
-    void saveZoneGeometryConfig(KConfigGroup& zones);
-    void saveBehaviorConfig(KConfigGroup& behavior, KConfigGroup& exclusions, KConfigGroup& activation);
-    void saveZoneSelectorConfig(KConfigGroup& zoneSelector);
-    void saveAllPerScreenOverrides(KSharedConfigPtr config);
-    void saveShortcutConfig(KConfigGroup& globalShortcuts);
-    void saveAutotilingConfig(KConfigGroup& autotiling, KConfigGroup& animations, KConfigGroup& autotileShortcuts);
+    void saveActivationConfig(ConfigGroup& activation);
+    void saveDisplayConfig(ConfigGroup& display);
+    void saveAppearanceConfig(ConfigGroup& appearance);
+    void saveZoneGeometryConfig(ConfigGroup& zones);
+    void saveBehaviorConfig(IConfigBackend* backend);
+    void saveZoneSelectorConfig(ConfigGroup& zoneSelector);
+    void saveAllPerScreenOverrides(IConfigBackend* backend);
+    void saveShortcutConfig(ConfigGroup& globalShortcuts);
+    void saveAutotilingConfig(IConfigBackend* backend);
+
+    // Config backend (replaces KSharedConfig)
+    std::unique_ptr<IConfigBackend> m_configBackend;
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Activation

@@ -86,6 +86,9 @@ set(plasmazones_core_SRCS
     config/settings/setters.cpp
     config/settings/perscreen.cpp
     config/settings.h
+    config/configbackend.h
+    config/configbackend_qsettings.h
+    config/configbackend_qsettings.cpp
     config/colorimporter.cpp
     config/colorimporter.h
     config/updatechecker.cpp
