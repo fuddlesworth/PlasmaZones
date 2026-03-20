@@ -7,8 +7,10 @@
 #include <QDir>
 #include <QFile>
 #include <QProcess>
-#include <QSettings>
+#include <QRegularExpression>
+#include <QSet>
 #include <QStandardPaths>
+#include <QTextStream>
 #include <QUrl>
 
 namespace PlasmaZones {
@@ -47,6 +49,11 @@ QString querySwww()
 // ── KDE Plasma provider ─────────────────────────────────────────────────────
 // Reads ~/.config/plasma-org.kde.plasma.desktop-appletsrc
 // Path: [Containments][N][Wallpaper][org.kde.image][General] Image=file:///...
+//
+// KConfig uses multi-bracket group headers like [Containments][355] to
+// represent nested groups.  QSettings::IniFormat does NOT understand this
+// nesting — it treats the entire bracket sequence as a flat group name.
+// We parse the file manually to handle KConfig's format correctly.
 
 class PlasmaWallpaperProvider : public IWallpaperProvider
 {
@@ -56,42 +63,76 @@ public:
         const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
             + QStringLiteral("/plasma-org.kde.plasma.desktop-appletsrc");
 
-        if (!QFile::exists(configPath))
+        QFile file(configPath);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
             return {};
 
-        QSettings config(configPath, QSettings::IniFormat);
+        // Two-pass approach:
+        // 1. Find containment IDs with formfactor=0 (desktop containments)
+        // 2. Find Image= under matching [Containments][N][Wallpaper][org.kde.image][General]
+        //
+        // KConfig format: group headers are [A][B][C], keys are Key=Value under them.
 
-        // Iterate containment subgroups looking for desktop (formfactor=0)
-        const QStringList topGroups = config.childGroups();
-        if (!topGroups.contains(QStringLiteral("Containments")))
-            return {};
+        QSet<QString> desktopContainmentIds;
+        QString currentGroup;
 
-        config.beginGroup(QStringLiteral("Containments"));
-        const QStringList containmentIds = config.childGroups();
-
-        for (const QString& id : containmentIds) {
-            config.beginGroup(id);
-            int formfactor = config.value(QStringLiteral("formfactor"), -1).toInt();
-            if (formfactor != 0) {
-                config.endGroup();
-                continue;
-            }
-            // Navigate: Wallpaper/org.kde.image/General/Image
-            QString imagePath = config.value(QStringLiteral("Wallpaper/org.kde.image/General/Image")).toString();
-            config.endGroup();
-
-            if (imagePath.isEmpty())
+        // Pass 1: find desktop containments
+        QTextStream in(&file);
+        while (!in.atEnd()) {
+            QString line = in.readLine().trimmed();
+            if (line.isEmpty() || line.startsWith(QLatin1Char('#')))
                 continue;
 
-            if (imagePath.startsWith(QLatin1String("file://"))) {
-                imagePath = QUrl(imagePath).toLocalFile();
+            if (line.startsWith(QLatin1Char('['))) {
+                currentGroup = line;
+                continue;
             }
-            if (QFile::exists(imagePath)) {
-                qCDebug(lcCore) << "Plasma wallpaper:" << imagePath;
-                return imagePath;
+
+            if (line.startsWith(QLatin1String("formfactor=0"))) {
+                // Check if current group matches [Containments][NNN] (exactly 2 brackets)
+                static const QRegularExpression re(QStringLiteral("^\\[Containments\\]\\[(\\d+)\\]$"));
+                QRegularExpressionMatch match = re.match(currentGroup);
+                if (match.hasMatch()) {
+                    desktopContainmentIds.insert(match.captured(1));
+                }
             }
         }
-        config.endGroup();
+
+        if (desktopContainmentIds.isEmpty())
+            return {};
+
+        // Pass 2: find wallpaper image in desktop containments
+        file.seek(0);
+        QTextStream in2(&file);
+        currentGroup.clear();
+
+        while (!in2.atEnd()) {
+            QString line = in2.readLine().trimmed();
+            if (line.isEmpty() || line.startsWith(QLatin1Char('#')))
+                continue;
+
+            if (line.startsWith(QLatin1Char('['))) {
+                currentGroup = line;
+                continue;
+            }
+
+            if (line.startsWith(QLatin1String("Image="))) {
+                // Check if group is [Containments][NNN][Wallpaper][org.kde.image][General]
+                for (const QString& id : std::as_const(desktopContainmentIds)) {
+                    QString expected = QStringLiteral("[Containments][%1][Wallpaper][org.kde.image][General]").arg(id);
+                    if (currentGroup == expected) {
+                        QString imagePath = line.mid(6); // after "Image="
+                        if (imagePath.startsWith(QLatin1String("file://"))) {
+                            imagePath = QUrl(imagePath).toLocalFile();
+                        }
+                        if (!imagePath.isEmpty() && QFile::exists(imagePath)) {
+                            qCDebug(lcCore) << "Plasma wallpaper:" << imagePath;
+                            return imagePath;
+                        }
+                    }
+                }
+            }
+        }
         return {};
     }
 };
