@@ -313,14 +313,31 @@ Flickable {
                         Kirigami.FormData.label: i18n("Font:")
                         spacing: Kirigami.Units.smallSpacing
 
-                        TextField {
+                        ComboBox {
+                            id: fontFamilyCombo
+
                             Layout.preferredWidth: root.sliderPreferredWidth
-                            text: kcm.labelFontFamily
-                            placeholderText: i18n("System default")
-                            onEditingFinished: kcm.labelFontFamily = text
+                            editable: true
+                            model: Qt.fontFamilies()
+                            font.family: kcm.labelFontFamily || Qt.application.font.family
+                            displayText: kcm.labelFontFamily || i18n("System default")
+                            currentIndex: {
+                                if (kcm.labelFontFamily === "")
+                                    return -1;
+
+                                var families = Qt.fontFamilies();
+                                for (var i = 0; i < families.length; i++) {
+                                    if (families[i] === kcm.labelFontFamily)
+                                        return i;
+
+                                }
+                                return -1;
+                            }
+                            onActivated: kcm.labelFontFamily = currentText
+                            onAccepted: kcm.labelFontFamily = editText
                         }
 
-                        Button {
+                        ToolButton {
                             icon.name: "edit-clear"
                             visible: kcm.labelFontFamily !== "" || kcm.labelFontWeight !== Font.Bold || kcm.labelFontItalic || kcm.labelFontUnderline || kcm.labelFontStrikeout || Math.abs(kcm.labelFontSizeScale - 1) > 0.01
                             ToolTip.text: i18n("Reset to defaults")
@@ -346,6 +363,9 @@ Flickable {
                         model: [{
                             "text": i18n("Thin"),
                             "value": Font.Thin
+                        }, {
+                            "text": i18n("ExtraLight"),
+                            "value": Font.ExtraLight
                         }, {
                             "text": i18n("Light"),
                             "value": Font.Light
@@ -374,7 +394,7 @@ Flickable {
                                     return i;
 
                             }
-                            return 5; // Bold default
+                            return 6; // Bold default
                         }
                         onActivated: kcm.labelFontWeight = currentValue
                     }

@@ -7,6 +7,7 @@ import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as QFZCommon
 
 Flickable {
     id: root
@@ -625,10 +626,16 @@ Flickable {
 
                         }
 
-                        // Info row
+                        // Info row with category badge
                         RowLayout {
                             Layout.alignment: Qt.AlignHCenter
                             spacing: Kirigami.Units.smallSpacing
+
+                            QFZCommon.CategoryBadge {
+                                visible: delegateRoot.modelData.category !== undefined
+                                category: delegateRoot.modelData.category !== undefined ? delegateRoot.modelData.category : 0
+                                autoAssign: delegateRoot.modelData.autoAssign === true
+                            }
 
                             Label {
                                 elide: Text.ElideRight
