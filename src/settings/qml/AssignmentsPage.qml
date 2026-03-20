@@ -37,6 +37,8 @@ Flickable {
         signal quickLayoutSlotsChanged()
         signal tilingQuickLayoutSlotsChanged()
         signal appRulesRefreshed()
+        signal activityAssignmentsChanged()
+        signal tilingActivityAssignmentsChanged()
 
         // Methods
         function isMonitorDisabled(name) {

@@ -34,147 +34,24 @@ Flickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // =====================================================================
-        // ACTIVATION
-        // =====================================================================
-        Kirigami.Card {
+        // Enable toggle
+        RowLayout {
             Layout.fillWidth: true
+            Layout.margins: Kirigami.Units.largeSpacing
 
-            header: Kirigami.Heading {
-                text: i18n("Activation")
-                level: 2
-                padding: Kirigami.Units.smallSpacing
+            Label {
+                text: i18n("Enable Zone Snapping")
+                font.bold: true
             }
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                RowLayout {
-                    Layout.fillWidth: true
-
-                    Label {
-                        text: i18n("Enable Zone Snapping")
-                        font.bold: true
-                    }
-
-                    Item {
-                        Layout.fillWidth: true
-                    }
-
-                    Switch {
-                        checked: kcm.snappingEnabled
-                        onToggled: kcm.snappingEnabled = checked
-                    }
-
-                }
-
-                CheckBox {
-                    text: i18n("Tap trigger to toggle overlay")
-                    checked: kcm.toggleActivation
-                    onToggled: kcm.toggleActivation = checked
-                    enabled: kcm.snappingEnabled
-                }
-
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
-
-                Label {
-                    text: i18n("Zone Span")
-                    font.bold: true
-                }
-
-                CheckBox {
-                    text: i18n("Enable zone spanning")
-                    checked: kcm.zoneSpanEnabled
-                    onToggled: kcm.zoneSpanEnabled = checked
-                    enabled: kcm.snappingEnabled
-                }
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    enabled: kcm.snappingEnabled && kcm.zoneSpanEnabled
-
-                    Label {
-                        text: i18n("Edge threshold:")
-                    }
-
-                    SpinBox {
-                        from: 5
-                        to: root.thresholdMax
-                        value: kcm.adjacentThreshold
-                        onValueModified: kcm.adjacentThreshold = value
-                    }
-
-                    Label {
-                        text: i18n("px")
-                    }
-
-                }
-
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
-
-                Label {
-                    text: i18n("Snap Assist")
-                    font.bold: true
-                }
-
-                CheckBox {
-                    id: snapAssistFeatureCheck
-
-                    text: i18n("Enable snap assist window picker")
-                    checked: kcm.snapAssistFeatureEnabled
-                    onToggled: kcm.snapAssistFeatureEnabled = checked
-                    enabled: kcm.snappingEnabled
-                }
-
-                CheckBox {
-                    text: i18n("Always show after snapping")
-                    checked: kcm.snapAssistEnabled
-                    onToggled: kcm.snapAssistEnabled = checked
-                    enabled: kcm.snappingEnabled && snapAssistFeatureCheck.checked
-                }
-
+            Item {
+                Layout.fillWidth: true
             }
 
-        }
-
-        // =====================================================================
-        // DISPLAY
-        // =====================================================================
-        Kirigami.Card {
-            Layout.fillWidth: true
-            enabled: kcm.snappingEnabled
-
-            header: Kirigami.Heading {
-                text: i18n("Display")
-                level: 2
-                padding: Kirigami.Units.smallSpacing
-            }
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                CheckBox {
-                    text: i18n("Show zones on all monitors while dragging")
-                    checked: kcm.showZonesOnAllMonitors
-                    onToggled: kcm.showZonesOnAllMonitors = checked
-                }
-
-                CheckBox {
-                    text: i18n("Show zone numbers")
-                    checked: kcm.showZoneNumbers
-                    onToggled: kcm.showZoneNumbers = checked
-                }
-
-                CheckBox {
-                    text: i18n("Flash zones when switching layouts")
-                    checked: kcm.flashZonesOnSwitch
-                    onToggled: kcm.flashZonesOnSwitch = checked
-                }
-
+            Switch {
+                checked: kcm.snappingEnabled
+                onToggled: kcm.snappingEnabled = checked
+                Accessible.name: i18n("Enable zone snapping")
             }
 
         }
@@ -182,322 +59,288 @@ Flickable {
         // =====================================================================
         // APPEARANCE
         // =====================================================================
-        Kirigami.Card {
+        Item {
             Layout.fillWidth: true
-            enabled: kcm.snappingEnabled
+            implicitHeight: appearanceCard.implicitHeight
 
-            header: Kirigami.Heading {
-                text: i18n("Appearance")
-                level: 2
-                padding: Kirigami.Units.smallSpacing
-            }
+            Kirigami.Card {
+                id: appearanceCard
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+                anchors.fill: parent
+                enabled: kcm.snappingEnabled
 
-                // --- Colors ---
-                Label {
-                    text: i18n("Colors")
-                    font.bold: true
+                header: Kirigami.Heading {
+                    text: i18n("Appearance")
+                    level: 3
+                    padding: Kirigami.Units.smallSpacing
                 }
 
-                CheckBox {
-                    id: useSystemColorsCheck
-
-                    text: i18n("Use system accent color")
-                    checked: kcm.useSystemColors
-                    onToggled: kcm.useSystemColors = checked
-                }
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    visible: !useSystemColorsCheck.checked
-
-                    Label {
-                        text: i18n("Highlight:")
+                contentItem: Kirigami.FormLayout {
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Colors")
                     }
 
-                    Rectangle {
-                        width: 32
-                        height: 32
-                        radius: Kirigami.Units.smallSpacing
-                        color: kcm.highlightColor
-                        border.color: Kirigami.Theme.disabledTextColor
-                        border.width: 1
+                    CheckBox {
+                        id: useSystemColorsCheck
 
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                highlightColorDialog.selectedColor = kcm.highlightColor;
-                                highlightColorDialog.open();
+                        Kirigami.FormData.label: i18n("Color scheme:")
+                        text: i18n("Use system accent color")
+                        checked: kcm.useSystemColors
+                        onToggled: kcm.useSystemColors = checked
+                    }
+
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Highlight:")
+                        visible: !useSystemColorsCheck.checked
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Rectangle {
+                            width: 32
+                            height: 32
+                            radius: Kirigami.Units.smallSpacing
+                            color: kcm.highlightColor
+                            border.color: Kirigami.Theme.disabledTextColor
+                            border.width: 1
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    highlightColorDialog.selectedColor = kcm.highlightColor;
+                                    highlightColorDialog.open();
+                                }
                             }
+
+                        }
+
+                        Label {
+                            text: kcm.highlightColor.toString().toUpperCase()
+                            font: Kirigami.Theme.fixedWidthFont
                         }
 
                     }
 
-                    Label {
-                        text: kcm.highlightColor.toString().toUpperCase()
-                        font: Kirigami.Theme.fixedWidthFont
-                    }
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Inactive:")
+                        visible: !useSystemColorsCheck.checked
+                        spacing: Kirigami.Units.smallSpacing
 
-                }
+                        Rectangle {
+                            width: 32
+                            height: 32
+                            radius: Kirigami.Units.smallSpacing
+                            color: kcm.inactiveColor
+                            border.color: Kirigami.Theme.disabledTextColor
+                            border.width: 1
 
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    visible: !useSystemColorsCheck.checked
-
-                    Label {
-                        text: i18n("Inactive:")
-                    }
-
-                    Rectangle {
-                        width: 32
-                        height: 32
-                        radius: Kirigami.Units.smallSpacing
-                        color: kcm.inactiveColor
-                        border.color: Kirigami.Theme.disabledTextColor
-                        border.width: 1
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                inactiveColorDialog.selectedColor = kcm.inactiveColor;
-                                inactiveColorDialog.open();
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    inactiveColorDialog.selectedColor = kcm.inactiveColor;
+                                    inactiveColorDialog.open();
+                                }
                             }
+
+                        }
+
+                        Label {
+                            text: kcm.inactiveColor.toString().toUpperCase()
+                            font: Kirigami.Theme.fixedWidthFont
                         }
 
                     }
 
-                    Label {
-                        text: kcm.inactiveColor.toString().toUpperCase()
-                        font: Kirigami.Theme.fixedWidthFont
-                    }
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Border:")
+                        visible: !useSystemColorsCheck.checked
+                        spacing: Kirigami.Units.smallSpacing
 
-                }
+                        Rectangle {
+                            width: 32
+                            height: 32
+                            radius: Kirigami.Units.smallSpacing
+                            color: kcm.borderColor
+                            border.color: Kirigami.Theme.disabledTextColor
+                            border.width: 1
 
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    visible: !useSystemColorsCheck.checked
-
-                    Label {
-                        text: i18n("Border:")
-                    }
-
-                    Rectangle {
-                        width: 32
-                        height: 32
-                        radius: Kirigami.Units.smallSpacing
-                        color: kcm.borderColor
-                        border.color: Kirigami.Theme.disabledTextColor
-                        border.width: 1
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                borderColorDialog.selectedColor = kcm.borderColor;
-                                borderColorDialog.open();
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    borderColorDialog.selectedColor = kcm.borderColor;
+                                    borderColorDialog.open();
+                                }
                             }
+
+                        }
+
+                        Label {
+                            text: kcm.borderColor.toString().toUpperCase()
+                            font: Kirigami.Theme.fixedWidthFont
                         }
 
                     }
 
-                    Label {
-                        text: kcm.borderColor.toString().toUpperCase()
-                        font: Kirigami.Theme.fixedWidthFont
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
                     }
 
-                }
+                    // Opacity subsection
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Active opacity:")
+                        spacing: Kirigami.Units.smallSpacing
 
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
+                        Slider {
+                            id: activeOpacitySlider
 
-                // --- Opacity ---
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
+                            Layout.preferredWidth: root.sliderPreferredWidth
+                            from: 0
+                            to: root.opacitySliderMax
+                            value: kcm.activeOpacity * root.opacitySliderMax
+                            onMoved: kcm.activeOpacity = value / root.opacitySliderMax
+                            Accessible.name: i18n("Active zone opacity")
+                        }
 
-                    Label {
-                        text: i18n("Active opacity:")
-                    }
-
-                    Slider {
-                        id: activeOpacitySlider
-
-                        Layout.preferredWidth: root.sliderPreferredWidth
-                        from: 0
-                        to: root.opacitySliderMax
-                        value: kcm.activeOpacity * root.opacitySliderMax
-                        onMoved: kcm.activeOpacity = value / root.opacitySliderMax
-                    }
-
-                    Label {
-                        text: Math.round(activeOpacitySlider.value) + "%"
-                        Layout.preferredWidth: root.sliderValueLabelWidth
-                    }
-
-                }
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: i18n("Inactive opacity:")
-                    }
-
-                    Slider {
-                        id: inactiveOpacitySlider
-
-                        Layout.preferredWidth: root.sliderPreferredWidth
-                        from: 0
-                        to: root.opacitySliderMax
-                        value: kcm.inactiveOpacity * root.opacitySliderMax
-                        onMoved: kcm.inactiveOpacity = value / root.opacitySliderMax
-                    }
-
-                    Label {
-                        text: Math.round(inactiveOpacitySlider.value) + "%"
-                        Layout.preferredWidth: root.sliderValueLabelWidth
-                    }
-
-                }
-
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
-
-                // --- Border ---
-                Label {
-                    text: i18n("Border")
-                    font.bold: true
-                }
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: i18n("Border width:")
-                    }
-
-                    SpinBox {
-                        from: 0
-                        to: root.borderWidthMax
-                        value: kcm.borderWidth
-                        onValueModified: kcm.borderWidth = value
-                    }
-
-                    Label {
-                        text: i18n("px")
-                    }
-
-                }
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: i18n("Border radius:")
-                    }
-
-                    SpinBox {
-                        from: 0
-                        to: root.borderRadiusMax
-                        value: kcm.borderRadius
-                        onValueModified: kcm.borderRadius = value
-                    }
-
-                    Label {
-                        text: i18n("px")
-                    }
-
-                }
-
-                CheckBox {
-                    text: i18n("Enable blur behind zones")
-                    checked: kcm.enableBlur
-                    onToggled: kcm.enableBlur = checked
-                }
-
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
-
-                // --- Zone Labels ---
-                Label {
-                    text: i18n("Zone Labels")
-                    font.bold: true
-                }
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    visible: !useSystemColorsCheck.checked
-
-                    Label {
-                        text: i18n("Label color:")
-                    }
-
-                    Rectangle {
-                        width: 32
-                        height: 32
-                        radius: Kirigami.Units.smallSpacing
-                        color: kcm.labelFontColor
-                        border.color: Kirigami.Theme.disabledTextColor
-                        border.width: 1
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                labelFontColorDialog.selectedColor = kcm.labelFontColor;
-                                labelFontColorDialog.open();
-                            }
+                        Label {
+                            text: Math.round(activeOpacitySlider.value) + "%"
+                            Layout.preferredWidth: root.sliderValueLabelWidth
                         }
 
                     }
 
-                    Label {
-                        text: kcm.labelFontColor.toString().toUpperCase()
-                        font: Kirigami.Theme.fixedWidthFont
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Inactive opacity:")
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Slider {
+                            id: inactiveOpacitySlider
+
+                            Layout.preferredWidth: root.sliderPreferredWidth
+                            from: 0
+                            to: root.opacitySliderMax
+                            value: kcm.inactiveOpacity * root.opacitySliderMax
+                            onMoved: kcm.inactiveOpacity = value / root.opacitySliderMax
+                            Accessible.name: i18n("Inactive zone opacity")
+                        }
+
+                        Label {
+                            text: Math.round(inactiveOpacitySlider.value) + "%"
+                            Layout.preferredWidth: root.sliderValueLabelWidth
+                        }
+
                     }
 
-                }
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: i18n("Font family:")
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Border")
                     }
 
-                    TextField {
-                        Layout.preferredWidth: root.sliderPreferredWidth
-                        text: kcm.labelFontFamily
-                        placeholderText: i18n("System default")
-                        onEditingFinished: kcm.labelFontFamily = text
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Border width:")
+                        spacing: Kirigami.Units.smallSpacing
+
+                        SpinBox {
+                            from: 0
+                            to: root.borderWidthMax
+                            value: kcm.borderWidth
+                            onValueModified: kcm.borderWidth = value
+                            Accessible.name: i18n("Border width")
+                        }
+
+                        Label {
+                            text: i18n("px")
+                        }
+
                     }
 
-                    Button {
-                        icon.name: "edit-clear"
-                        visible: kcm.labelFontFamily !== ""
-                        ToolTip.text: i18n("Reset to system default")
-                        ToolTip.visible: hovered
-                        onClicked: kcm.labelFontFamily = ""
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Border radius:")
+                        spacing: Kirigami.Units.smallSpacing
+
+                        SpinBox {
+                            from: 0
+                            to: root.borderRadiusMax
+                            value: kcm.borderRadius
+                            onValueModified: kcm.borderRadius = value
+                            Accessible.name: i18n("Border radius")
+                        }
+
+                        Label {
+                            text: i18n("px")
+                        }
+
                     }
 
-                }
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Zone Labels")
+                    }
 
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Color:")
+                        visible: !useSystemColorsCheck.checked
+                        spacing: Kirigami.Units.smallSpacing
 
-                    Label {
-                        text: i18n("Font weight:")
+                        Rectangle {
+                            width: 32
+                            height: 32
+                            radius: Kirigami.Units.smallSpacing
+                            color: kcm.labelFontColor
+                            border.color: Kirigami.Theme.disabledTextColor
+                            border.width: 1
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    labelFontColorDialog.selectedColor = kcm.labelFontColor;
+                                    labelFontColorDialog.open();
+                                }
+                            }
+
+                        }
+
+                        Label {
+                            text: kcm.labelFontColor.toString().toUpperCase()
+                            font: Kirigami.Theme.fixedWidthFont
+                        }
+
+                    }
+
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Font:")
+                        spacing: Kirigami.Units.smallSpacing
+
+                        TextField {
+                            Layout.preferredWidth: root.sliderPreferredWidth
+                            text: kcm.labelFontFamily
+                            placeholderText: i18n("System default")
+                            onEditingFinished: kcm.labelFontFamily = text
+                        }
+
+                        Button {
+                            icon.name: "edit-clear"
+                            visible: kcm.labelFontFamily !== "" || kcm.labelFontWeight !== Font.Bold || kcm.labelFontItalic || kcm.labelFontUnderline || kcm.labelFontStrikeout || Math.abs(kcm.labelFontSizeScale - 1) > 0.01
+                            ToolTip.text: i18n("Reset to defaults")
+                            ToolTip.visible: hovered
+                            onClicked: {
+                                kcm.labelFontFamily = "";
+                                kcm.labelFontSizeScale = 1;
+                                kcm.labelFontWeight = Font.Bold;
+                                kcm.labelFontItalic = false;
+                                kcm.labelFontUnderline = false;
+                                kcm.labelFontStrikeout = false;
+                            }
+                        }
+
                     }
 
                     ComboBox {
                         id: fontWeightCombo
 
+                        Kirigami.FormData.label: i18n("Weight:")
                         textRole: "text"
                         valueRole: "value"
                         model: [{
@@ -536,68 +379,105 @@ Flickable {
                         onActivated: kcm.labelFontWeight = currentValue
                     }
 
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Style:")
+                        spacing: Kirigami.Units.largeSpacing
+
+                        CheckBox {
+                            text: i18n("Italic")
+                            checked: kcm.labelFontItalic
+                            onToggled: kcm.labelFontItalic = checked
+                        }
+
+                        CheckBox {
+                            text: i18n("Underline")
+                            checked: kcm.labelFontUnderline
+                            onToggled: kcm.labelFontUnderline = checked
+                        }
+
+                        CheckBox {
+                            text: i18n("Strikeout")
+                            checked: kcm.labelFontStrikeout
+                            onToggled: kcm.labelFontStrikeout = checked
+                        }
+
+                    }
+
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Scale:")
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Slider {
+                            id: fontSizeScaleSlider
+
+                            Layout.preferredWidth: root.sliderPreferredWidth
+                            from: 25
+                            to: 300
+                            stepSize: 5
+                            value: kcm.labelFontSizeScale * 100
+                            onMoved: kcm.labelFontSizeScale = value / 100
+                            Accessible.name: i18n("Label font size scale")
+                        }
+
+                        Label {
+                            text: Math.round(fontSizeScaleSlider.value) + "%"
+                            Layout.preferredWidth: root.sliderValueLabelWidth
+                        }
+
+                    }
+
                 }
 
-                RowLayout {
-                    spacing: Kirigami.Units.largeSpacing
+            }
 
-                    CheckBox {
-                        text: i18n("Italic")
-                        checked: kcm.labelFontItalic
-                        onToggled: kcm.labelFontItalic = checked
-                    }
+        }
 
-                    CheckBox {
-                        text: i18n("Underline")
-                        checked: kcm.labelFontUnderline
-                        onToggled: kcm.labelFontUnderline = checked
-                    }
+        // =====================================================================
+        // EFFECTS
+        // =====================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: effectsCard.implicitHeight
 
-                    CheckBox {
-                        text: i18n("Strikeout")
-                        checked: kcm.labelFontStrikeout
-                        onToggled: kcm.labelFontStrikeout = checked
-                    }
+            Kirigami.Card {
+                id: effectsCard
 
+                anchors.fill: parent
+                enabled: kcm.snappingEnabled
+
+                header: Kirigami.Heading {
+                    text: i18n("Effects")
+                    level: 3
+                    padding: Kirigami.Units.smallSpacing
                 }
 
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: i18n("Font scale:")
+                contentItem: Kirigami.FormLayout {
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Visual Effects")
                     }
 
-                    Slider {
-                        id: fontSizeScaleSlider
-
-                        Layout.preferredWidth: root.sliderPreferredWidth
-                        from: 25
-                        to: 300
-                        stepSize: 5
-                        value: kcm.labelFontSizeScale * 100
-                        onMoved: kcm.labelFontSizeScale = value / 100
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Blur:")
+                        text: i18n("Enable blur behind zones")
+                        checked: kcm.enableBlur
+                        onToggled: kcm.enableBlur = checked
                     }
 
-                    Label {
-                        text: Math.round(fontSizeScaleSlider.value) + "%"
-                        Layout.preferredWidth: root.sliderValueLabelWidth
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Numbers:")
+                        text: i18n("Show zone numbers")
+                        checked: kcm.showZoneNumbers
+                        onToggled: kcm.showZoneNumbers = checked
                     }
 
-                }
-
-                Button {
-                    text: i18n("Reset Font to Defaults")
-                    icon.name: "edit-clear"
-                    visible: kcm.labelFontFamily !== "" || kcm.labelFontWeight !== Font.Bold || kcm.labelFontItalic || kcm.labelFontUnderline || kcm.labelFontStrikeout || Math.abs(kcm.labelFontSizeScale - 1) > 0.01
-                    onClicked: {
-                        kcm.labelFontFamily = "";
-                        kcm.labelFontSizeScale = 1;
-                        kcm.labelFontWeight = Font.Bold;
-                        kcm.labelFontItalic = false;
-                        kcm.labelFontUnderline = false;
-                        kcm.labelFontStrikeout = false;
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Animation:")
+                        text: i18n("Flash zones when switching layouts")
+                        checked: kcm.flashZonesOnSwitch
+                        onToggled: kcm.flashZonesOnSwitch = checked
                     }
+
                 }
 
             }
@@ -607,93 +487,100 @@ Flickable {
         // =====================================================================
         // SHADER EFFECTS
         // =====================================================================
-        Kirigami.Card {
+        Item {
             Layout.fillWidth: true
-            enabled: kcm.snappingEnabled
+            implicitHeight: shaderCard.implicitHeight
 
-            header: Kirigami.Heading {
-                text: i18n("Shader Effects")
-                level: 2
-                padding: Kirigami.Units.smallSpacing
-            }
+            Kirigami.Card {
+                id: shaderCard
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+                anchors.fill: parent
+                enabled: kcm.snappingEnabled
 
-                CheckBox {
-                    id: shaderEffectsCheck
-
-                    text: i18n("Enable shader effects")
-                    checked: kcm.enableShaderEffects
-                    onToggled: kcm.enableShaderEffects = checked
+                header: Kirigami.Heading {
+                    text: i18n("Shader Effects")
+                    level: 3
+                    padding: Kirigami.Units.smallSpacing
                 }
 
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    enabled: shaderEffectsCheck.checked
-
-                    Label {
-                        text: i18n("Frame rate:")
+                contentItem: Kirigami.FormLayout {
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Shader Effects")
                     }
 
-                    Slider {
-                        id: shaderFpsSlider
+                    CheckBox {
+                        id: shaderEffectsCheck
 
-                        Layout.preferredWidth: root.sliderPreferredWidth
-                        from: 30
-                        to: 144
-                        stepSize: 1
-                        value: kcm.shaderFrameRate
-                        onMoved: kcm.shaderFrameRate = Math.round(value)
+                        Kirigami.FormData.label: i18n("Shaders:")
+                        text: i18n("Enable shader effects")
+                        checked: kcm.enableShaderEffects
+                        onToggled: kcm.enableShaderEffects = checked
                     }
 
-                    Label {
-                        text: Math.round(shaderFpsSlider.value) + " fps"
-                        Layout.preferredWidth: root.sliderValueLabelWidth + 15
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Frame rate:")
+                        enabled: shaderEffectsCheck.checked
+                        opacity: enabled ? 1 : 0.6
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Slider {
+                            id: shaderFpsSlider
+
+                            Layout.preferredWidth: root.sliderPreferredWidth
+                            from: 30
+                            to: 144
+                            stepSize: 1
+                            value: kcm.shaderFrameRate
+                            onMoved: kcm.shaderFrameRate = Math.round(value)
+                        }
+
+                        Label {
+                            text: Math.round(shaderFpsSlider.value) + " fps"
+                            Layout.preferredWidth: root.sliderValueLabelWidth + 15
+                        }
+
                     }
 
-                }
-
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
-
-                Label {
-                    text: i18n("Audio Visualization")
-                    font.bold: true
-                }
-
-                CheckBox {
-                    id: audioVizCheck
-
-                    text: i18n("Enable CAVA audio spectrum")
-                    enabled: shaderEffectsCheck.checked
-                    checked: kcm.enableAudioVisualizer
-                    onToggled: kcm.enableAudioVisualizer = checked
-                }
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    enabled: shaderEffectsCheck.checked && audioVizCheck.checked
-
-                    Label {
-                        text: i18n("Spectrum bars:")
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Audio Visualization")
                     }
 
-                    Slider {
-                        id: audioBarsSlider
+                    CheckBox {
+                        id: audioVizCheck
 
-                        Layout.preferredWidth: root.sliderPreferredWidth
-                        from: 16
-                        to: 256
-                        stepSize: 2
-                        value: kcm.audioSpectrumBarCount
-                        onMoved: kcm.audioSpectrumBarCount = Math.round(value)
+                        Kirigami.FormData.label: i18n("Audio:")
+                        text: i18n("Enable CAVA audio spectrum")
+                        enabled: shaderEffectsCheck.checked
+                        checked: kcm.enableAudioVisualizer
+                        onToggled: kcm.enableAudioVisualizer = checked
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("Feeds audio spectrum data to shaders that support it.")
                     }
 
-                    Label {
-                        text: Math.round(audioBarsSlider.value)
-                        Layout.preferredWidth: root.sliderValueLabelWidth + 15
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Spectrum bars:")
+                        enabled: shaderEffectsCheck.checked && audioVizCheck.checked
+                        opacity: enabled ? 1 : 0.6
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Slider {
+                            id: audioBarsSlider
+
+                            Layout.preferredWidth: root.sliderPreferredWidth
+                            from: 16
+                            to: 256
+                            stepSize: 2
+                            value: kcm.audioSpectrumBarCount
+                            onMoved: kcm.audioSpectrumBarCount = Math.round(value)
+                        }
+
+                        Label {
+                            text: Math.round(audioBarsSlider.value)
+                            Layout.preferredWidth: root.sliderValueLabelWidth + 15
+                        }
+
                     }
 
                 }
@@ -703,136 +590,119 @@ Flickable {
         }
 
         // =====================================================================
-        // ZONE GEOMETRY
+        // ACTIVATION
         // =====================================================================
-        Kirigami.Card {
+        Item {
             Layout.fillWidth: true
-            enabled: kcm.snappingEnabled
+            implicitHeight: activationCard.implicitHeight
 
-            header: Kirigami.Heading {
-                text: i18n("Zone Geometry")
-                level: 2
-                padding: Kirigami.Units.smallSpacing
-            }
+            Kirigami.Card {
+                id: activationCard
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+                anchors.fill: parent
+                enabled: kcm.snappingEnabled
 
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: i18n("Zone padding:")
-                    }
-
-                    SpinBox {
-                        from: 0
-                        to: root.paddingMax
-                        value: kcm.zonePadding
-                        onValueModified: kcm.zonePadding = value
-                    }
-
-                    Label {
-                        text: i18n("px")
-                    }
-
+                header: Kirigami.Heading {
+                    text: i18n("Activation")
+                    level: 3
+                    padding: Kirigami.Units.smallSpacing
                 }
 
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: i18n("Edge gap:")
-                    }
-
-                    SpinBox {
-                        from: 0
-                        to: root.paddingMax
-                        value: kcm.outerGap
-                        onValueModified: kcm.outerGap = value
-                        enabled: !perSideCheck.checked
-                    }
-
-                    Label {
-                        text: i18n("px")
-                        visible: !perSideCheck.checked
+                contentItem: Kirigami.FormLayout {
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Triggers")
                     }
 
                     CheckBox {
-                        id: perSideCheck
+                        id: alwaysActivateCheck
 
-                        text: i18n("Set per side")
-                        checked: kcm.usePerSideOuterGap
-                        onToggled: kcm.usePerSideOuterGap = checked
+                        Layout.fillWidth: true
+                        Kirigami.FormData.label: i18n("Zone activation:")
+                        text: i18n("Activate on every window drag")
+                        checked: true // alwaysActivateOnDrag is derived from drag trigger config
+                        enabled: false // Read-only display — configure via drag triggers above
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("When enabled, the zone overlay appears on every window drag without requiring a modifier key or mouse button.")
                     }
 
-                }
-
-                GridLayout {
-                    columns: 6
-                    visible: perSideCheck.checked
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    columnSpacing: Kirigami.Units.smallSpacing
-                    rowSpacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: i18n("Top:")
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Toggle mode:")
+                        enabled: !alwaysActivateCheck.checked
+                        opacity: enabled ? 1 : 0.6
+                        text: i18n("Tap trigger to toggle overlay")
+                        checked: kcm.toggleActivation
+                        onToggled: kcm.toggleActivation = checked
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("When enabled, press the activation trigger once to show the overlay, press again to hide it. When disabled, hold the trigger to show.")
                     }
 
-                    SpinBox {
-                        from: 0
-                        to: root.paddingMax
-                        value: kcm.outerGapTop
-                        onValueModified: kcm.outerGapTop = value
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Zone Span")
                     }
 
-                    Label {
-                        text: i18n("px")
+                    CheckBox {
+                        id: zoneSpanEnabledCheck
+
+                        Kirigami.FormData.label: i18n("Paint-to-span:")
+                        text: i18n("Enable zone spanning")
+                        checked: kcm.zoneSpanEnabled
+                        onToggled: kcm.zoneSpanEnabled = checked
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("When enabled, you can paint across multiple zones to snap a window to the combined area.")
                     }
 
-                    Label {
-                        text: i18n("Bottom:")
+                    RowLayout {
+                        Layout.preferredWidth: root.sliderPreferredWidth
+                        Kirigami.FormData.label: i18n("Edge threshold:")
+                        enabled: zoneSpanEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
+                        spacing: Kirigami.Units.smallSpacing
+
+                        SpinBox {
+                            id: adjacentThresholdSpinBox
+
+                            from: 5
+                            to: root.thresholdMax
+                            value: kcm.adjacentThreshold
+                            onValueModified: kcm.adjacentThreshold = value
+                            Accessible.name: i18n("Edge threshold")
+                            ToolTip.visible: hovered
+                            ToolTip.text: i18n("Distance from zone edge for multi-zone selection")
+                        }
+
+                        Label {
+                            text: i18n("px")
+                        }
+
                     }
 
-                    SpinBox {
-                        from: 0
-                        to: root.paddingMax
-                        value: kcm.outerGapBottom
-                        onValueModified: kcm.outerGapBottom = value
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Snap Assist")
                     }
 
-                    Label {
-                        text: i18n("px")
+                    CheckBox {
+                        id: snapAssistFeatureEnabledCheck
+
+                        Kirigami.FormData.label: i18n("Window picker:")
+                        text: i18n("Enable snap assist")
+                        checked: kcm.snapAssistFeatureEnabled
+                        onToggled: kcm.snapAssistFeatureEnabled = checked
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("Show a window picker after snapping to fill remaining empty zones")
                     }
 
-                    Label {
-                        text: i18n("Left:")
-                    }
-
-                    SpinBox {
-                        from: 0
-                        to: root.paddingMax
-                        value: kcm.outerGapLeft
-                        onValueModified: kcm.outerGapLeft = value
-                    }
-
-                    Label {
-                        text: i18n("px")
-                    }
-
-                    Label {
-                        text: i18n("Right:")
-                    }
-
-                    SpinBox {
-                        from: 0
-                        to: root.paddingMax
-                        value: kcm.outerGapRight
-                        onValueModified: kcm.outerGapRight = value
-                    }
-
-                    Label {
-                        text: i18n("px")
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Behavior:")
+                        text: i18n("Always show after snapping")
+                        checked: kcm.snapAssistEnabled
+                        onToggled: kcm.snapAssistEnabled = checked
+                        enabled: snapAssistFeatureEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("When enabled, a window picker appears after every snap. When disabled, hold the trigger below while dropping to show the picker for that snap only.")
                     }
 
                 }
@@ -844,53 +714,64 @@ Flickable {
         // =====================================================================
         // BEHAVIOR
         // =====================================================================
-        Kirigami.Card {
+        Item {
             Layout.fillWidth: true
-            enabled: kcm.snappingEnabled
+            implicitHeight: behaviorCard.implicitHeight
 
-            header: Kirigami.Heading {
-                text: i18n("Behavior")
-                level: 2
-                padding: Kirigami.Units.smallSpacing
-            }
+            Kirigami.Card {
+                id: behaviorCard
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+                anchors.fill: parent
+                enabled: kcm.snappingEnabled
 
-                CheckBox {
-                    text: i18n("Re-snap windows to their zones after resolution changes")
-                    checked: kcm.keepWindowsInZonesOnResolutionChange
-                    onToggled: kcm.keepWindowsInZonesOnResolutionChange = checked
+                header: Kirigami.Heading {
+                    text: i18n("Behavior")
+                    level: 3
+                    padding: Kirigami.Units.smallSpacing
                 }
 
-                CheckBox {
-                    text: i18n("Move new windows to their last used zone")
-                    checked: kcm.moveNewWindowsToLastZone
-                    onToggled: kcm.moveNewWindowsToLastZone = checked
-                }
-
-                CheckBox {
-                    text: i18n("Restore original window size when unsnapping")
-                    checked: kcm.restoreOriginalSizeOnUnsnap
-                    onToggled: kcm.restoreOriginalSizeOnUnsnap = checked
-                }
-
-                CheckBox {
-                    text: i18n("Restore windows to their previous zone on login")
-                    checked: kcm.restoreWindowsToZonesOnLogin
-                    onToggled: kcm.restoreWindowsToZonesOnLogin = checked
-                }
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: i18n("Sticky windows:")
+                contentItem: Kirigami.FormLayout {
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Display:")
+                        text: i18n("Show zones on all monitors while dragging")
+                        checked: kcm.showZonesOnAllMonitors
+                        onToggled: kcm.showZonesOnAllMonitors = checked
                     }
 
-                    ComboBox {
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Resolution:")
+                        text: i18n("Re-snap windows to their zones after resolution changes")
+                        checked: kcm.keepWindowsInZonesOnResolutionChange
+                        onToggled: kcm.keepWindowsInZonesOnResolutionChange = checked
+                    }
+
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("New windows:")
+                        text: i18n("Move new windows to their last used zone")
+                        checked: kcm.moveNewWindowsToLastZone
+                        onToggled: kcm.moveNewWindowsToLastZone = checked
+                    }
+
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Unsnapping:")
+                        text: i18n("Restore original window size when unsnapping")
+                        checked: kcm.restoreOriginalSizeOnUnsnap
+                        onToggled: kcm.restoreOriginalSizeOnUnsnap = checked
+                    }
+
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Reopening:")
+                        text: i18n("Restore windows to their previous zone")
+                        checked: kcm.restoreWindowsToZonesOnLogin
+                        onToggled: kcm.restoreWindowsToZonesOnLogin = checked
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("When enabled, windows return to their previous zone when reopened, including after login or session restart.")
+                    }
+
+                    WideComboBox {
                         id: stickyHandlingCombo
 
+                        Kirigami.FormData.label: i18n("Sticky windows:")
                         textRole: "text"
                         valueRole: "value"
                         model: [{
@@ -905,6 +786,153 @@ Flickable {
                         }]
                         currentIndex: Math.max(0, indexOfValue(kcm.stickyWindowHandling))
                         onActivated: kcm.stickyWindowHandling = currentValue
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("Sticky windows appear on all desktops. Choose how snapping should behave.")
+                    }
+
+                }
+
+            }
+
+        }
+
+        // =====================================================================
+        // ZONE GEOMETRY
+        // =====================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: gapsCard.implicitHeight
+
+            Kirigami.Card {
+                id: gapsCard
+
+                anchors.fill: parent
+                enabled: kcm.snappingEnabled
+
+                header: Kirigami.Heading {
+                    text: i18n("Gaps")
+                    level: 3
+                    padding: Kirigami.Units.smallSpacing
+                }
+
+                contentItem: Kirigami.FormLayout {
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Zone padding:")
+                        spacing: Kirigami.Units.smallSpacing
+
+                        SpinBox {
+                            from: 0
+                            to: root.paddingMax
+                            value: kcm.zonePadding
+                            onValueModified: kcm.zonePadding = value
+                            Accessible.name: i18n("Zone padding")
+                        }
+
+                        Label {
+                            text: i18n("px")
+                        }
+
+                    }
+
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Edge gap:")
+                        spacing: Kirigami.Units.smallSpacing
+
+                        SpinBox {
+                            from: 0
+                            to: root.paddingMax
+                            value: kcm.outerGap
+                            onValueModified: kcm.outerGap = value
+                            enabled: !perSideCheck.checked
+                            Accessible.name: i18n("Edge gap")
+                        }
+
+                        Label {
+                            text: i18n("px")
+                            visible: !perSideCheck.checked
+                        }
+
+                        CheckBox {
+                            id: perSideCheck
+
+                            text: i18n("Set per side")
+                            checked: kcm.usePerSideOuterGap
+                            onToggled: kcm.usePerSideOuterGap = checked
+                        }
+
+                    }
+
+                    GridLayout {
+                        Kirigami.FormData.label: i18n("Per-side gaps:")
+                        visible: perSideCheck.checked
+                        columns: 6
+                        columnSpacing: Kirigami.Units.smallSpacing
+                        rowSpacing: Kirigami.Units.smallSpacing
+
+                        Label {
+                            text: i18n("Top:")
+                        }
+
+                        SpinBox {
+                            from: 0
+                            to: root.paddingMax
+                            value: kcm.outerGapTop
+                            onValueModified: kcm.outerGapTop = value
+                            Accessible.name: i18nc("@label", "Top edge gap")
+                        }
+
+                        Label {
+                            text: i18nc("@label", "px")
+                        }
+
+                        Label {
+                            text: i18n("Bottom:")
+                        }
+
+                        SpinBox {
+                            from: 0
+                            to: root.paddingMax
+                            value: kcm.outerGapBottom
+                            onValueModified: kcm.outerGapBottom = value
+                            Accessible.name: i18nc("@label", "Bottom edge gap")
+                        }
+
+                        Label {
+                            text: i18nc("@label", "px")
+                        }
+
+                        Label {
+                            text: i18n("Left:")
+                        }
+
+                        SpinBox {
+                            from: 0
+                            to: root.paddingMax
+                            value: kcm.outerGapLeft
+                            onValueModified: kcm.outerGapLeft = value
+                            Accessible.name: i18nc("@label", "Left edge gap")
+                        }
+
+                        Label {
+                            text: i18nc("@label", "px")
+                        }
+
+                        Label {
+                            text: i18n("Right:")
+                        }
+
+                        SpinBox {
+                            from: 0
+                            to: root.paddingMax
+                            value: kcm.outerGapRight
+                            onValueModified: kcm.outerGapRight = value
+                            Accessible.name: i18nc("@label", "Right edge gap")
+                        }
+
+                        Label {
+                            text: i18nc("@label", "px")
+                        }
+
                     }
 
                 }
@@ -916,48 +944,43 @@ Flickable {
         // =====================================================================
         // ZONE SELECTOR
         // =====================================================================
-        Kirigami.Card {
+        Item {
             Layout.fillWidth: true
-            enabled: kcm.snappingEnabled
+            implicitHeight: zoneSelectorCard.implicitHeight
 
-            header: Kirigami.Heading {
-                text: i18n("Zone Selector")
-                level: 2
-                padding: Kirigami.Units.smallSpacing
-            }
+            Kirigami.Card {
+                id: zoneSelectorCard
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+                anchors.fill: parent
+                enabled: kcm.snappingEnabled
 
-                CheckBox {
-                    text: i18n("Enable zone selector popup")
-                    checked: kcm.zoneSelectorEnabled
-                    onToggled: kcm.zoneSelectorEnabled = checked
-                    font.bold: true
+                header: Kirigami.Heading {
+                    text: i18n("Zone Selector")
+                    level: 3
+                    padding: Kirigami.Units.smallSpacing
                 }
 
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
+                contentItem: Kirigami.FormLayout {
+                    CheckBox {
+                        id: zoneSelectorEnabledCheck
 
-                // --- Position ---
-                Label {
-                    text: i18n("Position & Trigger")
-                    font.bold: true
-                    enabled: kcm.zoneSelectorEnabled
-                }
+                        Kirigami.FormData.label: i18n("Popup:")
+                        text: i18n("Enable zone selector popup")
+                        checked: kcm.zoneSelectorEnabled
+                        onToggled: kcm.zoneSelectorEnabled = checked
+                    }
 
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    enabled: kcm.zoneSelectorEnabled
-
-                    Label {
-                        text: i18n("Position:")
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Position & Trigger")
                     }
 
                     ComboBox {
                         id: zoneSelectorPositionCombo
 
+                        Kirigami.FormData.label: i18n("Position:")
+                        enabled: zoneSelectorEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
                         textRole: "text"
                         valueRole: "value"
                         model: [{
@@ -992,56 +1015,41 @@ Flickable {
                         onActivated: kcm.zoneSelectorPosition = currentValue
                     }
 
-                }
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Trigger distance:")
+                        enabled: zoneSelectorEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
+                        spacing: Kirigami.Units.smallSpacing
 
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    enabled: kcm.zoneSelectorEnabled
+                        Slider {
+                            id: triggerDistanceSlider
 
-                    Label {
-                        text: i18n("Trigger distance:")
+                            Layout.preferredWidth: root.sliderPreferredWidth
+                            from: 10
+                            to: root.zoneSelectorTriggerMax
+                            stepSize: 10
+                            value: kcm.zoneSelectorTriggerDistance
+                            onMoved: kcm.zoneSelectorTriggerDistance = value
+                        }
+
+                        Label {
+                            text: Math.round(triggerDistanceSlider.value) + " px"
+                            Layout.preferredWidth: root.sliderValueLabelWidth + 15
+                        }
+
                     }
 
-                    Slider {
-                        id: triggerDistanceSlider
-
-                        Layout.preferredWidth: root.sliderPreferredWidth
-                        from: 10
-                        to: root.zoneSelectorTriggerMax
-                        stepSize: 10
-                        value: kcm.zoneSelectorTriggerDistance
-                        onMoved: kcm.zoneSelectorTriggerDistance = value
-                    }
-
-                    Label {
-                        text: Math.round(triggerDistanceSlider.value) + " px"
-                        Layout.preferredWidth: root.sliderValueLabelWidth + 15
-                    }
-
-                }
-
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
-
-                // --- Layout Arrangement ---
-                Label {
-                    text: i18n("Layout Arrangement")
-                    font.bold: true
-                    enabled: kcm.zoneSelectorEnabled
-                }
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    enabled: kcm.zoneSelectorEnabled
-
-                    Label {
-                        text: i18n("Arrangement:")
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Layout Arrangement")
                     }
 
                     ComboBox {
                         id: layoutModeCombo
 
+                        Kirigami.FormData.label: i18n("Arrangement:")
+                        enabled: zoneSelectorEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
                         textRole: "text"
                         valueRole: "value"
                         model: [{
@@ -1058,66 +1066,39 @@ Flickable {
                         onActivated: kcm.zoneSelectorLayoutMode = currentValue
                     }
 
-                }
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    visible: kcm.zoneSelectorLayoutMode === 0
-                    enabled: kcm.zoneSelectorEnabled
-
-                    Label {
-                        text: i18n("Grid columns:")
-                    }
-
                     SpinBox {
+                        Kirigami.FormData.label: i18n("Grid columns:")
+                        visible: kcm.zoneSelectorLayoutMode === 0
+                        enabled: zoneSelectorEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
                         from: 1
                         to: root.zoneSelectorGridColumnsMax
                         value: kcm.zoneSelectorGridColumns
                         onValueModified: kcm.zoneSelectorGridColumns = value
                     }
 
-                }
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    visible: kcm.zoneSelectorLayoutMode === 0
-                    enabled: kcm.zoneSelectorEnabled
-
-                    Label {
-                        text: i18n("Max visible rows:")
-                    }
-
                     SpinBox {
+                        Kirigami.FormData.label: i18n("Max visible rows:")
+                        visible: kcm.zoneSelectorLayoutMode === 0
+                        enabled: zoneSelectorEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
                         from: 1
                         to: 10
                         value: kcm.zoneSelectorMaxRows
                         onValueModified: kcm.zoneSelectorMaxRows = value
                     }
 
-                }
-
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
-
-                // --- Preview Size ---
-                Label {
-                    text: i18n("Preview Size")
-                    font.bold: true
-                    enabled: kcm.zoneSelectorEnabled
-                }
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    enabled: kcm.zoneSelectorEnabled
-
-                    Label {
-                        text: i18n("Size mode:")
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Preview Size")
                     }
 
                     ComboBox {
                         id: sizeModeCombo
 
+                        Kirigami.FormData.label: i18n("Size mode:")
+                        enabled: zoneSelectorEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
                         textRole: "text"
                         valueRole: "value"
                         model: [{
@@ -1131,109 +1112,107 @@ Flickable {
                         onActivated: kcm.zoneSelectorSizeMode = currentValue
                     }
 
-                }
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Preview width:")
+                        visible: kcm.zoneSelectorSizeMode === 1
+                        enabled: zoneSelectorEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
+                        spacing: Kirigami.Units.smallSpacing
 
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    visible: kcm.zoneSelectorSizeMode === 1
-                    enabled: kcm.zoneSelectorEnabled
-
-                    Label {
-                        text: i18n("Preview width:")
-                    }
-
-                    SpinBox {
-                        from: root.zoneSelectorPreviewWidthMin
-                        to: root.zoneSelectorPreviewWidthMax
-                        value: kcm.zoneSelectorPreviewWidth
-                        onValueModified: {
-                            kcm.zoneSelectorPreviewWidth = value;
-                            if (kcm.zoneSelectorPreviewLockAspect) {
-                                var newHeight = Math.round(value / root.screenAspectRatio);
-                                newHeight = Math.max(root.zoneSelectorPreviewHeightMin, Math.min(root.zoneSelectorPreviewHeightMax, newHeight));
-                                kcm.zoneSelectorPreviewHeight = newHeight;
+                        SpinBox {
+                            from: root.zoneSelectorPreviewWidthMin
+                            to: root.zoneSelectorPreviewWidthMax
+                            value: kcm.zoneSelectorPreviewWidth
+                            onValueModified: {
+                                kcm.zoneSelectorPreviewWidth = value;
+                                if (kcm.zoneSelectorPreviewLockAspect) {
+                                    var newHeight = Math.round(value / root.screenAspectRatio);
+                                    newHeight = Math.max(root.zoneSelectorPreviewHeightMin, Math.min(root.zoneSelectorPreviewHeightMax, newHeight));
+                                    kcm.zoneSelectorPreviewHeight = newHeight;
+                                }
                             }
                         }
+
+                        Label {
+                            text: i18n("px")
+                        }
+
                     }
 
-                    Label {
-                        text: i18n("px")
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Preview height:")
+                        visible: kcm.zoneSelectorSizeMode === 1
+                        enabled: zoneSelectorEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
+                        spacing: Kirigami.Units.smallSpacing
+
+                        SpinBox {
+                            from: root.zoneSelectorPreviewHeightMin
+                            to: root.zoneSelectorPreviewHeightMax
+                            value: kcm.zoneSelectorPreviewHeight
+                            onValueModified: kcm.zoneSelectorPreviewHeight = value
+                            enabled: !kcm.zoneSelectorPreviewLockAspect
+                        }
+
+                        Label {
+                            text: i18n("px")
+                        }
+
                     }
 
-                }
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    visible: kcm.zoneSelectorSizeMode === 1
-                    enabled: kcm.zoneSelectorEnabled
-
-                    Label {
-                        text: i18n("Preview height:")
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Aspect:")
+                        text: i18n("Lock aspect ratio")
+                        checked: kcm.zoneSelectorPreviewLockAspect
+                        onToggled: kcm.zoneSelectorPreviewLockAspect = checked
+                        visible: kcm.zoneSelectorSizeMode === 1
+                        enabled: zoneSelectorEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
                     }
 
-                    SpinBox {
-                        from: root.zoneSelectorPreviewHeightMin
-                        to: root.zoneSelectorPreviewHeightMax
-                        value: kcm.zoneSelectorPreviewHeight
-                        onValueModified: kcm.zoneSelectorPreviewHeight = value
-                        enabled: !kcm.zoneSelectorPreviewLockAspect
-                    }
+                    // Live preview
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: previewRect.height + 30
+                        visible: zoneSelectorEnabledCheck.checked
+                        enabled: zoneSelectorEnabledCheck.checked
 
-                    Label {
-                        text: i18n("px")
-                    }
+                        Rectangle {
+                            id: previewRect
 
-                }
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: kcm.zoneSelectorSizeMode === 0 ? Math.round(180 * (root.screenAspectRatio / (16 / 9))) : kcm.zoneSelectorPreviewWidth
+                            height: kcm.zoneSelectorSizeMode === 0 ? Math.round(width / root.screenAspectRatio) : kcm.zoneSelectorPreviewHeight
+                            color: "transparent"
+                            radius: Kirigami.Units.smallSpacing
+                            border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4)
+                            border.width: 1
 
-                CheckBox {
-                    text: i18n("Lock aspect ratio")
-                    checked: kcm.zoneSelectorPreviewLockAspect
-                    onToggled: kcm.zoneSelectorPreviewLockAspect = checked
-                    visible: kcm.zoneSelectorSizeMode === 1
-                    enabled: kcm.zoneSelectorEnabled
-                }
+                            Row {
+                                anchors.fill: parent
+                                anchors.margins: 2
+                                spacing: 1
 
-                // Live preview
-                Item {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: previewRect.height + 30
-                    visible: kcm.zoneSelectorEnabled
-                    enabled: kcm.zoneSelectorEnabled
+                                Repeater {
+                                    model: 3
 
-                    Rectangle {
-                        id: previewRect
+                                    Rectangle {
+                                        width: (parent.width - 2) / 3
+                                        height: parent.height
+                                        radius: 2
+                                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.35)
+                                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.7)
+                                        border.width: 1
 
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: kcm.zoneSelectorSizeMode === 0 ? Math.round(180 * (root.screenAspectRatio / (16 / 9))) : kcm.zoneSelectorPreviewWidth
-                        height: kcm.zoneSelectorSizeMode === 0 ? Math.round(width / root.screenAspectRatio) : kcm.zoneSelectorPreviewHeight
-                        color: "transparent"
-                        radius: Kirigami.Units.smallSpacing
-                        border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4)
-                        border.width: 1
+                                        Label {
+                                            anchors.centerIn: parent
+                                            text: (index + 1).toString()
+                                            font.pixelSize: Math.min(parent.width, parent.height) * 0.3
+                                            font.bold: true
+                                            opacity: 0.6
+                                            visible: parent.width >= 20
+                                        }
 
-                        Row {
-                            anchors.fill: parent
-                            anchors.margins: 2
-                            spacing: 1
-
-                            Repeater {
-                                model: 3
-
-                                Rectangle {
-                                    width: (parent.width - 2) / 3
-                                    height: parent.height
-                                    radius: 2
-                                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.35)
-                                    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.7)
-                                    border.width: 1
-
-                                    Label {
-                                        anchors.centerIn: parent
-                                        text: (index + 1).toString()
-                                        font.pixelSize: Math.min(parent.width, parent.height) * 0.3
-                                        font.bold: true
-                                        opacity: 0.6
-                                        visible: parent.width >= 20
                                     }
 
                                 }
@@ -1242,15 +1221,15 @@ Flickable {
 
                         }
 
-                    }
+                        Label {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: previewRect.bottom
+                            anchors.topMargin: Kirigami.Units.smallSpacing
+                            text: previewRect.width + " x " + previewRect.height + " px"
+                            font: Kirigami.Theme.fixedWidthFont
+                            opacity: 0.7
+                        }
 
-                    Label {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: previewRect.bottom
-                        anchors.topMargin: Kirigami.Units.smallSpacing
-                        text: previewRect.width + " x " + previewRect.height + " px"
-                        font: Kirigami.Theme.fixedWidthFont
-                        opacity: 0.7
                     }
 
                 }

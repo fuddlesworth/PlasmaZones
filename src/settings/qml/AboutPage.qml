@@ -63,7 +63,7 @@ Flickable {
 
             header: Kirigami.Heading {
                 text: i18n("Daemon")
-                level: 2
+                level: 3
                 padding: Kirigami.Units.smallSpacing
             }
 
@@ -143,7 +143,7 @@ Flickable {
 
             header: Kirigami.Heading {
                 text: i18n("Links")
-                level: 2
+                level: 3
                 padding: Kirigami.Units.smallSpacing
             }
 
@@ -153,32 +153,40 @@ Flickable {
                 Button {
                     Layout.fillWidth: true
                     flat: true
-                    text: i18n("GitHub Repository")
                     icon.name: "vcs-branch"
+                    icon.width: Kirigami.Units.iconSizes.smallMedium
+                    icon.height: Kirigami.Units.iconSizes.smallMedium
+                    text: i18n("GitHub Repository")
                     onClicked: Qt.openUrlExternally("https://github.com/fuddlesworth/PlasmaZones")
                 }
 
                 Button {
                     Layout.fillWidth: true
                     flat: true
-                    text: i18n("Report a Bug")
                     icon.name: "tools-report-bug"
+                    icon.width: Kirigami.Units.iconSizes.smallMedium
+                    icon.height: Kirigami.Units.iconSizes.smallMedium
+                    text: i18n("Report a Bug")
                     onClicked: Qt.openUrlExternally("https://github.com/fuddlesworth/PlasmaZones/issues/new")
                 }
 
                 Button {
                     Layout.fillWidth: true
                     flat: true
-                    text: i18n("Documentation / Wiki")
                     icon.name: "documentation"
+                    icon.width: Kirigami.Units.iconSizes.smallMedium
+                    icon.height: Kirigami.Units.iconSizes.smallMedium
+                    text: i18n("Documentation / Wiki")
                     onClicked: Qt.openUrlExternally("https://github.com/fuddlesworth/PlasmaZones/wiki")
                 }
 
                 Button {
                     Layout.fillWidth: true
                     flat: true
-                    text: i18n("Releases")
                     icon.name: "package-available"
+                    icon.width: Kirigami.Units.iconSizes.smallMedium
+                    icon.height: Kirigami.Units.iconSizes.smallMedium
+                    text: i18n("Releases")
                     onClicked: Qt.openUrlExternally("https://github.com/fuddlesworth/PlasmaZones/releases")
                 }
 
@@ -192,7 +200,7 @@ Flickable {
 
             header: Kirigami.Heading {
                 text: i18n("License")
-                level: 2
+                level: 3
                 padding: Kirigami.Units.smallSpacing
             }
 
@@ -207,8 +215,10 @@ Flickable {
 
                 Button {
                     flat: true
-                    text: i18n("View License Text")
                     icon.name: "text-x-copying"
+                    icon.width: Kirigami.Units.iconSizes.smallMedium
+                    icon.height: Kirigami.Units.iconSizes.smallMedium
+                    text: i18n("View License Text")
                     onClicked: Qt.openUrlExternally("https://www.gnu.org/licenses/gpl-3.0.html")
                 }
 
@@ -223,7 +233,7 @@ Flickable {
 
             header: Kirigami.Heading {
                 text: i18n("Credits")
-                level: 2
+                level: 3
                 padding: Kirigami.Units.smallSpacing
             }
 
