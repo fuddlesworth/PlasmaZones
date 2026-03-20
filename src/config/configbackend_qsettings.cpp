@@ -47,7 +47,17 @@ static bool readKConfigIni(QIODevice& device, QSettings::SettingsMap& map)
         // but they won't appear in our config since we don't use those features
 
         QString fullKey = currentGroup.isEmpty() ? key : (currentGroup + QLatin1Char('/') + key);
-        map.insert(fullKey, value);
+
+        // Store typed QVariants so toBool()/toInt()/toDouble() work correctly.
+        // QVariant(QString("false")).toBool() returns true (non-empty string),
+        // but QVariant(false).toBool() returns false — we need the latter.
+        if (value.compare(QLatin1String("true"), Qt::CaseInsensitive) == 0) {
+            map.insert(fullKey, true);
+        } else if (value.compare(QLatin1String("false"), Qt::CaseInsensitive) == 0) {
+            map.insert(fullKey, false);
+        } else {
+            map.insert(fullKey, value);
+        }
     }
     return true;
 }
