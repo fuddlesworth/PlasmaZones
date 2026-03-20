@@ -4,7 +4,7 @@
 
 <img src="icons/hicolor/scalable/apps/plasmazones.svg" alt="PlasmaZones" width="96">
 
-**Window zone management for KDE Plasma 6**
+**Window zone management for Wayland compositors**
 
 Define zones on your screen. Drag windows into them. Done.
 
@@ -14,7 +14,7 @@ Define zones on your screen. Drag windows into them. Done.
 [![COPR](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fcopr.fedorainfracloud.org%2Fapi_3%2Fpackage%3Fownername%3Dfuddlesworth%26projectname%3DPlasmaZones%26packagename%3Dplasmazones%26with_latest_succeeded_build%3Dtrue&query=%24.builds.latest_succeeded.source_package.version&label=COPR&color=blue)](https://copr.fedorainfracloud.org/coprs/fuddlesworth/PlasmaZones/package/plasmazones/)
 <br>
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-blue.svg)](LICENSE)
-[![KDE Plasma 6](https://img.shields.io/badge/KDE%20Plasma-6-blue.svg)](https://kde.org/plasma-desktop/)
+[![Wayland](https://img.shields.io/badge/Wayland-native-blue.svg)](https://wayland.freedesktop.org/)
 
 </div>
 
@@ -234,15 +234,15 @@ Full KCM module with 8 tabs:
 
 ### Requirements
 
-- KDE Plasma 6 (Wayland)
+- Any Wayland compositor with layer-shell support
 - Qt 6.6+
-- KDE Frameworks 6.6+
-- LayerShellQt (required for Wayland overlays)
+- LayerShellQt 6.6+
 - CMake 3.16+
 - C++20 compiler
 
-Optional:
-- PlasmaActivities for activity-based layouts
+Optional (for full KDE integration):
+- KDE Frameworks 6.6+ (KWin effect, System Settings, KGlobalAccel shortcuts)
+- PlasmaActivities (activity-based layouts)
 
 ### Arch Linux (AUR)
 
@@ -286,20 +286,38 @@ Or add to your flake inputs. A `flake.nix` is included in the repository.
 ```bash
 git clone https://github.com/fuddlesworth/PlasmaZones.git
 cd PlasmaZones
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
-cmake --build . -j$(nproc)
-sudo cmake --install .
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build -j$(nproc)
+sudo cmake --install build
 ```
 
-After installation, refresh the KDE service cache and enable the daemon:
+**Portable build (no KDE dependencies):**
 
 ```bash
-kbuildsycoca6 --noincremental
+cmake -B build -DUSE_KDE_FRAMEWORKS=OFF \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build -j$(nproc)
+sudo cmake --install build
+```
+
+This builds only the daemon and editor — no KWin effect or KCM.
+See [Compositor Integration](docs/compositor-integration.md) for
+shortcut and config setup on non-KDE compositors.
+
+After installation, enable the daemon:
+
+```bash
 systemctl --user enable --now plasmazones.service
 ```
 
-Or log out and back in. Settings appear in **System Settings → Window Management → PlasmaZones**.
+On KDE Plasma, also refresh the service cache for KCM:
+
+```bash
+kbuildsycoca6 --noincremental
+```
+
+Settings appear in **System Settings → Window Management → PlasmaZones** (KDE only).
+On other compositors, edit `~/.config/plasmazonesrc` or use the layout editor.
 
 <details>
 <summary>Local install (no root)</summary>
@@ -499,7 +517,7 @@ Layouts stored as JSON in `~/.local/share/plasmazones/layouts/`.
 
 ## Troubleshooting
 
-### PlasmaZones not appearing in System Settings
+### PlasmaZones not appearing in System Settings (KDE only)
 
 Refresh the KDE service cache after installing from source:
 
@@ -601,7 +619,7 @@ src/
 │   ├── services/       # Snapping, templates, zone manager
 │   └── undo/           # Undo/redo command system
 ├── dbus/               # D-Bus adaptors (7 interfaces)
-├── config/             # Settings (KConfig), update checker
+├── config/             # Settings (IConfigBackend), update checker
 ├── ui/                 # QML components (OSD, overlays, zone selector)
 └── shared/             # Shared QML components and plugins
 kcm/                    # System Settings module (KCM)
@@ -654,6 +672,6 @@ GPL-3.0-or-later
 
 Inspired by [FancyZones](https://learn.microsoft.com/en-us/windows/powertoys/fancyzones) from PowerToys.
 
-**Made for KDE Plasma 6**
+**Works on KDE Plasma, Hyprland, Sway, GNOME, and any Wayland compositor with layer-shell support.**
 
 </div>
