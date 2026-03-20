@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.3.9] - 2026-03-20
+
+### Fixed
+- **Modifier key settings zeroed on save**: Changing the activation modifier in the KCM and saving silently wrote all-zero triggers to KConfig, permanently disabling zone activation. Complex D-Bus types (`QVariantList` of `QVariantMap`s) arrived as `QDBusArgument` objects that `toList()`/`toMap()` couldn't extract. Now applies `DBusVariantUtils::convertDbusArgument()` in both `setSetting()` and `setSettings()` before passing values to setters. Affects `dragActivationTriggers`, `zoneSpanTriggers`, and `snapAssistTriggers`.
+
 ## [2.3.8] - 2026-03-19
 
 ### Added
@@ -863,7 +868,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.8...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.9...HEAD
+[2.3.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.8...v2.3.9
 [2.3.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.7...v2.3.8
 [2.3.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.6...v2.3.7
 [2.3.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.5...v2.3.6
