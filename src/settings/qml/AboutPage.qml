@@ -10,6 +10,7 @@ Flickable {
     id: root
 
     contentHeight: content.implicitHeight
+    clip: true
 
     ColumnLayout {
         id: content
@@ -17,11 +18,10 @@ Flickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // --- App Header ---
+        // App header with icon and version (matches KCM)
         RowLayout {
             Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing * 2
-            Layout.alignment: Qt.AlignHCenter
+            Layout.topMargin: Kirigami.Units.largeSpacing
             spacing: Kirigami.Units.largeSpacing
 
             Kirigami.Icon {
@@ -31,6 +31,7 @@ Flickable {
             }
 
             ColumnLayout {
+                Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
 
                 Kirigami.Heading {
@@ -47,88 +48,280 @@ Flickable {
 
         }
 
+        // Description (matches KCM — left-aligned, full text)
         Label {
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.largeSpacing
-            Layout.bottomMargin: Kirigami.Units.largeSpacing
-            horizontalAlignment: Text.AlignHCenter
+            text: i18n("A window tiling and zone management tool for Wayland compositors. Organize your desktop with customizable zones, automatic tiling layouts, and keyboard-driven window placement.")
             wrapMode: Text.WordWrap
-            opacity: 0.7
-            text: i18n("Window tiling and zone management for Wayland compositors")
         }
 
-        // --- Daemon ---
-        Kirigami.Card {
+        // Daemon card
+        Item {
             Layout.fillWidth: true
+            implicitHeight: daemonCard.implicitHeight
 
-            header: Kirigami.Heading {
-                text: i18n("Daemon")
-                level: 3
-                padding: Kirigami.Units.smallSpacing
-            }
+            Kirigami.Card {
+                id: daemonCard
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+                anchors.fill: parent
 
-                RowLayout {
+                header: Kirigami.Heading {
+                    level: 3
+                    text: i18n("Daemon")
+                    padding: Kirigami.Units.smallSpacing
+                }
+
+                contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
 
-                    Rectangle {
-                        width: Kirigami.Units.gridUnit
-                        height: Kirigami.Units.gridUnit
-                        radius: width / 2
-                        color: settingsController.daemonRunning ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
+                    RowLayout {
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Rectangle {
+                            width: Kirigami.Units.gridUnit
+                            height: Kirigami.Units.gridUnit
+                            radius: width / 2
+                            color: settingsController.daemonRunning ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
+                        }
+
+                        Label {
+                            text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
+                            font.bold: true
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                        }
+
+                        Button {
+                            text: i18n("Start")
+                            icon.name: "media-playback-start"
+                            enabled: !settingsController.daemonRunning
+                            onClicked: settingsController.daemonController.startDaemon()
+                        }
+
+                        Button {
+                            text: i18n("Stop")
+                            icon.name: "media-playback-stop"
+                            enabled: settingsController.daemonRunning
+                            onClicked: settingsController.daemonController.stopDaemon()
+                        }
+
                     }
 
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                    }
+
+                    RowLayout {
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Label {
+                            text: i18n("Start daemon automatically")
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                        }
+
+                        Switch {
+                            checked: settingsController.daemonRunning
+                            onToggled: {
+                                if (checked)
+                                    settingsController.daemonController.startDaemon();
+                                else
+                                    settingsController.daemonController.stopDaemon();
+                            }
+                            Accessible.name: i18n("Enable PlasmaZones daemon autostart")
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        // Links card (matches KCM LinkButton pattern)
+        Item {
+            Layout.fillWidth: true
+            Layout.topMargin: Kirigami.Units.largeSpacing
+            implicitHeight: linksCard.implicitHeight
+
+            Kirigami.Card {
+                id: linksCard
+
+                anchors.fill: parent
+
+                header: Kirigami.Heading {
+                    level: 3
+                    text: i18n("Links")
+                    padding: Kirigami.Units.smallSpacing
+                }
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    // LinkButton pattern from KCM: icon + text + arrow, left-aligned
+                    Repeater {
+                        model: [{
+                            "text": i18n("GitHub Repository"),
+                            "icon": "vcs-branch",
+                            "url": "https://github.com/fuddlesworth/PlasmaZones"
+                        }, {
+                            "text": i18n("Report a Bug"),
+                            "icon": "tools-report-bug",
+                            "url": "https://github.com/fuddlesworth/PlasmaZones/issues/new"
+                        }, {
+                            "text": i18n("Documentation / Wiki"),
+                            "icon": "documentation",
+                            "url": "https://github.com/fuddlesworth/PlasmaZones/wiki"
+                        }, {
+                            "text": i18n("Releases"),
+                            "icon": "package-available",
+                            "url": "https://github.com/fuddlesworth/PlasmaZones/releases"
+                        }]
+
+                        Button {
+                            Layout.fillWidth: true
+                            flat: true
+                            horizontalPadding: Kirigami.Units.largeSpacing
+                            Accessible.name: modelData.text
+                            Accessible.role: Accessible.Link
+                            onClicked: Qt.openUrlExternally(modelData.url)
+
+                            contentItem: RowLayout {
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Kirigami.Icon {
+                                    source: modelData.icon
+                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                }
+
+                                Label {
+                                    text: modelData.text
+                                    Layout.fillWidth: true
+                                    color: Kirigami.Theme.linkColor
+                                }
+
+                                Kirigami.Icon {
+                                    source: "arrow-right"
+                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                    opacity: 0.5
+                                }
+
+                            }
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        // License card
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: licenseCard.implicitHeight
+
+            Kirigami.Card {
+                id: licenseCard
+
+                anchors.fill: parent
+
+                header: Kirigami.Heading {
+                    level: 3
+                    text: i18n("License")
+                    padding: Kirigami.Units.smallSpacing
+                }
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
                     Label {
-                        text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
+                        Layout.fillWidth: true
+                        text: i18n("PlasmaZones is free software licensed under the GNU General Public License version 3 or later (GPL-3.0-or-later).")
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Button {
+                        flat: true
+                        horizontalPadding: Kirigami.Units.largeSpacing
+                        onClicked: Qt.openUrlExternally("https://www.gnu.org/licenses/gpl-3.0.html")
+
+                        contentItem: RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Kirigami.Icon {
+                                source: "text-x-copying"
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            }
+
+                            Label {
+                                text: i18n("View License")
+                                color: Kirigami.Theme.linkColor
+                            }
+
+                            Kirigami.Icon {
+                                source: "arrow-right"
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                opacity: 0.5
+                            }
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        // Credits card
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: creditsCard.implicitHeight
+
+            Kirigami.Card {
+                id: creditsCard
+
+                anchors.fill: parent
+
+                header: Kirigami.Heading {
+                    level: 3
+                    text: i18n("Credits")
+                    padding: Kirigami.Units.smallSpacing
+                }
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: i18n("Created by fuddlesworth")
                         font.bold: true
                     }
 
-                    Item {
+                    Label {
                         Layout.fillWidth: true
+                        text: i18n("Inspired by FancyZones, extended with automatic tiling")
+                        opacity: 0.7
                     }
-
-                    Button {
-                        text: i18n("Start")
-                        icon.name: "media-playback-start"
-                        enabled: !settingsController.daemonRunning
-                        onClicked: settingsController.daemonController.startDaemon()
-                    }
-
-                    Button {
-                        text: i18n("Stop")
-                        icon.name: "media-playback-stop"
-                        enabled: settingsController.daemonRunning
-                        onClicked: settingsController.daemonController.stopDaemon()
-                    }
-
-                }
-
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
-
-                RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
 
                     Label {
-                        text: i18n("Start daemon automatically")
-                    }
-
-                    Item {
                         Layout.fillWidth: true
-                    }
-
-                    Switch {
-                        checked: settingsController.daemonRunning
-                        onToggled: {
-                            if (checked)
-                                settingsController.daemonController.startDaemon();
-                            else
-                                settingsController.daemonController.stopDaemon();
-                        }
-                        Accessible.name: i18n("Enable PlasmaZones daemon")
+                        text: i18n("Built with Qt, KDE Frameworks, and Kirigami")
+                        opacity: 0.7
                     }
 
                 }
@@ -137,125 +330,8 @@ Flickable {
 
         }
 
-        // --- Links ---
-        Kirigami.Card {
-            Layout.fillWidth: true
-
-            header: Kirigami.Heading {
-                text: i18n("Links")
-                level: 3
-                padding: Kirigami.Units.smallSpacing
-            }
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                Button {
-                    Layout.fillWidth: true
-                    flat: true
-                    icon.name: "vcs-branch"
-                    icon.width: Kirigami.Units.iconSizes.smallMedium
-                    icon.height: Kirigami.Units.iconSizes.smallMedium
-                    text: i18n("GitHub Repository")
-                    onClicked: Qt.openUrlExternally("https://github.com/fuddlesworth/PlasmaZones")
-                }
-
-                Button {
-                    Layout.fillWidth: true
-                    flat: true
-                    icon.name: "tools-report-bug"
-                    icon.width: Kirigami.Units.iconSizes.smallMedium
-                    icon.height: Kirigami.Units.iconSizes.smallMedium
-                    text: i18n("Report a Bug")
-                    onClicked: Qt.openUrlExternally("https://github.com/fuddlesworth/PlasmaZones/issues/new")
-                }
-
-                Button {
-                    Layout.fillWidth: true
-                    flat: true
-                    icon.name: "documentation"
-                    icon.width: Kirigami.Units.iconSizes.smallMedium
-                    icon.height: Kirigami.Units.iconSizes.smallMedium
-                    text: i18n("Documentation / Wiki")
-                    onClicked: Qt.openUrlExternally("https://github.com/fuddlesworth/PlasmaZones/wiki")
-                }
-
-                Button {
-                    Layout.fillWidth: true
-                    flat: true
-                    icon.name: "package-available"
-                    icon.width: Kirigami.Units.iconSizes.smallMedium
-                    icon.height: Kirigami.Units.iconSizes.smallMedium
-                    text: i18n("Releases")
-                    onClicked: Qt.openUrlExternally("https://github.com/fuddlesworth/PlasmaZones/releases")
-                }
-
-            }
-
-        }
-
-        // --- License ---
-        Kirigami.Card {
-            Layout.fillWidth: true
-
-            header: Kirigami.Heading {
-                text: i18n("License")
-                level: 3
-                padding: Kirigami.Units.smallSpacing
-            }
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: i18n("PlasmaZones is free software licensed under the " + "GNU General Public License version 3 or later (GPL-3.0-or-later). " + "You are free to use, modify, and distribute this software " + "under the terms of the license.")
-                }
-
-                Button {
-                    flat: true
-                    icon.name: "text-x-copying"
-                    icon.width: Kirigami.Units.iconSizes.smallMedium
-                    icon.height: Kirigami.Units.iconSizes.smallMedium
-                    text: i18n("View License Text")
-                    onClicked: Qt.openUrlExternally("https://www.gnu.org/licenses/gpl-3.0.html")
-                }
-
-            }
-
-        }
-
-        // --- Credits ---
-        Kirigami.Card {
-            Layout.fillWidth: true
-            Layout.bottomMargin: Kirigami.Units.largeSpacing * 2
-
-            header: Kirigami.Heading {
-                text: i18n("Credits")
-                level: 3
-                padding: Kirigami.Units.smallSpacing
-            }
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: i18n("Created by fuddlesworth")
-                    font.bold: true
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    opacity: 0.7
-                    text: i18n("Inspired by FancyZones and other tiling window managers. " + "Built for KDE Plasma and Wayland.")
-                }
-
-            }
-
+        Item {
+            Layout.fillHeight: true
         }
 
     }
