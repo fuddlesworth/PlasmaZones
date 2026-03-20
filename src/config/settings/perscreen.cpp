@@ -186,7 +186,22 @@ void savePerScreenOverrides(IConfigBackend* backend, const QString& prefix, cons
             continue;
         auto screenGroup = backend->group(prefix + it.key());
         for (auto oit = overrides.constBegin(); oit != overrides.constEnd(); ++oit) {
-            screenGroup->writeString(oit.key(), oit.value().toString());
+            const QVariant& val = oit.value();
+            switch (val.typeId()) {
+            case QMetaType::Bool:
+                screenGroup->writeBool(oit.key(), val.toBool());
+                break;
+            case QMetaType::Int:
+                screenGroup->writeInt(oit.key(), val.toInt());
+                break;
+            case QMetaType::Double:
+            case QMetaType::Float:
+                screenGroup->writeDouble(oit.key(), val.toDouble());
+                break;
+            default:
+                screenGroup->writeString(oit.key(), val.toString());
+                break;
+            }
         }
     }
 }

@@ -108,14 +108,14 @@ void WindowTrackingAdaptor::saveState()
     tracking->writeString(QStringLiteral("PendingRestoreQueues"),
                           QString::fromUtf8(QJsonDocument(pendingQueuesObj).toJson(QJsonDocument::Compact)));
 
-    // Clean up obsolete keys from old formats (write empty to clear)
-    tracking->writeString(QStringLiteral("PendingWindowScreenAssignments"), QString());
-    tracking->writeString(QStringLiteral("PendingWindowDesktopAssignments"), QString());
-    tracking->writeString(QStringLiteral("PendingWindowLayoutAssignments"), QString());
-    tracking->writeString(QStringLiteral("PendingWindowZoneNumbers"), QString());
-    tracking->writeString(QStringLiteral("WindowZoneAssignments"), QString());
-    tracking->writeString(QStringLiteral("WindowScreenAssignments"), QString());
-    tracking->writeString(QStringLiteral("WindowDesktopAssignments"), QString());
+    // Clean up obsolete keys from old formats
+    tracking->deleteKey(QStringLiteral("PendingWindowScreenAssignments"));
+    tracking->deleteKey(QStringLiteral("PendingWindowDesktopAssignments"));
+    tracking->deleteKey(QStringLiteral("PendingWindowLayoutAssignments"));
+    tracking->deleteKey(QStringLiteral("PendingWindowZoneNumbers"));
+    tracking->deleteKey(QStringLiteral("WindowZoneAssignments"));
+    tracking->deleteKey(QStringLiteral("WindowScreenAssignments"));
+    tracking->deleteKey(QStringLiteral("WindowDesktopAssignments"));
 
     // Save pre-tile geometries so float-toggle restores to the correct position
     // even after daemon restart (windows stay at their zone positions across restarts).
@@ -125,8 +125,8 @@ void WindowTrackingAdaptor::saveState()
                           serializeGeometryMapFull(m_service->preTileGeometries()));
     tracking->writeString(QStringLiteral("PreTileGeometries"), serializeGeometryMap(m_service->preTileGeometries()));
     // Remove old split keys if present (migration)
-    tracking->writeString(QStringLiteral("PreSnapGeometries"), QString());
-    tracking->writeString(QStringLiteral("PreAutotileGeometries"), QString());
+    tracking->deleteKey(QStringLiteral("PreSnapGeometries"));
+    tracking->deleteKey(QStringLiteral("PreAutotileGeometries"));
 
     // Save last used zone info (from service)
     tracking->writeString(QStringLiteral("LastUsedZoneId"), m_service->lastUsedZoneId());
@@ -134,7 +134,7 @@ void WindowTrackingAdaptor::saveState()
 
     // Float state is ephemeral (session-only) — do NOT persist across restarts.
     // Clear any stale entry from older versions so restored sessions start clean.
-    tracking->writeString(QStringLiteral("FloatingWindows"), QString());
+    tracking->deleteKey(QStringLiteral("FloatingWindows"));
 
     // Save pre-float zone assignments (for unfloating after session restore).
     // Runtime keys may be full window IDs; convert to

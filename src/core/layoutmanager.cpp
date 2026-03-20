@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "layoutmanager.h"
+#include "../config/configbackend.h"
+#include "../config/configbackend_qsettings.h"
 #include "constants.h"
 #include "logging.h"
 #include "utils.h"
@@ -17,6 +19,7 @@ namespace PlasmaZones {
 LayoutManager::LayoutManager(QObject* parent)
     : QObject(parent)
     , ILayoutManager()
+    , m_configBackend(createDefaultConfigBackend())
 {
     // Default layout directory
     m_layoutDirectory =
