@@ -45,8 +45,7 @@ void Settings::loadActivationConfig(ConfigGroup& activation)
             activation.writeInt(QStringLiteral("ZoneSpanModifier"), static_cast<int>(DragModifier::Disabled));
             qCInfo(lcConfig) << "Migrated MiddleClickMultiZone=false to ZoneSpanModifier=Disabled";
         }
-        // Note: cannot delete individual entries with ConfigGroup interface;
-        // the migration write above is sufficient.
+        activation.deleteKey(QStringLiteral("MiddleClickMultiZone"));
     }
     int legacySpanMod = activation.readInt(QStringLiteral("ZoneSpanModifier"), ConfigDefaults::zoneSpanModifier());
     if (legacySpanMod < 0 || legacySpanMod > static_cast<int>(DragModifier::CtrlAltMeta)) {
@@ -67,7 +66,8 @@ void Settings::loadDisplayConfig(ConfigGroup& display)
         display.readBool(QStringLiteral("ShowOnAllMonitors"), ConfigDefaults::showOnAllMonitors());
     // DisabledMonitors is a comma-separated string list
     QString disabledMonitorsStr = display.readString(QStringLiteral("DisabledMonitors"));
-    m_disabledMonitors = disabledMonitorsStr.isEmpty() ? QStringList() : disabledMonitorsStr.split(QLatin1Char(','));
+    m_disabledMonitors =
+        disabledMonitorsStr.isEmpty() ? QStringList() : disabledMonitorsStr.split(QLatin1Char(','), Qt::SkipEmptyParts);
     for (int i = 0; i < m_disabledMonitors.size(); ++i) {
         m_disabledMonitors[i] = m_disabledMonitors[i].trimmed();
         const QString& name = m_disabledMonitors[i];

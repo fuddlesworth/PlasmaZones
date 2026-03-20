@@ -65,9 +65,14 @@ int main(int argc, char* argv[])
     parser.addOptions({layoutIdOption, screenOption, newLayoutOption, previewOption});
     parser.process(app);
 
-    // Use platform style if available, fall back to Fusion
+    // Use platform style if available, fall back to Fusion for non-KDE environments
     if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
-        QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
+        const QString desktop = qEnvironmentVariable("XDG_CURRENT_DESKTOP").toLower();
+        if (desktop.contains(QLatin1String("kde")) || desktop.contains(QLatin1String("plasma"))) {
+            QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
+        } else {
+            QQuickStyle::setStyle(QStringLiteral("Fusion"));
+        }
     }
 
     // Register ZoneShaderItem for QML (shader preview in ShaderSettingsDialog)

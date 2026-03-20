@@ -70,13 +70,20 @@ int main(int argc, char* argv[])
 
     if (!bus.registerService(serviceName)) {
         if (parser.isSet(replaceOption)) {
-            // Ask existing instance to quit, then take over
+            // Ask existing instance to quit, then retry with exponential backoff
             QDBusInterface existing(serviceName, QStringLiteral("/Daemon"), serviceName);
             if (existing.isValid()) {
                 existing.call(QStringLiteral("Quit"));
-                QThread::msleep(500);
             }
-            if (!bus.registerService(serviceName)) {
+            bool registered = false;
+            for (int attempt = 0; attempt < 10; ++attempt) {
+                QThread::msleep(100 * (1 << qMin(attempt, 3))); // 100, 200, 400, 800ms...
+                if (bus.registerService(serviceName)) {
+                    registered = true;
+                    break;
+                }
+            }
+            if (!registered) {
                 qCCritical(PlasmaZones::lcDaemon) << "Failed to register D-Bus service after --replace";
                 return 1;
             }

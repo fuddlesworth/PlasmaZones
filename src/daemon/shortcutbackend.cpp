@@ -6,13 +6,16 @@
 
 #include <QAction>
 #include <QCoreApplication>
+#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusInterface>
 #include <QDBusMessage>
+#include <QDBusMetaType>
 #include <QDBusObjectPath>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QGuiApplication>
 
 #ifdef USE_KDE_FRAMEWORKS
@@ -116,11 +119,11 @@ public:
 
     void setGlobalShortcut(QAction* action, const QKeySequence& shortcut) override
     {
-        if (!action || m_sessionHandle.isEmpty())
+        if (!action)
             return;
         m_actions.insert(action->objectName(), action);
 
-        // Queue for batch bind after flush
+        // Queue for batch bind after flush (even if session isn't ready yet)
         m_pendingBinds.insert(action->objectName(), shortcut);
     }
 
@@ -139,21 +142,25 @@ public:
             return;
         }
 
-        // Build the shortcuts array for BindShortcuts
-        // Portal expects: BindShortcuts(session, shortcuts a(sa{sv}), parent_window, options)
-        QDBusMessage msg = QDBusMessage::createMethodCall(s_portalService, s_portalPath,
-                                                          QStringLiteral("org.freedesktop.portal.GlobalShortcuts"),
-                                                          QStringLiteral("BindShortcuts"));
+        sendBindShortcuts();
+    }
 
-        // Build shortcuts as QVariantList of QVariantMaps with "id" and options
-        // Note: the actual D-Bus signature requires a(sa{sv}) but Qt's auto-marshaling
-        // from QVariant may not produce the exact struct type. For full portal compliance,
-        // this would need QDBusArgument. For compositors that accept the variant form
-        // (Hyprland, KDE), QVariant works pragmatically.
-        QVariantList shortcuts;
+private:
+    static inline const QString s_portalService = QStringLiteral("org.freedesktop.portal.Desktop");
+    static inline const QString s_portalPath = QStringLiteral("/org/freedesktop/portal/desktop");
+
+    void sendBindShortcuts()
+    {
+        // Build the shortcuts array for BindShortcuts
+        // Portal expects: BindShortcuts(o session, a(sa{sv}) shortcuts, s parent_window, a{sv} options)
+        // We must use QDBusArgument to produce the correct a(sa{sv}) D-Bus struct array.
+        QDBusArgument shortcutsArg;
+        shortcutsArg.beginArray(qMetaTypeId<QDBusArgument>());
         for (auto it = m_pendingBinds.constBegin(); it != m_pendingBinds.constEnd(); ++it) {
-            QVariantMap entry;
-            entry[QStringLiteral("id")] = it.key();
+            shortcutsArg.beginStructure();
+            shortcutsArg << it.key(); // shortcut id (string)
+
+            // Options dict: a{sv}
             QVariantMap options;
             QAction* action = m_actions.value(it.key());
             if (action) {
@@ -162,13 +169,17 @@ public:
             if (!it.value().isEmpty()) {
                 options[QStringLiteral("preferred_trigger")] = it.value().toString();
             }
-            entry[QStringLiteral("options")] = options;
-            shortcuts.append(entry);
+            shortcutsArg << options;
+            shortcutsArg.endStructure();
         }
+        shortcutsArg.endArray();
 
+        QDBusMessage msg = QDBusMessage::createMethodCall(s_portalService, s_portalPath,
+                                                          QStringLiteral("org.freedesktop.portal.GlobalShortcuts"),
+                                                          QStringLiteral("BindShortcuts"));
         msg.setArguments({
-            QVariant::fromValue(m_sessionHandle),
-            QVariant::fromValue(shortcuts),
+            QVariant::fromValue(QDBusObjectPath(m_sessionHandle)),
+            QVariant::fromValue(shortcutsArg),
             QVariant::fromValue(QStringLiteral("")), // parent_window
             QVariant::fromValue(QVariantMap{}), // options
         });
@@ -178,15 +189,9 @@ public:
         Q_EMIT shortcutsReady();
     }
 
-private:
-    static inline const QString s_portalService = QStringLiteral("org.freedesktop.portal.Desktop");
-    static inline const QString s_portalPath = QStringLiteral("/org/freedesktop/portal/desktop");
-
     void createSession()
     {
-        // Use the portal's CreateSession. The response comes via the Response signal
-        // on the request object path. For simplicity, we use a synchronous approach:
-        // the reply contains the request object path, and we wait for the Response.
+        // Use the portal's CreateSession asynchronously to avoid blocking the event loop.
         QVariantMap options;
         options[QStringLiteral("session_handle_token")] = QStringLiteral("plasmazones");
         options[QStringLiteral("handle_token")] = QStringLiteral("plasmazones_session");
@@ -196,18 +201,22 @@ private:
                                                           QStringLiteral("CreateSession"));
         msg.setArguments({QVariant::fromValue(options)});
 
-        auto reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 5000);
-        if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
-            qCWarning(lcShortcuts) << "Portal CreateSession failed:" << reply.errorMessage();
+        QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, &PortalShortcutBackend::onSessionCreated);
+    }
+
+private Q_SLOTS:
+    void onSessionCreated(QDBusPendingCallWatcher* watcher)
+    {
+        watcher->deleteLater();
+        QDBusPendingReply<QDBusObjectPath> reply = *watcher;
+        if (reply.isError()) {
+            qCWarning(lcShortcuts) << "Portal CreateSession failed:" << reply.error().message();
             return;
         }
 
-        // The reply contains the request object path. Subscribe to its Response.
-        QString requestPath = reply.arguments().first().value<QDBusObjectPath>().path();
-
-        // The session handle follows the pattern:
-        // /org/freedesktop/portal/desktop/session/<sender>/<token>
-        // Wait briefly for the Response signal, or construct the handle from the token.
+        // Construct session handle from sender + token (portal convention)
         QString sender = QDBusConnection::sessionBus().baseService();
         sender.replace(QLatin1Char('.'), QLatin1Char('_'));
         if (sender.startsWith(QLatin1Char(':')))
@@ -220,9 +229,13 @@ private:
             QStringLiteral("Activated"), this, SLOT(onActivated(QDBusObjectPath, QString, QVariantMap)));
 
         qCInfo(lcShortcuts) << "Portal GlobalShortcuts session:" << m_sessionHandle;
+
+        // If shortcuts were queued before the session was ready, bind them now
+        if (!m_pendingBinds.isEmpty()) {
+            sendBindShortcuts();
+        }
     }
 
-private Q_SLOTS:
     void onActivated(const QDBusObjectPath& /*sessionHandle*/, const QString& shortcutId,
                      const QVariantMap& /*options*/)
     {

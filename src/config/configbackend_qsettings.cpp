@@ -201,6 +201,11 @@ bool QSettingsConfigGroup::hasKey(const QString& key) const
     return m_settings->contains(key);
 }
 
+void QSettingsConfigGroup::deleteKey(const QString& key)
+{
+    m_settings->remove(key);
+}
+
 // ── QSettingsConfigBackend ───────────────────────────────────────────────────
 
 QSettingsConfigBackend::QSettingsConfigBackend(const QString& filePath)

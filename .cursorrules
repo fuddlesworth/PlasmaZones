@@ -284,13 +284,12 @@ PlasmaZones uses Qt Linguist (`.ts`/`.qm`) for all translations. No KDE KI18n/ge
 - **QSettingsConfigBackend** (`configbackend_qsettings.cpp`): Default backend, reads/writes `~/.config/plasmazonesrc` in INI format
 - **kcfg schema** (`plasmazones.kcfg`): KConfigXT XML schema — **KCM-only**, used by `ConfigDefaults` for default values
 - **kcfgc config** (`plasmazones.kcfgc`): Code generator configuration (generates PlasmaZonesConfig) — **KCM-only**
-- **ConfigDefaults class** (`configdefaults.h`): Static wrapper exposing .kcfg defaults via `ConfigDefaults::xxx()` methods
+- **ConfigDefaults class** (`configdefaults.h`): Standalone header with hardcoded default constants (independent of KConfigXT)
 
-**KConfigXT and ConfigDefaults Usage:**
-The kcfgc generates a `PlasmaZonesConfig` class with `defaultXxxValue()` methods. The `ConfigDefaults`
-wrapper class provides static access to these generated defaults. The Settings class uses `ConfigDefaults`
-for all default values in `load()` and `reset()` methods, ensuring the .kcfg file is the single source
-of truth for all user-configurable settings.
+**ConfigDefaults Usage:**
+`ConfigDefaults` provides static methods for all settings defaults. The Settings class uses `ConfigDefaults`
+for all default values in `load()` and `reset()` methods. The `.kcfg` schema is only used by the KCM
+(System Settings module) and is NOT required for the daemon or editor builds.
 
 **When to use which:**
 - `ConfigDefaults::xxx()` - For settings defaults (config module and daemon)
@@ -608,11 +607,18 @@ TODO: Consider having EditorController get zonePadding via D-Bus from Settings i
   ```
 
 ### KDE Frameworks
-- Required: `KF6::Config` (KConfigXT/KCM only), `KF6::GlobalAccel` (shortcut backend + KCM)
-- **NOT used**: `KF6::I18n` — translations use Qt Linguist (`PzI18n::tr()`) instead
-- Optional: `KF6::Activities` (for activity-based layouts)
-- Use `find_package(KF6 REQUIRED COMPONENTS ...)`
-- Use `kcoreaddons_desktop_to_json()` for `.desktop` files
+- **Build option**: `cmake -DUSE_KDE_FRAMEWORKS=ON` (default) or `OFF` for portable Qt-only build
+- When `ON`: `KF6::KCMUtils`, `KF6::GlobalAccel` (KCM + shortcut backend)
+- When `OFF`: daemon + editor only, no KDE deps. Shortcuts use XDG Portal or D-Bus trigger fallback
+- **NOT used** (removed): `KF6::I18n`, `KF6::CoreAddons`, `KF6::DBusAddons`, `KF6::WindowSystem`, `KF6::Notifications`, `KF6::ColorScheme`
+- Translations use Qt Linguist (`PzI18n::tr()`) instead of KI18n
+- Optional: `KF6::Activities` / `PlasmaActivities` (for activity-based layouts, KDE-only)
+
+### Pluggable Backends
+Three interfaces enable compositor-agnostic operation:
+- **`IConfigBackend`** (`configbackend.h`): grouped key-value config with typed reads/writes
+- **`IShortcutBackend`** (`shortcutbackend.h`): global shortcut registration (KGlobalAccel, XDG Portal, D-Bus fallback)
+- **`IWallpaperProvider`** (`wallpaperprovider.h`): desktop wallpaper path for shader textures (KDE, Hyprland, Sway, GNOME)
 
 ### Export/Installation
 - Use `kf6_install_cmake_config_file()` for CMake config

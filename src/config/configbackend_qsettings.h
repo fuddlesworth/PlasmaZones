@@ -31,6 +31,7 @@ public:
     void writeColor(const QString& key, const QColor& value) override;
 
     bool hasKey(const QString& key) const override;
+    void deleteKey(const QString& key) override;
 
 private:
     QSettings* m_settings; // not owned

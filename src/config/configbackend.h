@@ -22,11 +22,20 @@
 namespace PlasmaZones {
 
 /// A view into a single config group (e.g., [Activation], [Display]).
-/// Lightweight value type — cheap to copy/pass by value.
+///
+/// Returned by IConfigBackend::group() as a unique_ptr.  Only one
+/// ConfigGroup may be active per backend at a time — destroy it
+/// (let the unique_ptr go out of scope) before creating another.
+/// Not copyable or movable.
 class PLASMAZONES_EXPORT ConfigGroup
 {
 public:
     virtual ~ConfigGroup() = default;
+
+    ConfigGroup(const ConfigGroup&) = delete;
+    ConfigGroup& operator=(const ConfigGroup&) = delete;
+    ConfigGroup(ConfigGroup&&) = delete;
+    ConfigGroup& operator=(ConfigGroup&&) = delete;
 
     // Typed reads with defaults
     virtual QString readString(const QString& key, const QString& defaultValue = {}) const = 0;
@@ -42,8 +51,12 @@ public:
     virtual void writeDouble(const QString& key, double value) = 0;
     virtual void writeColor(const QString& key, const QColor& value) = 0;
 
-    // Key existence
+    // Key management
     virtual bool hasKey(const QString& key) const = 0;
+    virtual void deleteKey(const QString& key) = 0;
+
+protected:
+    ConfigGroup() = default;
 };
 
 /// Top-level config backend.  Owns the connection to the config store
