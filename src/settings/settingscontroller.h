@@ -101,24 +101,30 @@ public:
         return m_screenHelper.screens();
     }
 
-    // Virtual desktops / activities (D-Bus queries)
-    Q_INVOKABLE int virtualDesktopCount() const
+    // Virtual desktops / activities (reactive via D-Bus signals)
+    Q_PROPERTY(int virtualDesktopCount READ virtualDesktopCount NOTIFY virtualDesktopsChanged)
+    Q_PROPERTY(QStringList virtualDesktopNames READ virtualDesktopNames NOTIFY virtualDesktopsChanged)
+    Q_PROPERTY(bool activitiesAvailable READ activitiesAvailable NOTIFY activitiesChanged)
+    Q_PROPERTY(QVariantList activities READ activities NOTIFY activitiesChanged)
+    Q_PROPERTY(QString currentActivity READ currentActivity NOTIFY activitiesChanged)
+
+    int virtualDesktopCount() const
     {
         return m_virtualDesktopCount;
     }
-    Q_INVOKABLE QStringList virtualDesktopNames() const
+    QStringList virtualDesktopNames() const
     {
         return m_virtualDesktopNames;
     }
-    Q_INVOKABLE bool activitiesAvailable() const
+    bool activitiesAvailable() const
     {
         return m_activitiesAvailable;
     }
-    Q_INVOKABLE QVariantList activities() const
+    QVariantList activities() const
     {
         return m_activities;
     }
-    Q_INVOKABLE QString currentActivity() const
+    QString currentActivity() const
     {
         return m_currentActivity;
     }
@@ -179,6 +185,10 @@ Q_SIGNALS:
     void layoutsChanged();
     void screensChanged();
 
+    // Virtual desktop / activity signals
+    void virtualDesktopsChanged();
+    void activitiesChanged();
+
     // Editor signals
     void editorDuplicateShortcutChanged();
     void editorSplitHorizontalShortcutChanged();
@@ -195,6 +205,8 @@ Q_SIGNALS:
 private Q_SLOTS:
     void onExternalSettingsChanged();
     void loadLayoutsAsync();
+    void onVirtualDesktopsChanged();
+    void onActivitiesChanged();
 
 private:
     void setNeedsSave(bool needs);

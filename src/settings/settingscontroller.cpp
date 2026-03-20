@@ -58,6 +58,20 @@ SettingsController::SettingsController(QObject* parent)
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutUpdated"),
                                           this, SLOT(loadLayoutsAsync()));
 
+    // Connect virtual desktop / activity D-Bus signals for reactive updates
+    QDBusConnection::sessionBus().connect(
+        QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
+        QStringLiteral("virtualDesktopCountChanged"), this, SLOT(onVirtualDesktopsChanged()));
+    QDBusConnection::sessionBus().connect(
+        QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
+        QStringLiteral("virtualDesktopNamesChanged"), this, SLOT(onVirtualDesktopsChanged()));
+    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                                          QString(DBus::Interface::LayoutManager), QStringLiteral("activitiesChanged"),
+                                          this, SLOT(onActivitiesChanged()));
+    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                                          QString(DBus::Interface::LayoutManager),
+                                          QStringLiteral("currentActivityChanged"), this, SLOT(onActivitiesChanged()));
+
     // Create editor config backend
     m_editorConfig = createDefaultConfigBackend();
 
@@ -110,18 +124,7 @@ void SettingsController::defaults()
     m_settings.reset();
     m_settings.load();
 
-    // Reset editor defaults
-    setEditorDuplicateShortcut(QStringLiteral("Ctrl+D"));
-    setEditorSplitHorizontalShortcut(QStringLiteral("Ctrl+Shift+H"));
-    setEditorSplitVerticalShortcut(QStringLiteral("Ctrl+Alt+V"));
-    setEditorFillShortcut(QStringLiteral("Ctrl+Shift+F"));
-    setEditorGridSnappingEnabled(true);
-    setEditorEdgeSnappingEnabled(true);
-    setEditorSnapIntervalX(0.05);
-    setEditorSnapIntervalY(0.05);
-    setEditorSnapOverrideModifier(1); // Shift
-    setFillOnDropEnabled(true);
-    setFillOnDropModifier(2); // Ctrl
+    resetEditorDefaults();
 
     setNeedsSave(true);
 }
@@ -565,6 +568,22 @@ void SettingsController::setFillOnDropModifier(int mod)
         Q_EMIT fillOnDropModifierChanged();
         setNeedsSave(true);
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Virtual desktop / activity D-Bus signal handlers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void SettingsController::onVirtualDesktopsChanged()
+{
+    refreshVirtualDesktops();
+    Q_EMIT virtualDesktopsChanged();
+}
+
+void SettingsController::onActivitiesChanged()
+{
+    refreshActivities();
+    Q_EMIT activitiesChanged();
 }
 
 void SettingsController::resetEditorDefaults()

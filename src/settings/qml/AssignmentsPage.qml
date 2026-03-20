@@ -22,11 +22,11 @@ Flickable {
         readonly property var layouts: settingsController.layouts
         // Properties from SettingsController (D-Bus queries)
         property int assignmentViewMode: 0
-        readonly property int virtualDesktopCount: settingsController.virtualDesktopCount()
-        readonly property var virtualDesktopNames: settingsController.virtualDesktopNames()
-        readonly property bool activitiesAvailable: settingsController.activitiesAvailable()
-        readonly property var activities: settingsController.activities()
-        readonly property string currentActivity: settingsController.currentActivity()
+        readonly property int virtualDesktopCount: settingsController.virtualDesktopCount
+        readonly property var virtualDesktopNames: settingsController.virtualDesktopNames
+        readonly property bool activitiesAvailable: settingsController.activitiesAvailable
+        readonly property var activities: settingsController.activities
+        readonly property string currentActivity: settingsController.currentActivity
         readonly property var disabledMonitors: kcm.disabledMonitors
 
         // Signals for sub-component Connections blocks
