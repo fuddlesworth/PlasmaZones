@@ -440,60 +440,26 @@ Flickable {
                             // Dim thumbnail when hidden
                             opacity: delegateRoot.modelData.hiddenFromSelector ? 0.5 : 1
 
-                            // Zone preview rectangles
+                            // Zone preview using shared ZonePreview component (same as KCM)
                             Rectangle {
                                 id: thumbnailBg
-
-                                readonly property var zones: delegateRoot.modelData.zones || []
-                                readonly property real previewOpacity: 0.2
-                                readonly property real borderOpacity: 0.9
 
                                 anchors.centerIn: parent
                                 width: Math.min(parent.width, parent.height * (16 / 9))
                                 height: Math.min(parent.height, parent.width / (16 / 9))
                                 radius: Kirigami.Units.smallSpacing
-                                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, previewOpacity)
-                                border.color: delegateRoot.isSelected ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, borderOpacity)
-                                border.width: delegateRoot.isSelected ? 2 : 1
+                                color: "transparent"
 
-                                // Zone rectangles
-                                Item {
+                                QFZCommon.ZonePreview {
                                     anchors.fill: parent
-                                    anchors.margins: Kirigami.Units.smallSpacing
-
-                                    Repeater {
-                                        model: thumbnailBg.zones
-
-                                        Rectangle {
-                                            required property var modelData
-                                            required property int index
-                                            // Zone geometry is nested: zones[i].relativeGeometry.{x,y,width,height}
-                                            readonly property var geo: modelData.relativeGeometry || modelData
-
-                                            x: (geo.x || 0) * parent.width
-                                            y: (geo.y || 0) * parent.height
-                                            width: (geo.width || geo.w || 0) * parent.width
-                                            height: (geo.height || geo.h || 0) * parent.height
-                                            color: delegateRoot.isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2)
-                                            border.color: delegateRoot.isSelected ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6)
-                                            border.width: 1
-                                            radius: 2
-
-                                            // Zone number label
-                                            Label {
-                                                anchors.centerIn: parent
-                                                text: (index + 1).toString()
-                                                font.pixelSize: Math.max(8, Math.min(parent.width, parent.height) * 0.4)
-                                                font.bold: true
-                                                color: delegateRoot.isSelected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
-                                                opacity: 0.7
-                                                visible: parent.width > 12 && parent.height > 12
-                                            }
-
-                                        }
-
-                                    }
-
+                                    zones: delegateRoot.modelData.zones || []
+                                    isHovered: delegateRoot.isHovered
+                                    isActive: delegateRoot.isSelected
+                                    showZoneNumbers: true
+                                    zonePadding: 1
+                                    edgeGap: 0
+                                    minZoneSize: 4
+                                    animationDuration: 0
                                 }
 
                                 // Layout name label at bottom
