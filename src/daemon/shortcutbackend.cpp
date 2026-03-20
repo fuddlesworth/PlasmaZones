@@ -14,6 +14,7 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QGuiApplication>
+#include <KGlobalAccel>
 
 namespace PlasmaZones {
 
@@ -39,174 +40,37 @@ public:
     {
         if (!action)
             return;
-        m_actions.insert(action->objectName(), action);
-
-        const QStringList actionId = buildActionId(action);
-        QList<int> keys;
-        for (int i = 0; i < defaultShortcut.count(); ++i)
-            keys.append(defaultShortcut[i].toCombined());
-
-        // Register default via D-Bus (no key grab) — uses setShortcut with IsDefault flag
-        QDBusMessage msg = QDBusMessage::createMethodCall(s_service, s_path, s_iface, QStringLiteral("setShortcut"));
-        msg.setArguments({
-            QVariant::fromValue(actionId),
-            QVariant::fromValue(keys),
-            QVariant::fromValue(static_cast<uint>(IsDefault)),
-        });
-        QDBusConnection::sessionBus().asyncCall(msg);
+        // KGlobalAccel library handles Wayland protocol, component registration, signal routing
+        KGlobalAccel::self()->setDefaultShortcut(action, {defaultShortcut});
     }
 
     void setShortcut(QAction* action, const QKeySequence& shortcut) override
     {
         if (!action)
             return;
-        m_actions.insert(action->objectName(), action);
-
-        const QStringList actionId = buildActionId(action);
-        QList<int> keys;
-        for (int i = 0; i < shortcut.count(); ++i)
-            keys.append(shortcut[i].toCombined());
-
-        QDBusMessage msg = QDBusMessage::createMethodCall(s_service, s_path, s_iface, QStringLiteral("setShortcut"));
-        msg.setArguments({
-            QVariant::fromValue(actionId),
-            QVariant::fromValue(keys),
-            QVariant::fromValue(static_cast<uint>(SetPresent)),
-        });
-
-        // Synchronous call — establishes the component signal connection
-        QDBusConnection::sessionBus().call(msg);
-        ensureComponentConnected();
+        // Synchronous — establishes component connection + key grab
+        KGlobalAccel::self()->setShortcut(action, {shortcut});
     }
 
     void setGlobalShortcut(QAction* action, const QKeySequence& shortcut) override
     {
         if (!action)
             return;
-        m_actions.insert(action->objectName(), action);
-
-        const QStringList actionId = buildActionId(action);
-        QList<int> keys;
-        for (int i = 0; i < shortcut.count(); ++i)
-            keys.append(shortcut[i].toCombined());
-
-        if (!m_componentConnected) {
-            // First shortcut: synchronous to establish component signal
-            QDBusMessage msg =
-                QDBusMessage::createMethodCall(s_service, s_path, s_iface, QStringLiteral("setShortcut"));
-            msg.setArguments({
-                QVariant::fromValue(actionId),
-                QVariant::fromValue(keys),
-                QVariant::fromValue(static_cast<uint>(SetPresent)),
-            });
-            QDBusConnection::sessionBus().call(msg);
-            ensureComponentConnected();
-        } else {
-            // Async grab
-            QDBusMessage msg =
-                QDBusMessage::createMethodCall(s_service, s_path, s_iface, QStringLiteral("setShortcut"));
-            msg.setArguments({
-                QVariant::fromValue(actionId),
-                QVariant::fromValue(keys),
-                QVariant::fromValue(static_cast<uint>(SetPresent)),
-            });
-            ++m_pendingCalls;
-            auto pending = QDBusConnection::sessionBus().asyncCall(msg);
-            auto* watcher = new QDBusPendingCallWatcher(pending, this);
-            connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-                w->deleteLater();
-                if (--m_pendingCalls == 0)
-                    Q_EMIT shortcutsReady();
-            });
-        }
+        // Full registration + grab (handles Wayland key grab protocol internally)
+        KGlobalAccel::setGlobalShortcut(action, shortcut);
     }
 
     void removeAllShortcuts(QAction* action) override
     {
         if (!action)
             return;
-        m_actions.remove(action->objectName());
-
-        // setInactive removes a single action's key grabs from kglobalacceld
-        const QStringList actionId = buildActionId(action);
-        QDBusMessage msg = QDBusMessage::createMethodCall(s_service, s_path, s_iface, QStringLiteral("setInactive"));
-        msg.setArguments({QVariant::fromValue(actionId)});
-        QDBusConnection::sessionBus().asyncCall(msg);
+        KGlobalAccel::self()->removeAllShortcuts(action);
     }
 
     void flush() override
     {
-        if (m_pendingCalls == 0) {
-            Q_EMIT shortcutsReady();
-        }
+        Q_EMIT shortcutsReady();
     }
-
-private Q_SLOTS:
-    // Dispatches kglobalacceld's globalShortcutPressed signal to the right QAction.
-    // Signal signature: globalShortcutPressed(QString componentUnique, QString shortcutUnique, qlonglong timestamp)
-    void onGlobalShortcutPressed(const QString& /*componentUnique*/, const QString& shortcutUnique,
-                                 qlonglong /*timestamp*/)
-    {
-        QAction* action = m_actions.value(shortcutUnique);
-        if (action) {
-            action->trigger();
-        }
-    }
-
-private:
-    static constexpr uint IsDefault = 4;
-    static constexpr uint SetPresent = 2;
-
-    static inline const QString s_service = QStringLiteral("org.kde.kglobalaccel");
-    static inline const QString s_path = QStringLiteral("/kglobalaccel");
-    static inline const QString s_iface = QStringLiteral("org.kde.KGlobalAccel");
-
-    QStringList buildActionId(QAction* action) const
-    {
-        return {
-            QCoreApplication::applicationName(),
-            action->objectName(),
-            QGuiApplication::applicationDisplayName(),
-            action->text().remove(QLatin1Char('&')),
-        };
-    }
-
-    void ensureComponentConnected()
-    {
-        if (m_componentConnected)
-            return;
-
-        // Call getComponent() — kglobalacceld uses this to register our process
-        // for signal delivery and returns the component object path.
-        const QString appName = QCoreApplication::applicationName();
-        QDBusMessage getComp =
-            QDBusMessage::createMethodCall(s_service, s_path, s_iface, QStringLiteral("getComponent"));
-        getComp.setArguments({QVariant::fromValue(appName)});
-
-        QDBusMessage reply = QDBusConnection::sessionBus().call(getComp);
-        if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
-            qCWarning(lcShortcuts) << "getComponent failed:" << reply.errorMessage();
-            // Fall back to wildcard path
-            QDBusConnection::sessionBus().connect(s_service, {}, QStringLiteral("org.kde.KGlobalAccel.Component"),
-                                                  QStringLiteral("globalShortcutPressed"), this,
-                                                  SLOT(onGlobalShortcutPressed(QString, QString, qlonglong)));
-        } else {
-            QString componentPath = reply.arguments().first().value<QDBusObjectPath>().path();
-            qCDebug(lcShortcuts) << "Component path:" << componentPath;
-
-            // Connect to globalShortcutPressed on the specific component path
-            QDBusConnection::sessionBus().connect(s_service, componentPath,
-                                                  QStringLiteral("org.kde.KGlobalAccel.Component"),
-                                                  QStringLiteral("globalShortcutPressed"), this,
-                                                  SLOT(onGlobalShortcutPressed(QString, QString, qlonglong)));
-        }
-
-        m_componentConnected = true;
-    }
-
-    bool m_componentConnected = false;
-    int m_pendingCalls = 0;
-    QHash<QString, QAction*> m_actions; // objectName -> action
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -450,6 +314,7 @@ private:
 
 std::unique_ptr<IShortcutBackend> createShortcutBackend(QObject* parent)
 {
+    qWarning() << "createShortcutBackend: detecting backend...";
     auto* bus = QDBusConnection::sessionBus().interface();
     if (!bus) {
         qCWarning(lcShortcuts) << "No D-Bus session bus — using trigger fallback";

@@ -202,6 +202,7 @@ target_link_libraries(plasmazones_core
         Qt6::DBus
         KF6::ConfigCore
         KF6::ConfigGui
+        KF6::GlobalAccel
         KF6::WindowSystem
 )
 
