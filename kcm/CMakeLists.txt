@@ -1,6 +1,12 @@
 # PlasmaZones KCM (KDE Control Module)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+# KConfig is used by KCM for KConfigXT and direct KConfigGroup access
+find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
+    Config
+    ConfigWidgets
+)
+
 # Shared library for helpers used by sub-KCMs
 add_subdirectory(common)
 

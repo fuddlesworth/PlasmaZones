@@ -112,8 +112,6 @@ add_compile_definitions(USE_KDE_FRAMEWORKS)
 
 # Find KDE Frameworks
 find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
-    Config
-    ConfigWidgets
     KCMUtils
     GlobalAccel   # Used by KCM + shortcut backend
 )
