@@ -13,6 +13,37 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+/// Query swww for the current wallpaper path.
+/// Output format: "eDP-1:       /path/to/image.png" (one line per monitor).
+/// Returns the first valid path found, or empty string.
+QString querySwww()
+{
+    QString swwwPath = QStandardPaths::findExecutable(QStringLiteral("swww"));
+    if (swwwPath.isEmpty())
+        return {};
+
+    QProcess proc;
+    proc.start(swwwPath, {QStringLiteral("query")});
+    if (!proc.waitForFinished(1000) || proc.exitCode() != 0)
+        return {};
+
+    const QStringList lines = QString::fromUtf8(proc.readAllStandardOutput()).split(QLatin1Char('\n'));
+    for (const QString& line : lines) {
+        int colonIdx = line.indexOf(QLatin1Char(':'));
+        if (colonIdx <= 0)
+            continue;
+        QString path = line.mid(colonIdx + 1).trimmed();
+        if (!path.isEmpty() && QFile::exists(path)) {
+            return path;
+        }
+    }
+    return {};
+}
+
+} // anonymous namespace
+
 // ── KDE Plasma provider ─────────────────────────────────────────────────────
 // Reads ~/.config/plasma-org.kde.plasma.desktop-appletsrc
 // Path: [Containments][N][Wallpaper][org.kde.image][General] Image=file:///...
@@ -74,23 +105,11 @@ class HyprlandWallpaperProvider : public IWallpaperProvider
 public:
     QString wallpaperPath() override
     {
-        // Try swww first (dynamic wallpaper tool)
-        QString swwwPath = QStandardPaths::findExecutable(QStringLiteral("swww"));
-        if (!swwwPath.isEmpty()) {
-            QProcess proc;
-            proc.start(swwwPath, {QStringLiteral("query")});
-            if (proc.waitForFinished(1000) && proc.exitCode() == 0) {
-                // Output format: "monitor: image_path"
-                QString output = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
-                int colonIdx = output.indexOf(QLatin1Char(':'));
-                if (colonIdx > 0) {
-                    QString path = output.mid(colonIdx + 1).trimmed();
-                    if (QFile::exists(path)) {
-                        qCDebug(lcCore) << "swww wallpaper:" << path;
-                        return path;
-                    }
-                }
-            }
+        // Try swww first (dynamic wallpaper tool, works on Hyprland and sway)
+        QString swwwResult = querySwww();
+        if (!swwwResult.isEmpty()) {
+            qCDebug(lcCore) << "swww wallpaper:" << swwwResult;
+            return swwwResult;
         }
 
         // Fall back to hyprpaper.conf
@@ -131,22 +150,10 @@ class SwayWallpaperProvider : public IWallpaperProvider
 public:
     QString wallpaperPath() override
     {
-        // swww works on sway too
-        QString swwwPath = QStandardPaths::findExecutable(QStringLiteral("swww"));
-        if (!swwwPath.isEmpty()) {
-            QProcess proc;
-            proc.start(swwwPath, {QStringLiteral("query")});
-            if (proc.waitForFinished(1000) && proc.exitCode() == 0) {
-                QString output = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
-                int colonIdx = output.indexOf(QLatin1Char(':'));
-                if (colonIdx > 0) {
-                    QString path = output.mid(colonIdx + 1).trimmed();
-                    if (QFile::exists(path)) {
-                        qCDebug(lcCore) << "swww wallpaper (sway):" << path;
-                        return path;
-                    }
-                }
-            }
+        QString result = querySwww();
+        if (!result.isEmpty()) {
+            qCDebug(lcCore) << "swww wallpaper (sway):" << result;
+            return result;
         }
         // swaybg doesn't provide a query interface — no reliable way to read it
         return {};
@@ -165,22 +172,37 @@ public:
         if (gsettings.isEmpty())
             return {};
 
-        QProcess proc;
-        proc.start(
-            gsettings,
-            {QStringLiteral("get"), QStringLiteral("org.gnome.desktop.background"), QStringLiteral("picture-uri")});
-        if (!proc.waitForFinished(1000) || proc.exitCode() != 0)
-            return {};
-
-        QString uri = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
-        // gsettings wraps in quotes: 'file:///path/to/image.jpg'
-        uri.remove(QLatin1Char('\''));
-        if (uri.startsWith(QLatin1String("file://"))) {
-            uri = QUrl(uri).toLocalFile();
+        // Check color scheme to determine light vs dark wallpaper
+        // GNOME uses picture-uri-dark when prefer-dark is active
+        QStringList uriKeys = {QStringLiteral("picture-uri")};
+        {
+            QProcess schemeProc;
+            schemeProc.start(
+                gsettings,
+                {QStringLiteral("get"), QStringLiteral("org.gnome.desktop.interface"), QStringLiteral("color-scheme")});
+            if (schemeProc.waitForFinished(1000) && schemeProc.exitCode() == 0) {
+                QString scheme = QString::fromUtf8(schemeProc.readAllStandardOutput()).trimmed();
+                if (scheme.contains(QLatin1String("dark"))) {
+                    uriKeys.prepend(QStringLiteral("picture-uri-dark"));
+                }
+            }
         }
-        if (QFile::exists(uri)) {
-            qCDebug(lcCore) << "GNOME wallpaper:" << uri;
-            return uri;
+
+        for (const QString& key : std::as_const(uriKeys)) {
+            QProcess proc;
+            proc.start(gsettings, {QStringLiteral("get"), QStringLiteral("org.gnome.desktop.background"), key});
+            if (!proc.waitForFinished(1000) || proc.exitCode() != 0)
+                continue;
+
+            QString uri = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+            uri.remove(QLatin1Char('\''));
+            if (uri.startsWith(QLatin1String("file://"))) {
+                uri = QUrl(uri).toLocalFile();
+            }
+            if (QFile::exists(uri)) {
+                qCDebug(lcCore) << "GNOME wallpaper:" << uri;
+                return uri;
+            }
         }
         return {};
     }

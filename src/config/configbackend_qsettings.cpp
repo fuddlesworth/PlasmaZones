@@ -14,6 +14,10 @@ QSettingsConfigGroup::QSettingsConfigGroup(QSettings* settings, const QString& g
     : m_settings(settings)
     , m_group(groupName)
 {
+    // QSettings groups are a stack — only one ConfigGroup should be active at a time.
+    // Nested beginGroup would silently read from "OldGroup/NewGroup" instead of "NewGroup".
+    Q_ASSERT_X(m_settings->group().isEmpty(), "QSettingsConfigGroup",
+               "Another ConfigGroup is still active — destroy it before creating a new one");
     m_settings->beginGroup(m_group);
 }
 
