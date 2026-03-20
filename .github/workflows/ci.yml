@@ -32,7 +32,7 @@ jobs:
             cmake ninja extra-cmake-modules \
             qt6-base qt6-declarative qt6-tools qt6-shadertools \
             kwin \
-            kconfig kconfigwidgets kcoreaddons kdbusaddons \
+            kconfig kconfigwidgets kcoreaddons \
             kcmutils kwindowsystem kglobalaccel \
             knotifications kcolorscheme \
             layer-shell-qt plasma-activities

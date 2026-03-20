@@ -9,12 +9,13 @@
 #include <QGuiApplication>
 #include <QCommandLineParser>
 #include <QDBusConnection>
+#include <QDBusInterface>
+#include <QThread>
 #include <QTimer>
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtQml/qqml.h>
 #include <KAboutData>
 #include "pz_i18n.h"
-#include <KDBusService>
 #include <signal.h>
 
 // Import static QML module for shared components
@@ -67,13 +68,27 @@ int main(int argc, char* argv[])
     parser.process(app);
     aboutData.processCommandLine(&parser);
 
-    // Ensure single instance
-    KDBusService::StartupOptions options = KDBusService::Unique;
-    if (parser.isSet(replaceOption)) {
-        options |= KDBusService::Replace;
-    }
+    // Ensure single instance via D-Bus service name registration
+    const QString serviceName = QStringLiteral("org.plasmazones.daemon");
+    QDBusConnection bus = QDBusConnection::sessionBus();
 
-    KDBusService service(options);
+    if (!bus.registerService(serviceName)) {
+        if (parser.isSet(replaceOption)) {
+            // Ask existing instance to quit, then take over
+            QDBusInterface existing(serviceName, QStringLiteral("/Daemon"), serviceName);
+            if (existing.isValid()) {
+                existing.call(QStringLiteral("Quit"));
+                QThread::msleep(500);
+            }
+            if (!bus.registerService(serviceName)) {
+                qCCritical(PlasmaZones::lcDaemon) << "Failed to register D-Bus service after --replace";
+                return 1;
+            }
+        } else {
+            qCWarning(PlasmaZones::lcDaemon) << "Already running (D-Bus name taken)";
+            return 0;
+        }
+    }
 
     // Set up signal handling for clean shutdown
     signal(SIGINT, signalHandler);
@@ -91,12 +106,6 @@ int main(int argc, char* argv[])
 
     qCInfo(PlasmaZones::lcDaemon) << "Daemon started";
     daemon.start();
-
-    // Handle activation requests (e.g., user launches plasmazonesd when already running)
-    // Log the activation but don't take action - overlay activation is via drag+modifier
-    QObject::connect(&service, &KDBusService::activateRequested, &daemon, []() {
-        qCInfo(PlasmaZones::lcDaemon) << "Activation: already running, ignored";
-    });
 
     int result = app.exec();
 

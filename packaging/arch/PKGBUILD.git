@@ -16,7 +16,6 @@ depends=(
     'kconfig'
     'kconfigwidgets'
     'kcoreaddons'
-    'kdbusaddons'
     'kcmutils'
     'kwindowsystem'
     'kglobalaccel'

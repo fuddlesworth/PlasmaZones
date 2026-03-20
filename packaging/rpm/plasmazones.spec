@@ -60,7 +60,6 @@ BuildRequires:  qt6-qtshadertools-devel
 BuildRequires:  cmake(KF6Config) >= 6.6.0
 BuildRequires:  cmake(KF6ConfigWidgets)
 BuildRequires:  cmake(KF6CoreAddons)
-BuildRequires:  cmake(KF6DBusAddons)
 BuildRequires:  cmake(KF6KCMUtils)
 BuildRequires:  cmake(KF6WindowSystem)
 BuildRequires:  cmake(KF6GlobalAccel)
@@ -70,7 +69,6 @@ BuildRequires:  cmake(KF6ColorScheme)
 BuildRequires:  kf6-kconfig-devel >= 6.6.0
 BuildRequires:  kf6-kconfigwidgets-devel >= 6.6.0
 BuildRequires:  kf6-kcoreaddons-devel >= 6.6.0
-BuildRequires:  kf6-kdbusaddons-devel >= 6.6.0
 BuildRequires:  kf6-kcmutils-devel >= 6.6.0
 BuildRequires:  kf6-kwindowsystem-devel >= 6.6.0
 BuildRequires:  kf6-kglobalaccel-devel >= 6.6.0
@@ -107,7 +105,6 @@ Requires:       qt6-qtshadertools
 Requires:       kf6-kconfig >= 6.6.0
 Requires:       kf6-kconfigwidgets >= 6.6.0
 Requires:       kf6-kcoreaddons >= 6.6.0
-Requires:       kf6-kdbusaddons >= 6.6.0
 Requires:       kf6-kcmutils >= 6.6.0
 Requires:       kf6-kwindowsystem >= 6.6.0
 Requires:       kf6-kglobalaccel >= 6.6.0

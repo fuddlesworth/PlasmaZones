@@ -17,7 +17,6 @@ Build-Depends:
  libkf6config-dev (>= 6.6.0),
  libkf6configwidgets-dev (>= 6.6.0),
  libkf6coreaddons-dev (>= 6.6.0),
- libkf6dbusaddons-dev (>= 6.6.0),
  libkf6kcmutils-dev (>= 6.6.0),
  libkf6windowsystem-dev (>= 6.6.0),
  libkf6globalaccel-dev (>= 6.6.0),

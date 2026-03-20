@@ -83,7 +83,6 @@ stdenv.mkDerivation {
     kconfig
     kconfigwidgets
     kcoreaddons
-    kdbusaddons
     kcmutils
     kwindowsystem
     kglobalaccel

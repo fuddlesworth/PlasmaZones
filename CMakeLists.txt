@@ -115,7 +115,6 @@ find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
     Config
     ConfigWidgets
     CoreAddons
-    DBusAddons
     KCMUtils
     WindowSystem
     GlobalAccel

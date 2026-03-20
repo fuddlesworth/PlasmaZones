@@ -396,7 +396,6 @@ target_link_libraries(plasmazonesd
         Qt6::QuickControls2
         Qt6::Concurrent  # Pre-load shader bake cache on registry refresh
         Qt6::ShaderTools  # QShaderBaker for ZoneShaderNodeRhi (runtime GLSL bake)
-        KF6::DBusAddons
         KF6::GlobalAccel
         KF6::Notifications
 )
