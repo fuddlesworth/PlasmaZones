@@ -8,6 +8,9 @@ import org.kde.kcmutils as KCMUtils
 import org.kde.kirigami as Kirigami
 
 KCMUtils.SimpleKCM {
+    // URL scheme launch handles the common case. For non-KDE desktops,
+    // users can run plasmazones-settings from the terminal.
+
     id: root
 
     ColumnLayout {
@@ -64,8 +67,6 @@ KCMUtils.SimpleKCM {
             implicitWidth: Math.max(implicitContentWidth + leftPadding + rightPadding, Kirigami.Units.gridUnit * 18)
             onClicked: {
                 Qt.openUrlExternally("plasmazones-settings:");
-                // Fallback: launch directly if URL scheme not registered
-                settingsProcess.start("plasmazones-settings", []);
             }
         }
 
@@ -108,19 +109,6 @@ KCMUtils.SimpleKCM {
 
         Item {
             Layout.fillHeight: true
-        }
-
-    }
-
-    // Process launcher for settings app
-    QtObject {
-        // QProcess not available in QML, but the URL scheme launch above
-        // handles the common case. For non-KDE desktops, users can run
-        // plasmazones-settings from the terminal.
-
-        id: settingsProcess
-
-        function start(cmd, args) {
         }
 
     }

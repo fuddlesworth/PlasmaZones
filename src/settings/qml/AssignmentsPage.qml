@@ -21,7 +21,7 @@ Flickable {
         readonly property var screens: settingsController.screens
         readonly property var layouts: settingsController.layouts
         // Properties from SettingsController (D-Bus queries)
-        readonly property int assignmentViewMode: 0
+        property int assignmentViewMode: 0
         readonly property int virtualDesktopCount: settingsController.virtualDesktopCount()
         readonly property var virtualDesktopNames: settingsController.virtualDesktopNames()
         readonly property bool activitiesAvailable: settingsController.activitiesAvailable()

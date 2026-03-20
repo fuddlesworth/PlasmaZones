@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "settingscontroller.h"
+#include "../core/constants.h"
 #include "../core/logging.h"
 #include "../config/configbackend_qsettings.h"
 #include "../../kcm/common/dbusutils.h"
@@ -118,6 +119,9 @@ void SettingsController::defaults()
     setEditorEdgeSnappingEnabled(true);
     setEditorSnapIntervalX(0.05);
     setEditorSnapIntervalY(0.05);
+    setEditorSnapOverrideModifier(1); // Shift
+    setFillOnDropEnabled(true);
+    setFillOnDropModifier(2); // Ctrl
 
     setNeedsSave(true);
 }
@@ -264,9 +268,11 @@ void SettingsController::clearScreenAssignment(const QString& screenName)
 
 void SettingsController::assignTilingLayoutToScreen(const QString& screenName, const QString& layoutId)
 {
-    // For tiling, set assignment entry with mode=1 (Autotile) + algorithm
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("assignLayoutByIdToScreen"),
-                        {layoutId, screenName, 0, QString()});
+    // Use setAssignmentEntry with mode=1 (Autotile) and the algorithm extracted
+    // from the layoutId, matching KCM's AssignmentManager behavior.
+    const QString algoId = LayoutId::extractAlgorithmId(layoutId);
+    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
+                        {screenName, 0, QString(), 1 /* Autotile */, QString() /* preserve snapping */, algoId});
     KCMDBus::notifyReload();
 }
 

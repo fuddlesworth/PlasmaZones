@@ -74,6 +74,7 @@ target_link_libraries(plasmazones-settings
         Qt6::QuickControls2
         Qt6::DBus
         Qt6::Widgets
+        KF6::Kirigami
 )
 
 install(TARGETS plasmazones-settings DESTINATION ${KDE_INSTALL_BINDIR})
