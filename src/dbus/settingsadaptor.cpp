@@ -4,6 +4,7 @@
 #include "settingsadaptor.h"
 #include "../core/interfaces.h"
 #include "../config/settings.h" // For concrete Settings type
+#include "../core/dbusvariantutils.h"
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
 #include <QJsonDocument>
@@ -561,7 +562,8 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
 
     auto it = m_setters.find(key);
     if (it != m_setters.end()) {
-        bool result = it.value()(value.variant());
+        QVariant converted = DBusVariantUtils::convertDbusArgument(value.variant());
+        bool result = it.value()(converted);
         if (result) {
             // Use debounced save instead of immediate save (performance optimization)
             // This batches multiple rapid setting changes into a single disk write
@@ -603,7 +605,12 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
                 allOk = false;
                 continue;
             }
-            if (!setter.value()(it.value())) {
+            // Convert QDBusArgument types to plain Qt types before passing to setters.
+            // Complex types (QVariantList of QVariantMaps, e.g. dragActivationTriggers)
+            // arrive from D-Bus as QDBusArgument objects; without conversion, toList()/toMap()
+            // return empty containers, silently zeroing trigger settings.
+            QVariant converted = DBusVariantUtils::convertDbusArgument(it.value());
+            if (!setter.value()(converted)) {
                 qCWarning(lcDbusSettings) << "setSettings: setter failed for key" << key;
                 allOk = false;
             }
