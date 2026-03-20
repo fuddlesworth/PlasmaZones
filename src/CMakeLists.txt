@@ -27,6 +27,8 @@ set(plasmazones_core_SRCS
     core/logging.cpp
     core/translationloader.h
     core/translationloader.cpp
+    core/wallpaperprovider.h
+    core/wallpaperprovider.cpp
     core/enums.h
     core/interfaces.h
     core/interfaces.cpp
