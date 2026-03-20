@@ -19,17 +19,24 @@ import org.kde.kirigami as Kirigami
 ComboBox {
     id: root
 
-    readonly property real _longestItemWidth: {
+    // Cached widest-item width — recalculated only when model or count changes.
+    // Using a separate TextMetrics avoids the binding loop caused by the
+    // _longestItemWidth → _metrics.text → advanceWidth → _longestItemWidth cycle.
+    property real _longestItemWidth: 0
+
+    function _recalcLongestWidth() {
         let maxW = 0;
-        let role = root.textRole || "";
         for (let i = 0; i < root.count; ++i) {
             _metrics.text = root.textAt(i) || "";
             maxW = Math.max(maxW, _metrics.advanceWidth);
         }
-        return maxW;
+        _longestItemWidth = maxW;
     }
 
     implicitContentWidthPolicy: ComboBox.WidestTextWhenCompleted
+    onCountChanged: Qt.callLater(_recalcLongestWidth)
+    onModelChanged: Qt.callLater(_recalcLongestWidth)
+    Component.onCompleted: _recalcLongestWidth()
 
     TextMetrics {
         id: _metrics

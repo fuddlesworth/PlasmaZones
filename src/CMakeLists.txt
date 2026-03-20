@@ -613,6 +613,9 @@ target_link_libraries(plasmazones-editor
 
 install(TARGETS plasmazones-editor DESTINATION ${KDE_INSTALL_BINDIR})
 
+# Standalone settings app (no KDE Frameworks required)
+add_subdirectory(settings)
+
 # Separate precompiled headers for executables (different PIC/PIE settings than shared lib)
 if(ENABLE_PCH)
     target_precompile_headers(plasmazones-editor
