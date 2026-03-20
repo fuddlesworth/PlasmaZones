@@ -13,12 +13,6 @@ qt_policy(SET QTP0004 NEW)
 # ═══════════════════════════════════════════════════════════════════════════════
 add_subdirectory(shared)
 
-# KConfigXT for settings (GENERATE_MOC ensures Q_OBJECT is processed)
-kconfig_add_kcfg_files(plasmazones_settings_SRCS
-    config/plasmazones.kcfgc
-    GENERATE_MOC
-)
-
 # Core library sources
 set(plasmazones_core_SRCS
     pz_qml_i18n.h
@@ -178,7 +172,6 @@ set(plasmazones_core_SRCS
     snap/snapengine/float.cpp
     snap/snapengine/lifecycle.cpp
     snap/snapengine/navigation.cpp
-    ${plasmazones_settings_SRCS}
 )
 
 # Create core library
@@ -200,8 +193,6 @@ target_link_libraries(plasmazones_core
         Qt6::Quick
         Qt6::Gui
         Qt6::DBus
-        KF6::ConfigCore
-        KF6::ConfigGui
         KF6::GlobalAccel
 )
 
@@ -334,13 +325,6 @@ install(TARGETS plasmazones_rendering
 )
 
 # Daemon executable
-# Note: We need to add kcfg files here too because KConfigXT generates local symbols
-# that can't be exported from plasmazones_core shared library.
-kconfig_add_kcfg_files(plasmazones_daemon_kcfg_SRCS
-    config/plasmazones.kcfgc
-    GENERATE_MOC
-)
-
 set(plasmazones_daemon_SRCS
     daemon/main.cpp
     daemon/daemon.cpp
@@ -378,8 +362,6 @@ set(plasmazones_daemon_SRCS
     daemon/unifiedlayoutcontroller.cpp
     daemon/unifiedlayoutcontroller.h
     # Shader rendering: ZoneShaderItem from plasmazones_rendering
-    # KConfigXT-generated config class (for ConfigDefaults)
-    ${plasmazones_daemon_kcfg_SRCS}
 )
 
 # QML resources for the daemon overlay
