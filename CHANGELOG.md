@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.3.11] - 2026-03-20
+
+### Fixed
+- **Move/Swap hotkeys on dual same-model monitors**: On setups with two identical-model monitors (e.g. dual Samsung Odyssey G93SC with different serials), KWin's `EffectWindow::screen()` can return the wrong output. Navigation hotkeys now trust the daemon's stored screen assignment for snapped windows (set at snap time, always correct) and fall back to the effect-provided screen only for unsnapped windows. Cross-screen moves are handled by `outputChanged` → `windowScreenChanged` which unsnaps the window before navigation fires.
+
 ## [2.3.10] - 2026-03-20
 
 ### Fixed
@@ -873,7 +878,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.10...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.11...HEAD
+[2.3.11]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.10...v2.3.11
 [2.3.10]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.9...v2.3.10
 [2.3.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.8...v2.3.9
 [2.3.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.7...v2.3.8
