@@ -9,10 +9,8 @@ find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
     ConfigWidgets
 )
 
-# Shared library for helpers used by KCM
-add_subdirectory(common)
-
 # Single KCM module: daemon toggle + settings app launcher
+# Common sources (DaemonController, etc.) are compiled directly by the about KCM.
 add_subdirectory(about)
 
 # Install category desktop file for System Settings subcategory

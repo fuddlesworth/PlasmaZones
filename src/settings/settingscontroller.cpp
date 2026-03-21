@@ -5,7 +5,7 @@
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../config/configbackend_qsettings.h"
-#include "../../kcm/common/dbusutils.h"
+#include "dbusutils.h"
 
 #include "../autotile/AlgorithmRegistry.h"
 #include "../autotile/TilingAlgorithm.h"

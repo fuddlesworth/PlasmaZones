@@ -5,22 +5,19 @@
 
 find_package(KF6Kirigami REQUIRED)
 
-# NOTE: DaemonController, ScreenHelper, and ScreenProvider sources are compiled here
-# directly rather than linking plasmazones_kcm_common, because that static library
-# pulls in KF6::GlobalAccel and KF6::ConfigWidgets which the standalone app must avoid.
-# These three classes are Qt-only (no KDE Frameworks deps).
-# TODO: Extract them into a separate Qt-only static lib that both KCM and standalone
-# can link, eliminating this intentional duplication.
 set(plasmazones_settings_SRCS
     main.cpp
     settingscontroller.h
     settingscontroller.cpp
+    # DaemonController shared with About KCM — kept in kcm/common/
     ${CMAKE_SOURCE_DIR}/kcm/common/daemoncontroller.h
     ${CMAKE_SOURCE_DIR}/kcm/common/daemoncontroller.cpp
-    ${CMAKE_SOURCE_DIR}/kcm/common/screenhelper.h
-    ${CMAKE_SOURCE_DIR}/kcm/common/screenhelper.cpp
-    ${CMAKE_SOURCE_DIR}/kcm/common/screenprovider.h
-    ${CMAKE_SOURCE_DIR}/kcm/common/screenprovider.cpp
+    # Qt-only utilities (standalone-only, no KDE Framework deps)
+    screenhelper.h
+    screenhelper.cpp
+    screenprovider.h
+    screenprovider.cpp
+    dbusutils.h
 )
 
 add_executable(plasmazones-settings ${plasmazones_settings_SRCS})
@@ -28,7 +25,7 @@ add_executable(plasmazones-settings ${plasmazones_settings_SRCS})
 target_include_directories(plasmazones-settings PRIVATE
     ${CMAKE_BINARY_DIR}/generated
     ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/kcm/common
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 qt_add_qml_module(plasmazones-settings
@@ -86,9 +83,9 @@ qt_add_resources(plasmazones-settings "shared_common_qml"
 )
 qt_add_resources(plasmazones-settings "shared_common_qmldir"
     PREFIX "/qt/qml/org/plasmazones/common"
-    BASE "${CMAKE_SOURCE_DIR}/kcm/common/org_plasmazones_common"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}/org_plasmazones_common"
     FILES
-        ${CMAKE_SOURCE_DIR}/kcm/common/org_plasmazones_common/qmldir
+        ${CMAKE_CURRENT_SOURCE_DIR}/org_plasmazones_common/qmldir
 )
 
 target_link_libraries(plasmazones-settings

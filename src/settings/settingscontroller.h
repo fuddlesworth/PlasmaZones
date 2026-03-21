@@ -10,7 +10,7 @@
 #include "../config/settings.h"
 #include "../config/configbackend.h"
 #include "../../kcm/common/daemoncontroller.h"
-#include "../../kcm/common/screenhelper.h"
+#include "screenhelper.h"
 #include "../core/constants.h"
 #include "../core/enums.h"
 #include "../core/modifierutils.h"
