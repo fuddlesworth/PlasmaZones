@@ -473,6 +473,7 @@ public:
     virtual void showZoneSelector(QScreen* screen = nullptr) = 0;
     virtual void hideZoneSelector() = 0;
     virtual void updateSelectorPosition(int cursorX, int cursorY) = 0;
+    virtual void scrollZoneSelector(int angleDeltaY) = 0;
 
     // Mouse position for shader effects (updated during window drag)
     virtual void updateMousePosition(int cursorX, int cursorY) = 0;

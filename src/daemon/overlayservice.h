@@ -105,6 +105,7 @@ public:
     void showZoneSelector(QScreen* screen = nullptr) override;
     void hideZoneSelector() override;
     void updateSelectorPosition(int cursorX, int cursorY) override;
+    void scrollZoneSelector(int angleDeltaY) override;
 
     // Mouse position for shader effects
     void updateMousePosition(int cursorX, int cursorY) override;

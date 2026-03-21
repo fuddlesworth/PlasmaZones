@@ -382,4 +382,17 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
     }
 }
 
+void OverlayService::scrollZoneSelector(int angleDeltaY)
+{
+    if (!m_zoneSelectorVisible) {
+        return;
+    }
+    for (auto* window : std::as_const(m_zoneSelectorWindows)) {
+        if (window) {
+            QMetaObject::invokeMethod(window, "applyScrollDelta",
+                                      Q_ARG(QVariant, angleDeltaY));
+        }
+    }
+}
+
 } // namespace PlasmaZones

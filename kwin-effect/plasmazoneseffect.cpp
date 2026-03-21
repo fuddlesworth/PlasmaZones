@@ -559,6 +559,7 @@ void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)
     // unaffected because mouseChanged reads xkb state directly.
 }
 
+
 void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 {
     setupWindowConnections(w);

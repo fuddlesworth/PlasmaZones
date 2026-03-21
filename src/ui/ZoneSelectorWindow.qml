@@ -121,14 +121,27 @@ Window {
         readonly property int normalDuration: 200
     }
 
-    // Auto-scroll constants for drag-based scrolling
-    // During window drag, the cursor is captured so scroll wheel events can't reach the ScrollView.
-    // Instead, auto-scroll when cursor is near the edges of the scrollable area.
+    // Scroll the zone selector from C++ (D-Bus forwarded wheel/keyboard events)
+    function applyScrollDelta(angleDeltaY) {
+        var step = angleDeltaY / 120.0 * 0.10;
+        if (root.needsScrolling) {
+            var vBar = scrollView.ScrollBar.vertical;
+            vBar.position = Math.max(0, Math.min(1 - vBar.size, vBar.position - step));
+        } else if (root.needsHorizontalScrolling) {
+            var hBar = scrollView.ScrollBar.horizontal;
+            hBar.position = Math.max(0, Math.min(1 - hBar.size, hBar.position - step));
+        }
+    }
+
+    // Auto-scroll constants for drag-based scrolling.
+    // During window drag the compositor captures the pointer, so scroll wheel
+    // events can't reach QML.  Auto-scroll triggers when the cursor is near
+    // the edges of the scrollable area.
     QtObject {
         id: autoScrollConstants
 
-        readonly property int edgeMargin: Kirigami.Units.gridUnit * 4 // ~32px trigger zone
-        readonly property real maxSpeed: 0.04 // max scroll position change per tick (0-1 range)
+        readonly property int edgeMargin: Kirigami.Units.gridUnit * 6 // ~48px trigger zone
+        readonly property real maxSpeed: 0.07 // max scroll position change per tick (0-1 range)
         readonly property int interval: 16 // ~60fps
         readonly property real scrollThreshold: 0.01 // epsilon for scroll position comparisons
         readonly property real fadeOpacity: 0.95 // fade gradient edge opacity (matches container)

@@ -86,6 +86,9 @@ public Q_SLOTS:
      */
     void dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons);
 
+    /** Forward mouse wheel delta to zone selector for scrolling during drag. */
+    void selectorScrollWheel(int angleDeltaY);
+
     /**
      * Called when window drag ends
      * @param windowId Unique window identifier

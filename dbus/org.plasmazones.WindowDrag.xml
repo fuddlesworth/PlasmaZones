@@ -51,6 +51,13 @@
             </arg>
         </method>
 
+        <method name="selectorScrollWheel">
+            <annotation name="org.gtk.GDBus.DocString" value="Forward scroll delta to the zone selector during drag. Reserved for future use when KWin exposes pointer axis events to effects."/>
+            <arg name="angleDeltaY" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Vertical scroll delta in 1/8 degree units (positive=up, negative=down). Standard wheel tick is ±120."/>
+            </arg>
+        </method>
+
         <method name="dragStopped">
             <annotation name="org.gtk.GDBus.DocString" value="Called when the drag ends. Returns snap rectangle and whether to apply it (shouldSnap). cursorX/Y are the cursor position at release (for release screen detection). modifiers: Qt::KeyboardModifiers at release — used for Snap Assist triggers (when always-on is off)."/>
             <arg name="windowId" type="s" direction="in">
