@@ -176,6 +176,7 @@ Q_SIGNALS:
     void audioSpectrumBarCountChanged();
     // Global shortcuts
     void openEditorShortcutChanged();
+    void openSettingsShortcutChanged();
     void previousLayoutShortcutChanged();
     void nextLayoutShortcutChanged();
     void quickLayout1ShortcutChanged();

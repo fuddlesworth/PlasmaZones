@@ -245,6 +245,8 @@ public:
     // Global Shortcuts (configurable via KCM, registered with KGlobalAccel)
     Q_PROPERTY(
         QString openEditorShortcut READ openEditorShortcut WRITE setOpenEditorShortcut NOTIFY openEditorShortcutChanged)
+    Q_PROPERTY(QString openSettingsShortcut READ openSettingsShortcut WRITE setOpenSettingsShortcut NOTIFY
+                   openSettingsShortcutChanged)
     Q_PROPERTY(QString previousLayoutShortcut READ previousLayoutShortcut WRITE setPreviousLayoutShortcut NOTIFY
                    previousLayoutShortcutChanged)
     Q_PROPERTY(
@@ -1089,6 +1091,11 @@ public:
         return m_openEditorShortcut;
     }
     void setOpenEditorShortcut(const QString& shortcut);
+    QString openSettingsShortcut() const
+    {
+        return m_openSettingsShortcut;
+    }
+    void setOpenSettingsShortcut(const QString& shortcut);
     QString previousLayoutShortcut() const
     {
         return m_previousLayoutShortcut;
@@ -1583,6 +1590,7 @@ private:
 
     // Global Shortcuts (configurable, registered with KGlobalAccel)
     QString m_openEditorShortcut = QStringLiteral("Meta+Shift+E");
+    QString m_openSettingsShortcut = QStringLiteral("Meta+Shift+P");
     QString m_previousLayoutShortcut = QStringLiteral("Meta+Alt+[");
     QString m_nextLayoutShortcut = QStringLiteral("Meta+Alt+]");
     QString m_quickLayoutShortcuts[9] = {

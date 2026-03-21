@@ -18,6 +18,7 @@
 #include "../../autotile/AutotileEngine.h"
 #include "../../autotile/AlgorithmRegistry.h"
 #include "../../autotile/TilingAlgorithm.h"
+#include <QProcess>
 #include "../config/settings.h"
 #include <QGuiApplication>
 #include <QScreen>
@@ -227,6 +228,9 @@ void Daemon::connectShortcutSignals()
     // Screen detection: On X11, QCursor::pos() works; on Wayland, background daemons
     // get stale cursor data. resolveShortcutScreen() handles both by falling back to
     // the screen reported by the KWin effect's windowActivated D-Bus call.
+    connect(m_shortcutManager.get(), &ShortcutManager::openSettingsRequested, this, []() {
+        QProcess::startDetached(QStringLiteral("plasmazones-settings"), {});
+    });
     connect(m_shortcutManager.get(), &ShortcutManager::openEditorRequested, this, [this]() {
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
         if (!screen && m_unifiedLayoutController && !m_unifiedLayoutController->currentScreenName().isEmpty()) {

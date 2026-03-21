@@ -514,6 +514,10 @@ public:
     {
         return QStringLiteral("Meta+Shift+E");
     }
+    static QString openSettingsShortcut()
+    {
+        return QStringLiteral("Meta+Shift+P");
+    }
     static QString previousLayoutShortcut()
     {
         return QStringLiteral("Meta+Alt+[");

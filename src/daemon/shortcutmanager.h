@@ -71,6 +71,11 @@ Q_SIGNALS:
     void openEditorRequested();
 
     /**
+     * @brief Emitted when settings shortcut is triggered
+     */
+    void openSettingsRequested();
+
+    /**
      * @brief Emitted when previous layout shortcut is triggered
      */
     void previousLayoutRequested();
@@ -185,10 +190,12 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void onOpenEditor();
+    void onOpenSettings();
     void onPreviousLayout();
     void onNextLayout();
     void onQuickLayout(int number);
     void updateEditorShortcut();
+    void updateSettingsShortcut();
     void updatePreviousLayoutShortcut();
     void updateNextLayoutShortcut();
     void updateQuickLayoutShortcut(int index);
@@ -285,6 +292,7 @@ private Q_SLOTS:
 
 private:
     void setupEditorShortcut();
+    void setupSettingsShortcut();
     void setupCyclingShortcuts();
     void setupQuickLayoutShortcuts();
     void setupNavigationShortcuts();
@@ -301,6 +309,7 @@ private:
     LayoutManager* m_layoutManager = nullptr;
 
     QAction* m_editorAction = nullptr;
+    QAction* m_settingsAction = nullptr;
     QAction* m_previousLayoutAction = nullptr;
     QAction* m_nextLayoutAction = nullptr;
     QVector<QAction*> m_quickLayoutActions;

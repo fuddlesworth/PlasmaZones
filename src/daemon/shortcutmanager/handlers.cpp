@@ -64,6 +64,11 @@ void ShortcutManager::onOpenEditor()
     Q_EMIT openEditorRequested();
 }
 
+void ShortcutManager::onOpenSettings()
+{
+    Q_EMIT openSettingsRequested();
+}
+
 void ShortcutManager::onPreviousLayout()
 {
     Q_EMIT previousLayoutRequested();
@@ -197,6 +202,11 @@ void ShortcutManager::onToggleLayoutLock()
 void ShortcutManager::updateEditorShortcut()
 {
     UPDATE_SHORTCUT(m_editorAction, openEditorShortcut);
+}
+
+void ShortcutManager::updateSettingsShortcut()
+{
+    UPDATE_SHORTCUT(m_settingsAction, openSettingsShortcut);
 }
 
 void ShortcutManager::updatePreviousLayoutShortcut()

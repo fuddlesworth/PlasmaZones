@@ -459,6 +459,7 @@ SETTINGS_SETTER_CLAMPED(AudioSpectrumBarCount, m_audioSpectrumBarCount, audioSpe
 // ═══════════════════════════════════════════════════════════════════════════════
 
 SETTINGS_SETTER(const QString&, OpenEditorShortcut, m_openEditorShortcut, openEditorShortcutChanged)
+SETTINGS_SETTER(const QString&, OpenSettingsShortcut, m_openSettingsShortcut, openSettingsShortcutChanged)
 SETTINGS_SETTER(const QString&, PreviousLayoutShortcut, m_previousLayoutShortcut, previousLayoutShortcutChanged)
 SETTINGS_SETTER(const QString&, NextLayoutShortcut, m_nextLayoutShortcut, nextLayoutShortcutChanged)
 
