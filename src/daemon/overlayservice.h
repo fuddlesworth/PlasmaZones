@@ -182,6 +182,9 @@ private Q_SLOTS:
     void onLayoutPickerSelected(const QString& layoutId);
 
 private:
+    // Sync CAVA service state (start/stop/reconfigure) with current settings.
+    void syncCavaState();
+
     // Refresh zone selector and overlay windows that are currently visible.
     // Skips hidden windows — showZoneSelector()/show() refresh before showing.
     void refreshVisibleWindows();

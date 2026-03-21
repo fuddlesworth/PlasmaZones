@@ -251,6 +251,15 @@ void OverlayService::updateSettings(ISettings* settings)
 {
     setSettings(settings);
 
+    // Sync CAVA state with current settings.  The signal-based handlers
+    // (enableAudioVisualizerChanged, etc.) connected in setSettings() only
+    // fire when load() detects a value change.  When the KCM uses batch
+    // setSettings + reloadSettings, the in-memory values are already updated
+    // by the batch setters before load() runs, so load() sees no change and
+    // the signals never fire.  Syncing here ensures CAVA always reflects
+    // the current configuration.
+    syncCavaState();
+
     // Hide overlay and zone selector on monitors that are now disabled
     if (m_settings) {
         for (auto* screen : m_overlayWindows.keys()) {

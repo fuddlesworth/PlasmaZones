@@ -89,40 +89,12 @@ void OverlayService::setSettings(ISettings* settings)
                 }
             });
 
-            connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, [this]() {
-                // Start/stop CAVA regardless of overlay visibility so it's warm when needed
-                if (m_settings->enableAudioVisualizer()) {
-                    if (m_cavaService) {
-                        m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
-                        m_cavaService->setFramerate(m_settings->shaderFrameRate());
-                        m_cavaService->start();
-                    }
-                } else {
-                    if (m_cavaService) {
-                        m_cavaService->stop();
-                        for (auto* window : std::as_const(m_overlayWindows)) {
-                            if (window) {
-                                writeQmlProperty(window, QStringLiteral("audioSpectrum"), QVariantList());
-                            }
-                        }
-                        if (m_shaderPreviewWindow) {
-                            writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), QVariantList());
-                        }
-                    }
-                }
-            });
-
-            connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, [this]() {
-                if (m_cavaService) {
-                    m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
-                }
-            });
-
-            connect(m_settings, &ISettings::shaderFrameRateChanged, this, [this]() {
-                if (m_cavaService && m_settings) {
-                    m_cavaService->setFramerate(m_settings->shaderFrameRate());
-                }
-            });
+            connect(m_settings, &ISettings::enableAudioVisualizerChanged, this,
+                    &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this,
+                    &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::shaderFrameRateChanged, this,
+                    &OverlayService::syncCavaState);
 
             // Hot-reload shaders when files change on disk.
             // ShaderRegistry detects file changes via QFileSystemWatcher and emits
@@ -146,12 +118,7 @@ void OverlayService::setSettings(ISettings* settings)
             }
 
             // Eagerly start CAVA at daemon boot so spectrum data is warm when overlay shows
-            if (m_settings->enableAudioVisualizer() && m_cavaService) {
-                m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
-                m_cavaService->setFramerate(m_settings->shaderFrameRate());
-                m_cavaService->start();
-                qCInfo(lcOverlay) << "CAVA started eagerly (audio visualization enabled)";
-            }
+            syncCavaState();
         }
     }
 }
@@ -197,6 +164,32 @@ void OverlayService::refreshVisibleWindows()
     if (m_visible) {
         for (QScreen* screen : m_overlayWindows.keys()) {
             updateOverlayWindow(screen);
+        }
+    }
+}
+
+void OverlayService::syncCavaState()
+{
+    if (!m_cavaService || !m_settings) {
+        return;
+    }
+    if (m_settings->enableAudioVisualizer()) {
+        m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
+        m_cavaService->setFramerate(m_settings->shaderFrameRate());
+        if (!m_cavaService->isRunning()) {
+            m_cavaService->start();
+        }
+    } else {
+        if (m_cavaService->isRunning()) {
+            m_cavaService->stop();
+            for (auto* window : std::as_const(m_overlayWindows)) {
+                if (window) {
+                    writeQmlProperty(window, QStringLiteral("audioSpectrum"), QVariantList());
+                }
+            }
+            if (m_shaderPreviewWindow) {
+                writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), QVariantList());
+            }
         }
     }
 }
