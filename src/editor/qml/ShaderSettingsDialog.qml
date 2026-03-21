@@ -1199,15 +1199,17 @@ Kirigami.Dialog {
                 onWidthChanged: debouncePreviewUpdate.restart()
                 onHeightChanged: debouncePreviewUpdate.restart()
 
-                MouseArea {
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.NoButton
-                    onPositionChanged: function(mouse) {
-                        previewBackground.previewMouse = Qt.point(mouse.x, mouse.y);
+                HoverHandler {
+                    id: previewHover
+                    onPointChanged: {
+                        if (previewHover.hovered)
+                            previewBackground.previewMouse = Qt.point(previewHover.point.position.x, previewHover.point.position.y);
+
                     }
-                    onExited: {
-                        previewBackground.previewMouse = Qt.point(-1, -1);
+                    onHoveredChanged: {
+                        if (!previewHover.hovered)
+                            previewBackground.previewMouse = Qt.point(-1, -1);
+
                     }
                 }
 
