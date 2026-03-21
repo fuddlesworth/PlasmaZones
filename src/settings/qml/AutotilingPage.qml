@@ -614,16 +614,17 @@ Flickable {
 
                 }
 
-                // Settings — centered
+                // Settings — centered; only visible for algorithms that have master/split parameters
                 Kirigami.FormLayout {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.maximumWidth: Math.min(Kirigami.Units.gridUnit * 20, parent.width)
+                    visible: algoCombo.currentValue === "master-stack" || algoCombo.currentValue === "three-column" || algoCombo.currentValue === "centered-master"
 
-                    // Split ratio slider (general -- hidden for centered-master)
+                    // Split ratio slider (master-stack and three-column only)
                     RowLayout {
                         Kirigami.FormData.label: i18n("Split ratio:")
                         spacing: Kirigami.Units.smallSpacing
-                        visible: algoCombo.currentValue !== "centered-master"
+                        visible: algoCombo.currentValue === "master-stack" || algoCombo.currentValue === "three-column"
 
                         Slider {
                             id: splitRatioSlider
@@ -647,20 +648,20 @@ Flickable {
 
                     }
 
-                    // Master count (general -- hidden for centered-master)
+                    // Master count (master-stack and centered-master)
                     RowLayout {
-                        Kirigami.FormData.label: i18n("Master count:")
+                        Kirigami.FormData.label: algoCombo.currentValue === "centered-master" ? i18n("Center count:") : i18n("Master count:")
                         spacing: Kirigami.Units.smallSpacing
-                        visible: algoCombo.currentValue !== "centered-master"
+                        visible: algoCombo.currentValue === "master-stack" || algoCombo.currentValue === "centered-master"
 
                         SpinBox {
                             from: 1
                             to: 5
                             value: kcm.autotileMasterCount
                             onValueModified: kcm.autotileMasterCount = value
-                            Accessible.name: i18n("Master count")
+                            Accessible.name: algoCombo.currentValue === "centered-master" ? i18n("Center count") : i18n("Master count")
                             ToolTip.visible: hovered
-                            ToolTip.text: i18n("Number of windows in the master area")
+                            ToolTip.text: algoCombo.currentValue === "centered-master" ? i18n("Number of windows in the center area") : i18n("Number of windows in the master area")
                         }
 
                     }
@@ -693,6 +694,7 @@ Flickable {
 
                     }
 
+                    // Centered master count (separate from general master count)
                     RowLayout {
                         Kirigami.FormData.label: i18n("Center count:")
                         spacing: Kirigami.Units.smallSpacing

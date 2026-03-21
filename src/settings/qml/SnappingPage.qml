@@ -313,28 +313,14 @@ Flickable {
                         Kirigami.FormData.label: i18n("Font:")
                         spacing: Kirigami.Units.smallSpacing
 
-                        ComboBox {
-                            id: fontFamilyCombo
+                        Button {
+                            id: fontPickerButton
 
                             Layout.preferredWidth: root.sliderPreferredWidth
-                            editable: true
-                            model: Qt.fontFamilies()
+                            text: kcm.labelFontFamily || i18n("System default")
                             font.family: kcm.labelFontFamily || Qt.application.font.family
-                            displayText: kcm.labelFontFamily || i18n("System default")
-                            currentIndex: {
-                                if (kcm.labelFontFamily === "")
-                                    return -1;
-
-                                var families = Qt.fontFamilies();
-                                for (var i = 0; i < families.length; i++) {
-                                    if (families[i] === kcm.labelFontFamily)
-                                        return i;
-
-                                }
-                                return -1;
-                            }
-                            onActivated: kcm.labelFontFamily = currentText
-                            onAccepted: kcm.labelFontFamily = editText
+                            icon.name: "font-select-symbolic"
+                            onClicked: fontPickerDialog.open()
                         }
 
                         ToolButton {
@@ -1539,6 +1525,85 @@ Flickable {
 
         title: i18n("Choose Label Color")
         onAccepted: kcm.labelFontColor = selectedColor
+    }
+
+    Dialog {
+        id: fontPickerDialog
+
+        title: i18n("Select Font")
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(parent.width * 0.6, Kirigami.Units.gridUnit * 25)
+        height: Math.min(parent.height * 0.7, Kirigami.Units.gridUnit * 30)
+        modal: true
+        standardButtons: Dialog.Cancel
+        onOpened: {
+            fontSearchField.text = "";
+            fontFamilyListView.model = Qt.fontFamilies();
+            if (kcm.labelFontFamily !== "") {
+                var families = Qt.fontFamilies();
+                for (var i = 0; i < families.length; i++) {
+                    if (families[i] === kcm.labelFontFamily) {
+                        fontFamilyListView.currentIndex = i;
+                        fontFamilyListView.positionViewAtIndex(i, ListView.Center);
+                        break;
+                    }
+                }
+            }
+            fontSearchField.forceActiveFocus();
+        }
+
+        contentItem: ColumnLayout {
+            spacing: Kirigami.Units.smallSpacing
+
+            TextField {
+                id: fontSearchField
+
+                Layout.fillWidth: true
+                placeholderText: i18n("Search fonts...")
+                onTextChanged: fontFamilyListView.model = Qt.fontFamilies().filter(function(f) {
+                    return f.toLowerCase().indexOf(text.toLowerCase()) !== -1;
+                })
+                Component.onCompleted: fontFamilyListView.model = Qt.fontFamilies()
+            }
+
+            ListView {
+                id: fontFamilyListView
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                currentIndex: -1
+                Component.onCompleted: {
+                    if (kcm.labelFontFamily !== "") {
+                        var families = model;
+                        for (var i = 0; i < families.length; i++) {
+                            if (families[i] === kcm.labelFontFamily) {
+                                currentIndex = i;
+                                positionViewAtIndex(i, ListView.Center);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                delegate: ItemDelegate {
+                    required property string modelData
+                    required property int index
+
+                    width: fontFamilyListView.width
+                    text: modelData
+                    font.family: modelData
+                    highlighted: fontFamilyListView.currentIndex === index
+                    onClicked: {
+                        kcm.labelFontFamily = modelData;
+                        fontPickerDialog.close();
+                    }
+                }
+
+            }
+
+        }
+
     }
 
 }
