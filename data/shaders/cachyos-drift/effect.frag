@@ -695,7 +695,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 // ─── Custom Label Composite ───────────────────────────────────────
 
 vec4 compositeCachyLabels(vec4 color, vec2 fragCoord,
-                          float bass, float treble, bool hasAudio) {
+                          float bass, float mids, float treble, bool hasAudio) {
     vec2 uv = labelsUv(fragCoord);
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
@@ -708,37 +708,148 @@ vec4 compositeCachyLabels(vec4 color, vec2 fragCoord,
     float labelGlowSpread = customParams[4].x >= 0.0 ? customParams[4].x : 3.0;
     float labelBrightness = customParams[4].y >= 0.0 ? customParams[4].y : 2.5;
     float labelAudioReact = customParams[4].z >= 0.0 ? customParams[4].z : 1.0;
+    float labelChroma     = customParams[7].z >= 0.0 ? customParams[7].z : 0.5;
 
-    float halo = 0.0;
+    float bassR   = hasAudio ? bass * labelAudioReact   : 0.0;
+    float midsR   = hasAudio ? mids * labelAudioReact   : 0.0;
+    float trebleR = hasAudio ? treble * labelAudioReact : 0.0;
+
+    // ── Expanded Gaussian halo (wide + visible at any resolution) ──
+    // Sample in a wide 5×5 grid with large spread for a clearly visible glow.
+    float haloSmooth = 0.0;
+    float haloWide = 0.0;
     for (int dy = -2; dy <= 2; dy++) {
         for (int dx = -2; dx <= 2; dx++) {
-            float w = exp(-float(dx * dx + dy * dy) * 0.3);
-            halo += texture(uZoneLabels, uv + vec2(float(dx), float(dy)) * px * labelGlowSpread).a * w;
+            float r2 = float(dx * dx + dy * dy);
+            vec2 off = vec2(float(dx), float(dy)) * px * labelGlowSpread;
+            float s = texture(uZoneLabels, uv + off).a;
+            haloSmooth += s * exp(-r2 * 0.4);   // tight core
+            haloWide   += s * exp(-r2 * 0.15);   // wide outer
         }
     }
-    halo /= 16.5;
+    haloSmooth /= 8.0;
+    haloWide   /= 12.0;
 
-    if (halo > 0.003) {
-        float haloEdge = halo * (1.0 - labels.a);
-        float t = length(uv - 0.5) + iTime * 0.06;
-        vec3 haloCol = cachyPalette(t, palPrimary, palSecondary, palAccent);
-        float haloBright = haloEdge * (0.5 + (hasAudio ? bass * 0.5 * labelAudioReact : 0.0));
-        color.rgb += haloCol * haloBright;
-        if (hasAudio && treble > 0.1) {
-            float sparkNoise = noise2D(uv * 40.0 + iTime * 3.5);
-            float spark = smoothstep(0.7, 0.95, sparkNoise) * treble * 2.0 * labelAudioReact;
-            color.rgb += mix(vec3(1.0), palGlow, 0.3) * haloEdge * spark;
+    // Second wider pass for the large atmospheric glow
+    float haloAtmo = 0.0;
+    for (int dy = -3; dy <= 3; dy++) {
+        for (int dx = -3; dx <= 3; dx++) {
+            float r2 = float(dx * dx + dy * dy);
+            if (r2 > 12.0) continue;  // skip corners
+            vec2 off = vec2(float(dx), float(dy)) * px * labelGlowSpread * 1.8;
+            haloAtmo += texture(uZoneLabels, uv + off).a * exp(-r2 * 0.12);
         }
-        color.a = max(color.a, haloEdge * 0.5);
+    }
+    haloAtmo /= 18.0;
+
+    float haloAngle = atan(uv.y - 0.5, uv.x - 0.5);
+
+    if (haloAtmo > 0.001) {
+        float outerMask = haloAtmo * (1.0 - labels.a);
+        float innerMask = haloSmooth * (1.0 - labels.a);
+        float midMask   = haloWide * (1.0 - labels.a);
+
+        // Chromatic split — R and B offset outward from text center
+        float chromaOff = (3.0 + bassR * 4.0) * px.x * labelGlowSpread * labelChroma;
+        vec2 chromaDir = vec2(cos(haloAngle), sin(haloAngle));
+        float chromR = texture(uZoneLabels, uv + chromaDir * chromaOff).a * (1.0 - labels.a);
+        float chromB = texture(uZoneLabels, uv - chromaDir * chromaOff).a * (1.0 - labels.a);
+
+        // Angular color sweep
+        float sweep = fract(haloAngle / TAU + iTime * 0.12 + midsR * 0.4);
+        vec3 haloCol = cachyPalette(sweep, palPrimary, palSecondary, palAccent);
+
+        // Inner ring: bright, tight, chromatic
+        vec3 innerCol = vec3(chromR * 1.5, innerMask, chromB * 1.5) * labelChroma
+                      + haloCol * (1.0 - labelChroma * 0.5);
+        color.rgb += innerCol * innerMask * (2.5 + bassR * 1.5);
+
+        // Mid ring: colored glow
+        color.rgb += haloCol * midMask * (1.5 + bassR * 0.8);
+
+        // Outer atmospheric: soft wide glow
+        vec3 outerCol = mix(haloCol, palGlow, 0.4 + midsR * 0.3);
+        color.rgb += outerCol * outerMask * (0.8 + bassR * 0.5);
+
+        // 12-fold angular rays — always visible, treble makes them sharper
+        float rayAngle = mod(haloAngle, TAU / 12.0) - TAU / 24.0;
+        float ray = exp(-abs(rayAngle) * (30.0 + trebleR * 40.0));
+        float rayPulse = 0.6 + 0.4 * sin(iTime * 3.0);
+        color.rgb += palGlow * 3.0 * ray * midMask * rayPulse;
+
+        // Treble sparks
+        if (trebleR > 0.04) {
+            float sparkN = noise2D(uv * 50.0 + iTime * 5.0);
+            float spark = smoothstep(0.55, 0.85, sparkN) * trebleR * 4.0;
+            color.rgb += vec3(1.0, 0.95, 0.85) * innerMask * spark;
+        }
+
+        color.a = max(color.a, midMask * 0.8);
     }
 
+    // ── Text fill: digital shatter pattern ─────────────────────
+    // Noise-based angular regions create hard color boundaries inside
+    // text strokes — a glitchy, digital aesthetic matching CachyOS.
     if (labels.a > 0.01) {
-        vec3 lens = color.rgb * labelBrightness;
-        float t = length(uv - 0.5) + iTime * 0.08;
-        lens += cachyPalette(t, palPrimary, palSecondary, palAccent) * 0.15;
-        float bassPulse = hasAudio ? 1.0 + bass * 0.4 * labelAudioReact : 1.0;
-        lens *= bassPulse;
-        color.rgb = mix(color.rgb, lens, labels.a);
+        // Noise at pixel scale — creates irregular angular regions inside text.
+        // Each region gets a distinct color from the palette via threshold.
+        vec2 nCoord = fragCoord * 0.08 + vec2(iTime * 0.6, iTime * 0.35);
+        float n1 = noise(nCoord);
+        float n2 = noise(nCoord * 1.7 + 50.0);
+
+        // Quantize noise into 4 distinct bands — hard color boundaries
+        float band = floor(n1 * 4.0) / 3.0;  // 0.0, 0.33, 0.67, 1.0
+        vec3 bandCol = cachyPalette(band + iTime * 0.06, palPrimary, palSecondary, palAccent);
+
+        // Second noise layer for brightness variation
+        float bright = 0.6 + n2 * 0.8;  // range 0.6–1.4
+
+        // Diagonal scan line — a bright stripe sweeping across the text
+        float scanSpeed = 1.5 + bassR * 2.0;
+        float scan = fract(fragCoord.x * 0.003 + fragCoord.y * 0.002 - iTime * scanSpeed * 0.04);
+        float scanLine = smoothstep(0.0, 0.04, scan) * smoothstep(0.12, 0.04, scan);
+
+        // Edge detection — bright rim at stroke boundaries
+        float aL = texture(uZoneLabels, uv + vec2(-px.x, 0.0)).a;
+        float aR = texture(uZoneLabels, uv + vec2( px.x, 0.0)).a;
+        float aU = texture(uZoneLabels, uv + vec2(0.0, -px.y)).a;
+        float aD = texture(uZoneLabels, uv + vec2(0.0,  px.y)).a;
+        float edgeStrength = clamp((4.0 * labels.a - aL - aR - aU - aD) * 2.5, 0.0, 1.0);
+
+        // Chromatic aberration — rotates over time
+        float caOff = labelChroma * 2.0 * px.x * iResolution.x * 0.004;
+        float caAngle = iTime * 0.8;
+        vec2 caDir = vec2(cos(caAngle), sin(caAngle));
+        float rCh = texture(uZoneLabels, uv + caDir * caOff).a;
+        float bCh = texture(uZoneLabels, uv - caDir * caOff).a;
+        vec3 chromaText = vec3(rCh, labels.a, bCh);
+
+        // Build text color: banded noise body + scan highlight + edge rim
+        vec3 textCol = bandCol * bright;
+        textCol += palGlow * 2.5 * scanLine;                     // bright scan stripe
+        textCol += mix(palGlow, vec3(1.0), 0.5) * edgeStrength;  // bright stroke edges
+        textCol *= mix(vec3(1.0), chromaText + 0.4, labelChroma * 0.5);  // chroma tint
+
+        // Bass breathing + per-band flash
+        textCol *= (1.0 + bassR * 0.5);
+        float flashBand = floor(n1 * 4.0);
+        float flashPhase = hash21(vec2(flashBand, floor(iTime * 3.0)));
+        if (flashPhase > 0.65 && bassR > 0.1) {
+            textCol += palGlow * bassR * 1.5;
+        }
+
+        // Apply brightness
+        textCol *= labelBrightness;
+
+        // Gentle tonemap (openSUSE-style — preserves contrast)
+        textCol = textCol / (0.6 + textCol);
+
+        // Saturation boost
+        float textLum = dot(textCol, vec3(0.2126, 0.7152, 0.0722));
+        textCol = mix(vec3(textLum), textCol, 1.5);
+        textCol = max(textCol, vec3(0.0));
+
+        color.rgb = mix(color.rgb, textCol, labels.a);
         color.a = max(color.a, labels.a);
     }
 
@@ -771,6 +882,6 @@ void main() {
     }
 
     if (customParams[7].y > 0.5)
-        color = compositeCachyLabels(color, fragCoord, bass, treble, hasAudio);
+        color = compositeCachyLabels(color, fragCoord, bass, mids, treble, hasAudio);
     fragColor = clampFragColor(color);
 }

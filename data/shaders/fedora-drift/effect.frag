@@ -925,23 +925,30 @@ vec4 compositeFedoraLabels(vec4 color, vec2 fragCoord,
 
     // ── Label text body: frosted glass text ─────────────────────
     if (labels.a > 0.01) {
-        float edgeDist = labels.a;
-        vec3 tubeWhite = FROST_SILVER;
+        // Diagonal frost gradient in pixel space — visible within each character
+        float frostWave = sin(fragCoord.x * 0.25 - time * 2.0 + fragCoord.y * 0.15) * 0.5 + 0.5;
+        vec3 tubeColor = frostPalette(frostWave + time * 0.06, palPrimary, palAccent, palGlow);
 
-        float t = uv.x * 1.5 + time * 0.08;
-        vec3 tubeColor = frostPalette(t, palPrimary, palAccent, palGlow);
+        // Frost crystalline noise — breaks up the solid fill
+        float frost = noise2D(fragCoord * 0.12 + time * 0.5);
+        vec3 frostTint = mix(tubeColor, FROST_SILVER, frost * 0.5);
 
-        // Core-to-edge gradient within the glyph
-        vec3 lens = mix(tubeColor, tubeWhite, smoothstep(0.3, 0.9, edgeDist));
-        lens *= labelBrightness * pulse * sweepBright;
+        // Stroke edge detection for frosted rim
+        float aL = texture(uZoneLabels, uv + vec2(-px.x, 0.0)).a;
+        float aR = texture(uZoneLabels, uv + vec2( px.x, 0.0)).a;
+        float aU = texture(uZoneLabels, uv + vec2(0.0, -px.y)).a;
+        float aD = texture(uZoneLabels, uv + vec2(0.0,  px.y)).a;
+        float rim = clamp((4.0 * labels.a - aL - aR - aU - aD) * 2.5, 0.0, 1.0);
 
-        // Bass pulse (enveloped)
-        lens *= 1.0 + bassEnv * 0.5;
+        // Combine: frost body + bright silver rim at edges
+        vec3 textCol = frostTint * 0.7 + FROST_SILVER * rim * 0.6;
+        textCol *= labelBrightness * pulse * sweepBright;
+        textCol *= 1.0 + bassEnv * 0.5;
 
-        // Background bleed-through at edges (frosted glass look)
-        vec3 blended = mix(color.rgb * 0.3 + lens * 0.7, lens, smoothstep(0.2, 0.7, edgeDist));
+        // Gentle tonemap preserving frost color variation
+        textCol = textCol / (0.6 + textCol);
 
-        color.rgb = mix(color.rgb, blended, labels.a);
+        color.rgb = mix(color.rgb, textCol, labels.a);
         color.a = max(color.a, labels.a);
     }
 

@@ -1003,29 +1003,36 @@ vec4 compositeNeonLabels(vec4 color, vec2 fragCoord,
 
     // ── Label text body: neon tube lit text ──────────────────────────
     if (labels.a > 0.01) {
-        // Neon tube treatment: white-hot center → colored edges
-        float edgeDist = labels.a; // thicker = closer to center
-        vec3 tubeWhite = vec3(1.0, 1.0, 0.97);
-
-        float t = uv.x * 1.5 + time * 0.1;
+        // Color sweep in pixel space — visible within each character
+        float neonWave = sin(fragCoord.x * 0.2 - time * 2.5 + fragCoord.y * 0.12) * 0.5 + 0.5;
         vec3 tubeColor = mix(
-            neonPalette(t, palPrimary, palAccent, palSecondary),
-            sunsetPalette(t + 0.15, 1.0),
-            0.25
+            neonPalette(neonWave + time * 0.08, palPrimary, palAccent, palSecondary),
+            sunsetPalette(neonWave + 0.15, 1.0),
+            0.3
         );
 
-        // Core-to-edge gradient within the glyph
-        vec3 lens = mix(tubeColor, tubeWhite, smoothstep(0.3, 0.9, edgeDist));
-        lens *= labelBrightness * flicker * sweepBright;
+        // Neon tube flicker noise — breaks up solid fill with bright/dim regions
+        float tubeNoise = noise(fragCoord * 0.1 + time * 2.0);
+        vec3 tubeCol = mix(tubeColor, vec3(1.0, 1.0, 0.97), tubeNoise * 0.4);
 
-        // Bass pulse
+        // Stroke edge rim — neon tubes glow brightest at edges
+        float aL = texture(uZoneLabels, uv + vec2(-px.x, 0.0)).a;
+        float aR = texture(uZoneLabels, uv + vec2( px.x, 0.0)).a;
+        float aU = texture(uZoneLabels, uv + vec2(0.0, -px.y)).a;
+        float aD = texture(uZoneLabels, uv + vec2(0.0,  px.y)).a;
+        float rim = clamp((4.0 * labels.a - aL - aR - aU - aD) * 2.5, 0.0, 1.0);
+
+        // Combine: neon tube body + bright white rim
+        vec3 textCol = tubeCol * 0.7 + vec3(1.0, 1.0, 0.97) * rim * 0.5;
+        textCol *= labelBrightness * flicker * sweepBright;
+
         float bassPulse = hasAudio ? 1.0 + bass * 0.6 * labelAudioReact : 1.0;
-        lens *= bassPulse;
+        textCol *= bassPulse;
 
-        // Background bleed-through at edges (glass tube look)
-        vec3 blended = mix(color.rgb * 0.3 + lens * 0.7, lens, smoothstep(0.2, 0.7, edgeDist));
+        // Gentle tonemap
+        textCol = textCol / (0.6 + textCol);
 
-        color.rgb = mix(color.rgb, blended, labels.a);
+        color.rgb = mix(color.rgb, textCol, labels.a);
         color.a = max(color.a, labels.a);
     }
 
