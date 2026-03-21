@@ -7,6 +7,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.3.15] - 2026-03-21
+
+### Fixed
+- **Shader preview crash on hover** ([#235]): Moving the mouse over the shader preview in the editor dialog crashed with SIGSEGV in `QV4::Lookup::getterQObject`. The `MouseArea.onPositionChanged` handler's QObject-backed event parameter was invalidated mid-evaluation by cascading signal chains on Qt 6.10. Replaced `MouseArea` with `HoverHandler` which uses a value-type point property.
+- **CAVA settings not applied dynamically**: Enabling/disabling CAVA audio visualizer or changing bar count/sample rate in KCM required a daemon restart. The KCM's batch `setSettings` applied values with `QSignalBlocker`, then `load()` saw no change (in-memory values already updated). Added `syncCavaState()` called from `updateSettings()` on every settings reload.
+- **Layout card button flicker at fractional DPI**: The Auto-assign and Visibility toggle buttons flickered when hovered at 125% display scaling. The `visible:` property toggling caused Row geometry reflow that shifted button positions by sub-pixel amounts, creating a hover feedback loop. Replaced `visible:` with `opacity:`/`enabled:` and added `ToolTip.delay`.
+
+### Changed
+- **Enhanced label effects for branded shaders**: CachyOS, Fedora, Neon, and NixOS Drift shaders had label text bodies that appeared solid white. Text fill patterns used screen-space UV which barely varied within characters, and `smoothstep(0.3, 0.9, labels.a)` washed to white. Rewrote all four with pixel-space patterns, edge rim detection, and `x/(0.6+x)` tonemapping. Each shader gets a unique style: digital shatter (CachyOS), frost crystalline (Fedora), neon tube flicker (Neon), hash grid verification (NixOS).
+
 ## [2.3.14] - 2026-03-21
 
 ### Fixed
@@ -898,7 +908,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.14...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.15...HEAD
+[2.3.15]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.14...v2.3.15
 [2.3.14]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.13...v2.3.14
 [2.3.13]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.12...v2.3.13
 [2.3.12]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.11...v2.3.12
