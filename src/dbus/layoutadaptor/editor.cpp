@@ -292,11 +292,11 @@ void LayoutAdaptor::openEditor()
     launchEditor({}, QString());
 }
 
-void LayoutAdaptor::openEditorForScreen(const QString& screenName)
+void LayoutAdaptor::openEditorForScreen(const QString& screenId)
 {
-    // Intentionally passes the connector name (not screen ID) — the editor process
+    // Intentionally passes the screen ID — the editor process
     // uses it for QScreen::name() matching and geometry lookup.
-    launchEditor({QStringLiteral("--screen"), screenName}, QStringLiteral("for screen: %1").arg(screenName));
+    launchEditor({QStringLiteral("--screen"), screenId}, QStringLiteral("for screen: %1").arg(screenId));
 }
 
 void LayoutAdaptor::openEditorForLayout(const QString& layoutId)
@@ -304,13 +304,13 @@ void LayoutAdaptor::openEditorForLayout(const QString& layoutId)
     launchEditor({QStringLiteral("--layout"), layoutId}, QStringLiteral("for layout: %1").arg(layoutId));
 }
 
-void LayoutAdaptor::openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenName)
+void LayoutAdaptor::openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenId)
 {
     QStringList args{QStringLiteral("--layout"), layoutId};
-    if (!screenName.isEmpty()) {
-        args << QStringLiteral("--screen") << screenName;
+    if (!screenId.isEmpty()) {
+        args << QStringLiteral("--screen") << screenId;
     }
-    launchEditor(args, QStringLiteral("for layout: %1 on screen: %2").arg(layoutId, screenName));
+    launchEditor(args, QStringLiteral("for layout: %1 on screen: %2").arg(layoutId, screenId));
 }
 
 } // namespace PlasmaZones

@@ -23,7 +23,7 @@ namespace PlasmaZones {
 
 // parseZonesJson is defined in overlayservice_internal.h (shared inline)
 
-void OverlayService::showSnapAssist(const QString& screenName, const QString& emptyZonesJson,
+void OverlayService::showSnapAssist(const QString& screenId, const QString& emptyZonesJson,
                                     const QString& candidatesJson)
 {
     if (emptyZonesJson.isEmpty() || candidatesJson.isEmpty()) {
@@ -33,8 +33,8 @@ void OverlayService::showSnapAssist(const QString& screenName, const QString& em
     }
 
     QScreen* screen = nullptr;
-    if (!screenName.isEmpty()) {
-        screen = Utils::findScreenByIdOrName(screenName);
+    if (!screenId.isEmpty()) {
+        screen = Utils::findScreenByIdOrName(screenId);
     }
     if (!screen) {
         screen = Utils::primaryScreen();
@@ -132,10 +132,10 @@ void OverlayService::showSnapAssist(const QString& screenName, const QString& em
     // KeyboardInteractivityExclusive tells the compositor to send keyboard events,
     // but Qt may not set internal focus without an explicit activation request.
     m_snapAssistWindow->requestActivate();
-    qCInfo(lcOverlay) << "showSnapAssist: screen=" << screenName << "zones=" << zonesList.size()
+    qCInfo(lcOverlay) << "showSnapAssist: screen=" << screenId << "zones=" << zonesList.size()
                       << "candidates=" << candidatesList.size();
 
-    Q_EMIT snapAssistShown(screenName, emptyZonesJson, candidatesJson);
+    Q_EMIT snapAssistShown(screenId, emptyZonesJson, candidatesJson);
 }
 
 void OverlayService::setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl)
@@ -280,7 +280,7 @@ void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const Q
 // Layout Picker Overlay
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void OverlayService::showLayoutPicker(const QString& screenName)
+void OverlayService::showLayoutPicker(const QString& screenId)
 {
     // Guard: if picker window already exists (visible or being set up), do nothing.
     // Prevents double-trigger when shortcut fires before KeyboardInteractivityExclusive
@@ -291,8 +291,8 @@ void OverlayService::showLayoutPicker(const QString& screenName)
 
     // Resolve target screen
     QScreen* screen = nullptr;
-    if (!screenName.isEmpty()) {
-        screen = Utils::findScreenByIdOrName(screenName);
+    if (!screenId.isEmpty()) {
+        screen = Utils::findScreenByIdOrName(screenId);
     }
     if (!screen) {
         screen = Utils::primaryScreen();
@@ -312,8 +312,8 @@ void OverlayService::showLayoutPicker(const QString& screenName)
     m_layoutPickerWindow->setScreen(screen);
 
     // Build layouts list
-    const QString screenId = Utils::screenIdentifier(screen);
-    QVariantList layoutsList = buildLayoutsList(screenId);
+    const QString resolvedScreenId = Utils::screenIdentifier(screen);
+    QVariantList layoutsList = buildLayoutsList(resolvedScreenId);
     if (layoutsList.isEmpty()) {
         qCDebug(lcOverlay) << "showLayoutPicker: no layouts available";
         destroyLayoutPickerWindow();

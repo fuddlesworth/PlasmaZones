@@ -27,7 +27,7 @@ namespace PlasmaZones {
 using namespace WindowTrackingInternal;
 
 void WindowTrackingAdaptor::storePreTileGeometry(const QString& windowId, int x, int y, int width, int height,
-                                                 const QString& screenName, bool overwrite)
+                                                 const QString& screenId, bool overwrite)
 {
     if (!validateWindowId(windowId, QStringLiteral("store pre-tile geometry"))) {
         return;
@@ -39,8 +39,8 @@ void WindowTrackingAdaptor::storePreTileGeometry(const QString& windowId, int x,
         return;
     }
 
-    m_service->storePreTileGeometry(windowId, QRect(x, y, width, height), screenName, overwrite);
-    qCDebug(lcDbusWindow) << "Stored pre-tile geometry for" << windowId << "screen=" << screenName
+    m_service->storePreTileGeometry(windowId, QRect(x, y, width, height), screenId, overwrite);
+    qCDebug(lcDbusWindow) << "Stored pre-tile geometry for" << windowId << "screen=" << screenId
                           << "overwrite=" << overwrite;
 }
 

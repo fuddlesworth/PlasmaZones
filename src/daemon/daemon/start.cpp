@@ -365,22 +365,22 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "LayoutPicker shortcut: no screen info";
             return;
         }
-        const QString screenName = Utils::screenIdentifier(screen);
-        m_unifiedLayoutController->setCurrentScreenName(screenName);
-        updateLayoutFilterForScreen(screenName);
-        m_overlayService->showLayoutPicker(screenName);
+        const QString screenId = Utils::screenIdentifier(screen);
+        m_unifiedLayoutController->setCurrentScreenName(screenId);
+        updateLayoutFilterForScreen(screenId);
+        m_overlayService->showLayoutPicker(screenId);
     });
     connect(m_overlayService.get(), &OverlayService::layoutPickerSelected, this, [this](const QString& layoutId) {
         if (!m_unifiedLayoutController) {
             return;
         }
         // Check if screen is locked for its current mode
-        QString screenName = m_unifiedLayoutController->currentScreenName();
-        if (!screenName.isEmpty() && m_layoutManager) {
+        QString screenId = m_unifiedLayoutController->currentScreenName();
+        if (!screenId.isEmpty() && m_layoutManager) {
             int mode =
-                static_cast<int>(m_layoutManager->modeForScreen(screenName, currentDesktop(), currentActivity()));
-            if (isCurrentContextLockedForMode(screenName, mode)) {
-                showLockedPreviewOsd(screenName);
+                static_cast<int>(m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity()));
+            if (isCurrentContextLockedForMode(screenId, mode)) {
+                showLockedPreviewOsd(screenId);
                 return;
             }
         }

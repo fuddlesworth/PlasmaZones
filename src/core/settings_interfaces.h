@@ -95,14 +95,14 @@ public:
     virtual bool showZonesOnAllMonitors() const = 0;
     virtual void setShowZonesOnAllMonitors(bool show) = 0;
     virtual QStringList disabledMonitors() const = 0;
-    virtual void setDisabledMonitors(const QStringList& screenNames) = 0;
-    virtual bool isMonitorDisabled(const QString& screenName) const = 0;
+    virtual void setDisabledMonitors(const QStringList& screenIdOrNames) = 0;
+    virtual bool isMonitorDisabled(const QString& screenIdOrName) const = 0;
     virtual QStringList lockedScreens() const = 0;
     virtual void setLockedScreens(const QStringList& screens) = 0;
-    virtual void setScreenLocked(const QString& screenName, bool locked) = 0;
-    virtual bool isScreenLocked(const QString& screenName) const = 0;
-    virtual bool isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity) const = 0;
-    virtual void setContextLocked(const QString& screenName, int virtualDesktop, const QString& activity,
+    virtual void setScreenLocked(const QString& screenIdOrName, bool locked) = 0;
+    virtual bool isScreenLocked(const QString& screenIdOrName) const = 0;
+    virtual bool isContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity) const = 0;
+    virtual void setContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity,
                                   bool locked) = 0;
     virtual bool showZoneNumbers() const = 0;
     virtual void setShowZoneNumbers(bool show) = 0;
@@ -202,7 +202,7 @@ public:
     virtual void setMinimumZoneDisplaySizePx(int size) = 0;
 
     // Per-screen snapping config resolution (override > global fallback)
-    virtual QVariantMap getPerScreenSnappingSettings(const QString& /*screenName*/) const
+    virtual QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const
     {
         return {};
     }
@@ -262,7 +262,7 @@ public:
     virtual void setZoneSelectorMaxRows(int rows) = 0;
 
     // Per-screen zone selector config resolution
-    virtual ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& /*screenName*/) const
+    virtual ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& /*screenIdOrName*/) const
     {
         return {static_cast<int>(zoneSelectorPosition()),
                 static_cast<int>(zoneSelectorLayoutMode()),

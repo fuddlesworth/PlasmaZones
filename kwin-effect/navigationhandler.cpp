@@ -730,7 +730,7 @@ void NavigationHandler::handleSwapWindows(const QString& targetZoneId, const QSt
                 int w2 = obj.value(QLatin1String("w2")).toInt();
                 int h2 = obj.value(QLatin1String("h2")).toInt();
                 QString zoneId2 = obj.value(QLatin1String("zoneId2")).toString();
-                QString resultScreenName = obj.value(QLatin1String("screenName")).toString();
+                QString resultScreenId = obj.value(QLatin1String("screenName")).toString();
 
                 QRect geom1(x1, y1, w1, h1);
                 if (!geom1.isValid())
@@ -742,7 +742,7 @@ void NavigationHandler::handleSwapWindows(const QString& targetZoneId, const QSt
 
                 if (windowId2.isEmpty()) {
                     m_effect->applySnapGeometry(safeWindow, geom1);
-                    swapIface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, zoneId1, resultScreenName);
+                    swapIface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, zoneId1, resultScreenId);
                 } else {
                     QRect geom2(x2, y2, w2, h2);
                     if (!geom2.isValid())
@@ -753,7 +753,7 @@ void NavigationHandler::handleSwapWindows(const QString& targetZoneId, const QSt
                     if (!targetWindow || !m_effect->shouldHandleWindow(targetWindow)) {
                         m_effect->applySnapGeometry(safeWindow, geom1);
                         swapIface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, zoneId1,
-                                             resultScreenName);
+                                             resultScreenId);
                         return;
                     }
 
@@ -771,7 +771,7 @@ void NavigationHandler::handleSwapWindows(const QString& targetZoneId, const QSt
                         {safeWindow, geom1, capturedWindowId, zoneId1},
                         {QPointer<KWin::EffectWindow>(targetWindow), geom2, windowId2, zoneId2},
                     };
-                    m_effect->applyStaggeredOrImmediate(2, [this, swapEntries, resultScreenName](int i) {
+                    m_effect->applyStaggeredOrImmediate(2, [this, swapEntries, resultScreenId](int i) {
                         const SwapSnap& s = swapEntries[i];
                         if (!s.window) {
                             return;
@@ -779,7 +779,7 @@ void NavigationHandler::handleSwapWindows(const QString& targetZoneId, const QSt
                         m_effect->applySnapGeometry(s.window, s.geometry);
                         auto* iface = m_effect->windowTrackingInterface();
                         if (iface && iface->isValid()) {
-                            iface->asyncCall(QStringLiteral("windowSnapped"), s.windowId, s.zoneId, resultScreenName);
+                            iface->asyncCall(QStringLiteral("windowSnapped"), s.windowId, s.zoneId, resultScreenId);
                         }
                     });
                 }

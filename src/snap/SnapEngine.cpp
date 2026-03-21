@@ -60,7 +60,7 @@ void SnapEngine::windowClosed(const QString& windowId)
 void SnapEngine::windowFocused(const QString& windowId, const QString& screenId)
 {
     Q_UNUSED(windowId)
-    m_lastActiveScreenName = screenId;
+    m_lastActiveScreenId = screenId;
 }
 
 // toggleWindowFloat and setWindowFloat are implemented in snapengine/float.cpp

@@ -2528,7 +2528,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(QDBusAbstractInterface& iface, const QS
                     if (storePreSnap)
                         ensurePreSnapGeometryStored(window, windowId);
                     applySnapGeometry(window, geo, false, skipAnimation);
-                    // args[1] is screenName (e.g. for snapToEmptyZone, snapToLastZone)
+                    // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
                     if (onSnapSuccess && args.size() >= 2) {
                         onSnapSuccess(windowId, args[1].toString());
                     }

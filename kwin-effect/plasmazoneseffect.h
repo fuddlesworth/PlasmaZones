@@ -263,7 +263,7 @@ private:
     // iface must remain valid for the duration of the async call (caller guarantees
     // ownership via unique_ptr member; the reference is only used to initiate the call,
     // not captured in the async lambda).
-    // onSnapSuccess: optional callback when snap is applied, receives (windowId, screenName)
+    // onSnapSuccess: optional callback when snap is applied, receives (windowId, screenId)
     void tryAsyncSnapCall(QDBusAbstractInterface& iface, const QString& method, const QList<QVariant>& args,
                           QPointer<KWin::EffectWindow> window, const QString& windowId, bool storePreSnap,
                           std::function<void()> fallback,

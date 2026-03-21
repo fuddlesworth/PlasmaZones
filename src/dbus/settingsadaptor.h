@@ -62,10 +62,10 @@ public Q_SLOTS:
     QStringList getSettingKeys();
 
     // Per-screen settings (categories: "autotile", "snapping", "zoneSelector")
-    void setPerScreenSetting(const QString& screenName, const QString& category, const QString& key,
+    void setPerScreenSetting(const QString& screenId, const QString& category, const QString& key,
                              const QDBusVariant& value);
-    void clearPerScreenSettings(const QString& screenName, const QString& category);
-    QVariantMap getPerScreenSettings(const QString& screenName, const QString& category);
+    void clearPerScreenSettings(const QString& screenId, const QString& category);
+    QVariantMap getPerScreenSettings(const QString& screenId, const QString& category);
 
     /**
      * @brief Get list of available shader effects

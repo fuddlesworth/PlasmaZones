@@ -29,7 +29,7 @@ struct PLASMAZONES_EXPORT SnapResult
     QRect geometry; ///< Target geometry for snapping (x, y, width, height)
     QString zoneId; ///< UUID of primary target zone (backward compat)
     QStringList zoneIds; ///< All zone UUIDs (for multi-zone snap)
-    QString screenName; ///< Screen where the zone is located
+    QString screenId; ///< Screen where the zone is located
 
     /**
      * @brief Check if this result represents a valid snap operation
@@ -61,7 +61,7 @@ struct PLASMAZONES_EXPORT UnfloatResult
     bool found = false; ///< Whether a valid restore target was found
     QStringList zoneIds; ///< Zone UUIDs to restore to
     QRect geometry; ///< Target geometry for the window
-    QString screenName; ///< Screen where the zones are located
+    QString screenId; ///< Screen where the zones are located
 };
 
 /**
@@ -76,7 +76,7 @@ struct PLASMAZONES_EXPORT DragInfo
     QRect geometry; ///< Current window geometry
     QString appName; ///< Application name (for exclusion checks)
     QString windowClass; ///< Window class (for pattern matching)
-    QString screenName; ///< Screen where window is located
+    QString screenId; ///< Screen where window is located
     bool isSticky = false; ///< Whether window is on all desktops
     int virtualDesktop = 0; ///< Current virtual desktop (0 = all)
 

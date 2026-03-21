@@ -20,7 +20,7 @@ namespace PlasmaZones {
 // ═══════════════════════════════════════════════════════════════════════════
 
 static QJsonObject moveResult(bool success, const QString& reason, const QString& zoneId, const QString& geometryJson,
-                              const QString& sourceZoneId, const QString& screenName)
+                              const QString& sourceZoneId, const QString& screenId)
 {
     QJsonObject obj;
     obj[QLatin1String("success")] = success;
@@ -28,12 +28,12 @@ static QJsonObject moveResult(bool success, const QString& reason, const QString
     obj[QLatin1String("zoneId")] = zoneId;
     obj[QLatin1String("geometryJson")] = geometryJson;
     obj[QLatin1String("sourceZoneId")] = sourceZoneId;
-    obj[QLatin1String("screenName")] = screenName;
+    obj[QLatin1String("screenName")] = screenId;
     return obj;
 }
 
 static QJsonObject focusResult(bool success, const QString& reason, const QString& windowIdToActivate,
-                               const QString& sourceZoneId, const QString& targetZoneId, const QString& screenName)
+                               const QString& sourceZoneId, const QString& targetZoneId, const QString& screenId)
 {
     QJsonObject obj;
     obj[QLatin1String("success")] = success;
@@ -41,25 +41,25 @@ static QJsonObject focusResult(bool success, const QString& reason, const QStrin
     obj[QLatin1String("windowIdToActivate")] = windowIdToActivate;
     obj[QLatin1String("sourceZoneId")] = sourceZoneId;
     obj[QLatin1String("targetZoneId")] = targetZoneId;
-    obj[QLatin1String("screenName")] = screenName;
+    obj[QLatin1String("screenName")] = screenId;
     return obj;
 }
 
 static QJsonObject cycleResult(bool success, const QString& reason, const QString& windowIdToActivate,
-                               const QString& zoneId, const QString& screenName)
+                               const QString& zoneId, const QString& screenId)
 {
     QJsonObject obj;
     obj[QLatin1String("success")] = success;
     obj[QLatin1String("reason")] = reason;
     obj[QLatin1String("windowIdToActivate")] = windowIdToActivate;
     obj[QLatin1String("zoneId")] = zoneId;
-    obj[QLatin1String("screenName")] = screenName;
+    obj[QLatin1String("screenName")] = screenId;
     return obj;
 }
 
 static QJsonObject swapResult(bool success, const QString& reason, const QString& windowId1, int x1, int y1, int w1,
                               int h1, const QString& zoneId1, const QString& windowId2, int x2, int y2, int w2, int h2,
-                              const QString& zoneId2, const QString& screenName, const QString& sourceZoneId,
+                              const QString& zoneId2, const QString& screenId, const QString& sourceZoneId,
                               const QString& targetZoneId)
 {
     QJsonObject obj;
@@ -77,7 +77,7 @@ static QJsonObject swapResult(bool success, const QString& reason, const QString
     obj[QLatin1String("w2")] = w2;
     obj[QLatin1String("h2")] = h2;
     obj[QLatin1String("zoneId2")] = zoneId2;
-    obj[QLatin1String("screenName")] = screenName;
+    obj[QLatin1String("screenName")] = screenId;
     obj[QLatin1String("sourceZoneId")] = sourceZoneId;
     obj[QLatin1String("targetZoneId")] = targetZoneId;
     return obj;
@@ -217,7 +217,7 @@ QString WindowTrackingAdaptor::getFocusTargetForWindow(const QString& windowId, 
             .toJson(QJsonDocument::Compact));
 }
 
-QString WindowTrackingAdaptor::getRestoreForWindow(const QString& windowId, const QString& screenName)
+QString WindowTrackingAdaptor::getRestoreForWindow(const QString& windowId, const QString& screenId)
 {
     if (!validateWindowId(windowId, QStringLiteral("getRestoreForWindow"))) {
         QJsonObject obj;
@@ -228,7 +228,7 @@ QString WindowTrackingAdaptor::getRestoreForWindow(const QString& windowId, cons
     }
 
     int x = 0, y = 0, w = 0, h = 0;
-    auto geo = m_service->validatedPreTileGeometry(windowId, screenName);
+    auto geo = m_service->validatedPreTileGeometry(windowId, screenId);
     bool found = geo.has_value();
     if (found) {
         x = geo->x();
@@ -246,36 +246,36 @@ QString WindowTrackingAdaptor::getRestoreForWindow(const QString& windowId, cons
     if (!found || w <= 0 || h <= 0) {
         obj[QLatin1String("reason")] = QLatin1String("not_snapped");
         Q_EMIT navigationFeedback(false, QStringLiteral("restore"), QStringLiteral("not_snapped"), QString(), QString(),
-                                  screenName);
+                                  screenId);
     } else {
-        Q_EMIT navigationFeedback(true, QStringLiteral("restore"), QString(), QString(), QString(), screenName);
+        Q_EMIT navigationFeedback(true, QStringLiteral("restore"), QString(), QString(), QString(), screenId);
     }
     return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
 }
 
-QString WindowTrackingAdaptor::getCycleTargetForWindow(const QString& windowId, bool forward, const QString& screenName)
+QString WindowTrackingAdaptor::getCycleTargetForWindow(const QString& windowId, bool forward, const QString& screenId)
 {
     if (!validateWindowId(windowId, QStringLiteral("getCycleTargetForWindow"))) {
         return QString::fromUtf8(
-            QJsonDocument(cycleResult(false, QStringLiteral("invalid_window"), QString(), QString(), screenName))
+            QJsonDocument(cycleResult(false, QStringLiteral("invalid_window"), QString(), QString(), screenId))
                 .toJson(QJsonDocument::Compact));
     }
 
     QString currentZoneId = m_service->zoneForWindow(windowId);
     if (currentZoneId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("not_snapped"), QString(), QString(),
-                                  screenName);
+                                  screenId);
         return QString::fromUtf8(
-            QJsonDocument(cycleResult(false, QStringLiteral("not_snapped"), QString(), QString(), screenName))
+            QJsonDocument(cycleResult(false, QStringLiteral("not_snapped"), QString(), QString(), screenId))
                 .toJson(QJsonDocument::Compact));
     }
 
     QStringList windowsInZone = m_service->windowsInZone(currentZoneId);
     if (windowsInZone.size() < 2) {
         Q_EMIT navigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("single_window"), currentZoneId,
-                                  currentZoneId, screenName);
+                                  currentZoneId, screenId);
         return QString::fromUtf8(
-            QJsonDocument(cycleResult(false, QStringLiteral("single_window"), QString(), currentZoneId, screenName))
+            QJsonDocument(cycleResult(false, QStringLiteral("single_window"), QString(), currentZoneId, screenId))
                 .toJson(QJsonDocument::Compact));
     }
 
@@ -293,8 +293,8 @@ QString WindowTrackingAdaptor::getCycleTargetForWindow(const QString& windowId, 
                             : (currentIndex - 1 + windowsInZone.size()) % windowsInZone.size();
     QString targetWindowId = windowsInZone.at(nextIndex);
 
-    Q_EMIT navigationFeedback(true, QStringLiteral("cycle"), QString(), currentZoneId, currentZoneId, screenName);
-    return QString::fromUtf8(QJsonDocument(cycleResult(true, QString(), targetWindowId, currentZoneId, screenName))
+    Q_EMIT navigationFeedback(true, QStringLiteral("cycle"), QString(), currentZoneId, currentZoneId, screenId);
+    return QString::fromUtf8(QJsonDocument(cycleResult(true, QString(), targetWindowId, currentZoneId, screenId))
                                  .toJson(QJsonDocument::Compact));
 }
 

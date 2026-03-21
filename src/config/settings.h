@@ -408,8 +408,8 @@ public:
     {
         return m_disabledMonitors;
     }
-    void setDisabledMonitors(const QStringList& screenNames) override;
-    bool isMonitorDisabled(const QString& screenName) const override;
+    void setDisabledMonitors(const QStringList& screenIdOrNames) override;
+    bool isMonitorDisabled(const QString& screenIdOrName) const override;
 
     bool showZoneNumbers() const override
     {
@@ -770,25 +770,25 @@ public:
     void setZoneSelectorMaxRows(int rows) override;
 
     // Per-screen zone selector config (override > global fallback)
-    ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& screenName) const override;
-    Q_INVOKABLE QVariantMap getPerScreenZoneSelectorSettings(const QString& screenName) const;
-    Q_INVOKABLE void setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key,
+    ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& screenIdOrName) const override;
+    Q_INVOKABLE QVariantMap getPerScreenZoneSelectorSettings(const QString& screenIdOrName) const;
+    Q_INVOKABLE void setPerScreenZoneSelectorSetting(const QString& screenIdOrName, const QString& key,
                                                      const QVariant& value);
-    Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenName);
-    Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenIdOrName);
+    Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenIdOrName) const;
     Q_INVOKABLE QStringList screensWithZoneSelectorOverrides() const;
 
     // Per-screen autotile config (override > global fallback)
-    Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenName) const;
-    Q_INVOKABLE void setPerScreenAutotileSetting(const QString& screenName, const QString& key, const QVariant& value);
-    Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenName);
-    Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenName) const;
+    Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenIdOrName) const;
+    Q_INVOKABLE void setPerScreenAutotileSetting(const QString& screenIdOrName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenIdOrName);
+    Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenIdOrName) const;
 
     // Per-screen snapping config (override > global fallback)
-    Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenName) const override;
-    Q_INVOKABLE void setPerScreenSnappingSetting(const QString& screenName, const QString& key, const QVariant& value);
-    Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenName);
-    Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenName) const;
+    Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenIdOrName) const override;
+    Q_INVOKABLE void setPerScreenSnappingSetting(const QString& screenIdOrName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenIdOrName);
+    Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenIdOrName) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotiling Settings (ISettings interface)
@@ -1052,10 +1052,10 @@ public:
         return m_lockedScreens;
     }
     void setLockedScreens(const QStringList& screens) override;
-    bool isScreenLocked(const QString& screenName) const override;
-    void setScreenLocked(const QString& screenName, bool locked) override;
-    bool isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity) const override;
-    void setContextLocked(const QString& screenName, int virtualDesktop, const QString& activity, bool locked) override;
+    bool isScreenLocked(const QString& screenIdOrName) const override;
+    void setScreenLocked(const QString& screenIdOrName, bool locked) override;
+    bool isContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity) const override;
+    void setContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity, bool locked) override;
 
     // Shader Effects
     bool enableShaderEffects() const override
@@ -1514,13 +1514,13 @@ private:
     bool m_zoneSelectorPreviewLockAspect = true;
     int m_zoneSelectorGridColumns = 5; // grid columns (Manual mode)
 
-    // Per-screen zone selector overrides (screenName -> settings map)
+    // Per-screen zone selector overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenZoneSelectorSettings;
 
-    // Per-screen autotile overrides (screenName -> settings map)
+    // Per-screen autotile overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenAutotileSettings;
 
-    // Per-screen snapping overrides (screenName -> settings map)
+    // Per-screen snapping overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenSnappingSettings;
 
     // Autotiling Settings

@@ -104,11 +104,11 @@ inline void configureLayerShell(QQuickWindow* window, QScreen* screen, int layer
 
 // Resolve target screen from a screen name/ID string with fallback to primary.
 // Replaces 4 occurrences of "find screen by name with fallback to primary screen".
-inline QScreen* resolveTargetScreen(const QString& screenName)
+inline QScreen* resolveTargetScreen(const QString& screenId)
 {
     QScreen* screen = nullptr;
-    if (!screenName.isEmpty()) {
-        screen = Utils::findScreenByIdOrName(screenName);
+    if (!screenId.isEmpty()) {
+        screen = Utils::findScreenByIdOrName(screenId);
     }
     if (!screen) {
         screen = Utils::primaryScreen();

@@ -146,26 +146,26 @@ void ScreenManager::queryKdePlasmaPanels(bool fromDelayedRequery)
                         bool isFloating = !match.captured(5).isEmpty() && match.captured(5).toInt() != 0;
 
                         // Find the Qt screen matching this Plasma screen's geometry
-                        QString screenName;
+                        QString connectorName;
                         if (!match.captured(6).isEmpty()) {
                             QRect plasmaGeom(match.captured(6).toInt(), match.captured(7).toInt(),
                                              match.captured(8).toInt(), match.captured(9).toInt());
                             for (auto* qs : qtScreens) {
                                 if (qs->geometry() == plasmaGeom) {
-                                    screenName = qs->name();
+                                    connectorName = qs->name();
                                     break;
                                 }
                             }
                         }
 
-                        if (screenName.isEmpty()) {
+                        if (connectorName.isEmpty()) {
                             qCWarning(lcScreen) << "Could not match Plasma screen" << plasmaIndex
                                                 << "to any Qt screen by geometry - skipping panel";
                             continue;
                         }
 
                         qCDebug(lcScreen)
-                            << "Parsed panel screen=" << screenName << " (plasma idx" << plasmaIndex << ")"
+                            << "Parsed panel screen=" << connectorName << " (plasma idx" << plasmaIndex << ")"
                             << "location=" << location << "offset=" << totalOffset << "floating=" << isFloating
                             << "hiding=" << hiding;
 
@@ -177,11 +177,11 @@ void ScreenManager::queryKdePlasmaPanels(bool fromDelayedRequery)
                             totalOffset = 0;
                         }
 
-                        if (!m_panelOffsets.contains(screenName)) {
-                            m_panelOffsets.insert(screenName, ScreenPanelOffsets{});
+                        if (!m_panelOffsets.contains(connectorName)) {
+                            m_panelOffsets.insert(connectorName, ScreenPanelOffsets{});
                         }
 
-                        ScreenPanelOffsets& offsets = m_panelOffsets[screenName];
+                        ScreenPanelOffsets& offsets = m_panelOffsets[connectorName];
                         if (location == QLatin1String("top")) {
                             offsets.top = totalOffset;
                         } else if (location == QLatin1String("bottom")) {

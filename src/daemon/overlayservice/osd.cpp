@@ -59,15 +59,15 @@ void sizeAndCenterOsd(QQuickWindow* window, const QRect& screenGeom, qreal aspec
 } // namespace
 
 bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio,
-                                            const QString& screenName)
+                                            const QString& screenId)
 {
     // Resolve target screen: explicit name/ID > primary
     // Note: QCursor::pos() is NOT used here — it returns stale data for background
-    // daemons on Wayland. Callers should always pass screenName from KWin effect data.
+    // daemons on Wayland. Callers should always pass screenId from KWin effect data.
     // Accepts both connector name (e.g. "DP-2") and EDID-based screen ID (e.g. from currentScreenName).
     QScreen* screen = nullptr;
-    if (!screenName.isEmpty()) {
-        screen = Utils::findScreenByIdOrName(screenName);
+    if (!screenId.isEmpty()) {
+        screen = Utils::findScreenByIdOrName(screenId);
     }
     if (!screen) {
         screen = Utils::primaryScreen();
@@ -97,7 +97,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screen
     return true;
 }
 
-void OverlayService::showLayoutOsd(Layout* layout, const QString& screenName)
+void OverlayService::showLayoutOsd(Layout* layout, const QString& screenId)
 {
     if (!layout) {
         qCDebug(lcOverlay) << "No layout provided for OSD";
@@ -112,7 +112,7 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenName)
     QQuickWindow* window = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio, screenName)) {
+    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio, screenId)) {
         return;
     }
 
@@ -127,10 +127,10 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenName)
 
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
-    qCInfo(lcOverlay) << "Layout OSD: layout=" << layout->name() << "screen=" << screenName;
+    qCInfo(lcOverlay) << "Layout OSD: layout=" << layout->name() << "screen=" << screenId;
 }
 
-void OverlayService::showLockedLayoutOsd(Layout* layout, const QString& screenName)
+void OverlayService::showLockedLayoutOsd(Layout* layout, const QString& screenId)
 {
     if (!layout) {
         return;
@@ -139,7 +139,7 @@ void OverlayService::showLockedLayoutOsd(Layout* layout, const QString& screenNa
     QQuickWindow* window = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio, screenName)) {
+    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio, screenId)) {
         return;
     }
 
@@ -156,11 +156,11 @@ void OverlayService::showLockedLayoutOsd(Layout* layout, const QString& screenNa
 
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
-    qCInfo(lcOverlay) << "Locked OSD: layout=" << layout->name() << "screen=" << screenName;
+    qCInfo(lcOverlay) << "Locked OSD: layout=" << layout->name() << "screen=" << screenId;
 }
 
 void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
-                                   bool autoAssign, const QString& screenName)
+                                   bool autoAssign, const QString& screenId)
 {
     if (zones.isEmpty()) {
         qCDebug(lcOverlay) << "Skipping OSD for empty layout=" << name;
@@ -170,7 +170,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     QQuickWindow* window = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio, screenName)) {
+    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio, screenId)) {
         return;
     }
 
@@ -184,7 +184,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
 
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
-    qCInfo(lcOverlay) << "Layout OSD: name=" << name << "category=" << category << "screen=" << screenName;
+    qCInfo(lcOverlay) << "Layout OSD: name=" << name << "category=" << category << "screen=" << screenId;
 }
 
 void OverlayService::hideLayoutOsd()
@@ -259,10 +259,10 @@ void OverlayService::destroyLayoutOsdWindow(QScreen* screen)
 
 void OverlayService::showNavigationOsd(bool success, const QString& action, const QString& reason,
                                        const QString& sourceZoneId, const QString& targetZoneId,
-                                       const QString& screenName)
+                                       const QString& screenId)
 {
     qCDebug(lcOverlay) << "showNavigationOsd called: action=" << action << "reason=" << reason
-                       << "screen=" << screenName << "success=" << success;
+                       << "screen=" << screenId << "success=" << success;
 
     // Only show OSD for successful actions - failures (no windows, no zones, etc.) don't need feedback
     if (!success) {
@@ -283,7 +283,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
     // Show on the screen where the navigation occurred, fallback to primary
     // Accepts both connector name and EDID-based screen ID for flexibility
-    QScreen* screen = Utils::findScreenByIdOrName(screenName);
+    QScreen* screen = Utils::findScreenByIdOrName(screenId);
     if (!screen) {
         screen = Utils::primaryScreen();
     }

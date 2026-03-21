@@ -136,7 +136,7 @@ public:
     /**
      * @brief Set current screen name for per-screen visibility filtering
      */
-    void setCurrentScreenName(const QString& screenName);
+    void setCurrentScreenName(const QString& screenId);
 
     /**
      * @brief Set current virtual desktop for visibility filtering

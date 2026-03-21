@@ -46,15 +46,15 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 
     // Apply: mark auto-snapped, clear floating state, assign to zone(s)
     m_windowTracker->markAsAutoSnapped(windowId);
-    clearFloatingStateForSnap(windowId, result.screenName);
-    assignToZones(windowId, result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds, result.screenName);
+    clearFloatingStateForSnap(windowId, result.screenId);
+    assignToZones(windowId, result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds, result.screenId);
 
     // Emit geometry for KWin effect to apply
     Q_EMIT applyGeometryRequested(windowId, GeometryUtils::rectToJson(result.geometry), result.zoneId,
-                                  result.screenName);
+                                  result.screenId);
 
     qCInfo(lcCore) << "SnapEngine::windowOpened: snapped" << windowId << "to zone" << result.zoneId << "on"
-                   << result.screenName;
+                   << result.screenId;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

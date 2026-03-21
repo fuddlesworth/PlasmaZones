@@ -657,10 +657,10 @@ Q_SIGNALS:
 
     /**
      * @brief Emitted when the set of autotile screens changes
-     * @param screenNames List of screen names using autotile
+     * @param screenIds List of screen IDs using autotile
      * @param isDesktopSwitch True if caused by desktop/activity switch (not user toggle)
      */
-    void autotileScreensChanged(const QStringList& screenNames, bool isDesktopSwitch);
+    void autotileScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
 
     /**
      * @brief Emitted when the algorithm changes

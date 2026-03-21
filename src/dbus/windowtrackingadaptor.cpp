@@ -388,9 +388,9 @@ QStringList WindowTrackingAdaptor::getSnappedWindows()
     return m_service->snappedWindows();
 }
 
-QString WindowTrackingAdaptor::getEmptyZonesJson(const QString& screenName)
+QString WindowTrackingAdaptor::getEmptyZonesJson(const QString& screenId)
 {
-    return m_service->getEmptyZonesJson(screenName);
+    return m_service->getEmptyZonesJson(screenId);
 }
 
 QStringList WindowTrackingAdaptor::getMultiZoneForWindow(const QString& windowId)
@@ -424,7 +424,7 @@ QString WindowTrackingAdaptor::getZoneGeometry(const QString& zoneId)
     return getZoneGeometryForScreen(zoneId, QString());
 }
 
-QString WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, const QString& screenName)
+QString WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, const QString& screenId)
 {
     if (zoneId.isEmpty()) {
         qCDebug(lcDbusWindow) << "getZoneGeometryForScreen: empty zone ID";
@@ -432,7 +432,7 @@ QString WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, c
     }
 
     // Delegate to service
-    QRect geo = m_service->zoneGeometry(zoneId, screenName);
+    QRect geo = m_service->zoneGeometry(zoneId, screenId);
     if (!geo.isValid()) {
         qCDebug(lcDbusWindow) << "getZoneGeometryForScreen: invalid geometry for zone:" << zoneId;
         return QString();

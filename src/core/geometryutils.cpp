@@ -125,11 +125,11 @@ QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const 
     return geom;
 }
 
-int getEffectiveZonePadding(Layout* layout, ISettings* settings, const QString& screenName)
+int getEffectiveZonePadding(Layout* layout, ISettings* settings, const QString& screenId)
 {
     // Per-screen snapping override (highest priority)
-    if (!screenName.isEmpty() && settings) {
-        QVariantMap perScreen = settings->getPerScreenSnappingSettings(screenName);
+    if (!screenId.isEmpty() && settings) {
+        QVariantMap perScreen = settings->getPerScreenSnappingSettings(screenId);
         auto it = perScreen.constFind(QLatin1String("ZonePadding"));
         if (it != perScreen.constEnd()) {
             return it->toInt();
@@ -162,11 +162,11 @@ QRect snapToRect(const QRectF& rf)
     return QRect(left, top, std::max(0, right - left), std::max(0, bottom - top));
 }
 
-EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QString& screenName)
+EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QString& screenId)
 {
     // Per-screen snapping override (highest priority)
-    if (!screenName.isEmpty() && settings) {
-        QVariantMap perScreen = settings->getPerScreenSnappingSettings(screenName);
+    if (!screenId.isEmpty() && settings) {
+        QVariantMap perScreen = settings->getPerScreenSnappingSettings(screenId);
         if (!perScreen.isEmpty()) {
             auto usePerSideIt = perScreen.constFind(QLatin1String("UsePerSideOuterGap"));
             bool usePerSide = (usePerSideIt != perScreen.constEnd()) ? usePerSideIt->toBool() : false;

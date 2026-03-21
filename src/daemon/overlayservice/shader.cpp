@@ -245,7 +245,7 @@ void OverlayService::updateShaderUniforms()
     }
 }
 
-void OverlayService::showShaderPreview(int x, int y, int width, int height, const QString& screenName,
+void OverlayService::showShaderPreview(int x, int y, int width, int height, const QString& screenId,
                                        const QString& shaderId, const QString& shaderParamsJson,
                                        const QString& zonesJson)
 {
@@ -259,8 +259,8 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     }
 
     QScreen* screen = nullptr;
-    if (!screenName.isEmpty()) {
-        screen = Utils::findScreenByIdOrName(screenName);
+    if (!screenId.isEmpty()) {
+        screen = Utils::findScreenByIdOrName(screenId);
     }
     if (!screen) {
         screen = Utils::findScreenAtPosition(x, y);

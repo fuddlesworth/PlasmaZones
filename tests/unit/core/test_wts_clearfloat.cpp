@@ -873,7 +873,7 @@ private Q_SLOTS:
         if (result.found) {
             QCOMPARE(result.zoneIds, QStringList{m_zoneIds[0]});
             QVERIFY(result.geometry.isValid());
-            QVERIFY(!result.screenName.isEmpty());
+            QVERIFY(!result.screenId.isEmpty());
         }
         // In headless mode, found=false is acceptable — geometry requires QScreen
         Q_UNUSED(result);

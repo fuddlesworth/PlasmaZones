@@ -34,11 +34,11 @@ void WindowTrackingAdaptor::focusAdjacentZone(const QString& direction)
     }
 }
 
-void WindowTrackingAdaptor::pushToEmptyZone(const QString& screenName)
+void WindowTrackingAdaptor::pushToEmptyZone(const QString& screenId)
 {
-    qCInfo(lcDbusWindow) << "pushToEmptyZone: screen=" << screenName;
+    qCInfo(lcDbusWindow) << "pushToEmptyZone: screen=" << screenId;
     if (m_snapEngine) {
-        m_snapEngine->pushToEmptyZone(screenName);
+        m_snapEngine->pushToEmptyZone(screenId);
     }
 }
 
@@ -67,9 +67,9 @@ void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
     }
 }
 
-void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& screenName)
+void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& screenId)
 {
-    qCInfo(lcDbusWindow) << "snapToZoneByNumber: zoneNumber=" << zoneNumber << "screen=" << screenName;
+    qCInfo(lcDbusWindow) << "snapToZoneByNumber: zoneNumber=" << zoneNumber << "screen=" << screenId;
 
     if (zoneNumber < 1 || zoneNumber > 9) {
         qCWarning(lcDbusWindow) << "Invalid zone number:" << zoneNumber << "(must be 1-9)";
@@ -79,15 +79,15 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& sc
     }
 
     if (m_snapEngine) {
-        m_snapEngine->moveToPosition(QString(), zoneNumber, screenName);
+        m_snapEngine->moveToPosition(QString(), zoneNumber, screenId);
     }
 }
 
-void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise, const QString& screenName)
+void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise, const QString& screenId)
 {
-    qCDebug(lcDbusWindow) << "rotateWindowsInLayout: clockwise=" << clockwise << "screen=" << screenName;
+    qCDebug(lcDbusWindow) << "rotateWindowsInLayout: clockwise=" << clockwise << "screen=" << screenId;
     if (m_snapEngine) {
-        m_snapEngine->rotateWindows(clockwise, screenName);
+        m_snapEngine->rotateWindows(clockwise, screenId);
     }
 }
 
@@ -116,19 +116,19 @@ void WindowTrackingAdaptor::resnapCurrentAssignments(const QString& screenFilter
     }
 }
 
-void WindowTrackingAdaptor::resnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenName)
+void WindowTrackingAdaptor::resnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId)
 {
-    qCDebug(lcDbusWindow) << "resnapFromAutotileOrder: count=" << autotileWindowOrder.size() << "screen=" << screenName;
+    qCDebug(lcDbusWindow) << "resnapFromAutotileOrder: count=" << autotileWindowOrder.size() << "screen=" << screenId;
     if (m_snapEngine) {
-        m_snapEngine->resnapFromAutotileOrder(autotileWindowOrder, screenName);
+        m_snapEngine->resnapFromAutotileOrder(autotileWindowOrder, screenId);
     }
 }
 
-void WindowTrackingAdaptor::snapAllWindows(const QString& screenName)
+void WindowTrackingAdaptor::snapAllWindows(const QString& screenId)
 {
-    qCDebug(lcDbusWindow) << "snapAllWindows: screen=" << screenName;
+    qCDebug(lcDbusWindow) << "snapAllWindows: screen=" << screenId;
     if (m_snapEngine) {
-        m_snapEngine->snapAllWindows(screenName);
+        m_snapEngine->snapAllWindows(screenId);
     }
 }
 
@@ -139,22 +139,22 @@ void WindowTrackingAdaptor::requestMoveSpecificWindowToZone(const QString& windo
     Q_EMIT moveSpecificWindowToZoneRequested(windowId, zoneId, geometryJson);
 }
 
-QString WindowTrackingAdaptor::calculateSnapAllWindows(const QStringList& windowIds, const QString& screenName)
+QString WindowTrackingAdaptor::calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId)
 {
-    qCDebug(lcDbusWindow) << "calculateSnapAllWindows: count=" << windowIds.size() << "screen=" << screenName;
+    qCDebug(lcDbusWindow) << "calculateSnapAllWindows: count=" << windowIds.size() << "screen=" << screenId;
     if (m_snapEngine) {
-        return m_snapEngine->calculateSnapAllWindows(windowIds, screenName);
+        return m_snapEngine->calculateSnapAllWindows(windowIds, screenId);
     }
     return QStringLiteral("[]");
 }
 
 void WindowTrackingAdaptor::reportNavigationFeedback(bool success, const QString& action, const QString& reason,
                                                      const QString& sourceZoneId, const QString& targetZoneId,
-                                                     const QString& screenName)
+                                                     const QString& screenId)
 {
     qCDebug(lcDbusWindow) << "Navigation feedback: success=" << success << "action=" << action << "reason=" << reason
-                          << "sourceZone=" << sourceZoneId << "targetZone=" << targetZoneId << "screen=" << screenName;
-    Q_EMIT navigationFeedback(success, action, reason, sourceZoneId, targetZoneId, screenName);
+                          << "sourceZone=" << sourceZoneId << "targetZone=" << targetZoneId << "screen=" << screenId;
+    Q_EMIT navigationFeedback(success, action, reason, sourceZoneId, targetZoneId, screenId);
 }
 
 bool WindowTrackingAdaptor::validateDirection(const QString& direction, const QString& action)

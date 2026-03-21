@@ -140,17 +140,17 @@ void UnifiedLayoutController::syncFromExternalState(const QString& overrideId)
     }
 }
 
-void UnifiedLayoutController::setCurrentScreenName(const QString& screenName)
+void UnifiedLayoutController::setCurrentScreenName(const QString& screenId)
 {
-    if (m_currentScreenName != screenName) {
-        m_currentScreenName = screenName;
+    if (m_currentScreenName != screenId) {
+        m_currentScreenName = screenId;
         m_cacheValid = false;
 
         // Sync current layout ID to what's actually assigned to this screen
         // (not the global active layout, which may belong to a different screen)
-        if (m_layoutManager && !screenName.isEmpty()) {
+        if (m_layoutManager && !screenId.isEmpty()) {
             Layout* screenLayout =
-                m_layoutManager->layoutForScreen(screenName, m_currentVirtualDesktop, m_currentActivity);
+                m_layoutManager->layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
             if (screenLayout) {
                 m_currentLayoutId = screenLayout->id().toString();
             }

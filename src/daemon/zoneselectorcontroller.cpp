@@ -190,13 +190,13 @@ void ZoneSelectorController::setLayoutManager(LayoutManager* layoutManager)
         // Only update when the popup is actually visible (during drag) to avoid
         // excessive updates during startup or layout switching when popup is hidden
         connect(m_layoutManager, &LayoutManager::layoutAssigned, this,
-                [this](const QString& screenName, int /*virtualDesktop*/, Layout* layout) {
+                [this](const QString& screenId, int /*virtualDesktop*/, Layout* layout) {
                     // Only update if:
                     // 1. We're currently dragging (popup may be visible)
                     // 2. This assignment is for our screen
                     // 3. Layout is valid
                     // This prevents cascading updates during startup
-                    if (m_isDragging && m_screen && Utils::screenIdentifier(m_screen) == screenName && layout) {
+                    if (m_isDragging && m_screen && Utils::screenIdentifier(m_screen) == screenId && layout) {
                         setActiveLayoutId(layout->id().toString());
                     }
                 });

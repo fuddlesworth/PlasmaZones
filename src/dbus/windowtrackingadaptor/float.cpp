@@ -60,7 +60,7 @@ void WindowTrackingAdaptor::clearPreFloatZone(const QString& windowId)
     }
 }
 
-QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, const QString& screenName)
+QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, const QString& screenId)
 {
     QJsonObject result;
     result[QLatin1String("found")] = false;
@@ -69,7 +69,7 @@ QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, 
         return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
     }
 
-    UnfloatResult unfloat = m_service->resolveUnfloatGeometry(windowId, screenName);
+    UnfloatResult unfloat = m_service->resolveUnfloatGeometry(windowId, screenId);
     if (!unfloat.found) {
         qCDebug(lcDbusWindow) << "calculateUnfloatRestore: no restore target for" << windowId;
         return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
@@ -85,7 +85,7 @@ QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, 
     result[QLatin1String("y")] = unfloat.geometry.y();
     result[QLatin1String("width")] = unfloat.geometry.width();
     result[QLatin1String("height")] = unfloat.geometry.height();
-    result[QLatin1String("screenName")] = unfloat.screenName;
+    result[QLatin1String("screenName")] = unfloat.screenId;
 
     qCDebug(lcDbusWindow) << "calculateUnfloatRestore for" << windowId << "-> zones:" << unfloat.zoneIds
                           << "geo:" << unfloat.geometry;

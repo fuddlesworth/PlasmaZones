@@ -301,7 +301,7 @@ private:
     std::function<void()> m_loadFn;
 
     // Last-focused screen (updated by windowFocused)
-    QString m_lastActiveScreenName;
+    QString m_lastActiveScreenId;
 };
 
 } // namespace PlasmaZones

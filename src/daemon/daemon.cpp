@@ -181,7 +181,7 @@ bool Daemon::init()
     // Only update if this is a DIFFERENT layout than the active one
     // (to avoid double-processing when both signals fire for the same layout)
     connect(m_layoutManager.get(), &LayoutManager::layoutAssigned, this,
-            [this](const QString& screenName, int /*virtualDesktop*/, Layout* layout) {
+            [this](const QString& screenId, int /*virtualDesktop*/, Layout* layout) {
                 if (!layout) {
                     return;
                 }
@@ -192,7 +192,7 @@ bool Daemon::init()
                 }
                 // This is a screen-specific layout different from the active one
                 // Only recalculate for the specific screen
-                QScreen* screen = m_screenManager->screenByName(screenName);
+                QScreen* screen = m_screenManager->screenByName(screenId);
                 if (screen) {
                     layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screen));
                 }

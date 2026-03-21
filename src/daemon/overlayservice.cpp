@@ -409,7 +409,7 @@ void OverlayService::handleScreenRemoved(QScreen* screen)
     m_navigationOsdCreationFailed.remove(screen);
 }
 
-QVariantList OverlayService::buildLayoutsList(const QString& screenName) const
+QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
 {
     // Determine filter per-screen: check this screen's assignment to decide
     // whether to show manual layouts, autotile algorithms, or both.
@@ -417,10 +417,10 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenName) const
     bool includeAutotile = m_includeAutotileLayouts;
     auto* layoutManager = dynamic_cast<LayoutManager*>(m_layoutManager);
     if (layoutManager) {
-        const QString screenId = Utils::isConnectorName(screenName) ? Utils::screenIdForName(screenName) : screenName;
-        if (!screenId.isEmpty()) {
+        const QString resolvedId = Utils::isConnectorName(screenId) ? Utils::screenIdForName(screenId) : screenId;
+        if (!resolvedId.isEmpty()) {
             const QString assignmentId =
-                layoutManager->assignmentIdForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
+                layoutManager->assignmentIdForScreen(resolvedId, m_currentVirtualDesktop, m_currentActivity);
             if (LayoutId::isAutotile(assignmentId)) {
                 includeManual = false;
                 includeAutotile = true;
@@ -430,7 +430,7 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenName) const
             }
         }
     }
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager, screenName, m_currentVirtualDesktop,
+    const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager, screenId, m_currentVirtualDesktop,
                                                              m_currentActivity, includeManual, includeAutotile);
     return LayoutUtils::toVariantList(entries);
 }
@@ -446,15 +446,15 @@ void OverlayService::setLayoutFilter(bool includeManual, bool includeAutotile)
     refreshVisibleWindows();
 }
 
-void OverlayService::setExcludedScreens(const QSet<QString>& screenNames)
+void OverlayService::setExcludedScreens(const QSet<QString>& screenIds)
 {
-    m_excludedScreens = screenNames;
+    m_excludedScreens = screenIds;
 }
 
-int OverlayService::visibleLayoutCount(const QString& screenName) const
+int OverlayService::visibleLayoutCount(const QString& screenId) const
 {
     const auto entries =
-        LayoutUtils::buildUnifiedLayoutList(m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity,
+        LayoutUtils::buildUnifiedLayoutList(m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity,
                                             m_includeManualLayouts, m_includeAutotileLayouts);
     return entries.size();
 }

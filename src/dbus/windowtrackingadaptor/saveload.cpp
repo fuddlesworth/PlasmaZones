@@ -84,8 +84,8 @@ void WindowTrackingAdaptor::saveState()
         for (const auto& entry : it.value()) {
             QJsonObject entryObj;
             entryObj[QLatin1String("zoneIds")] = toJsonArray(entry.zoneIds);
-            if (!entry.screenName.isEmpty()) {
-                entryObj[QLatin1String("screen")] = Utils::screenIdForName(entry.screenName);
+            if (!entry.screenId.isEmpty()) {
+                entryObj[QLatin1String("screen")] = Utils::screenIdForName(entry.screenId);
             }
             if (entry.virtualDesktop > 0) {
                 entryObj[QLatin1String("desktop")] = entry.virtualDesktop;
@@ -258,7 +258,7 @@ void WindowTrackingAdaptor::loadState()
                 QString appId = Utils::extractAppId(windowId);
                 PendingRestore pending;
                 pending.zoneIds = zoneIds;
-                pending.screenName = screen;
+                pending.screenId = screen;
                 pending.virtualDesktop = desktop;
                 activePending[appId].append(pending);
             }
@@ -297,7 +297,7 @@ void WindowTrackingAdaptor::loadState()
                     if (entry.zoneIds.isEmpty()) {
                         continue;
                     }
-                    entry.screenName = resolveScreen(entryObj[QLatin1String("screen")].toString());
+                    entry.screenId = resolveScreen(entryObj[QLatin1String("screen")].toString());
                     entry.virtualDesktop = entryObj[QLatin1String("desktop")].toInt(0);
                     entry.layoutId = entryObj[QLatin1String("layout")].toString();
                     for (const QJsonValue& v : entryObj[QLatin1String("zoneNumbers")].toArray()) {
@@ -326,18 +326,18 @@ void WindowTrackingAdaptor::loadState()
         struct Fingerprint
         {
             QStringList zoneIds;
-            QString screenName;
+            QString screenId;
             int virtualDesktop;
         };
         QList<Fingerprint> persistedBudget;
         for (const auto& e : pendingQueues.value(appId)) {
-            persistedBudget.append({e.zoneIds, e.screenName, e.virtualDesktop});
+            persistedBudget.append({e.zoneIds, e.screenId, e.virtualDesktop});
         }
         for (const auto& activeEntry : activeIt.value()) {
             bool covered = false;
             for (int i = 0; i < persistedBudget.size(); ++i) {
                 if (persistedBudget[i].zoneIds == activeEntry.zoneIds
-                    && persistedBudget[i].screenName == activeEntry.screenName
+                    && persistedBudget[i].screenId == activeEntry.screenId
                     && persistedBudget[i].virtualDesktop == activeEntry.virtualDesktop) {
                     persistedBudget.removeAt(i); // consume one match
                     covered = true;
@@ -430,10 +430,10 @@ void WindowTrackingAdaptor::loadState()
 
     // Load last used zone info
     QString lastZoneId = tracking.readEntry(QStringLiteral("LastUsedZoneId"), QString());
-    QString lastScreenName = tracking.readEntry(QStringLiteral("LastUsedScreenName"), QString());
+    QString lastScreenId = tracking.readEntry(QStringLiteral("LastUsedScreenName"), QString());
     QString lastZoneClass = tracking.readEntry(QStringLiteral("LastUsedZoneClass"), QString());
     int lastDesktop = tracking.readEntry(QStringLiteral("LastUsedDesktop"), 0);
-    m_service->setLastUsedZone(lastZoneId, lastScreenName, lastZoneClass, lastDesktop);
+    m_service->setLastUsedZone(lastZoneId, lastScreenId, lastZoneClass, lastDesktop);
 
     // Float state is ephemeral (session-only) — skip loading.
     // Any stale FloatingWindows entries from older versions are cleaned up in saveState().

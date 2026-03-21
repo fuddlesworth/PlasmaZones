@@ -214,7 +214,7 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
     return list;
 }
 
-QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenName,
+QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenId,
                                                    int virtualDesktop, const QString& activity, bool includeManual,
                                                    bool includeAutotile)
 {
@@ -225,9 +225,9 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
     }
 
     // Translate connector name to screen ID for allowedScreens matching
-    QString screenId;
-    if (!screenName.isEmpty()) {
-        screenId = Utils::isConnectorName(screenName) ? Utils::screenIdForName(screenName) : screenName;
+    QString resolvedScreenId;
+    if (!screenId.isEmpty()) {
+        resolvedScreenId = Utils::isConnectorName(screenId) ? Utils::screenIdForName(screenId) : screenId;
     }
 
     // Track the active layout so we can guarantee it appears in the list
@@ -249,8 +249,8 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
             }
 
             // Tier 2: screen filter (unless active)
-            if (!isActive && !screenId.isEmpty() && !layout->allowedScreens().isEmpty()) {
-                if (!layout->allowedScreens().contains(screenId)) {
+            if (!isActive && !resolvedScreenId.isEmpty() && !layout->allowedScreens().isEmpty()) {
+                if (!layout->allowedScreens().contains(resolvedScreenId)) {
                     continue;
                 }
             }

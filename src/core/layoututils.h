@@ -102,14 +102,14 @@ PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutMan
  * - Not allowed on the given screen/desktop/activity (if allow lists are non-empty)
  *
  * @param layoutManager Layout manager interface
- * @param screenName Current screen name (empty = skip screen filter)
+ * @param screenId Current screen ID (empty = skip screen filter)
  * @param virtualDesktop Current virtual desktop (0 = skip desktop filter)
  * @param activity Current activity ID (empty = skip activity filter)
  * @param includeManual Include manual zone-based layouts (default: true)
  * @param includeAutotile Include dynamic autotile algorithm layouts (default: true)
  */
 PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry>
-buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenName, int virtualDesktop,
+buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenId, int virtualDesktop,
                        const QString& activity, bool includeManual = true, bool includeAutotile = true);
 
 /**

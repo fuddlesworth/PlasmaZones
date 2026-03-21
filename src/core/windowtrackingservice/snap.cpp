@@ -87,7 +87,7 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
         result.geometry = geo;
         result.zoneId = zoneId;
         result.zoneIds = QStringList{zoneId};
-        result.screenName = effectiveScreen;
+        result.screenId = effectiveScreen;
         return result;
     };
 
@@ -170,8 +170,8 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     }
 
     // Don't cross-screen snap
-    if (!windowScreenId.isEmpty() && !m_lastUsedScreenName.isEmpty()
-        && !Utils::screensMatch(windowScreenId, m_lastUsedScreenName)) {
+    if (!windowScreenId.isEmpty() && !m_lastUsedScreenId.isEmpty()
+        && !Utils::screensMatch(windowScreenId, m_lastUsedScreenId)) {
         return SnapResult::noSnap();
     }
 
@@ -184,7 +184,7 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     }
 
     // Calculate geometry
-    QRect geo = zoneGeometry(m_lastUsedZoneId, m_lastUsedScreenName);
+    QRect geo = zoneGeometry(m_lastUsedZoneId, m_lastUsedScreenId);
     if (!geo.isValid()) {
         return SnapResult::noSnap();
     }
@@ -194,7 +194,7 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     result.geometry = geo;
     result.zoneId = m_lastUsedZoneId;
     result.zoneIds = QStringList{m_lastUsedZoneId};
-    result.screenName = m_lastUsedScreenName;
+    result.screenId = m_lastUsedScreenId;
     return result;
 }
 
@@ -295,7 +295,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
         return SnapResult::noSnap();
     }
     QString zoneId = zoneIds.first(); // Primary zone for validation
-    QString savedScreen = entry.screenName.isEmpty() ? screenId : entry.screenName;
+    QString savedScreen = entry.screenId.isEmpty() ? screenId : entry.screenId;
 
     // BUG FIX: Verify layout context matches before restoring
     // Without this check, windows would restore even if the current layout is different
@@ -392,7 +392,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
     result.geometry = geo;
     result.zoneId = zoneId;
     result.zoneIds = zoneIds;
-    result.screenName = savedScreen;
+    result.screenId = savedScreen;
     return result;
 }
 
@@ -407,11 +407,11 @@ void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUs
     }
 }
 
-void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QString& screenName,
+void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QString& screenId,
                                                const QString& windowClass, int virtualDesktop)
 {
     m_lastUsedZoneId = zoneId;
-    m_lastUsedScreenName = screenName;
+    m_lastUsedScreenId = screenId;
     m_lastUsedZoneClass = windowClass;
     m_lastUsedDesktop = virtualDesktop;
     scheduleSaveState();

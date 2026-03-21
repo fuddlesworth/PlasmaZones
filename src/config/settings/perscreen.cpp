@@ -227,8 +227,8 @@ void loadPerScreenGroup(KSharedConfigPtr config, const QStringList& allGroups, c
     for (const QString& groupName : allGroups) {
         if (!groupName.startsWith(prefix))
             continue;
-        QString screenName = groupName.mid(prefix.size());
-        if (screenName.isEmpty())
+        QString screenIdOrName = groupName.mid(prefix.size());
+        if (screenIdOrName.isEmpty())
             continue;
 
         KConfigGroup screenGroup = config->group(groupName);
@@ -245,7 +245,7 @@ void loadPerScreenGroup(KSharedConfigPtr config, const QStringList& allGroups, c
             }
         }
         if (!overrides.isEmpty()) {
-            dest[screenName] = overrides;
+            dest[screenIdOrName] = overrides;
         }
     }
     migrateConnectorNames(dest);
@@ -275,22 +275,22 @@ void Settings::saveAllPerScreenOverrides(KSharedConfigPtr config)
 
 template<typename T>
 static typename QHash<QString, T>::const_iterator findPerScreenEntry(const QHash<QString, T>& hash,
-                                                                     const QString& screenName)
+                                                                     const QString& screenIdOrName)
 {
-    auto it = hash.constFind(screenName);
+    auto it = hash.constFind(screenIdOrName);
     if (it != hash.constEnd()) {
         return it;
     }
-    if (Utils::isConnectorName(screenName)) {
-        QString resolved = Utils::screenIdForName(screenName);
-        if (resolved != screenName) {
+    if (Utils::isConnectorName(screenIdOrName)) {
+        QString resolved = Utils::screenIdForName(screenIdOrName);
+        if (resolved != screenIdOrName) {
             it = hash.constFind(resolved);
             if (it != hash.constEnd())
                 return it;
         }
     }
-    QString connector = Utils::screenNameForId(screenName);
-    if (!connector.isEmpty() && connector != screenName) {
+    QString connector = Utils::screenNameForId(screenIdOrName);
+    if (!connector.isEmpty() && connector != screenIdOrName) {
         it = hash.constFind(connector);
         if (it != hash.constEnd())
             return it;
@@ -299,25 +299,25 @@ static typename QHash<QString, T>::const_iterator findPerScreenEntry(const QHash
 }
 
 template<typename T>
-static bool removePerScreenEntry(QHash<QString, T>& hash, const QString& screenName)
+static bool removePerScreenEntry(QHash<QString, T>& hash, const QString& screenIdOrName)
 {
-    if (hash.remove(screenName)) {
+    if (hash.remove(screenIdOrName)) {
         return true;
     }
-    if (Utils::isConnectorName(screenName)) {
-        QString resolved = Utils::screenIdForName(screenName);
-        if (resolved != screenName && hash.remove(resolved))
+    if (Utils::isConnectorName(screenIdOrName)) {
+        QString resolved = Utils::screenIdForName(screenIdOrName);
+        if (resolved != screenIdOrName && hash.remove(resolved))
             return true;
     }
-    QString connector = Utils::screenNameForId(screenName);
-    if (!connector.isEmpty() && connector != screenName && hash.remove(connector))
+    QString connector = Utils::screenNameForId(screenIdOrName);
+    if (!connector.isEmpty() && connector != screenIdOrName && hash.remove(connector))
         return true;
     return false;
 }
 
 // ── Per-Screen Zone Selector Config ──────────────────────────────────────────
 
-ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenName) const
+ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenIdOrName) const
 {
     ZoneSelectorConfig config = {static_cast<int>(m_zoneSelectorPosition),
                                  static_cast<int>(m_zoneSelectorLayoutMode),
@@ -329,7 +329,7 @@ ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenNam
                                  m_zoneSelectorGridColumns,
                                  m_zoneSelectorTriggerDistance};
 
-    auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenName);
+    auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName);
     if (it == m_perScreenZoneSelectorSettings.constEnd()) {
         return config;
     }
@@ -338,15 +338,15 @@ ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenNam
     return config;
 }
 
-QVariantMap Settings::getPerScreenZoneSelectorSettings(const QString& screenName) const
+QVariantMap Settings::getPerScreenZoneSelectorSettings(const QString& screenIdOrName) const
 {
-    auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenName);
+    auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName);
     return (it != m_perScreenZoneSelectorSettings.constEnd()) ? it.value() : QVariantMap();
 }
 
-void Settings::setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key, const QVariant& value)
+void Settings::setPerScreenZoneSelectorSetting(const QString& screenIdOrName, const QString& key, const QVariant& value)
 {
-    if (screenName.isEmpty() || key.isEmpty()) {
+    if (screenIdOrName.isEmpty() || key.isEmpty()) {
         return;
     }
 
@@ -356,7 +356,7 @@ void Settings::setPerScreenZoneSelectorSetting(const QString& screenName, const 
         return;
     }
 
-    QVariantMap& screenSettings = m_perScreenZoneSelectorSettings[screenName];
+    QVariantMap& screenSettings = m_perScreenZoneSelectorSettings[screenIdOrName];
     if (screenSettings.value(key) == validated) {
         return;
     }
@@ -365,17 +365,17 @@ void Settings::setPerScreenZoneSelectorSetting(const QString& screenName, const 
     Q_EMIT settingsChanged();
 }
 
-void Settings::clearPerScreenZoneSelectorSettings(const QString& screenName)
+void Settings::clearPerScreenZoneSelectorSettings(const QString& screenIdOrName)
 {
-    if (removePerScreenEntry(m_perScreenZoneSelectorSettings, screenName)) {
+    if (removePerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName)) {
         Q_EMIT perScreenZoneSelectorSettingsChanged();
         Q_EMIT settingsChanged();
     }
 }
 
-bool Settings::hasPerScreenZoneSelectorSettings(const QString& screenName) const
+bool Settings::hasPerScreenZoneSelectorSettings(const QString& screenIdOrName) const
 {
-    return findPerScreenEntry(m_perScreenZoneSelectorSettings, screenName)
+    return findPerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName)
         != m_perScreenZoneSelectorSettings.constEnd();
 }
 
@@ -386,15 +386,15 @@ QStringList Settings::screensWithZoneSelectorOverrides() const
 
 // ── Per-Screen Autotile Config ───────────────────────────────────────────────
 
-QVariantMap Settings::getPerScreenAutotileSettings(const QString& screenName) const
+QVariantMap Settings::getPerScreenAutotileSettings(const QString& screenIdOrName) const
 {
-    auto it = findPerScreenEntry(m_perScreenAutotileSettings, screenName);
+    auto it = findPerScreenEntry(m_perScreenAutotileSettings, screenIdOrName);
     return (it != m_perScreenAutotileSettings.constEnd()) ? it.value() : QVariantMap();
 }
 
-void Settings::setPerScreenAutotileSetting(const QString& screenName, const QString& key, const QVariant& value)
+void Settings::setPerScreenAutotileSetting(const QString& screenIdOrName, const QString& key, const QVariant& value)
 {
-    if (screenName.isEmpty() || key.isEmpty()) {
+    if (screenIdOrName.isEmpty() || key.isEmpty()) {
         return;
     }
 
@@ -404,7 +404,7 @@ void Settings::setPerScreenAutotileSetting(const QString& screenName, const QStr
         return;
     }
 
-    QVariantMap& screenSettings = m_perScreenAutotileSettings[screenName];
+    QVariantMap& screenSettings = m_perScreenAutotileSettings[screenIdOrName];
     if (screenSettings.value(key) == validated) {
         return;
     }
@@ -413,30 +413,30 @@ void Settings::setPerScreenAutotileSetting(const QString& screenName, const QStr
     Q_EMIT settingsChanged();
 }
 
-void Settings::clearPerScreenAutotileSettings(const QString& screenName)
+void Settings::clearPerScreenAutotileSettings(const QString& screenIdOrName)
 {
-    if (removePerScreenEntry(m_perScreenAutotileSettings, screenName)) {
+    if (removePerScreenEntry(m_perScreenAutotileSettings, screenIdOrName)) {
         Q_EMIT perScreenAutotileSettingsChanged();
         Q_EMIT settingsChanged();
     }
 }
 
-bool Settings::hasPerScreenAutotileSettings(const QString& screenName) const
+bool Settings::hasPerScreenAutotileSettings(const QString& screenIdOrName) const
 {
-    return findPerScreenEntry(m_perScreenAutotileSettings, screenName) != m_perScreenAutotileSettings.constEnd();
+    return findPerScreenEntry(m_perScreenAutotileSettings, screenIdOrName) != m_perScreenAutotileSettings.constEnd();
 }
 
 // ── Per-Screen Snapping Config ───────────────────────────────────────────────
 
-QVariantMap Settings::getPerScreenSnappingSettings(const QString& screenName) const
+QVariantMap Settings::getPerScreenSnappingSettings(const QString& screenIdOrName) const
 {
-    auto it = findPerScreenEntry(m_perScreenSnappingSettings, screenName);
+    auto it = findPerScreenEntry(m_perScreenSnappingSettings, screenIdOrName);
     return (it != m_perScreenSnappingSettings.constEnd()) ? it.value() : QVariantMap();
 }
 
-void Settings::setPerScreenSnappingSetting(const QString& screenName, const QString& key, const QVariant& value)
+void Settings::setPerScreenSnappingSetting(const QString& screenIdOrName, const QString& key, const QVariant& value)
 {
-    if (screenName.isEmpty() || key.isEmpty()) {
+    if (screenIdOrName.isEmpty() || key.isEmpty()) {
         return;
     }
 
@@ -446,7 +446,7 @@ void Settings::setPerScreenSnappingSetting(const QString& screenName, const QStr
         return;
     }
 
-    QVariantMap& screenSettings = m_perScreenSnappingSettings[screenName];
+    QVariantMap& screenSettings = m_perScreenSnappingSettings[screenIdOrName];
     if (screenSettings.value(key) == validated) {
         return;
     }
@@ -455,17 +455,17 @@ void Settings::setPerScreenSnappingSetting(const QString& screenName, const QStr
     Q_EMIT settingsChanged();
 }
 
-void Settings::clearPerScreenSnappingSettings(const QString& screenName)
+void Settings::clearPerScreenSnappingSettings(const QString& screenIdOrName)
 {
-    if (removePerScreenEntry(m_perScreenSnappingSettings, screenName)) {
+    if (removePerScreenEntry(m_perScreenSnappingSettings, screenIdOrName)) {
         Q_EMIT perScreenSnappingSettingsChanged();
         Q_EMIT settingsChanged();
     }
 }
 
-bool Settings::hasPerScreenSnappingSettings(const QString& screenName) const
+bool Settings::hasPerScreenSnappingSettings(const QString& screenIdOrName) const
 {
-    return findPerScreenEntry(m_perScreenSnappingSettings, screenName) != m_perScreenSnappingSettings.constEnd();
+    return findPerScreenEntry(m_perScreenSnappingSettings, screenIdOrName) != m_perScreenSnappingSettings.constEnd();
 }
 
 } // namespace PlasmaZones

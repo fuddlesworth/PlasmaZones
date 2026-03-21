@@ -225,9 +225,9 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
     }
 
     QRect screenGeom = screen->geometry();
-    QString screenName = screen->name();
+    QString connectorName = screen->name();
 
-    qCDebug(lcScreen) << "calculateAvailableGeometry: screen=" << screenName << "geometry=" << screenGeom;
+    qCDebug(lcScreen) << "calculateAvailableGeometry: screen=" << connectorName << "geometry=" << screenGeom;
 
     int topOffset = 0;
     int bottomOffset = 0;
@@ -236,8 +236,8 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
     bool hasDbusData = false;
 
     // Look up panel offsets by screen name (populated by D-Bus query with geometry matching)
-    if (m_panelOffsets.contains(screenName)) {
-        const ScreenPanelOffsets& offsets = m_panelOffsets.value(screenName);
+    if (m_panelOffsets.contains(connectorName)) {
+        const ScreenPanelOffsets& offsets = m_panelOffsets.value(connectorName);
         topOffset = offsets.top;
         bottomOffset = offsets.bottom;
         leftOffset = offsets.left;
@@ -294,7 +294,7 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
             // D-Bus query succeeded but found no panels on this screen,
             // yet sensor reports less than full screen. The sensor likely
             // landed on a different output (Wayland screen binding issue).
-            qCDebug(lcScreen) << "Sensor for" << screenName << "reports" << sensorGeom.size()
+            qCDebug(lcScreen) << "Sensor for" << connectorName << "reports" << sensorGeom.size()
                               << "but D-Bus found no panels on this screen."
                               << "Using full screen geometry instead.";
             finalWidth = screenGeom.width();

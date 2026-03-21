@@ -163,13 +163,13 @@ void WindowTrackingAdaptor::applySnapResult(const SnapResult& result, const QStr
     shouldSnap = true;
 
     m_service->markAsAutoSnapped(windowId);
-    clearFloatingStateForSnap(windowId, result.screenName);
+    clearFloatingStateForSnap(windowId, result.screenId);
 
     int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     if (result.zoneIds.size() > 1) {
-        m_service->assignWindowToZones(windowId, result.zoneIds, result.screenName, currentDesktop);
+        m_service->assignWindowToZones(windowId, result.zoneIds, result.screenId, currentDesktop);
     } else {
-        m_service->assignWindowToZone(windowId, result.zoneId, result.screenName, currentDesktop);
+        m_service->assignWindowToZone(windowId, result.zoneId, result.screenId, currentDesktop);
     }
 }
 

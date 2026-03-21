@@ -490,42 +490,42 @@ void Daemon::connectLayoutSignals()
     // Connect zone selector manual layout selection (drop on zone)
     // Screen name comes directly from the zone selector window
     connect(m_overlayService.get(), &OverlayService::manualLayoutSelected, this,
-            [this](const QString& layoutId, const QString& screenName) {
+            [this](const QString& layoutId, const QString& screenId) {
                 if (!m_layoutManager) {
                     return;
                 }
                 // Check if snapping layout is locked
-                QString lockScreenId = screenName.isEmpty() ? QString() : Utils::screenIdForName(screenName);
+                QString lockScreenId = screenId.isEmpty() ? QString() : Utils::screenIdForName(screenId);
                 if (!lockScreenId.isEmpty() && isCurrentContextLockedForMode(lockScreenId, 0)) {
-                    showLockedPreviewOsd(screenName);
+                    showLockedPreviewOsd(screenId);
                     return;
                 }
                 Layout* layout = m_layoutManager->layoutById(QUuid::fromString(layoutId));
                 if (!layout) {
                     return;
                 }
-                const QString screenId = screenName.isEmpty() ? QString() : Utils::screenIdForName(screenName);
+                const QString resolvedScreenId = screenId.isEmpty() ? QString() : Utils::screenIdForName(screenId);
                 const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
                 const QString activity = (m_activityManager && ActivityManager::isAvailable())
                     ? m_activityManager->currentActivity()
                     : QString();
 
-                if (!screenId.isEmpty()) {
+                if (!resolvedScreenId.isEmpty()) {
                     // Write per-desktop assignment with empty activity so it applies
                     // regardless of which activity is active.
                     if (!activity.isEmpty()) {
-                        m_layoutManager->clearAssignment(screenId, desktop, activity);
+                        m_layoutManager->clearAssignment(resolvedScreenId, desktop, activity);
                     }
                     // assignLayout FIRST so resolveLayoutForScreen() sees the new
                     // assignment when onLayoutChanged() populates the resnap buffer.
-                    m_layoutManager->assignLayout(screenId, desktop, QString(), layout);
+                    m_layoutManager->assignLayout(resolvedScreenId, desktop, QString(), layout);
                 }
                 // Update global active layout — fires activeLayoutChanged →
                 // onLayoutChanged → resnap buffer population.
                 m_layoutManager->setActiveLayout(layout);
                 qCInfo(lcDaemon) << "Zone selector: manual layout selected, layout=" << layout->name()
-                                 << "screen=" << screenName;
-                m_overlayService->showLayoutOsd(layout, screenName);
+                                 << "screen=" << screenId;
+                m_overlayService->showLayoutOsd(layout, screenId);
                 // Resnap windows to the new layout's zones
                 if (m_snapEngine) {
                     m_suppressResnapOsd = 1;
@@ -539,11 +539,11 @@ void Daemon::connectOverlaySignals()
     // Connect zone selector autotile layout selection — route through UnifiedLayoutController
     // to avoid duplicate activation logic (the controller handles enable + algorithm + OSD)
     connect(m_overlayService.get(), &IOverlayService::autotileLayoutSelected, this,
-            [this](const QString& algorithmId, const QString& screenName) {
+            [this](const QString& algorithmId, const QString& screenId) {
                 // Check if tiling algorithm is locked
-                QString lockScreenId = screenName.isEmpty() ? QString() : Utils::screenIdForName(screenName);
+                QString lockScreenId = screenId.isEmpty() ? QString() : Utils::screenIdForName(screenId);
                 if (!lockScreenId.isEmpty() && isCurrentContextLockedForMode(lockScreenId, 1)) {
-                    showLockedPreviewOsd(screenName);
+                    showLockedPreviewOsd(screenId);
                     return;
                 }
                 if (m_unifiedLayoutController) {
@@ -579,7 +579,7 @@ void Daemon::connectOverlaySignals()
     connect(
         m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
         [this](bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
-               const QString& targetZoneId, const QString& screenName) {
+               const QString& targetZoneId, const QString& screenId) {
             // Suppress resnap OSD when triggered by a mode/layout change
             // (layout switch OSD already provides feedback)
             if (m_suppressResnapOsd > 0 && (action == QStringLiteral("resnap") || action == QStringLiteral("retile"))) {
@@ -587,7 +587,7 @@ void Daemon::connectOverlaySignals()
                 return;
             }
             if (m_settings && m_settings->showNavigationOsd()) {
-                m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenName);
+                m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenId);
             }
         });
 

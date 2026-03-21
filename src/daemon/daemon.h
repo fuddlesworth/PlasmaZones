@@ -103,9 +103,9 @@ public:
     Q_INVOKABLE bool isOverlayVisible() const;
 
     // OSD notifications
-    void showLayoutOsd(Layout* layout, const QString& screenName = QString());
-    void showLockedOsd(const QString& screenName);
-    void showLockedPreviewOsd(const QString& screenName);
+    void showLayoutOsd(Layout* layout, const QString& screenId = QString());
+    void showLockedOsd(const QString& screenId);
+    void showLockedPreviewOsd(const QString& screenId);
 
 private:
     /**
@@ -122,7 +122,7 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /** @brief Return the active IWindowEngine for a screen (autotile or snap) */
-    IWindowEngine* engineForScreen(const QString& screenName) const;
+    IWindowEngine* engineForScreen(const QString& screenId) const;
 
     void handleRotate(bool clockwise);
     void handleFloat();
@@ -306,8 +306,8 @@ private:
     // Desktop/activity resolution helpers (DRY — used by multiple handlers)
     int currentDesktop() const;
     QString currentActivity() const;
-    bool isCurrentContextLocked(const QString& screenName) const;
-    bool isCurrentContextLockedForMode(const QString& screenName, int mode) const;
+    bool isCurrentContextLocked(const QString& screenId) const;
+    bool isCurrentContextLockedForMode(const QString& screenId, int mode) const;
 
     /** @brief Prune m_lastAutotileOrders for stale desktops */
     void pruneContextMapsForDesktop(int maxDesktop);

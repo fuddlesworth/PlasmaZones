@@ -44,11 +44,11 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
 {
     // IWindowEngine::setWindowFloat has no screenId param, so resolve it:
     // 1. Try the window's tracked screen from WTS (most accurate)
-    // 2. Fall back to m_lastActiveScreenName (from last windowFocused)
+    // 2. Fall back to m_lastActiveScreenId (from last windowFocused)
     // 3. Fall back to empty (unfloatToZone/applyGeometryForFloat handle gracefully)
     QString screenId = m_windowTracker->screenAssignments().value(windowId);
     if (screenId.isEmpty()) {
-        screenId = m_lastActiveScreenName;
+        screenId = m_lastActiveScreenId;
     }
     if (screenId.isEmpty()) {
         qCDebug(lcCore) << "setWindowFloat: no screen context for" << windowId << "- using empty screenId";
@@ -82,10 +82,10 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
 
     m_windowTracker->setWindowFloating(windowId, false);
     m_windowTracker->clearPreFloatZone(windowId);
-    assignToZones(windowId, unfloat.zoneIds, unfloat.screenName);
+    assignToZones(windowId, unfloat.zoneIds, unfloat.screenId);
 
-    Q_EMIT windowFloatingChanged(windowId, false, unfloat.screenName);
-    Q_EMIT applyGeometryRequested(windowId, GeometryUtils::rectToJson(unfloat.geometry), QString(), unfloat.screenName);
+    Q_EMIT windowFloatingChanged(windowId, false, unfloat.screenId);
+    Q_EMIT applyGeometryRequested(windowId, GeometryUtils::rectToJson(unfloat.geometry), QString(), unfloat.screenId);
     return true;
 }
 

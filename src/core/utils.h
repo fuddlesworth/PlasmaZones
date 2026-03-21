@@ -20,16 +20,16 @@ namespace Utils {
 
 /**
  * @brief Find a screen by its connector name
- * @param screenName Connector name to find (e.g., "DP-2")
+ * @param connectorName Connector name to find (e.g., "DP-2")
  * @return Pointer to QScreen if found, nullptr otherwise
  */
-inline QScreen* findScreenByName(const QString& screenName)
+inline QScreen* findScreenByName(const QString& connectorName)
 {
-    if (screenName.isEmpty()) {
+    if (connectorName.isEmpty()) {
         return QGuiApplication::primaryScreen();
     }
     for (QScreen* screen : QGuiApplication::screens()) {
-        if (screen->name() == screenName) {
+        if (screen->name() == connectorName) {
             return screen;
         }
     }

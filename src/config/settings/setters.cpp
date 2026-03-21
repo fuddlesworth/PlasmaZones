@@ -88,22 +88,22 @@ SETTINGS_SETTER(bool, SnappingEnabled, m_snappingEnabled, snappingEnabledChanged
 SETTINGS_SETTER(bool, ShowZonesOnAllMonitors, m_showZonesOnAllMonitors, showZonesOnAllMonitorsChanged)
 SETTINGS_SETTER(const QStringList&, DisabledMonitors, m_disabledMonitors, disabledMonitorsChanged)
 
-bool Settings::isMonitorDisabled(const QString& screenName) const
+bool Settings::isMonitorDisabled(const QString& screenIdOrName) const
 {
-    if (m_disabledMonitors.contains(screenName)) {
+    if (m_disabledMonitors.contains(screenIdOrName)) {
         return true;
     }
-    // Backward compat: if screenName looks like a connector name (no colons),
+    // Backward compat: if screenIdOrName looks like a connector name (no colons),
     // resolve to stable EDID-based screen ID and check again
-    if (Utils::isConnectorName(screenName)) {
-        QString resolved = Utils::screenIdForName(screenName);
-        if (resolved != screenName && m_disabledMonitors.contains(resolved)) {
+    if (Utils::isConnectorName(screenIdOrName)) {
+        QString resolved = Utils::screenIdForName(screenIdOrName);
+        if (resolved != screenIdOrName && m_disabledMonitors.contains(resolved)) {
             return true;
         }
     } else {
-        // screenName is a screen ID — try reverse lookup to connector name
+        // screenIdOrName is a screen ID — try reverse lookup to connector name
         // (covers unmigrated entries from screens disconnected during load)
-        QString connector = Utils::screenNameForId(screenName);
+        QString connector = Utils::screenNameForId(screenIdOrName);
         if (!connector.isEmpty() && m_disabledMonitors.contains(connector)) {
             return true;
         }
@@ -111,28 +111,28 @@ bool Settings::isMonitorDisabled(const QString& screenName) const
     return false;
 }
 
-bool Settings::isScreenLocked(const QString& screenName) const
+bool Settings::isScreenLocked(const QString& screenIdOrName) const
 {
-    return isContextLocked(screenName, 0, QString());
+    return isContextLocked(screenIdOrName, 0, QString());
 }
 
-void Settings::setScreenLocked(const QString& screenName, bool locked)
+void Settings::setScreenLocked(const QString& screenIdOrName, bool locked)
 {
-    setContextLocked(screenName, 0, QString(), locked);
+    setContextLocked(screenIdOrName, 0, QString(), locked);
 }
 
-bool Settings::isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity) const
+bool Settings::isContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity) const
 {
     // Resolve both connector name and screen ID so locks match regardless
     // of which format was used to store vs query (same approach as isMonitorDisabled)
-    QStringList namesToCheck = {screenName};
-    if (Utils::isConnectorName(screenName)) {
-        QString resolved = Utils::screenIdForName(screenName);
-        if (resolved != screenName)
+    QStringList namesToCheck = {screenIdOrName};
+    if (Utils::isConnectorName(screenIdOrName)) {
+        QString resolved = Utils::screenIdForName(screenIdOrName);
+        if (resolved != screenIdOrName)
             namesToCheck.append(resolved);
     } else {
-        QString connector = Utils::screenNameForId(screenName);
-        if (!connector.isEmpty() && connector != screenName)
+        QString connector = Utils::screenNameForId(screenIdOrName);
+        if (!connector.isEmpty() && connector != screenIdOrName)
             namesToCheck.append(connector);
     }
 
@@ -157,9 +157,9 @@ bool Settings::isContextLocked(const QString& screenName, int virtualDesktop, co
     return false;
 }
 
-void Settings::setContextLocked(const QString& screenName, int virtualDesktop, const QString& activity, bool locked)
+void Settings::setContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity, bool locked)
 {
-    QString key = screenName;
+    QString key = screenIdOrName;
     if (virtualDesktop > 0) {
         key += QStringLiteral(":") + QString::number(virtualDesktop);
         if (!activity.isEmpty())

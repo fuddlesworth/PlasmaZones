@@ -811,7 +811,7 @@ private Q_SLOTS:
 
         WindowTrackingService::PendingRestore entry;
         entry.zoneIds = {oldZoneId};
-        entry.screenName = QString();
+        entry.screenId = QString();
         entry.layoutId = m_testLayout->id().toString();
         entry.zoneNumbers = {2};
 
@@ -857,7 +857,7 @@ private Q_SLOTS:
 
         WindowTrackingService::PendingRestore entry;
         entry.zoneIds = {m_zoneIds[0]};
-        entry.screenName = QStringLiteral("DP-1");
+        entry.screenId = QStringLiteral("DP-1");
         entry.virtualDesktop = 1;
         entry.layoutId = QUuid::createUuid().toString();
         entry.zoneNumbers = {1};
@@ -944,13 +944,13 @@ private Q_SLOTS:
 
         WindowTrackingService::PendingRestore entry;
         entry.zoneIds = {m_zoneIds[0]};
-        entry.screenName = QStringLiteral("HDMI-2");
+        entry.screenId = QStringLiteral("HDMI-2");
 
         QHash<QString, QList<WindowTrackingService::PendingRestore>> queues;
         queues[appId] = {entry};
         m_service->setPendingRestoreQueues(queues);
 
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().screenName, QStringLiteral("HDMI-2"));
+        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().screenId, QStringLiteral("HDMI-2"));
     }
 
     void testRestore_savedScreenDisconnected()
@@ -960,7 +960,7 @@ private Q_SLOTS:
 
         WindowTrackingService::PendingRestore entry;
         entry.zoneIds = {m_zoneIds[0]};
-        entry.screenName = QStringLiteral("DISCONNECTED-99");
+        entry.screenId = QStringLiteral("DISCONNECTED-99");
         entry.layoutId = m_testLayout->id().toString();
 
         QHash<QString, QList<WindowTrackingService::PendingRestore>> queues;

@@ -92,7 +92,7 @@ public:
      * multi-monitor mode. The overlay will not be shown or updated on
      * screens whose names appear in the set.
      */
-    void setExcludedScreens(const QSet<QString>& screenNames);
+    void setExcludedScreens(const QSet<QString>& screenIds);
 
     // Screen management
     void setupForScreen(QScreen* screen);
@@ -110,7 +110,7 @@ public:
     void updateMousePosition(int cursorX, int cursorY) override;
 
     // Filtered layout count for trigger edge computation
-    int visibleLayoutCount(const QString& screenName) const override;
+    int visibleLayoutCount(const QString& screenId) const override;
 
     // Selected zone from zone selector (IOverlayService interface)
     bool hasSelectedZone() const override;
@@ -126,11 +126,11 @@ public:
     void clearSelectedZone() override;
 
     // Layout OSD (visual preview when switching layouts)
-    // screenName: target screen (empty = screen under cursor, fallback to primary)
-    void showLayoutOsd(Layout* layout, const QString& screenName = QString());
+    // screenId: target screen (empty = screen under cursor, fallback to primary)
+    void showLayoutOsd(Layout* layout, const QString& screenId = QString());
     void showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
-                       bool autoAssign = false, const QString& screenName = QString());
-    void showLockedLayoutOsd(Layout* layout, const QString& screenName = QString());
+                       bool autoAssign = false, const QString& screenId = QString());
+    void showLockedLayoutOsd(Layout* layout, const QString& screenId = QString());
 
     /**
      * @brief Pre-create Layout OSD QML windows for all connected screens.
@@ -145,24 +145,24 @@ public:
     // Navigation OSD (feedback for keyboard navigation)
     void showNavigationOsd(bool success, const QString& action, const QString& reason,
                            const QString& sourceZoneId = QString(), const QString& targetZoneId = QString(),
-                           const QString& screenName = QString());
+                           const QString& screenId = QString());
 
     // Shader preview overlay (editor Shader Settings dialog - dedicated window avoids multi-pass clear issues)
-    void showShaderPreview(int x, int y, int width, int height, const QString& screenName, const QString& shaderId,
+    void showShaderPreview(int x, int y, int width, int height, const QString& screenId, const QString& shaderId,
                            const QString& shaderParamsJson, const QString& zonesJson) override;
     void updateShaderPreview(int x, int y, int width, int height, const QString& shaderParamsJson,
                              const QString& zonesJson) override;
     void hideShaderPreview() override;
 
     // Snap Assist overlay (window picker after snapping)
-    void showSnapAssist(const QString& screenName, const QString& emptyZonesJson,
+    void showSnapAssist(const QString& screenId, const QString& emptyZonesJson,
                         const QString& candidatesJson) override;
     void hideSnapAssist() override;
     bool isSnapAssistVisible() const override;
     void setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl) override;
 
     // Layout Picker overlay (interactive layout browser + resnap)
-    void showLayoutPicker(const QString& screenName = QString());
+    void showLayoutPicker(const QString& screenId = QString());
     bool isLayoutPickerVisible() const;
 
 protected:
@@ -192,7 +192,7 @@ private:
     void updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
                                       Layout* screenLayout);
     QVariantList buildZonesList(QScreen* screen) const;
-    QVariantList buildLayoutsList(const QString& screenName = QString()) const;
+    QVariantList buildLayoutsList(const QString& screenId = QString()) const;
     QVariantMap zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout = nullptr) const;
 
     /**
@@ -284,11 +284,11 @@ private:
      * @param window Output: the prepared window (nullptr on failure)
      * @param screenGeom Output: screen geometry
      * @param aspectRatio Output: calculated aspect ratio
-     * @param screenName Target screen (empty = primary)
+     * @param screenId Target screen (empty = primary)
      * @return true if window is ready, false on failure
      */
     bool prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio,
-                                const QString& screenName = QString());
+                                const QString& screenId = QString());
 
     /**
      * @brief Create a QML window from a resource URL

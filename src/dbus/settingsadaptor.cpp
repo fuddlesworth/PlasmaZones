@@ -633,7 +633,7 @@ QStringList SettingsAdaptor::getSettingKeys()
 // Per-Screen Settings D-Bus Methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void SettingsAdaptor::setPerScreenSetting(const QString& screenName, const QString& category, const QString& key,
+void SettingsAdaptor::setPerScreenSetting(const QString& screenId, const QString& category, const QString& key,
                                           const QDBusVariant& value)
 {
     auto* concrete = qobject_cast<Settings*>(m_settings);
@@ -642,11 +642,11 @@ void SettingsAdaptor::setPerScreenSetting(const QString& screenName, const QStri
         return;
     }
     if (category == QLatin1String("autotile")) {
-        concrete->setPerScreenAutotileSetting(screenName, key, value.variant());
+        concrete->setPerScreenAutotileSetting(screenId, key, value.variant());
     } else if (category == QLatin1String("snapping")) {
-        concrete->setPerScreenSnappingSetting(screenName, key, value.variant());
+        concrete->setPerScreenSnappingSetting(screenId, key, value.variant());
     } else if (category == QLatin1String("zoneSelector")) {
-        concrete->setPerScreenZoneSelectorSetting(screenName, key, value.variant());
+        concrete->setPerScreenZoneSelectorSetting(screenId, key, value.variant());
     } else {
         qCWarning(lcDbusSettings) << "setPerScreenSetting: unknown category" << category;
         return;
@@ -654,7 +654,7 @@ void SettingsAdaptor::setPerScreenSetting(const QString& screenName, const QStri
     concrete->save();
 }
 
-void SettingsAdaptor::clearPerScreenSettings(const QString& screenName, const QString& category)
+void SettingsAdaptor::clearPerScreenSettings(const QString& screenId, const QString& category)
 {
     auto* concrete = qobject_cast<Settings*>(m_settings);
     if (!concrete) {
@@ -662,11 +662,11 @@ void SettingsAdaptor::clearPerScreenSettings(const QString& screenName, const QS
         return;
     }
     if (category == QLatin1String("autotile")) {
-        concrete->clearPerScreenAutotileSettings(screenName);
+        concrete->clearPerScreenAutotileSettings(screenId);
     } else if (category == QLatin1String("snapping")) {
-        concrete->clearPerScreenSnappingSettings(screenName);
+        concrete->clearPerScreenSnappingSettings(screenId);
     } else if (category == QLatin1String("zoneSelector")) {
-        concrete->clearPerScreenZoneSelectorSettings(screenName);
+        concrete->clearPerScreenZoneSelectorSettings(screenId);
     } else {
         qCWarning(lcDbusSettings) << "clearPerScreenSettings: unknown category" << category;
         return;
@@ -674,7 +674,7 @@ void SettingsAdaptor::clearPerScreenSettings(const QString& screenName, const QS
     scheduleSave();
 }
 
-QVariantMap SettingsAdaptor::getPerScreenSettings(const QString& screenName, const QString& category)
+QVariantMap SettingsAdaptor::getPerScreenSettings(const QString& screenId, const QString& category)
 {
     auto* concrete = qobject_cast<Settings*>(m_settings);
     if (!concrete) {
@@ -682,11 +682,11 @@ QVariantMap SettingsAdaptor::getPerScreenSettings(const QString& screenName, con
         return {};
     }
     if (category == QLatin1String("autotile")) {
-        return concrete->getPerScreenAutotileSettings(screenName);
+        return concrete->getPerScreenAutotileSettings(screenId);
     } else if (category == QLatin1String("snapping")) {
-        return concrete->getPerScreenSnappingSettings(screenName);
+        return concrete->getPerScreenSnappingSettings(screenId);
     } else if (category == QLatin1String("zoneSelector")) {
-        return concrete->getPerScreenZoneSelectorSettings(screenName);
+        return concrete->getPerScreenZoneSelectorSettings(screenId);
     }
     qCWarning(lcDbusSettings) << "getPerScreenSettings: unknown category" << category;
     return {};

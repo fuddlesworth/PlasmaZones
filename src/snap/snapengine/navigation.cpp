@@ -22,7 +22,7 @@ void SnapEngine::moveInDirection(const QString& direction)
     if (direction.isEmpty()) {
         qCWarning(lcCore) << "SnapEngine::moveInDirection: empty direction";
         Q_EMIT navigationFeedback(false, QStringLiteral("move"), QStringLiteral("invalid_direction"), QString(),
-                                  QString(), m_lastActiveScreenName);
+                                  QString(), m_lastActiveScreenId);
         return;
     }
 
@@ -42,7 +42,7 @@ void SnapEngine::focusInDirection(const QString& direction, const QString& actio
     if (direction.isEmpty()) {
         qCWarning(lcCore) << "SnapEngine::focusInDirection: empty direction";
         Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("invalid_direction"), QString(),
-                                  QString(), m_lastActiveScreenName);
+                                  QString(), m_lastActiveScreenId);
         return;
     }
 
@@ -56,7 +56,7 @@ void SnapEngine::swapInDirection(const QString& direction, const QString& action
     if (direction.isEmpty()) {
         qCWarning(lcCore) << "SnapEngine::swapInDirection: empty direction";
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("invalid_direction"), QString(),
-                                  QString(), m_lastActiveScreenName);
+                                  QString(), m_lastActiveScreenId);
         return;
     }
 
@@ -116,12 +116,12 @@ void SnapEngine::resnapToNewLayout()
         if (!layout) {
             qCWarning(lcCore) << "resnapToNewLayout: no active layout";
             Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_active_layout"), QString(),
-                                      QString(), m_lastActiveScreenName);
+                                      QString(), m_lastActiveScreenId);
         } else {
             qCWarning(lcCore) << "resnapToNewLayout: buffer empty, activeLayout=" << layout->name()
                               << "zones=" << layout->zoneCount();
             Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"),
-                                      QString(), QString(), m_lastActiveScreenName);
+                                      QString(), QString(), m_lastActiveScreenId);
         }
         return;
     }
@@ -138,7 +138,7 @@ void SnapEngine::resnapCurrentAssignments(const QString& screenFilter)
     if (entries.isEmpty()) {
         qCDebug(lcCore) << "No windows to resnap from current assignments";
         Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"), QString(),
-                                  QString(), screenFilter.isEmpty() ? m_lastActiveScreenName : screenFilter);
+                                  QString(), screenFilter.isEmpty() ? m_lastActiveScreenId : screenFilter);
         return;
     }
 
