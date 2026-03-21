@@ -30,6 +30,8 @@ Flickable {
         readonly property var disabledMonitors: appSettings.disabledMonitors
 
         // Signals for sub-component Connections blocks
+        signal layoutsChanged()
+        signal screensChanged()
         signal screenAssignmentsChanged()
         signal tilingScreenAssignmentsChanged()
         signal tilingDesktopAssignmentsChanged()
@@ -121,11 +123,6 @@ Flickable {
         // App rules
         function getAppRulesForLayout(id) {
             return settingsController.getAppRulesForLayout(id);
-        }
-
-        function setAppRulesForLayout(id, rules) {
-            settingsController.setAppRulesForLayout(id, rules);
-            appRulesRefreshed();
         }
 
         function addAppRuleToLayout(id, pattern, zone, screen) {
@@ -226,12 +223,25 @@ Flickable {
         }
 
     }
-    // View mode: 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
 
+    // View mode: 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     readonly property int viewMode: appSettings.autotileEnabled ? root.settingsBridge.assignmentViewMode : 0
 
     contentHeight: mainCol.implicitHeight
     clip: true
+
+    // Forward settingsController signals to bridge for sub-component reactivity
+    Connections {
+        function onLayoutsChanged() {
+            root.settingsBridge.layoutsChanged();
+        }
+
+        function onScreensChanged() {
+            root.settingsBridge.screensChanged();
+        }
+
+        target: settingsController
+    }
 
     // Inline constants (from monolith Constants object)
     QtObject {
