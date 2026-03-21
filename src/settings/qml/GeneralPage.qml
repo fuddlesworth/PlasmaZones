@@ -106,33 +106,19 @@ Flickable {
         SettingsCard {
             headerText: i18n("Configuration")
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                Label {
-                    Layout.fillWidth: true
-                    text: i18n("Export or import your PlasmaZones settings. Import will create a backup of your current configuration.")
-                    wrapMode: Text.WordWrap
-                    opacity: 0.7
+            contentItem: Kirigami.FormLayout {
+                Button {
+                    Kirigami.FormData.label: i18n("Backup:")
+                    text: i18n("Export Settings")
+                    icon.name: "document-export"
+                    onClicked: exportConfigDialog.open()
                 }
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.topMargin: Kirigami.Units.smallSpacing
-                    spacing: Kirigami.Units.largeSpacing
-
-                    Button {
-                        text: i18n("Export Settings")
-                        icon.name: "document-export"
-                        onClicked: exportConfigDialog.open()
-                    }
-
-                    Button {
-                        text: i18n("Import Settings")
-                        icon.name: "document-import"
-                        onClicked: importConfigDialog.open()
-                    }
-
+                Button {
+                    Kirigami.FormData.label: i18n("Restore:")
+                    text: i18n("Import Settings")
+                    icon.name: "document-import"
+                    onClicked: importConfigDialog.open()
                 }
 
             }

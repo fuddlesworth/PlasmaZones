@@ -117,6 +117,11 @@ Flickable {
                 collapsible: true
 
                 contentItem: Kirigami.FormLayout {
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Snap Behavior")
+                    }
+
                     CheckBox {
                         Kirigami.FormData.label: i18n("Grid snapping:")
                         text: i18n("Enable grid snapping")
@@ -137,6 +142,7 @@ Flickable {
 
                     Kirigami.Separator {
                         Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Grid Intervals")
                     }
 
                     SettingsSlider {
@@ -173,6 +179,7 @@ Flickable {
 
                     Kirigami.Separator {
                         Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Modifier")
                     }
 
                     ModifierComboBox {
