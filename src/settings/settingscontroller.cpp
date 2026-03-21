@@ -16,6 +16,8 @@
 #include <QDBusMessage>
 #include <QFile>
 #include <QFontDatabase>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDesktopServices>
@@ -25,6 +27,7 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QSettings>
 #include <QTimer>
 #include <QUrl>
 
@@ -1501,6 +1504,48 @@ void SettingsController::resetEditorDefaults()
     setEditorSnapOverrideModifier(static_cast<int>(Qt::ShiftModifier));
     setFillOnDropEnabled(true);
     setFillOnDropModifier(static_cast<int>(Qt::ControlModifier));
+}
+
+QVariantMap SettingsController::loadWindowGeometry() const
+{
+    QSettings settings(QStringLiteral("plasmazones"), QStringLiteral("settings-window"));
+    QVariantMap geo;
+    int w = settings.value(QStringLiteral("width"), 0).toInt();
+    int h = settings.value(QStringLiteral("height"), 0).toInt();
+    int x = settings.value(QStringLiteral("x")).toInt();
+    int y = settings.value(QStringLiteral("y")).toInt();
+    bool hasPosition = settings.contains(QStringLiteral("x"));
+
+    // Validate against available screen geometry
+    if (w > 0 && h > 0) {
+        QRect virtualGeo;
+        for (auto* screen : QGuiApplication::screens())
+            virtualGeo = virtualGeo.united(screen->availableGeometry());
+        if (!virtualGeo.isEmpty()) {
+            w = qMin(w, virtualGeo.width());
+            h = qMin(h, virtualGeo.height());
+            // Check if center of saved window is on any screen
+            if (hasPosition && !virtualGeo.contains(QPoint(x + w / 2, y + h / 2))) {
+                hasPosition = false; // off-screen, let WM place it
+            }
+        }
+    }
+
+    geo[QStringLiteral("width")] = w;
+    geo[QStringLiteral("height")] = h;
+    geo[QStringLiteral("x")] = x;
+    geo[QStringLiteral("y")] = y;
+    geo[QStringLiteral("hasPosition")] = hasPosition;
+    return geo;
+}
+
+void SettingsController::saveWindowGeometry(int x, int y, int width, int height)
+{
+    QSettings settings(QStringLiteral("plasmazones"), QStringLiteral("settings-window"));
+    settings.setValue(QStringLiteral("x"), x);
+    settings.setValue(QStringLiteral("y"), y);
+    settings.setValue(QStringLiteral("width"), width);
+    settings.setValue(QStringLiteral("height"), height);
 }
 
 } // namespace PlasmaZones

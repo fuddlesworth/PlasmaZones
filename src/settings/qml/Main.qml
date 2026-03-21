@@ -29,6 +29,38 @@ ApplicationWindow {
     width: Kirigami.Units.gridUnit * 80
     height: Kirigami.Units.gridUnit * 48
     visible: true
+    Component.onCompleted: {
+        var geo = settingsController.loadWindowGeometry();
+        if (geo.width > 0 && geo.height > 0) {
+            window.width = geo.width;
+            window.height = geo.height;
+        }
+        if (geo.hasPosition) {
+            window.x = geo.x;
+            window.y = geo.y;
+        }
+    }
+    onClosing: {
+        settingsController.saveWindowGeometry(window.x, window.y, window.width, window.height);
+    }
+
+    Shortcut {
+        sequence: "Ctrl+PgUp"
+        onActivated: {
+            if (sidebar.currentIndex > 0)
+                settingsController.activePage = pageModel.get(sidebar.currentIndex - 1).name;
+
+        }
+    }
+
+    Shortcut {
+        sequence: "Ctrl+PgDown"
+        onActivated: {
+            if (sidebar.currentIndex < pageModel.count - 1)
+                settingsController.activePage = pageModel.get(sidebar.currentIndex + 1).name;
+
+        }
+    }
 
     ListModel {
         id: pageModel
@@ -95,6 +127,8 @@ ApplicationWindow {
     }
 
     RowLayout {
+        id: mainContent
+
         anchors.fill: parent
         spacing: 0
 
@@ -173,6 +207,9 @@ ApplicationWindow {
                         }
                         leftPadding: window.sidebarCompact ? 0 : Kirigami.Units.smallSpacing
                         rightPadding: window.sidebarCompact ? 0 : Kirigami.Units.smallSpacing
+                        ToolTip.visible: window.sidebarCompact && navDelegate.hovered
+                        ToolTip.text: navDelegate.label
+                        ToolTip.delay: 300
 
                         background: Rectangle {
                             color: navDelegate.highlighted ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : navDelegate.hovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"

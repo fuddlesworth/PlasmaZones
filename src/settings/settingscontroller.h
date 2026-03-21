@@ -310,6 +310,9 @@ public:
     Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenName) const;
 
+    Q_INVOKABLE QVariantMap loadWindowGeometry() const;
+    Q_INVOKABLE void saveWindowGeometry(int x, int y, int width, int height);
+
     Q_INVOKABLE void load();
     Q_INVOKABLE void save();
     Q_INVOKABLE void defaults();
