@@ -263,6 +263,8 @@ void Settings::loadShortcutConfig(ConfigGroup& globalShortcuts)
 {
     m_openEditorShortcut =
         globalShortcuts.readString(QStringLiteral("OpenEditorShortcut"), ConfigDefaults::openEditorShortcut());
+    m_openSettingsShortcut =
+        globalShortcuts.readString(QStringLiteral("OpenSettingsShortcut"), ConfigDefaults::openSettingsShortcut());
     m_previousLayoutShortcut =
         globalShortcuts.readString(QStringLiteral("PreviousLayoutShortcut"), ConfigDefaults::previousLayoutShortcut());
     m_nextLayoutShortcut =
@@ -583,6 +585,7 @@ void Settings::saveZoneSelectorConfig(ConfigGroup& zoneSelector)
 void Settings::saveShortcutConfig(ConfigGroup& globalShortcuts)
 {
     globalShortcuts.writeString(QStringLiteral("OpenEditorShortcut"), m_openEditorShortcut);
+    globalShortcuts.writeString(QStringLiteral("OpenSettingsShortcut"), m_openSettingsShortcut);
     globalShortcuts.writeString(QStringLiteral("PreviousLayoutShortcut"), m_previousLayoutShortcut);
     globalShortcuts.writeString(QStringLiteral("NextLayoutShortcut"), m_nextLayoutShortcut);
     for (int i = 0; i < 9; ++i) {

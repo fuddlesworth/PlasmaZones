@@ -56,6 +56,7 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
 
     // Connect to settings changes to update shortcuts dynamically
     connect(m_settings, &Settings::openEditorShortcutChanged, this, &ShortcutManager::updateEditorShortcut);
+    connect(m_settings, &Settings::openSettingsShortcutChanged, this, &ShortcutManager::updateSettingsShortcut);
     connect(m_settings, &Settings::previousLayoutShortcutChanged, this, &ShortcutManager::updatePreviousLayoutShortcut);
     connect(m_settings, &Settings::nextLayoutShortcutChanged, this, &ShortcutManager::updateNextLayoutShortcut);
 
@@ -211,6 +212,7 @@ void ShortcutManager::registerShortcuts()
     // kglobalacceld without grabbing keys). Each setup call also queues the
     // shortcut for async key-grab activation below.
     setupEditorShortcut();
+    setupSettingsShortcut();
     setupCyclingShortcuts();
     setupQuickLayoutShortcuts();
     setupNavigationShortcuts();
@@ -261,6 +263,7 @@ void ShortcutManager::updateShortcuts()
 
     // Core shortcuts
     updateEditorShortcut();
+    updateSettingsShortcut();
     updatePreviousLayoutShortcut();
     updateNextLayoutShortcut();
 
@@ -337,6 +340,7 @@ void ShortcutManager::unregisterShortcuts()
 
     // Core shortcuts
     DELETE_SHORTCUT(m_editorAction);
+    DELETE_SHORTCUT(m_settingsAction);
     DELETE_SHORTCUT(m_previousLayoutAction);
     DELETE_SHORTCUT(m_nextLayoutAction);
 
@@ -405,6 +409,12 @@ void ShortcutManager::setupEditorShortcut()
 {
     SETUP_SHORTCUT(m_editorAction, "Open Zone Editor", "open_editor", openEditorShortcut,
                    &ShortcutManager::onOpenEditor);
+}
+
+void ShortcutManager::setupSettingsShortcut()
+{
+    SETUP_SHORTCUT(m_settingsAction, "Open Settings", "open_settings", openSettingsShortcut,
+                   &ShortcutManager::onOpenSettings);
 }
 
 void ShortcutManager::setupCyclingShortcuts()
