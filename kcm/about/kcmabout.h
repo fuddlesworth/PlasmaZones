@@ -50,6 +50,7 @@ public:
 
     Q_INVOKABLE void checkForUpdates();
     Q_INVOKABLE void openReleaseUrl();
+    Q_INVOKABLE void openSettings();
 
 Q_SIGNALS:
     void daemonRunningChanged();

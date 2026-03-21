@@ -65,9 +65,7 @@ KCMUtils.SimpleKCM {
             font.bold: true
             implicitHeight: Kirigami.Units.gridUnit * 3
             implicitWidth: Math.max(implicitContentWidth + leftPadding + rightPadding, Kirigami.Units.gridUnit * 18)
-            onClicked: {
-                Qt.openUrlExternally("plasmazones-settings:");
-            }
+            onClicked: kcm.openSettings()
         }
 
         Label {

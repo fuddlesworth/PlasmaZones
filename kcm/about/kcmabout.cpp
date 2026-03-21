@@ -4,6 +4,7 @@
 #include "kcmabout.h"
 #include "../common/daemoncontroller.h"
 #include <QDesktopServices>
+#include <QProcess>
 #include <QUrl>
 #include <KConfig>
 #include <KConfigGroup>
@@ -118,6 +119,11 @@ void KCMAbout::openReleaseUrl()
     } else {
         QDesktopServices::openUrl(QUrl(GITHUB_RELEASES_URL));
     }
+}
+
+void KCMAbout::openSettings()
+{
+    QProcess::startDetached(QStringLiteral("plasmazones-settings"), {});
 }
 
 } // namespace PlasmaZones
