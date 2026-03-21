@@ -14,37 +14,37 @@ import org.kde.kirigami as Kirigami
 Kirigami.Card {
     id: root
 
-    required property var kcm
+    required property var appSettings
     required property QtObject constants
     // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     property int viewMode: 0
 
     function getScreenLayout(screenName) {
-        return viewMode === 1 ? (kcm.getTilingLayoutForScreen(screenName) || "") : (kcm.getLayoutForScreen(screenName) || "");
+        return viewMode === 1 ? (appSettings.getTilingLayoutForScreen(screenName) || "") : (appSettings.getLayoutForScreen(screenName) || "");
     }
 
     function getScreenActivityLayout(screenName, activityId) {
         if (viewMode === 1)
-            return kcm.hasExplicitTilingAssignmentForScreenActivity(screenName, activityId) ? (kcm.getTilingLayoutForScreenActivity(screenName, activityId) || "") : "";
+            return appSettings.hasExplicitTilingAssignmentForScreenActivity(screenName, activityId) ? (appSettings.getTilingLayoutForScreenActivity(screenName, activityId) || "") : "";
         else
-            return kcm.hasExplicitAssignmentForScreenActivity(screenName, activityId) ? (kcm.getSnappingLayoutForScreenActivity(screenName, activityId) || "") : "";
+            return appSettings.hasExplicitAssignmentForScreenActivity(screenName, activityId) ? (appSettings.getSnappingLayoutForScreenActivity(screenName, activityId) || "") : "";
     }
 
     function assignScreenActivity(screenName, activityId, layoutId) {
         if (viewMode === 1)
-            kcm.assignTilingLayoutToScreenActivity(screenName, activityId, layoutId);
+            appSettings.assignTilingLayoutToScreenActivity(screenName, activityId, layoutId);
         else
-            kcm.assignLayoutToScreenActivity(screenName, activityId, layoutId);
+            appSettings.assignLayoutToScreenActivity(screenName, activityId, layoutId);
     }
 
     function clearScreenActivity(screenName, activityId) {
         if (viewMode === 1)
-            kcm.clearTilingScreenActivityAssignment(screenName, activityId);
+            appSettings.clearTilingScreenActivityAssignment(screenName, activityId);
         else
-            kcm.clearScreenActivityAssignment(screenName, activityId);
+            appSettings.clearScreenActivityAssignment(screenName, activityId);
     }
 
-    visible: kcm.activitiesAvailable
+    visible: appSettings.activitiesAvailable
 
     header: Kirigami.Heading {
         level: 3
@@ -70,7 +70,7 @@ Kirigami.Card {
             Layout.preferredHeight: contentHeight
             Layout.margins: Kirigami.Units.smallSpacing
             clip: true
-            model: root.kcm.activities
+            model: root.appSettings.activities
             interactive: false
             Accessible.name: i18n("Activities list")
             Accessible.role: Accessible.List
@@ -112,12 +112,12 @@ Kirigami.Card {
                         Label {
                             Layout.fillWidth: true
                             text: activityDelegate.activityName
-                            font.bold: activityDelegate.activityId === root.kcm.currentActivity
+                            font.bold: activityDelegate.activityId === root.appSettings.currentActivity
                             elide: Text.ElideRight
                         }
 
                         Label {
-                            visible: activityDelegate.activityId === root.kcm.currentActivity
+                            visible: activityDelegate.activityId === root.appSettings.currentActivity
                             text: i18n("Current")
                             font.italic: true
                             opacity: 0.7
@@ -127,7 +127,7 @@ Kirigami.Card {
 
                     // Per-screen assignments using AssignmentRow + lock toggle
                     Repeater {
-                        model: root.kcm.screens
+                        model: root.appSettings.screens
 
                         RowLayout {
                             id: activityScreenRow
@@ -151,9 +151,9 @@ Kirigami.Card {
                                 Layout.fillWidth: true
                                 enabled: {
                                     void (activityDelegate._activityRevision);
-                                    return !root.kcm.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode);
+                                    return !root.appSettings.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode);
                                 }
-                                kcm: root.kcm
+                                appSettings: root.appSettings
                                 iconSource: "video-display"
                                 iconOpacity: 0.7
                                 layoutFilter: root.viewMode === 1 ? 1 : 0
@@ -168,7 +168,7 @@ Kirigami.Card {
                                     return displayInfo ? activityScreenRow.screenName + " — " + displayInfo : activityScreenRow.screenName;
                                 }
                                 noneText: i18n("Use default")
-                                resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.kcm.defaultLayoutId || "")
+                                resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.appSettings.defaultLayoutId || "")
                                 currentLayoutId: {
                                     void (activityDelegate._activityRevision);
                                     return root.getScreenActivityLayout(activityScreenRow.screenName, activityDelegate.activityId);
@@ -201,7 +201,7 @@ Kirigami.Card {
                                         activityDelegate._activityRevision++;
                                     }
 
-                                    target: root.kcm
+                                    target: root.appSettings
                                 }
 
                             }
@@ -209,19 +209,19 @@ Kirigami.Card {
                             ToolButton {
                                 icon.name: {
                                     void (activityDelegate._activityRevision);
-                                    return root.kcm.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode) ? "object-locked" : "object-unlocked";
+                                    return root.appSettings.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode) ? "object-locked" : "object-unlocked";
                                 }
                                 opacity: {
                                     void (activityDelegate._activityRevision);
-                                    return root.kcm.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode) ? 1 : 0.4;
+                                    return root.appSettings.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode) ? 1 : 0.4;
                                 }
                                 display: ToolButton.IconOnly
                                 ToolTip.text: {
                                     void (activityDelegate._activityRevision);
-                                    return root.kcm.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode) ? i18n("Unlock layout for %1 on %2", activityDelegate.activityName, activityScreenRow.screenName) : i18n("Lock layout for %1 on %2", activityDelegate.activityName, activityScreenRow.screenName);
+                                    return root.appSettings.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode) ? i18n("Unlock layout for %1 on %2", activityDelegate.activityName, activityScreenRow.screenName) : i18n("Lock layout for %1 on %2", activityDelegate.activityName, activityScreenRow.screenName);
                                 }
                                 ToolTip.visible: hovered
-                                onClicked: root.kcm.toggleContextLock(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode)
+                                onClicked: root.appSettings.toggleContextLock(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode)
                             }
 
                         }
@@ -237,7 +237,7 @@ Kirigami.Card {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.smallSpacing
-            visible: root.kcm.activities.length === 0 && root.kcm.activitiesAvailable
+            visible: root.appSettings.activities.length === 0 && root.appSettings.activitiesAvailable
             type: Kirigami.MessageType.Information
             text: i18n("No activities found. Create activities in System Settings → Activities.")
         }
@@ -245,7 +245,7 @@ Kirigami.Card {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.smallSpacing
-            visible: root.kcm.screens.length === 0 && root.kcm.activities.length > 0
+            visible: root.appSettings.screens.length === 0 && root.appSettings.activities.length > 0
             type: Kirigami.MessageType.Warning
             text: i18n("No screens detected. Make sure the PlasmaZones daemon is running.")
         }

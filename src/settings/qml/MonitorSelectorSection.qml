@@ -20,7 +20,7 @@ import org.kde.kirigami as Kirigami
 ColumnLayout {
     id: root
 
-    required property var kcm
+    required property var appSettings
     property bool featureEnabled: true
     property string selectedScreenName: ""
     property bool hasOverrides: false
@@ -28,7 +28,7 @@ ColumnLayout {
 
     signal resetClicked()
 
-    visible: kcm.screens.length > 1
+    visible: appSettings.screens.length > 1
     spacing: Kirigami.Units.largeSpacing
 
     // Section divider
@@ -76,7 +76,7 @@ ColumnLayout {
                     id: monitorCombo
 
                     Layout.fillWidth: true
-                    kcm: root.kcm
+                    appSettings: root.appSettings
                     noneText: i18n("All Monitors (Default)")
                     Accessible.name: i18n("Monitor selection")
                     onActivated: {

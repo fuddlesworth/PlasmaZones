@@ -4,7 +4,7 @@
 import QtQuick
 
 /**
- * @brief Reusable per-screen override logic for KCM tabs
+ * @brief Reusable per-screen override logic for settings pages
  *
  * Encapsulates the identical per-screen override pattern used across
  * AutotilingTab, ZoneSelectorSection, and ZonesTab. Each tab instantiates
@@ -13,7 +13,7 @@ import QtQuick
  * Usage:
  *   PerScreenOverrideHelper {
  *       id: psHelper
- *       kcm: root.kcm
+ *       appSettings: root.appSettings
  *       getterMethod: "getPerScreenAutotileSettings"
  *       setterMethod: "setPerScreenAutotileSetting"
  *       clearerMethod: "clearPerScreenAutotileSettings"
@@ -23,7 +23,7 @@ import QtQuick
  *       psHelper.writeSetting(key, value, globalSetter)
  */
 QtObject {
-    required property var kcm
+    required property var appSettings
     required property string getterMethod
     required property string setterMethod
     required property string clearerMethod
@@ -35,7 +35,7 @@ QtObject {
 
     function reload() {
         if (isPerScreen && selectedScreenName !== "")
-            perScreenOverrides = kcm[getterMethod](selectedScreenName);
+            perScreenOverrides = appSettings[getterMethod](selectedScreenName);
         else
             perScreenOverrides = {
         };
@@ -50,7 +50,7 @@ QtObject {
 
     function writeSetting(key, value, globalSetter) {
         if (isPerScreen) {
-            kcm[setterMethod](selectedScreenName, key, value);
+            appSettings[setterMethod](selectedScreenName, key, value);
             var updated = Object.assign({
             }, perScreenOverrides);
             updated[key] = value;
@@ -61,7 +61,7 @@ QtObject {
     }
 
     function clearOverrides() {
-        kcm[clearerMethod](selectedScreenName);
+        appSettings[clearerMethod](selectedScreenName);
         reload();
     }
 

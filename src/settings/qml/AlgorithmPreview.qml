@@ -12,14 +12,14 @@ import org.plasmazones.common as QFZCommon
  *
  * Renders a preview of how windows would be arranged with
  * the given algorithm settings. Delegates zone calculation to the
- * real C++ algorithm classes via kcm.generateAlgorithmPreview(),
+ * real C++ algorithm classes via appSettings.generateAlgorithmPreview(),
  * and renders using the shared ZonePreview component.
  */
 Item {
     id: root
 
-    // KCM reference for calling generateAlgorithmPreview()
-    required property var kcm
+    // Settings reference for calling generateAlgorithmPreview()
+    required property var appSettings
     // Algorithm configuration
     property string algorithmId: ""
     property int windowCount: 4
@@ -37,7 +37,7 @@ Item {
 
     function recalcZones() {
         if (root.algorithmId !== "")
-            root.zones = root.kcm.generateAlgorithmPreview(root.algorithmId, root.windowCount, root.splitRatio, root.masterCount);
+            root.zones = root.appSettings.generateAlgorithmPreview(root.algorithmId, root.windowCount, root.splitRatio, root.masterCount);
 
     }
 

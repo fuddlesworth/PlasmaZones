@@ -21,7 +21,7 @@ Flickable {
     property alias selectedScreenName: psHelper.selectedScreenName
     readonly property alias isPerScreen: psHelper.isPerScreen
     readonly property alias hasOverrides: psHelper.hasOverrides
-    readonly property string effectiveAlgorithm: settingValue("Algorithm", kcm.autotileAlgorithm)
+    readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettings.autotileAlgorithm)
 
     function settingValue(key, globalValue) {
         return psHelper.settingValue(key, globalValue);
@@ -36,7 +36,7 @@ Flickable {
     PerScreenOverrideHelper {
         id: psHelper
 
-        kcm: settingsController
+        appSettings: settingsController
         getterMethod: "getPerScreenAutotileSettings"
         setterMethod: "setPerScreenAutotileSetting"
         clearerMethod: "clearPerScreenAutotileSettings"
@@ -65,19 +65,19 @@ Flickable {
             }
 
             Switch {
-                checked: kcm.autotileEnabled
-                onToggled: kcm.autotileEnabled = checked
+                checked: appSettings.autotileEnabled
+                onToggled: appSettings.autotileEnabled = checked
                 Accessible.name: i18n("Enable automatic tiling")
             }
 
         }
 
         // =====================================================================
-        // Appearance Card (Borders + Colors, matching KCM structure)
+        // Appearance Card (Borders + Colors, matching original structure)
         // =====================================================================
         Kirigami.Card {
             Layout.fillWidth: true
-            enabled: kcm.autotileEnabled
+            enabled: appSettings.autotileEnabled
 
             header: Kirigami.Heading {
                 text: i18n("Appearance")
@@ -96,8 +96,8 @@ Flickable {
 
                     Kirigami.FormData.label: i18n("Color scheme:")
                     text: i18n("Use system accent color")
-                    checked: kcm.autotileUseSystemBorderColors
-                    onToggled: kcm.autotileUseSystemBorderColors = checked
+                    checked: appSettings.autotileUseSystemBorderColors
+                    onToggled: appSettings.autotileUseSystemBorderColors = checked
                 }
 
                 RowLayout {
@@ -106,15 +106,15 @@ Flickable {
                     spacing: Kirigami.Units.smallSpacing
 
                     ColorButton {
-                        color: kcm.autotileBorderColor
+                        color: appSettings.autotileBorderColor
                         onClicked: {
-                            activeBorderColorDialog.selectedColor = kcm.autotileBorderColor;
+                            activeBorderColorDialog.selectedColor = appSettings.autotileBorderColor;
                             activeBorderColorDialog.open();
                         }
                     }
 
                     Label {
-                        text: kcm.autotileBorderColor.toString().toUpperCase()
+                        text: appSettings.autotileBorderColor.toString().toUpperCase()
                         font: Kirigami.Theme.fixedWidthFont
                     }
 
@@ -126,15 +126,15 @@ Flickable {
                     spacing: Kirigami.Units.smallSpacing
 
                     ColorButton {
-                        color: kcm.autotileInactiveBorderColor
+                        color: appSettings.autotileInactiveBorderColor
                         onClicked: {
-                            inactiveBorderColorDialog.selectedColor = kcm.autotileInactiveBorderColor;
+                            inactiveBorderColorDialog.selectedColor = appSettings.autotileInactiveBorderColor;
                             inactiveBorderColorDialog.open();
                         }
                     }
 
                     Label {
-                        text: kcm.autotileInactiveBorderColor.toString().toUpperCase()
+                        text: appSettings.autotileInactiveBorderColor.toString().toUpperCase()
                         font: Kirigami.Theme.fixedWidthFont
                     }
 
@@ -150,8 +150,8 @@ Flickable {
 
                     Kirigami.FormData.label: i18n("Title bars:")
                     text: i18n("Hide title bars on tiled windows")
-                    checked: kcm.autotileHideTitleBars
-                    onToggled: kcm.autotileHideTitleBars = checked
+                    checked: appSettings.autotileHideTitleBars
+                    onToggled: appSettings.autotileHideTitleBars = checked
                     ToolTip.visible: hovered
                     ToolTip.text: i18n("Remove window title bars while autotiled. Restored when floating or leaving autotile mode.")
                 }
@@ -166,8 +166,8 @@ Flickable {
 
                     Kirigami.FormData.label: i18n("Border:")
                     text: i18n("Show borders in tiling mode")
-                    checked: kcm.autotileShowBorder
-                    onToggled: kcm.autotileShowBorder = checked
+                    checked: appSettings.autotileShowBorder
+                    onToggled: appSettings.autotileShowBorder = checked
                     ToolTip.visible: hovered
                     ToolTip.text: i18n("Draw colored borders around all windows in tiling mode. Active color for focused, inactive for unfocused. Works with or without hidden title bars.")
                 }
@@ -180,8 +180,8 @@ Flickable {
                     SpinBox {
                         from: 0
                         to: 10
-                        value: kcm.autotileBorderWidth
-                        onValueModified: kcm.autotileBorderWidth = value
+                        value: appSettings.autotileBorderWidth
+                        onValueModified: appSettings.autotileBorderWidth = value
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Colored border drawn around tiled windows (0 to disable)")
                     }
@@ -200,8 +200,8 @@ Flickable {
                     SpinBox {
                         from: 0
                         to: 20
-                        value: kcm.autotileBorderRadius
-                        onValueModified: kcm.autotileBorderRadius = value
+                        value: appSettings.autotileBorderRadius
+                        onValueModified: appSettings.autotileBorderRadius = value
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Corner radius for the border (0 for square corners)")
                     }
@@ -221,7 +221,7 @@ Flickable {
         // =====================================================================
         Kirigami.Card {
             Layout.fillWidth: true
-            enabled: kcm.autotileEnabled
+            enabled: appSettings.autotileEnabled
 
             header: Kirigami.Heading {
                 text: i18n("Behavior")
@@ -245,22 +245,22 @@ Flickable {
                         "text": i18n("Add as main window"),
                         "value": 2
                     }]
-                    currentIndex: Math.max(0, indexOfValue(kcm.autotileInsertPosition))
-                    onActivated: kcm.autotileInsertPosition = currentValue
+                    currentIndex: Math.max(0, indexOfValue(appSettings.autotileInsertPosition))
+                    onActivated: appSettings.autotileInsertPosition = currentValue
                 }
 
                 CheckBox {
                     Kirigami.FormData.label: i18n("Focus:")
                     text: i18n("Automatically focus newly opened windows")
-                    checked: kcm.autotileFocusNewWindows
-                    onToggled: kcm.autotileFocusNewWindows = checked
+                    checked: appSettings.autotileFocusNewWindows
+                    onToggled: appSettings.autotileFocusNewWindows = checked
                 }
 
                 CheckBox {
                     Kirigami.FormData.label: " "
                     text: i18n("Focus follows mouse pointer")
-                    checked: kcm.autotileFocusFollowsMouse
-                    onToggled: kcm.autotileFocusFollowsMouse = checked
+                    checked: appSettings.autotileFocusFollowsMouse
+                    onToggled: appSettings.autotileFocusFollowsMouse = checked
                     ToolTip.visible: hovered
                     ToolTip.text: i18n("When enabled, moving mouse over a window focuses it")
                 }
@@ -268,8 +268,8 @@ Flickable {
                 CheckBox {
                     Kirigami.FormData.label: i18n("Constraints:")
                     text: i18n("Respect window minimum size")
-                    checked: kcm.autotileRespectMinimumSize
-                    onToggled: kcm.autotileRespectMinimumSize = checked
+                    checked: appSettings.autotileRespectMinimumSize
+                    onToggled: appSettings.autotileRespectMinimumSize = checked
                     ToolTip.visible: hovered
                     ToolTip.text: i18n("Windows will not be resized below their minimum size. This may leave gaps in the layout.")
                 }
@@ -283,7 +283,7 @@ Flickable {
         // =====================================================================
         MonitorSelectorSection {
             Layout.fillWidth: true
-            kcm: settingsController
+            appSettings: settingsController
             featureEnabled: settingsController.settings.autotileEnabled
             selectedScreenName: root.selectedScreenName
             hasOverrides: root.hasOverrides
@@ -296,7 +296,7 @@ Flickable {
         // =====================================================================
         Kirigami.Card {
             Layout.fillWidth: true
-            enabled: kcm.autotileEnabled
+            enabled: appSettings.autotileEnabled
 
             header: Kirigami.Heading {
                 text: i18n("Gaps")
@@ -312,9 +312,9 @@ Flickable {
                     SpinBox {
                         from: 0
                         to: root.gapMax
-                        value: root.settingValue("InnerGap", kcm.autotileInnerGap)
+                        value: root.settingValue("InnerGap", appSettings.autotileInnerGap)
                         onValueModified: root.writeSetting("InnerGap", value, function(v) {
-                            kcm.autotileInnerGap = v;
+                            appSettings.autotileInnerGap = v;
                         })
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Gap between tiled windows")
@@ -333,10 +333,10 @@ Flickable {
                     SpinBox {
                         from: 0
                         to: root.gapMax
-                        value: root.settingValue("OuterGap", kcm.autotileOuterGap)
+                        value: root.settingValue("OuterGap", appSettings.autotileOuterGap)
                         enabled: !perSideCheck.checked
                         onValueModified: root.writeSetting("OuterGap", value, function(v) {
-                            kcm.autotileOuterGap = v;
+                            appSettings.autotileOuterGap = v;
                         })
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Gap from screen edges")
@@ -351,9 +351,9 @@ Flickable {
                         id: perSideCheck
 
                         text: i18n("Set per side")
-                        checked: root.settingValue("UsePerSideOuterGap", kcm.autotileUsePerSideOuterGap)
+                        checked: root.settingValue("UsePerSideOuterGap", appSettings.autotileUsePerSideOuterGap)
                         onToggled: root.writeSetting("UsePerSideOuterGap", checked, function(v) {
-                            kcm.autotileUsePerSideOuterGap = v;
+                            appSettings.autotileUsePerSideOuterGap = v;
                         })
                     }
 
@@ -373,9 +373,9 @@ Flickable {
                     SpinBox {
                         from: 0
                         to: root.gapMax
-                        value: root.settingValue("OuterGapTop", kcm.autotileOuterGapTop)
+                        value: root.settingValue("OuterGapTop", appSettings.autotileOuterGapTop)
                         onValueModified: root.writeSetting("OuterGapTop", value, function(v) {
-                            kcm.autotileOuterGapTop = v;
+                            appSettings.autotileOuterGapTop = v;
                         })
                         Accessible.name: i18nc("@label", "Top edge gap")
                     }
@@ -391,9 +391,9 @@ Flickable {
                     SpinBox {
                         from: 0
                         to: root.gapMax
-                        value: root.settingValue("OuterGapBottom", kcm.autotileOuterGapBottom)
+                        value: root.settingValue("OuterGapBottom", appSettings.autotileOuterGapBottom)
                         onValueModified: root.writeSetting("OuterGapBottom", value, function(v) {
-                            kcm.autotileOuterGapBottom = v;
+                            appSettings.autotileOuterGapBottom = v;
                         })
                         Accessible.name: i18nc("@label", "Bottom edge gap")
                     }
@@ -409,9 +409,9 @@ Flickable {
                     SpinBox {
                         from: 0
                         to: root.gapMax
-                        value: root.settingValue("OuterGapLeft", kcm.autotileOuterGapLeft)
+                        value: root.settingValue("OuterGapLeft", appSettings.autotileOuterGapLeft)
                         onValueModified: root.writeSetting("OuterGapLeft", value, function(v) {
-                            kcm.autotileOuterGapLeft = v;
+                            appSettings.autotileOuterGapLeft = v;
                         })
                         Accessible.name: i18nc("@label", "Left edge gap")
                     }
@@ -427,9 +427,9 @@ Flickable {
                     SpinBox {
                         from: 0
                         to: root.gapMax
-                        value: root.settingValue("OuterGapRight", kcm.autotileOuterGapRight)
+                        value: root.settingValue("OuterGapRight", appSettings.autotileOuterGapRight)
                         onValueModified: root.writeSetting("OuterGapRight", value, function(v) {
-                            kcm.autotileOuterGapRight = v;
+                            appSettings.autotileOuterGapRight = v;
                         })
                         Accessible.name: i18nc("@label", "Right edge gap")
                     }
@@ -443,9 +443,9 @@ Flickable {
                 CheckBox {
                     Kirigami.FormData.label: i18n("Smart gaps:")
                     text: i18n("Hide gaps when only one window is tiled")
-                    checked: root.settingValue("SmartGaps", kcm.autotileSmartGaps)
+                    checked: root.settingValue("SmartGaps", appSettings.autotileSmartGaps)
                     onToggled: root.writeSetting("SmartGaps", checked, function(v) {
-                        kcm.autotileSmartGaps = v;
+                        appSettings.autotileSmartGaps = v;
                     })
                 }
 
@@ -458,7 +458,7 @@ Flickable {
         // =====================================================================
         Kirigami.Card {
             Layout.fillWidth: true
-            enabled: kcm.autotileEnabled
+            enabled: appSettings.autotileEnabled
 
             header: Kirigami.Heading {
                 text: i18n("Algorithm")
@@ -493,12 +493,12 @@ Flickable {
                             AlgorithmPreview {
                                 anchors.fill: parent
                                 anchors.margins: Kirigami.Units.smallSpacing
-                                kcm: settingsController
+                                appSettings: settingsController
                                 showLabel: false
                                 algorithmId: root.effectiveAlgorithm
                                 windowCount: previewWindowSlider.value
-                                splitRatio: root.effectiveAlgorithm === "centered-master" ? (root.settingValue("SplitRatio", kcm.autotileCenteredMasterSplitRatio) || 0.5) : (root.settingValue("SplitRatio", kcm.autotileSplitRatio) || 0.6)
-                                masterCount: root.effectiveAlgorithm === "centered-master" ? (root.settingValue("MasterCount", kcm.autotileCenteredMasterMasterCount) || 1) : (root.settingValue("MasterCount", kcm.autotileMasterCount) || 1)
+                                splitRatio: root.effectiveAlgorithm === "centered-master" ? (root.settingValue("SplitRatio", appSettings.autotileCenteredMasterSplitRatio) || 0.5) : (root.settingValue("SplitRatio", appSettings.autotileSplitRatio) || 0.6)
+                                masterCount: root.effectiveAlgorithm === "centered-master" ? (root.settingValue("MasterCount", appSettings.autotileCenteredMasterMasterCount) || 1) : (root.settingValue("MasterCount", appSettings.autotileMasterCount) || 1)
                             }
 
                         }
@@ -536,13 +536,13 @@ Flickable {
                         Component.onCompleted: currentIndex = Math.max(0, indexOfValue(root.effectiveAlgorithm))
                         onActivated: {
                             root.writeSetting("Algorithm", currentValue, function(v) {
-                                kcm.autotileAlgorithm = v;
+                                appSettings.autotileAlgorithm = v;
                             });
                             // Reset max windows to the new algorithm's default
                             let algoData = model[currentIndex];
                             if (algoData && algoData.defaultMaxWindows !== undefined)
                                 root.writeSetting("MaxWindows", algoData.defaultMaxWindows, function(v) {
-                                kcm.autotileMaxWindows = v;
+                                appSettings.autotileMaxWindows = v;
                             });
 
                         }
@@ -604,13 +604,13 @@ Flickable {
                             to: 12
                             stepSize: 1
                             onMoved: root.writeSetting("MaxWindows", Math.round(value), function(v) {
-                                kcm.autotileMaxWindows = v;
+                                appSettings.autotileMaxWindows = v;
                             })
                             ToolTip.visible: hovered
                             ToolTip.text: i18n("Maximum number of windows to tile with this algorithm")
 
                             Binding on value {
-                                value: root.settingValue("MaxWindows", kcm.autotileMaxWindows)
+                                value: root.settingValue("MaxWindows", appSettings.autotileMaxWindows)
                                 when: !previewWindowSlider.pressed
                                 restoreMode: Binding.RestoreNone
                             }
@@ -662,18 +662,18 @@ Flickable {
                             onMoved: {
                                 if (root.effectiveAlgorithm === "centered-master")
                                     root.writeSetting("SplitRatio", value, function(v) {
-                                    kcm.autotileCenteredMasterSplitRatio = v;
+                                    appSettings.autotileCenteredMasterSplitRatio = v;
                                 });
                                 else
                                     root.writeSetting("SplitRatio", value, function(v) {
-                                    kcm.autotileSplitRatio = v;
+                                    appSettings.autotileSplitRatio = v;
                                 });
                             }
                             ToolTip.visible: hovered
                             ToolTip.text: root.effectiveAlgorithm === "three-column" || root.effectiveAlgorithm === "centered-master" ? i18n("Proportion of screen width for the center column") : i18n("Proportion of screen width for the master area")
 
                             Binding on value {
-                                value: root.effectiveAlgorithm === "centered-master" ? root.settingValue("SplitRatio", kcm.autotileCenteredMasterSplitRatio) : root.settingValue("SplitRatio", kcm.autotileSplitRatio)
+                                value: root.effectiveAlgorithm === "centered-master" ? root.settingValue("SplitRatio", appSettings.autotileCenteredMasterSplitRatio) : root.settingValue("SplitRatio", appSettings.autotileSplitRatio)
                                 when: !splitRatioSlider.pressed
                                 restoreMode: Binding.RestoreNone
                             }
@@ -707,11 +707,11 @@ Flickable {
                             onValueModified: {
                                 if (root.effectiveAlgorithm === "centered-master")
                                     root.writeSetting("MasterCount", value, function(v) {
-                                    kcm.autotileCenteredMasterMasterCount = v;
+                                    appSettings.autotileCenteredMasterMasterCount = v;
                                 });
                                 else
                                     root.writeSetting("MasterCount", value, function(v) {
-                                    kcm.autotileMasterCount = v;
+                                    appSettings.autotileMasterCount = v;
                                 });
                             }
                             Accessible.name: root.effectiveAlgorithm === "centered-master" ? i18n("Center count") : i18n("Master count")
@@ -719,7 +719,7 @@ Flickable {
                             ToolTip.text: root.effectiveAlgorithm === "centered-master" ? i18n("Number of windows in the center area") : i18n("Number of windows in the master area")
 
                             Binding on value {
-                                value: root.effectiveAlgorithm === "centered-master" ? root.settingValue("MasterCount", kcm.autotileCenteredMasterMasterCount) : root.settingValue("MasterCount", kcm.autotileMasterCount)
+                                value: root.effectiveAlgorithm === "centered-master" ? root.settingValue("MasterCount", appSettings.autotileCenteredMasterMasterCount) : root.settingValue("MasterCount", appSettings.autotileMasterCount)
                                 when: !masterCountSpinBox.activeFocus
                                 restoreMode: Binding.RestoreNone
                             }
@@ -743,14 +743,14 @@ Flickable {
         id: activeBorderColorDialog
 
         title: i18n("Choose Active Border Color")
-        onAccepted: kcm.autotileBorderColor = selectedColor
+        onAccepted: appSettings.autotileBorderColor = selectedColor
     }
 
     ColorDialog {
         id: inactiveBorderColorDialog
 
         title: i18n("Choose Inactive Border Color")
-        onAccepted: kcm.autotileInactiveBorderColor = selectedColor
+        onAccepted: appSettings.autotileInactiveBorderColor = selectedColor
     }
 
 }

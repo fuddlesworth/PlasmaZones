@@ -18,7 +18,7 @@ RowLayout {
     id: root
 
     // Required properties
-    required property var kcm
+    required property var appSettings
     required property string iconSource
     required property string labelText
     // Optional customization
@@ -28,7 +28,7 @@ RowLayout {
     property real iconOpacity: 1
     property int layoutFilter: -1 // -1 = all, 0 = manual/zone only, 1 = autotile only
     // The layout ID that "Default" resolves to (set by parent based on hierarchy)
-    property string resolvedDefaultId: kcm ? kcm.defaultLayoutId : ""
+    property string resolvedDefaultId: appSettings ? appSettings.defaultLayoutId : ""
     // Current assignment (set externally, component updates selection)
     property string currentLayoutId: ""
 
@@ -62,7 +62,7 @@ RowLayout {
         id: layoutCombo
 
         Layout.preferredWidth: root.comboWidth
-        kcm: root.kcm
+        appSettings: root.appSettings
         noneText: root.noneText
         showPreview: root.showPreview
         layoutFilter: root.layoutFilter

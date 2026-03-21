@@ -9,14 +9,14 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
-    // Sub-components expect kcmModule with screens/layouts/settings properties.
-    // We create a bridge that combines Settings (kcm) + SettingsController properties.
+    // Sub-components expect settingsBridge with screens/layouts/settings properties.
+    // We create a bridge that combines Settings (appSettings) + SettingsController properties.
     readonly property var
-    kcmModule: QtObject {
+    settingsBridge: QtObject {
         // Forward all Settings properties that sub-components use
-        readonly property bool autotileEnabled: kcm.autotileEnabled
-        readonly property string autotileAlgorithm: kcm.autotileAlgorithm
-        readonly property string defaultLayoutId: kcm.defaultLayoutId
+        readonly property bool autotileEnabled: appSettings.autotileEnabled
+        readonly property string autotileAlgorithm: appSettings.autotileAlgorithm
+        readonly property string defaultLayoutId: appSettings.defaultLayoutId
         // Properties from SettingsController
         readonly property var screens: settingsController.screens
         readonly property var layouts: settingsController.layouts
@@ -27,7 +27,7 @@ Flickable {
         readonly property bool activitiesAvailable: settingsController.activitiesAvailable
         readonly property var activities: settingsController.activities
         readonly property string currentActivity: settingsController.currentActivity
-        readonly property var disabledMonitors: kcm.disabledMonitors
+        readonly property var disabledMonitors: appSettings.disabledMonitors
 
         // Signals for sub-component Connections blocks
         signal screenAssignmentsChanged()
@@ -228,7 +228,7 @@ Flickable {
     }
     // View mode: 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
 
-    readonly property int viewMode: kcm.autotileEnabled ? root.kcmModule.assignmentViewMode : 0
+    readonly property int viewMode: appSettings.autotileEnabled ? root.settingsBridge.assignmentViewMode : 0
 
     contentHeight: mainCol.implicitHeight
     clip: true
@@ -244,7 +244,7 @@ Flickable {
     WindowPickerDialog {
         id: windowPickerDialog
 
-        kcm: root.kcmModule
+        appSettings: root.settingsBridge
     }
 
     ColumnLayout {
@@ -264,7 +264,7 @@ Flickable {
         Item {
             Layout.fillWidth: true
             implicitHeight: modeSelectorCard.implicitHeight
-            visible: root.kcmModule.autotileEnabled
+            visible: root.settingsBridge.autotileEnabled
 
             Kirigami.Card {
                 id: modeSelectorCard
@@ -293,9 +293,9 @@ Flickable {
                         }]
                         textRole: "text"
                         valueRole: "value"
-                        currentIndex: root.kcmModule.assignmentViewMode
+                        currentIndex: root.settingsBridge.assignmentViewMode
                         onActivated: {
-                            root.kcmModule.assignmentViewMode = model[currentIndex].value;
+                            root.settingsBridge.assignmentViewMode = model[currentIndex].value;
                         }
                         ToolTip.visible: hovered
                         ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -326,7 +326,7 @@ Flickable {
                 id: monitorCard
 
                 anchors.fill: parent
-                kcm: root.kcmModule
+                appSettings: root.settingsBridge
                 constants: constants
                 viewMode: root.viewMode
             }
@@ -337,13 +337,13 @@ Flickable {
         Item {
             Layout.fillWidth: true
             implicitHeight: activityCard.implicitHeight
-            visible: root.kcmModule.activitiesAvailable
+            visible: root.settingsBridge.activitiesAvailable
 
             ActivityAssignmentsCard {
                 id: activityCard
 
                 anchors.fill: parent
-                kcm: root.kcmModule
+                appSettings: root.settingsBridge
                 constants: constants
                 viewMode: root.viewMode
             }
@@ -354,7 +354,7 @@ Flickable {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.smallSpacing
-            visible: !root.kcmModule.activitiesAvailable && root.kcmModule.screens.length > 0
+            visible: !root.settingsBridge.activitiesAvailable && root.settingsBridge.screens.length > 0
             type: Kirigami.MessageType.Information
             text: i18n("KDE Activities support is not available. Activity-based layout assignments require the KDE Activities service to be running.")
         }
@@ -368,7 +368,7 @@ Flickable {
                 id: appRulesCard
 
                 anchors.fill: parent
-                kcm: root.kcmModule
+                appSettings: root.settingsBridge
                 constants: constants
                 windowPickerDialog: windowPickerDialog
                 viewMode: root.viewMode
@@ -385,7 +385,7 @@ Flickable {
                 id: quickSlotsCard
 
                 anchors.fill: parent
-                kcm: root.kcmModule
+                appSettings: root.settingsBridge
                 constants: constants
                 viewMode: root.viewMode
             }

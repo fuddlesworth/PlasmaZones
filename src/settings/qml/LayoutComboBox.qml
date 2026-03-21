@@ -22,13 +22,14 @@ import org.plasmazones.common as QFZCommon
 ComboBox {
     // ── Imperative model management ─────────────────────────────────────
     // Instead of a reactive model binding (which creates a new JS array on
-    // every kcm.layouts change and resets ComboBox popup scroll), we build
+    // every appSettings.layouts change and resets ComboBox popup scroll), we build
     // the model imperatively and only swap it when visible content changes.
     // Match the active filter so the default item is semantically consistent
+    // Defer until popup closes
 
     id: root
 
-    required property var kcm
+    required property var appSettings
     property string noneText: i18n("Default")
     property string currentLayoutId: ""
     property bool showPreview: false
@@ -36,10 +37,10 @@ ComboBox {
     property int layoutFilter: -1
     // The layout ID that "Default" actually resolves to at runtime.
     // Set by parent based on context:
-    // - Monitor dropdown: kcm.defaultLayoutId (global default)
+    // - Monitor dropdown: appSettings.defaultLayoutId (global default)
     // - Per-desktop dropdown: monitor's layout (or global if none)
     // - Activity dropdown: monitor's layout (or global if none)
-    property string resolvedDefaultId: kcm ? kcm.defaultLayoutId : ""
+    property string resolvedDefaultId: appSettings ? appSettings.defaultLayoutId : ""
     // Defer model swap while the popup is open to prevent scroll resets.
     // The model will update as soon as the popup closes.
     property bool _rebuildPending: false
@@ -51,13 +52,13 @@ ComboBox {
     property bool _rebuildScheduled: false
 
     // Helper to find layout by ID.
-    // Caches kcm.layouts locally to avoid repeated QVariant→JS conversion
-    // (each kcm.layouts access creates fresh JS wrappers for all entries).
+    // Caches appSettings.layouts locally to avoid repeated QVariant→JS conversion
+    // (each appSettings.layouts access creates fresh JS wrappers for all entries).
     function findLayoutById(layoutId) {
-        if (!kcm || !kcm.layouts || !layoutId)
+        if (!appSettings || !appSettings.layouts || !layoutId)
             return null;
 
-        let layouts = kcm.layouts;
+        let layouts = appSettings.layouts;
         for (let i = 0; i < layouts.length; i++) {
             if (layouts[i].id === layoutId)
                 return layouts[i];
@@ -67,7 +68,7 @@ ComboBox {
     }
 
     // Helper to get category with default fallback.
-    // KCM layout objects use `isAutotile` (bool), while overlay/D-Bus objects
+    // Layout objects use `isAutotile` (bool), while overlay/D-Bus objects
     // use `category` (int: 0=Manual, 1=Autotile). Check both fields.
     function getCategory(layout, defaultCategory) {
         if (!layout)
@@ -99,8 +100,8 @@ ComboBox {
             "category": root.layoutFilter >= 0 ? root.layoutFilter : getCategory(defaultLayout, -1),
             "isDefaultOption": true
         }];
-        if (kcm && kcm.layouts) {
-            let layouts = kcm.layouts; // cache locally — avoid repeated QVariant→JS conversion
+        if (appSettings && appSettings.layouts) {
+            let layouts = appSettings.layouts; // cache locally — avoid repeated QVariant→JS conversion
             let layoutItems = [];
             for (let i = 0; i < layouts.length; i++) {
                 let layout = layouts[i];
@@ -172,8 +173,6 @@ ComboBox {
     }
 
     function _doRebuild() {
-        // Defer until popup closes
-
         _rebuildScheduled = false;
         let items = _buildItems();
         if (_modelMatchesItems(items)) {
@@ -249,7 +248,7 @@ ComboBox {
             root.rebuildModel();
         }
 
-        target: root.kcm ?? null
+        target: root.appSettings ?? null
     }
 
     // ── Custom popup ────────────────────────────────────────────────────

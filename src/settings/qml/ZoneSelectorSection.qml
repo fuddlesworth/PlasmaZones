@@ -21,9 +21,9 @@ ColumnLayout {
 
     id: root
 
-    required property var kcm
-    // Controller with per-screen methods (defaults to kcm for KCM compatibility)
-    property var controller: kcm
+    required property var appSettings
+    // Controller with per-screen methods (defaults to appSettings for shared component compatibility)
+    property var controller: appSettings
     required property QtObject constants
     // Whether the parent tab is currently visible (for conditional tooltips)
     property bool isCurrentTab: false
@@ -35,26 +35,26 @@ ColumnLayout {
     readonly property alias isPerScreen: psHelper.isPerScreen
     readonly property alias hasOverrides: psHelper.hasOverrides
     // Effective values that resolve per-screen > global
-    readonly property int effectivePosition: settingValue("Position", kcm.zoneSelectorPosition)
-    readonly property int effectiveLayoutMode: settingValue("LayoutMode", kcm.zoneSelectorLayoutMode)
-    readonly property int effectiveSizeMode: settingValue("SizeMode", kcm.zoneSelectorSizeMode)
-    readonly property int effectiveGridColumns: settingValue("GridColumns", kcm.zoneSelectorGridColumns)
-    readonly property int effectiveMaxRows: settingValue("MaxRows", kcm.zoneSelectorMaxRows)
+    readonly property int effectivePosition: settingValue("Position", appSettings.zoneSelectorPosition)
+    readonly property int effectiveLayoutMode: settingValue("LayoutMode", appSettings.zoneSelectorLayoutMode)
+    readonly property int effectiveSizeMode: settingValue("SizeMode", appSettings.zoneSelectorSizeMode)
+    readonly property int effectiveGridColumns: settingValue("GridColumns", appSettings.zoneSelectorGridColumns)
+    readonly property int effectiveMaxRows: settingValue("MaxRows", appSettings.zoneSelectorMaxRows)
     readonly property int effectivePreviewWidth: {
         var sm = effectiveSizeMode;
         if (sm === 0)
             return Math.round(180 * (safeAspectRatio / (16 / 9)));
 
-        return settingValue("PreviewWidth", kcm.zoneSelectorPreviewWidth);
+        return settingValue("PreviewWidth", appSettings.zoneSelectorPreviewWidth);
     }
     readonly property int effectivePreviewHeight: {
         var sm = effectiveSizeMode;
         if (sm === 0)
             return Math.round(effectivePreviewWidth / safeAspectRatio);
 
-        return settingValue("PreviewHeight", kcm.zoneSelectorPreviewHeight);
+        return settingValue("PreviewHeight", appSettings.zoneSelectorPreviewHeight);
     }
-    readonly property int effectiveTriggerDistance: settingValue("TriggerDistance", kcm.zoneSelectorTriggerDistance)
+    readonly property int effectiveTriggerDistance: settingValue("TriggerDistance", appSettings.zoneSelectorTriggerDistance)
 
     function settingValue(key, globalValue) {
         return psHelper.settingValue(key, globalValue);
@@ -69,7 +69,7 @@ ColumnLayout {
     PerScreenOverrideHelper {
         id: psHelper
 
-        kcm: root.controller
+        appSettings: root.controller
         getterMethod: "getPerScreenZoneSelectorSettings"
         setterMethod: "setPerScreenZoneSelectorSetting"
         clearerMethod: "clearPerScreenZoneSelectorSettings"
@@ -87,15 +87,15 @@ ColumnLayout {
     CheckBox {
         Layout.fillWidth: true
         text: i18n("Enable zone selector popup")
-        checked: kcm.zoneSelectorEnabled
-        onToggled: kcm.zoneSelectorEnabled = checked
+        checked: appSettings.zoneSelectorEnabled
+        onToggled: appSettings.zoneSelectorEnabled = checked
         font.bold: true
     }
 
     MonitorSelectorSection {
         Layout.fillWidth: true
-        kcm: root.controller
-        featureEnabled: root.kcm.zoneSelectorEnabled
+        appSettings: root.controller
+        featureEnabled: root.appSettings.zoneSelectorEnabled
         selectedScreenName: root.selectedScreenName
         hasOverrides: root.hasOverrides
         onSelectedScreenNameChanged: root.selectedScreenName = selectedScreenName
@@ -111,7 +111,7 @@ ColumnLayout {
             id: positionCard
 
             anchors.fill: parent
-            enabled: kcm.zoneSelectorEnabled
+            enabled: appSettings.zoneSelectorEnabled
 
             header: Kirigami.Heading {
                 level: 3
@@ -133,10 +133,10 @@ ColumnLayout {
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: parent.top
                         position: root.effectivePosition
-                        enabled: kcm.zoneSelectorEnabled
+                        enabled: appSettings.zoneSelectorEnabled
                         onPositionSelected: function(newPosition) {
                             root.writeSetting("Position", newPosition, function(v) {
-                                kcm.zoneSelectorPosition = v;
+                                appSettings.zoneSelectorPosition = v;
                             });
                         }
                     }
@@ -193,7 +193,7 @@ ColumnLayout {
                                 stepSize: 10
                                 Accessible.name: i18n("Trigger distance")
                                 onMoved: root.writeSetting("TriggerDistance", value, function(v) {
-                                    kcm.zoneSelectorTriggerDistance = v;
+                                    appSettings.zoneSelectorTriggerDistance = v;
                                 })
 
                                 Binding on value {
@@ -232,7 +232,7 @@ ColumnLayout {
             id: layoutCard
 
             anchors.fill: parent
-            enabled: kcm.zoneSelectorEnabled
+            enabled: appSettings.zoneSelectorEnabled
 
             header: Kirigami.Heading {
                 level: 3
@@ -259,7 +259,7 @@ ColumnLayout {
                     }]
                     currentIndex: Math.max(0, indexOfValue(root.effectiveLayoutMode))
                     onActivated: root.writeSetting("LayoutMode", currentValue, function(v) {
-                        kcm.zoneSelectorLayoutMode = v;
+                        appSettings.zoneSelectorLayoutMode = v;
                     })
                 }
 
@@ -270,7 +270,7 @@ ColumnLayout {
                     value: root.effectiveGridColumns
                     visible: root.effectiveLayoutMode === 0
                     onValueModified: root.writeSetting("GridColumns", value, function(v) {
-                        kcm.zoneSelectorGridColumns = v;
+                        appSettings.zoneSelectorGridColumns = v;
                     })
                 }
 
@@ -281,7 +281,7 @@ ColumnLayout {
                     value: root.effectiveMaxRows
                     visible: root.effectiveLayoutMode === 0 // Only applies to Grid mode
                     onValueModified: root.writeSetting("MaxRows", value, function(v) {
-                        kcm.zoneSelectorMaxRows = v;
+                        appSettings.zoneSelectorMaxRows = v;
                     })
                     ToolTip.visible: hovered && root.isCurrentTab
                     ToolTip.text: i18n("Scrolling enabled when more rows exist")
@@ -302,7 +302,7 @@ ColumnLayout {
             id: previewCard
 
             anchors.fill: parent
-            enabled: kcm.zoneSelectorEnabled
+            enabled: appSettings.zoneSelectorEnabled
 
             header: Kirigami.Heading {
                 level: 3
@@ -428,7 +428,7 @@ ColumnLayout {
                         onClicked: {
                             sizeButtonRow.customModeActive = false;
                             root.writeSetting("SizeMode", 0, function(v) {
-                                kcm.zoneSelectorSizeMode = v;
+                                appSettings.zoneSelectorSizeMode = v;
                             });
                         }
                         ToolTip.visible: hovered
@@ -443,13 +443,13 @@ ColumnLayout {
                         onClicked: {
                             sizeButtonRow.customModeActive = false;
                             root.writeSetting("SizeMode", 1, function(v) {
-                                kcm.zoneSelectorSizeMode = v;
+                                appSettings.zoneSelectorSizeMode = v;
                             });
                             root.writeSetting("PreviewWidth", 120, function(v) {
-                                kcm.zoneSelectorPreviewWidth = v;
+                                appSettings.zoneSelectorPreviewWidth = v;
                             });
                             root.writeSetting("PreviewHeight", Math.round(120 / root.safeAspectRatio), function(v) {
-                                kcm.zoneSelectorPreviewHeight = v;
+                                appSettings.zoneSelectorPreviewHeight = v;
                             });
                         }
                         ToolTip.visible: hovered
@@ -464,13 +464,13 @@ ColumnLayout {
                         onClicked: {
                             sizeButtonRow.customModeActive = false;
                             root.writeSetting("SizeMode", 1, function(v) {
-                                kcm.zoneSelectorSizeMode = v;
+                                appSettings.zoneSelectorSizeMode = v;
                             });
                             root.writeSetting("PreviewWidth", 180, function(v) {
-                                kcm.zoneSelectorPreviewWidth = v;
+                                appSettings.zoneSelectorPreviewWidth = v;
                             });
                             root.writeSetting("PreviewHeight", Math.round(180 / root.safeAspectRatio), function(v) {
-                                kcm.zoneSelectorPreviewHeight = v;
+                                appSettings.zoneSelectorPreviewHeight = v;
                             });
                         }
                         ToolTip.visible: hovered
@@ -485,13 +485,13 @@ ColumnLayout {
                         onClicked: {
                             sizeButtonRow.customModeActive = false;
                             root.writeSetting("SizeMode", 1, function(v) {
-                                kcm.zoneSelectorSizeMode = v;
+                                appSettings.zoneSelectorSizeMode = v;
                             });
                             root.writeSetting("PreviewWidth", 260, function(v) {
-                                kcm.zoneSelectorPreviewWidth = v;
+                                appSettings.zoneSelectorPreviewWidth = v;
                             });
                             root.writeSetting("PreviewHeight", Math.round(260 / root.safeAspectRatio), function(v) {
-                                kcm.zoneSelectorPreviewHeight = v;
+                                appSettings.zoneSelectorPreviewHeight = v;
                             });
                         }
                         ToolTip.visible: hovered
@@ -506,7 +506,7 @@ ColumnLayout {
                         onClicked: {
                             sizeButtonRow.customModeActive = true;
                             root.writeSetting("SizeMode", 1, function(v) {
-                                kcm.zoneSelectorSizeMode = v;
+                                appSettings.zoneSelectorSizeMode = v;
                             });
                         }
                         ToolTip.visible: hovered
@@ -538,13 +538,13 @@ ColumnLayout {
                         Accessible.name: i18n("Preview size")
                         onMoved: {
                             root.writeSetting("PreviewWidth", value, function(v) {
-                                kcm.zoneSelectorPreviewWidth = v;
+                                appSettings.zoneSelectorPreviewWidth = v;
                             });
                             // Always maintain aspect ratio
                             var newHeight = Math.round(value / root.safeAspectRatio);
                             newHeight = Math.max(root.constants.zoneSelectorPreviewHeightMin, Math.min(root.constants.zoneSelectorPreviewHeightMax, newHeight));
                             root.writeSetting("PreviewHeight", newHeight, function(v) {
-                                kcm.zoneSelectorPreviewHeight = v;
+                                appSettings.zoneSelectorPreviewHeight = v;
                             });
                         }
 

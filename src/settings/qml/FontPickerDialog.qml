@@ -9,8 +9,8 @@ import org.kde.kirigami as Kirigami
 Kirigami.Dialog {
     id: dialog
 
-    // KCM reference for QFontDatabase helpers
-    required property var kcm
+    // Settings reference for QFontDatabase helpers
+    required property var appSettings
     // Output properties (committed on accept)
     property string selectedFamily: ""
     property int selectedWeight: Font.Bold
@@ -54,7 +54,7 @@ Kirigami.Dialog {
             workingStyle = "";
             return ;
         }
-        availableStyles = kcm.fontStylesForFamily(workingFamily);
+        availableStyles = appSettings.fontStylesForFamily(workingFamily);
         // Find the style matching current weight/italic
         workingStyle = findMatchingStyle();
     }
@@ -62,8 +62,8 @@ Kirigami.Dialog {
     function findMatchingStyle() {
         // Try to find a style that matches current weight + italic
         for (var i = 0; i < availableStyles.length; i++) {
-            var sw = kcm.fontStyleWeight(workingFamily, availableStyles[i]);
-            var si = kcm.fontStyleItalic(workingFamily, availableStyles[i]);
+            var sw = appSettings.fontStyleWeight(workingFamily, availableStyles[i]);
+            var si = appSettings.fontStyleItalic(workingFamily, availableStyles[i]);
             if (sw === workingWeight && si === workingItalic)
                 return availableStyles[i];
 
@@ -72,8 +72,8 @@ Kirigami.Dialog {
         var bestIdx = 0;
         var bestDist = 9999;
         for (var j = 0; j < availableStyles.length; j++) {
-            var w = kcm.fontStyleWeight(workingFamily, availableStyles[j]);
-            var it = kcm.fontStyleItalic(workingFamily, availableStyles[j]);
+            var w = appSettings.fontStyleWeight(workingFamily, availableStyles[j]);
+            var it = appSettings.fontStyleItalic(workingFamily, availableStyles[j]);
             var dist = Math.abs(w - workingWeight) + (it !== workingItalic ? 500 : 0);
             if (dist < bestDist) {
                 bestDist = dist;
@@ -81,8 +81,8 @@ Kirigami.Dialog {
             }
         }
         if (availableStyles.length > 0) {
-            workingWeight = kcm.fontStyleWeight(workingFamily, availableStyles[bestIdx]);
-            workingItalic = kcm.fontStyleItalic(workingFamily, availableStyles[bestIdx]);
+            workingWeight = appSettings.fontStyleWeight(workingFamily, availableStyles[bestIdx]);
+            workingItalic = appSettings.fontStyleItalic(workingFamily, availableStyles[bestIdx]);
             return availableStyles[bestIdx];
         }
         return "";
@@ -226,8 +226,8 @@ Kirigami.Dialog {
                         highlighted: modelData === dialog.workingStyle
                         onClicked: {
                             dialog.workingStyle = modelData;
-                            dialog.workingWeight = kcm.fontStyleWeight(dialog.workingFamily, modelData);
-                            dialog.workingItalic = kcm.fontStyleItalic(dialog.workingFamily, modelData);
+                            dialog.workingWeight = appSettings.fontStyleWeight(dialog.workingFamily, modelData);
+                            dialog.workingItalic = appSettings.fontStyleItalic(dialog.workingFamily, modelData);
                         }
                     }
 

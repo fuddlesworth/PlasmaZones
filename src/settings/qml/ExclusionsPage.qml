@@ -14,19 +14,19 @@ Flickable {
     WindowPickerDialog {
         id: windowPickerDialog
 
-        kcm: settingsController
+        appSettings: settingsController
         onPicked: (value) => {
             if (forApps) {
-                let apps = kcm.excludedApplications.slice();
+                let apps = appSettings.excludedApplications.slice();
                 if (value.length > 0 && apps.indexOf(value) === -1) {
                     apps.push(value);
-                    kcm.excludedApplications = apps;
+                    appSettings.excludedApplications = apps;
                 }
             } else {
-                let classes = kcm.excludedWindowClasses.slice();
+                let classes = appSettings.excludedWindowClasses.slice();
                 if (value.length > 0 && classes.indexOf(value) === -1) {
                     classes.push(value);
-                    kcm.excludedWindowClasses = classes;
+                    appSettings.excludedWindowClasses = classes;
                 }
             }
         }
@@ -38,7 +38,7 @@ Flickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // Info message at top level, matching KCM placement
+        // Info message at top level, matching original placement
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
@@ -66,8 +66,8 @@ Flickable {
                     CheckBox {
                         Kirigami.FormData.label: i18n("Transient:")
                         text: i18n("Exclude transient windows (dialogs, popups, toolbars)")
-                        checked: kcm.excludeTransientWindows
-                        onToggled: kcm.excludeTransientWindows = checked
+                        checked: appSettings.excludeTransientWindows
+                        onToggled: appSettings.excludeTransientWindows = checked
                     }
 
                     Kirigami.Separator {
@@ -88,8 +88,8 @@ Flickable {
                                 from: 0
                                 to: 1000
                                 stepSize: 10
-                                value: kcm.minimumWindowWidth
-                                onValueModified: kcm.minimumWindowWidth = value
+                                value: appSettings.minimumWindowWidth
+                                onValueModified: appSettings.minimumWindowWidth = value
                                 textFromValue: function(value) {
                                     return value === 0 ? i18n("Disabled") : value + " px";
                                 }
@@ -107,8 +107,8 @@ Flickable {
                                 from: 0
                                 to: 1000
                                 stepSize: 10
-                                value: kcm.minimumWindowHeight
-                                onValueModified: kcm.minimumWindowHeight = value
+                                value: appSettings.minimumWindowHeight
+                                onValueModified: appSettings.minimumWindowHeight = value
                                 textFromValue: function(value) {
                                     return value === 0 ? i18n("Disabled") : value + " px";
                                 }
@@ -147,21 +147,21 @@ Flickable {
                 emptyTitle: i18n("No excluded applications")
                 emptyExplanation: i18n("Add application names above to exclude them from snapping and autotiling")
                 iconSource: "application-x-executable"
-                model: kcm.excludedApplications
+                model: appSettings.excludedApplications
                 useMonospaceFont: false
                 showPickButton: true
                 onAddRequested: (text) => {
-                    let apps = kcm.excludedApplications.slice();
+                    let apps = appSettings.excludedApplications.slice();
                     let entry = text.trim();
                     if (entry.length > 0 && apps.indexOf(entry) === -1) {
                         apps.push(entry);
-                        kcm.excludedApplications = apps;
+                        appSettings.excludedApplications = apps;
                     }
                 }
                 onRemoveRequested: (index) => {
-                    let apps = kcm.excludedApplications.slice();
+                    let apps = appSettings.excludedApplications.slice();
                     apps.splice(index, 1);
-                    kcm.excludedApplications = apps;
+                    appSettings.excludedApplications = apps;
                 }
                 onPickRequested: windowPickerDialog.openForApps()
             }
@@ -182,21 +182,21 @@ Flickable {
                 emptyTitle: i18n("No excluded window classes")
                 emptyExplanation: i18n("Add window classes above to exclude them from snapping and autotiling")
                 iconSource: "window"
-                model: kcm.excludedWindowClasses
+                model: appSettings.excludedWindowClasses
                 useMonospaceFont: true
                 showPickButton: true
                 onAddRequested: (text) => {
-                    let classes = kcm.excludedWindowClasses.slice();
+                    let classes = appSettings.excludedWindowClasses.slice();
                     let entry = text.trim();
                     if (entry.length > 0 && classes.indexOf(entry) === -1) {
                         classes.push(entry);
-                        kcm.excludedWindowClasses = classes;
+                        appSettings.excludedWindowClasses = classes;
                     }
                 }
                 onRemoveRequested: (index) => {
-                    let classes = kcm.excludedWindowClasses.slice();
+                    let classes = appSettings.excludedWindowClasses.slice();
                     classes.splice(index, 1);
-                    kcm.excludedWindowClasses = classes;
+                    appSettings.excludedWindowClasses = classes;
                 }
                 onPickRequested: windowPickerDialog.openForClasses()
             }

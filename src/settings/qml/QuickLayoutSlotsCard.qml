@@ -14,20 +14,20 @@ import org.kde.kirigami as Kirigami
 Kirigami.Card {
     id: root
 
-    required property var kcm
+    required property var appSettings
     required property QtObject constants
     // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     property int viewMode: 0
 
     function getSlot(slotNumber) {
-        return viewMode === 1 ? (kcm.getTilingQuickLayoutSlot(slotNumber) || "") : (kcm.getQuickLayoutSlot(slotNumber) || "");
+        return viewMode === 1 ? (appSettings.getTilingQuickLayoutSlot(slotNumber) || "") : (appSettings.getQuickLayoutSlot(slotNumber) || "");
     }
 
     function setSlot(slotNumber, value) {
         if (viewMode === 1)
-            kcm.setTilingQuickLayoutSlot(slotNumber, value);
+            appSettings.setTilingQuickLayoutSlot(slotNumber, value);
         else
-            kcm.setQuickLayoutSlot(slotNumber, value);
+            appSettings.setQuickLayoutSlot(slotNumber, value);
     }
 
     header: Kirigami.Heading {
@@ -64,7 +64,7 @@ Kirigami.Card {
 
                 required property int index
                 property int slotNumber: index + 1
-                property string shortcutText: root.kcm.getQuickLayoutShortcut(slotNumber)
+                property string shortcutText: root.appSettings.getQuickLayoutShortcut(slotNumber)
                 property int _slotRevision: 0
 
                 width: ListView.view.width
@@ -103,7 +103,7 @@ Kirigami.Card {
                         id: slotLayoutCombo
 
                         Layout.preferredWidth: Kirigami.Units.gridUnit * 16
-                        kcm: root.kcm
+                        appSettings: root.appSettings
                         noneText: i18n("None")
                         showPreview: root.viewMode === 0
                         layoutFilter: root.viewMode === 1 ? 1 : 0
@@ -125,7 +125,7 @@ Kirigami.Card {
                                 slotDelegate._slotRevision++;
                             }
 
-                            target: root.kcm
+                            target: root.appSettings
                         }
 
                     }

@@ -10,10 +10,10 @@ import org.kde.kirigami as Kirigami
  * @brief Reusable combo box for selecting a screen/monitor
  *
  * Shows screen name, resolution, and primary indicator.
- * Rebuilds model reactively when kcm.screens changes.
+ * Rebuilds model reactively when appSettings.screens changes.
  *
  * Properties:
- *   - kcm: required, the KCM backend object
+ *   - appSettings: required, the settings backend object
  *   - noneText: label for the "any/all" option (default: "Any Screen")
  *   - showNoneOption: whether to show the none/all option (default: true)
  *   - currentScreenName: the currently selected screen name ("" for none)
@@ -21,7 +21,7 @@ import org.kde.kirigami as Kirigami
 WideComboBox {
     id: root
 
-    required property var kcm
+    required property var appSettings
     property string noneText: i18n("Any Screen")
     property bool showNoneOption: true
     //* The screen name of the current selection ("" if none/all selected)
@@ -55,9 +55,9 @@ WideComboBox {
             "value": ""
         });
 
-        if (root.kcm && root.kcm.screens) {
-            for (let i = 0; i < root.kcm.screens.length; ++i) {
-                let s = root.kcm.screens[i];
+        if (root.appSettings && root.appSettings.screens) {
+            for (let i = 0; i < root.appSettings.screens.length; ++i) {
+                let s = root.appSettings.screens[i];
                 let label = s.name || (i18n("Monitor") + " " + (i + 1));
                 let mfr = s.manufacturer || "";
                 let mdl = s.model || "";
@@ -95,7 +95,7 @@ WideComboBox {
             root.selectScreenName(prev);
         }
 
-        target: root.kcm
+        target: root.appSettings
     }
 
 }

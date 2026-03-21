@@ -47,7 +47,7 @@ Flickable {
     PerScreenOverrideHelper {
         id: snappingHelper
 
-        kcm: settingsController
+        appSettings: settingsController
         getterMethod: "getPerScreenSnappingSettings"
         setterMethod: "setPerScreenSnappingSetting"
         clearerMethod: "clearPerScreenSnappingSettings"
@@ -74,8 +74,8 @@ Flickable {
             }
 
             Switch {
-                checked: kcm.snappingEnabled
-                onToggled: kcm.snappingEnabled = checked
+                checked: appSettings.snappingEnabled
+                onToggled: appSettings.snappingEnabled = checked
                 Accessible.name: i18n("Enable zone snapping")
             }
 
@@ -92,7 +92,7 @@ Flickable {
                 id: appearanceCard
 
                 anchors.fill: parent
-                enabled: kcm.snappingEnabled
+                enabled: appSettings.snappingEnabled
 
                 header: Kirigami.Heading {
                     text: i18n("Appearance")
@@ -111,8 +111,8 @@ Flickable {
 
                         Kirigami.FormData.label: i18n("Color scheme:")
                         text: i18n("Use system accent color")
-                        checked: kcm.useSystemColors
-                        onToggled: kcm.useSystemColors = checked
+                        checked: appSettings.useSystemColors
+                        onToggled: appSettings.useSystemColors = checked
                     }
 
                     RowLayout {
@@ -121,15 +121,15 @@ Flickable {
                         spacing: Kirigami.Units.smallSpacing
 
                         ColorButton {
-                            color: kcm.highlightColor
+                            color: appSettings.highlightColor
                             onClicked: {
-                                highlightColorDialog.selectedColor = kcm.highlightColor;
+                                highlightColorDialog.selectedColor = appSettings.highlightColor;
                                 highlightColorDialog.open();
                             }
                         }
 
                         Label {
-                            text: kcm.highlightColor.toString().toUpperCase()
+                            text: appSettings.highlightColor.toString().toUpperCase()
                             font: Kirigami.Theme.fixedWidthFont
                         }
 
@@ -141,15 +141,15 @@ Flickable {
                         spacing: Kirigami.Units.smallSpacing
 
                         ColorButton {
-                            color: kcm.inactiveColor
+                            color: appSettings.inactiveColor
                             onClicked: {
-                                inactiveColorDialog.selectedColor = kcm.inactiveColor;
+                                inactiveColorDialog.selectedColor = appSettings.inactiveColor;
                                 inactiveColorDialog.open();
                             }
                         }
 
                         Label {
-                            text: kcm.inactiveColor.toString().toUpperCase()
+                            text: appSettings.inactiveColor.toString().toUpperCase()
                             font: Kirigami.Theme.fixedWidthFont
                         }
 
@@ -161,15 +161,15 @@ Flickable {
                         spacing: Kirigami.Units.smallSpacing
 
                         ColorButton {
-                            color: kcm.borderColor
+                            color: appSettings.borderColor
                             onClicked: {
-                                borderColorDialog.selectedColor = kcm.borderColor;
+                                borderColorDialog.selectedColor = appSettings.borderColor;
                                 borderColorDialog.open();
                             }
                         }
 
                         Label {
-                            text: kcm.borderColor.toString().toUpperCase()
+                            text: appSettings.borderColor.toString().toUpperCase()
                             font: Kirigami.Theme.fixedWidthFont
                         }
 
@@ -225,8 +225,8 @@ Flickable {
                             Layout.preferredWidth: root.sliderPreferredWidth
                             from: 0
                             to: root.opacitySliderMax
-                            value: kcm.activeOpacity * root.opacitySliderMax
-                            onMoved: kcm.activeOpacity = value / root.opacitySliderMax
+                            value: appSettings.activeOpacity * root.opacitySliderMax
+                            onMoved: appSettings.activeOpacity = value / root.opacitySliderMax
                             Accessible.name: i18n("Active zone opacity")
                         }
 
@@ -247,8 +247,8 @@ Flickable {
                             Layout.preferredWidth: root.sliderPreferredWidth
                             from: 0
                             to: root.opacitySliderMax
-                            value: kcm.inactiveOpacity * root.opacitySliderMax
-                            onMoved: kcm.inactiveOpacity = value / root.opacitySliderMax
+                            value: appSettings.inactiveOpacity * root.opacitySliderMax
+                            onMoved: appSettings.inactiveOpacity = value / root.opacitySliderMax
                             Accessible.name: i18n("Inactive zone opacity")
                         }
 
@@ -271,8 +271,8 @@ Flickable {
                         SpinBox {
                             from: 0
                             to: root.borderWidthMax
-                            value: kcm.borderWidth
-                            onValueModified: kcm.borderWidth = value
+                            value: appSettings.borderWidth
+                            onValueModified: appSettings.borderWidth = value
                             Accessible.name: i18n("Border width")
                         }
 
@@ -289,8 +289,8 @@ Flickable {
                         SpinBox {
                             from: 0
                             to: root.borderRadiusMax
-                            value: kcm.borderRadius
-                            onValueModified: kcm.borderRadius = value
+                            value: appSettings.borderRadius
+                            onValueModified: appSettings.borderRadius = value
                             Accessible.name: i18n("Border radius")
                         }
 
@@ -311,15 +311,15 @@ Flickable {
                         spacing: Kirigami.Units.smallSpacing
 
                         ColorButton {
-                            color: kcm.labelFontColor
+                            color: appSettings.labelFontColor
                             onClicked: {
-                                labelFontColorDialog.selectedColor = kcm.labelFontColor;
+                                labelFontColorDialog.selectedColor = appSettings.labelFontColor;
                                 labelFontColorDialog.open();
                             }
                         }
 
                         Label {
-                            text: kcm.labelFontColor.toString().toUpperCase()
+                            text: appSettings.labelFontColor.toString().toUpperCase()
                             font: Kirigami.Theme.fixedWidthFont
                         }
 
@@ -330,33 +330,33 @@ Flickable {
                         spacing: Kirigami.Units.smallSpacing
 
                         Button {
-                            text: kcm.labelFontFamily || i18n("System default")
-                            font.family: kcm.labelFontFamily
-                            font.weight: kcm.labelFontWeight
-                            font.italic: kcm.labelFontItalic
+                            text: appSettings.labelFontFamily || i18n("System default")
+                            font.family: appSettings.labelFontFamily
+                            font.weight: appSettings.labelFontWeight
+                            font.italic: appSettings.labelFontItalic
                             icon.name: "font-select-symbolic"
                             onClicked: {
-                                fontPickerDialog.selectedFamily = kcm.labelFontFamily;
-                                fontPickerDialog.selectedWeight = kcm.labelFontWeight;
-                                fontPickerDialog.selectedItalic = kcm.labelFontItalic;
-                                fontPickerDialog.selectedUnderline = kcm.labelFontUnderline;
-                                fontPickerDialog.selectedStrikeout = kcm.labelFontStrikeout;
+                                fontPickerDialog.selectedFamily = appSettings.labelFontFamily;
+                                fontPickerDialog.selectedWeight = appSettings.labelFontWeight;
+                                fontPickerDialog.selectedItalic = appSettings.labelFontItalic;
+                                fontPickerDialog.selectedUnderline = appSettings.labelFontUnderline;
+                                fontPickerDialog.selectedStrikeout = appSettings.labelFontStrikeout;
                                 fontPickerDialog.open();
                             }
                         }
 
                         Button {
                             icon.name: "edit-clear"
-                            visible: kcm.labelFontFamily !== "" || kcm.labelFontWeight !== Font.Bold || kcm.labelFontItalic || kcm.labelFontUnderline || kcm.labelFontStrikeout || Math.abs(kcm.labelFontSizeScale - 1) > 0.01
+                            visible: appSettings.labelFontFamily !== "" || appSettings.labelFontWeight !== Font.Bold || appSettings.labelFontItalic || appSettings.labelFontUnderline || appSettings.labelFontStrikeout || Math.abs(appSettings.labelFontSizeScale - 1) > 0.01
                             ToolTip.text: i18n("Reset to defaults")
                             ToolTip.visible: hovered
                             onClicked: {
-                                kcm.labelFontFamily = "";
-                                kcm.labelFontSizeScale = 1;
-                                kcm.labelFontWeight = Font.Bold;
-                                kcm.labelFontItalic = false;
-                                kcm.labelFontUnderline = false;
-                                kcm.labelFontStrikeout = false;
+                                appSettings.labelFontFamily = "";
+                                appSettings.labelFontSizeScale = 1;
+                                appSettings.labelFontWeight = Font.Bold;
+                                appSettings.labelFontItalic = false;
+                                appSettings.labelFontUnderline = false;
+                                appSettings.labelFontStrikeout = false;
                             }
                         }
 
@@ -373,8 +373,8 @@ Flickable {
                             from: 25
                             to: 300
                             stepSize: 5
-                            value: kcm.labelFontSizeScale * 100
-                            onMoved: kcm.labelFontSizeScale = value / 100
+                            value: appSettings.labelFontSizeScale * 100
+                            onMoved: appSettings.labelFontSizeScale = value / 100
                             Accessible.name: i18n("Label font size scale")
                         }
 
@@ -402,7 +402,7 @@ Flickable {
                 id: effectsCard
 
                 anchors.fill: parent
-                enabled: kcm.snappingEnabled
+                enabled: appSettings.snappingEnabled
 
                 header: Kirigami.Heading {
                     text: i18n("Effects")
@@ -419,22 +419,22 @@ Flickable {
                     CheckBox {
                         Kirigami.FormData.label: i18n("Blur:")
                         text: i18n("Enable blur behind zones")
-                        checked: kcm.enableBlur
-                        onToggled: kcm.enableBlur = checked
+                        checked: appSettings.enableBlur
+                        onToggled: appSettings.enableBlur = checked
                     }
 
                     CheckBox {
                         Kirigami.FormData.label: i18n("Numbers:")
                         text: i18n("Show zone numbers")
-                        checked: kcm.showZoneNumbers
-                        onToggled: kcm.showZoneNumbers = checked
+                        checked: appSettings.showZoneNumbers
+                        onToggled: appSettings.showZoneNumbers = checked
                     }
 
                     CheckBox {
                         Kirigami.FormData.label: i18n("Animation:")
                         text: i18n("Flash zones when switching layouts")
-                        checked: kcm.flashZonesOnSwitch
-                        onToggled: kcm.flashZonesOnSwitch = checked
+                        checked: appSettings.flashZonesOnSwitch
+                        onToggled: appSettings.flashZonesOnSwitch = checked
                     }
 
                 }
@@ -454,7 +454,7 @@ Flickable {
                 id: shaderCard
 
                 anchors.fill: parent
-                enabled: kcm.snappingEnabled
+                enabled: appSettings.snappingEnabled
 
                 header: Kirigami.Heading {
                     text: i18n("Shader Effects")
@@ -473,8 +473,8 @@ Flickable {
 
                         Kirigami.FormData.label: i18n("Shaders:")
                         text: i18n("Enable shader effects")
-                        checked: kcm.enableShaderEffects
-                        onToggled: kcm.enableShaderEffects = checked
+                        checked: appSettings.enableShaderEffects
+                        onToggled: appSettings.enableShaderEffects = checked
                     }
 
                     RowLayout {
@@ -490,8 +490,8 @@ Flickable {
                             from: 30
                             to: 144
                             stepSize: 1
-                            value: kcm.shaderFrameRate
-                            onMoved: kcm.shaderFrameRate = Math.round(value)
+                            value: appSettings.shaderFrameRate
+                            onMoved: appSettings.shaderFrameRate = Math.round(value)
                         }
 
                         Label {
@@ -512,8 +512,8 @@ Flickable {
                         Kirigami.FormData.label: i18n("Audio:")
                         text: i18n("Enable CAVA audio spectrum")
                         enabled: shaderEffectsCheck.checked && settingsController.cavaAvailable
-                        checked: kcm.enableAudioVisualizer
-                        onToggled: kcm.enableAudioVisualizer = checked
+                        checked: appSettings.enableAudioVisualizer
+                        onToggled: appSettings.enableAudioVisualizer = checked
                         ToolTip.visible: hovered
                         ToolTip.text: settingsController.cavaAvailable ? i18n("Feeds audio spectrum data to shaders that support it.") : i18n("CAVA is not installed. Install cava to enable audio visualization.")
                     }
@@ -538,8 +538,8 @@ Flickable {
                             from: 16
                             to: 256
                             stepSize: 2
-                            value: kcm.audioSpectrumBarCount
-                            onMoved: kcm.audioSpectrumBarCount = Math.round(value)
+                            value: appSettings.audioSpectrumBarCount
+                            onMoved: appSettings.audioSpectrumBarCount = Math.round(value)
                         }
 
                         Label {
@@ -566,7 +566,7 @@ Flickable {
                 id: activationCard
 
                 anchors.fill: parent
-                enabled: kcm.snappingEnabled
+                enabled: appSettings.snappingEnabled
 
                 header: Kirigami.Heading {
                     text: i18n("Activation")
@@ -617,8 +617,8 @@ Flickable {
                         enabled: !alwaysActivateCheck.checked
                         opacity: enabled ? 1 : 0.6
                         text: i18n("Tap trigger to toggle overlay")
-                        checked: kcm.toggleActivation
-                        onToggled: kcm.toggleActivation = checked
+                        checked: appSettings.toggleActivation
+                        onToggled: appSettings.toggleActivation = checked
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("When enabled, press the activation trigger once to show the overlay, press again to hide it. When disabled, hold the trigger to show.")
                     }
@@ -633,8 +633,8 @@ Flickable {
 
                         Kirigami.FormData.label: i18n("Paint-to-span:")
                         text: i18n("Enable zone spanning")
-                        checked: kcm.zoneSpanEnabled
-                        onToggled: kcm.zoneSpanEnabled = checked
+                        checked: appSettings.zoneSpanEnabled
+                        onToggled: appSettings.zoneSpanEnabled = checked
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("When enabled, you can paint across multiple zones to snap a window to the combined area.")
                     }
@@ -668,8 +668,8 @@ Flickable {
 
                             from: 5
                             to: root.thresholdMax
-                            value: kcm.adjacentThreshold
-                            onValueModified: kcm.adjacentThreshold = value
+                            value: appSettings.adjacentThreshold
+                            onValueModified: appSettings.adjacentThreshold = value
                             Accessible.name: i18n("Edge threshold")
                             ToolTip.visible: hovered
                             ToolTip.text: i18n("Distance from zone edge for multi-zone selection")
@@ -691,8 +691,8 @@ Flickable {
 
                         Kirigami.FormData.label: i18n("Window picker:")
                         text: i18n("Enable snap assist")
-                        checked: kcm.snapAssistFeatureEnabled
-                        onToggled: kcm.snapAssistFeatureEnabled = checked
+                        checked: appSettings.snapAssistFeatureEnabled
+                        onToggled: appSettings.snapAssistFeatureEnabled = checked
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Show a window picker after snapping to fill remaining empty zones")
                     }
@@ -700,8 +700,8 @@ Flickable {
                     CheckBox {
                         Kirigami.FormData.label: i18n("Behavior:")
                         text: i18n("Always show after snapping")
-                        checked: kcm.snapAssistEnabled
-                        onToggled: kcm.snapAssistEnabled = checked
+                        checked: appSettings.snapAssistEnabled
+                        onToggled: appSettings.snapAssistEnabled = checked
                         enabled: snapAssistFeatureEnabledCheck.checked
                         opacity: enabled ? 1 : 0.6
                         ToolTip.visible: hovered
@@ -712,7 +712,7 @@ Flickable {
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.sliderPreferredWidth
                         Kirigami.FormData.label: i18n("Hold to enable:")
-                        enabled: snapAssistFeatureEnabledCheck.checked && !kcm.snapAssistEnabled
+                        enabled: snapAssistFeatureEnabledCheck.checked && !appSettings.snapAssistEnabled
                         opacity: enabled ? 1 : 0.6
                         allowMultiple: true
                         acceptMode: acceptModeAll
@@ -742,7 +742,7 @@ Flickable {
                 id: behaviorCard
 
                 anchors.fill: parent
-                enabled: kcm.snappingEnabled
+                enabled: appSettings.snappingEnabled
 
                 header: Kirigami.Heading {
                     text: i18n("Behavior")
@@ -754,36 +754,36 @@ Flickable {
                     CheckBox {
                         Kirigami.FormData.label: i18n("Display:")
                         text: i18n("Show zones on all monitors while dragging")
-                        checked: kcm.showZonesOnAllMonitors
-                        onToggled: kcm.showZonesOnAllMonitors = checked
+                        checked: appSettings.showZonesOnAllMonitors
+                        onToggled: appSettings.showZonesOnAllMonitors = checked
                     }
 
                     CheckBox {
                         Kirigami.FormData.label: i18n("Resolution:")
                         text: i18n("Re-snap windows to their zones after resolution changes")
-                        checked: kcm.keepWindowsInZonesOnResolutionChange
-                        onToggled: kcm.keepWindowsInZonesOnResolutionChange = checked
+                        checked: appSettings.keepWindowsInZonesOnResolutionChange
+                        onToggled: appSettings.keepWindowsInZonesOnResolutionChange = checked
                     }
 
                     CheckBox {
                         Kirigami.FormData.label: i18n("New windows:")
                         text: i18n("Move new windows to their last used zone")
-                        checked: kcm.moveNewWindowsToLastZone
-                        onToggled: kcm.moveNewWindowsToLastZone = checked
+                        checked: appSettings.moveNewWindowsToLastZone
+                        onToggled: appSettings.moveNewWindowsToLastZone = checked
                     }
 
                     CheckBox {
                         Kirigami.FormData.label: i18n("Unsnapping:")
                         text: i18n("Restore original window size when unsnapping")
-                        checked: kcm.restoreOriginalSizeOnUnsnap
-                        onToggled: kcm.restoreOriginalSizeOnUnsnap = checked
+                        checked: appSettings.restoreOriginalSizeOnUnsnap
+                        onToggled: appSettings.restoreOriginalSizeOnUnsnap = checked
                     }
 
                     CheckBox {
                         Kirigami.FormData.label: i18n("Reopening:")
                         text: i18n("Restore windows to their previous zone")
-                        checked: kcm.restoreWindowsToZonesOnLogin
-                        onToggled: kcm.restoreWindowsToZonesOnLogin = checked
+                        checked: appSettings.restoreWindowsToZonesOnLogin
+                        onToggled: appSettings.restoreWindowsToZonesOnLogin = checked
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("When enabled, windows return to their previous zone when reopened, including after login or session restart.")
                     }
@@ -804,8 +804,8 @@ Flickable {
                             "text": i18n("Ignore all"),
                             "value": 2
                         }]
-                        currentIndex: Math.max(0, indexOfValue(kcm.stickyWindowHandling))
-                        onActivated: kcm.stickyWindowHandling = currentValue
+                        currentIndex: Math.max(0, indexOfValue(appSettings.stickyWindowHandling))
+                        onActivated: appSettings.stickyWindowHandling = currentValue
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Sticky windows appear on all desktops. Choose how snapping should behave.")
                     }
@@ -821,7 +821,7 @@ Flickable {
         // =====================================================================
         MonitorSelectorSection {
             Layout.fillWidth: true
-            kcm: settingsController
+            appSettings: settingsController
             featureEnabled: settingsController.settings.snappingEnabled
             selectedScreenName: snappingHelper.selectedScreenName
             hasOverrides: snappingHelper.hasOverrides
@@ -840,7 +840,7 @@ Flickable {
                 id: gapsCard
 
                 anchors.fill: parent
-                enabled: kcm.snappingEnabled
+                enabled: appSettings.snappingEnabled
 
                 header: Kirigami.Heading {
                     text: i18n("Gaps")
@@ -856,9 +856,9 @@ Flickable {
                         SpinBox {
                             from: 0
                             to: root.paddingMax
-                            value: root.snappingSettingValue("ZonePadding", kcm.zonePadding)
+                            value: root.snappingSettingValue("ZonePadding", appSettings.zonePadding)
                             onValueModified: root.writeSnappingSetting("ZonePadding", value, function(v) {
-                                kcm.zonePadding = v;
+                                appSettings.zonePadding = v;
                             })
                             Accessible.name: i18n("Zone padding")
                         }
@@ -876,10 +876,10 @@ Flickable {
                         SpinBox {
                             from: 0
                             to: root.paddingMax
-                            value: root.snappingSettingValue("OuterGap", kcm.outerGap)
+                            value: root.snappingSettingValue("OuterGap", appSettings.outerGap)
                             enabled: !perSideCheck.checked
                             onValueModified: root.writeSnappingSetting("OuterGap", value, function(v) {
-                                kcm.outerGap = v;
+                                appSettings.outerGap = v;
                             })
                             Accessible.name: i18n("Edge gap")
                         }
@@ -893,9 +893,9 @@ Flickable {
                             id: perSideCheck
 
                             text: i18n("Set per side")
-                            checked: root.snappingSettingValue("UsePerSideOuterGap", kcm.usePerSideOuterGap)
+                            checked: root.snappingSettingValue("UsePerSideOuterGap", appSettings.usePerSideOuterGap)
                             onToggled: root.writeSnappingSetting("UsePerSideOuterGap", checked, function(v) {
-                                kcm.usePerSideOuterGap = v;
+                                appSettings.usePerSideOuterGap = v;
                             })
                         }
 
@@ -915,9 +915,9 @@ Flickable {
                         SpinBox {
                             from: 0
                             to: root.paddingMax
-                            value: root.snappingSettingValue("OuterGapTop", kcm.outerGapTop)
+                            value: root.snappingSettingValue("OuterGapTop", appSettings.outerGapTop)
                             onValueModified: root.writeSnappingSetting("OuterGapTop", value, function(v) {
-                                kcm.outerGapTop = v;
+                                appSettings.outerGapTop = v;
                             })
                             Accessible.name: i18nc("@label", "Top edge gap")
                         }
@@ -933,9 +933,9 @@ Flickable {
                         SpinBox {
                             from: 0
                             to: root.paddingMax
-                            value: root.snappingSettingValue("OuterGapBottom", kcm.outerGapBottom)
+                            value: root.snappingSettingValue("OuterGapBottom", appSettings.outerGapBottom)
                             onValueModified: root.writeSnappingSetting("OuterGapBottom", value, function(v) {
-                                kcm.outerGapBottom = v;
+                                appSettings.outerGapBottom = v;
                             })
                             Accessible.name: i18nc("@label", "Bottom edge gap")
                         }
@@ -951,9 +951,9 @@ Flickable {
                         SpinBox {
                             from: 0
                             to: root.paddingMax
-                            value: root.snappingSettingValue("OuterGapLeft", kcm.outerGapLeft)
+                            value: root.snappingSettingValue("OuterGapLeft", appSettings.outerGapLeft)
                             onValueModified: root.writeSnappingSetting("OuterGapLeft", value, function(v) {
-                                kcm.outerGapLeft = v;
+                                appSettings.outerGapLeft = v;
                             })
                             Accessible.name: i18nc("@label", "Left edge gap")
                         }
@@ -969,9 +969,9 @@ Flickable {
                         SpinBox {
                             from: 0
                             to: root.paddingMax
-                            value: root.snappingSettingValue("OuterGapRight", kcm.outerGapRight)
+                            value: root.snappingSettingValue("OuterGapRight", appSettings.outerGapRight)
                             onValueModified: root.writeSnappingSetting("OuterGapRight", value, function(v) {
-                                kcm.outerGapRight = v;
+                                appSettings.outerGapRight = v;
                             })
                             Accessible.name: i18nc("@label", "Right edge gap")
                         }
@@ -993,7 +993,7 @@ Flickable {
         // =====================================================================
         ZoneSelectorSection {
             Layout.fillWidth: true
-            kcm: settingsController.settings
+            appSettings: settingsController.settings
             controller: settingsController
             constants: root
             isCurrentTab: true
@@ -1009,40 +1009,40 @@ Flickable {
         id: highlightColorDialog
 
         title: i18n("Choose Highlight Color")
-        onAccepted: kcm.highlightColor = selectedColor
+        onAccepted: appSettings.highlightColor = selectedColor
     }
 
     ColorDialog {
         id: inactiveColorDialog
 
         title: i18n("Choose Inactive Zone Color")
-        onAccepted: kcm.inactiveColor = selectedColor
+        onAccepted: appSettings.inactiveColor = selectedColor
     }
 
     ColorDialog {
         id: borderColorDialog
 
         title: i18n("Choose Border Color")
-        onAccepted: kcm.borderColor = selectedColor
+        onAccepted: appSettings.borderColor = selectedColor
     }
 
     ColorDialog {
         id: labelFontColorDialog
 
         title: i18n("Choose Label Color")
-        onAccepted: kcm.labelFontColor = selectedColor
+        onAccepted: appSettings.labelFontColor = selectedColor
     }
 
     FontPickerDialog {
         id: fontPickerDialog
 
-        kcm: settingsController
+        appSettings: settingsController
         onAccepted: {
-            kcm.labelFontFamily = selectedFamily;
-            kcm.labelFontWeight = selectedWeight;
-            kcm.labelFontItalic = selectedItalic;
-            kcm.labelFontUnderline = selectedUnderline;
-            kcm.labelFontStrikeout = selectedStrikeout;
+            appSettings.labelFontFamily = selectedFamily;
+            appSettings.labelFontWeight = selectedWeight;
+            appSettings.labelFontItalic = selectedItalic;
+            appSettings.labelFontUnderline = selectedUnderline;
+            appSettings.labelFontStrikeout = selectedStrikeout;
         }
     }
 

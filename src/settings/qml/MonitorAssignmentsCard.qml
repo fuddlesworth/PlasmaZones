@@ -14,7 +14,7 @@ import org.kde.kirigami as Kirigami
 Kirigami.Card {
     id: root
 
-    required property var kcm
+    required property var appSettings
     required property QtObject constants
     // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     property int viewMode: 0
@@ -33,10 +33,10 @@ Kirigami.Card {
 
             Layout.fillWidth: true
             // Use model length for reactive height calculation (count may lag on first load)
-            Layout.preferredHeight: (root.kcm.screens && root.kcm.screens.length > 0) ? contentHeight : Kirigami.Units.gridUnit * 4
+            Layout.preferredHeight: (root.appSettings.screens && root.appSettings.screens.length > 0) ? contentHeight : Kirigami.Units.gridUnit * 4
             Layout.margins: Kirigami.Units.smallSpacing
             clip: true
-            model: root.kcm.screens
+            model: root.appSettings.screens
             interactive: false
             Accessible.name: i18n("Monitor list")
             Accessible.role: Accessible.List
@@ -139,28 +139,28 @@ Kirigami.Card {
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 16
                             enabled: {
                                 void (monitorDelegate._assignmentRevision);
-                                return !root.kcm.isScreenLocked(monitorDelegate.screenName, root.viewMode);
+                                return !root.appSettings.isScreenLocked(monitorDelegate.screenName, root.viewMode);
                             }
-                            kcm: root.kcm
+                            appSettings: root.appSettings
                             noneText: i18n("Default")
                             showPreview: true
                             layoutFilter: root.viewMode === 1 ? 1 : 0
                             currentLayoutId: {
                                 void (monitorDelegate._assignmentRevision); // force re-evaluate on data change
-                                return root.viewMode === 1 ? (root.kcm.getTilingLayoutForScreen(monitorDelegate.screenName) || "") : (root.kcm.getLayoutForScreen(monitorDelegate.screenName) || "");
+                                return root.viewMode === 1 ? (root.appSettings.getTilingLayoutForScreen(monitorDelegate.screenName) || "") : (root.appSettings.getLayoutForScreen(monitorDelegate.screenName) || "");
                             }
                             onActivated: {
                                 let selectedValue = model[currentIndex].value;
                                 if (root.viewMode === 1) {
                                     if (selectedValue === "")
-                                        root.kcm.clearTilingScreenAssignment(monitorDelegate.screenName);
+                                        root.appSettings.clearTilingScreenAssignment(monitorDelegate.screenName);
                                     else
-                                        root.kcm.assignTilingLayoutToScreen(monitorDelegate.screenName, selectedValue);
+                                        root.appSettings.assignTilingLayoutToScreen(monitorDelegate.screenName, selectedValue);
                                 } else {
                                     if (selectedValue === "")
-                                        root.kcm.clearScreenAssignment(monitorDelegate.screenName);
+                                        root.appSettings.clearScreenAssignment(monitorDelegate.screenName);
                                     else
-                                        root.kcm.assignLayoutToScreen(monitorDelegate.screenName, selectedValue);
+                                        root.appSettings.assignLayoutToScreen(monitorDelegate.screenName, selectedValue);
                                 }
                             }
 
@@ -181,7 +181,7 @@ Kirigami.Card {
                                     monitorDelegate._assignmentRevision++;
                                 }
 
-                                target: root.kcm
+                                target: root.appSettings
                             }
 
                         }
@@ -190,13 +190,13 @@ Kirigami.Card {
                             icon.name: "edit-clear"
                             enabled: {
                                 void (monitorDelegate._assignmentRevision);
-                                return !root.kcm.isScreenLocked(monitorDelegate.screenName, root.viewMode);
+                                return !root.appSettings.isScreenLocked(monitorDelegate.screenName, root.viewMode);
                             }
                             onClicked: {
                                 if (root.viewMode === 1)
-                                    root.kcm.clearTilingScreenAssignment(monitorDelegate.screenName);
+                                    root.appSettings.clearTilingScreenAssignment(monitorDelegate.screenName);
                                 else
-                                    root.kcm.clearScreenAssignment(monitorDelegate.screenName);
+                                    root.appSettings.clearScreenAssignment(monitorDelegate.screenName);
                                 screenLayoutCombo.clearSelection();
                             }
                             ToolTip.visible: hovered
@@ -206,19 +206,19 @@ Kirigami.Card {
                         ToolButton {
                             icon.name: {
                                 void (monitorDelegate._assignmentRevision);
-                                return root.kcm.isScreenLocked(monitorDelegate.screenName, root.viewMode) ? "object-locked" : "object-unlocked";
+                                return root.appSettings.isScreenLocked(monitorDelegate.screenName, root.viewMode) ? "object-locked" : "object-unlocked";
                             }
                             opacity: {
                                 void (monitorDelegate._assignmentRevision);
-                                return root.kcm.isScreenLocked(monitorDelegate.screenName, root.viewMode) ? 1 : 0.4;
+                                return root.appSettings.isScreenLocked(monitorDelegate.screenName, root.viewMode) ? 1 : 0.4;
                             }
                             display: ToolButton.IconOnly
                             ToolTip.text: {
                                 void (monitorDelegate._assignmentRevision);
-                                return root.kcm.isScreenLocked(monitorDelegate.screenName, root.viewMode) ? i18n("Unlock layout for this monitor") : i18n("Lock layout for this monitor");
+                                return root.appSettings.isScreenLocked(monitorDelegate.screenName, root.viewMode) ? i18n("Unlock layout for this monitor") : i18n("Lock layout for this monitor");
                             }
                             ToolTip.visible: hovered
-                            onClicked: root.kcm.toggleScreenLock(monitorDelegate.screenName, root.viewMode)
+                            onClicked: root.appSettings.toggleScreenLock(monitorDelegate.screenName, root.viewMode)
                         }
 
                         Item {
@@ -226,7 +226,7 @@ Kirigami.Card {
                         }
 
                         ToolButton {
-                            visible: root.kcm.virtualDesktopCount > 1
+                            visible: root.appSettings.virtualDesktopCount > 1
                             icon.name: monitorDelegate.expanded ? "go-up" : "go-down"
                             text: monitorDelegate.expanded ? "" : i18n("Per-desktop")
                             display: AbstractButton.TextBesideIcon
@@ -243,17 +243,17 @@ Kirigami.Card {
 
                         Layout.fillWidth: true
                         text: i18n("Disable PlasmaZones on this monitor")
-                        checked: root.kcm.isMonitorDisabled(monitorDelegate.screenName)
-                        onToggled: root.kcm.setMonitorDisabled(monitorDelegate.screenName, checked)
+                        checked: root.appSettings.isMonitorDisabled(monitorDelegate.screenName)
+                        onToggled: root.appSettings.setMonitorDisabled(monitorDelegate.screenName, checked)
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("When enabled, zones will not appear on this monitor")
 
                         Connections {
                             function onDisabledMonitorsChanged() {
-                                disableCheck.checked = root.kcm.isMonitorDisabled(monitorDelegate.screenName);
+                                disableCheck.checked = root.appSettings.isMonitorDisabled(monitorDelegate.screenName);
                             }
 
-                            target: root.kcm
+                            target: root.appSettings
                         }
 
                     }
@@ -262,7 +262,7 @@ Kirigami.Card {
                     ColumnLayout {
                         Layout.fillWidth: true
                         Layout.leftMargin: Kirigami.Units.gridUnit * 2
-                        visible: monitorDelegate.expanded && root.kcm.virtualDesktopCount > 1
+                        visible: monitorDelegate.expanded && root.appSettings.virtualDesktopCount > 1
                         spacing: Kirigami.Units.smallSpacing
 
                         Kirigami.Separator {
@@ -278,14 +278,14 @@ Kirigami.Card {
 
                         // Per-desktop assignments using AssignmentRow
                         Repeater {
-                            model: root.kcm.virtualDesktopCount
+                            model: root.appSettings.virtualDesktopCount
 
                             RowLayout {
                                 id: desktopRowContainer
 
                                 required property int index
                                 property int desktopNumber: index + 1
-                                property string desktopName: root.kcm.virtualDesktopNames[index] || i18n("Desktop %1", desktopNumber)
+                                property string desktopName: root.appSettings.virtualDesktopNames[index] || i18n("Desktop %1", desktopNumber)
 
                                 Layout.fillWidth: true
                                 spacing: Kirigami.Units.smallSpacing
@@ -296,61 +296,61 @@ Kirigami.Card {
                                     // Per-desktop "Default" resolves to monitor's layout (or global if monitor has none)
                                     property string monitorLayout: {
                                         void (monitorDelegate._assignmentRevision);
-                                        return root.viewMode === 1 ? (root.kcm.getTilingLayoutForScreen(monitorDelegate.screenName) || "") : (root.kcm.getLayoutForScreen(monitorDelegate.screenName) || "");
+                                        return root.viewMode === 1 ? (root.appSettings.getTilingLayoutForScreen(monitorDelegate.screenName) || "") : (root.appSettings.getLayoutForScreen(monitorDelegate.screenName) || "");
                                     }
 
                                     Layout.fillWidth: true
                                     enabled: {
                                         void (monitorDelegate._assignmentRevision);
-                                        return !root.kcm.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode);
+                                        return !root.appSettings.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode);
                                     }
-                                    kcm: root.kcm
+                                    appSettings: root.appSettings
                                     iconSource: "preferences-desktop-virtual"
                                     labelText: desktopRowContainer.desktopName
                                     layoutFilter: root.viewMode === 1 ? 1 : 0
                                     showPreview: true
                                     noneText: i18n("Use default")
-                                    resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.kcm.defaultLayoutId || "")
+                                    resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.appSettings.defaultLayoutId || "")
                                     currentLayoutId: {
                                         void (monitorDelegate._assignmentRevision);
                                         if (root.viewMode === 1) {
-                                            let hasExplicit = root.kcm.hasExplicitTilingAssignmentForScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
-                                            return hasExplicit ? (root.kcm.getTilingLayoutForScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber) || "") : "";
+                                            let hasExplicit = root.appSettings.hasExplicitTilingAssignmentForScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
+                                            return hasExplicit ? (root.appSettings.getTilingLayoutForScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber) || "") : "";
                                         } else {
-                                            let hasExplicit = root.kcm.hasExplicitAssignmentForScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
-                                            return hasExplicit ? (root.kcm.getSnappingLayoutForScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber) || "") : "";
+                                            let hasExplicit = root.appSettings.hasExplicitAssignmentForScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
+                                            return hasExplicit ? (root.appSettings.getSnappingLayoutForScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber) || "") : "";
                                         }
                                     }
                                     onAssignmentSelected: (layoutId) => {
                                         if (root.viewMode === 1)
-                                            root.kcm.assignTilingLayoutToScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber, layoutId);
+                                            root.appSettings.assignTilingLayoutToScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber, layoutId);
                                         else
-                                            root.kcm.assignLayoutToScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber, layoutId);
+                                            root.appSettings.assignLayoutToScreenDesktop(monitorDelegate.screenName, desktopRowContainer.desktopNumber, layoutId);
                                     }
                                     onAssignmentCleared: {
                                         if (root.viewMode === 1)
-                                            root.kcm.clearTilingScreenDesktopAssignment(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
+                                            root.appSettings.clearTilingScreenDesktopAssignment(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
                                         else
-                                            root.kcm.clearScreenDesktopAssignment(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
+                                            root.appSettings.clearScreenDesktopAssignment(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
                                     }
                                 }
 
                                 ToolButton {
                                     icon.name: {
                                         void (monitorDelegate._assignmentRevision);
-                                        return root.kcm.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode) ? "object-locked" : "object-unlocked";
+                                        return root.appSettings.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode) ? "object-locked" : "object-unlocked";
                                     }
                                     opacity: {
                                         void (monitorDelegate._assignmentRevision);
-                                        return root.kcm.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode) ? 1 : 0.4;
+                                        return root.appSettings.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode) ? 1 : 0.4;
                                     }
                                     display: ToolButton.IconOnly
                                     ToolTip.text: {
                                         void (monitorDelegate._assignmentRevision);
-                                        return root.kcm.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode) ? i18n("Unlock layout for %1", desktopRowContainer.desktopName) : i18n("Lock layout for %1", desktopRowContainer.desktopName);
+                                        return root.appSettings.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode) ? i18n("Unlock layout for %1", desktopRowContainer.desktopName) : i18n("Lock layout for %1", desktopRowContainer.desktopName);
                                     }
                                     ToolTip.visible: hovered
-                                    onClicked: root.kcm.toggleContextLock(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode)
+                                    onClicked: root.appSettings.toggleContextLock(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode)
                                 }
 
                             }
@@ -372,7 +372,7 @@ Kirigami.Card {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.smallSpacing
-            visible: root.kcm.virtualDesktopCount <= 1 && root.kcm.screens.length > 0
+            visible: root.appSettings.virtualDesktopCount <= 1 && root.appSettings.screens.length > 0
             type: Kirigami.MessageType.Information
             text: i18n("Per-desktop assignments are available with multiple virtual desktops.")
         }

@@ -53,7 +53,7 @@ int main(int argc, char* argv[])
     engine.rootContext()->setContextObject(localizedContext);
 
     engine.rootContext()->setContextProperty(QStringLiteral("settingsController"), &controller);
-    engine.rootContext()->setContextProperty(QStringLiteral("kcm"), controller.settings());
+    engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), controller.settings());
 
     if (parser.isSet(pageOption)) {
         controller.setActivePage(parser.value(pageOption));

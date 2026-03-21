@@ -15,7 +15,7 @@ import org.kde.kirigami as Kirigami
 RowLayout {
     id: root
 
-    required property var kcm
+    required property var appSettings
     property int viewMode: 0 // 0 = Snapping Layouts, 1 = Auto Tile
 
     signal requestCreateNewLayout()
@@ -56,7 +56,7 @@ RowLayout {
 
     // View switcher — only visible when autotiling is enabled
     ComboBox {
-        visible: root.kcm.autotileEnabled
+        visible: root.appSettings.autotileEnabled
         model: [i18n("Snapping"), i18n("Tiling")]
         currentIndex: root.viewMode
         onActivated: (index) => {

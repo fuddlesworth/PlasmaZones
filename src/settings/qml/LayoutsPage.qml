@@ -12,8 +12,8 @@ import org.plasmazones.common as QFZCommon
 Flickable {
     id: root
 
-    // Capture the context property so child components can access it via root.kcmModule
-    readonly property var kcmModule: kcm
+    // Capture the context property so child components can access it via root.settingsBridge
+    readonly property var settingsBridge: appSettings
     // Inline constants matching monolith's Constants.qml
     readonly property int layoutListMinHeight: Kirigami.Units.gridUnit * 20
     // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms
@@ -25,7 +25,7 @@ Flickable {
     // Reset to Snapping Layouts when autotiling is disabled
     Connections {
         function onAutotileEnabledChanged() {
-            if (!root.kcmModule.autotileEnabled && root.viewMode !== 0) {
+            if (!root.settingsBridge.autotileEnabled && root.viewMode !== 0) {
                 root.viewMode = 0;
                 layoutGrid.currentIndex = -1;
                 layoutGrid.rebuildModel();
@@ -33,7 +33,7 @@ Flickable {
             }
         }
 
-        target: root.kcmModule
+        target: root.settingsBridge
     }
 
     ColumnLayout {
@@ -45,7 +45,7 @@ Flickable {
         // ─── Toolbar ─────────────────────────────────────────────────────────
         LayoutToolbar {
             Layout.fillWidth: true
-            kcm: root.kcmModule
+            appSettings: root.settingsBridge
             viewMode: root.viewMode
             onRequestCreateNewLayout: settingsController.createNewLayout()
             onRequestImportLayout: importDialog.open()
@@ -147,20 +147,20 @@ Flickable {
                         return false;
 
                     if (root.viewMode === 1)
-                        return layoutContextMenu.layoutId !== ("autotile:" + root.kcmModule.autotileAlgorithm);
+                        return layoutContextMenu.layoutId !== ("autotile:" + root.settingsBridge.autotileAlgorithm);
 
-                    return layoutContextMenu.layoutId !== root.kcmModule.defaultLayoutId;
+                    return layoutContextMenu.layoutId !== root.settingsBridge.defaultLayoutId;
                 }
                 onTriggered: {
                     if (root.viewMode === 1)
-                        root.kcmModule.autotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
+                        root.settingsBridge.autotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
                     else
-                        root.kcmModule.defaultLayoutId = layoutContextMenu.layoutId;
+                        root.settingsBridge.defaultLayoutId = layoutContextMenu.layoutId;
                 }
             }
 
             MenuItem {
-                // root.kcmModule.setLayoutHidden(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector))
+                // root.settingsBridge.setLayoutHidden(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector))
 
                 text: layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector ? i18n("Show in Zone Selector") : i18n("Hide from Zone Selector")
                 icon.name: layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector ? "view-visible" : "view-hidden"
@@ -170,7 +170,7 @@ Flickable {
             }
 
             MenuItem {
-                // root.kcmModule.setLayoutAutoAssign(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true))
+                // root.settingsBridge.setLayoutAutoAssign(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true))
 
                 text: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign")
                 icon.name: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true ? "window-duplicate" : "window-new"
@@ -277,7 +277,7 @@ Flickable {
             }
 
             function selectDefaultLayout(mode) {
-                let defaultId = (mode === 1) ? ("autotile:" + root.kcmModule.autotileAlgorithm) : root.kcmModule.defaultLayoutId;
+                let defaultId = (mode === 1) ? ("autotile:" + root.settingsBridge.autotileAlgorithm) : root.settingsBridge.defaultLayoutId;
                 if (defaultId)
                     Qt.callLater(() => {
                     return selectLayoutById(defaultId);
@@ -342,7 +342,7 @@ Flickable {
 
             // ─── Layout Grid Delegate ────────────────────────────────────
             delegate: LayoutGridDelegate {
-                kcm: root.kcmModule
+                appSettings: root.settingsBridge
                 cellWidth: layoutGrid.cellWidth
                 cellHeight: layoutGrid.cellHeight
                 viewMode: root.viewMode

@@ -9,8 +9,8 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
-    // Bridge: combine Settings (kcm) with SettingsController editor properties
-    readonly property var kcmModule: settingsController
+    // Bridge: combine Settings (appSettings) with SettingsController editor properties
+    readonly property var settingsBridge: settingsController
     // Inline constants (from monolith Constants object)
     readonly property int sliderPreferredWidth: 200
     readonly property int sliderValueLabelWidth: 40
@@ -538,7 +538,7 @@ Flickable {
                                 return o.text;
                             })
                             currentIndex: {
-                                let val = root.kcmModule.editorSnapOverrideModifier || 0;
+                                let val = root.settingsBridge.editorSnapOverrideModifier || 0;
                                 for (let i = 0; i < modifierOptions.length; i++) {
                                     if (modifierOptions[i].value === val)
                                         return i;
@@ -547,7 +547,7 @@ Flickable {
                                 return 0;
                             }
                             onActivated: (idx) => {
-                                root.kcmModule.editorSnapOverrideModifier = modifierOptions[idx].value;
+                                root.settingsBridge.editorSnapOverrideModifier = modifierOptions[idx].value;
                             }
                             ToolTip.visible: hovered
                             ToolTip.text: i18n("Hold this modifier to temporarily override snap behavior")
@@ -585,8 +585,8 @@ Flickable {
 
                         Kirigami.FormData.label: i18n("Enable:")
                         text: i18n("Fill zone on drop with modifier key")
-                        checked: root.kcmModule.fillOnDropEnabled
-                        onToggled: root.kcmModule.fillOnDropEnabled = checked
+                        checked: root.settingsBridge.fillOnDropEnabled
+                        onToggled: root.settingsBridge.fillOnDropEnabled = checked
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("When enabled, holding the modifier key while dropping a zone expands it to fill available space")
                     }
@@ -622,7 +622,7 @@ Flickable {
                                 return o.text;
                             })
                             currentIndex: {
-                                let val = root.kcmModule.fillOnDropModifier || 0;
+                                let val = root.settingsBridge.fillOnDropModifier || 0;
                                 for (let i = 0; i < modifierOptions.length; i++) {
                                     if (modifierOptions[i].value === val)
                                         return i;
@@ -631,7 +631,7 @@ Flickable {
                                 return 0;
                             }
                             onActivated: (idx) => {
-                                root.kcmModule.fillOnDropModifier = modifierOptions[idx].value;
+                                root.settingsBridge.fillOnDropModifier = modifierOptions[idx].value;
                             }
                             ToolTip.visible: hovered
                             ToolTip.text: i18n("Hold this modifier while dropping to fill available space")

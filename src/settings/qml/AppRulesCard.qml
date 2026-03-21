@@ -15,29 +15,29 @@ import org.kde.kirigami as Kirigami
 Kirigami.Card {
     id: root
 
-    required property var kcm
+    required property var appSettings
     required property QtObject constants
     required property WindowPickerDialog windowPickerDialog
     // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     property int viewMode: 0
-    // Current layout selection (populated from kcm.layouts)
+    // Current layout selection (populated from appSettings.layouts)
     property string selectedLayoutId: ""
     property var currentRules: []
     property int selectedLayoutZoneCount: 99
     property bool pickerOpenedByUs: false
     // The effective layout ID: if "Default" is selected (empty), resolve to the global default
-    readonly property string effectiveLayoutId: selectedLayoutId !== "" ? selectedLayoutId : (kcm ? kcm.defaultLayoutId : "")
+    readonly property string effectiveLayoutId: selectedLayoutId !== "" ? selectedLayoutId : (appSettings ? appSettings.defaultLayoutId : "")
     readonly property bool hasSelectedLayout: effectiveLayoutId !== ""
 
     function updateSelectedLayoutZoneCount() {
         let layoutId = effectiveLayoutId;
-        if (!kcm || !kcm.layouts || layoutId === "") {
+        if (!appSettings || !appSettings.layouts || layoutId === "") {
             selectedLayoutZoneCount = 99;
             return ;
         }
-        for (let i = 0; i < kcm.layouts.length; ++i) {
-            if (kcm.layouts[i].id === layoutId) {
-                selectedLayoutZoneCount = kcm.layouts[i].zoneCount || 99;
+        for (let i = 0; i < appSettings.layouts.length; ++i) {
+            if (appSettings.layouts[i].id === layoutId) {
+                selectedLayoutZoneCount = appSettings.layouts[i].zoneCount || 99;
                 return ;
             }
         }
@@ -46,8 +46,8 @@ Kirigami.Card {
 
     function refreshRules() {
         let layoutId = effectiveLayoutId;
-        if (layoutId !== "" && kcm)
-            currentRules = kcm.getAppRulesForLayout(layoutId);
+        if (layoutId !== "" && appSettings)
+            currentRules = appSettings.getAppRulesForLayout(layoutId);
         else
             currentRules = [];
     }
@@ -58,7 +58,7 @@ Kirigami.Card {
             return ;
 
         let layoutId = effectiveLayoutId;
-        if (layoutId === "" || !kcm)
+        if (layoutId === "" || !appSettings)
             return ;
 
         let screen = targetScreen || "";
@@ -72,15 +72,15 @@ Kirigami.Card {
                 return ;
             }
         }
-        kcm.addAppRuleToLayout(layoutId, trimmed, zoneNumber, screen);
+        appSettings.addAppRuleToLayout(layoutId, trimmed, zoneNumber, screen);
         screenCombo.reset();
         refreshRules();
     }
 
     function removeRule(index) {
         let layoutId = effectiveLayoutId;
-        if (layoutId !== "" && kcm) {
-            kcm.removeAppRuleFromLayout(layoutId, index);
+        if (layoutId !== "" && appSettings) {
+            appSettings.removeAppRuleFromLayout(layoutId, index);
             refreshRules();
         }
     }
@@ -99,7 +99,7 @@ Kirigami.Card {
             root.refreshRules();
         }
 
-        target: root.kcm
+        target: root.appSettings
     }
 
     Connections {
@@ -138,7 +138,7 @@ Kirigami.Card {
                 id: layoutCombo
 
                 Layout.fillWidth: true
-                kcm: root.kcm
+                appSettings: root.appSettings
                 noneText: i18n("Default")
                 layoutFilter: root.viewMode === 1 ? 1 : 0
                 showPreview: root.viewMode === 0
@@ -198,7 +198,7 @@ Kirigami.Card {
             ScreenComboBox {
                 id: screenCombo
 
-                kcm: root.kcm
+                appSettings: root.appSettings
                 noneText: i18n("Any Screen")
                 implicitWidth: Kirigami.Units.gridUnit * 12
                 Accessible.name: i18n("Target screen")

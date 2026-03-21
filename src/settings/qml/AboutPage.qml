@@ -19,7 +19,7 @@ Flickable {
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: Kirigami.Units.largeSpacing
 
-        // Enable/disable toggle (matching KCM header placement)
+        // Enable/disable toggle (matching original header placement)
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 0
@@ -235,7 +235,7 @@ Flickable {
 
     }
 
-    // Helper component for link buttons (matching original KCM)
+    // Helper component for link buttons (matching original design)
     component LinkButton: Button {
         id: linkButton
 

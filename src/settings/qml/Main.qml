@@ -17,7 +17,7 @@ ApplicationWindow {
     ListModel {
         id: pageModel
 
-        // Order and names match KCM X-KDE-Weight + metadata
+        // Page order and names
         ListElement {
             name: "layouts"
             label: "Layouts"

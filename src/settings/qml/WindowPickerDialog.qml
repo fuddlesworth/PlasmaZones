@@ -17,7 +17,7 @@ import org.kde.kirigami as Kirigami
 Kirigami.Dialog {
     id: dialog
 
-    required property var kcm
+    required property var appSettings
     property bool forApps: false
     property var windowList: []
 
@@ -57,7 +57,7 @@ Kirigami.Dialog {
 
     function refresh() {
         searchField.text = "";
-        windowList = kcm.getRunningWindows();
+        windowList = appSettings.getRunningWindows();
     }
 
     title: forApps ? i18n("Pick Application from Running Windows") : i18n("Pick Window Class from Running Windows")

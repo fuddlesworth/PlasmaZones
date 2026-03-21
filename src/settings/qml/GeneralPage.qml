@@ -13,12 +13,12 @@ Flickable {
     readonly property int sliderPreferredWidth: 200
     readonly property int sliderValueLabelWidth: 40
     // Capture the context property so child components can access it
-    readonly property var kcmModule: kcm
+    readonly property var settingsBridge: appSettings
 
     contentHeight: content.implicitHeight
     clip: true
     Component.onCompleted: {
-        easingPreview.curve = kcm.animationEasingCurve;
+        easingPreview.curve = appSettings.animationEasingCurve;
     }
 
     ColumnLayout {
@@ -54,8 +54,8 @@ Flickable {
 
                         Layout.fillWidth: true
                         text: i18n("Smooth window geometry transitions")
-                        checked: kcm.animationsEnabled
-                        onToggled: kcm.animationsEnabled = checked
+                        checked: appSettings.animationsEnabled
+                        onToggled: appSettings.animationsEnabled = checked
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Animate windows when snapping to zones or tiling. Applies to both manual snapping and autotiling.")
                     }
@@ -67,12 +67,12 @@ Flickable {
                         Layout.fillWidth: true
                         Layout.maximumWidth: 500
                         Layout.alignment: Qt.AlignHCenter
-                        curve: kcm.animationEasingCurve
-                        animationDuration: kcm.animationDuration
+                        curve: appSettings.animationEasingCurve
+                        animationDuration: appSettings.animationDuration
                         previewEnabled: animationsEnabledCheck.checked
                         opacity: animationsEnabledCheck.checked ? 1 : 0.4
                         onCurveEdited: function(newCurve) {
-                            kcm.animationEasingCurve = newCurve;
+                            appSettings.animationEasingCurve = newCurve;
                         }
                     }
 
@@ -83,7 +83,7 @@ Flickable {
                     // Easing controls (extracted component)
                     EasingSettings {
                         Layout.fillWidth: true
-                        kcm: root.kcmModule
+                        appSettings: root.settingsBridge
                         constants: root
                         animationsEnabled: animationsEnabledCheck.checked
                         easingPreview: easingPreview
@@ -100,23 +100,23 @@ Flickable {
         // ═══════════════════════════════════════════════════════════════════════
         OsdCard {
             Layout.fillWidth: true
-            kcm: root.kcmModule
+            appSettings: root.settingsBridge
         }
 
     }
 
-    // Wire up easingPreview.curve to kcm.animationEasingCurve bidirectionally
+    // Wire up easingPreview.curve to appSettings.animationEasingCurve bidirectionally
     Connections {
         function onAnimationEasingCurveChanged() {
-            easingPreview.curve = kcm.animationEasingCurve;
+            easingPreview.curve = appSettings.animationEasingCurve;
         }
 
-        target: kcm
+        target: appSettings
     }
 
     Connections {
         function onCurveEdited(newCurve) {
-            kcm.animationEasingCurve = newCurve;
+            appSettings.animationEasingCurve = newCurve;
         }
 
         target: easingPreview

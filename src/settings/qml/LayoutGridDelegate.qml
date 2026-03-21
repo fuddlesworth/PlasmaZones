@@ -17,12 +17,12 @@ Item {
 
     required property var modelData
     required property int index
-    required property var kcm
+    required property var appSettings
     required property real cellWidth
     required property real cellHeight
     property int viewMode: 0 // 0 = Snapping Layouts, 1 = Auto Tile
     // The full autotile default ID including prefix, for comparison
-    readonly property string autotileDefaultId: "autotile:" + root.kcm.autotileAlgorithm
+    readonly property string autotileDefaultId: "autotile:" + root.appSettings.autotileAlgorithm
     // Selection state (bound from parent GridView)
     property bool isSelected: false
     property bool isHovered: false
@@ -101,12 +101,12 @@ Item {
                     anchors.centerIn: parent
                     layout: root.modelData
                     isSelected: root.isSelected
-                    fontFamily: root.kcm ? root.kcm.labelFontFamily : ""
-                    fontSizeScale: root.kcm ? root.kcm.labelFontSizeScale : 1
-                    fontWeight: root.kcm ? root.kcm.labelFontWeight : Font.Bold
-                    fontItalic: root.kcm ? root.kcm.labelFontItalic : false
-                    fontUnderline: root.kcm ? root.kcm.labelFontUnderline : false
-                    fontStrikeout: root.kcm ? root.kcm.labelFontStrikeout : false
+                    fontFamily: root.appSettings ? root.appSettings.labelFontFamily : ""
+                    fontSizeScale: root.appSettings ? root.appSettings.labelFontSizeScale : 1
+                    fontWeight: root.appSettings ? root.appSettings.labelFontWeight : Font.Bold
+                    fontItalic: root.appSettings ? root.appSettings.labelFontItalic : false
+                    fontUnderline: root.appSettings ? root.appSettings.labelFontUnderline : false
+                    fontStrikeout: root.appSettings ? root.appSettings.labelFontStrikeout : false
                     transformOrigin: Item.Center
                     scale: Math.min(1, safeParentWidth / safeImplicitWidth, safeParentHeight / safeImplicitHeight)
                 }
@@ -122,7 +122,7 @@ Item {
                         id: defaultIcon
 
                         source: "favorite"
-                        visible: root.viewMode === 1 ? root.modelData.id === root.autotileDefaultId : root.modelData.id === root.kcm.defaultLayoutId
+                        visible: root.viewMode === 1 ? root.modelData.id === root.autotileDefaultId : root.modelData.id === root.appSettings.defaultLayoutId
                         width: Kirigami.Units.iconSizes.small
                         height: Kirigami.Units.iconSizes.small
                         color: Kirigami.Theme.positiveTextColor
@@ -192,7 +192,7 @@ Item {
                         icon.width: Kirigami.Units.iconSizes.small
                         icon.height: Kirigami.Units.iconSizes.small
                         icon.color: root.modelData.autoAssign === true ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
-                        onClicked: root.kcm.setLayoutAutoAssign(root.modelData.id, !(root.modelData.autoAssign === true))
+                        onClicked: root.appSettings.setLayoutAutoAssign(root.modelData.id, !(root.modelData.autoAssign === true))
                         ToolTip.visible: hovered
                         ToolTip.text: root.modelData.autoAssign === true ? i18n("Auto-assign enabled: new windows fill empty zones. Click to disable.") : i18n("Click to auto-assign new windows to empty zones")
                     }
@@ -207,7 +207,7 @@ Item {
                         icon.width: Kirigami.Units.iconSizes.small
                         icon.height: Kirigami.Units.iconSizes.small
                         icon.color: root.modelData.hiddenFromSelector ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.textColor
-                        onClicked: root.kcm.setLayoutHidden(root.modelData.id, !root.modelData.hiddenFromSelector)
+                        onClicked: root.appSettings.setLayoutHidden(root.modelData.id, !root.modelData.hiddenFromSelector)
                         ToolTip.visible: hovered
                         ToolTip.text: root.modelData.hiddenFromSelector ? i18n("Hidden from zone selector. Click to show.") : i18n("Visible in zone selector. Click to hide.")
                     }
