@@ -95,103 +95,134 @@ Flickable {
             lockedScreensChanged();
         }
 
+        // Quick layout slots
         function getQuickLayoutSlot(n) {
-            return "";
+            return settingsController.getQuickLayoutSlot(n);
         }
 
         function setQuickLayoutSlot(n, id) {
+            settingsController.setQuickLayoutSlot(n, id);
+            quickLayoutSlotsChanged();
         }
 
         function getQuickLayoutShortcut(n) {
-            return "";
+            return settingsController.getQuickLayoutShortcut(n);
         }
 
         function getTilingQuickLayoutSlot(n) {
-            return "";
+            return settingsController.getTilingQuickLayoutSlot(n);
         }
 
         function setTilingQuickLayoutSlot(n, id) {
+            settingsController.setTilingQuickLayoutSlot(n, id);
+            tilingQuickLayoutSlotsChanged();
         }
 
+        // App rules
         function getAppRulesForLayout(id) {
-            return [];
+            return settingsController.getAppRulesForLayout(id);
         }
 
         function setAppRulesForLayout(id, rules) {
+            settingsController.setAppRulesForLayout(id, rules);
+            appRulesRefreshed();
         }
 
         function addAppRuleToLayout(id, pattern, zone, screen) {
+            settingsController.addAppRuleToLayout(id, pattern, zone, screen);
+            appRulesRefreshed();
         }
 
         function removeAppRuleFromLayout(id, idx) {
+            settingsController.removeAppRuleFromLayout(id, idx);
+            appRulesRefreshed();
         }
 
+        // Running windows
         function getRunningWindows() {
-            return [];
+            return settingsController.getRunningWindows();
         }
 
+        // Per-desktop assignments
         function hasExplicitAssignmentForScreenDesktop(screen, desktop) {
-            return false;
+            return settingsController.hasExplicitAssignmentForScreenDesktop(screen, desktop);
         }
 
         function hasExplicitTilingAssignmentForScreenDesktop(screen, desktop) {
-            return false;
+            return settingsController.hasExplicitTilingAssignmentForScreenDesktop(screen, desktop);
         }
 
         function hasExplicitAssignmentForScreenActivity(screen, activity) {
-            return false;
+            return settingsController.hasExplicitAssignmentForScreenActivity(screen, activity);
         }
 
         function hasExplicitTilingAssignmentForScreenActivity(screen, activity) {
-            return false;
+            return settingsController.hasExplicitTilingAssignmentForScreenActivity(screen, activity);
         }
 
         function getLayoutForScreenDesktop(screen, desktop) {
-            return "";
+            return settingsController.getLayoutForScreenDesktop(screen, desktop);
         }
 
         function getSnappingLayoutForScreenDesktop(screen, desktop) {
-            return "";
+            return settingsController.getSnappingLayoutForScreenDesktop(screen, desktop);
         }
 
         function getTilingLayoutForScreenDesktop(screen, desktop) {
-            return "";
+            return settingsController.getTilingLayoutForScreenDesktop(screen, desktop);
         }
 
         function clearScreenDesktopAssignment(screen, desktop) {
+            settingsController.clearScreenDesktopAssignment(screen, desktop);
+            screenAssignmentsChanged();
         }
 
         function assignLayoutToScreenDesktop(screen, desktop, layout) {
+            settingsController.assignLayoutToScreenDesktop(screen, desktop, layout);
+            screenAssignmentsChanged();
         }
 
         function assignTilingLayoutToScreenDesktop(screen, desktop, layout) {
+            settingsController.assignTilingLayoutToScreenDesktop(screen, desktop, layout);
+            tilingScreenAssignmentsChanged();
         }
 
         function clearTilingScreenDesktopAssignment(screen, desktop) {
+            settingsController.clearTilingScreenDesktopAssignment(screen, desktop);
+            tilingScreenAssignmentsChanged();
         }
 
+        // Per-activity assignments
         function getLayoutForScreenActivity(screen, activity) {
-            return "";
+            return settingsController.getLayoutForScreenActivity(screen, activity);
         }
 
         function getSnappingLayoutForScreenActivity(screen, activity) {
-            return "";
+            return settingsController.getSnappingLayoutForScreenActivity(screen, activity);
         }
 
         function getTilingLayoutForScreenActivity(screen, activity) {
-            return "";
+            return settingsController.getTilingLayoutForScreenActivity(screen, activity);
         }
 
         function clearScreenActivityAssignment(screen, activity) {
+            settingsController.clearScreenActivityAssignment(screen, activity);
+            activityAssignmentsChanged();
         }
 
         function assignLayoutToScreenActivity(screen, activity, layout) {
+            settingsController.assignLayoutToScreenActivity(screen, activity, layout);
+            activityAssignmentsChanged();
         }
 
         function assignTilingLayoutToScreenActivity(screen, activity, layout) {
+            settingsController.assignTilingLayoutToScreenActivity(screen, activity, layout);
+            tilingActivityAssignmentsChanged();
         }
 
         function clearTilingScreenActivityAssignment(screen, activity) {
+            settingsController.clearTilingScreenActivityAssignment(screen, activity);
+            tilingActivityAssignmentsChanged();
         }
 
     }
