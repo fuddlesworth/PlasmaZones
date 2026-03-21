@@ -12,6 +12,8 @@
 #include "../../kcm/common/daemoncontroller.h"
 #include "../../kcm/common/screenhelper.h"
 #include "../core/constants.h"
+#include "../core/enums.h"
+#include "../core/modifierutils.h"
 
 #include <QObject>
 #include <QString>
@@ -60,6 +62,22 @@ class SettingsController : public QObject
         int fillOnDropModifier READ fillOnDropModifier WRITE setFillOnDropModifier NOTIFY fillOnDropModifierChanged)
     Q_PROPERTY(qreal editorSnapIntervalY READ editorSnapIntervalY WRITE setEditorSnapIntervalY NOTIFY
                    editorSnapIntervalYChanged)
+
+    // Trigger configuration
+    Q_PROPERTY(bool alwaysActivateOnDrag READ alwaysActivateOnDrag WRITE setAlwaysActivateOnDrag NOTIFY
+                   alwaysActivateOnDragChanged)
+    Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
+                   dragActivationTriggersChanged)
+    Q_PROPERTY(QVariantList defaultDragActivationTriggers READ defaultDragActivationTriggers CONSTANT)
+    Q_PROPERTY(
+        QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY zoneSpanTriggersChanged)
+    Q_PROPERTY(QVariantList defaultZoneSpanTriggers READ defaultZoneSpanTriggers CONSTANT)
+    Q_PROPERTY(QVariantList snapAssistTriggers READ snapAssistTriggers WRITE setSnapAssistTriggers NOTIFY
+                   snapAssistTriggersChanged)
+    Q_PROPERTY(QVariantList defaultSnapAssistTriggers READ defaultSnapAssistTriggers CONSTANT)
+
+    // Cava detection
+    Q_PROPERTY(bool cavaAvailable READ cavaAvailable CONSTANT)
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
@@ -140,6 +158,11 @@ public:
     Q_INVOKABLE bool isMonitorDisabled(const QString& screenName) const;
     Q_INVOKABLE void setMonitorDisabled(const QString& screenName, bool disabled);
 
+    // Font helpers (for FontPickerDialog)
+    Q_INVOKABLE QStringList fontStylesForFamily(const QString& family) const;
+    Q_INVOKABLE int fontStyleWeight(const QString& family, const QString& style) const;
+    Q_INVOKABLE bool fontStyleItalic(const QString& family, const QString& style) const;
+
     // Assignment helpers (D-Bus to daemon)
     Q_INVOKABLE void assignLayoutToScreen(const QString& screenName, const QString& layoutId);
     Q_INVOKABLE void clearScreenAssignment(const QString& screenName);
@@ -149,6 +172,14 @@ public:
     // Assignment query helpers (D-Bus to daemon)
     Q_INVOKABLE QString getLayoutForScreen(const QString& screenName) const;
     Q_INVOKABLE QString getTilingLayoutForScreen(const QString& screenName) const;
+
+    // Assignment lock helpers
+    Q_INVOKABLE bool isScreenLocked(const QString& screenName, int mode) const;
+    Q_INVOKABLE void toggleScreenLock(const QString& screenName, int mode);
+    Q_INVOKABLE bool isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity,
+                                     int mode) const;
+    Q_INVOKABLE void toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity,
+                                       int mode);
 
     // ── Editor settings ──────────────────────────────────────────────────────
     // These duplicate the [Editor] config group handling from kcm/editor/kcmeditor.cpp.
@@ -180,6 +211,51 @@ public:
 
     Q_INVOKABLE void resetEditorDefaults();
 
+    // ── Trigger configuration ────────────────────────────────────────────────
+    bool alwaysActivateOnDrag() const;
+    QVariantList dragActivationTriggers() const;
+    QVariantList defaultDragActivationTriggers() const;
+    QVariantList zoneSpanTriggers() const;
+    QVariantList defaultZoneSpanTriggers() const;
+    QVariantList snapAssistTriggers() const;
+    QVariantList defaultSnapAssistTriggers() const;
+
+    void setAlwaysActivateOnDrag(bool enabled);
+    void setDragActivationTriggers(const QVariantList& triggers);
+    void setZoneSpanTriggers(const QVariantList& triggers);
+    void setSnapAssistTriggers(const QVariantList& triggers);
+
+    // ── Cava detection ───────────────────────────────────────────────────────
+    bool cavaAvailable() const;
+
+    // ── Color import ─────────────────────────────────────────────────────────
+    Q_INVOKABLE void loadColorsFromPywal();
+    Q_INVOKABLE void loadColorsFromFile(const QString& filePath);
+
+    // ── Algorithm helpers ────────────────────────────────────────────────────
+    Q_INVOKABLE QVariantList availableAlgorithms() const;
+    Q_INVOKABLE QVariantList generateAlgorithmPreview(const QString& algorithmId, int windowCount, double splitRatio,
+                                                      int masterCount) const;
+
+    // ── Per-screen autotile overrides ────────────────────────────────────────
+    Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenName) const;
+    Q_INVOKABLE void setPerScreenAutotileSetting(const QString& screenName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenName) const;
+
+    // ── Per-screen snapping overrides ────────────────────────────────────────
+    Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenName) const;
+    Q_INVOKABLE void setPerScreenSnappingSetting(const QString& screenName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenName) const;
+
+    // ── Per-screen zone selector overrides ───────────────────────────────────
+    Q_INVOKABLE QVariantMap getPerScreenZoneSelectorSettings(const QString& screenName) const;
+    Q_INVOKABLE void setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key,
+                                                     const QVariant& value);
+    Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenName) const;
+
     Q_INVOKABLE void load();
     Q_INVOKABLE void save();
     Q_INVOKABLE void defaults();
@@ -195,6 +271,17 @@ Q_SIGNALS:
     // Virtual desktop / activity signals
     void virtualDesktopsChanged();
     void activitiesChanged();
+
+    // Trigger signals
+    void alwaysActivateOnDragChanged();
+    void dragActivationTriggersChanged();
+    void zoneSpanTriggersChanged();
+    void snapAssistTriggersChanged();
+
+    // Color import signals
+    void colorImportError(const QString& error);
+    void colorImportSuccess();
+    void lockedScreensChanged();
 
     // Editor signals
     void editorDuplicateShortcutChanged();
@@ -223,6 +310,9 @@ private:
     void saveEditorSettings();
     void refreshVirtualDesktops();
     void refreshActivities();
+
+    static QVariantList convertTriggersForQml(const QVariantList& triggers);
+    static QVariantList convertTriggersForStorage(const QVariantList& triggers);
 
     Settings m_settings;
     DaemonController m_daemonController;

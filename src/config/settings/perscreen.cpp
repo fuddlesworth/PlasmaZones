@@ -88,25 +88,29 @@ constexpr const char* kPerScreenAutotileKeys[] = {
 
 QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& value)
 {
-    if (key == QLatin1String("AutotileSplitRatio")) {
+    // Strip "Autotile" prefix so both "Algorithm" and "AutotileAlgorithm" match.
+    // QML PerScreenOverrideHelper sends short keys; config storage uses prefixed keys.
+    const QString k = key.startsWith(QLatin1String("Autotile")) ? key.mid(8) : key;
+
+    if (k == QLatin1String("SplitRatio")) {
         double v = value.toDouble();
         return QVariant(qBound(AutotileDefaults::MinSplitRatio, v, AutotileDefaults::MaxSplitRatio));
     }
-    if (key == QLatin1String("AutotileMasterCount"))
+    if (k == QLatin1String("MasterCount"))
         return QVariant(qBound(AutotileDefaults::MinMasterCount, value.toInt(), AutotileDefaults::MaxMasterCount));
-    if (key == QLatin1String("AutotileInnerGap") || key == QLatin1String("AutotileOuterGap"))
+    if (k == QLatin1String("InnerGap") || k == QLatin1String("OuterGap"))
         return QVariant(qBound(AutotileDefaults::MinGap, value.toInt(), AutotileDefaults::MaxGap));
-    if (key.startsWith(QLatin1String("AutotileOuterGap")))
+    if (k.startsWith(QLatin1String("OuterGap")))
         return QVariant(qBound(AutotileDefaults::MinGap, value.toInt(), AutotileDefaults::MaxGap));
-    if (key == QLatin1String("AutotileMaxWindows"))
+    if (k == QLatin1String("MaxWindows"))
         return QVariant(qBound(AutotileDefaults::MinMaxWindows, value.toInt(), AutotileDefaults::MaxMaxWindows));
-    if (key == QLatin1String("AutotileInsertPosition"))
+    if (k == QLatin1String("InsertPosition"))
         return QVariant(qBound(0, value.toInt(), 2));
-    if (key == QLatin1String("AutotileAlgorithm") || key == QLatin1String("AnimationEasingCurve"))
+    if (k == QLatin1String("Algorithm") || key == QLatin1String("AnimationEasingCurve"))
         return value;
-    if (key == QLatin1String("AutotileUsePerSideOuterGap") || key == QLatin1String("AutotileFocusNewWindows")
-        || key == QLatin1String("AutotileSmartGaps") || key == QLatin1String("AutotileFocusFollowsMouse")
-        || key == QLatin1String("AutotileRespectMinimumSize") || key == QLatin1String("AutotileHideTitleBars")
+    if (k == QLatin1String("UsePerSideOuterGap") || k == QLatin1String("FocusNewWindows")
+        || k == QLatin1String("SmartGaps") || k == QLatin1String("FocusFollowsMouse")
+        || k == QLatin1String("RespectMinimumSize") || k == QLatin1String("HideTitleBars")
         || key == QLatin1String("AnimationsEnabled"))
         return QVariant(value.toBool());
     if (key == QLatin1String("AnimationDuration"))

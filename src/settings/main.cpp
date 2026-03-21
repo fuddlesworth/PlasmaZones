@@ -10,6 +10,7 @@
 
 #include <QGuiApplication>
 #include <QCommandLineParser>
+#include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -24,6 +25,7 @@ int main(int argc, char* argv[])
     app.setOrganizationName(QStringLiteral("plasmazones"));
     app.setOrganizationDomain(QStringLiteral("org.plasmazones"));
     app.setDesktopFileName(QStringLiteral("org.plasmazones.settings"));
+    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("plasmazones-settings")));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(PzI18n::tr("PlasmaZones Settings"));

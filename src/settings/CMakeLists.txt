@@ -55,6 +55,16 @@ qt_add_qml_module(plasmazones-settings
         qml/LayoutComboBox.qml
         qml/ScreenComboBox.qml
         qml/WideComboBox.qml
+        qml/FontPickerDialog.qml
+        qml/ColorButton.qml
+        qml/InputCapture.qml
+        qml/KeySequenceInput.qml
+        qml/ModifierAndMouseCheckBoxes.qml
+        qml/PositionPicker.qml
+        qml/AlgorithmPreview.qml
+        qml/LayoutThumbnail.qml
+        qml/PerScreenOverrideHelper.qml
+        qml/MonitorSelectorSection.qml
     NO_PLUGIN
 )
 

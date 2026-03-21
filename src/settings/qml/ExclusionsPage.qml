@@ -11,6 +11,27 @@ Flickable {
 
     contentHeight: content.implicitHeight
 
+    WindowPickerDialog {
+        id: windowPickerDialog
+
+        kcm: settingsController
+        onPicked: (value) => {
+            if (forApps) {
+                let apps = kcm.excludedApplications.slice();
+                if (value.length > 0 && apps.indexOf(value) === -1) {
+                    apps.push(value);
+                    kcm.excludedApplications = apps;
+                }
+            } else {
+                let classes = kcm.excludedWindowClasses.slice();
+                if (value.length > 0 && classes.indexOf(value) === -1) {
+                    classes.push(value);
+                    kcm.excludedWindowClasses = classes;
+                }
+            }
+        }
+    }
+
     ColumnLayout {
         id: content
 
@@ -55,37 +76,45 @@ Flickable {
                     }
 
                     RowLayout {
-                        Kirigami.FormData.label: i18n("Width:")
-                        spacing: Kirigami.Units.smallSpacing
+                        Kirigami.FormData.label: i18n("Dimensions:")
+                        spacing: Kirigami.Units.largeSpacing
 
-                        SpinBox {
-                            from: 0
-                            to: 1000
-                            stepSize: 10
-                            value: kcm.minimumWindowWidth
-                            onValueModified: kcm.minimumWindowWidth = value
-                            textFromValue: function(value) {
-                                return value === 0 ? i18n("Disabled") : value + " px";
+                        RowLayout {
+                            Label {
+                                text: i18n("W:")
                             }
-                            Accessible.name: i18n("Minimum window width")
+
+                            SpinBox {
+                                from: 0
+                                to: 1000
+                                stepSize: 10
+                                value: kcm.minimumWindowWidth
+                                onValueModified: kcm.minimumWindowWidth = value
+                                textFromValue: function(value) {
+                                    return value === 0 ? i18n("Disabled") : value + " px";
+                                }
+                                Accessible.name: i18n("Minimum window width")
+                            }
+
                         }
 
-                    }
-
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Height:")
-                        spacing: Kirigami.Units.smallSpacing
-
-                        SpinBox {
-                            from: 0
-                            to: 1000
-                            stepSize: 10
-                            value: kcm.minimumWindowHeight
-                            onValueModified: kcm.minimumWindowHeight = value
-                            textFromValue: function(value) {
-                                return value === 0 ? i18n("Disabled") : value + " px";
+                        RowLayout {
+                            Label {
+                                text: i18n("H:")
                             }
-                            Accessible.name: i18n("Minimum window height")
+
+                            SpinBox {
+                                from: 0
+                                to: 1000
+                                stepSize: 10
+                                value: kcm.minimumWindowHeight
+                                onValueModified: kcm.minimumWindowHeight = value
+                                textFromValue: function(value) {
+                                    return value === 0 ? i18n("Disabled") : value + " px";
+                                }
+                                Accessible.name: i18n("Minimum window height")
+                            }
+
                         }
 
                     }
@@ -158,6 +187,13 @@ Flickable {
                                 }
                                 appInput.text = "";
                             }
+                        }
+
+                        ToolButton {
+                            icon.name: "crosshairs"
+                            ToolTip.text: i18n("Pick from running windows")
+                            ToolTip.visible: hovered
+                            onClicked: windowPickerDialog.openForApps()
                         }
 
                     }
@@ -282,6 +318,13 @@ Flickable {
                                 }
                                 classInput.text = "";
                             }
+                        }
+
+                        ToolButton {
+                            icon.name: "crosshairs"
+                            ToolTip.text: i18n("Pick from running windows")
+                            ToolTip.visible: hovered
+                            onClicked: windowPickerDialog.openForClasses()
                         }
 
                     }

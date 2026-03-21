@@ -78,10 +78,20 @@ Flickable {
         }
 
         function isScreenLocked(screen, mode) {
-            return false;
+            return settingsController.isScreenLocked(screen, mode);
         }
 
         function toggleScreenLock(screen, mode) {
+            settingsController.toggleScreenLock(screen, mode);
+            lockedScreensChanged();
+        }
+
+        function isContextLocked(screen, desktop, activity, mode) {
+            return settingsController.isContextLocked(screen, desktop, activity, mode);
+        }
+
+        function toggleContextLock(screen, desktop, activity, mode) {
+            settingsController.toggleContextLock(screen, desktop, activity, mode);
             lockedScreensChanged();
         }
 
@@ -134,14 +144,6 @@ Flickable {
 
         function hasExplicitTilingAssignmentForScreenActivity(screen, activity) {
             return false;
-        }
-
-        function isContextLocked(screen, desktop, activity, mode) {
-            return false;
-        }
-
-        function toggleContextLock(screen, desktop, activity, mode) {
-            lockedScreensChanged();
         }
 
         function getLayoutForScreenDesktop(screen, desktop) {

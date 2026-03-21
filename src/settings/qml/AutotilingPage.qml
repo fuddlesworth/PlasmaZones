@@ -13,63 +13,34 @@ Flickable {
 
     // Layout constants
     readonly property int gapMax: 50
+    readonly property int algorithmPreviewWidth: 280
+    readonly property int algorithmPreviewHeight: 160
     readonly property int sliderValueLabelWidth: 40
     readonly property bool bordersActive: hideTitleBarsCheck.checked || showBorderCheck.checked
-    // Algorithm list (14 algorithms matching the KCM)
-    readonly property var algorithmModel: [{
-        "id": "master-stack",
-        "name": i18n("Master-Stack")
-    }, {
-        "id": "dwindle",
-        "name": i18n("Dwindle")
-    }, {
-        "id": "spiral",
-        "name": i18n("Spiral")
-    }, {
-        "id": "grid",
-        "name": i18n("Grid")
-    }, {
-        "id": "columns",
-        "name": i18n("Columns")
-    }, {
-        "id": "rows",
-        "name": i18n("Rows")
-    }, {
-        "id": "bsp",
-        "name": i18n("BSP")
-    }, {
-        "id": "centered-master",
-        "name": i18n("Centered Master")
-    }, {
-        "id": "monocle",
-        "name": i18n("Monocle")
-    }, {
-        "id": "wide",
-        "name": i18n("Wide")
-    }, {
-        "id": "three-column",
-        "name": i18n("Three Column")
-    }, {
-        "id": "cascade",
-        "name": i18n("Cascade")
-    }, {
-        "id": "spread",
-        "name": i18n("Spread")
-    }, {
-        "id": "stair",
-        "name": i18n("Stair")
-    }]
+    // Per-screen override helper (applies to Algorithm + Gaps cards)
+    property alias selectedScreenName: psHelper.selectedScreenName
+    readonly property alias isPerScreen: psHelper.isPerScreen
+    readonly property alias hasOverrides: psHelper.hasOverrides
+    readonly property string effectiveAlgorithm: settingValue("Algorithm", kcm.autotileAlgorithm)
 
-    function algorithmIndexOf(algoId) {
-        for (var i = 0; i < algorithmModel.length; i++) {
-            if (algorithmModel[i].id === algoId)
-                return i;
+    function settingValue(key, globalValue) {
+        return psHelper.settingValue(key, globalValue);
+    }
 
-        }
-        return 0;
+    function writeSetting(key, value, globalSetter) {
+        psHelper.writeSetting(key, value, globalSetter);
     }
 
     contentHeight: content.implicitHeight
+
+    PerScreenOverrideHelper {
+        id: psHelper
+
+        kcm: settingsController
+        getterMethod: "getPerScreenAutotileSettings"
+        setterMethod: "setPerScreenAutotileSetting"
+        clearerMethod: "clearPerScreenAutotileSettings"
+    }
 
     ColumnLayout {
         id: content
@@ -134,25 +105,12 @@ Flickable {
                     visible: !useSystemColorsCheck.checked
                     spacing: Kirigami.Units.smallSpacing
 
-                    Rectangle {
-                        width: 32
-                        height: 32
-                        radius: Kirigami.Units.smallSpacing
+                    ColorButton {
                         color: kcm.autotileBorderColor
-                        border.color: Kirigami.Theme.disabledTextColor
-                        border.width: 1
-                        Accessible.name: i18n("Active border color picker")
-                        Accessible.role: Accessible.Button
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                activeBorderColorDialog.selectedColor = kcm.autotileBorderColor;
-                                activeBorderColorDialog.open();
-                            }
+                        onClicked: {
+                            activeBorderColorDialog.selectedColor = kcm.autotileBorderColor;
+                            activeBorderColorDialog.open();
                         }
-
                     }
 
                     Label {
@@ -167,25 +125,12 @@ Flickable {
                     visible: !useSystemColorsCheck.checked
                     spacing: Kirigami.Units.smallSpacing
 
-                    Rectangle {
-                        width: 32
-                        height: 32
-                        radius: Kirigami.Units.smallSpacing
+                    ColorButton {
                         color: kcm.autotileInactiveBorderColor
-                        border.color: Kirigami.Theme.disabledTextColor
-                        border.width: 1
-                        Accessible.name: i18n("Inactive border color picker")
-                        Accessible.role: Accessible.Button
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                inactiveBorderColorDialog.selectedColor = kcm.autotileInactiveBorderColor;
-                                inactiveBorderColorDialog.open();
-                            }
+                        onClicked: {
+                            inactiveBorderColorDialog.selectedColor = kcm.autotileInactiveBorderColor;
+                            inactiveBorderColorDialog.open();
                         }
-
                     }
 
                     Label {
@@ -334,7 +279,20 @@ Flickable {
         }
 
         // =====================================================================
-        // Gaps Card
+        // Monitor Selector (per-screen overrides for Algorithm + Gaps)
+        // =====================================================================
+        MonitorSelectorSection {
+            Layout.fillWidth: true
+            kcm: settingsController
+            featureEnabled: settingsController.settings.autotileEnabled
+            selectedScreenName: root.selectedScreenName
+            hasOverrides: root.hasOverrides
+            onSelectedScreenNameChanged: root.selectedScreenName = selectedScreenName
+            onResetClicked: psHelper.clearOverrides()
+        }
+
+        // =====================================================================
+        // Gaps Card (per-monitor)
         // =====================================================================
         Kirigami.Card {
             Layout.fillWidth: true
@@ -354,8 +312,10 @@ Flickable {
                     SpinBox {
                         from: 0
                         to: root.gapMax
-                        value: kcm.autotileInnerGap
-                        onValueModified: kcm.autotileInnerGap = value
+                        value: root.settingValue("InnerGap", kcm.autotileInnerGap)
+                        onValueModified: root.writeSetting("InnerGap", value, function(v) {
+                            kcm.autotileInnerGap = v;
+                        })
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Gap between tiled windows")
                     }
@@ -373,9 +333,11 @@ Flickable {
                     SpinBox {
                         from: 0
                         to: root.gapMax
-                        value: kcm.autotileOuterGap
+                        value: root.settingValue("OuterGap", kcm.autotileOuterGap)
                         enabled: !perSideCheck.checked
-                        onValueModified: kcm.autotileOuterGap = value
+                        onValueModified: root.writeSetting("OuterGap", value, function(v) {
+                            kcm.autotileOuterGap = v;
+                        })
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Gap from screen edges")
                     }
@@ -389,8 +351,10 @@ Flickable {
                         id: perSideCheck
 
                         text: i18n("Set per side")
-                        checked: kcm.autotileUsePerSideOuterGap
-                        onToggled: kcm.autotileUsePerSideOuterGap = checked
+                        checked: root.settingValue("UsePerSideOuterGap", kcm.autotileUsePerSideOuterGap)
+                        onToggled: root.writeSetting("UsePerSideOuterGap", checked, function(v) {
+                            kcm.autotileUsePerSideOuterGap = v;
+                        })
                     }
 
                 }
@@ -409,8 +373,10 @@ Flickable {
                     SpinBox {
                         from: 0
                         to: root.gapMax
-                        value: kcm.autotileOuterGapTop
-                        onValueModified: kcm.autotileOuterGapTop = value
+                        value: root.settingValue("OuterGapTop", kcm.autotileOuterGapTop)
+                        onValueModified: root.writeSetting("OuterGapTop", value, function(v) {
+                            kcm.autotileOuterGapTop = v;
+                        })
                         Accessible.name: i18nc("@label", "Top edge gap")
                     }
 
@@ -425,8 +391,10 @@ Flickable {
                     SpinBox {
                         from: 0
                         to: root.gapMax
-                        value: kcm.autotileOuterGapBottom
-                        onValueModified: kcm.autotileOuterGapBottom = value
+                        value: root.settingValue("OuterGapBottom", kcm.autotileOuterGapBottom)
+                        onValueModified: root.writeSetting("OuterGapBottom", value, function(v) {
+                            kcm.autotileOuterGapBottom = v;
+                        })
                         Accessible.name: i18nc("@label", "Bottom edge gap")
                     }
 
@@ -441,8 +409,10 @@ Flickable {
                     SpinBox {
                         from: 0
                         to: root.gapMax
-                        value: kcm.autotileOuterGapLeft
-                        onValueModified: kcm.autotileOuterGapLeft = value
+                        value: root.settingValue("OuterGapLeft", kcm.autotileOuterGapLeft)
+                        onValueModified: root.writeSetting("OuterGapLeft", value, function(v) {
+                            kcm.autotileOuterGapLeft = v;
+                        })
                         Accessible.name: i18nc("@label", "Left edge gap")
                     }
 
@@ -457,8 +427,10 @@ Flickable {
                     SpinBox {
                         from: 0
                         to: root.gapMax
-                        value: kcm.autotileOuterGapRight
-                        onValueModified: kcm.autotileOuterGapRight = value
+                        value: root.settingValue("OuterGapRight", kcm.autotileOuterGapRight)
+                        onValueModified: root.writeSetting("OuterGapRight", value, function(v) {
+                            kcm.autotileOuterGapRight = v;
+                        })
                         Accessible.name: i18nc("@label", "Right edge gap")
                     }
 
@@ -471,8 +443,10 @@ Flickable {
                 CheckBox {
                     Kirigami.FormData.label: i18n("Smart gaps:")
                     text: i18n("Hide gaps when only one window is tiled")
-                    checked: kcm.autotileSmartGaps
-                    onToggled: kcm.autotileSmartGaps = checked
+                    checked: root.settingValue("SmartGaps", kcm.autotileSmartGaps)
+                    onToggled: root.writeSetting("SmartGaps", checked, function(v) {
+                        kcm.autotileSmartGaps = v;
+                    })
                 }
 
             }
@@ -480,12 +454,9 @@ Flickable {
         }
 
         // =====================================================================
-        // Algorithm Card
+        // Algorithm Card (per-monitor)
         // =====================================================================
         Kirigami.Card {
-            // FormLayout
-            // ColumnLayout
-
             Layout.fillWidth: true
             enabled: kcm.autotileEnabled
 
@@ -498,56 +469,36 @@ Flickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.largeSpacing
 
-                // Live preview — centered at top (matching KCM AlgorithmCard)
+                // Live preview - centered at top
                 Item {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: previewContainer.height + Kirigami.Units.gridUnit * 2
+                    Layout.preferredHeight: root.algorithmPreviewHeight + Kirigami.Units.gridUnit * 4
 
+                    // Preview container
                     Item {
-                        id: previewContainer
+                        id: algorithmPreviewContainer
 
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: parent.top
-                        width: Math.min(parent.width * 0.8, Kirigami.Units.gridUnit * 22)
-                        height: width * 9 / 16
+                        width: root.algorithmPreviewWidth
+                        height: root.algorithmPreviewHeight
 
                         Rectangle {
-                            id: previewBg
-
-                            property var zones: {
-                                let algoId = "autotile:" + algoCombo.currentValue;
-                                let layouts = settingsController.layouts;
-                                for (let i = 0; i < layouts.length; i++) {
-                                    if (layouts[i].id === algoId)
-                                        return layouts[i].zones || [];
-
-                                }
-                                return [];
-                            }
-
                             anchors.fill: parent
                             color: Kirigami.Theme.backgroundColor
                             border.color: Kirigami.Theme.disabledTextColor
                             border.width: 1
                             radius: Kirigami.Units.smallSpacing
 
-                            QFZCommon.ZonePreview {
+                            AlgorithmPreview {
                                 anchors.fill: parent
                                 anchors.margins: Kirigami.Units.smallSpacing
-                                zones: previewBg.zones
-                                isHovered: true
-                                showZoneNumbers: true
-                                zonePadding: 1
-                                edgeGap: 0
-                                minZoneSize: 4
-                                animationDuration: 0
-                            }
-
-                            Label {
-                                anchors.centerIn: parent
-                                text: i18n("No preview available")
-                                opacity: 0.4
-                                visible: previewBg.zones.length === 0
+                                kcm: settingsController
+                                showLabel: false
+                                algorithmId: root.effectiveAlgorithm
+                                windowCount: previewWindowSlider.value
+                                splitRatio: root.effectiveAlgorithm === "centered-master" ? (root.settingValue("SplitRatio", kcm.autotileCenteredMasterSplitRatio) || 0.5) : (root.settingValue("SplitRatio", kcm.autotileSplitRatio) || 0.6)
+                                masterCount: root.effectiveAlgorithm === "centered-master" ? (root.settingValue("MasterCount", kcm.autotileCenteredMasterMasterCount) || 1) : (root.settingValue("MasterCount", kcm.autotileMasterCount) || 1)
                             }
 
                         }
@@ -557,7 +508,7 @@ Flickable {
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.top: parent.bottom
                             anchors.topMargin: Kirigami.Units.smallSpacing
-                            text: i18n("%1 windows", previewContainer.zones ? previewContainer.children[0].zones.length : 0)
+                            text: i18np("Max %n window", "Max %n windows", previewWindowSlider.value)
                             font: Kirigami.Theme.fixedWidthFont
                             opacity: 0.7
                         }
@@ -566,32 +517,46 @@ Flickable {
 
                 }
 
-                // Algorithm selector — centered
+                // Algorithm selection - centered
                 ColumnLayout {
                     Layout.alignment: Qt.AlignHCenter
                     spacing: Kirigami.Units.smallSpacing
                     Layout.maximumWidth: Math.min(Kirigami.Units.gridUnit * 25, parent.width)
 
-                    ComboBox {
-                        id: algoCombo
+                    WideComboBox {
+                        id: algorithmCombo
 
                         Layout.alignment: Qt.AlignHCenter
-                        Layout.fillWidth: true
+                        Accessible.name: i18n("Tiling algorithm")
                         textRole: "name"
                         valueRole: "id"
-                        model: root.algorithmModel
-                        Component.onCompleted: currentIndex = root.algorithmIndexOf(kcm.autotileAlgorithm)
-                        onActivated: kcm.autotileAlgorithm = currentValue
-                        Accessible.name: i18n("Tiling algorithm")
+                        model: settingsController.availableAlgorithms()
+                        // indexOfValue is unreliable during initial model population;
+                        // defer to Component.onCompleted so the model is fully ready.
+                        Component.onCompleted: currentIndex = Math.max(0, indexOfValue(root.effectiveAlgorithm))
+                        onActivated: {
+                            root.writeSetting("Algorithm", currentValue, function(v) {
+                                kcm.autotileAlgorithm = v;
+                            });
+                            // Reset max windows to the new algorithm's default
+                            let algoData = model[currentIndex];
+                            if (algoData && algoData.defaultMaxWindows !== undefined)
+                                root.writeSetting("MaxWindows", algoData.defaultMaxWindows, function(v) {
+                                kcm.autotileMaxWindows = v;
+                            });
+
+                        }
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Select how windows are automatically arranged on screen")
 
+                        // Re-sync when the effective algorithm changes externally
+                        // (e.g. per-screen override selection)
                         Connections {
-                            function onAutotileAlgorithmChanged() {
-                                algoCombo.currentIndex = root.algorithmIndexOf(kcm.autotileAlgorithm);
+                            function onEffectiveAlgorithmChanged() {
+                                algorithmCombo.currentIndex = Math.max(0, algorithmCombo.indexOfValue(root.effectiveAlgorithm));
                             }
 
-                            target: kcm
+                            target: root
                         }
 
                     }
@@ -601,10 +566,10 @@ Flickable {
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignHCenter
                         text: {
-                            const m = algoCombo.model;
-                            const idx = algoCombo.currentIndex;
-                            if (m && idx >= 0 && idx < m.length)
-                                return m[idx].description || "";
+                            const model = algorithmCombo.model;
+                            const idx = algorithmCombo.currentIndex;
+                            if (model && idx >= 0 && idx < model.length)
+                                return model[idx].description || "";
 
                             return "";
                         }
@@ -614,17 +579,78 @@ Flickable {
 
                 }
 
-                // Settings — centered; only visible for algorithms that have master/split parameters
-                Kirigami.FormLayout {
+                // Max windows slider - controls preview, zone count, and persisted setting
+                ColumnLayout {
                     Layout.alignment: Qt.AlignHCenter
+                    spacing: Kirigami.Units.smallSpacing
                     Layout.maximumWidth: Math.min(Kirigami.Units.gridUnit * 20, parent.width)
-                    visible: algoCombo.currentValue === "master-stack" || algoCombo.currentValue === "three-column" || algoCombo.currentValue === "centered-master"
 
-                    // Split ratio slider (master-stack and three-column only)
+                    Label {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: i18n("Max Windows")
+                        font.bold: true
+                    }
+
                     RowLayout {
-                        Kirigami.FormData.label: i18n("Split ratio:")
+                        Layout.fillWidth: true
                         spacing: Kirigami.Units.smallSpacing
-                        visible: algoCombo.currentValue === "master-stack" || algoCombo.currentValue === "three-column"
+
+                        Slider {
+                            id: previewWindowSlider
+
+                            Layout.fillWidth: true
+                            Accessible.name: i18n("Maximum windows preview")
+                            from: 1
+                            to: 12
+                            stepSize: 1
+                            onMoved: root.writeSetting("MaxWindows", Math.round(value), function(v) {
+                                kcm.autotileMaxWindows = v;
+                            })
+                            ToolTip.visible: hovered
+                            ToolTip.text: i18n("Maximum number of windows to tile with this algorithm")
+
+                            Binding on value {
+                                value: root.settingValue("MaxWindows", kcm.autotileMaxWindows)
+                                when: !previewWindowSlider.pressed
+                                restoreMode: Binding.RestoreNone
+                            }
+
+                        }
+
+                        Label {
+                            text: Math.round(previewWindowSlider.value)
+                            Layout.preferredWidth: root.sliderValueLabelWidth
+                            horizontalAlignment: Text.AlignRight
+                            font: Kirigami.Theme.fixedWidthFont
+                        }
+
+                    }
+
+                }
+
+                // Algorithm-specific settings (master-stack, three-column, centered-master)
+                ColumnLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: Math.min(Kirigami.Units.gridUnit * 20, parent.width)
+                    spacing: Kirigami.Units.smallSpacing
+                    visible: root.effectiveAlgorithm === "master-stack" || root.effectiveAlgorithm === "three-column" || root.effectiveAlgorithm === "centered-master"
+
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                    }
+
+                    // Master/Center ratio
+                    Label {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: root.effectiveAlgorithm === "three-column" || root.effectiveAlgorithm === "centered-master" ? i18n("Center Ratio") : i18n("Master Ratio")
+                        font.bold: true
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
 
                         Slider {
                             id: splitRatioSlider
@@ -633,10 +659,25 @@ Flickable {
                             from: 0.1
                             to: 0.9
                             stepSize: 0.05
-                            value: kcm.autotileSplitRatio
-                            onMoved: kcm.autotileSplitRatio = value
+                            onMoved: {
+                                if (root.effectiveAlgorithm === "centered-master")
+                                    root.writeSetting("SplitRatio", value, function(v) {
+                                    kcm.autotileCenteredMasterSplitRatio = v;
+                                });
+                                else
+                                    root.writeSetting("SplitRatio", value, function(v) {
+                                    kcm.autotileSplitRatio = v;
+                                });
+                            }
                             ToolTip.visible: hovered
-                            ToolTip.text: i18n("Proportion of screen width for the master area")
+                            ToolTip.text: root.effectiveAlgorithm === "three-column" || root.effectiveAlgorithm === "centered-master" ? i18n("Proportion of screen width for the center column") : i18n("Proportion of screen width for the master area")
+
+                            Binding on value {
+                                value: root.effectiveAlgorithm === "centered-master" ? root.settingValue("SplitRatio", kcm.autotileCenteredMasterSplitRatio) : root.settingValue("SplitRatio", kcm.autotileSplitRatio)
+                                when: !splitRatioSlider.pressed
+                                restoreMode: Binding.RestoreNone
+                            }
+
                         }
 
                         Label {
@@ -648,83 +689,41 @@ Flickable {
 
                     }
 
-                    // Master count (master-stack and centered-master)
+                    // Master count - for master-stack and centered-master
                     RowLayout {
-                        Kirigami.FormData.label: algoCombo.currentValue === "centered-master" ? i18n("Center count:") : i18n("Master count:")
+                        Layout.alignment: Qt.AlignHCenter
                         spacing: Kirigami.Units.smallSpacing
-                        visible: algoCombo.currentValue === "master-stack" || algoCombo.currentValue === "centered-master"
-
-                        SpinBox {
-                            from: 1
-                            to: 5
-                            value: kcm.autotileMasterCount
-                            onValueModified: kcm.autotileMasterCount = value
-                            Accessible.name: algoCombo.currentValue === "centered-master" ? i18n("Center count") : i18n("Master count")
-                            ToolTip.visible: hovered
-                            ToolTip.text: algoCombo.currentValue === "centered-master" ? i18n("Number of windows in the center area") : i18n("Number of windows in the master area")
-                        }
-
-                    }
-
-                    // Centered master specific settings
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Center ratio:")
-                        spacing: Kirigami.Units.smallSpacing
-                        visible: algoCombo.currentValue === "centered-master"
-
-                        Slider {
-                            id: centeredSplitRatioSlider
-
-                            Layout.fillWidth: true
-                            from: 0.1
-                            to: 0.9
-                            stepSize: 0.05
-                            value: kcm.autotileCenteredMasterSplitRatio
-                            onMoved: kcm.autotileCenteredMasterSplitRatio = value
-                            ToolTip.visible: hovered
-                            ToolTip.text: i18n("Proportion of screen width for the center column")
-                        }
+                        visible: root.effectiveAlgorithm === "master-stack" || root.effectiveAlgorithm === "centered-master"
 
                         Label {
-                            text: Math.round(centeredSplitRatioSlider.value * 100) + "%"
-                            Layout.preferredWidth: root.sliderValueLabelWidth
-                            horizontalAlignment: Text.AlignRight
-                            font: Kirigami.Theme.fixedWidthFont
+                            text: root.effectiveAlgorithm === "centered-master" ? i18n("Center count:") : i18n("Master count:")
                         }
 
-                    }
-
-                    // Centered master count (separate from general master count)
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Center count:")
-                        spacing: Kirigami.Units.smallSpacing
-                        visible: algoCombo.currentValue === "centered-master"
-
                         SpinBox {
+                            id: masterCountSpinBox
+
                             from: 1
                             to: 5
-                            value: kcm.autotileCenteredMasterMasterCount
-                            onValueModified: kcm.autotileCenteredMasterMasterCount = value
-                            Accessible.name: i18n("Center count")
+                            onValueModified: {
+                                if (root.effectiveAlgorithm === "centered-master")
+                                    root.writeSetting("MasterCount", value, function(v) {
+                                    kcm.autotileCenteredMasterMasterCount = v;
+                                });
+                                else
+                                    root.writeSetting("MasterCount", value, function(v) {
+                                    kcm.autotileMasterCount = v;
+                                });
+                            }
+                            Accessible.name: root.effectiveAlgorithm === "centered-master" ? i18n("Center count") : i18n("Master count")
                             ToolTip.visible: hovered
-                            ToolTip.text: i18n("Number of windows in the center area")
-                        }
+                            ToolTip.text: root.effectiveAlgorithm === "centered-master" ? i18n("Number of windows in the center area") : i18n("Number of windows in the master area")
 
-                    }
+                            Binding on value {
+                                value: root.effectiveAlgorithm === "centered-master" ? root.settingValue("MasterCount", kcm.autotileCenteredMasterMasterCount) : root.settingValue("MasterCount", kcm.autotileMasterCount)
+                                when: !masterCountSpinBox.activeFocus
+                                restoreMode: Binding.RestoreNone
+                            }
 
-                    // Max windows
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Max windows:")
-                        spacing: Kirigami.Units.smallSpacing
-
-                        SpinBox {
-                            from: 1
-                            to: 12
-                            value: kcm.autotileMaxWindows
-                            onValueModified: kcm.autotileMaxWindows = value
-                            Accessible.name: i18n("Maximum tiled windows")
-                            ToolTip.visible: hovered
-                            ToolTip.text: i18n("Maximum number of windows to tile with this algorithm")
                         }
 
                     }
@@ -732,7 +731,6 @@ Flickable {
                 }
 
             }
-            // Card
 
         }
 

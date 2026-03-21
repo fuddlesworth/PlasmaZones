@@ -344,11 +344,13 @@ install(DIRECTORY data/shaders/
 install(FILES
     icons/hicolor/scalable/apps/plasmazones.svg
     icons/hicolor/scalable/apps/plasmazones-editor.svg
+    icons/hicolor/scalable/apps/plasmazones-settings.svg
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps
 )
 install(FILES
     icons/hicolor-light/scalable/apps/plasmazones.svg
     icons/hicolor-light/scalable/apps/plasmazones-editor.svg
+    icons/hicolor-light/scalable/apps/plasmazones-settings.svg
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor-light/scalable/apps
 )
 

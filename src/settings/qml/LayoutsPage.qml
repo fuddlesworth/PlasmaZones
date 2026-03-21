@@ -433,54 +433,33 @@ Flickable {
                         anchors.margins: Kirigami.Units.smallSpacing
                         spacing: Kirigami.Units.smallSpacing / 2
 
-                        // Thumbnail area (inlined simplified LayoutThumbnail)
+                        // Thumbnail area (using shared LayoutThumbnail, matching KCM)
                         Item {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             // Dim thumbnail when hidden
                             opacity: delegateRoot.modelData.hiddenFromSelector ? 0.5 : 1
 
-                            // Zone preview using shared ZonePreview component (same as KCM)
-                            Rectangle {
-                                id: thumbnailBg
+                            LayoutThumbnail {
+                                id: layoutThumbnail
+
+                                // Safe scale calculation - fit thumbnail within parent bounds
+                                readonly property real safeImplicitWidth: Math.max(1, implicitWidth)
+                                readonly property real safeImplicitHeight: Math.max(1, implicitHeight)
+                                readonly property real safeParentWidth: Math.max(1, parent.width)
+                                readonly property real safeParentHeight: Math.max(1, parent.height)
 
                                 anchors.centerIn: parent
-                                width: Math.min(parent.width, parent.height * (16 / 9))
-                                height: Math.min(parent.height, parent.width / (16 / 9))
-                                radius: Kirigami.Units.smallSpacing
-                                color: "transparent"
-
-                                QFZCommon.ZonePreview {
-                                    anchors.fill: parent
-                                    zones: delegateRoot.modelData.zones || []
-                                    isHovered: delegateRoot.isHovered
-                                    isActive: delegateRoot.isSelected
-                                    showZoneNumbers: true
-                                    zonePadding: 1
-                                    edgeGap: 0
-                                    minZoneSize: 4
-                                    animationDuration: 0
-                                }
-
-                                // Layout name label at bottom
-                                Label {
-                                    anchors.bottom: parent.bottom
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.margins: Kirigami.Units.smallSpacing
-                                    text: delegateRoot.modelData.name || i18n("Unnamed")
-                                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-                                    font.bold: delegateRoot.isSelected
-                                    elide: Text.ElideRight
-                                    horizontalAlignment: Text.AlignHCenter
-
-                                    background: Rectangle {
-                                        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.9)
-                                        radius: Kirigami.Units.smallSpacing * 0.5
-                                    }
-
-                                }
-
+                                layout: delegateRoot.modelData
+                                isSelected: delegateRoot.isSelected
+                                fontFamily: kcm.labelFontFamily || ""
+                                fontSizeScale: kcm.labelFontSizeScale || 1
+                                fontWeight: kcm.labelFontWeight !== undefined ? kcm.labelFontWeight : Font.Bold
+                                fontItalic: kcm.labelFontItalic || false
+                                fontUnderline: kcm.labelFontUnderline || false
+                                fontStrikeout: kcm.labelFontStrikeout || false
+                                transformOrigin: Item.Center
+                                scale: Math.min(1, safeParentWidth / safeImplicitWidth, safeParentHeight / safeImplicitHeight)
                             }
 
                             // Top-left indicator row (default star + system badge)

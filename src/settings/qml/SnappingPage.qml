@@ -25,8 +25,33 @@ Flickable {
     readonly property int zoneSelectorPreviewHeightMax: 300
     readonly property int zoneSelectorGridColumnsMax: 10
     readonly property real screenAspectRatio: Screen.width > 0 && Screen.height > 0 ? (Screen.width / Screen.height) : (16 / 9)
+    // Per-screen snapping gap/padding helper
+    property alias selectedSnappingScreenName: snappingHelper.selectedScreenName
+    readonly property alias isPerScreenSnapping: snappingHelper.isPerScreen
+    readonly property alias hasSnappingOverrides: snappingHelper.hasOverrides
+
+    function snappingSettingValue(key, globalValue) {
+        return snappingHelper.settingValue(key, globalValue);
+    }
+
+    function writeSnappingSetting(key, value, globalSetter) {
+        snappingHelper.writeSetting(key, value, globalSetter);
+    }
+
+    function clearSnappingOverrides() {
+        snappingHelper.clearOverrides();
+    }
 
     contentHeight: content.implicitHeight
+
+    PerScreenOverrideHelper {
+        id: snappingHelper
+
+        kcm: settingsController
+        getterMethod: "getPerScreenSnappingSettings"
+        setterMethod: "setPerScreenSnappingSetting"
+        clearerMethod: "clearPerScreenSnappingSettings"
+    }
 
     ColumnLayout {
         id: content
@@ -95,23 +120,12 @@ Flickable {
                         visible: !useSystemColorsCheck.checked
                         spacing: Kirigami.Units.smallSpacing
 
-                        Rectangle {
-                            width: 32
-                            height: 32
-                            radius: Kirigami.Units.smallSpacing
+                        ColorButton {
                             color: kcm.highlightColor
-                            border.color: Kirigami.Theme.disabledTextColor
-                            border.width: 1
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    highlightColorDialog.selectedColor = kcm.highlightColor;
-                                    highlightColorDialog.open();
-                                }
+                            onClicked: {
+                                highlightColorDialog.selectedColor = kcm.highlightColor;
+                                highlightColorDialog.open();
                             }
-
                         }
 
                         Label {
@@ -126,23 +140,12 @@ Flickable {
                         visible: !useSystemColorsCheck.checked
                         spacing: Kirigami.Units.smallSpacing
 
-                        Rectangle {
-                            width: 32
-                            height: 32
-                            radius: Kirigami.Units.smallSpacing
+                        ColorButton {
                             color: kcm.inactiveColor
-                            border.color: Kirigami.Theme.disabledTextColor
-                            border.width: 1
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    inactiveColorDialog.selectedColor = kcm.inactiveColor;
-                                    inactiveColorDialog.open();
-                                }
+                            onClicked: {
+                                inactiveColorDialog.selectedColor = kcm.inactiveColor;
+                                inactiveColorDialog.open();
                             }
-
                         }
 
                         Label {
@@ -157,23 +160,12 @@ Flickable {
                         visible: !useSystemColorsCheck.checked
                         spacing: Kirigami.Units.smallSpacing
 
-                        Rectangle {
-                            width: 32
-                            height: 32
-                            radius: Kirigami.Units.smallSpacing
+                        ColorButton {
                             color: kcm.borderColor
-                            border.color: Kirigami.Theme.disabledTextColor
-                            border.width: 1
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    borderColorDialog.selectedColor = kcm.borderColor;
-                                    borderColorDialog.open();
-                                }
+                            onClicked: {
+                                borderColorDialog.selectedColor = kcm.borderColor;
+                                borderColorDialog.open();
                             }
-
                         }
 
                         Label {
@@ -181,6 +173,41 @@ Flickable {
                             font: Kirigami.Theme.fixedWidthFont
                         }
 
+                    }
+
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Import colors:")
+                        visible: !useSystemColorsCheck.checked
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Button {
+                            text: i18n("From pywal")
+                            icon.name: "color-management"
+                            onClicked: settingsController.loadColorsFromPywal()
+                        }
+
+                        Button {
+                            text: i18n("From file...")
+                            icon.name: "document-open"
+                            onClicked: colorFileDialog.open()
+                        }
+
+                    }
+
+                    Kirigami.InlineMessage {
+                        id: colorImportMessage
+
+                        Layout.fillWidth: true
+                        visible: false
+                        type: Kirigami.MessageType.Positive
+                        Accessible.name: text
+                    }
+
+                    Timer {
+                        id: colorImportHideTimer
+
+                        interval: 3000
+                        onTriggered: colorImportMessage.visible = false
                     }
 
                     Kirigami.Separator {
@@ -283,23 +310,12 @@ Flickable {
                         visible: !useSystemColorsCheck.checked
                         spacing: Kirigami.Units.smallSpacing
 
-                        Rectangle {
-                            width: 32
-                            height: 32
-                            radius: Kirigami.Units.smallSpacing
+                        ColorButton {
                             color: kcm.labelFontColor
-                            border.color: Kirigami.Theme.disabledTextColor
-                            border.width: 1
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    labelFontColorDialog.selectedColor = kcm.labelFontColor;
-                                    labelFontColorDialog.open();
-                                }
+                            onClicked: {
+                                labelFontColorDialog.selectedColor = kcm.labelFontColor;
+                                labelFontColorDialog.open();
                             }
-
                         }
 
                         Label {
@@ -314,16 +330,22 @@ Flickable {
                         spacing: Kirigami.Units.smallSpacing
 
                         Button {
-                            id: fontPickerButton
-
-                            Layout.preferredWidth: root.sliderPreferredWidth
                             text: kcm.labelFontFamily || i18n("System default")
-                            font.family: kcm.labelFontFamily || Qt.application.font.family
+                            font.family: kcm.labelFontFamily
+                            font.weight: kcm.labelFontWeight
+                            font.italic: kcm.labelFontItalic
                             icon.name: "font-select-symbolic"
-                            onClicked: fontPickerDialog.open()
+                            onClicked: {
+                                fontPickerDialog.selectedFamily = kcm.labelFontFamily;
+                                fontPickerDialog.selectedWeight = kcm.labelFontWeight;
+                                fontPickerDialog.selectedItalic = kcm.labelFontItalic;
+                                fontPickerDialog.selectedUnderline = kcm.labelFontUnderline;
+                                fontPickerDialog.selectedStrikeout = kcm.labelFontStrikeout;
+                                fontPickerDialog.open();
+                            }
                         }
 
-                        ToolButton {
+                        Button {
                             icon.name: "edit-clear"
                             visible: kcm.labelFontFamily !== "" || kcm.labelFontWeight !== Font.Bold || kcm.labelFontItalic || kcm.labelFontUnderline || kcm.labelFontStrikeout || Math.abs(kcm.labelFontSizeScale - 1) > 0.01
                             ToolTip.text: i18n("Reset to defaults")
@@ -336,75 +358,6 @@ Flickable {
                                 kcm.labelFontUnderline = false;
                                 kcm.labelFontStrikeout = false;
                             }
-                        }
-
-                    }
-
-                    ComboBox {
-                        id: fontWeightCombo
-
-                        Kirigami.FormData.label: i18n("Weight:")
-                        textRole: "text"
-                        valueRole: "value"
-                        model: [{
-                            "text": i18n("Thin"),
-                            "value": Font.Thin
-                        }, {
-                            "text": i18n("ExtraLight"),
-                            "value": Font.ExtraLight
-                        }, {
-                            "text": i18n("Light"),
-                            "value": Font.Light
-                        }, {
-                            "text": i18n("Normal"),
-                            "value": Font.Normal
-                        }, {
-                            "text": i18n("Medium"),
-                            "value": Font.Medium
-                        }, {
-                            "text": i18n("DemiBold"),
-                            "value": Font.DemiBold
-                        }, {
-                            "text": i18n("Bold"),
-                            "value": Font.Bold
-                        }, {
-                            "text": i18n("ExtraBold"),
-                            "value": Font.ExtraBold
-                        }, {
-                            "text": i18n("Black"),
-                            "value": Font.Black
-                        }]
-                        currentIndex: {
-                            for (var i = 0; i < model.length; i++) {
-                                if (model[i].value === kcm.labelFontWeight)
-                                    return i;
-
-                            }
-                            return 6; // Bold default
-                        }
-                        onActivated: kcm.labelFontWeight = currentValue
-                    }
-
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Style:")
-                        spacing: Kirigami.Units.largeSpacing
-
-                        CheckBox {
-                            text: i18n("Italic")
-                            checked: kcm.labelFontItalic
-                            onToggled: kcm.labelFontItalic = checked
-                        }
-
-                        CheckBox {
-                            text: i18n("Underline")
-                            checked: kcm.labelFontUnderline
-                            onToggled: kcm.labelFontUnderline = checked
-                        }
-
-                        CheckBox {
-                            text: i18n("Strikeout")
-                            checked: kcm.labelFontStrikeout
-                            onToggled: kcm.labelFontStrikeout = checked
                         }
 
                     }
@@ -558,16 +511,23 @@ Flickable {
 
                         Kirigami.FormData.label: i18n("Audio:")
                         text: i18n("Enable CAVA audio spectrum")
-                        enabled: shaderEffectsCheck.checked
+                        enabled: shaderEffectsCheck.checked && settingsController.cavaAvailable
                         checked: kcm.enableAudioVisualizer
                         onToggled: kcm.enableAudioVisualizer = checked
                         ToolTip.visible: hovered
-                        ToolTip.text: i18n("Feeds audio spectrum data to shaders that support it.")
+                        ToolTip.text: settingsController.cavaAvailable ? i18n("Feeds audio spectrum data to shaders that support it.") : i18n("CAVA is not installed. Install cava to enable audio visualization.")
+                    }
+
+                    Kirigami.InlineMessage {
+                        Layout.fillWidth: true
+                        type: Kirigami.MessageType.Warning
+                        text: i18n("CAVA is not installed. Install the <b>cava</b> package to enable audio-reactive shader effects.")
+                        visible: !settingsController.cavaAvailable && shaderEffectsCheck.checked
                     }
 
                     RowLayout {
                         Kirigami.FormData.label: i18n("Spectrum bars:")
-                        enabled: shaderEffectsCheck.checked && audioVizCheck.checked
+                        enabled: shaderEffectsCheck.checked && audioVizCheck.checked && settingsController.cavaAvailable
                         opacity: enabled ? 1 : 0.6
                         spacing: Kirigami.Units.smallSpacing
 
@@ -626,13 +586,33 @@ Flickable {
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Zone activation:")
                         text: i18n("Activate on every window drag")
-                        checked: true // alwaysActivateOnDrag is derived from drag trigger config
-                        enabled: false // Read-only display — configure via drag triggers above
+                        checked: settingsController.alwaysActivateOnDrag
+                        onToggled: settingsController.alwaysActivateOnDrag = checked
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("When enabled, the zone overlay appears on every window drag without requiring a modifier key or mouse button.")
                     }
 
+                    ModifierAndMouseCheckBoxes {
+                        id: dragActivationInput
+
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: root.sliderPreferredWidth
+                        Kirigami.FormData.label: i18n("Hold to activate:")
+                        enabled: !alwaysActivateCheck.checked
+                        opacity: enabled ? 1 : 0.6
+                        allowMultiple: true
+                        acceptMode: acceptModeAll
+                        triggers: settingsController.dragActivationTriggers
+                        defaultTriggers: settingsController.defaultDragActivationTriggers
+                        tooltipEnabled: true
+                        customTooltipText: i18n("Hold modifier or use mouse button to show zones while dragging. Add multiple triggers to activate with any of them.")
+                        onTriggersModified: (triggers) => {
+                            settingsController.dragActivationTriggers = triggers;
+                        }
+                    }
+
                     CheckBox {
+                        Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Toggle mode:")
                         enabled: !alwaysActivateCheck.checked
                         opacity: enabled ? 1 : 0.6
@@ -657,6 +637,23 @@ Flickable {
                         onToggled: kcm.zoneSpanEnabled = checked
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("When enabled, you can paint across multiple zones to snap a window to the combined area.")
+                    }
+
+                    ModifierAndMouseCheckBoxes {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: root.sliderPreferredWidth
+                        Kirigami.FormData.label: i18n("Modifier:")
+                        enabled: zoneSpanEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
+                        allowMultiple: true
+                        acceptMode: acceptModeAll
+                        triggers: settingsController.zoneSpanTriggers
+                        defaultTriggers: settingsController.defaultZoneSpanTriggers
+                        tooltipEnabled: true
+                        customTooltipText: i18n("Hold modifier or use mouse button while dragging to paint across zones. Add multiple triggers to activate with any of them.")
+                        onTriggersModified: (triggers) => {
+                            settingsController.zoneSpanTriggers = triggers;
+                        }
                     }
 
                     RowLayout {
@@ -709,6 +706,23 @@ Flickable {
                         opacity: enabled ? 1 : 0.6
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("When enabled, a window picker appears after every snap. When disabled, hold the trigger below while dropping to show the picker for that snap only.")
+                    }
+
+                    ModifierAndMouseCheckBoxes {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: root.sliderPreferredWidth
+                        Kirigami.FormData.label: i18n("Hold to enable:")
+                        enabled: snapAssistFeatureEnabledCheck.checked && !kcm.snapAssistEnabled
+                        opacity: enabled ? 1 : 0.6
+                        allowMultiple: true
+                        acceptMode: acceptModeAll
+                        triggers: settingsController.snapAssistTriggers
+                        defaultTriggers: settingsController.defaultSnapAssistTriggers
+                        tooltipEnabled: true
+                        customTooltipText: i18n("Hold this modifier or mouse button when releasing a window to show the picker for that snap only. Add multiple triggers to activate with any of them.")
+                        onTriggersModified: (triggers) => {
+                            settingsController.snapAssistTriggers = triggers;
+                        }
                     }
 
                 }
@@ -803,6 +817,19 @@ Flickable {
         }
 
         // =====================================================================
+        // PER-MONITOR SNAPPING OVERRIDES
+        // =====================================================================
+        MonitorSelectorSection {
+            Layout.fillWidth: true
+            kcm: settingsController
+            featureEnabled: settingsController.settings.snappingEnabled
+            selectedScreenName: snappingHelper.selectedScreenName
+            hasOverrides: snappingHelper.hasOverrides
+            onSelectedScreenNameChanged: snappingHelper.selectedScreenName = selectedScreenName
+            onResetClicked: snappingHelper.clearOverrides()
+        }
+
+        // =====================================================================
         // ZONE GEOMETRY
         // =====================================================================
         Item {
@@ -829,8 +856,10 @@ Flickable {
                         SpinBox {
                             from: 0
                             to: root.paddingMax
-                            value: kcm.zonePadding
-                            onValueModified: kcm.zonePadding = value
+                            value: root.snappingSettingValue("ZonePadding", kcm.zonePadding)
+                            onValueModified: root.writeSnappingSetting("ZonePadding", value, function(v) {
+                                kcm.zonePadding = v;
+                            })
                             Accessible.name: i18n("Zone padding")
                         }
 
@@ -847,9 +876,11 @@ Flickable {
                         SpinBox {
                             from: 0
                             to: root.paddingMax
-                            value: kcm.outerGap
-                            onValueModified: kcm.outerGap = value
+                            value: root.snappingSettingValue("OuterGap", kcm.outerGap)
                             enabled: !perSideCheck.checked
+                            onValueModified: root.writeSnappingSetting("OuterGap", value, function(v) {
+                                kcm.outerGap = v;
+                            })
                             Accessible.name: i18n("Edge gap")
                         }
 
@@ -862,8 +893,10 @@ Flickable {
                             id: perSideCheck
 
                             text: i18n("Set per side")
-                            checked: kcm.usePerSideOuterGap
-                            onToggled: kcm.usePerSideOuterGap = checked
+                            checked: root.snappingSettingValue("UsePerSideOuterGap", kcm.usePerSideOuterGap)
+                            onToggled: root.writeSnappingSetting("UsePerSideOuterGap", checked, function(v) {
+                                kcm.usePerSideOuterGap = v;
+                            })
                         }
 
                     }
@@ -882,8 +915,10 @@ Flickable {
                         SpinBox {
                             from: 0
                             to: root.paddingMax
-                            value: kcm.outerGapTop
-                            onValueModified: kcm.outerGapTop = value
+                            value: root.snappingSettingValue("OuterGapTop", kcm.outerGapTop)
+                            onValueModified: root.writeSnappingSetting("OuterGapTop", value, function(v) {
+                                kcm.outerGapTop = v;
+                            })
                             Accessible.name: i18nc("@label", "Top edge gap")
                         }
 
@@ -898,8 +933,10 @@ Flickable {
                         SpinBox {
                             from: 0
                             to: root.paddingMax
-                            value: kcm.outerGapBottom
-                            onValueModified: kcm.outerGapBottom = value
+                            value: root.snappingSettingValue("OuterGapBottom", kcm.outerGapBottom)
+                            onValueModified: root.writeSnappingSetting("OuterGapBottom", value, function(v) {
+                                kcm.outerGapBottom = v;
+                            })
                             Accessible.name: i18nc("@label", "Bottom edge gap")
                         }
 
@@ -914,8 +951,10 @@ Flickable {
                         SpinBox {
                             from: 0
                             to: root.paddingMax
-                            value: kcm.outerGapLeft
-                            onValueModified: kcm.outerGapLeft = value
+                            value: root.snappingSettingValue("OuterGapLeft", kcm.outerGapLeft)
+                            onValueModified: root.writeSnappingSetting("OuterGapLeft", value, function(v) {
+                                kcm.outerGapLeft = v;
+                            })
                             Accessible.name: i18nc("@label", "Left edge gap")
                         }
 
@@ -930,8 +969,10 @@ Flickable {
                         SpinBox {
                             from: 0
                             to: root.paddingMax
-                            value: kcm.outerGapRight
-                            onValueModified: kcm.outerGapRight = value
+                            value: root.snappingSettingValue("OuterGapRight", kcm.outerGapRight)
+                            onValueModified: root.writeSnappingSetting("OuterGapRight", value, function(v) {
+                                kcm.outerGapRight = v;
+                            })
                             Accessible.name: i18nc("@label", "Right edge gap")
                         }
 
@@ -984,128 +1025,20 @@ Flickable {
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.largeSpacing
 
-                    // Centered position picker with description
-                    Item {
-                        id: positionPicker
-
-                        readonly property var positionLabels: [i18n("Top-Left"), i18n("Top"), i18n("Top-Right"), i18n("Left"), i18n("Center"), i18n("Right"), i18n("Bottom-Left"), i18n("Bottom"), i18n("Bottom-Right")]
-
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: positionPickerGrid.height + Kirigami.Units.gridUnit * 4
-
-                        Item {
-                            id: positionPickerGrid
-
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.top: parent.top
-                            width: 160
-                            height: 110
-
-                            Rectangle {
-                                anchors.fill: parent
-                                color: Kirigami.Theme.backgroundColor
-                                radius: Kirigami.Units.smallSpacing
-                                border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
-                                border.width: 1
-
-                                Rectangle {
-                                    anchors.fill: parent
-                                    anchors.margins: 4
-                                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
-                                    radius: Kirigami.Units.smallSpacing / 2
-
-                                    Grid {
-                                        id: positionGrid
-
-                                        anchors.fill: parent
-                                        anchors.margins: 6
-                                        columns: 3
-                                        rows: 3
-                                        spacing: 3
-
-                                        Repeater {
-                                            model: 9
-
-                                            Rectangle {
-                                                id: posCell
-
-                                                required property int index
-                                                property bool isSelected: index === kcm.zoneSelectorPosition
-                                                property bool isHovered: posCellMouse.containsMouse
-
-                                                width: (positionGrid.width - positionGrid.spacing * 2) / 3
-                                                height: (positionGrid.height - positionGrid.spacing * 2) / 3
-                                                radius: 3
-                                                color: {
-                                                    if (isSelected)
-                                                        return Kirigami.Theme.highlightColor;
-
-                                                    if (isHovered && zoneSelectorEnabledCheck.checked)
-                                                        return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4);
-
-                                                    return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15);
-                                                }
-                                                border.color: {
-                                                    if (isSelected)
-                                                        return Kirigami.Theme.highlightColor;
-
-                                                    if (isHovered && zoneSelectorEnabledCheck.checked)
-                                                        return Kirigami.Theme.highlightColor;
-
-                                                    return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3);
-                                                }
-                                                border.width: isSelected ? 2 : 1
-
-                                                MouseArea {
-                                                    id: posCellMouse
-
-                                                    anchors.fill: parent
-                                                    hoverEnabled: true
-                                                    enabled: zoneSelectorEnabledCheck.checked
-                                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                                    onClicked: kcm.zoneSelectorPosition = posCell.index
-                                                    ToolTip.visible: containsMouse && zoneSelectorEnabledCheck.checked
-                                                    ToolTip.delay: 500
-                                                    ToolTip.text: positionPicker.positionLabels[posCell.index]
-                                                }
-
-                                                Behavior on color {
-                                                    ColorAnimation {
-                                                        duration: 100
-                                                    }
-
-                                                }
-
-                                            }
-
-                                        }
-
-                                    }
-
-                                }
-
-                            }
-
+                    PositionPicker {
+                        Layout.alignment: Qt.AlignHCenter
+                        position: kcm.zoneSelectorPosition
+                        enabled: zoneSelectorEnabledCheck.checked
+                        onPositionSelected: function(newPosition) {
+                            kcm.zoneSelectorPosition = newPosition;
                         }
+                    }
 
-                        Label {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.top: positionPickerGrid.bottom
-                            anchors.topMargin: Kirigami.Units.smallSpacing
-                            text: positionPicker.positionLabels[kcm.zoneSelectorPosition] || ""
-                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-                            opacity: 0.7
-                        }
-
-                        Label {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.top: positionPickerGrid.bottom
-                            anchors.topMargin: Kirigami.Units.smallSpacing + Kirigami.Units.gridUnit
-                            text: i18n("Choose where the popup appears on screen")
-                            opacity: 0.7
-                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-                        }
-
+                    Label {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: i18n("Choose where the popup appears on screen")
+                        opacity: 0.7
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     }
 
                     // Trigger distance - centered like position picker
@@ -1527,83 +1460,51 @@ Flickable {
         onAccepted: kcm.labelFontColor = selectedColor
     }
 
-    Dialog {
+    FontPickerDialog {
         id: fontPickerDialog
 
-        title: i18n("Select Font")
-        anchors.centerIn: Overlay.overlay
-        width: Math.min(parent.width * 0.6, Kirigami.Units.gridUnit * 25)
-        height: Math.min(parent.height * 0.7, Kirigami.Units.gridUnit * 30)
-        modal: true
-        standardButtons: Dialog.Cancel
-        onOpened: {
-            fontSearchField.text = "";
-            fontFamilyListView.model = Qt.fontFamilies();
-            if (kcm.labelFontFamily !== "") {
-                var families = Qt.fontFamilies();
-                for (var i = 0; i < families.length; i++) {
-                    if (families[i] === kcm.labelFontFamily) {
-                        fontFamilyListView.currentIndex = i;
-                        fontFamilyListView.positionViewAtIndex(i, ListView.Center);
-                        break;
-                    }
-                }
-            }
-            fontSearchField.forceActiveFocus();
+        kcm: settingsController
+        onAccepted: {
+            kcm.labelFontFamily = selectedFamily;
+            kcm.labelFontWeight = selectedWeight;
+            kcm.labelFontItalic = selectedItalic;
+            kcm.labelFontUnderline = selectedUnderline;
+            kcm.labelFontStrikeout = selectedStrikeout;
+        }
+    }
+
+    FileDialog {
+        id: colorFileDialog
+
+        title: i18n("Import Colors from File")
+        nameFilters: ["JSON files (*.json)", "All files (*)"]
+        fileMode: FileDialog.OpenFile
+        onAccepted: settingsController.loadColorsFromFile(selectedFile.toString().replace(/^file:\/\/+/, "/"))
+    }
+
+    Kirigami.PromptDialog {
+        id: colorImportErrorDialog
+
+        title: i18n("Color Import Failed")
+        subtitle: ""
+        standardButtons: Kirigami.Dialog.Ok
+        preferredWidth: Math.min(Kirigami.Units.gridUnit * 30, parent.width * 0.8)
+    }
+
+    Connections {
+        function onColorImportError(message) {
+            colorImportErrorDialog.subtitle = message;
+            colorImportErrorDialog.open();
         }
 
-        contentItem: ColumnLayout {
-            spacing: Kirigami.Units.smallSpacing
-
-            TextField {
-                id: fontSearchField
-
-                Layout.fillWidth: true
-                placeholderText: i18n("Search fonts...")
-                onTextChanged: fontFamilyListView.model = Qt.fontFamilies().filter(function(f) {
-                    return f.toLowerCase().indexOf(text.toLowerCase()) !== -1;
-                })
-                Component.onCompleted: fontFamilyListView.model = Qt.fontFamilies()
-            }
-
-            ListView {
-                id: fontFamilyListView
-
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-                currentIndex: -1
-                Component.onCompleted: {
-                    if (kcm.labelFontFamily !== "") {
-                        var families = model;
-                        for (var i = 0; i < families.length; i++) {
-                            if (families[i] === kcm.labelFontFamily) {
-                                currentIndex = i;
-                                positionViewAtIndex(i, ListView.Center);
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                delegate: ItemDelegate {
-                    required property string modelData
-                    required property int index
-
-                    width: fontFamilyListView.width
-                    text: modelData
-                    font.family: modelData
-                    highlighted: fontFamilyListView.currentIndex === index
-                    onClicked: {
-                        kcm.labelFontFamily = modelData;
-                        fontPickerDialog.close();
-                    }
-                }
-
-            }
-
+        function onColorImportSuccess() {
+            colorImportMessage.type = Kirigami.MessageType.Positive;
+            colorImportMessage.text = i18n("Colors imported successfully");
+            colorImportMessage.visible = true;
+            colorImportHideTimer.restart();
         }
 
+        target: settingsController
     }
 
 }

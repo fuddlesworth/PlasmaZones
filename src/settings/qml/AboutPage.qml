@@ -19,52 +19,10 @@ Flickable {
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: Kirigami.Units.largeSpacing
 
-        // App header with icon and version (matches KCM)
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-            spacing: Kirigami.Units.largeSpacing
-
-            Kirigami.Icon {
-                source: "plasmazones"
-                Layout.preferredWidth: Kirigami.Units.iconSizes.huge
-                Layout.preferredHeight: Kirigami.Units.iconSizes.huge
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
-
-                Kirigami.Heading {
-                    level: 1
-                    text: i18n("PlasmaZones")
-                }
-
-                Label {
-                    text: Qt.application.version.length > 0 ? i18n("Version %1", Qt.application.version) : i18n("Version unknown")
-                    opacity: 0.7
-                }
-
-            }
-
-        }
-
-        // Description (matches KCM — left-aligned, full text)
-        Label {
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-            text: i18n("A window tiling and zone management tool for Wayland compositors. Organize your desktop with customizable zones, automatic tiling layouts, and keyboard-driven window placement.")
-            wrapMode: Text.WordWrap
-        }
-
-        // Enable/disable section (matches KCM header pattern)
+        // Enable/disable toggle (matching KCM header placement)
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 0
-
-            Kirigami.Separator {
-                Layout.fillWidth: true
-            }
 
             RowLayout {
                 Layout.fillWidth: true
@@ -103,7 +61,45 @@ Flickable {
 
         }
 
-        // Links card (matches KCM LinkButton pattern)
+        // App header with icon and version
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: Kirigami.Units.largeSpacing
+            spacing: Kirigami.Units.largeSpacing
+
+            Kirigami.Icon {
+                source: "plasmazones"
+                Layout.preferredWidth: Kirigami.Units.iconSizes.huge
+                Layout.preferredHeight: Kirigami.Units.iconSizes.huge
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                Kirigami.Heading {
+                    level: 1
+                    text: i18n("PlasmaZones")
+                }
+
+                Label {
+                    text: Qt.application.version.length > 0 ? i18n("Version %1", Qt.application.version) : i18n("Version unknown")
+                    opacity: 0.7
+                }
+
+            }
+
+        }
+
+        // Description
+        Label {
+            Layout.fillWidth: true
+            Layout.topMargin: Kirigami.Units.largeSpacing
+            text: i18n("A window tiling and zone management tool for Wayland compositors. Organize your desktop with customizable zones, automatic tiling layouts, and keyboard-driven window placement.")
+            wrapMode: Text.WordWrap
+        }
+
+        // Links card
         Item {
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.largeSpacing
@@ -123,60 +119,28 @@ Flickable {
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
 
-                    // LinkButton pattern from KCM: icon + text + arrow, left-aligned
-                    Repeater {
-                        model: [{
-                            "text": i18n("GitHub Repository"),
-                            "icon": "vcs-branch",
-                            "url": "https://github.com/fuddlesworth/PlasmaZones"
-                        }, {
-                            "text": i18n("Report a Bug"),
-                            "icon": "tools-report-bug",
-                            "url": "https://github.com/fuddlesworth/PlasmaZones/issues/new"
-                        }, {
-                            "text": i18n("Documentation / Wiki"),
-                            "icon": "documentation",
-                            "url": "https://github.com/fuddlesworth/PlasmaZones/wiki"
-                        }, {
-                            "text": i18n("Releases"),
-                            "icon": "package-available",
-                            "url": "https://github.com/fuddlesworth/PlasmaZones/releases"
-                        }]
+                    LinkButton {
+                        linkText: i18n("GitHub Repository")
+                        linkIcon: "vcs-branch"
+                        url: "https://github.com/fuddlesworth/PlasmaZones"
+                    }
 
-                        Button {
-                            Layout.fillWidth: true
-                            flat: true
-                            horizontalPadding: Kirigami.Units.largeSpacing
-                            Accessible.name: modelData.text
-                            Accessible.role: Accessible.Link
-                            onClicked: Qt.openUrlExternally(modelData.url)
+                    LinkButton {
+                        linkText: i18n("Report a Bug")
+                        linkIcon: "tools-report-bug"
+                        url: "https://github.com/fuddlesworth/PlasmaZones/issues/new"
+                    }
 
-                            contentItem: RowLayout {
-                                spacing: Kirigami.Units.smallSpacing
+                    LinkButton {
+                        linkText: i18n("Documentation / Wiki")
+                        linkIcon: "documentation"
+                        url: "https://github.com/fuddlesworth/PlasmaZones/wiki"
+                    }
 
-                                Kirigami.Icon {
-                                    source: modelData.icon
-                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                }
-
-                                Label {
-                                    text: modelData.text
-                                    Layout.fillWidth: true
-                                    color: Kirigami.Theme.linkColor
-                                }
-
-                                Kirigami.Icon {
-                                    source: "arrow-right"
-                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                    opacity: 0.5
-                                }
-
-                            }
-
-                        }
-
+                    LinkButton {
+                        linkText: i18n("Releases")
+                        linkIcon: "package-available"
+                        url: "https://github.com/fuddlesworth/PlasmaZones/releases"
                     }
 
                 }
@@ -210,34 +174,10 @@ Flickable {
                         wrapMode: Text.WordWrap
                     }
 
-                    Button {
-                        flat: true
-                        horizontalPadding: Kirigami.Units.largeSpacing
-                        onClicked: Qt.openUrlExternally("https://www.gnu.org/licenses/gpl-3.0.html")
-
-                        contentItem: RowLayout {
-                            spacing: Kirigami.Units.smallSpacing
-
-                            Kirigami.Icon {
-                                source: "text-x-copying"
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                            }
-
-                            Label {
-                                text: i18n("View License")
-                                color: Kirigami.Theme.linkColor
-                            }
-
-                            Kirigami.Icon {
-                                source: "arrow-right"
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                opacity: 0.5
-                            }
-
-                        }
-
+                    LinkButton {
+                        linkText: i18n("View License")
+                        linkIcon: "license"
+                        url: "https://www.gnu.org/licenses/gpl-3.0.html"
                     }
 
                 }
@@ -291,6 +231,48 @@ Flickable {
 
         Item {
             Layout.fillHeight: true
+        }
+
+    }
+
+    // Helper component for link buttons (matching original KCM)
+    component LinkButton: Button {
+        id: linkButton
+
+        required property string linkText
+        required property string linkIcon
+        required property string url
+
+        Layout.fillWidth: true
+        flat: true
+        horizontalPadding: Kirigami.Units.largeSpacing
+        Accessible.name: linkText
+        Accessible.role: Accessible.Link
+        Accessible.description: i18n("Opens %1 in web browser", url)
+        onClicked: Qt.openUrlExternally(linkButton.url)
+
+        contentItem: RowLayout {
+            spacing: Kirigami.Units.smallSpacing
+
+            Kirigami.Icon {
+                source: linkButton.linkIcon
+                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+            }
+
+            Label {
+                text: linkButton.linkText
+                Layout.fillWidth: true
+                color: Kirigami.Theme.linkColor
+            }
+
+            Kirigami.Icon {
+                source: "arrow-right"
+                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                opacity: 0.5
+            }
+
         }
 
     }

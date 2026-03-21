@@ -7,7 +7,15 @@
 #include "../config/configbackend_qsettings.h"
 #include "../../kcm/common/dbusutils.h"
 
+#include "../autotile/AlgorithmRegistry.h"
+#include "../autotile/TilingAlgorithm.h"
+#include "../autotile/TilingState.h"
+
+#include "../config/configdefaults.h"
+
 #include <QDBusMessage>
+#include <QFile>
+#include <QFontDatabase>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDesktopServices>
@@ -274,6 +282,25 @@ void SettingsController::openLayoutsFolder()
 // Assignment helpers (D-Bus to daemon LayoutManager)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+QStringList SettingsController::fontStylesForFamily(const QString& family) const
+{
+    return QFontDatabase::styles(family);
+}
+
+int SettingsController::fontStyleWeight(const QString& family, const QString& style) const
+{
+    return QFontDatabase::weight(family, style);
+}
+
+bool SettingsController::fontStyleItalic(const QString& family, const QString& style) const
+{
+    return QFontDatabase::italic(family, style);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Assignment helpers (D-Bus to daemon LayoutManager)
+// ═══════════════════════════════════════════════════════════════════════════════
+
 void SettingsController::assignLayoutToScreen(const QString& screenName, const QString& layoutId)
 {
     KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("assignLayoutByIdToScreen"),
@@ -325,6 +352,44 @@ QString SettingsController::getTilingLayoutForScreen(const QString& screenName) 
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
     return {};
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Assignment lock helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+static QString lockKey(const QString& screenName, int mode)
+{
+    return QString::number(mode) + QStringLiteral(":") + screenName;
+}
+
+bool SettingsController::isScreenLocked(const QString& screenName, int mode) const
+{
+    return m_settings.isScreenLocked(lockKey(screenName, mode));
+}
+
+void SettingsController::toggleScreenLock(const QString& screenName, int mode)
+{
+    const QString key = lockKey(screenName, mode);
+    m_settings.setScreenLocked(key, !m_settings.isScreenLocked(key));
+    Q_EMIT lockedScreensChanged();
+    setNeedsSave(true);
+}
+
+bool SettingsController::isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity,
+                                         int mode) const
+{
+    return m_settings.isContextLocked(lockKey(screenName, mode), virtualDesktop, activity);
+}
+
+void SettingsController::toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity,
+                                           int mode)
+{
+    const QString key = lockKey(screenName, mode);
+    bool locked = m_settings.isContextLocked(key, virtualDesktop, activity);
+    m_settings.setContextLocked(key, virtualDesktop, activity, !locked);
+    Q_EMIT lockedScreensChanged();
+    setNeedsSave(true);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -625,6 +690,311 @@ void SettingsController::onActivitiesChanged()
 {
     refreshActivities();
     Q_EMIT activitiesChanged();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Trigger conversion helpers (same logic as KCMSnapping)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantList SettingsController::convertTriggersForQml(const QVariantList& triggers)
+{
+    QVariantList result;
+    for (const auto& t : triggers) {
+        auto map = t.toMap();
+        QVariantMap converted;
+        converted[QStringLiteral("modifier")] =
+            ModifierUtils::dragModifierToBitmask(map.value(QStringLiteral("modifier"), 0).toInt());
+        converted[QStringLiteral("mouseButton")] = map.value(QStringLiteral("mouseButton"), 0);
+        result.append(converted);
+    }
+    return result;
+}
+
+QVariantList SettingsController::convertTriggersForStorage(const QVariantList& triggers)
+{
+    QVariantList result;
+    for (const auto& t : triggers) {
+        auto map = t.toMap();
+        QVariantMap stored;
+        stored[QStringLiteral("modifier")] =
+            ModifierUtils::bitmaskToDragModifier(map.value(QStringLiteral("modifier"), 0).toInt());
+        stored[QStringLiteral("mouseButton")] = map.value(QStringLiteral("mouseButton"), 0);
+        result.append(stored);
+    }
+    return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Trigger getters
+// ═══════════════════════════════════════════════════════════════════════════════
+
+bool SettingsController::alwaysActivateOnDrag() const
+{
+    const int alwaysActive = static_cast<int>(DragModifier::AlwaysActive);
+    const auto triggers = m_settings.dragActivationTriggers();
+    for (const auto& t : triggers) {
+        if (t.toMap().value(QStringLiteral("modifier"), 0).toInt() == alwaysActive) {
+            return true;
+        }
+    }
+    return false;
+}
+
+QVariantList SettingsController::dragActivationTriggers() const
+{
+    return convertTriggersForQml(m_settings.dragActivationTriggers());
+}
+
+QVariantList SettingsController::defaultDragActivationTriggers() const
+{
+    return convertTriggersForQml(ConfigDefaults::dragActivationTriggers());
+}
+
+QVariantList SettingsController::zoneSpanTriggers() const
+{
+    return convertTriggersForQml(m_settings.zoneSpanTriggers());
+}
+
+QVariantList SettingsController::defaultZoneSpanTriggers() const
+{
+    return convertTriggersForQml(ConfigDefaults::zoneSpanTriggers());
+}
+
+QVariantList SettingsController::snapAssistTriggers() const
+{
+    return convertTriggersForQml(m_settings.snapAssistTriggers());
+}
+
+QVariantList SettingsController::defaultSnapAssistTriggers() const
+{
+    return convertTriggersForQml(ConfigDefaults::snapAssistTriggers());
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Trigger setters
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void SettingsController::setDragActivationTriggers(const QVariantList& triggers)
+{
+    const bool wasAlwaysActive = alwaysActivateOnDrag();
+    const QVariantList converted = convertTriggersForStorage(triggers);
+    if (m_settings.dragActivationTriggers() != converted) {
+        m_settings.setDragActivationTriggers(converted);
+        Q_EMIT dragActivationTriggersChanged();
+        if (alwaysActivateOnDrag() != wasAlwaysActive) {
+            Q_EMIT alwaysActivateOnDragChanged();
+        }
+        setNeedsSave(true);
+    }
+}
+
+void SettingsController::setAlwaysActivateOnDrag(bool enabled)
+{
+    if (alwaysActivateOnDrag() == enabled) {
+        return;
+    }
+    if (enabled) {
+        // Single AlwaysActive trigger -- written directly in storage format (DragModifier enum)
+        QVariantMap trigger;
+        trigger[QStringLiteral("modifier")] = static_cast<int>(DragModifier::AlwaysActive);
+        trigger[QStringLiteral("mouseButton")] = 0;
+        m_settings.setDragActivationTriggers({trigger});
+    } else {
+        // Revert to default triggers
+        m_settings.setDragActivationTriggers(ConfigDefaults::dragActivationTriggers());
+    }
+    Q_EMIT alwaysActivateOnDragChanged();
+    Q_EMIT dragActivationTriggersChanged();
+    setNeedsSave(true);
+}
+
+void SettingsController::setZoneSpanTriggers(const QVariantList& triggers)
+{
+    const QVariantList converted = convertTriggersForStorage(triggers);
+    if (m_settings.zoneSpanTriggers() != converted) {
+        m_settings.setZoneSpanTriggers(converted);
+        Q_EMIT zoneSpanTriggersChanged();
+        setNeedsSave(true);
+    }
+}
+
+void SettingsController::setSnapAssistTriggers(const QVariantList& triggers)
+{
+    QVariantList converted = convertTriggersForStorage(triggers);
+    if (m_settings.snapAssistTriggers() != converted) {
+        m_settings.setSnapAssistTriggers(converted);
+        Q_EMIT snapAssistTriggersChanged();
+        setNeedsSave(true);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Cava detection
+// ═══════════════════════════════════════════════════════════════════════════════
+
+bool SettingsController::cavaAvailable() const
+{
+    return !QStandardPaths::findExecutable(QStringLiteral("cava")).isEmpty();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Color import
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void SettingsController::loadColorsFromPywal()
+{
+    QString pywalPath = QDir::homePath() + QStringLiteral("/.cache/wal/colors.json");
+    if (!QFile::exists(pywalPath)) {
+        Q_EMIT colorImportError(
+            tr("Pywal colors not found. Run 'wal' to generate colors first.\n\nExpected file: %1").arg(pywalPath));
+        return;
+    }
+
+    QString error = m_settings.loadColorsFromFile(pywalPath);
+    if (!error.isEmpty()) {
+        Q_EMIT colorImportError(error);
+        return;
+    }
+
+    Q_EMIT colorImportSuccess();
+    setNeedsSave(true);
+}
+
+void SettingsController::loadColorsFromFile(const QString& filePath)
+{
+    QString error = m_settings.loadColorsFromFile(filePath);
+    if (!error.isEmpty()) {
+        Q_EMIT colorImportError(error);
+        return;
+    }
+
+    Q_EMIT colorImportSuccess();
+    setNeedsSave(true);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Algorithm helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantList SettingsController::availableAlgorithms() const
+{
+    QVariantList algorithms;
+    auto* registry = AlgorithmRegistry::instance();
+    for (const QString& id : registry->availableAlgorithms()) {
+        TilingAlgorithm* algo = registry->algorithm(id);
+        if (algo) {
+            QVariantMap algoMap;
+            algoMap[QStringLiteral("id")] = id;
+            algoMap[QStringLiteral("name")] = algo->name();
+            algoMap[QStringLiteral("description")] = algo->description();
+            algoMap[QStringLiteral("defaultMaxWindows")] = algo->defaultMaxWindows();
+            algorithms.append(algoMap);
+        }
+    }
+    return algorithms;
+}
+
+QVariantList SettingsController::generateAlgorithmPreview(const QString& algorithmId, int windowCount,
+                                                          double splitRatio, int masterCount) const
+{
+    auto* registry = AlgorithmRegistry::instance();
+    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    if (!algo) {
+        return {};
+    }
+
+    const int previewSize = 1000;
+    const QRect previewRect(0, 0, previewSize, previewSize);
+
+    TilingState state(QStringLiteral("preview"));
+    state.setMasterCount(masterCount);
+    state.setSplitRatio(splitRatio);
+
+    const int count = qMax(1, windowCount);
+    QVector<QRect> zones = algo->calculateZones({count, previewRect, &state, 0, {}});
+
+    return AlgorithmRegistry::zonesToRelativeGeometry(zones, previewRect);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Per-screen autotile overrides
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantMap SettingsController::getPerScreenAutotileSettings(const QString& screenName) const
+{
+    return m_settings.getPerScreenAutotileSettings(screenName);
+}
+
+void SettingsController::setPerScreenAutotileSetting(const QString& screenName, const QString& key,
+                                                     const QVariant& value)
+{
+    m_settings.setPerScreenAutotileSetting(screenName, key, value);
+    setNeedsSave(true);
+}
+
+void SettingsController::clearPerScreenAutotileSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenAutotileSettings(screenName);
+    setNeedsSave(true);
+}
+
+bool SettingsController::hasPerScreenAutotileSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenAutotileSettings(screenName);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Per-screen snapping overrides
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantMap SettingsController::getPerScreenSnappingSettings(const QString& screenName) const
+{
+    return m_settings.getPerScreenSnappingSettings(screenName);
+}
+
+void SettingsController::setPerScreenSnappingSetting(const QString& screenName, const QString& key,
+                                                     const QVariant& value)
+{
+    m_settings.setPerScreenSnappingSetting(screenName, key, value);
+    setNeedsSave(true);
+}
+
+void SettingsController::clearPerScreenSnappingSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenSnappingSettings(screenName);
+    setNeedsSave(true);
+}
+
+bool SettingsController::hasPerScreenSnappingSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenSnappingSettings(screenName);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Per-screen zone selector overrides
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantMap SettingsController::getPerScreenZoneSelectorSettings(const QString& screenName) const
+{
+    return m_settings.getPerScreenZoneSelectorSettings(screenName);
+}
+
+void SettingsController::setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key,
+                                                         const QVariant& value)
+{
+    m_settings.setPerScreenZoneSelectorSetting(screenName, key, value);
+    setNeedsSave(true);
+}
+
+void SettingsController::clearPerScreenZoneSelectorSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenZoneSelectorSettings(screenName);
+    setNeedsSave(true);
+}
+
+bool SettingsController::hasPerScreenZoneSelectorSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenZoneSelectorSettings(screenName);
 }
 
 void SettingsController::resetEditorDefaults()
