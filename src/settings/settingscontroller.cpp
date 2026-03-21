@@ -872,6 +872,41 @@ void SettingsController::loadColorsFromFile(const QString& filePath)
     setNeedsSave(true);
 }
 
+QVariantList SettingsController::getRunningWindows() const
+{
+    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::Settings), QStringLiteral("getRunningWindows"));
+    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+        return {};
+    }
+
+    QString json = reply.arguments().at(0).toString();
+    if (json.isEmpty()) {
+        return {};
+    }
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        return {};
+    }
+
+    QVariantList result;
+    const QJsonArray array = doc.array();
+    for (const QJsonValue& value : array) {
+        if (!value.isObject()) {
+            continue;
+        }
+        QJsonObject obj = value.toObject();
+        QVariantMap item;
+        item[QStringLiteral("windowClass")] = obj[QLatin1String("windowClass")].toString();
+        item[QStringLiteral("appName")] = obj[QLatin1String("appName")].toString();
+        item[QStringLiteral("caption")] = obj[QLatin1String("caption")].toString();
+        result.append(item);
+    }
+
+    return result;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Algorithm helpers
 // ═══════════════════════════════════════════════════════════════════════════════

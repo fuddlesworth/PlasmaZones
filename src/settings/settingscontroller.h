@@ -231,6 +231,7 @@ public:
     // ── Color import ─────────────────────────────────────────────────────────
     Q_INVOKABLE void loadColorsFromPywal();
     Q_INVOKABLE void loadColorsFromFile(const QString& filePath);
+    Q_INVOKABLE QVariantList getRunningWindows() const;
 
     // ── Algorithm helpers ────────────────────────────────────────────────────
     Q_INVOKABLE QVariantList availableAlgorithms() const;

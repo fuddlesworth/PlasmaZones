@@ -138,128 +138,32 @@ Flickable {
             Layout.fillWidth: true
             implicitHeight: appsCard.implicitHeight
 
-            Kirigami.Card {
+            ExclusionListCard {
                 id: appsCard
 
                 anchors.fill: parent
-
-                header: Kirigami.Heading {
-                    text: i18n("Excluded Applications")
-                    level: 3
-                    padding: Kirigami.Units.smallSpacing
-                }
-
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.smallSpacing
-
-                        TextField {
-                            id: appInput
-
-                            Layout.fillWidth: true
-                            placeholderText: i18n("Application name (e.g., firefox, konsole)")
-                            onAccepted: {
-                                if (text.length > 0) {
-                                    let apps = kcm.excludedApplications.slice();
-                                    let entry = text.trim();
-                                    if (entry.length > 0 && apps.indexOf(entry) === -1) {
-                                        apps.push(entry);
-                                        kcm.excludedApplications = apps;
-                                    }
-                                    text = "";
-                                }
-                            }
-                        }
-
-                        Button {
-                            text: i18n("Add")
-                            icon.name: "list-add"
-                            enabled: appInput.text.trim().length > 0
-                            onClicked: {
-                                let apps = kcm.excludedApplications.slice();
-                                let entry = appInput.text.trim();
-                                if (entry.length > 0 && apps.indexOf(entry) === -1) {
-                                    apps.push(entry);
-                                    kcm.excludedApplications = apps;
-                                }
-                                appInput.text = "";
-                            }
-                        }
-
-                        ToolButton {
-                            icon.name: "crosshairs"
-                            ToolTip.text: i18n("Pick from running windows")
-                            ToolTip.visible: hovered
-                            onClicked: windowPickerDialog.openForApps()
-                        }
-
+                title: i18n("Excluded Applications")
+                placeholderText: i18n("Application name (e.g., firefox, konsole)")
+                emptyTitle: i18n("No excluded applications")
+                emptyExplanation: i18n("Add application names above to exclude them from snapping and autotiling")
+                iconSource: "application-x-executable"
+                model: kcm.excludedApplications
+                useMonospaceFont: false
+                showPickButton: true
+                onAddRequested: (text) => {
+                    let apps = kcm.excludedApplications.slice();
+                    let entry = text.trim();
+                    if (entry.length > 0 && apps.indexOf(entry) === -1) {
+                        apps.push(entry);
+                        kcm.excludedApplications = apps;
                     }
-
-                    ListView {
-                        id: appListView
-
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: Math.max(contentHeight, Kirigami.Units.gridUnit * 6)
-                        Layout.minimumHeight: Kirigami.Units.gridUnit * 6
-                        Layout.margins: Kirigami.Units.smallSpacing
-                        clip: true
-                        model: kcm.excludedApplications
-                        interactive: false
-                        Accessible.name: i18n("Excluded Applications")
-                        Accessible.role: Accessible.List
-
-                        Kirigami.PlaceholderMessage {
-                            anchors.centerIn: parent
-                            width: parent.width - Kirigami.Units.gridUnit * 4
-                            visible: parent.count === 0
-                            text: i18n("No excluded applications")
-                            explanation: i18n("Add application names above to exclude them from snapping and autotiling")
-                        }
-
-                        delegate: ItemDelegate {
-                            required property string modelData
-                            required property int index
-
-                            width: ListView.view.width
-                            highlighted: ListView.isCurrentItem
-                            onClicked: appListView.currentIndex = index
-
-                            contentItem: RowLayout {
-                                Kirigami.Icon {
-                                    source: "application-x-executable"
-                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                    Layout.alignment: Qt.AlignVCenter
-                                }
-
-                                Label {
-                                    text: modelData
-                                    Layout.fillWidth: true
-                                    Layout.alignment: Qt.AlignVCenter
-                                    elide: Text.ElideRight
-                                }
-
-                                ToolButton {
-                                    icon.name: "edit-delete"
-                                    onClicked: {
-                                        let apps = kcm.excludedApplications.slice();
-                                        apps.splice(index, 1);
-                                        kcm.excludedApplications = apps;
-                                    }
-                                    Accessible.name: i18n("Remove %1", modelData)
-                                }
-
-                            }
-
-                        }
-
-                    }
-
                 }
-
+                onRemoveRequested: (index) => {
+                    let apps = kcm.excludedApplications.slice();
+                    apps.splice(index, 1);
+                    kcm.excludedApplications = apps;
+                }
+                onPickRequested: windowPickerDialog.openForApps()
             }
 
         }
@@ -269,129 +173,32 @@ Flickable {
             Layout.fillWidth: true
             implicitHeight: classesCard.implicitHeight
 
-            Kirigami.Card {
+            ExclusionListCard {
                 id: classesCard
 
                 anchors.fill: parent
-
-                header: Kirigami.Heading {
-                    text: i18n("Excluded Window Classes")
-                    level: 3
-                    padding: Kirigami.Units.smallSpacing
-                }
-
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.smallSpacing
-
-                        TextField {
-                            id: classInput
-
-                            Layout.fillWidth: true
-                            placeholderText: i18n("Window class (e.g., org.kde.dolphin)")
-                            onAccepted: {
-                                if (text.length > 0) {
-                                    let classes = kcm.excludedWindowClasses.slice();
-                                    let entry = text.trim();
-                                    if (entry.length > 0 && classes.indexOf(entry) === -1) {
-                                        classes.push(entry);
-                                        kcm.excludedWindowClasses = classes;
-                                    }
-                                    text = "";
-                                }
-                            }
-                        }
-
-                        Button {
-                            text: i18n("Add")
-                            icon.name: "list-add"
-                            enabled: classInput.text.trim().length > 0
-                            onClicked: {
-                                let classes = kcm.excludedWindowClasses.slice();
-                                let entry = classInput.text.trim();
-                                if (entry.length > 0 && classes.indexOf(entry) === -1) {
-                                    classes.push(entry);
-                                    kcm.excludedWindowClasses = classes;
-                                }
-                                classInput.text = "";
-                            }
-                        }
-
-                        ToolButton {
-                            icon.name: "crosshairs"
-                            ToolTip.text: i18n("Pick from running windows")
-                            ToolTip.visible: hovered
-                            onClicked: windowPickerDialog.openForClasses()
-                        }
-
+                title: i18n("Excluded Window Classes")
+                placeholderText: i18n("Window class (e.g., org.kde.dolphin)")
+                emptyTitle: i18n("No excluded window classes")
+                emptyExplanation: i18n("Add window classes above to exclude them from snapping and autotiling")
+                iconSource: "window"
+                model: kcm.excludedWindowClasses
+                useMonospaceFont: true
+                showPickButton: true
+                onAddRequested: (text) => {
+                    let classes = kcm.excludedWindowClasses.slice();
+                    let entry = text.trim();
+                    if (entry.length > 0 && classes.indexOf(entry) === -1) {
+                        classes.push(entry);
+                        kcm.excludedWindowClasses = classes;
                     }
-
-                    ListView {
-                        id: classListView
-
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: Math.max(contentHeight, Kirigami.Units.gridUnit * 6)
-                        Layout.minimumHeight: Kirigami.Units.gridUnit * 6
-                        Layout.margins: Kirigami.Units.smallSpacing
-                        clip: true
-                        model: kcm.excludedWindowClasses
-                        interactive: false
-                        Accessible.name: i18n("Excluded Window Classes")
-                        Accessible.role: Accessible.List
-
-                        Kirigami.PlaceholderMessage {
-                            anchors.centerIn: parent
-                            width: parent.width - Kirigami.Units.gridUnit * 4
-                            visible: parent.count === 0
-                            text: i18n("No excluded window classes")
-                            explanation: i18n("Add window classes above to exclude them from snapping and autotiling")
-                        }
-
-                        delegate: ItemDelegate {
-                            required property string modelData
-                            required property int index
-
-                            width: ListView.view.width
-                            highlighted: ListView.isCurrentItem
-                            onClicked: classListView.currentIndex = index
-
-                            contentItem: RowLayout {
-                                Kirigami.Icon {
-                                    source: "window"
-                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                    Layout.alignment: Qt.AlignVCenter
-                                }
-
-                                Label {
-                                    text: modelData
-                                    Layout.fillWidth: true
-                                    Layout.alignment: Qt.AlignVCenter
-                                    font: Kirigami.Theme.fixedWidthFont
-                                    elide: Text.ElideRight
-                                }
-
-                                ToolButton {
-                                    icon.name: "edit-delete"
-                                    onClicked: {
-                                        let classes = kcm.excludedWindowClasses.slice();
-                                        classes.splice(index, 1);
-                                        kcm.excludedWindowClasses = classes;
-                                    }
-                                    Accessible.name: i18n("Remove %1", modelData)
-                                }
-
-                            }
-
-                        }
-
-                    }
-
                 }
-
+                onRemoveRequested: (index) => {
+                    let classes = kcm.excludedWindowClasses.slice();
+                    classes.splice(index, 1);
+                    kcm.excludedWindowClasses = classes;
+                }
+                onPickRequested: windowPickerDialog.openForClasses()
             }
 
         }
