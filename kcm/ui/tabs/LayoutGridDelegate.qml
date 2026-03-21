@@ -192,17 +192,13 @@ Item {
                         width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
                         height: width
                         padding: 0
-                        // Use opacity instead of visible to avoid geometry reflow that
-                        // causes hover feedback loops at fractional DPI scaling.
-                        opacity: (root.modelData.isAutotile !== true && (root.isHovered || root.modelData.autoAssign === true)) ? 1 : 0
-                        enabled: opacity > 0
+                        visible: root.modelData.isAutotile !== true && (root.isHovered || root.modelData.autoAssign === true)
                         icon.name: root.modelData.autoAssign === true ? "window-duplicate" : "window-new"
                         icon.width: Kirigami.Units.iconSizes.small
                         icon.height: Kirigami.Units.iconSizes.small
                         icon.color: root.modelData.autoAssign === true ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
                         onClicked: root.kcm.setLayoutAutoAssign(root.modelData.id, !(root.modelData.autoAssign === true))
                         ToolTip.visible: hovered
-                        ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.text: root.modelData.autoAssign === true ? i18n("Auto-assign enabled: new windows fill empty zones. Click to disable.") : i18n("Click to auto-assign new windows to empty zones")
                     }
 
@@ -211,15 +207,13 @@ Item {
                         width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
                         height: width
                         padding: 0
-                        opacity: (root.isHovered || root.modelData.hiddenFromSelector === true) ? 1 : 0
-                        enabled: opacity > 0
+                        visible: root.isHovered || root.modelData.hiddenFromSelector === true
                         icon.name: root.modelData.hiddenFromSelector ? "view-hidden" : "view-visible"
                         icon.width: Kirigami.Units.iconSizes.small
                         icon.height: Kirigami.Units.iconSizes.small
                         icon.color: root.modelData.hiddenFromSelector ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.textColor
                         onClicked: root.kcm.setLayoutHidden(root.modelData.id, !root.modelData.hiddenFromSelector)
                         ToolTip.visible: hovered
-                        ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.text: root.modelData.hiddenFromSelector ? i18n("Hidden from zone selector. Click to show.") : i18n("Visible in zone selector. Click to hide.")
                     }
 
