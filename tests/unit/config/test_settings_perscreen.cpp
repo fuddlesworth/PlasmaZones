@@ -76,14 +76,15 @@ private Q_SLOTS:
 
         QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
 
-        // Valid value
+        // Valid value (long-form key -- normalized to short form internally)
         settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 3);
         QCOMPARE(spy.count(), 1);
 
         // Value is clamped (not rejected outright): 100 should clamp to MaxMasterCount (5)
         settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 100);
         QVariantMap overrides = settings.getPerScreenAutotileSettings(screen);
-        int stored = overrides.value(QStringLiteral("AutotileMasterCount")).toInt();
+        // Key is stored in short form ("MasterCount") after normalization
+        int stored = overrides.value(QStringLiteral("MasterCount")).toInt();
         QVERIFY2(stored >= AutotileDefaults::MinMasterCount && stored <= AutotileDefaults::MaxMasterCount,
                  "Per-screen autotile value must be clamped to valid range");
     }

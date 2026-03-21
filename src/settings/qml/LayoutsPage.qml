@@ -374,8 +374,7 @@ Flickable {
         nameFilters: ["JSON files (*.json)", "All files (*)"]
         fileMode: FileDialog.OpenFile
         onAccepted: {
-            // TODO: importLayout not yet on SettingsController
-            settingsController.openLayoutsFolder();
+            settingsController.importLayout(selectedFile.toString().replace(/^file:\/\/+/, "/"));
         }
     }
 
@@ -389,8 +388,7 @@ Flickable {
         nameFilters: ["JSON files (*.json)"]
         fileMode: FileDialog.SaveFile
         onAccepted: {
-            // TODO: exportLayout not yet on SettingsController
-            settingsController.openLayoutsFolder();
+            settingsController.exportLayout(exportDialog.layoutId, selectedFile.toString().replace(/^file:\/\/+/, "/"));
         }
     }
 

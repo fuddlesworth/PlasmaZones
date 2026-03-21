@@ -270,6 +270,32 @@ void loadPerScreenGroup(IConfigBackend* backend, const QStringList& allGroups, c
 
 } // anonymous namespace
 
+/**
+ * Normalize autotile per-screen override keys from disk-format (prefixed: "AutotileAlgorithm")
+ * to short-format ("Algorithm") that QML uses for lookup via settingValue().
+ *
+ * On disk, keys use the "Autotile" prefix (e.g. "AutotileAlgorithm", "AutotileSplitRatio").
+ * QML's PerScreenOverrideHelper calls settingValue("Algorithm", ...) with the short form.
+ * Without normalization, keys loaded from disk can't be found by QML lookups.
+ *
+ * The "Animations*" keys have no "Autotile" prefix on disk, so they pass through unchanged.
+ */
+static void normalizeAutotileKeys(QHash<QString, QVariantMap>& settings)
+{
+    for (auto it = settings.begin(); it != settings.end(); ++it) {
+        QVariantMap normalized;
+        for (auto kit = it.value().constBegin(); kit != it.value().constEnd(); ++kit) {
+            const QString& key = kit.key();
+            if (key.startsWith(QLatin1String("Autotile"))) {
+                normalized[key.mid(8)] = kit.value(); // Strip "Autotile" prefix
+            } else {
+                normalized[key] = kit.value();
+            }
+        }
+        it.value() = normalized;
+    }
+}
+
 void Settings::loadPerScreenOverrides(IConfigBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
@@ -278,15 +304,50 @@ void Settings::loadPerScreenOverrides(IConfigBackend* backend)
     loadPerScreenGroup(backend, allGroups, QStringLiteral("AutotileScreen:"), kPerScreenAutotileKeys,
                        std::size(kPerScreenAutotileKeys), readPerScreenAutotileEntry, validatePerScreenAutotileValue,
                        m_perScreenAutotileSettings);
+    // Normalize autotile keys from disk format ("AutotileAlgorithm") to short format
+    // ("Algorithm") that QML uses for lookup via PerScreenOverrideHelper.settingValue().
+    normalizeAutotileKeys(m_perScreenAutotileSettings);
     loadPerScreenGroup(backend, allGroups, QStringLiteral("SnappingScreen:"), kPerScreenSnappingKeys,
                        std::size(kPerScreenSnappingKeys), readPerScreenSnappingEntry, validatePerScreenSnappingValue,
                        m_perScreenSnappingSettings);
 }
 
+/**
+ * Expand autotile per-screen override keys from short-format ("Algorithm") back to
+ * disk-format ("AutotileAlgorithm") for saving. This is the inverse of normalizeAutotileKeys().
+ *
+ * Keys that already have the "Autotile" prefix or are "Animations*" keys pass through unchanged.
+ */
+static QHash<QString, QVariantMap> expandAutotileKeys(const QHash<QString, QVariantMap>& settings)
+{
+    // Short keys that should NOT get the "Autotile" prefix
+    static const QStringList animationKeys = {
+        QStringLiteral("AnimationsEnabled"),
+        QStringLiteral("AnimationDuration"),
+        QStringLiteral("AnimationEasingCurve"),
+    };
+
+    QHash<QString, QVariantMap> expanded;
+    for (auto it = settings.constBegin(); it != settings.constEnd(); ++it) {
+        QVariantMap expandedMap;
+        for (auto kit = it.value().constBegin(); kit != it.value().constEnd(); ++kit) {
+            const QString& key = kit.key();
+            if (key.startsWith(QLatin1String("Autotile")) || animationKeys.contains(key)) {
+                expandedMap[key] = kit.value();
+            } else {
+                expandedMap[QStringLiteral("Autotile") + key] = kit.value();
+            }
+        }
+        expanded[it.key()] = expandedMap;
+    }
+    return expanded;
+}
+
 void Settings::saveAllPerScreenOverrides(IConfigBackend* backend)
 {
     savePerScreenOverrides(backend, QStringLiteral("ZoneSelector:"), m_perScreenZoneSelectorSettings);
-    savePerScreenOverrides(backend, QStringLiteral("AutotileScreen:"), m_perScreenAutotileSettings);
+    // Expand short keys back to disk format before saving
+    savePerScreenOverrides(backend, QStringLiteral("AutotileScreen:"), expandAutotileKeys(m_perScreenAutotileSettings));
     savePerScreenOverrides(backend, QStringLiteral("SnappingScreen:"), m_perScreenSnappingSettings);
 }
 
@@ -421,11 +482,16 @@ void Settings::setPerScreenAutotileSetting(const QString& screenIdOrName, const 
         return;
     }
 
+    // Normalize to short form: strip "Autotile" prefix so the in-memory map
+    // always uses short keys ("Algorithm", "SplitRatio") matching QML lookups.
+    // Animation keys ("AnimationsEnabled", etc.) have no "Autotile" prefix.
+    const QString normalizedKey = key.startsWith(QLatin1String("Autotile")) ? key.mid(8) : key;
+
     QVariantMap& screenSettings = m_perScreenAutotileSettings[screenIdOrName];
-    if (screenSettings.value(key) == validated) {
+    if (screenSettings.value(normalizedKey) == validated) {
         return;
     }
-    screenSettings[key] = validated;
+    screenSettings[normalizedKey] = validated;
     Q_EMIT perScreenAutotileSettingsChanged();
     Q_EMIT settingsChanged();
 }
