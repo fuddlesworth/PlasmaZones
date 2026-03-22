@@ -10,41 +10,13 @@ Flickable {
     id: root
 
     readonly property var
-    settingsBridge: QtObject {
-        readonly property bool autotileEnabled: appSettings.autotileEnabled
-        readonly property var layouts: settingsController.layouts
-        readonly property int assignmentViewMode: 1
-
-        signal quickLayoutSlotsChanged()
-        signal tilingQuickLayoutSlotsChanged()
-
-        function getQuickLayoutShortcut(n) {
-            return settingsController.getQuickLayoutShortcut(n);
-        }
-
-        // Quick layout slots (tiling only)
-        function getTilingQuickLayoutSlot(n) {
-            return settingsController.getTilingQuickLayoutSlot(n);
-        }
-
-        function setTilingQuickLayoutSlot(n, id) {
-            settingsController.setTilingQuickLayoutSlot(n, id);
-            tilingQuickLayoutSlotsChanged();
-        }
-
+    settingsBridge: TilingBridge {
     }
 
     readonly property int viewMode: 1
 
     contentHeight: mainCol.implicitHeight
     clip: true
-
-    QtObject {
-        id: constants
-
-        readonly property real labelSecondaryOpacity: 0.7
-        readonly property int quickLayoutSlotCount: 9
-    }
 
     ColumnLayout {
         id: mainCol
@@ -69,7 +41,6 @@ Flickable {
 
                 anchors.fill: parent
                 appSettings: root.settingsBridge
-                constants: constants
                 viewMode: root.viewMode
             }
 

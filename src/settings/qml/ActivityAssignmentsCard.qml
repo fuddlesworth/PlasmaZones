@@ -15,7 +15,6 @@ SettingsCard {
     id: root
 
     required property var appSettings
-    required property QtObject constants
     // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     property int viewMode: 0
 
@@ -56,7 +55,7 @@ SettingsCard {
             Layout.margins: Kirigami.Units.smallSpacing
             text: root.viewMode === 1 ? i18n("Assign tiling algorithms to KDE Activities. Algorithm changes automatically when you switch activities.") : i18n("Assign layouts to KDE Activities. Layout changes automatically when you switch activities.")
             wrapMode: Text.WordWrap
-            opacity: root.constants.labelSecondaryOpacity
+            opacity: 0.7
         }
 
         ListView {

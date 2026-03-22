@@ -16,7 +16,6 @@ SettingsCard {
     id: root
 
     required property var appSettings
-    required property QtObject constants
     required property WindowPickerDialog windowPickerDialog
     // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     property int viewMode: 0

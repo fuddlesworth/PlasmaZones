@@ -424,8 +424,10 @@ void SettingsController::flushStagedAssignments()
         if (s.stagedMode.has_value()) {
             const int mode = *s.stagedMode;
             const QString snapping = s.snappingLayoutId.value_or(QString());
-            const QString tiling =
-                s.tilingAlgorithmId.has_value() ? LayoutId::extractAlgorithmId(*s.tilingAlgorithmId) : QString();
+            const QString tiling = s.tilingAlgorithmId.has_value()
+                ? (LayoutId::isAutotile(*s.tilingAlgorithmId) ? LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
+                                                              : *s.tilingAlgorithmId)
+                : QString();
             DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
                                    {s.screenId, s.virtualDesktop, s.activityId, mode, snapping, tiling});
             continue;
@@ -452,7 +454,9 @@ void SettingsController::flushStagedAssignments()
 
         // Tiling algorithm assignment
         if (s.tilingAlgorithmId.has_value() && !s.tilingAlgorithmId->isEmpty()) {
-            const QString algoId = LayoutId::extractAlgorithmId(*s.tilingAlgorithmId);
+            const QString algoId = LayoutId::isAutotile(*s.tilingAlgorithmId)
+                ? LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
+                : *s.tilingAlgorithmId;
             if (isActivity)
                 DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
                                        {s.screenId, 0, s.activityId, 1, QString(), algoId});
@@ -517,110 +521,118 @@ bool SettingsController::stagedTilingLayout(const QString& screen, int desktop, 
 // Assignment mutations (staged — flushed to daemon on save)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void SettingsController::assignLayoutToScreen(const QString& screenName, const QString& layoutId)
+// ── Staged mutation helpers ──────────────────────────────────────────────────
+
+void SettingsController::stageSnapping(const QString& screen, int desktop, const QString& activity,
+                                       const QString& layoutId)
 {
-    auto& e = stagedEntry(screenName, 0, QString());
+    auto& e = stagedEntry(screen, desktop, activity);
     e.fullCleared = false;
     e.stagedMode = std::nullopt; // Per-field path — mode inferred from fields
     e.snappingLayoutId = layoutId;
     setNeedsSave(true);
 }
 
-void SettingsController::clearScreenAssignment(const QString& screenName)
+void SettingsController::stageTiling(const QString& screen, int desktop, const QString& activity,
+                                     const QString& layoutId)
 {
-    auto& e = stagedEntry(screenName, 0, QString());
-    e.fullCleared = true;
-    e.stagedMode = std::nullopt;
-    e.snappingLayoutId = std::nullopt;
-    e.tilingAlgorithmId = std::nullopt;
-    setNeedsSave(true);
-}
-
-void SettingsController::assignTilingLayoutToScreen(const QString& screenName, const QString& layoutId)
-{
-    auto& e = stagedEntry(screenName, 0, QString());
+    auto& e = stagedEntry(screen, desktop, activity);
     e.fullCleared = false;
     e.stagedMode = std::nullopt; // Per-field path — mode inferred from fields
     e.tilingAlgorithmId = layoutId;
     setNeedsSave(true);
 }
 
-void SettingsController::clearTilingScreenAssignment(const QString& screenName)
+void SettingsController::stageFullClear(const QString& screen, int desktop, const QString& activity)
 {
-    auto& e = stagedEntry(screenName, 0, QString());
+    auto& e = stagedEntry(screen, desktop, activity);
     e.fullCleared = true;
     e.stagedMode = std::nullopt;
     e.snappingLayoutId = std::nullopt;
     e.tilingAlgorithmId = std::nullopt;
     setNeedsSave(true);
+}
+
+void SettingsController::stageTilingClear(const QString& screen, int desktop, const QString& activity)
+{
+    auto& e = stagedEntry(screen, desktop, activity);
+    e.tilingAlgorithmId = QString(); // empty = cleared
+    setNeedsSave(true);
+}
+
+// ── Snapping assignment delegates ───────────────────────────────────────────
+
+void SettingsController::assignLayoutToScreen(const QString& screenName, const QString& layoutId)
+{
+    stageSnapping(screenName, 0, QString(), layoutId);
 }
 
 void SettingsController::assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
                                                      const QString& layoutId)
 {
-    auto& e = stagedEntry(screenName, virtualDesktop, QString());
-    e.fullCleared = false;
-    e.stagedMode = std::nullopt;
-    e.snappingLayoutId = layoutId;
-    setNeedsSave(true);
-}
-
-void SettingsController::clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
-{
-    auto& e = stagedEntry(screenName, virtualDesktop, QString());
-    e.fullCleared = true;
-    e.stagedMode = std::nullopt;
-    e.snappingLayoutId = std::nullopt;
-    e.tilingAlgorithmId = std::nullopt;
-    setNeedsSave(true);
-}
-
-void SettingsController::assignTilingLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
-                                                           const QString& layoutId)
-{
-    auto& e = stagedEntry(screenName, virtualDesktop, QString());
-    e.fullCleared = false;
-    e.stagedMode = std::nullopt;
-    e.tilingAlgorithmId = layoutId;
-    setNeedsSave(true);
-}
-
-void SettingsController::clearTilingScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
-{
-    auto& e = stagedEntry(screenName, virtualDesktop, QString());
-    e.tilingAlgorithmId = QString(); // empty = cleared
-    setNeedsSave(true);
+    stageSnapping(screenName, virtualDesktop, QString(), layoutId);
 }
 
 void SettingsController::assignLayoutToScreenActivity(const QString& screenName, const QString& activityId,
                                                       const QString& layoutId)
 {
-    auto& e = stagedEntry(screenName, 0, activityId);
-    e.fullCleared = false;
-    e.stagedMode = std::nullopt;
-    e.snappingLayoutId = layoutId;
-    setNeedsSave(true);
+    stageSnapping(screenName, 0, activityId, layoutId);
 }
 
-void SettingsController::clearScreenActivityAssignment(const QString& screenName, const QString& activityId)
+// ── Tiling assignment delegates ─────────────────────────────────────────────
+
+void SettingsController::assignTilingLayoutToScreen(const QString& screenName, const QString& layoutId)
 {
-    auto& e = stagedEntry(screenName, 0, activityId);
-    e.fullCleared = true;
-    e.stagedMode = std::nullopt;
-    e.snappingLayoutId = std::nullopt;
-    e.tilingAlgorithmId = std::nullopt;
-    setNeedsSave(true);
+    stageTiling(screenName, 0, QString(), layoutId);
+}
+
+void SettingsController::assignTilingLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
+                                                           const QString& layoutId)
+{
+    stageTiling(screenName, virtualDesktop, QString(), layoutId);
 }
 
 void SettingsController::assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId,
                                                             const QString& layoutId)
 {
-    auto& e = stagedEntry(screenName, 0, activityId);
-    e.fullCleared = false;
-    e.stagedMode = std::nullopt;
-    e.tilingAlgorithmId = layoutId;
-    setNeedsSave(true);
+    stageTiling(screenName, 0, activityId, layoutId);
 }
+
+// ── Full-clear assignment delegates ─────────────────────────────────────────
+
+void SettingsController::clearScreenAssignment(const QString& screenName)
+{
+    stageFullClear(screenName, 0, QString());
+}
+
+void SettingsController::clearTilingScreenAssignment(const QString& screenName)
+{
+    stageFullClear(screenName, 0, QString());
+}
+
+void SettingsController::clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
+{
+    stageFullClear(screenName, virtualDesktop, QString());
+}
+
+void SettingsController::clearScreenActivityAssignment(const QString& screenName, const QString& activityId)
+{
+    stageFullClear(screenName, 0, activityId);
+}
+
+// ── Tiling-only clear delegates ─────────────────────────────────────────────
+
+void SettingsController::clearTilingScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
+{
+    stageTilingClear(screenName, virtualDesktop, QString());
+}
+
+void SettingsController::clearTilingScreenActivityAssignment(const QString& screenName, const QString& activityId)
+{
+    stageTilingClear(screenName, 0, activityId);
+}
+
+// ── Atomic mode+layout staging (overview page) ─────────────────────────────
 
 void SettingsController::stageAssignmentEntry(const QString& screenName, int mode, const QString& snappingLayoutId,
                                               const QString& tilingAlgorithmId)
@@ -630,13 +642,6 @@ void SettingsController::stageAssignmentEntry(const QString& screenName, int mod
     e.stagedMode = mode;
     e.snappingLayoutId = snappingLayoutId.isEmpty() ? std::nullopt : std::optional<QString>(snappingLayoutId);
     e.tilingAlgorithmId = tilingAlgorithmId.isEmpty() ? std::nullopt : std::optional<QString>(tilingAlgorithmId);
-    setNeedsSave(true);
-}
-
-void SettingsController::clearTilingScreenActivityAssignment(const QString& screenName, const QString& activityId)
-{
-    auto& e = stagedEntry(screenName, 0, activityId);
-    e.tilingAlgorithmId = QString(); // empty = cleared
     setNeedsSave(true);
 }
 
@@ -699,8 +704,15 @@ bool SettingsController::hasExplicitAssignmentForScreenDesktop(const QString& sc
     QString snap, tile;
     bool hasSnap = stagedSnappingLayout(screenName, virtualDesktop, QString(), snap);
     bool hasTile = stagedTilingLayout(screenName, virtualDesktop, QString(), tile);
-    if (hasSnap || hasTile)
-        return (!snap.isEmpty()) || (!tile.isEmpty());
+    if (hasSnap || hasTile) {
+        // If either staged field is non-empty, we definitely have an assignment
+        if (!snap.isEmpty() || !tile.isEmpty())
+            return true;
+        // Only short-circuit to false when BOTH fields are staged and empty;
+        // otherwise fall through to D-Bus so the daemon's other field is checked.
+        if (hasSnap && hasTile)
+            return false;
+    }
     QDBusMessage reply =
         DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
                                QStringLiteral("hasExplicitAssignmentForScreenDesktop"), {screenName, virtualDesktop});
@@ -773,8 +785,12 @@ bool SettingsController::hasExplicitAssignmentForScreenActivity(const QString& s
     QString snap, tile;
     bool hasSnap = stagedSnappingLayout(screenName, 0, activityId, snap);
     bool hasTile = stagedTilingLayout(screenName, 0, activityId, tile);
-    if (hasSnap || hasTile)
-        return (!snap.isEmpty()) || (!tile.isEmpty());
+    if (hasSnap || hasTile) {
+        if (!snap.isEmpty() || !tile.isEmpty())
+            return true;
+        if (hasSnap && hasTile)
+            return false;
+    }
     QDBusMessage reply =
         DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
                                QStringLiteral("hasExplicitAssignmentForScreenActivity"), {screenName, activityId});
@@ -1527,7 +1543,10 @@ bool SettingsController::importAllSettings(const QString& filePath)
     if (QFile::exists(backupPath)) {
         QFile::remove(backupPath);
     }
-    QFile::copy(configPath, backupPath);
+    if (!QFile::copy(configPath, backupPath)) {
+        qCWarning(PlasmaZones::lcCore) << "Failed to backup config to:" << backupPath;
+        return false;
+    }
     // Replace with imported file
     if (QFile::exists(configPath)) {
         QFile::remove(configPath);
@@ -1599,6 +1618,8 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName) c
         if (s->tilingAlgorithmId.has_value() && !s->tilingAlgorithmId->isEmpty())
             map[QStringLiteral("mode")] = 1;
         else if (s->snappingLayoutId.has_value() && !s->tilingAlgorithmId.has_value())
+            map[QStringLiteral("mode")] = 0;
+        else if (s->snappingLayoutId.has_value() && !s->snappingLayoutId->isEmpty())
             map[QStringLiteral("mode")] = 0;
     }
     return map;

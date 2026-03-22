@@ -52,7 +52,7 @@ Item {
         }
     }
     Layout.fillWidth: true
-    implicitHeight: cardBg.height + (hoverHandler.hovered && enabled ? 1 : 0)
+    implicitHeight: cardBg.height
     implicitWidth: cardBg.width
     // Reparent contentItem into our content area with top padding
     onContentItemChanged: {
@@ -257,6 +257,12 @@ Item {
                     to: 1
                     duration: 150
                     easing.type: Easing.OutCubic
+                }
+
+                ScriptAction {
+                    script: contentClip.height = Qt.binding(function() {
+                        return contentColumn.implicitHeight;
+                    })
                 }
 
             }

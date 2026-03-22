@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -62,10 +63,9 @@ Row {
                 text: optionDelegate.modelData
             }
 
-            Text {
+            Label {
                 anchors.centerIn: parent
                 text: optionDelegate.modelData
-                color: Kirigami.Theme.textColor
                 font.weight: Font.Normal
                 opacity: optionDelegate.isActive ? 1 : 0.5
 

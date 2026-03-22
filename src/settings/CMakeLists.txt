@@ -50,6 +50,8 @@ qt_add_qml_module(plasmazones-settings
         qml/SnappingQuickShortcutsPage.qml
         qml/TilingAssignmentsPage.qml
         qml/TilingQuickShortcutsPage.qml
+        qml/SnappingBridge.qml
+        qml/TilingBridge.qml
         qml/AboutPage.qml
         qml/MonitorStatePage.qml
         # Sub-components (copied from KCM)

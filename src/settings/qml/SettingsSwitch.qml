@@ -13,8 +13,8 @@ Item {
 
     signal toggled()
 
-    implicitWidth: 36
-    implicitHeight: 18
+    implicitWidth: Kirigami.Units.gridUnit * 2
+    implicitHeight: Kirigami.Units.gridUnit
     Accessible.role: Accessible.CheckBox
     Accessible.name: root.accessibleName
     Accessible.checked: root.checked
@@ -27,14 +27,16 @@ Item {
 
         // Knob
         Rectangle {
-            width: 14
-            height: 14
-            radius: 7
-            color: "white"
-            border.color: Qt.rgba(0, 0, 0, 0.15)
+            readonly property int pad: Kirigami.Units.smallSpacing / 2
+
+            width: parent.height - Kirigami.Units.smallSpacing
+            height: width
+            radius: height / 2
+            color: Kirigami.Theme.highlightedTextColor
+            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
             border.width: 0.5
-            y: 2
-            x: root.checked ? parent.width - width - 2 : 2
+            y: pad
+            x: root.checked ? parent.width - width - pad : pad
 
             Behavior on x {
                 NumberAnimation {
@@ -58,7 +60,10 @@ Item {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: root.toggled()
+        onClicked: {
+            root.checked = !root.checked;
+            root.toggled();
+        }
     }
 
 }

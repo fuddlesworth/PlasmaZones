@@ -150,14 +150,14 @@ Flickable {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Warning
             text: i18n("Unable to retrieve monitor state. Make sure the daemon is running.")
-            visible: stateView.state === null
+            visible: stateView.screenState === null
         }
 
         // Current state for selected monitor
         ColumnLayout {
             id: stateView
 
-            property var state: {
+            property var screenState: {
                 void root._revision;
                 void root._selectedScreen;
                 return root._currentState();
@@ -172,22 +172,22 @@ Flickable {
 
             Layout.alignment: Qt.AlignHCenter
             spacing: Kirigami.Units.largeSpacing
-            visible: state !== null
-            onStateChanged: {
-                if (!state)
+            visible: screenState !== null
+            onScreenStateChanged: {
+                if (!screenState)
                     return ;
 
                 var staged = settingsController.getStagedAssignment(root._selectedScreen);
                 if (Object.keys(staged).length > 0) {
                     // Restore from staged state
-                    localMode = staged.mode !== undefined ? staged.mode : (state.mode || 0);
-                    localLayoutId = staged.layoutId !== undefined ? staged.layoutId : (state.layoutId || "");
-                    localAlgorithmId = staged.algorithmId !== undefined ? staged.algorithmId : (state.algorithmId || "");
+                    localMode = staged.mode !== undefined ? staged.mode : (screenState.mode || 0);
+                    localLayoutId = staged.layoutId !== undefined ? staged.layoutId : (screenState.layoutId || "");
+                    localAlgorithmId = staged.algorithmId !== undefined ? staged.algorithmId : (screenState.algorithmId || "");
                 } else {
                     // No staged changes — use daemon state
-                    localMode = state.mode || 0;
-                    localLayoutId = state.layoutId || "";
-                    localAlgorithmId = state.algorithmId || "";
+                    localMode = screenState.mode || 0;
+                    localLayoutId = screenState.layoutId || "";
+                    localAlgorithmId = screenState.algorithmId || "";
                 }
             }
 

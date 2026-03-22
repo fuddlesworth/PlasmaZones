@@ -397,7 +397,7 @@ ApplicationWindow {
             let idx = sidebar.currentIndex;
             for (let i = idx - 1; i >= 0; i--) {
                 let item = sidebarModel.get(i);
-                if (!item.isBackButton && !item.hasChildren) {
+                if (!item.isBackButton && !item.hasChildren && item.name !== "__divider__") {
                     settingsController.activePage = item.name;
                     return ;
                 }
@@ -415,7 +415,7 @@ ApplicationWindow {
             let idx = sidebar.currentIndex;
             for (let i = idx + 1; i < sidebarModel.count; i++) {
                 let item = sidebarModel.get(i);
-                if (!item.isBackButton && !item.hasChildren) {
+                if (!item.isBackButton && !item.hasChildren && item.name !== "__divider__") {
                     settingsController.activePage = item.name;
                     return ;
                 }
@@ -429,7 +429,13 @@ ApplicationWindow {
 
     Shortcut {
         sequence: "?"
-        enabled: !sidebarSearch.activeFocus
+        enabled: {
+            var item = window.activeFocusItem;
+            if (!item)
+                return true;
+
+            return !(item instanceof TextInput) && !(item instanceof TextEdit);
+        }
         onActivated: window._showShortcuts = !window._showShortcuts
     }
 

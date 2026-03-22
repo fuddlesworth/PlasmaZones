@@ -15,7 +15,6 @@ SettingsCard {
     id: root
 
     required property var appSettings
-    required property QtObject constants
     // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     property int viewMode: 0
 
@@ -41,7 +40,7 @@ SettingsCard {
             Layout.margins: Kirigami.Units.smallSpacing
             text: root.viewMode === 1 ? i18n("Assign tiling algorithms to keyboard shortcuts for instant switching.") : i18n("Assign layouts to keyboard shortcuts for instant switching.")
             wrapMode: Text.WordWrap
-            opacity: root.constants.labelSecondaryOpacity
+            opacity: 0.7
         }
 
         ListView {
@@ -51,7 +50,7 @@ SettingsCard {
             Layout.preferredHeight: contentHeight
             Layout.margins: Kirigami.Units.smallSpacing
             clip: true
-            model: root.constants.quickLayoutSlotCount
+            model: 9
             interactive: false
             Accessible.name: i18n("Quick layout shortcuts list")
             Accessible.role: Accessible.List

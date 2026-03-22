@@ -424,6 +424,12 @@ private:
     const StagedAssignment* stagedEntryConst(const QString& screen, int desktop, const QString& activity) const;
     void flushStagedAssignments();
 
+    // Staged mutation helpers (shared logic for Q_INVOKABLE assignment methods)
+    void stageSnapping(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
+    void stageTiling(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
+    void stageFullClear(const QString& screen, int desktop, const QString& activity);
+    void stageTilingClear(const QString& screen, int desktop, const QString& activity);
+
     // Staged getter helpers — return true if handled (result set), false to fall through to D-Bus
     bool stagedSnappingLayout(const QString& screen, int desktop, const QString& activity, QString& out) const;
     bool stagedTilingLayout(const QString& screen, int desktop, const QString& activity, QString& out) const;

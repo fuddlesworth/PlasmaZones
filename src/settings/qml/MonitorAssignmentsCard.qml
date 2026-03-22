@@ -15,7 +15,6 @@ SettingsCard {
     id: root
 
     required property var appSettings
-    required property QtObject constants
     // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     property int viewMode: 0
 
@@ -115,7 +114,7 @@ SettingsCard {
 
                                     return info;
                                 }
-                                opacity: root.constants.labelSecondaryOpacity
+                                opacity: 0.7
                                 font: Kirigami.Theme.smallFont
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true

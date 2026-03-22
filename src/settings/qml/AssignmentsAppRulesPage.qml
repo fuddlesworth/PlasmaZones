@@ -10,35 +10,7 @@ Flickable {
     id: root
 
     readonly property var
-    settingsBridge: QtObject {
-        readonly property bool autotileEnabled: appSettings.autotileEnabled
-        readonly property string autotileAlgorithm: appSettings.autotileAlgorithm
-        readonly property string defaultLayoutId: appSettings.defaultLayoutId
-        readonly property var screens: settingsController.screens
-        readonly property var layouts: settingsController.layouts
-
-        signal appRulesRefreshed()
-
-        // App rules
-        function getAppRulesForLayout(id) {
-            return settingsController.getAppRulesForLayout(id);
-        }
-
-        function addAppRuleToLayout(id, pattern, zone, screen) {
-            settingsController.addAppRuleToLayout(id, pattern, zone, screen);
-            appRulesRefreshed();
-        }
-
-        function removeAppRuleFromLayout(id, idx) {
-            settingsController.removeAppRuleFromLayout(id, idx);
-            appRulesRefreshed();
-        }
-
-        // Running windows
-        function getRunningWindows() {
-            return settingsController.getRunningWindows();
-        }
-
+    settingsBridge: SnappingBridge {
     }
 
     // App rules are snapping-only (zone-based), so viewMode is always 0
@@ -46,12 +18,6 @@ Flickable {
 
     contentHeight: mainCol.implicitHeight
     clip: true
-
-    QtObject {
-        id: constants
-
-        readonly property real labelSecondaryOpacity: 0.7
-    }
 
     WindowPickerDialog {
         id: windowPickerDialog
@@ -82,7 +48,6 @@ Flickable {
 
                 anchors.fill: parent
                 appSettings: root.settingsBridge
-                constants: constants
                 windowPickerDialog: windowPickerDialog
                 viewMode: root.viewMode
             }

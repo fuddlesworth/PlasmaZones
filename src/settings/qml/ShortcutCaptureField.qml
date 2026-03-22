@@ -199,7 +199,7 @@ TextField {
             capturing = false;
 
     }
-    ToolTip.visible: hovered
+    ToolTip.visible: hovered && !capturing
     ToolTip.text: tooltipText
 
     MouseArea {

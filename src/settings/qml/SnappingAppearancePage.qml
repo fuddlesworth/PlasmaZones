@@ -286,7 +286,7 @@ Flickable {
         id: colorFileDialog
 
         title: i18n("Import Colors from File")
-        nameFilters: ["JSON files (*.json)", "All files (*)"]
+        nameFilters: [i18n("JSON files (*.json)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: settingsController.loadColorsFromFile(selectedFile.toString().replace(/^file:\/\/+/, "/"))
     }

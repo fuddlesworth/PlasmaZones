@@ -7,7 +7,7 @@
 #include <QDBusMessage>
 #include <QDBusMetaType>
 #include <QDBusPendingCall>
-#include "../../src/core/constants.h"
+#include "../core/constants.h"
 
 namespace PlasmaZones::DaemonDBus {
 
