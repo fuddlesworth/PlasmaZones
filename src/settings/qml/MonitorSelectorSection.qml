@@ -31,27 +31,6 @@ ColumnLayout {
     visible: appSettings.screens.length > 1
     spacing: Kirigami.Units.largeSpacing
 
-    // Section divider
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: Kirigami.Units.smallSpacing
-
-        Kirigami.Separator {
-            Layout.fillWidth: true
-        }
-
-        Label {
-            text: root.isPerScreen ? i18n("Per-Monitor Settings — %1", root.selectedScreenName) : i18n("Per-Monitor Settings — All Monitors")
-            opacity: 0.5
-            font: Kirigami.Theme.smallFont
-        }
-
-        Kirigami.Separator {
-            Layout.fillWidth: true
-        }
-
-    }
-
     // Monitor selector card
     Item {
         Layout.fillWidth: true
