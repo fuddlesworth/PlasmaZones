@@ -12,27 +12,50 @@ Flickable {
     readonly property var
     settingsBridge: QtObject {
         readonly property bool autotileEnabled: appSettings.autotileEnabled
+        readonly property string autotileAlgorithm: appSettings.autotileAlgorithm
+        readonly property string defaultLayoutId: appSettings.defaultLayoutId
         readonly property var screens: settingsController.screens
         readonly property var layouts: settingsController.layouts
-        property int assignmentViewMode: 0
+        readonly property int assignmentViewMode: 0
+        readonly property int virtualDesktopCount: settingsController.virtualDesktopCount
+        readonly property var virtualDesktopNames: settingsController.virtualDesktopNames
+        readonly property var disabledMonitors: appSettings.disabledMonitors
         readonly property bool activitiesAvailable: settingsController.activitiesAvailable
         readonly property var activities: settingsController.activities
         readonly property string currentActivity: settingsController.currentActivity
 
-        signal activityAssignmentsChanged()
-        signal tilingActivityAssignmentsChanged()
         signal screenAssignmentsChanged()
         signal tilingScreenAssignmentsChanged()
+        signal tilingDesktopAssignmentsChanged()
         signal lockedScreensChanged()
+        signal activityAssignmentsChanged()
+        signal tilingActivityAssignmentsChanged()
+
+        // Monitor disabled
+        function isMonitorDisabled(name) {
+            return settingsController.isMonitorDisabled(name);
+        }
+
+        function setMonitorDisabled(name, disabled) {
+            settingsController.setMonitorDisabled(name, disabled);
+        }
+
+        // Screen assignments
+        function assignLayoutToScreen(screen, layout) {
+            settingsController.assignLayoutToScreen(screen, layout);
+            screenAssignmentsChanged();
+        }
+
+        function clearScreenAssignment(screen) {
+            settingsController.clearScreenAssignment(screen);
+            screenAssignmentsChanged();
+        }
 
         function getLayoutForScreen(screen) {
             return settingsController.getLayoutForScreen(screen);
         }
 
-        function getTilingLayoutForScreen(screen) {
-            return settingsController.getTilingLayoutForScreen(screen);
-        }
-
+        // Screen locking
         function isScreenLocked(screen, mode) {
             return settingsController.isScreenLocked(screen, mode);
         }
@@ -51,13 +74,32 @@ Flickable {
             lockedScreensChanged();
         }
 
+        // Per-desktop assignments
+        function hasExplicitAssignmentForScreenDesktop(screen, desktop) {
+            return settingsController.hasExplicitAssignmentForScreenDesktop(screen, desktop);
+        }
+
+        function getLayoutForScreenDesktop(screen, desktop) {
+            return settingsController.getLayoutForScreenDesktop(screen, desktop);
+        }
+
+        function getSnappingLayoutForScreenDesktop(screen, desktop) {
+            return settingsController.getSnappingLayoutForScreenDesktop(screen, desktop);
+        }
+
+        function clearScreenDesktopAssignment(screen, desktop) {
+            settingsController.clearScreenDesktopAssignment(screen, desktop);
+            screenAssignmentsChanged();
+        }
+
+        function assignLayoutToScreenDesktop(screen, desktop, layout) {
+            settingsController.assignLayoutToScreenDesktop(screen, desktop, layout);
+            screenAssignmentsChanged();
+        }
+
         // Per-activity assignments
         function hasExplicitAssignmentForScreenActivity(screen, activity) {
             return settingsController.hasExplicitAssignmentForScreenActivity(screen, activity);
-        }
-
-        function hasExplicitTilingAssignmentForScreenActivity(screen, activity) {
-            return settingsController.hasExplicitTilingAssignmentForScreenActivity(screen, activity);
         }
 
         function getLayoutForScreenActivity(screen, activity) {
@@ -66,10 +108,6 @@ Flickable {
 
         function getSnappingLayoutForScreenActivity(screen, activity) {
             return settingsController.getSnappingLayoutForScreenActivity(screen, activity);
-        }
-
-        function getTilingLayoutForScreenActivity(screen, activity) {
-            return settingsController.getTilingLayoutForScreenActivity(screen, activity);
         }
 
         function clearScreenActivityAssignment(screen, activity) {
@@ -82,20 +120,9 @@ Flickable {
             activityAssignmentsChanged();
         }
 
-        function assignTilingLayoutToScreenActivity(screen, activity, layout) {
-            settingsController.assignTilingLayoutToScreenActivity(screen, activity, layout);
-            tilingActivityAssignmentsChanged();
-        }
-
-        function clearTilingScreenActivityAssignment(screen, activity) {
-            settingsController.clearTilingScreenActivityAssignment(screen, activity);
-            tilingActivityAssignmentsChanged();
-        }
-
     }
 
-    // View mode: 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
-    readonly property int viewMode: appSettings.autotileEnabled ? root.settingsBridge.assignmentViewMode : 0
+    readonly property int viewMode: 0
 
     contentHeight: mainCol.implicitHeight
     clip: true
@@ -115,58 +142,22 @@ Flickable {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
-            text: i18n("Assign layouts to KDE Activities per monitor.")
+            text: i18n("Assign zone layouts to monitors, virtual desktops, and activities.")
             visible: true
         }
 
-        // Mode selector (visible only when autotiling is enabled)
+        // Monitor Assignments
         Item {
             Layout.fillWidth: true
-            implicitHeight: modeSelectorCard.implicitHeight
-            visible: root.settingsBridge.autotileEnabled
+            implicitHeight: monitorCard.implicitHeight
 
-            SettingsCard {
-                id: modeSelectorCard
+            MonitorAssignmentsCard {
+                id: monitorCard
 
                 anchors.fill: parent
-                headerText: i18n("Configuration Mode")
-
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    WideComboBox {
-                        id: modeCombo
-
-                        Layout.fillWidth: true
-                        model: [{
-                            "text": i18n("Snapping — Zone layouts"),
-                            "value": 0
-                        }, {
-                            "text": i18n("Tiling — Autotile algorithms"),
-                            "value": 1
-                        }]
-                        textRole: "text"
-                        valueRole: "value"
-                        currentIndex: root.settingsBridge.assignmentViewMode
-                        onActivated: {
-                            root.settingsBridge.assignmentViewMode = model[currentIndex].value;
-                        }
-                        ToolTip.visible: hovered
-                        ToolTip.delay: Kirigami.Units.toolTipDelay
-                        ToolTip.text: i18n("Switch between snapping and tiling configurations. Both are saved independently.")
-                    }
-
-                    Kirigami.InlineMessage {
-                        Layout.fillWidth: true
-                        Layout.margins: Kirigami.Units.smallSpacing
-                        Layout.topMargin: Kirigami.Units.smallSpacing * 2
-                        visible: true
-                        type: root.viewMode === 1 ? Kirigami.MessageType.Positive : Kirigami.MessageType.Information
-                        text: root.viewMode === 1 ? i18n("Tiling mode: assign autotile algorithms per activity.") : i18n("Snapping mode: assign zone layouts per activity.")
-                    }
-
-                }
-
+                appSettings: root.settingsBridge
+                constants: constants
+                viewMode: root.viewMode
             }
 
         }

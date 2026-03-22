@@ -47,10 +47,11 @@ qt_add_qml_module(plasmazones-settings
         qml/ExclusionsPage.qml
         qml/EditorPage.qml
         qml/LayoutsPage.qml
-        qml/AssignmentsMonitorsPage.qml
-        qml/AssignmentsActivitiesPage.qml
         qml/AssignmentsAppRulesPage.qml
-        qml/AssignmentsQuickSlotsPage.qml
+        qml/SnappingAssignmentsPage.qml
+        qml/SnappingQuickShortcutsPage.qml
+        qml/TilingAssignmentsPage.qml
+        qml/TilingQuickShortcutsPage.qml
         qml/AboutPage.qml
         # Sub-components (copied from KCM)
         qml/MonitorAssignmentsCard.qml

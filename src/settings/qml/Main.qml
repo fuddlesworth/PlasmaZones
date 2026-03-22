@@ -33,10 +33,10 @@ ApplicationWindow {
         "iconName": "window-duplicate",
         "hasChildren": true
     }, {
-        "name": "assignments",
-        "label": "Assignments",
-        "iconName": "view-list-details",
-        "hasChildren": true
+        "name": "apprules",
+        "label": "App Rules",
+        "iconName": "application-x-executable",
+        "hasChildren": false
     }, {
         "name": "exclusions",
         "label": "Exclusions",
@@ -80,6 +80,14 @@ ApplicationWindow {
             "name": "snap-effects",
             "label": "Effects",
             "iconName": "preferences-desktop-effects"
+        }, {
+            "name": "snap-assignments",
+            "label": "Assignments",
+            "iconName": "view-list-details"
+        }, {
+            "name": "snap-shortcuts",
+            "label": "Quick Shortcuts",
+            "iconName": "bookmark"
         }],
         "tiling": [{
             "name": "tile-appearance",
@@ -97,21 +105,12 @@ ApplicationWindow {
             "name": "tile-algorithm",
             "label": "Algorithm",
             "iconName": "view-grid"
-        }],
-        "assignments": [{
-            "name": "monitors",
-            "label": "Monitors",
-            "iconName": "monitor"
         }, {
-            "name": "activities",
-            "label": "Activities",
-            "iconName": "activities"
+            "name": "tile-assignments",
+            "label": "Assignments",
+            "iconName": "view-list-details"
         }, {
-            "name": "apprules",
-            "label": "App Rules",
-            "iconName": "application-x-executable"
-        }, {
-            "name": "quickslots",
+            "name": "tile-shortcuts",
             "label": "Quick Shortcuts",
             "iconName": "bookmark"
         }]
@@ -128,10 +127,11 @@ ApplicationWindow {
         "tile-behavior": "TilingBehaviorPage.qml",
         "tile-gaps": "TilingGapsPage.qml",
         "tile-algorithm": "TilingAlgorithmPage.qml",
-        "monitors": "AssignmentsMonitorsPage.qml",
-        "activities": "AssignmentsActivitiesPage.qml",
+        "snap-assignments": "SnappingAssignmentsPage.qml",
+        "snap-shortcuts": "SnappingQuickShortcutsPage.qml",
+        "tile-assignments": "TilingAssignmentsPage.qml",
+        "tile-shortcuts": "TilingQuickShortcutsPage.qml",
         "apprules": "AssignmentsAppRulesPage.qml",
-        "quickslots": "AssignmentsQuickSlotsPage.qml",
         "exclusions": "ExclusionsPage.qml",
         "editor": "EditorPage.qml",
         "general": "GeneralPage.qml",
@@ -271,6 +271,23 @@ ApplicationWindow {
         }
     }
 
+    // Auto-drill-out if feature disabled while viewing its subpages
+    Connections {
+        function onSnappingEnabledChanged() {
+            if (!appSettings.snappingEnabled && _sidebarMode === "snapping")
+                _drillOut();
+
+        }
+
+        function onAutotileEnabledChanged() {
+            if (!appSettings.autotileEnabled && _sidebarMode === "tiling")
+                _drillOut();
+
+        }
+
+        target: appSettings
+    }
+
     // Visible sidebar model (rebuilt when _sidebarMode changes)
     ListModel {
         id: sidebarModel
@@ -378,6 +395,13 @@ ApplicationWindow {
                                 return ;
                             }
                             if (hasChildren) {
+                                // Block drill-down if the feature is disabled
+                                if (name === "snapping" && !appSettings.snappingEnabled)
+                                    return ;
+
+                                if (name === "tiling" && !appSettings.autotileEnabled)
+                                    return ;
+
                                 window._drillIn(name);
                                 return ;
                             }
@@ -494,13 +518,34 @@ ApplicationWindow {
 
                             }
 
+                            // Enable/disable toggle for snapping and tiling
+                            SettingsSwitch {
+                                visible: (navDelegate.name === "snapping" || navDelegate.name === "tiling") && !window.sidebarCompact
+                                checked: navDelegate.name === "snapping" ? appSettings.snappingEnabled : appSettings.autotileEnabled
+                                accessibleName: navDelegate.label
+                                onToggled: {
+                                    if (navDelegate.name === "snapping")
+                                        appSettings.snappingEnabled = !appSettings.snappingEnabled;
+                                    else
+                                        appSettings.autotileEnabled = !appSettings.autotileEnabled;
+                                }
+                            }
+
                             // Right chevron for items with children
                             Kirigami.Icon {
                                 source: "go-next"
                                 Layout.preferredWidth: Kirigami.Units.iconSizes.small
                                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
                                 Layout.alignment: Qt.AlignVCenter
-                                opacity: 0.3
+                                opacity: {
+                                    if (navDelegate.name === "snapping" && !appSettings.snappingEnabled)
+                                        return 0.15;
+
+                                    if (navDelegate.name === "tiling" && !appSettings.autotileEnabled)
+                                        return 0.15;
+
+                                    return 0.3;
+                                }
                                 visible: navDelegate.hasChildren && !window.sidebarCompact
                             }
 
@@ -641,8 +686,9 @@ ApplicationWindow {
 
                     Label {
                         text: {
+                            // Show "Parent > Child"
+
                             if (window._sidebarMode !== "main")
-                                // Show "Parent > Child"
                                 return window._parentLabel() + "  \u203A  " + window._subPageLabel(settingsController.activePage);
 
                             // Top-level: just show page name

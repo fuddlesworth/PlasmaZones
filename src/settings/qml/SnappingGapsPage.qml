@@ -69,7 +69,6 @@ Flickable {
                 id: gapsCard
 
                 anchors.fill: parent
-                enabled: appSettings.snappingEnabled
                 headerText: i18n("Gaps")
                 collapsible: true
 

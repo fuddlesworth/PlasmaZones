@@ -32,7 +32,6 @@ Flickable {
                 id: activationCard
 
                 anchors.fill: parent
-                enabled: appSettings.snappingEnabled
                 headerText: i18n("Activation")
                 collapsible: true
 
@@ -193,7 +192,6 @@ Flickable {
                 id: behaviorCard
 
                 anchors.fill: parent
-                enabled: appSettings.snappingEnabled
                 headerText: i18n("Behavior")
                 collapsible: true
 

@@ -22,22 +22,11 @@ Flickable {
         spacing: Kirigami.Units.largeSpacing
 
         // =================================================================
-        // Enable toggle
-        // =================================================================
-        SettingsToggleRow {
-            text: i18n("Enable Automatic Tiling")
-            checked: appSettings.autotileEnabled
-            onToggled: (checked) => {
-                return appSettings.autotileEnabled = checked;
-            }
-        }
-
         // =================================================================
         // Appearance Card (Colors + Decorations + Borders)
         // =================================================================
         SettingsCard {
             Layout.fillWidth: true
-            enabled: appSettings.autotileEnabled
             headerText: i18n("Appearance")
             collapsible: true
 

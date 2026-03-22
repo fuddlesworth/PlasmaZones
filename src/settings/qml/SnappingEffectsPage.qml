@@ -29,7 +29,6 @@ Flickable {
                 id: effectsCard
 
                 anchors.fill: parent
-                enabled: appSettings.snappingEnabled
                 headerText: i18n("Effects")
                 collapsible: true
 
@@ -77,7 +76,6 @@ Flickable {
                 id: shaderCard
 
                 anchors.fill: parent
-                enabled: appSettings.snappingEnabled
                 headerText: i18n("Shader Effects")
                 collapsible: true
 

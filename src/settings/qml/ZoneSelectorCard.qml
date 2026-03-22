@@ -49,7 +49,6 @@ ColumnLayout {
             id: gapsCard
 
             anchors.fill: parent
-            enabled: selectorRoot.appSettings.snappingEnabled
             headerText: i18n("Gaps")
             collapsible: true
 

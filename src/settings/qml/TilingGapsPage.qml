@@ -59,7 +59,6 @@ Flickable {
         // =================================================================
         SettingsCard {
             Layout.fillWidth: true
-            enabled: appSettings.autotileEnabled
             headerText: i18n("Gaps")
             collapsible: true
 

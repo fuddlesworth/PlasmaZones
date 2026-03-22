@@ -23,15 +23,6 @@ Flickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // Enable toggle
-        SettingsToggleRow {
-            text: i18n("Enable Zone Snapping")
-            checked: appSettings.snappingEnabled
-            onToggled: (checked) => {
-                return appSettings.snappingEnabled = checked;
-            }
-        }
-
         // =====================================================================
         // APPEARANCE
         // =====================================================================
@@ -43,7 +34,6 @@ Flickable {
                 id: appearanceCard
 
                 anchors.fill: parent
-                enabled: appSettings.snappingEnabled
                 headerText: i18n("Appearance")
                 collapsible: true
 
