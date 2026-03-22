@@ -12,7 +12,7 @@ import org.kde.kirigami as Kirigami
  * Eliminates duplication between excluded applications and excluded window classes
  * lists in ExclusionsTab.
  */
-Kirigami.Card {
+SettingsCard {
     id: root
 
     required property string title
@@ -31,11 +31,7 @@ Kirigami.Card {
     signal removeRequested(int index)
     signal pickRequested()
 
-    header: Kirigami.Heading {
-        level: 3
-        text: root.title
-        padding: Kirigami.Units.smallSpacing
-    }
+    headerText: root.title
 
     contentItem: ColumnLayout {
         spacing: Kirigami.Units.smallSpacing

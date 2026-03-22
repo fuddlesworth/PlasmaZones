@@ -121,7 +121,7 @@ Item {
                 return root.algorithmId;
             }
         }
-        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+        font: Kirigami.Theme.smallFont
         opacity: 0.5
     }
 

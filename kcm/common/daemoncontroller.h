@@ -35,8 +35,8 @@ public:
     bool isEnabled() const;
     void setEnabled(bool enabled);
 
-    void startDaemon();
-    void stopDaemon();
+    Q_INVOKABLE void startDaemon();
+    Q_INVOKABLE void stopDaemon();
 
 Q_SIGNALS:
     void runningChanged();

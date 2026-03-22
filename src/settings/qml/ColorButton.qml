@@ -10,7 +10,7 @@ import org.kde.kirigami as Kirigami
 Rectangle {
     id: root
 
-    property int buttonSize: 32
+    property int buttonSize: Kirigami.Units.gridUnit * 2
 
     signal clicked()
 
@@ -52,7 +52,7 @@ Rectangle {
             var size = 4;
             // Use theme-neutral colors for checkerboard pattern (standard for transparency preview)
             var lightGray = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.2);
-            var white = Qt.rgba(1, 1, 1, 1);
+            var white = Kirigami.Theme.backgroundColor;
             for (var x = 0; x < width; x += size) {
                 for (var y = 0; y < height; y += size) {
                     ctx.fillStyle = ((x / size + y / size) % 2 === 0) ? lightGray : white;

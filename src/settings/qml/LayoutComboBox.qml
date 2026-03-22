@@ -386,7 +386,7 @@ ComboBox {
 
                     Label {
                         text: modelData.text
-                        font.bold: highlighted || isCurrentSelection
+                        font.weight: (highlighted || isCurrentSelection) ? Font.DemiBold : Font.Normal
                         color: highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                         elide: Text.ElideRight
                         Layout.fillWidth: true
@@ -416,7 +416,7 @@ ComboBox {
                             return i18n("%1 zones", (modelData.layout && modelData.layout.zoneCount) || 0);
                         }
                     }
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    font: Kirigami.Theme.smallFont
                     color: highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                     opacity: 0.7
                     elide: Text.ElideRight

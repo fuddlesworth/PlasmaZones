@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -10,8 +11,8 @@ Flickable {
     id: root
 
     // Layout constants (previously from monolith's QtObject)
-    readonly property int sliderPreferredWidth: 200
-    readonly property int sliderValueLabelWidth: 40
+    readonly property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
+    readonly property int sliderValueLabelWidth: Kirigami.Units.gridUnit * 3
     // Capture the context property so child components can access it
     readonly property var settingsBridge: appSettings
 
@@ -34,16 +35,12 @@ Flickable {
             Layout.fillWidth: true
             implicitHeight: animationsCard.implicitHeight
 
-            Kirigami.Card {
+            SettingsCard {
                 id: animationsCard
 
                 anchors.fill: parent
-
-                header: Kirigami.Heading {
-                    level: 3
-                    text: i18n("Animations")
-                    padding: Kirigami.Units.smallSpacing
-                }
+                headerText: i18n("Animations")
+                collapsible: true
 
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.largeSpacing
@@ -103,23 +100,49 @@ Flickable {
             appSettings: root.settingsBridge
         }
 
-    }
+        // ═══════════════════════════════════════════════════════════════════════
+        // CONFIGURATION CARD
+        // ═══════════════════════════════════════════════════════════════════════
+        SettingsCard {
+            headerText: i18n("Configuration")
 
-    // Wire up easingPreview.curve to appSettings.animationEasingCurve bidirectionally
-    Connections {
-        function onAnimationEasingCurveChanged() {
-            easingPreview.curve = appSettings.animationEasingCurve;
+            contentItem: Kirigami.FormLayout {
+                Button {
+                    Kirigami.FormData.label: i18n("Backup:")
+                    text: i18n("Export Settings")
+                    icon.name: "document-export"
+                    onClicked: exportConfigDialog.open()
+                }
+
+                Button {
+                    Kirigami.FormData.label: i18n("Restore:")
+                    text: i18n("Import Settings")
+                    icon.name: "document-import"
+                    onClicked: importConfigDialog.open()
+                }
+
+            }
+
         }
 
-        target: appSettings
     }
 
-    Connections {
-        function onCurveEdited(newCurve) {
-            appSettings.animationEasingCurve = newCurve;
-        }
+    FileDialog {
+        id: exportConfigDialog
 
-        target: easingPreview
+        title: i18n("Export Settings")
+        nameFilters: [i18n("PlasmaZones Config (*.conf *.ini)"), i18n("All files (*)")]
+        fileMode: FileDialog.SaveFile
+        onAccepted: settingsController.exportAllSettings(selectedFile.toString().replace(/^file:\/\/+/, "/"))
+    }
+
+    FileDialog {
+        id: importConfigDialog
+
+        title: i18n("Import Settings")
+        nameFilters: [i18n("PlasmaZones Config (*.conf *.ini *.rc)"), i18n("All files (*)")]
+        fileMode: FileDialog.OpenFile
+        onAccepted: settingsController.importAllSettings(selectedFile.toString().replace(/^file:\/\/+/, "/"))
     }
 
 }

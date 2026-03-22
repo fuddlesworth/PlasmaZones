@@ -30,7 +30,7 @@ Flickable {
 
                 Label {
                     text: i18n("Enable PlasmaZones")
-                    font.bold: true
+                    font.weight: Font.DemiBold
                 }
 
                 Item {
@@ -42,15 +42,15 @@ Flickable {
                     opacity: 0.7
                 }
 
-                Switch {
+                SettingsSwitch {
                     checked: settingsController.daemonRunning
                     onToggled: {
-                        if (checked)
-                            settingsController.daemonController.startDaemon();
-                        else
+                        if (settingsController.daemonRunning)
                             settingsController.daemonController.stopDaemon();
+                        else
+                            settingsController.daemonController.startDaemon();
                     }
-                    Accessible.name: i18n("Enable PlasmaZones")
+                    accessibleName: i18n("Enable PlasmaZones")
                 }
 
             }
@@ -105,16 +105,11 @@ Flickable {
             Layout.topMargin: Kirigami.Units.largeSpacing
             implicitHeight: linksCard.implicitHeight
 
-            Kirigami.Card {
+            SettingsCard {
                 id: linksCard
 
                 anchors.fill: parent
-
-                header: Kirigami.Heading {
-                    level: 3
-                    text: i18n("Links")
-                    padding: Kirigami.Units.smallSpacing
-                }
+                headerText: i18n("Links")
 
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
@@ -154,16 +149,11 @@ Flickable {
             Layout.fillWidth: true
             implicitHeight: licenseCard.implicitHeight
 
-            Kirigami.Card {
+            SettingsCard {
                 id: licenseCard
 
                 anchors.fill: parent
-
-                header: Kirigami.Heading {
-                    level: 3
-                    text: i18n("License")
-                    padding: Kirigami.Units.smallSpacing
-                }
+                headerText: i18n("License")
 
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
@@ -191,16 +181,11 @@ Flickable {
             Layout.fillWidth: true
             implicitHeight: creditsCard.implicitHeight
 
-            Kirigami.Card {
+            SettingsCard {
                 id: creditsCard
 
                 anchors.fill: parent
-
-                header: Kirigami.Heading {
-                    level: 3
-                    text: i18n("Credits")
-                    padding: Kirigami.Units.smallSpacing
-                }
+                headerText: i18n("Credits")
 
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
@@ -208,7 +193,7 @@ Flickable {
                     Label {
                         Layout.fillWidth: true
                         text: i18n("Created by fuddlesworth")
-                        font.bold: true
+                        font.weight: Font.DemiBold
                     }
 
                     Label {

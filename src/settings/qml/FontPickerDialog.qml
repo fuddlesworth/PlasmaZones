@@ -159,7 +159,7 @@ Kirigami.Dialog {
 
                 Label {
                     text: i18n("Family")
-                    font.bold: true
+                    font.weight: Font.DemiBold
                 }
 
                 ListView {
@@ -204,7 +204,7 @@ Kirigami.Dialog {
 
                 Label {
                     text: i18n("Style")
-                    font.bold: true
+                    font.weight: Font.DemiBold
                 }
 
                 ListView {

@@ -9,5 +9,5 @@
 #   - DaemonController: D-Bus daemon lifecycle (start/stop/status)
 #   - ScreenHelper: Connected monitor enumeration
 #   - ScreenProvider: Abstract screen data provider
-#   - DBusUtils (KCMDBus): D-Bus call helper to daemon
+#   - DBusUtils (DaemonDBus): D-Bus call helper to daemon
 #   - org_plasmazones_common/qmldir: QML module registration for ZonePreview/CategoryBadge

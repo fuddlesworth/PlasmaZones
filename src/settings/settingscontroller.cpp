@@ -16,6 +16,8 @@
 #include <QDBusMessage>
 #include <QFile>
 #include <QFontDatabase>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDesktopServices>
@@ -25,6 +27,7 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QSettings>
 #include <QTimer>
 #include <QUrl>
 
@@ -115,6 +118,7 @@ void SettingsController::load()
     loadEditorSettings();
     m_screenHelper.refreshScreens();
     scheduleLayoutLoad();
+    m_stagedAssignments.clear();
     setNeedsSave(false);
 }
 
@@ -128,8 +132,18 @@ void SettingsController::save()
     // Save editor settings
     saveEditorSettings();
 
-    // Notify daemon to reload settings (synchronous to avoid race)
-    KCMDBus::notifyReload();
+    // Notify daemon to reload KConfig settings FIRST (before assignments)
+    DaemonDBus::notifyReload();
+
+    // Flush staged assignment changes to daemon (same batch protocol as KCM).
+    // This must happen AFTER notifyReload so the reload doesn't overwrite
+    // the assignment changes.
+    if (!m_stagedAssignments.isEmpty()) {
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setSaveBatchMode"), {true});
+        flushStagedAssignments();
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("applyAssignmentChanges"));
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setSaveBatchMode"), {false});
+    }
 
     // Safe to clear immediately: notifyReload() is synchronous, so the daemon
     // has already processed the reload and emitted settingsChanged before we
@@ -146,6 +160,7 @@ void SettingsController::defaults()
     m_settings.reset();
 
     resetEditorDefaults();
+    m_stagedAssignments.clear();
 
     setNeedsSave(true);
 }
@@ -231,8 +246,8 @@ void SettingsController::loadLayoutsAsync()
 
 void SettingsController::createNewLayout()
 {
-    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("createLayout"),
-                                             {QStringLiteral("New Layout"), QStringLiteral("custom")});
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("createLayout"),
+                                                {QStringLiteral("New Layout"), QStringLiteral("custom")});
 
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString newLayoutId = reply.arguments().first().toString();
@@ -246,7 +261,7 @@ void SettingsController::createNewLayout()
 void SettingsController::deleteLayout(const QString& layoutId)
 {
     QDBusMessage reply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("deleteLayout"), {layoutId});
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("deleteLayout"), {layoutId});
     if (reply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "deleteLayout failed:" << reply.errorMessage();
     }
@@ -255,7 +270,7 @@ void SettingsController::deleteLayout(const QString& layoutId)
 
 void SettingsController::duplicateLayout(const QString& layoutId)
 {
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("duplicateLayout"), {layoutId});
+    DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("duplicateLayout"), {layoutId});
     scheduleLayoutLoad();
 }
 
@@ -295,7 +310,7 @@ void SettingsController::importLayout(const QString& filePath)
     if (filePath.isEmpty())
         return;
     QDBusMessage reply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("importLayout"), {filePath});
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("importLayout"), {filePath});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString newLayoutId = reply.arguments().first().toString();
         if (!newLayoutId.isEmpty()) {
@@ -320,7 +335,8 @@ void SettingsController::setLayoutHidden(const QString& layoutId, bool hidden)
 {
     if (layoutId.isEmpty())
         return;
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setLayoutHidden"), {layoutId, hidden});
+    DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setLayoutHidden"),
+                           {layoutId, hidden});
     scheduleLayoutLoad();
 }
 
@@ -328,8 +344,8 @@ void SettingsController::setLayoutAutoAssign(const QString& layoutId, bool enabl
 {
     if (layoutId.isEmpty())
         return;
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setLayoutAutoAssign"),
-                        {layoutId, enabled});
+    DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setLayoutAutoAssign"),
+                           {layoutId, enabled});
     scheduleLayoutLoad();
 }
 
@@ -353,48 +369,299 @@ bool SettingsController::fontStyleItalic(const QString& family, const QString& s
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Assignment helpers (D-Bus to daemon LayoutManager)
+// Assignment staging helpers
 // ═══════════════════════════════════════════════════════════════════════════════
+
+QString SettingsController::assignmentCacheKey(const QString& screen, int desktop, const QString& activity)
+{
+    return screen + QChar(0x1F) + QString::number(desktop) + QChar(0x1F) + activity;
+}
+
+SettingsController::StagedAssignment& SettingsController::stagedEntry(const QString& screen, int desktop,
+                                                                      const QString& activity)
+{
+    const QString key = assignmentCacheKey(screen, desktop, activity);
+    auto it = m_stagedAssignments.find(key);
+    if (it == m_stagedAssignments.end()) {
+        StagedAssignment entry;
+        entry.screenId = screen;
+        entry.virtualDesktop = desktop;
+        entry.activityId = activity;
+        it = m_stagedAssignments.insert(key, entry);
+    }
+    return *it;
+}
+
+const SettingsController::StagedAssignment* SettingsController::stagedEntryConst(const QString& screen, int desktop,
+                                                                                 const QString& activity) const
+{
+    const QString key = assignmentCacheKey(screen, desktop, activity);
+    auto it = m_stagedAssignments.constFind(key);
+    return it != m_stagedAssignments.constEnd() ? &(*it) : nullptr;
+}
+
+void SettingsController::flushStagedAssignments()
+{
+    qCInfo(PlasmaZones::lcCore) << "flushStagedAssignments: count=" << m_stagedAssignments.size();
+    for (auto it = m_stagedAssignments.constBegin(); it != m_stagedAssignments.constEnd(); ++it) {
+        const auto& s = it.value();
+        const bool isActivity = !s.activityId.isEmpty();
+        const bool isDesktop = s.virtualDesktop > 0;
+        qCInfo(PlasmaZones::lcCore)
+            << "  flush: screen=" << s.screenId << "fullCleared=" << s.fullCleared
+            << "mode=" << (s.stagedMode.has_value() ? QString::number(*s.stagedMode) : QStringLiteral("(none)"))
+            << "snapping=" << (s.snappingLayoutId.has_value() ? *s.snappingLayoutId : QStringLiteral("(none)"))
+            << "tiling=" << (s.tilingAlgorithmId.has_value() ? *s.tilingAlgorithmId : QStringLiteral("(none)"));
+
+        // Full clear — clear the entire entry for this context
+        if (s.fullCleared) {
+            if (isActivity)
+                DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                                       QStringLiteral("clearAssignmentForScreenActivity"), {s.screenId, s.activityId});
+            else if (isDesktop)
+                DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                                       QStringLiteral("clearAssignmentForScreenDesktop"),
+                                       {s.screenId, s.virtualDesktop});
+            else
+                DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("clearAssignment"),
+                                       {s.screenId});
+            continue;
+        }
+
+        // Explicit mode staging (overview page) — uses setAssignmentEntry for the
+        // exact (screen, desktop, activity) context. This is the only D-Bus method
+        // that targets a full context triple, matching the KCM batch save path.
+        if (s.stagedMode.has_value()) {
+            const int mode = *s.stagedMode;
+            const QString snapping = s.snappingLayoutId.value_or(QString());
+            const QString tiling = s.tilingAlgorithmId.has_value()
+                ? (LayoutId::isAutotile(*s.tilingAlgorithmId) ? LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
+                                                              : *s.tilingAlgorithmId)
+                : QString();
+            DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
+                                   {s.screenId, s.virtualDesktop, s.activityId, mode, snapping, tiling});
+            continue;
+        }
+
+        // Snapping layout assignment (per-field path — assignment pages)
+        if (s.snappingLayoutId.has_value() && !s.snappingLayoutId->isEmpty()) {
+            QDBusMessage reply;
+            if (isActivity)
+                reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                                               QStringLiteral("assignLayoutToScreenActivity"),
+                                               {s.screenId, s.activityId, *s.snappingLayoutId});
+            else if (isDesktop)
+                reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                                               QStringLiteral("assignLayoutToScreenDesktop"),
+                                               {s.screenId, s.virtualDesktop, *s.snappingLayoutId});
+            else
+                reply =
+                    DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                                           QStringLiteral("assignLayoutToScreen"), {s.screenId, *s.snappingLayoutId});
+            if (reply.type() == QDBusMessage::ErrorMessage)
+                qCWarning(PlasmaZones::lcCore) << "  assignLayout FAILED:" << reply.errorMessage();
+        }
+
+        // Tiling algorithm assignment
+        if (s.tilingAlgorithmId.has_value() && !s.tilingAlgorithmId->isEmpty()) {
+            const QString algoId = LayoutId::isAutotile(*s.tilingAlgorithmId)
+                ? LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
+                : *s.tilingAlgorithmId;
+            DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
+                                   {s.screenId, s.virtualDesktop, s.activityId, 1, QString(), algoId});
+        }
+
+        // Tiling-only clear — clearing the algorithm reverts to snapping mode (mode=0).
+        // The daemon clamps mode via qBound(0, mode, 1).
+        if (s.tilingAlgorithmId.has_value() && s.tilingAlgorithmId->isEmpty() && !s.fullCleared) {
+            DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
+                                   {s.screenId, s.virtualDesktop, s.activityId, 0, QString(), QString()});
+        }
+    }
+    m_stagedAssignments.clear();
+}
+
+bool SettingsController::stagedSnappingLayout(const QString& screen, int desktop, const QString& activity,
+                                              QString& out) const
+{
+    auto* s = stagedEntryConst(screen, desktop, activity);
+    if (!s)
+        return false;
+    if (s->fullCleared && !s->snappingLayoutId.has_value()) {
+        out = QString();
+        return true;
+    }
+    if (s->snappingLayoutId.has_value()) {
+        out = *s->snappingLayoutId;
+        return true;
+    }
+    return false;
+}
+
+bool SettingsController::stagedTilingLayout(const QString& screen, int desktop, const QString& activity,
+                                            QString& out) const
+{
+    auto* s = stagedEntryConst(screen, desktop, activity);
+    if (!s)
+        return false;
+    if (s->fullCleared && !s->tilingAlgorithmId.has_value()) {
+        out = QString();
+        return true;
+    }
+    if (s->tilingAlgorithmId.has_value()) {
+        const QString& val = *s->tilingAlgorithmId;
+        if (val.isEmpty()) {
+            out = QString();
+        } else {
+            out = LayoutId::isAutotile(val) ? val : LayoutId::makeAutotileId(val);
+        }
+        return true;
+    }
+    return false;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Assignment mutations (staged — flushed to daemon on save)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Staged mutation helpers ──────────────────────────────────────────────────
+
+void SettingsController::stageSnapping(const QString& screen, int desktop, const QString& activity,
+                                       const QString& layoutId)
+{
+    auto& e = stagedEntry(screen, desktop, activity);
+    e.fullCleared = false;
+    e.stagedMode = std::nullopt;
+    e.snappingLayoutId = layoutId;
+    e.tilingAlgorithmId = std::nullopt; // Clear opposite to prevent mode conflict on flush
+    setNeedsSave(true);
+}
+
+void SettingsController::stageTiling(const QString& screen, int desktop, const QString& activity,
+                                     const QString& layoutId)
+{
+    auto& e = stagedEntry(screen, desktop, activity);
+    e.fullCleared = false;
+    e.stagedMode = std::nullopt;
+    e.tilingAlgorithmId = layoutId;
+    e.snappingLayoutId = std::nullopt; // Clear opposite to prevent mode conflict on flush
+    setNeedsSave(true);
+}
+
+void SettingsController::stageFullClear(const QString& screen, int desktop, const QString& activity)
+{
+    auto& e = stagedEntry(screen, desktop, activity);
+    e.fullCleared = true;
+    e.stagedMode = std::nullopt;
+    e.snappingLayoutId = std::nullopt;
+    e.tilingAlgorithmId = std::nullopt;
+    setNeedsSave(true);
+}
+
+void SettingsController::stageTilingClear(const QString& screen, int desktop, const QString& activity)
+{
+    auto& e = stagedEntry(screen, desktop, activity);
+    e.tilingAlgorithmId = QString(); // empty = cleared
+    setNeedsSave(true);
+}
+
+// ── Snapping assignment delegates ───────────────────────────────────────────
 
 void SettingsController::assignLayoutToScreen(const QString& screenName, const QString& layoutId)
 {
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("assignLayoutByIdToScreen"),
-                        {layoutId, screenName, 0, QString()});
-    KCMDBus::notifyReload();
+    stageSnapping(screenName, 0, QString(), layoutId);
 }
 
-void SettingsController::clearScreenAssignment(const QString& screenName)
+void SettingsController::assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
+                                                     const QString& layoutId)
 {
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("clearAssignment"),
-                        {screenName, 0, QString()});
-    KCMDBus::notifyReload();
+    stageSnapping(screenName, virtualDesktop, QString(), layoutId);
 }
+
+void SettingsController::assignLayoutToScreenActivity(const QString& screenName, const QString& activityId,
+                                                      const QString& layoutId)
+{
+    stageSnapping(screenName, 0, activityId, layoutId);
+}
+
+// ── Tiling assignment delegates ─────────────────────────────────────────────
 
 void SettingsController::assignTilingLayoutToScreen(const QString& screenName, const QString& layoutId)
 {
-    // Use setAssignmentEntry with mode=1 (Autotile) and the algorithm extracted
-    // from the layoutId, matching KCM's AssignmentManager behavior.
-    const QString algoId = LayoutId::extractAlgorithmId(layoutId);
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
-                        {screenName, 0, QString(), 1 /* Autotile */, QString() /* preserve snapping */, algoId});
-    KCMDBus::notifyReload();
+    stageTiling(screenName, 0, QString(), layoutId);
+}
+
+void SettingsController::assignTilingLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
+                                                           const QString& layoutId)
+{
+    stageTiling(screenName, virtualDesktop, QString(), layoutId);
+}
+
+void SettingsController::assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId,
+                                                            const QString& layoutId)
+{
+    stageTiling(screenName, 0, activityId, layoutId);
+}
+
+// ── Full-clear assignment delegates ─────────────────────────────────────────
+
+void SettingsController::clearScreenAssignment(const QString& screenName)
+{
+    stageFullClear(screenName, 0, QString());
 }
 
 void SettingsController::clearTilingScreenAssignment(const QString& screenName)
 {
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("clearAssignment"),
-                        {screenName, 0, QString()});
-    KCMDBus::notifyReload();
+    stageFullClear(screenName, 0, QString());
+}
+
+void SettingsController::clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
+{
+    stageFullClear(screenName, virtualDesktop, QString());
+}
+
+void SettingsController::clearScreenActivityAssignment(const QString& screenName, const QString& activityId)
+{
+    stageFullClear(screenName, 0, activityId);
+}
+
+// ── Tiling-only clear delegates ─────────────────────────────────────────────
+
+void SettingsController::clearTilingScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
+{
+    stageTilingClear(screenName, virtualDesktop, QString());
+}
+
+void SettingsController::clearTilingScreenActivityAssignment(const QString& screenName, const QString& activityId)
+{
+    stageTilingClear(screenName, 0, activityId);
+}
+
+// ── Atomic mode+layout staging (overview page) ─────────────────────────────
+
+void SettingsController::stageAssignmentEntry(const QString& screenName, int virtualDesktop, const QString& activityId,
+                                              int mode, const QString& snappingLayoutId,
+                                              const QString& tilingAlgorithmId)
+{
+    auto& e = stagedEntry(screenName, virtualDesktop, activityId);
+    e.fullCleared = false;
+    e.stagedMode = mode;
+    e.snappingLayoutId = snappingLayoutId.isEmpty() ? std::nullopt : std::optional<QString>(snappingLayoutId);
+    e.tilingAlgorithmId = tilingAlgorithmId.isEmpty() ? std::nullopt : std::optional<QString>(tilingAlgorithmId);
+    setNeedsSave(true);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Assignment query helpers (D-Bus to daemon)
+// Assignment query helpers (check staged state, then fall back to D-Bus)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QString SettingsController::getLayoutForScreen(const QString& screenName) const
 {
-    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                             QStringLiteral("getLayoutForScreen"), {screenName});
+    QString staged;
+    if (stagedSnappingLayout(screenName, 0, QString(), staged))
+        return staged;
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                                                QStringLiteral("getLayoutForScreen"), {screenName});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
     return {};
@@ -402,46 +669,37 @@ QString SettingsController::getLayoutForScreen(const QString& screenName) const
 
 QString SettingsController::getTilingLayoutForScreen(const QString& screenName) const
 {
-    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                             QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, 0});
+    QString staged;
+    if (stagedTilingLayout(screenName, 0, QString(), staged))
+        return staged;
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                                                QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, 0});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
     return {};
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Per-desktop assignments (D-Bus to daemon)
-// ═══════════════════════════════════════════════════════════════════════════════
 
 QString SettingsController::getLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
-    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                             QStringLiteral("getLayoutForScreenDesktop"), {screenName, virtualDesktop});
+    QString staged;
+    if (stagedSnappingLayout(screenName, virtualDesktop, QString(), staged))
+        return staged;
+    QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutForScreenDesktop"),
+                               {screenName, virtualDesktop});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
     return {};
-}
-
-void SettingsController::assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
-                                                     const QString& layoutId)
-{
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("assignLayoutToScreenDesktop"),
-                        {screenName, virtualDesktop, layoutId});
-    KCMDBus::notifyReload();
-}
-
-void SettingsController::clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
-{
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("clearAssignmentForScreenDesktop"),
-                        {screenName, virtualDesktop});
-    KCMDBus::notifyReload();
 }
 
 QString SettingsController::getSnappingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
+    QString staged;
+    if (stagedSnappingLayout(screenName, virtualDesktop, QString(), staged))
+        return staged;
     QDBusMessage reply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                            QStringLiteral("getSnappingLayoutForScreenDesktop"), {screenName, virtualDesktop});
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                               QStringLiteral("getSnappingLayoutForScreenDesktop"), {screenName, virtualDesktop});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
     return {};
@@ -449,40 +707,34 @@ QString SettingsController::getSnappingLayoutForScreenDesktop(const QString& scr
 
 bool SettingsController::hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
+    QString snap, tile;
+    bool hasSnap = stagedSnappingLayout(screenName, virtualDesktop, QString(), snap);
+    bool hasTile = stagedTilingLayout(screenName, virtualDesktop, QString(), tile);
+    if (hasSnap || hasTile) {
+        // If either staged field is non-empty, we definitely have an assignment
+        if (!snap.isEmpty() || !tile.isEmpty())
+            return true;
+        // Only short-circuit to false when BOTH fields are staged and empty;
+        // otherwise fall through to D-Bus so the daemon's other field is checked.
+        if (hasSnap && hasTile)
+            return false;
+    }
     QDBusMessage reply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                            QStringLiteral("hasExplicitAssignmentForScreenDesktop"), {screenName, virtualDesktop});
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                               QStringLiteral("hasExplicitAssignmentForScreenDesktop"), {screenName, virtualDesktop});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toBool();
     return false;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Tiling per-desktop assignments (D-Bus to daemon)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void SettingsController::assignTilingLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
-                                                           const QString& layoutId)
-{
-    const QString algoId = LayoutId::extractAlgorithmId(layoutId);
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
-                        {screenName, virtualDesktop, QString(), 1 /* Autotile */, QString(), algoId});
-    KCMDBus::notifyReload();
-}
-
-void SettingsController::clearTilingScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
-{
-    // Clear the tiling algorithm only -- use setAssignmentEntry with empty tilingAlgorithm
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
-                        {screenName, virtualDesktop, QString(), -1 /* preserve mode */, QString(), QString()});
-    KCMDBus::notifyReload();
-}
-
 QString SettingsController::getTilingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
+    QString staged;
+    if (stagedTilingLayout(screenName, virtualDesktop, QString(), staged))
+        return staged;
     QDBusMessage reply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                            QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, virtualDesktop});
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                               QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, virtualDesktop});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString algo = reply.arguments().first().toString();
         if (!algo.isEmpty())
@@ -494,52 +746,39 @@ QString SettingsController::getTilingLayoutForScreenDesktop(const QString& scree
 bool SettingsController::hasExplicitTilingAssignmentForScreenDesktop(const QString& screenName,
                                                                      int virtualDesktop) const
 {
+    QString staged;
+    if (stagedTilingLayout(screenName, virtualDesktop, QString(), staged))
+        return !staged.isEmpty();
     QDBusMessage reply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                            QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, virtualDesktop});
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                               QStringLiteral("getTilingAlgorithmForScreenDesktop"), {screenName, virtualDesktop});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return !reply.arguments().first().toString().isEmpty();
     return false;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Per-activity assignments (D-Bus to daemon)
-// ═══════════════════════════════════════════════════════════════════════════════
-
 QString SettingsController::getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
 {
-    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                             QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
+    QString staged;
+    if (stagedSnappingLayout(screenName, 0, activityId, staged))
+        return staged;
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                                                QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
     return {};
 }
 
-void SettingsController::assignLayoutToScreenActivity(const QString& screenName, const QString& activityId,
-                                                      const QString& layoutId)
-{
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("assignLayoutToScreenActivity"),
-                        {screenName, activityId, layoutId});
-    KCMDBus::notifyReload();
-}
-
-void SettingsController::clearScreenActivityAssignment(const QString& screenName, const QString& activityId)
-{
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("clearAssignmentForScreenActivity"),
-                        {screenName, activityId});
-    KCMDBus::notifyReload();
-}
-
 QString SettingsController::getSnappingLayoutForScreenActivity(const QString& screenName,
                                                                const QString& activityId) const
 {
-    // The daemon's getLayoutForScreenActivity returns the active layout (snapping or autotile).
-    // For the snapping-specific layout, we query via the full assignment path.
-    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                             QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
+    QString staged;
+    if (stagedSnappingLayout(screenName, 0, activityId, staged))
+        return staged;
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                                                QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString layoutId = reply.arguments().first().toString();
-        // Only return if it's a real layout ID (not an autotile ID)
         if (!layoutId.isEmpty() && !LayoutId::isAutotile(layoutId))
             return layoutId;
     }
@@ -549,39 +788,30 @@ QString SettingsController::getSnappingLayoutForScreenActivity(const QString& sc
 bool SettingsController::hasExplicitAssignmentForScreenActivity(const QString& screenName,
                                                                 const QString& activityId) const
 {
+    QString snap, tile;
+    bool hasSnap = stagedSnappingLayout(screenName, 0, activityId, snap);
+    bool hasTile = stagedTilingLayout(screenName, 0, activityId, tile);
+    if (hasSnap || hasTile) {
+        if (!snap.isEmpty() || !tile.isEmpty())
+            return true;
+        if (hasSnap && hasTile)
+            return false;
+    }
     QDBusMessage reply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                            QStringLiteral("hasExplicitAssignmentForScreenActivity"), {screenName, activityId});
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                               QStringLiteral("hasExplicitAssignmentForScreenActivity"), {screenName, activityId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toBool();
     return false;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Tiling per-activity assignments (D-Bus to daemon)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void SettingsController::assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId,
-                                                            const QString& layoutId)
-{
-    const QString algoId = LayoutId::extractAlgorithmId(layoutId);
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
-                        {screenName, 0, activityId, 1 /* Autotile */, QString(), algoId});
-    KCMDBus::notifyReload();
-}
-
-void SettingsController::clearTilingScreenActivityAssignment(const QString& screenName, const QString& activityId)
-{
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
-                        {screenName, 0, activityId, -1 /* preserve mode */, QString(), QString()});
-    KCMDBus::notifyReload();
-}
-
 QString SettingsController::getTilingLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
 {
-    // No direct D-Bus method for tiling-only activity query, so check the full assignment
-    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                             QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
+    QString staged;
+    if (stagedTilingLayout(screenName, 0, activityId, staged))
+        return staged;
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                                                QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString layoutId = reply.arguments().first().toString();
         if (LayoutId::isAutotile(layoutId))
@@ -605,8 +835,8 @@ QString SettingsController::getQuickLayoutSlot(int slotNumber) const
 {
     if (slotNumber < 1 || slotNumber > 9)
         return {};
-    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                             QStringLiteral("getQuickLayoutSlot"), {slotNumber});
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                                                QStringLiteral("getQuickLayoutSlot"), {slotNumber});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
     return {};
@@ -616,8 +846,8 @@ void SettingsController::setQuickLayoutSlot(int slotNumber, const QString& layou
 {
     if (slotNumber < 1 || slotNumber > 9)
         return;
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setQuickLayoutSlot"),
-                        {slotNumber, layoutId});
+    DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setQuickLayoutSlot"),
+                           {slotNumber, layoutId});
 }
 
 QString SettingsController::getQuickLayoutShortcut(int slotNumber) const
@@ -665,7 +895,7 @@ void SettingsController::setTilingQuickLayoutSlot(int slotNumber, const QString&
 QVariantList SettingsController::getAppRulesForLayout(const QString& layoutId) const
 {
     QDBusMessage reply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayout"), {layoutId});
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayout"), {layoutId});
     if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
         return {};
 
@@ -785,13 +1015,13 @@ void SettingsController::setMonitorDisabled(const QString& screenName, bool disa
 void SettingsController::refreshVirtualDesktops()
 {
     QDBusMessage countReply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getVirtualDesktopCount"));
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getVirtualDesktopCount"));
     if (countReply.type() == QDBusMessage::ReplyMessage && !countReply.arguments().isEmpty()) {
         m_virtualDesktopCount = countReply.arguments().first().toInt();
     }
 
     QDBusMessage namesReply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getVirtualDesktopNames"));
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getVirtualDesktopNames"));
     if (namesReply.type() == QDBusMessage::ReplyMessage && !namesReply.arguments().isEmpty()) {
         m_virtualDesktopNames = namesReply.arguments().first().toStringList();
     }
@@ -800,14 +1030,14 @@ void SettingsController::refreshVirtualDesktops()
 void SettingsController::refreshActivities()
 {
     QDBusMessage availReply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("isActivitiesAvailable"));
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("isActivitiesAvailable"));
     if (availReply.type() == QDBusMessage::ReplyMessage && !availReply.arguments().isEmpty()) {
         m_activitiesAvailable = availReply.arguments().first().toBool();
     }
 
     if (m_activitiesAvailable) {
         QDBusMessage infoReply =
-            KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getAllActivitiesInfo"));
+            DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getAllActivitiesInfo"));
         if (infoReply.type() == QDBusMessage::ReplyMessage && !infoReply.arguments().isEmpty()) {
             QString json = infoReply.arguments().first().toString();
             QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
@@ -820,7 +1050,7 @@ void SettingsController::refreshActivities()
         }
 
         QDBusMessage currentReply =
-            KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getCurrentActivity"));
+            DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getCurrentActivity"));
         if (currentReply.type() == QDBusMessage::ReplyMessage && !currentReply.arguments().isEmpty()) {
             m_currentActivity = currentReply.arguments().first().toString();
         }
@@ -1247,7 +1477,8 @@ void SettingsController::loadColorsFromFile(const QString& filePath)
 
 QVariantList SettingsController::getRunningWindows() const
 {
-    QDBusMessage reply = KCMDBus::callDaemon(QString(DBus::Interface::Settings), QStringLiteral("getRunningWindows"));
+    QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(DBus::Interface::Settings), QStringLiteral("getRunningWindows"));
     if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
         return {};
     }
@@ -1278,6 +1509,126 @@ QVariantList SettingsController::getRunningWindows() const
     }
 
     return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Config export/import
+// ═══════════════════════════════════════════════════════════════════════════════
+
+bool SettingsController::exportAllSettings(const QString& filePath)
+{
+    if (filePath.isEmpty()) {
+        return false;
+    }
+    QString configPath =
+        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/plasmazonesrc");
+    if (!QFile::exists(configPath)) {
+        qCWarning(PlasmaZones::lcCore) << "Config file not found:" << configPath;
+        return false;
+    }
+    // Remove destination if it exists (QFile::copy won't overwrite)
+    if (QFile::exists(filePath)) {
+        QFile::remove(filePath);
+    }
+    bool ok = QFile::copy(configPath, filePath);
+    if (!ok) {
+        qCWarning(PlasmaZones::lcCore) << "Failed to export settings to:" << filePath;
+    }
+    return ok;
+}
+
+bool SettingsController::importAllSettings(const QString& filePath)
+{
+    if (filePath.isEmpty() || !QFile::exists(filePath)) {
+        return false;
+    }
+    QString configPath =
+        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/plasmazonesrc");
+    // Backup current config
+    QString backupPath = configPath + QStringLiteral(".bak");
+    if (QFile::exists(backupPath)) {
+        QFile::remove(backupPath);
+    }
+    if (!QFile::copy(configPath, backupPath)) {
+        qCWarning(PlasmaZones::lcCore) << "Failed to backup config to:" << backupPath;
+        return false;
+    }
+    // Replace with imported file
+    if (QFile::exists(configPath)) {
+        QFile::remove(configPath);
+    }
+    bool ok = QFile::copy(filePath, configPath);
+    if (ok) {
+        m_settings.load();
+        Q_EMIT needsSaveChanged();
+    } else {
+        qCWarning(PlasmaZones::lcCore) << "Failed to import settings from:" << filePath;
+    }
+    return ok;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Screen state query
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantList SettingsController::getScreenStates() const
+{
+    QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getScreenStates"));
+    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty())
+        return {};
+
+    const QString json = reply.arguments().at(0).toString();
+    if (json.isEmpty())
+        return {};
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray())
+        return {};
+
+    QVariantList result;
+    for (const QJsonValue& value : doc.array()) {
+        if (value.isObject())
+            result.append(value.toObject().toVariantMap());
+    }
+    return result;
+}
+
+bool SettingsController::hasStagedAssignment(const QString& screenName, int virtualDesktop,
+                                             const QString& activityId) const
+{
+    return stagedEntryConst(screenName, virtualDesktop, activityId) != nullptr;
+}
+
+QVariantMap SettingsController::getStagedAssignment(const QString& screenName, int virtualDesktop,
+                                                    const QString& activityId) const
+{
+    auto* s = stagedEntryConst(screenName, virtualDesktop, activityId);
+    if (!s)
+        return {};
+    QVariantMap map;
+    if (s->snappingLayoutId.has_value())
+        map[QStringLiteral("layoutId")] = *s->snappingLayoutId;
+    if (s->tilingAlgorithmId.has_value()) {
+        const QString& val = *s->tilingAlgorithmId;
+        // Strip "autotile:" prefix if present
+        if (val.startsWith(QLatin1String("autotile:")))
+            map[QStringLiteral("algorithmId")] = val.mid(9);
+        else
+            map[QStringLiteral("algorithmId")] = val;
+    }
+    // Explicit mode takes priority (stageAssignmentEntry path)
+    if (s->stagedMode.has_value()) {
+        map[QStringLiteral("mode")] = *s->stagedMode;
+    } else {
+        // Infer mode from which fields are staged (per-field path)
+        if (s->tilingAlgorithmId.has_value() && !s->tilingAlgorithmId->isEmpty())
+            map[QStringLiteral("mode")] = 1;
+        else if (s->snappingLayoutId.has_value() && !s->snappingLayoutId->isEmpty())
+            map[QStringLiteral("mode")] = 0;
+    }
+    return map;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1409,7 +1760,7 @@ void SettingsController::saveAppRulesToDaemon(const QString& layoutId, const QVa
 {
     // Get the current layout JSON, update the appRules field, and send back via updateLayout
     QDBusMessage getReply =
-        KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayout"), {layoutId});
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayout"), {layoutId});
     if (getReply.type() != QDBusMessage::ReplyMessage || getReply.arguments().isEmpty())
         return;
 
@@ -1431,7 +1782,7 @@ void SettingsController::saveAppRulesToDaemon(const QString& layoutId, const QVa
     obj[QLatin1String("appRules")] = rulesArray;
 
     QString updatedJson = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-    KCMDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("updateLayout"), {updatedJson});
+    DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("updateLayout"), {updatedJson});
     scheduleLayoutLoad();
 }
 
@@ -1448,6 +1799,48 @@ void SettingsController::resetEditorDefaults()
     setEditorSnapOverrideModifier(static_cast<int>(Qt::ShiftModifier));
     setFillOnDropEnabled(true);
     setFillOnDropModifier(static_cast<int>(Qt::ControlModifier));
+}
+
+QVariantMap SettingsController::loadWindowGeometry() const
+{
+    QSettings settings(QStringLiteral("plasmazones"), QStringLiteral("settings-window"));
+    QVariantMap geo;
+    int w = settings.value(QStringLiteral("width"), 0).toInt();
+    int h = settings.value(QStringLiteral("height"), 0).toInt();
+    int x = settings.value(QStringLiteral("x")).toInt();
+    int y = settings.value(QStringLiteral("y")).toInt();
+    bool hasPosition = settings.contains(QStringLiteral("x"));
+
+    // Validate against available screen geometry
+    if (w > 0 && h > 0) {
+        QRect virtualGeo;
+        for (auto* screen : QGuiApplication::screens())
+            virtualGeo = virtualGeo.united(screen->availableGeometry());
+        if (!virtualGeo.isEmpty()) {
+            w = qMin(w, virtualGeo.width());
+            h = qMin(h, virtualGeo.height());
+            // Check if center of saved window is on any screen
+            if (hasPosition && !virtualGeo.contains(QPoint(x + w / 2, y + h / 2))) {
+                hasPosition = false; // off-screen, let WM place it
+            }
+        }
+    }
+
+    geo[QStringLiteral("width")] = w;
+    geo[QStringLiteral("height")] = h;
+    geo[QStringLiteral("x")] = x;
+    geo[QStringLiteral("y")] = y;
+    geo[QStringLiteral("hasPosition")] = hasPosition;
+    return geo;
+}
+
+void SettingsController::saveWindowGeometry(int x, int y, int width, int height)
+{
+    QSettings settings(QStringLiteral("plasmazones"), QStringLiteral("settings-window"));
+    settings.setValue(QStringLiteral("x"), x);
+    settings.setValue(QStringLiteral("y"), y);
+    settings.setValue(QStringLiteral("width"), width);
+    settings.setValue(QStringLiteral("height"), height);
 }
 
 } // namespace PlasmaZones

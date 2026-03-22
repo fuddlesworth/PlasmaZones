@@ -196,7 +196,7 @@ Item {
         Label {
             Layout.alignment: Qt.AlignHCenter
             text: root.positionLabels[root.position] || ""
-            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+            font: Kirigami.Theme.smallFont
             opacity: 0.7
         }
 

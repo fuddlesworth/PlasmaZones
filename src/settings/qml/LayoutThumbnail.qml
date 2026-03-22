@@ -33,10 +33,10 @@ Rectangle {
     readonly property real screenAspectRatio: primaryScreen ? (primaryScreen.width / primaryScreen.height) : (16 / 9) // Default to 16:9 if no screen
     // Calculate dimensions based on aspect ratio.
     // Use a base height and calculate width to match screen ratio.
-    readonly property real baseHeight: Kirigami.Units.gridUnit * 9
+    property real baseHeight: Kirigami.Units.gridUnit * 9
     readonly property real calculatedWidth: baseHeight * screenAspectRatio
-    readonly property real minThumbnailWidth: Kirigami.Units.gridUnit * 10 // 80px minimum
-    readonly property real maxThumbnailWidth: Kirigami.Units.gridUnit * 20 // 160px maximum
+    property real minThumbnailWidth: Kirigami.Units.gridUnit * 10 // 80px minimum
+    property real maxThumbnailWidth: Kirigami.Units.gridUnit * 20 // 160px maximum
 
     // Use calculated width but ensure minimum size for usability
     implicitWidth: Math.max(minThumbnailWidth, Math.min(calculatedWidth, maxThumbnailWidth))
@@ -81,7 +81,7 @@ Rectangle {
         anchors.margins: Kirigami.Units.smallSpacing
         text: root.layout ? (root.layout.name || i18n("Unnamed")) : ""
         font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-        font.bold: isSelected
+        font.weight: isSelected ? Font.DemiBold : Font.Normal
         elide: Text.ElideRight
         horizontalAlignment: Text.AlignHCenter
 

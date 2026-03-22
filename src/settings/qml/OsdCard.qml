@@ -22,16 +22,12 @@ Item {
     Layout.fillWidth: true
     implicitHeight: osdCard.implicitHeight
 
-    Kirigami.Card {
+    SettingsCard {
         id: osdCard
 
         anchors.fill: parent
-
-        header: Kirigami.Heading {
-            level: 3
-            text: i18n("On-Screen Display")
-            padding: Kirigami.Units.smallSpacing
-        }
+        headerText: i18n("On-Screen Display")
+        collapsible: true
 
         contentItem: Kirigami.FormLayout {
             CheckBox {

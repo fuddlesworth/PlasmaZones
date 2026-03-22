@@ -327,137 +327,85 @@ Kirigami.FormLayout {
     }
 
     // Amplitude slider (visible for elastic and bounce presets)
-    RowLayout {
+    QtObject {
         id: amplitudeRow
 
         readonly property bool isElastic: easingRoot.easingPreview.curveType === "elastic-in" || easingRoot.easingPreview.curveType === "elastic-out" || easingRoot.easingPreview.curveType === "elastic-in-out"
         readonly property bool isBounce: easingRoot.easingPreview.curveType === "bounce-in" || easingRoot.easingPreview.curveType === "bounce-out" || easingRoot.easingPreview.curveType === "bounce-in-out"
+    }
 
-        Kirigami.FormData.label: i18n("Amplitude:")
-        visible: isElastic || isBounce
+    SettingsSlider {
+        formLabel: i18n("Amplitude:")
+        visible: amplitudeRow.isElastic || amplitudeRow.isBounce
         enabled: easingRoot.animationsEnabled
-        spacing: Kirigami.Units.smallSpacing
-
-        Slider {
-            id: elasticAmplitudeSlider
-
-            Layout.preferredWidth: easingRoot.constants.sliderPreferredWidth
-            from: amplitudeRow.isElastic ? 1 : 0.5
-            to: 3
-            stepSize: 0.1
-            value: easingRoot.easingPreview.elasticAmplitude
-            onMoved: {
-                var ct = easingRoot.easingPreview.curveType;
-                var amp = value.toFixed(2);
-                if (amplitudeRow.isElastic) {
-                    var per = easingRoot.easingPreview.elasticPeriod.toFixed(2);
-                    easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + per;
-                } else {
-                    easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + easingRoot.easingPreview.bouncesCount;
-                }
+        from: amplitudeRow.isElastic ? 1 : 0.5
+        to: 3
+        stepSize: 0.1
+        value: easingRoot.easingPreview.elasticAmplitude
+        formatValue: function(v) {
+            return v.toFixed(1);
+        }
+        onMoved: (value) => {
+            var ct = easingRoot.easingPreview.curveType;
+            var amp = value.toFixed(2);
+            if (amplitudeRow.isElastic) {
+                var per = easingRoot.easingPreview.elasticPeriod.toFixed(2);
+                easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + per;
+            } else {
+                easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + easingRoot.easingPreview.bouncesCount;
             }
-            Accessible.name: i18n("Amplitude")
-            ToolTip.visible: hovered
-            ToolTip.text: amplitudeRow.isBounce ? i18n("Controls the bounce height -- higher values exaggerate bounces, lower values flatten them (1.0 = standard)") : i18n("Controls the overshoot intensity of the elastic animation (1.0 = standard)")
         }
-
-        Label {
-            text: elasticAmplitudeSlider.value.toFixed(1)
-            Layout.preferredWidth: easingRoot.constants.sliderValueLabelWidth
-        }
-
     }
 
     // Bounce count slider (visible for bounce presets)
-    RowLayout {
-        Kirigami.FormData.label: i18n("Bounces:")
+    SettingsSlider {
+        formLabel: i18n("Bounces:")
         visible: amplitudeRow.isBounce
         enabled: easingRoot.animationsEnabled
-        spacing: Kirigami.Units.smallSpacing
-
-        Slider {
-            id: bouncesSlider
-
-            Layout.preferredWidth: easingRoot.constants.sliderPreferredWidth
-            from: 1
-            to: 8
-            stepSize: 1
-            value: easingRoot.easingPreview.bouncesCount
-            onMoved: {
-                var ct = easingRoot.easingPreview.curveType;
-                var amp = easingRoot.easingPreview.elasticAmplitude.toFixed(2);
-                easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + Math.round(value);
-            }
-            Accessible.name: i18n("Number of bounces")
-            ToolTip.visible: hovered
-            ToolTip.text: i18n("Number of bounces before settling -- fewer bounces feel snappier, more feel bouncier")
+        from: 1
+        to: 8
+        value: easingRoot.easingPreview.bouncesCount
+        valueSuffix: ""
+        onMoved: (value) => {
+            var ct = easingRoot.easingPreview.curveType;
+            var amp = easingRoot.easingPreview.elasticAmplitude.toFixed(2);
+            easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + Math.round(value);
         }
-
-        Label {
-            text: Math.round(bouncesSlider.value).toString()
-            Layout.preferredWidth: easingRoot.constants.sliderValueLabelWidth
-        }
-
     }
 
     // Elastic period slider
-    RowLayout {
-        Kirigami.FormData.label: i18n("Period:")
+    SettingsSlider {
+        formLabel: i18n("Period:")
         visible: easingRoot.easingPreview.curveType === "elastic-in" || easingRoot.easingPreview.curveType === "elastic-out" || easingRoot.easingPreview.curveType === "elastic-in-out"
         enabled: easingRoot.animationsEnabled
-        spacing: Kirigami.Units.smallSpacing
-
-        Slider {
-            id: elasticPeriodSlider
-
-            Layout.preferredWidth: easingRoot.constants.sliderPreferredWidth
-            from: 0.1
-            to: 1
-            stepSize: 0.05
-            value: easingRoot.easingPreview.elasticPeriod
-            onMoved: {
-                var ct = easingRoot.easingPreview.curveType;
-                var amp = easingRoot.easingPreview.elasticAmplitude.toFixed(2);
-                var per = value.toFixed(2);
-                easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + per;
-            }
-            Accessible.name: i18n("Elastic period")
-            ToolTip.visible: hovered
-            ToolTip.text: i18n("Controls the oscillation frequency -- lower values produce tighter, faster bounces")
+        from: 0.1
+        to: 1
+        stepSize: 0.05
+        value: easingRoot.easingPreview.elasticPeriod
+        formatValue: function(v) {
+            return v.toFixed(2);
         }
-
-        Label {
-            text: elasticPeriodSlider.value.toFixed(2)
-            Layout.preferredWidth: easingRoot.constants.sliderValueLabelWidth
+        onMoved: (value) => {
+            var ct = easingRoot.easingPreview.curveType;
+            var amp = easingRoot.easingPreview.elasticAmplitude.toFixed(2);
+            var per = value.toFixed(2);
+            easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + per;
         }
-
     }
 
     // Duration slider
-    RowLayout {
-        Kirigami.FormData.label: i18n("Duration:")
+    SettingsSlider {
+        formLabel: i18n("Duration:")
         enabled: easingRoot.animationsEnabled
-        spacing: Kirigami.Units.smallSpacing
-
-        Slider {
-            id: animationDurationSlider
-
-            Layout.preferredWidth: easingRoot.constants.sliderPreferredWidth
-            from: 50
-            to: 500
-            stepSize: 10
-            value: easingRoot.appSettings.animationDuration
-            onMoved: easingRoot.appSettings.animationDuration = Math.round(value)
-            Accessible.name: i18n("Animation duration")
-            ToolTip.visible: hovered
-            ToolTip.text: i18n("How long window animations take to complete (milliseconds)")
+        from: 50
+        to: 500
+        stepSize: 10
+        value: easingRoot.appSettings.animationDuration
+        valueSuffix: " ms"
+        labelWidth: 55
+        onMoved: (value) => {
+            return easingRoot.appSettings.animationDuration = Math.round(value);
         }
-
-        Label {
-            text: Math.round(animationDurationSlider.value) + " ms"
-            Layout.preferredWidth: easingRoot.constants.sliderValueLabelWidth + 15
-        }
-
     }
 
     // Sequence mode (all at once vs one by one)
@@ -474,58 +422,41 @@ Kirigami.FormLayout {
     }
 
     // Stagger interval (only relevant when one by one)
-    RowLayout {
-        Kirigami.FormData.label: i18n("Delay between windows:")
+    SettingsSlider {
+        formLabel: i18n("Delay between windows:")
         visible: easingRoot.appSettings.animationSequenceMode === 1
         enabled: easingRoot.animationsEnabled
-        spacing: Kirigami.Units.smallSpacing
-
-        Slider {
-            Layout.preferredWidth: easingRoot.constants.sliderPreferredWidth
-            from: 10
-            to: easingRoot.appSettings.animationStaggerIntervalMax !== undefined ? easingRoot.appSettings.animationStaggerIntervalMax : 200
-            stepSize: 10
-            value: easingRoot.appSettings.animationStaggerInterval
-            onMoved: easingRoot.appSettings.animationStaggerInterval = Math.round(value)
-            Accessible.name: i18n("Delay between each window starting its animation")
-            ToolTip.visible: hovered
-            ToolTip.text: i18n("When animating one by one: milliseconds between each window starting. Lower values create a fast cascading effect with overlapping animations.")
+        from: 10
+        to: easingRoot.appSettings.animationStaggerIntervalMax !== undefined ? easingRoot.appSettings.animationStaggerIntervalMax : 200
+        stepSize: 10
+        value: easingRoot.appSettings.animationStaggerInterval
+        valueSuffix: " ms"
+        labelWidth: 55
+        onMoved: (value) => {
+            return easingRoot.appSettings.animationStaggerInterval = Math.round(value);
         }
-
-        Label {
-            text: i18n("%1 ms", easingRoot.appSettings.animationStaggerInterval)
-            Layout.preferredWidth: easingRoot.constants.sliderValueLabelWidth + 15
-        }
-
     }
 
     // Minimum distance threshold
-    RowLayout {
-        Kirigami.FormData.label: i18n("Minimum distance:")
+    SettingsSpinBox {
+        formLabel: i18n("Minimum distance:")
         enabled: easingRoot.animationsEnabled
-        spacing: Kirigami.Units.smallSpacing
-
-        SpinBox {
-            from: 0
-            to: 200
-            stepSize: 5
-            value: easingRoot.appSettings.animationMinDistance
-            onValueModified: easingRoot.appSettings.animationMinDistance = value
-            Accessible.name: i18n("Minimum distance")
-            ToolTip.visible: hovered
-            ToolTip.text: i18n("Skip animation when the geometry change is smaller than this many pixels. Prevents jittery micro-animations.")
+        from: 0
+        to: 200
+        stepSize: 5
+        value: easingRoot.appSettings.animationMinDistance
+        tooltipText: i18n("Skip animation when the geometry change is smaller than this many pixels. Prevents jittery micro-animations.")
+        onValueModified: (value) => {
+            return easingRoot.appSettings.animationMinDistance = value;
         }
+    }
 
-        Label {
-            text: i18n("px")
-        }
-
-        Label {
-            text: easingRoot.appSettings.animationMinDistance === 0 ? i18n("(always animate)") : ""
-            opacity: 0.6
-            font.italic: true
-        }
-
+    Label {
+        Kirigami.FormData.label: " "
+        text: easingRoot.appSettings.animationMinDistance === 0 ? i18n("(always animate)") : ""
+        visible: easingRoot.appSettings.animationMinDistance === 0
+        opacity: 0.7
+        font.italic: true
     }
 
 }

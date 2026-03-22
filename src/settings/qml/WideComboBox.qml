@@ -88,7 +88,7 @@ ComboBox {
         contentItem: Label {
             text: root.textRole ? modelData[root.textRole] : modelData
             color: parent.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
-            font.bold: parent.highlighted || parent.isCurrentSelection
+            font.weight: (parent.highlighted || parent.isCurrentSelection) ? Font.DemiBold : Font.Normal
             elide: Text.ElideRight
             verticalAlignment: Text.AlignVCenter
         }

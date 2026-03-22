@@ -149,7 +149,7 @@ Kirigami.Dialog {
                         Label {
                             text: modelData.caption
                             Layout.fillWidth: true
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            font: Kirigami.Theme.smallFont
                             opacity: 0.7
                             elide: Text.ElideRight
                             visible: modelData.caption.length > 0

@@ -55,11 +55,11 @@ RowLayout {
     }
 
     // View switcher — only visible when autotiling is enabled
-    ComboBox {
+    SettingsButtonGroup {
         visible: root.appSettings.autotileEnabled
         model: [i18n("Snapping"), i18n("Tiling")]
         currentIndex: root.viewMode
-        onActivated: (index) => {
+        onIndexChanged: (index) => {
             return root.viewModeRequested(index);
         }
     }

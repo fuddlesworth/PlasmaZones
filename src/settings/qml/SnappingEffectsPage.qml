@@ -1,0 +1,158 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
+
+Flickable {
+    id: root
+
+    contentHeight: content.implicitHeight
+    clip: true
+
+    ColumnLayout {
+        id: content
+
+        width: parent.width
+        spacing: Kirigami.Units.largeSpacing
+
+        // =====================================================================
+        // EFFECTS
+        // =====================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: effectsCard.implicitHeight
+
+            SettingsCard {
+                id: effectsCard
+
+                anchors.fill: parent
+                headerText: i18n("Effects")
+                collapsible: true
+
+                contentItem: Kirigami.FormLayout {
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Visual Effects")
+                    }
+
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Blur:")
+                        text: i18n("Enable blur behind zones")
+                        checked: appSettings.enableBlur
+                        onToggled: appSettings.enableBlur = checked
+                    }
+
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Numbers:")
+                        text: i18n("Show zone numbers")
+                        checked: appSettings.showZoneNumbers
+                        onToggled: appSettings.showZoneNumbers = checked
+                    }
+
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Animation:")
+                        text: i18n("Flash zones when switching layouts")
+                        checked: appSettings.flashZonesOnSwitch
+                        onToggled: appSettings.flashZonesOnSwitch = checked
+                    }
+
+                }
+
+            }
+
+        }
+
+        // =====================================================================
+        // SHADER EFFECTS
+        // =====================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: shaderCard.implicitHeight
+
+            SettingsCard {
+                id: shaderCard
+
+                anchors.fill: parent
+                headerText: i18n("Shader Effects")
+                collapsible: true
+
+                contentItem: Kirigami.FormLayout {
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Shader Effects")
+                    }
+
+                    CheckBox {
+                        id: shaderEffectsCheck
+
+                        Kirigami.FormData.label: i18n("Shaders:")
+                        text: i18n("Enable shader effects")
+                        checked: appSettings.enableShaderEffects
+                        onToggled: appSettings.enableShaderEffects = checked
+                    }
+
+                    SettingsSlider {
+                        formLabel: i18n("Frame rate:")
+                        enabled: shaderEffectsCheck.checked
+                        opacity: enabled ? 1 : 0.4
+                        from: 30
+                        to: 144
+                        value: appSettings.shaderFrameRate
+                        valueSuffix: " fps"
+                        labelWidth: 55
+                        onMoved: (value) => {
+                            return appSettings.shaderFrameRate = Math.round(value);
+                        }
+                    }
+
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Audio Visualization")
+                    }
+
+                    CheckBox {
+                        id: audioVizCheck
+
+                        Kirigami.FormData.label: i18n("Audio:")
+                        text: i18n("Enable CAVA audio spectrum")
+                        enabled: shaderEffectsCheck.checked && settingsController.cavaAvailable
+                        checked: appSettings.enableAudioVisualizer
+                        onToggled: appSettings.enableAudioVisualizer = checked
+                        ToolTip.visible: hovered
+                        ToolTip.text: settingsController.cavaAvailable ? i18n("Feeds audio spectrum data to shaders that support it.") : i18n("CAVA is not installed. Install cava to enable audio visualization.")
+                    }
+
+                    Kirigami.InlineMessage {
+                        Layout.fillWidth: true
+                        type: Kirigami.MessageType.Warning
+                        text: i18n("CAVA is not installed. Install the <b>cava</b> package to enable audio-reactive shader effects.")
+                        visible: !settingsController.cavaAvailable && shaderEffectsCheck.checked
+                    }
+
+                    SettingsSlider {
+                        formLabel: i18n("Spectrum bars:")
+                        enabled: shaderEffectsCheck.checked && audioVizCheck.checked && settingsController.cavaAvailable
+                        opacity: enabled ? 1 : 0.4
+                        from: 16
+                        to: 256
+                        stepSize: 2
+                        value: appSettings.audioSpectrumBarCount
+                        valueSuffix: ""
+                        labelWidth: 55
+                        onMoved: (value) => {
+                            return appSettings.audioSpectrumBarCount = Math.round(value);
+                        }
+                    }
+
+                }
+
+            }
+
+        }
+
+    }
+
+}

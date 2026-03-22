@@ -35,13 +35,25 @@ qt_add_qml_module(plasmazones-settings
     QML_FILES
         qml/Main.qml
         qml/GeneralPage.qml
-        qml/SnappingPage.qml
-        qml/AutotilingPage.qml
+        qml/SnappingAppearancePage.qml
+        qml/SnappingEffectsPage.qml
+        qml/SnappingBehaviorPage.qml
+        qml/SnappingZoneSelectorPage.qml
+        qml/TilingAppearancePage.qml
+        qml/TilingBehaviorPage.qml
+        qml/TilingAlgorithmPage.qml
         qml/ExclusionsPage.qml
         qml/EditorPage.qml
         qml/LayoutsPage.qml
-        qml/AssignmentsPage.qml
+        qml/AssignmentsAppRulesPage.qml
+        qml/SnappingAssignmentsPage.qml
+        qml/SnappingQuickShortcutsPage.qml
+        qml/TilingAssignmentsPage.qml
+        qml/TilingQuickShortcutsPage.qml
+        qml/SnappingBridge.qml
+        qml/TilingBridge.qml
         qml/AboutPage.qml
+        qml/MonitorStatePage.qml
         # Sub-components (copied from KCM)
         qml/MonitorAssignmentsCard.qml
         qml/ActivityAssignmentsCard.qml
@@ -69,7 +81,16 @@ qt_add_qml_module(plasmazones-settings
         qml/ZoneSelectorSection.qml
         qml/EasingPreview.qml
         qml/EasingSettings.qml
+        qml/SettingsCard.qml
         qml/OsdCard.qml
+        qml/ShortcutCaptureField.qml
+        qml/ModifierComboBox.qml
+        qml/SettingsSlider.qml
+        qml/SettingsSpinBox.qml
+        qml/SettingsToggleRow.qml
+        qml/SettingsSwitch.qml
+        qml/SettingsButtonGroup.qml
+        qml/ColorSwatchRow.qml
     NO_PLUGIN
 )
 

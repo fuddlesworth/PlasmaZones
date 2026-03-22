@@ -27,6 +27,8 @@ ColumnLayout {
     required property QtObject constants
     // Whether the parent tab is currently visible (for conditional tooltips)
     property bool isCurrentTab: false
+    // Whether to show the internal MonitorSelectorSection (hide when parent provides one)
+    property bool showMonitorSelector: true
     // Screen aspect ratio for preview calculations (with safety check)
     property real screenAspectRatio: 16 / 9
     readonly property real safeAspectRatio: screenAspectRatio > 0 ? screenAspectRatio : (16 / 9)
@@ -55,6 +57,10 @@ ColumnLayout {
         return settingValue("PreviewHeight", appSettings.zoneSelectorPreviewHeight);
     }
     readonly property int effectiveTriggerDistance: settingValue("TriggerDistance", appSettings.zoneSelectorTriggerDistance)
+
+    function resetOverrides() {
+        psHelper.clearOverrides();
+    }
 
     function settingValue(key, globalValue) {
         return psHelper.settingValue(key, globalValue);
@@ -89,13 +95,13 @@ ColumnLayout {
         text: i18n("Enable zone selector popup")
         checked: appSettings.zoneSelectorEnabled
         onToggled: appSettings.zoneSelectorEnabled = checked
-        font.bold: true
+        font.weight: Font.DemiBold
     }
 
     MonitorSelectorSection {
         Layout.fillWidth: true
+        visible: root.showMonitorSelector
         appSettings: root.controller
-        featureEnabled: root.appSettings.zoneSelectorEnabled
         selectedScreenName: root.selectedScreenName
         hasOverrides: root.hasOverrides
         onSelectedScreenNameChanged: root.selectedScreenName = selectedScreenName
@@ -107,17 +113,13 @@ ColumnLayout {
         Layout.fillWidth: true
         implicitHeight: positionCard.implicitHeight
 
-        Kirigami.Card {
+        SettingsCard {
             id: positionCard
 
             anchors.fill: parent
             enabled: appSettings.zoneSelectorEnabled
-
-            header: Kirigami.Heading {
-                level: 3
-                text: i18n("Position & Trigger")
-                padding: Kirigami.Units.smallSpacing
-            }
+            headerText: i18n("Position & Trigger")
+            collapsible: true
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.largeSpacing
@@ -149,7 +151,7 @@ ColumnLayout {
                         anchors.topMargin: Kirigami.Units.smallSpacing
                         text: i18n("Choose where the popup appears on screen")
                         opacity: 0.7
-                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        font: Kirigami.Theme.smallFont
                     }
 
                 }
@@ -170,14 +172,14 @@ ColumnLayout {
                         Label {
                             Layout.alignment: Qt.AlignHCenter
                             text: i18n("Trigger Distance")
-                            font.bold: true
+                            font.weight: Font.DemiBold
                         }
 
                         Label {
                             Layout.alignment: Qt.AlignHCenter
                             text: i18n("How close to the screen edge before the popup appears")
                             opacity: 0.7
-                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                            font: Kirigami.Theme.smallFont
                         }
 
                         RowLayout {
@@ -228,17 +230,13 @@ ColumnLayout {
         Layout.fillWidth: true
         implicitHeight: layoutCard.implicitHeight
 
-        Kirigami.Card {
+        SettingsCard {
             id: layoutCard
 
             anchors.fill: parent
             enabled: appSettings.zoneSelectorEnabled
-
-            header: Kirigami.Heading {
-                level: 3
-                text: i18n("Layout Arrangement")
-                padding: Kirigami.Units.smallSpacing
-            }
+            headerText: i18n("Layout Arrangement")
+            collapsible: true
 
             contentItem: Kirigami.FormLayout {
                 WideComboBox {
@@ -263,28 +261,33 @@ ColumnLayout {
                     })
                 }
 
-                SpinBox {
-                    Kirigami.FormData.label: i18n("Grid columns:")
+                SettingsSpinBox {
+                    formLabel: i18n("Grid columns:")
                     from: 1
                     to: root.constants.zoneSelectorGridColumnsMax
                     value: root.effectiveGridColumns
                     visible: root.effectiveLayoutMode === 0
-                    onValueModified: root.writeSetting("GridColumns", value, function(v) {
-                        appSettings.zoneSelectorGridColumns = v;
-                    })
+                    unitText: ""
+                    onValueModified: (value) => {
+                        return root.writeSetting("GridColumns", value, function(v) {
+                            appSettings.zoneSelectorGridColumns = v;
+                        });
+                    }
                 }
 
-                SpinBox {
-                    Kirigami.FormData.label: i18n("Max visible rows:")
+                SettingsSpinBox {
+                    formLabel: i18n("Max visible rows:")
                     from: 1
                     to: 10
                     value: root.effectiveMaxRows
-                    visible: root.effectiveLayoutMode === 0 // Only applies to Grid mode
-                    onValueModified: root.writeSetting("MaxRows", value, function(v) {
-                        appSettings.zoneSelectorMaxRows = v;
-                    })
-                    ToolTip.visible: hovered && root.isCurrentTab
-                    ToolTip.text: i18n("Scrolling enabled when more rows exist")
+                    visible: root.effectiveLayoutMode === 0
+                    unitText: ""
+                    tooltipText: i18n("Scrolling enabled when more rows exist")
+                    onValueModified: (value) => {
+                        return root.writeSetting("MaxRows", value, function(v) {
+                            appSettings.zoneSelectorMaxRows = v;
+                        });
+                    }
                 }
 
             }
@@ -298,17 +301,13 @@ ColumnLayout {
         Layout.fillWidth: true
         implicitHeight: previewCard.implicitHeight
 
-        Kirigami.Card {
+        SettingsCard {
             id: previewCard
 
             anchors.fill: parent
             enabled: appSettings.zoneSelectorEnabled
-
-            header: Kirigami.Heading {
-                level: 3
-                text: i18n("Preview Size")
-                padding: Kirigami.Units.smallSpacing
-            }
+            headerText: i18n("Preview Size")
+            collapsible: true
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.largeSpacing
@@ -355,9 +354,9 @@ ColumnLayout {
                                             anchors.centerIn: parent
                                             text: (index + 1).toString()
                                             font.pixelSize: Math.min(parent.width, parent.height) * 0.3
-                                            font.bold: true
+                                            font.weight: Font.DemiBold
                                             color: Kirigami.Theme.textColor
-                                            opacity: 0.6
+                                            opacity: 0.5
                                             visible: parent.width >= 20
                                         }
 
@@ -571,8 +570,8 @@ ColumnLayout {
                     Layout.alignment: Qt.AlignHCenter
                     visible: root.effectiveSizeMode === 0
                     text: i18n("Preview size adjusts automatically based on your screen resolution.")
-                    opacity: 0.6
-                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                    opacity: 0.7
+                    font: Kirigami.Theme.smallFont
                     horizontalAlignment: Text.AlignHCenter
                 }
 

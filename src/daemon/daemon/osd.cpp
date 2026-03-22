@@ -345,24 +345,21 @@ void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
         || !m_screenManager) {
         return;
     }
-    QScreen* screen = m_windowTrackingAdaptor ? resolveShortcutScreen(m_windowTrackingAdaptor) : nullptr;
-    if (!screen && !m_screenManager->screens().isEmpty()) {
-        screen = m_screenManager->screens().first();
-    }
-    if (!screen) {
-        return;
-    }
-    const QString screenId = Utils::screenIdentifier(screen);
-    const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-    if (LayoutId::isAutotile(assignmentId)) {
-        const QString algoId = LayoutId::extractAlgorithmId(assignmentId);
-        auto* algo = AlgorithmRegistry::instance()->algorithm(algoId);
-        const QString displayName = algo ? algo->name() : algoId;
-        showAlgorithmOsdDeferred(algoId, displayName, screenId);
-    } else {
-        Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
-        if (layout) {
-            showLayoutOsdDeferred(layout->id(), screenId);
+    // Show OSD on ALL screens — each screen may have a different per-desktop
+    // assignment (autotile vs snapping, different layouts/algorithms).
+    for (QScreen* screen : m_screenManager->screens()) {
+        const QString screenId = Utils::screenIdentifier(screen);
+        const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+        if (LayoutId::isAutotile(assignmentId)) {
+            const QString algoId = LayoutId::extractAlgorithmId(assignmentId);
+            auto* algo = AlgorithmRegistry::instance()->algorithm(algoId);
+            const QString displayName = algo ? algo->name() : algoId;
+            showAlgorithmOsdDeferred(algoId, displayName, screenId);
+        } else {
+            Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
+            if (layout) {
+                showLayoutOsdDeferred(layout->id(), screenId);
+            }
         }
     }
 }

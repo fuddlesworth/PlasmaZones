@@ -20,13 +20,13 @@ QList<ScreenInfo> fetchScreens()
     // Get primary screen name from daemon
     QString primaryScreenName;
     QDBusMessage primaryReply =
-        KCMDBus::callDaemon(QString(DBus::Interface::Screen), QStringLiteral("getPrimaryScreen"));
+        DaemonDBus::callDaemon(QString(DBus::Interface::Screen), QStringLiteral("getPrimaryScreen"));
     if (primaryReply.type() == QDBusMessage::ReplyMessage && !primaryReply.arguments().isEmpty()) {
         primaryScreenName = primaryReply.arguments().first().toString();
     }
 
     // Get screens from daemon via D-Bus
-    QDBusMessage screenReply = KCMDBus::callDaemon(QString(DBus::Interface::Screen), QStringLiteral("getScreens"));
+    QDBusMessage screenReply = DaemonDBus::callDaemon(QString(DBus::Interface::Screen), QStringLiteral("getScreens"));
 
     if (screenReply.type() == QDBusMessage::ReplyMessage && !screenReply.arguments().isEmpty()) {
         const QStringList screenNames = screenReply.arguments().first().toStringList();
@@ -37,7 +37,7 @@ QList<ScreenInfo> fetchScreens()
             info.isPrimary = (screenName == primaryScreenName);
 
             QDBusMessage infoReply =
-                KCMDBus::callDaemon(QString(DBus::Interface::Screen), QStringLiteral("getScreenInfo"), {screenName});
+                DaemonDBus::callDaemon(QString(DBus::Interface::Screen), QStringLiteral("getScreenInfo"), {screenName});
 
             if (infoReply.type() == QDBusMessage::ReplyMessage && !infoReply.arguments().isEmpty()) {
                 QString infoJson = infoReply.arguments().first().toString();

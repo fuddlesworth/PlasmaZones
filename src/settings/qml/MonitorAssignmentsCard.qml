@@ -11,19 +11,15 @@ import org.kde.kirigami as Kirigami
  *
  * Refactored to use AssignmentRow component, eliminating duplicated patterns.
  */
-Kirigami.Card {
+SettingsCard {
     id: root
 
     required property var appSettings
-    required property QtObject constants
     // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     property int viewMode: 0
 
-    header: Kirigami.Heading {
-        level: 3
-        text: root.viewMode === 1 ? i18n("Monitor Tiling Assignments") : i18n("Monitor Assignments")
-        padding: Kirigami.Units.smallSpacing
-    }
+    headerText: root.viewMode === 1 ? i18n("Monitor Tiling Assignments") : i18n("Monitor Assignments")
+    collapsible: true
 
     contentItem: ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
@@ -105,7 +101,7 @@ Kirigami.Card {
                                     let displayInfo = parts.join(" ");
                                     return displayInfo ? name + " — " + displayInfo : name;
                                 }
-                                font.bold: true
+                                font.weight: Font.DemiBold
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
@@ -118,8 +114,8 @@ Kirigami.Card {
 
                                     return info;
                                 }
-                                opacity: root.constants.labelSecondaryOpacity
-                                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                opacity: 0.7
+                                font: Kirigami.Theme.smallFont
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
@@ -271,9 +267,9 @@ Kirigami.Card {
 
                         Label {
                             text: i18n("Per-Desktop Overrides")
-                            font.bold: true
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
-                            opacity: 0.8
+                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                            font.weight: Font.DemiBold
+                            opacity: 0.7
                         }
 
                         // Per-desktop assignments using AssignmentRow

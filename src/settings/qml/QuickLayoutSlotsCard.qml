@@ -11,11 +11,10 @@ import org.kde.kirigami as Kirigami
  *
  * Refactored to use cleaner structure with LayoutComboBox.
  */
-Kirigami.Card {
+SettingsCard {
     id: root
 
     required property var appSettings
-    required property QtObject constants
     // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     property int viewMode: 0
 
@@ -30,11 +29,8 @@ Kirigami.Card {
             appSettings.setQuickLayoutSlot(slotNumber, value);
     }
 
-    header: Kirigami.Heading {
-        level: 3
-        text: root.viewMode === 1 ? i18n("Tiling Quick Shortcuts") : i18n("Quick Layout Shortcuts")
-        padding: Kirigami.Units.smallSpacing
-    }
+    headerText: root.viewMode === 1 ? i18n("Tiling Quick Shortcuts") : i18n("Quick Layout Shortcuts")
+    collapsible: true
 
     contentItem: ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
@@ -44,7 +40,7 @@ Kirigami.Card {
             Layout.margins: Kirigami.Units.smallSpacing
             text: root.viewMode === 1 ? i18n("Assign tiling algorithms to keyboard shortcuts for instant switching.") : i18n("Assign layouts to keyboard shortcuts for instant switching.")
             wrapMode: Text.WordWrap
-            opacity: root.constants.labelSecondaryOpacity
+            opacity: 0.7
         }
 
         ListView {
@@ -54,7 +50,7 @@ Kirigami.Card {
             Layout.preferredHeight: contentHeight
             Layout.margins: Kirigami.Units.smallSpacing
             clip: true
-            model: root.constants.quickLayoutSlotCount
+            model: 9
             interactive: false
             Accessible.name: i18n("Quick layout shortcuts list")
             Accessible.role: Accessible.List
@@ -88,7 +84,7 @@ Kirigami.Card {
 
                         Label {
                             text: slotDelegate.shortcutText !== "" ? slotDelegate.shortcutText : i18n("No shortcut assigned")
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            font: Kirigami.Theme.smallFont
                             opacity: slotDelegate.shortcutText !== "" ? 0.7 : 0.4
                         }
 

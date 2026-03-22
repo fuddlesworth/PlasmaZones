@@ -7,9 +7,9 @@
 #include <QDBusMessage>
 #include <QDBusMetaType>
 #include <QDBusPendingCall>
-#include "../../src/core/constants.h"
+#include "../core/constants.h"
 
-namespace PlasmaZones::KCMDBus {
+namespace PlasmaZones::DaemonDBus {
 
 /// Unified D-Bus timeout for KCM <-> daemon calls (milliseconds)
 constexpr int TimeoutMs = 3000;
@@ -68,4 +68,4 @@ inline void clearPerScreenDaemonSettings(const QString& screenName, const QStrin
     QDBusConnection::sessionBus().asyncCall(msg);
 }
 
-} // namespace PlasmaZones::KCMDBus
+} // namespace PlasmaZones::DaemonDBus

@@ -11,11 +11,10 @@ import org.kde.kirigami as Kirigami
  *
  * Refactored to use AssignmentRow component, eliminating duplicated patterns.
  */
-Kirigami.Card {
+SettingsCard {
     id: root
 
     required property var appSettings
-    required property QtObject constants
     // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     property int viewMode: 0
 
@@ -45,12 +44,8 @@ Kirigami.Card {
     }
 
     visible: appSettings.activitiesAvailable
-
-    header: Kirigami.Heading {
-        level: 3
-        text: root.viewMode === 1 ? i18n("Activity Tiling Assignments") : i18n("Activity Assignments")
-        padding: Kirigami.Units.smallSpacing
-    }
+    headerText: root.viewMode === 1 ? i18n("Activity Tiling Assignments") : i18n("Activity Assignments")
+    collapsible: true
 
     contentItem: ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
@@ -60,7 +55,7 @@ Kirigami.Card {
             Layout.margins: Kirigami.Units.smallSpacing
             text: root.viewMode === 1 ? i18n("Assign tiling algorithms to KDE Activities. Algorithm changes automatically when you switch activities.") : i18n("Assign layouts to KDE Activities. Layout changes automatically when you switch activities.")
             wrapMode: Text.WordWrap
-            opacity: root.constants.labelSecondaryOpacity
+            opacity: 0.7
         }
 
         ListView {
@@ -112,7 +107,7 @@ Kirigami.Card {
                         Label {
                             Layout.fillWidth: true
                             text: activityDelegate.activityName
-                            font.bold: activityDelegate.activityId === root.appSettings.currentActivity
+                            font.weight: activityDelegate.activityId === root.appSettings.currentActivity ? Font.DemiBold : Font.Normal
                             elide: Text.ElideRight
                         }
 

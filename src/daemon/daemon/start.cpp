@@ -229,7 +229,14 @@ void Daemon::connectShortcutSignals()
     // get stale cursor data. resolveShortcutScreen() handles both by falling back to
     // the screen reported by the KWin effect's windowActivated D-Bus call.
     connect(m_shortcutManager.get(), &ShortcutManager::openSettingsRequested, this, []() {
-        QProcess::startDetached(QStringLiteral("plasmazones-settings"), {});
+        // Launch in its own systemd scope so stopping the daemon service
+        // doesn't kill the settings app (they'd share a cgroup otherwise).
+        if (!QProcess::startDetached(
+                QStringLiteral("systemd-run"),
+                {QStringLiteral("--user"), QStringLiteral("--scope"), QStringLiteral("plasmazones-settings")})) {
+            // Fallback if systemd-run is unavailable
+            QProcess::startDetached(QStringLiteral("plasmazones-settings"), {});
+        }
     });
     connect(m_shortcutManager.get(), &ShortcutManager::openEditorRequested, this, [this]() {
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);

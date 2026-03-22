@@ -10,6 +10,7 @@ Flickable {
     id: root
 
     contentHeight: content.implicitHeight
+    clip: true
 
     WindowPickerDialog {
         id: windowPickerDialog
@@ -51,16 +52,12 @@ Flickable {
             Layout.fillWidth: true
             implicitHeight: filteringCard.implicitHeight
 
-            Kirigami.Card {
+            SettingsCard {
                 id: filteringCard
 
                 anchors.fill: parent
-
-                header: Kirigami.Heading {
-                    text: i18n("Window Filtering")
-                    level: 3
-                    padding: Kirigami.Units.smallSpacing
-                }
+                headerText: i18n("Window Filtering")
+                collapsible: true
 
                 contentItem: Kirigami.FormLayout {
                     CheckBox {

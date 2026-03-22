@@ -31,7 +31,6 @@ ColumnLayout {
     MonitorSelectorSection {
         Layout.fillWidth: true
         appSettings: selectorRoot.controller
-        featureEnabled: true
         selectedScreenName: selectorRoot.constants.selectedSnappingScreenName
         hasOverrides: selectorRoot.constants.hasSnappingOverrides
         onSelectedScreenNameChanged: selectorRoot.constants.selectedSnappingScreenName = selectedScreenName
@@ -45,37 +44,24 @@ ColumnLayout {
         Layout.fillWidth: true
         implicitHeight: gapsCard.implicitHeight
 
-        Kirigami.Card {
+        SettingsCard {
             id: gapsCard
 
             anchors.fill: parent
-            enabled: selectorRoot.appSettings.snappingEnabled
-
-            header: Kirigami.Heading {
-                level: 3
-                text: i18n("Gaps")
-                padding: Kirigami.Units.smallSpacing
-            }
+            headerText: i18n("Gaps")
+            collapsible: true
 
             contentItem: Kirigami.FormLayout {
-                RowLayout {
-                    Kirigami.FormData.label: i18n("Zone padding:")
-                    spacing: Kirigami.Units.smallSpacing
-
-                    SpinBox {
-                        from: 0
-                        to: selectorRoot.constants.paddingMax
-                        value: selectorRoot.constants.snappingSettingValue("ZonePadding", selectorRoot.appSettings.zonePadding)
-                        onValueModified: selectorRoot.constants.writeSnappingSetting("ZonePadding", value, function(v) {
+                SettingsSpinBox {
+                    formLabel: i18n("Zone padding:")
+                    from: 0
+                    to: selectorRoot.constants.paddingMax
+                    value: selectorRoot.constants.snappingSettingValue("ZonePadding", selectorRoot.appSettings.zonePadding)
+                    onValueModified: (value) => {
+                        return selectorRoot.constants.writeSnappingSetting("ZonePadding", value, function(v) {
                             selectorRoot.appSettings.zonePadding = v;
-                        })
-                        Accessible.name: i18n("Zone padding")
+                        });
                     }
-
-                    Label {
-                        text: i18n("px")
-                    }
-
                 }
 
                 RowLayout {
