@@ -662,8 +662,8 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
                     const vec2 sDir1 = vec2(-0.5, 0.86602540378);            // cos(2pi/3), sin(2pi/3)
                     const vec2 sDir2 = vec2(-0.5, -0.86602540378);           // cos(4pi/3), sin(4pi/3)
                     vec2 baseUV = iLogoUV * noiseScale * 1.5 + iSeed * 10.0;
-                    vec2 tOff = time * speed * 2.0;
-                    float timeOff = time * 0.15;
+                    float tOff = time * speed * 2.0;
+                    vec2 timeOff = vec2(time * 0.15);
                     float sFlow0 = simplex2D((baseUV + sDir0 * tOff) * 2.0 + timeOff) * 0.5 + 0.5;
                     float sFlow1 = simplex2D((baseUV + sDir1 * tOff) * 2.0 + timeOff) * 0.5 + 0.5;
                     float sFlow2 = simplex2D((baseUV + sDir2 * tOff) * 2.0 + timeOff) * 0.5 + 0.5;
