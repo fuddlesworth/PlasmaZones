@@ -590,10 +590,12 @@ ApplicationWindow {
                             text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
                             opacity: 0.7
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignVCenter
                             visible: !window.sidebarCompact
                         }
 
                         SettingsSwitch {
+                            Layout.alignment: Qt.AlignVCenter
                             checked: settingsController.daemonRunning
                             accessibleName: i18n("Toggle daemon")
                             onToggled: {

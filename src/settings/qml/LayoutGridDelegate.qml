@@ -71,11 +71,27 @@ Item {
         id: cardBackground
 
         anchors.fill: parent
-        anchors.margins: Kirigami.Units.smallSpacing / 2
-        radius: Kirigami.Units.smallSpacing
-        color: root.isSelected ? Kirigami.Theme.highlightColor : root.isHovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2) : "transparent"
-        border.color: root.isSelected ? Kirigami.Theme.highlightColor : root.isHovered ? Kirigami.Theme.disabledTextColor : "transparent"
-        border.width: 1
+        anchors.margins: Kirigami.Units.smallSpacing
+        radius: Kirigami.Units.smallSpacing * 1.5
+        color: {
+            if (root.isSelected)
+                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15);
+
+            if (root.isHovered)
+                return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06);
+
+            return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03);
+        }
+        border.width: Math.round(Kirigami.Units.devicePixelRatio)
+        border.color: {
+            if (root.isSelected)
+                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5);
+
+            if (root.isHovered)
+                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3);
+
+            return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08);
+        }
 
         ColumnLayout {
             anchors.fill: parent
@@ -254,6 +270,20 @@ Item {
                     text: i18n("%1 zones", root.modelData.zoneCount || 0)
                 }
 
+            }
+
+        }
+
+        Behavior on color {
+            ColorAnimation {
+                duration: 150
+            }
+
+        }
+
+        Behavior on border.color {
+            ColorAnimation {
+                duration: 150
             }
 
         }
