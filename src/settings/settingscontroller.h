@@ -289,12 +289,14 @@ public:
 
     // ── Screen state query ─────────────────────────────────────────────────
     Q_INVOKABLE QVariantList getScreenStates() const;
-    Q_INVOKABLE bool hasStagedAssignment(const QString& screenName) const;
-    Q_INVOKABLE QVariantMap getStagedAssignment(const QString& screenName) const;
+    Q_INVOKABLE bool hasStagedAssignment(const QString& screenName, int virtualDesktop = 0,
+                                         const QString& activityId = QString()) const;
+    Q_INVOKABLE QVariantMap getStagedAssignment(const QString& screenName, int virtualDesktop = 0,
+                                                const QString& activityId = QString()) const;
 
     // ── Atomic mode+layout staging (overview page) ──────────────────────────
-    Q_INVOKABLE void stageAssignmentEntry(const QString& screenName, int mode, const QString& snappingLayoutId,
-                                          const QString& tilingAlgorithmId);
+    Q_INVOKABLE void stageAssignmentEntry(const QString& screenName, int virtualDesktop, const QString& activityId,
+                                          int mode, const QString& snappingLayoutId, const QString& tilingAlgorithmId);
 
     // ── Algorithm helpers ────────────────────────────────────────────────────
     Q_INVOKABLE QVariantList availableAlgorithms() const;

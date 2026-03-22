@@ -248,6 +248,8 @@ QString LayoutAdaptor::getScreenStates()
 
         QJsonObject obj;
         obj[QLatin1String("screenName")] = screenId;
+        obj[QLatin1String("virtualDesktop")] = desktop;
+        obj[QLatin1String("activity")] = activity;
         obj[QLatin1String("mode")] = static_cast<int>(entry.mode);
 
         // Snapping layout — use resolved layout (includes default fallback)

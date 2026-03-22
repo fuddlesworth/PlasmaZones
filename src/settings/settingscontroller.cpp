@@ -132,11 +132,18 @@ void SettingsController::save()
     // Save editor settings
     saveEditorSettings();
 
-    // Flush staged assignment changes to daemon
-    flushStagedAssignments();
-
-    // Notify daemon to reload settings (synchronous to avoid race)
+    // Notify daemon to reload KConfig settings FIRST (before assignments)
     DaemonDBus::notifyReload();
+
+    // Flush staged assignment changes to daemon (same batch protocol as KCM).
+    // This must happen AFTER notifyReload so the reload doesn't overwrite
+    // the assignment changes.
+    if (!m_stagedAssignments.isEmpty()) {
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setSaveBatchMode"), {true});
+        flushStagedAssignments();
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("applyAssignmentChanges"));
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setSaveBatchMode"), {false});
+    }
 
     // Safe to clear immediately: notifyReload() is synchronous, so the daemon
     // has already processed the reload and emitted settingsChanged before we
@@ -420,7 +427,9 @@ void SettingsController::flushStagedAssignments()
                                        {s.screenId});
         }
 
-        // Atomic mode+layout via setAssignmentEntry (overview page path)
+        // Explicit mode staging (overview page) — uses setAssignmentEntry for the
+        // exact (screen, desktop, activity) context. This is the only D-Bus method
+        // that targets a full context triple, matching the KCM batch save path.
         if (s.stagedMode.has_value()) {
             const int mode = *s.stagedMode;
             const QString snapping = s.snappingLayoutId.value_or(QString());
@@ -457,22 +466,15 @@ void SettingsController::flushStagedAssignments()
             const QString algoId = LayoutId::isAutotile(*s.tilingAlgorithmId)
                 ? LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
                 : *s.tilingAlgorithmId;
-            if (isActivity)
-                DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
-                                       {s.screenId, 0, s.activityId, 1, QString(), algoId});
-            else
-                DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
-                                       {s.screenId, s.virtualDesktop, QString(), 1, QString(), algoId});
+            DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
+                                   {s.screenId, s.virtualDesktop, s.activityId, 1, QString(), algoId});
         }
 
-        // Tiling-only clear (preserve mode, clear algorithm)
+        // Tiling-only clear — clearing the algorithm reverts to snapping mode (mode=0).
+        // The daemon clamps mode via qBound(0, mode, 1).
         if (s.tilingAlgorithmId.has_value() && s.tilingAlgorithmId->isEmpty() && !s.fullCleared) {
-            if (isActivity)
-                DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
-                                       {s.screenId, 0, s.activityId, -1, QString(), QString()});
-            else
-                DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
-                                       {s.screenId, s.virtualDesktop, QString(), -1, QString(), QString()});
+            DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
+                                   {s.screenId, s.virtualDesktop, s.activityId, 0, QString(), QString()});
         }
     }
     m_stagedAssignments.clear();
@@ -528,8 +530,9 @@ void SettingsController::stageSnapping(const QString& screen, int desktop, const
 {
     auto& e = stagedEntry(screen, desktop, activity);
     e.fullCleared = false;
-    e.stagedMode = std::nullopt; // Per-field path — mode inferred from fields
+    e.stagedMode = std::nullopt;
     e.snappingLayoutId = layoutId;
+    e.tilingAlgorithmId = std::nullopt; // Clear opposite to prevent mode conflict on flush
     setNeedsSave(true);
 }
 
@@ -538,8 +541,9 @@ void SettingsController::stageTiling(const QString& screen, int desktop, const Q
 {
     auto& e = stagedEntry(screen, desktop, activity);
     e.fullCleared = false;
-    e.stagedMode = std::nullopt; // Per-field path — mode inferred from fields
+    e.stagedMode = std::nullopt;
     e.tilingAlgorithmId = layoutId;
+    e.snappingLayoutId = std::nullopt; // Clear opposite to prevent mode conflict on flush
     setNeedsSave(true);
 }
 
@@ -634,10 +638,11 @@ void SettingsController::clearTilingScreenActivityAssignment(const QString& scre
 
 // ── Atomic mode+layout staging (overview page) ─────────────────────────────
 
-void SettingsController::stageAssignmentEntry(const QString& screenName, int mode, const QString& snappingLayoutId,
+void SettingsController::stageAssignmentEntry(const QString& screenName, int virtualDesktop, const QString& activityId,
+                                              int mode, const QString& snappingLayoutId,
                                               const QString& tilingAlgorithmId)
 {
-    auto& e = stagedEntry(screenName, 0, QString());
+    auto& e = stagedEntry(screenName, virtualDesktop, activityId);
     e.fullCleared = false;
     e.stagedMode = mode;
     e.snappingLayoutId = snappingLayoutId.isEmpty() ? std::nullopt : std::optional<QString>(snappingLayoutId);
@@ -1589,14 +1594,16 @@ QVariantList SettingsController::getScreenStates() const
     return result;
 }
 
-bool SettingsController::hasStagedAssignment(const QString& screenName) const
+bool SettingsController::hasStagedAssignment(const QString& screenName, int virtualDesktop,
+                                             const QString& activityId) const
 {
-    return stagedEntryConst(screenName, 0, QString()) != nullptr;
+    return stagedEntryConst(screenName, virtualDesktop, activityId) != nullptr;
 }
 
-QVariantMap SettingsController::getStagedAssignment(const QString& screenName) const
+QVariantMap SettingsController::getStagedAssignment(const QString& screenName, int virtualDesktop,
+                                                    const QString& activityId) const
 {
-    auto* s = stagedEntryConst(screenName, 0, QString());
+    auto* s = stagedEntryConst(screenName, virtualDesktop, activityId);
     if (!s)
         return {};
     QVariantMap map;
@@ -1617,8 +1624,6 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName) c
         // Infer mode from which fields are staged (per-field path)
         if (s->tilingAlgorithmId.has_value() && !s->tilingAlgorithmId->isEmpty())
             map[QStringLiteral("mode")] = 1;
-        else if (s->snappingLayoutId.has_value() && !s->tilingAlgorithmId.has_value())
-            map[QStringLiteral("mode")] = 0;
         else if (s->snappingLayoutId.has_value() && !s->snappingLayoutId->isEmpty())
             map[QStringLiteral("mode")] = 0;
     }

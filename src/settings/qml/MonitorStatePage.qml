@@ -66,21 +66,35 @@ Flickable {
         return layout ? (layout.zones || []) : [];
     }
 
-    // Stage the current local state for the selected screen (flushed on Apply)
+    // Stage the current local state for the selected screen (flushed on Apply).
+    // Uses setAssignmentEntry targeting the exact (screen, desktop, activity)
+    // context from getScreenStates — same D-Bus method the KCM batch save uses.
     function _stageCurrentState() {
         if (!_selectedScreen)
             return ;
 
-        var snapping = stateView.localMode === 0 ? stateView.localLayoutId : "";
-        var tiling = stateView.localMode === 1 ? stateView.localAlgorithmId : "";
-        // Only stage when there's a meaningful value for the active mode
-        if (stateView.localMode === 0 && !snapping)
+        var state = stateView.screenState;
+        if (!state)
             return ;
 
-        if (stateView.localMode === 1 && !tiling)
-            return ;
+        var desktop = state.virtualDesktop || 0;
+        var activity = state.activity || "";
+        var snapping = "";
+        var tiling = "";
+        if (stateView.localMode === 1) {
+            var algoId = stateView.localAlgorithmId || (state ? state.algorithmId : "");
+            if (!algoId)
+                return ;
 
-        settingsController.stageAssignmentEntry(_selectedScreen, stateView.localMode, snapping, tiling ? ("autotile:" + tiling) : "");
+            tiling = "autotile:" + algoId;
+        } else {
+            var layoutId = stateView.localLayoutId || (state ? state.layoutId : "");
+            if (!layoutId)
+                return ;
+
+            snapping = layoutId;
+        }
+        settingsController.stageAssignmentEntry(_selectedScreen, desktop, activity, stateView.localMode, snapping, tiling);
     }
 
     contentHeight: content.implicitHeight
@@ -177,7 +191,9 @@ Flickable {
                 if (!screenState)
                     return ;
 
-                var staged = settingsController.getStagedAssignment(root._selectedScreen);
+                var desktop = screenState.virtualDesktop || 0;
+                var activity = screenState.activity || "";
+                var staged = settingsController.getStagedAssignment(root._selectedScreen, desktop, activity);
                 if (Object.keys(staged).length > 0) {
                     // Restore from staged state
                     localMode = staged.mode !== undefined ? staged.mode : (screenState.mode || 0);
