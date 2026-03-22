@@ -75,31 +75,42 @@ Item {
 
         width: root.width
         height: headerArea.height + contentClip.height
-        radius: Kirigami.Units.smallSpacing
-        color: Kirigami.Theme.backgroundColor
-        border.width: 1
+        radius: Kirigami.Units.smallSpacing * 1.5
+        // Slightly elevated from page background
+        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
+        border.width: Math.round(Kirigami.Units.devicePixelRatio)
         border.color: {
             if (!root.enabled)
-                return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06);
+                return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04);
 
             if (hoverHandler.hovered)
                 return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4);
 
-            return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1);
+            return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08);
         }
 
         // ── Header ─────────────────────────────────────────────────────
-        Item {
+        Rectangle {
             id: headerArea
 
             width: parent.width
             height: headerLoader.height
             visible: root.headerText.length > 0 || root.header !== null
+            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
+            radius: cardBg.radius
             // Reparent custom header
             onVisibleChanged: {
                 if (root.header !== null && visible)
                     root.header.parent = headerLoader;
 
+            }
+
+            // Square off the bottom corners since content is below
+            Rectangle {
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: parent.radius
+                color: parent.color
             }
 
             // Click to collapse/expand
