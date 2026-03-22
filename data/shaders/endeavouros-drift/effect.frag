@@ -187,6 +187,14 @@ const vec2 EOS_PURP_POLY[37] = vec2[37](
 const vec2 EOS_AABB_LO = vec2(0.013, 0.094);
 const vec2 EOS_AABB_HI = vec2(0.987, 0.906);
 
+// Per-sail tight AABBs (computed from vertex data + 0.005 padding)
+const vec2 BLUE_AABB_LO = vec2(0.066, 0.090);
+const vec2 BLUE_AABB_HI = vec2(0.991, 0.911);
+const vec2 RED_AABB_LO  = vec2(0.009, 0.089);
+const vec2 RED_AABB_HI  = vec2(0.589, 0.792);
+const vec2 PURP_AABB_LO = vec2(0.136, 0.090);
+const vec2 PURP_AABB_HI = vec2(0.885, 0.830);
+
 // -- Polygon SDF core (winding-number approach) ---------------------------
 // Shared loop body: returns vec2(signedDist, edgeDist).
 // We specialize per array size to satisfy GLSL 450 type requirements.
@@ -204,28 +212,28 @@ const vec2 EOS_AABB_HI = vec2(0.987, 0.906);
     } \
     float edgeDist = sqrt(d);
 
-// SDF with AABB early-out returning vec2(signedDist, edgeDist)
+// SDF with per-sail tight AABB early-out returning vec2(signedDist, edgeDist)
 vec2 sdBlueWithEdge(vec2 p) {
-    vec2 dLo = EOS_AABB_LO - p; vec2 dHi = p - EOS_AABB_HI;
+    vec2 dLo = BLUE_AABB_LO - p; vec2 dHi = p - BLUE_AABB_HI;
     vec2 outside = max(max(dLo, dHi), vec2(0.0));
     float boxDist2 = dot(outside, outside);
-    if (boxDist2 > 0.04) { float bd = sqrt(boxDist2); return vec2(bd, bd); }
+    if (boxDist2 > 0.0004) { float bd = sqrt(boxDist2); return vec2(bd, bd); }
     POLY_SDF_BODY(EOS_BLUE_POLY, EOS_BLUE_N)
     return vec2(s * edgeDist, edgeDist);
 }
 vec2 sdRedWithEdge(vec2 p) {
-    vec2 dLo = EOS_AABB_LO - p; vec2 dHi = p - EOS_AABB_HI;
+    vec2 dLo = RED_AABB_LO - p; vec2 dHi = p - RED_AABB_HI;
     vec2 outside = max(max(dLo, dHi), vec2(0.0));
     float boxDist2 = dot(outside, outside);
-    if (boxDist2 > 0.04) { float bd = sqrt(boxDist2); return vec2(bd, bd); }
+    if (boxDist2 > 0.0004) { float bd = sqrt(boxDist2); return vec2(bd, bd); }
     POLY_SDF_BODY(EOS_RED_POLY, EOS_RED_N)
     return vec2(s * edgeDist, edgeDist);
 }
 vec2 sdPurpWithEdge(vec2 p) {
-    vec2 dLo = EOS_AABB_LO - p; vec2 dHi = p - EOS_AABB_HI;
+    vec2 dLo = PURP_AABB_LO - p; vec2 dHi = p - PURP_AABB_HI;
     vec2 outside = max(max(dLo, dHi), vec2(0.0));
     float boxDist2 = dot(outside, outside);
-    if (boxDist2 > 0.04) { float bd = sqrt(boxDist2); return vec2(bd, bd); }
+    if (boxDist2 > 0.0004) { float bd = sqrt(boxDist2); return vec2(bd, bd); }
     POLY_SDF_BODY(EOS_PURP_POLY, EOS_PURP_N)
     return vec2(s * edgeDist, edgeDist);
 }
@@ -243,6 +251,8 @@ struct SailHit {
 };
 
 // Evaluate all 3 sails at point p, return the topmost hit (painter's order)
+// Per-sail tight AABBs in each sd*WithEdge skip the expensive polygon loop
+// for pixels far from that sail's bounding box.
 SailHit evalEosSails(vec2 p, vec3 colBlue, vec3 colCoral, vec3 colPurple) {
     // Painter's order: coral first (back), purple second, blue on top (front)
     vec2 redResult = sdRedWithEdge(p);
@@ -255,10 +265,9 @@ SailHit evalEosSails(vec2 p, vec3 colBlue, vec3 colCoral, vec3 colPurple) {
     hit.edgeDist = min(redResult.y, min(purpResult.y, blueResult.y));
     hit.sailIndex = -1;
     hit.sailColor = vec3(0.0);
-    hit.overlapCount = 0;
-    if (redResult.x < 0.0) hit.overlapCount++;
-    if (purpResult.x < 0.0) hit.overlapCount++;
-    if (blueResult.x < 0.0) hit.overlapCount++;
+
+    // Branchless overlap count
+    hit.overlapCount = int(step(0.0, -redResult.x) + step(0.0, -purpResult.x) + step(0.0, -blueResult.x));
 
     // Topmost layer wins (blue on top)
     if (redResult.x < 0.0) {
@@ -355,11 +364,21 @@ vec3 constellationNetwork(vec2 uv, float time, float bassEnv, float midsEnv, flo
         col += dotColors[i] * (dotMask + dotHalo) * dotBright * particleStr;
 
         // Connection lines to nearby dots
+        // Pre-compute: if fragment is far from this dot, most connections won't
+        // produce visible line contribution. Use cheap distance-to-midpoint check.
+        float distToDot_i = length(uv - dPos);
         for (int j = i + 1; j < CONSTELLATION_COUNT; j++) {
             vec2 dPos2 = dots[j];
             float dotDist = length(dPos - dPos2);
 
             if (dotDist < connectionThreshold) {
+                // Skip sdSegment if fragment is far from both endpoints
+                // (the segment can't be closer than max(distToA, distToB) - segLen)
+                float distToDot_j = length(uv - dPos2);
+                float minApproach = min(distToDot_i, distToDot_j);
+                // lineWidth is 0.003, use generous cutoff of 0.04 (includes halo)
+                if (minApproach > dotDist + 0.04) continue;
+
                 float lineDist = sdSegment(uv, dPos, dPos2);
                 float lineWidth = 0.003;
                 float lineMask = smoothstep(lineWidth, lineWidth * 0.1, lineDist);
@@ -394,7 +413,8 @@ vec3 constellationNetwork(vec2 uv, float time, float bassEnv, float midsEnv, flo
         }
     }
 
-    // ── Treble flash: random dots burst bright on treble (branchless) ──
+    // ── Treble flash: random dots burst bright on treble ──
+    // Branch is worthwhile here: skips 24 exp+length when treble is silent
     if (trebleEnv > 0.05) {
         for (int i = 0; i < CONSTELLATION_COUNT; i++) {
             float fi = float(i);
@@ -520,8 +540,8 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
         // Mids: palette warmth shift — purple-heavy music shifts toward warm coral
         col = mix(col, col * mix(vec3(1.0), palAccent * 1.5, 0.15), midsEnv * 0.4);
 
-        // Treble: sharp bright flicker across the background
-        if (trebleEnv > 0.1) {
+        // Treble: sharp bright flicker across the background (branchless)
+        {
             vec2 flickerGrid = floor(globalUV * 30.0 + time * 8.0);
             float flicker = step(0.92, hash21(flickerGrid)) * trebleEnv;
             col += palGlow * flicker * 0.4;
@@ -610,20 +630,21 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
                 float depth = clamp(-fDist / 0.12, 0.0, 1.0);
 
                 // Per-sail phase offset for bass pulse (120° apart)
-                float sailPhaseOffset = float(sail.sailIndex) * TAU / 3.0;
+                // Hoist trig: sailAngle == sailPhaseOffset, compute cos/sin once
+                float sailAngle = float(sail.sailIndex) * TAU / 3.0;
                 float sailPulse = 1.0 + bassEnv * logoPulse * 0.6
-                                  * (0.5 + 0.5 * sin(time * 2.0 + sailPhaseOffset + iPhase));
+                                  * (0.5 + 0.5 * sin(time * 2.0 + sailAngle + iPhase));
 
                 // --- Layer 1: Per-sail directional flow ---
                 // Each sail's noise flows in a unique direction (0°, 120°, 240°)
-                float sailAngle = float(sail.sailIndex) * TAU / 3.0;
                 vec2 sailFlowDir = vec2(cos(sailAngle), sin(sailAngle));
                 vec2 flowUV = iLogoUV * noiseScale * 1.5 + iSeed * 10.0;
                 flowUV += sailFlowDir * time * speed * 2.0;
 
-                // Domain warp for organic motion
-                float warp1 = simplex2D(flowUV * 0.6 + time * 0.1) * 0.4;
-                float warp2 = simplex2D(flowUV * 0.6 + time * 0.1 + vec2(50.0)) * 0.4;
+                // Domain warp for organic motion (cache shared subexpression)
+                vec2 warpBase = flowUV * 0.6 + time * 0.1;
+                float warp1 = simplex2D(warpBase) * 0.4;
+                float warp2 = simplex2D(warpBase + vec2(50.0)) * 0.4;
                 flowUV += vec2(warp1, warp2) * 0.5;
 
                 float flow = simplexFBM(flowUV, max(octaves - 1, 3));
@@ -632,34 +653,30 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
                 vec3 interiorCol = mix(sail.sailColor * 0.4, sail.sailColor, flow) * brightness * 1.4;
 
                 // --- Layer 2: Overlap interference pattern ---
-                // Where 2+ sails share space, blend their directional flows
-                {
-                    int overlapN = sail.overlapCount;
-                    if (overlapN >= 2) {
-                        // Compute the OTHER sails' flows too
-                        vec3 blendCol = vec3(0.0);
-                        float interference = 0.0;
-                        for (int si = 0; si < 3; si++) {
-                            float sAngle = float(si) * TAU / 3.0;
-                            vec2 sDir = vec2(cos(sAngle), sin(sAngle));
-                            vec2 sUV = iLogoUV * noiseScale * 1.5 + iSeed * 10.0 + sDir * time * speed * 2.0;
-                            float sFlow = simplex2D(sUV * 2.0 + time * 0.15) * 0.5 + 0.5;
-                            vec3 sCol = si == 0 ? palPrimary : si == 1 ? palAccent : palSecondary;
-                            blendCol += sCol * sFlow;
-                            interference += sFlow;
-                        }
-                        blendCol /= 3.0;
-                        // Interference creates bright bands where flows align
-                        float interfereStr = abs(interference / 3.0 - 0.5) * 2.0;
-                        interfereStr = pow(interfereStr, 2.0);
+                // Where 2+ sails share space, blend their directional flows.
+                // Unrolled loop with constant trig; branch avoids 3 simplex calls
+                // for the majority of pixels that are in only 1 sail.
+                if (sail.overlapCount >= 2) {
+                    // Constant sail directions (120 deg apart) -- no trig needed
+                    const vec2 sDir0 = vec2(1.0, 0.0);                       // cos(0), sin(0)
+                    const vec2 sDir1 = vec2(-0.5, 0.86602540378);            // cos(2pi/3), sin(2pi/3)
+                    const vec2 sDir2 = vec2(-0.5, -0.86602540378);           // cos(4pi/3), sin(4pi/3)
+                    vec2 baseUV = iLogoUV * noiseScale * 1.5 + iSeed * 10.0;
+                    vec2 tOff = time * speed * 2.0;
+                    float timeOff = time * 0.15;
+                    float sFlow0 = simplex2D((baseUV + sDir0 * tOff) * 2.0 + timeOff) * 0.5 + 0.5;
+                    float sFlow1 = simplex2D((baseUV + sDir1 * tOff) * 2.0 + timeOff) * 0.5 + 0.5;
+                    float sFlow2 = simplex2D((baseUV + sDir2 * tOff) * 2.0 + timeOff) * 0.5 + 0.5;
+                    vec3 blendCol = (palPrimary * sFlow0 + palAccent * sFlow1 + palSecondary * sFlow2) / 3.0;
+                    float interference = (sFlow0 + sFlow1 + sFlow2) / 3.0;
+                    float interfereStr = abs(interference - 0.5) * 2.0;
+                    interfereStr *= interfereStr;
 
-                        float overlapStr = float(overlapN - 1) * 0.5;
-                        overlapStr *= (1.0 + trebleEnv * 1.0 + midsEnv * 0.5);
+                    float overlapStr = float(sail.overlapCount - 1) * 0.5;
+                    overlapStr *= (1.0 + trebleEnv + midsEnv * 0.5);
 
-                        // Blend interference pattern into interior
-                        interiorCol = mix(interiorCol, blendCol * brightness * 1.5, overlapStr * 0.5);
-                        interiorCol += palGlow * interfereStr * overlapStr * 0.4 * brightness;
-                    }
+                    interiorCol = mix(interiorCol, blendCol * brightness * 1.5, overlapStr * 0.5);
+                    interiorCol += palGlow * interfereStr * overlapStr * 0.4 * brightness;
                 }
 
                 // --- Layer 3: Summit convergence beacon ---
@@ -686,7 +703,8 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
                     float pulse = pow(max(sin(pulsePhase), 0.0), 3.0);
                     edgeGlow *= 0.3 + pulse * 0.7;
 
-                    if (trebleEnv > 0.01) {
+                    // Branchless treble edge spark (trebleEnv multiplier handles zero case)
+                    {
                         float edgeSpark = simplex2D(iLogoUV * 35.0 + time * 5.0 + iSeed * 20.0);
                         edgeSpark = smoothstep(0.5, 0.9, edgeSpark) * trebleEnv;
                         edgeGlow += edgeSpark * smoothstep(edgeWidth * 2.0, 0.0, edgeProximity);
@@ -701,8 +719,8 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
                 // Bass: sail flashes toward white on heavy hits (dramatic impact)
                 interiorCol = mix(interiorCol, interiorCol + sail.sailColor * 0.5, bassEnv * 0.5);
 
-                // Treble: bright crackling energy across interior
-                if (trebleEnv > 0.05) {
+                // Treble: bright crackling energy across interior (branchless)
+                {
                     float crackle = simplex2D(iLogoUV * 20.0 + time * 10.0 + iSeed * 5.0);
                     crackle = smoothstep(0.4, 0.9, crackle) * trebleEnv;
                     interiorCol += palGlow * crackle * 0.6;
