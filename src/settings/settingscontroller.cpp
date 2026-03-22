@@ -4,7 +4,6 @@
 #include "settingscontroller.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
-#include "../config/configbackend_qsettings.h"
 #include "dbusutils.h"
 
 #include "../autotile/AlgorithmRegistry.h"
@@ -76,9 +75,22 @@ SettingsController::SettingsController(QObject* parent)
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutDeleted"),
                                           this, SLOT(loadLayoutsAsync()));
+    // layoutChanged fires when a layout is modified (editor saves, zone changes, rename)
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                          QString(DBus::Interface::LayoutManager), QStringLiteral("layoutUpdated"),
+                                          QString(DBus::Interface::LayoutManager), QStringLiteral("layoutChanged"),
                                           this, SLOT(loadLayoutsAsync()));
+    // layoutListChanged fires when the layout list changes (editor, import, system layout reload)
+    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                                          QString(DBus::Interface::LayoutManager), QStringLiteral("layoutListChanged"),
+                                          this, SLOT(loadLayoutsAsync()));
+    // screenLayoutChanged(QString,QString,int) fires when assignments change (hotkeys, scripts, toggle)
+    QDBusConnection::sessionBus().connect(
+        QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
+        QStringLiteral("screenLayoutChanged"), this, SLOT(onScreenLayoutChanged(QString, QString, int)));
+    // quickLayoutSlotsChanged fires when quick layout slots are modified externally
+    QDBusConnection::sessionBus().connect(
+        QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
+        QStringLiteral("quickLayoutSlotsChanged"), this, SIGNAL(quickLayoutSlotsChanged()));
 
     // Connect virtual desktop / activity D-Bus signals for reactive updates
     QDBusConnection::sessionBus().connect(
@@ -94,11 +106,26 @@ SettingsController::SettingsController(QObject* parent)
                                           QString(DBus::Interface::LayoutManager),
                                           QStringLiteral("currentActivityChanged"), this, SLOT(onActivitiesChanged()));
 
-    // Create editor config backend
-    m_editorConfig = createDefaultConfigBackend();
+    // Connect editor settings signals from Settings to SettingsController for QML forwarding
+    connect(&m_settings, &Settings::editorDuplicateShortcutChanged, this,
+            &SettingsController::editorDuplicateShortcutChanged);
+    connect(&m_settings, &Settings::editorSplitHorizontalShortcutChanged, this,
+            &SettingsController::editorSplitHorizontalShortcutChanged);
+    connect(&m_settings, &Settings::editorSplitVerticalShortcutChanged, this,
+            &SettingsController::editorSplitVerticalShortcutChanged);
+    connect(&m_settings, &Settings::editorFillShortcutChanged, this, &SettingsController::editorFillShortcutChanged);
+    connect(&m_settings, &Settings::editorGridSnappingEnabledChanged, this,
+            &SettingsController::editorGridSnappingEnabledChanged);
+    connect(&m_settings, &Settings::editorEdgeSnappingEnabledChanged, this,
+            &SettingsController::editorEdgeSnappingEnabledChanged);
+    connect(&m_settings, &Settings::editorSnapIntervalXChanged, this, &SettingsController::editorSnapIntervalXChanged);
+    connect(&m_settings, &Settings::editorSnapIntervalYChanged, this, &SettingsController::editorSnapIntervalYChanged);
+    connect(&m_settings, &Settings::editorSnapOverrideModifierChanged, this,
+            &SettingsController::editorSnapOverrideModifierChanged);
+    connect(&m_settings, &Settings::fillOnDropEnabledChanged, this, &SettingsController::fillOnDropEnabledChanged);
+    connect(&m_settings, &Settings::fillOnDropModifierChanged, this, &SettingsController::fillOnDropModifierChanged);
 
     // Initial loads
-    loadEditorSettings();
     scheduleLayoutLoad();
     refreshVirtualDesktops();
     refreshActivities();
@@ -115,10 +142,11 @@ void SettingsController::setActivePage(const QString& page)
 void SettingsController::load()
 {
     m_settings.load();
-    loadEditorSettings();
     m_screenHelper.refreshScreens();
     scheduleLayoutLoad();
     m_stagedAssignments.clear();
+    m_stagedQuickSlots.clear();
+    m_stagedTilingQuickSlots.clear();
     setNeedsSave(false);
 }
 
@@ -126,14 +154,28 @@ void SettingsController::save()
 {
     m_saving = true;
 
-    // Save main settings
+    // Save main settings (includes editor settings)
     m_settings.save();
 
-    // Save editor settings
-    saveEditorSettings();
+    // Flush staged tiling quick layout slots to config BEFORE notifyReload
+    // so the daemon sees them when it reparses
+    if (!m_stagedTilingQuickSlots.isEmpty()) {
+        for (auto it = m_stagedTilingQuickSlots.constBegin(); it != m_stagedTilingQuickSlots.constEnd(); ++it) {
+            m_settings.writeTilingQuickLayoutSlot(it.key(), it.value());
+        }
+        m_settings.syncConfig();
+        m_stagedTilingQuickSlots.clear();
+    }
 
-    // Notify daemon to reload KConfig settings FIRST (before assignments)
+    // Notify daemon to reload KConfig settings (before D-Bus assignment mutations)
     DaemonDBus::notifyReload();
+
+    // Flush staged quick layout slots to daemon (D-Bus mutations, after reload)
+    for (auto it = m_stagedQuickSlots.constBegin(); it != m_stagedQuickSlots.constEnd(); ++it) {
+        DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setQuickLayoutSlot"),
+                               {it.key(), it.value()});
+    }
+    m_stagedQuickSlots.clear();
 
     // Flush staged assignment changes to daemon (same batch protocol as KCM).
     // This must happen AFTER notifyReload so the reload doesn't overwrite
@@ -157,10 +199,15 @@ void SettingsController::defaults()
 {
     // reset() deletes all config groups, syncs to disk, then calls load()
     // internally -- no separate load() needed.
+    // reset() deletes the [Editor] group and reloads defaults internally
     m_settings.reset();
 
-    resetEditorDefaults();
     m_stagedAssignments.clear();
+    m_stagedQuickSlots.clear();
+    m_stagedTilingQuickSlots.clear();
+
+    // Notify daemon to reload — reset() wrote defaults to disk
+    DaemonDBus::notifyReload();
 
     setNeedsSave(true);
 }
@@ -835,6 +882,10 @@ QString SettingsController::getQuickLayoutSlot(int slotNumber) const
 {
     if (slotNumber < 1 || slotNumber > 9)
         return {};
+    // Return staged value if the user changed it before Apply
+    auto it = m_stagedQuickSlots.constFind(slotNumber);
+    if (it != m_stagedQuickSlots.constEnd())
+        return it.value();
     QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
                                                 QStringLiteral("getQuickLayoutSlot"), {slotNumber});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
@@ -846,8 +897,8 @@ void SettingsController::setQuickLayoutSlot(int slotNumber, const QString& layou
 {
     if (slotNumber < 1 || slotNumber > 9)
         return;
-    DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setQuickLayoutSlot"),
-                           {slotNumber, layoutId});
+    m_stagedQuickSlots[slotNumber] = layoutId;
+    setNeedsSave(true);
 }
 
 QString SettingsController::getQuickLayoutShortcut(int slotNumber) const
@@ -863,28 +914,18 @@ QString SettingsController::getTilingQuickLayoutSlot(int slotNumber) const
 {
     if (slotNumber < 1 || slotNumber > 9)
         return {};
-    // Tiling quick layout slots are stored in KConfig [TilingQuickLayoutSlots] group.
-    // Read via the config backend.
-    if (!m_editorConfig)
-        return {};
-    m_editorConfig->reparseConfiguration();
-    auto group = m_editorConfig->group(QStringLiteral("TilingQuickLayoutSlots"));
-    return group->readString(QString::number(slotNumber));
+    // Return staged value if the user changed it before Apply
+    auto it = m_stagedTilingQuickSlots.constFind(slotNumber);
+    if (it != m_stagedTilingQuickSlots.constEnd())
+        return it.value();
+    return m_settings.readTilingQuickLayoutSlot(slotNumber);
 }
 
 void SettingsController::setTilingQuickLayoutSlot(int slotNumber, const QString& layoutId)
 {
     if (slotNumber < 1 || slotNumber > 9)
         return;
-    if (!m_editorConfig)
-        return;
-    auto group = m_editorConfig->group(QStringLiteral("TilingQuickLayoutSlots"));
-    if (layoutId.isEmpty()) {
-        group->writeString(QString::number(slotNumber), QString());
-    } else {
-        group->writeString(QString::number(slotNumber), layoutId);
-    }
-    m_editorConfig->sync();
+    m_stagedTilingQuickSlots[slotNumber] = layoutId;
     setNeedsSave(true);
 }
 
@@ -1058,225 +1099,103 @@ void SettingsController::refreshActivities()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Editor settings (read/write via IConfigBackend for [Editor] group)
+// Editor settings (delegated to Settings class for [Editor] group)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void SettingsController::loadEditorSettings()
-{
-    if (!m_editorConfig)
-        return;
-
-    m_editorConfig->reparseConfiguration();
-    auto group = m_editorConfig->group(QStringLiteral("Editor"));
-
-    m_editorDuplicateShortcut = group->readString(QStringLiteral("EditorDuplicateShortcut"), QStringLiteral("Ctrl+D"));
-    m_editorSplitHorizontalShortcut =
-        group->readString(QStringLiteral("EditorSplitHorizontalShortcut"), QStringLiteral("Ctrl+Shift+H"));
-    m_editorSplitVerticalShortcut =
-        group->readString(QStringLiteral("EditorSplitVerticalShortcut"), QStringLiteral("Ctrl+Alt+V"));
-    m_editorFillShortcut = group->readString(QStringLiteral("EditorFillShortcut"), QStringLiteral("Ctrl+Shift+F"));
-    m_editorGridSnappingEnabled = group->readBool(QStringLiteral("GridSnappingEnabled"), true);
-    m_editorEdgeSnappingEnabled = group->readBool(QStringLiteral("EdgeSnappingEnabled"), true);
-
-    double intervalX = group->readDouble(QStringLiteral("SnapIntervalX"), -1.0);
-    if (intervalX < 0.0)
-        intervalX = group->readDouble(QStringLiteral("SnapInterval"), 0.05);
-    m_editorSnapIntervalX = intervalX;
-
-    double intervalY = group->readDouble(QStringLiteral("SnapIntervalY"), -1.0);
-    if (intervalY < 0.0)
-        intervalY = group->readDouble(QStringLiteral("SnapInterval"), 0.05);
-    m_editorSnapIntervalY = intervalY;
-
-    Q_EMIT editorDuplicateShortcutChanged();
-    Q_EMIT editorSplitHorizontalShortcutChanged();
-    Q_EMIT editorSplitVerticalShortcutChanged();
-    Q_EMIT editorFillShortcutChanged();
-    Q_EMIT editorGridSnappingEnabledChanged();
-    Q_EMIT editorEdgeSnappingEnabledChanged();
-    m_editorSnapOverrideModifier =
-        group->readInt(QStringLiteral("SnapOverrideModifier"), static_cast<int>(Qt::ShiftModifier));
-    m_fillOnDropEnabled = group->readBool(QStringLiteral("FillOnDropEnabled"), true);
-    m_fillOnDropModifier = group->readInt(QStringLiteral("FillOnDropModifier"), static_cast<int>(Qt::ControlModifier));
-
-    Q_EMIT editorSnapIntervalXChanged();
-    Q_EMIT editorSnapIntervalYChanged();
-    Q_EMIT editorSnapOverrideModifierChanged();
-    Q_EMIT fillOnDropEnabledChanged();
-    Q_EMIT fillOnDropModifierChanged();
-}
-
-void SettingsController::saveEditorSettings()
-{
-    if (!m_editorConfig)
-        return;
-
-    auto group = m_editorConfig->group(QStringLiteral("Editor"));
-
-    group->writeString(QStringLiteral("EditorDuplicateShortcut"), m_editorDuplicateShortcut);
-    group->writeString(QStringLiteral("EditorSplitHorizontalShortcut"), m_editorSplitHorizontalShortcut);
-    group->writeString(QStringLiteral("EditorSplitVerticalShortcut"), m_editorSplitVerticalShortcut);
-    group->writeString(QStringLiteral("EditorFillShortcut"), m_editorFillShortcut);
-    group->writeBool(QStringLiteral("GridSnappingEnabled"), m_editorGridSnappingEnabled);
-    group->writeBool(QStringLiteral("EdgeSnappingEnabled"), m_editorEdgeSnappingEnabled);
-    group->writeDouble(QStringLiteral("SnapIntervalX"), m_editorSnapIntervalX);
-    group->writeDouble(QStringLiteral("SnapIntervalY"), m_editorSnapIntervalY);
-    group->writeInt(QStringLiteral("SnapOverrideModifier"), m_editorSnapOverrideModifier);
-    group->writeBool(QStringLiteral("FillOnDropEnabled"), m_fillOnDropEnabled);
-    group->writeInt(QStringLiteral("FillOnDropModifier"), m_fillOnDropModifier);
-
-    m_editorConfig->sync();
-}
-
-// Editor getters
+// Editor getters — delegate to m_settings
 
 QString SettingsController::editorDuplicateShortcut() const
 {
-    return m_editorDuplicateShortcut;
+    return m_settings.editorDuplicateShortcut();
 }
 QString SettingsController::editorSplitHorizontalShortcut() const
 {
-    return m_editorSplitHorizontalShortcut;
+    return m_settings.editorSplitHorizontalShortcut();
 }
 QString SettingsController::editorSplitVerticalShortcut() const
 {
-    return m_editorSplitVerticalShortcut;
+    return m_settings.editorSplitVerticalShortcut();
 }
 QString SettingsController::editorFillShortcut() const
 {
-    return m_editorFillShortcut;
+    return m_settings.editorFillShortcut();
 }
 bool SettingsController::editorGridSnappingEnabled() const
 {
-    return m_editorGridSnappingEnabled;
+    return m_settings.editorGridSnappingEnabled();
 }
 bool SettingsController::editorEdgeSnappingEnabled() const
 {
-    return m_editorEdgeSnappingEnabled;
+    return m_settings.editorEdgeSnappingEnabled();
 }
 qreal SettingsController::editorSnapIntervalX() const
 {
-    return m_editorSnapIntervalX;
+    return m_settings.editorSnapIntervalX();
 }
 qreal SettingsController::editorSnapIntervalY() const
 {
-    return m_editorSnapIntervalY;
+    return m_settings.editorSnapIntervalY();
 }
-
-// Editor setters
-
-void SettingsController::setEditorDuplicateShortcut(const QString& shortcut)
-{
-    if (m_editorDuplicateShortcut != shortcut) {
-        m_editorDuplicateShortcut = shortcut;
-        Q_EMIT editorDuplicateShortcutChanged();
-        setNeedsSave(true);
-    }
-}
-
-void SettingsController::setEditorSplitHorizontalShortcut(const QString& shortcut)
-{
-    if (m_editorSplitHorizontalShortcut != shortcut) {
-        m_editorSplitHorizontalShortcut = shortcut;
-        Q_EMIT editorSplitHorizontalShortcutChanged();
-        setNeedsSave(true);
-    }
-}
-
-void SettingsController::setEditorSplitVerticalShortcut(const QString& shortcut)
-{
-    if (m_editorSplitVerticalShortcut != shortcut) {
-        m_editorSplitVerticalShortcut = shortcut;
-        Q_EMIT editorSplitVerticalShortcutChanged();
-        setNeedsSave(true);
-    }
-}
-
-void SettingsController::setEditorFillShortcut(const QString& shortcut)
-{
-    if (m_editorFillShortcut != shortcut) {
-        m_editorFillShortcut = shortcut;
-        Q_EMIT editorFillShortcutChanged();
-        setNeedsSave(true);
-    }
-}
-
-void SettingsController::setEditorGridSnappingEnabled(bool enabled)
-{
-    if (m_editorGridSnappingEnabled != enabled) {
-        m_editorGridSnappingEnabled = enabled;
-        Q_EMIT editorGridSnappingEnabledChanged();
-        setNeedsSave(true);
-    }
-}
-
-void SettingsController::setEditorEdgeSnappingEnabled(bool enabled)
-{
-    if (m_editorEdgeSnappingEnabled != enabled) {
-        m_editorEdgeSnappingEnabled = enabled;
-        Q_EMIT editorEdgeSnappingEnabledChanged();
-        setNeedsSave(true);
-    }
-}
-
-void SettingsController::setEditorSnapIntervalX(qreal interval)
-{
-    interval = qBound(0.01, interval, 1.0);
-    if (!qFuzzyCompare(m_editorSnapIntervalX, interval)) {
-        m_editorSnapIntervalX = interval;
-        Q_EMIT editorSnapIntervalXChanged();
-        setNeedsSave(true);
-    }
-}
-
-void SettingsController::setEditorSnapIntervalY(qreal interval)
-{
-    interval = qBound(0.01, interval, 1.0);
-    if (!qFuzzyCompare(m_editorSnapIntervalY, interval)) {
-        m_editorSnapIntervalY = interval;
-        Q_EMIT editorSnapIntervalYChanged();
-        setNeedsSave(true);
-    }
-}
-
 int SettingsController::editorSnapOverrideModifier() const
 {
-    return m_editorSnapOverrideModifier;
+    return m_settings.editorSnapOverrideModifier();
 }
 bool SettingsController::fillOnDropEnabled() const
 {
-    return m_fillOnDropEnabled;
+    return m_settings.fillOnDropEnabled();
 }
 int SettingsController::fillOnDropModifier() const
 {
-    return m_fillOnDropModifier;
+    return m_settings.fillOnDropModifier();
 }
 
-void SettingsController::setEditorSnapOverrideModifier(int mod)
-{
-    if (m_editorSnapOverrideModifier != mod) {
-        m_editorSnapOverrideModifier = mod;
-        Q_EMIT editorSnapOverrideModifierChanged();
-        setNeedsSave(true);
-    }
-}
+// Editor setters — write to m_settings + mark dirty
 
-void SettingsController::setFillOnDropEnabled(bool enabled)
+// Editor setters — delegate to Settings. The meta-object NOTIFY connection
+// in the constructor handles setNeedsSave(true) when the value actually changes.
+void SettingsController::setEditorDuplicateShortcut(const QString& s)
 {
-    if (m_fillOnDropEnabled != enabled) {
-        m_fillOnDropEnabled = enabled;
-        Q_EMIT fillOnDropEnabledChanged();
-        setNeedsSave(true);
-    }
+    m_settings.setEditorDuplicateShortcut(s);
 }
-
-void SettingsController::setFillOnDropModifier(int mod)
+void SettingsController::setEditorSplitHorizontalShortcut(const QString& s)
 {
-    if (m_fillOnDropModifier != mod) {
-        m_fillOnDropModifier = mod;
-        Q_EMIT fillOnDropModifierChanged();
-        setNeedsSave(true);
-    }
+    m_settings.setEditorSplitHorizontalShortcut(s);
+}
+void SettingsController::setEditorSplitVerticalShortcut(const QString& s)
+{
+    m_settings.setEditorSplitVerticalShortcut(s);
+}
+void SettingsController::setEditorFillShortcut(const QString& s)
+{
+    m_settings.setEditorFillShortcut(s);
+}
+void SettingsController::setEditorGridSnappingEnabled(bool v)
+{
+    m_settings.setEditorGridSnappingEnabled(v);
+}
+void SettingsController::setEditorEdgeSnappingEnabled(bool v)
+{
+    m_settings.setEditorEdgeSnappingEnabled(v);
+}
+void SettingsController::setEditorSnapIntervalX(qreal v)
+{
+    m_settings.setEditorSnapIntervalX(v);
+}
+void SettingsController::setEditorSnapIntervalY(qreal v)
+{
+    m_settings.setEditorSnapIntervalY(v);
+}
+void SettingsController::setEditorSnapOverrideModifier(int v)
+{
+    m_settings.setEditorSnapOverrideModifier(v);
+}
+void SettingsController::setFillOnDropEnabled(bool v)
+{
+    m_settings.setFillOnDropEnabled(v);
+}
+void SettingsController::setFillOnDropModifier(int v)
+{
+    m_settings.setFillOnDropModifier(v);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1293,6 +1212,15 @@ void SettingsController::onActivitiesChanged()
 {
     refreshActivities();
     Q_EMIT activitiesChanged();
+}
+
+void SettingsController::onScreenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop)
+{
+    Q_UNUSED(screenId)
+    Q_UNUSED(layoutId)
+    Q_UNUSED(virtualDesktop)
+    // External assignment change (hotkey, script, toggle) — refresh overview
+    Q_EMIT screenLayoutChanged();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1560,6 +1488,7 @@ bool SettingsController::importAllSettings(const QString& filePath)
     bool ok = QFile::copy(filePath, configPath);
     if (ok) {
         m_settings.load();
+        DaemonDBus::notifyReload();
         Q_EMIT needsSaveChanged();
     } else {
         qCWarning(PlasmaZones::lcCore) << "Failed to import settings from:" << filePath;
@@ -1788,17 +1717,18 @@ void SettingsController::saveAppRulesToDaemon(const QString& layoutId, const QVa
 
 void SettingsController::resetEditorDefaults()
 {
-    setEditorDuplicateShortcut(QStringLiteral("Ctrl+D"));
-    setEditorSplitHorizontalShortcut(QStringLiteral("Ctrl+Shift+H"));
-    setEditorSplitVerticalShortcut(QStringLiteral("Ctrl+Alt+V"));
-    setEditorFillShortcut(QStringLiteral("Ctrl+Shift+F"));
-    setEditorGridSnappingEnabled(true);
-    setEditorEdgeSnappingEnabled(true);
-    setEditorSnapIntervalX(0.05);
-    setEditorSnapIntervalY(0.05);
-    setEditorSnapOverrideModifier(static_cast<int>(Qt::ShiftModifier));
-    setFillOnDropEnabled(true);
-    setFillOnDropModifier(static_cast<int>(Qt::ControlModifier));
+    m_settings.setEditorDuplicateShortcut(QStringLiteral("Ctrl+D"));
+    m_settings.setEditorSplitHorizontalShortcut(QStringLiteral("Ctrl+Shift+H"));
+    m_settings.setEditorSplitVerticalShortcut(QStringLiteral("Ctrl+Alt+V"));
+    m_settings.setEditorFillShortcut(QStringLiteral("Ctrl+Shift+F"));
+    m_settings.setEditorGridSnappingEnabled(true);
+    m_settings.setEditorEdgeSnappingEnabled(true);
+    m_settings.setEditorSnapIntervalX(0.05);
+    m_settings.setEditorSnapIntervalY(0.05);
+    m_settings.setEditorSnapOverrideModifier(static_cast<int>(Qt::ShiftModifier));
+    m_settings.setFillOnDropEnabled(true);
+    m_settings.setFillOnDropModifier(static_cast<int>(Qt::ControlModifier));
+    setNeedsSave(true);
 }
 
 QVariantMap SettingsController::loadWindowGeometry() const

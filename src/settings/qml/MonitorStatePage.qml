@@ -132,6 +132,10 @@ Flickable {
             root._refresh();
         }
 
+        function onScreenLayoutChanged() {
+            root._refresh();
+        }
+
         target: settingsController
     }
 

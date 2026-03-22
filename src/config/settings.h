@@ -786,13 +786,15 @@ public:
 
     // Per-screen autotile config (override > global fallback)
     Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenIdOrName) const;
-    Q_INVOKABLE void setPerScreenAutotileSetting(const QString& screenIdOrName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void setPerScreenAutotileSetting(const QString& screenIdOrName, const QString& key,
+                                                 const QVariant& value);
     Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenIdOrName);
     Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenIdOrName) const;
 
     // Per-screen snapping config (override > global fallback)
     Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenIdOrName) const override;
-    Q_INVOKABLE void setPerScreenSnappingSetting(const QString& screenIdOrName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void setPerScreenSnappingSetting(const QString& screenIdOrName, const QString& key,
+                                                 const QVariant& value);
     Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenIdOrName);
     Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenIdOrName) const;
 
@@ -1061,7 +1063,8 @@ public:
     bool isScreenLocked(const QString& screenIdOrName) const override;
     void setScreenLocked(const QString& screenIdOrName, bool locked) override;
     bool isContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity) const override;
-    void setContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity, bool locked) override;
+    void setContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity,
+                          bool locked) override;
 
     // Shader Effects
     bool enableShaderEffects() const override
@@ -1333,6 +1336,71 @@ public:
     }
     void setToggleLayoutLockShortcut(const QString& shortcut);
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Editor Settings (shared [Editor] group in plasmazonesrc)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    QString editorDuplicateShortcut() const
+    {
+        return m_editorDuplicateShortcut;
+    }
+    void setEditorDuplicateShortcut(const QString& shortcut);
+    QString editorSplitHorizontalShortcut() const
+    {
+        return m_editorSplitHorizontalShortcut;
+    }
+    void setEditorSplitHorizontalShortcut(const QString& shortcut);
+    QString editorSplitVerticalShortcut() const
+    {
+        return m_editorSplitVerticalShortcut;
+    }
+    void setEditorSplitVerticalShortcut(const QString& shortcut);
+    QString editorFillShortcut() const
+    {
+        return m_editorFillShortcut;
+    }
+    void setEditorFillShortcut(const QString& shortcut);
+    bool editorGridSnappingEnabled() const
+    {
+        return m_editorGridSnappingEnabled;
+    }
+    void setEditorGridSnappingEnabled(bool enabled);
+    bool editorEdgeSnappingEnabled() const
+    {
+        return m_editorEdgeSnappingEnabled;
+    }
+    void setEditorEdgeSnappingEnabled(bool enabled);
+    qreal editorSnapIntervalX() const
+    {
+        return m_editorSnapIntervalX;
+    }
+    void setEditorSnapIntervalX(qreal interval);
+    qreal editorSnapIntervalY() const
+    {
+        return m_editorSnapIntervalY;
+    }
+    void setEditorSnapIntervalY(qreal interval);
+    int editorSnapOverrideModifier() const
+    {
+        return m_editorSnapOverrideModifier;
+    }
+    void setEditorSnapOverrideModifier(int mod);
+    bool fillOnDropEnabled() const
+    {
+        return m_fillOnDropEnabled;
+    }
+    void setFillOnDropEnabled(bool enabled);
+    int fillOnDropModifier() const
+    {
+        return m_fillOnDropModifier;
+    }
+    void setFillOnDropModifier(int mod);
+
+    // TilingQuickLayoutSlots — read/write via the shared config backend
+    QString readTilingQuickLayoutSlot(int slotNumber) const;
+    void writeTilingQuickLayoutSlot(int slotNumber, const QString& layoutId);
+    void syncConfig();
+
     // Persistence
     void load() override;
     void save() override;
@@ -1342,6 +1410,20 @@ public:
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath);
     Q_INVOKABLE void applySystemColorScheme();
     void applyAutotileBorderSystemColor();
+
+Q_SIGNALS:
+    // Editor settings signals (not part of ISettings interface)
+    void editorDuplicateShortcutChanged();
+    void editorSplitHorizontalShortcutChanged();
+    void editorSplitVerticalShortcutChanged();
+    void editorFillShortcutChanged();
+    void editorGridSnappingEnabledChanged();
+    void editorEdgeSnappingEnabledChanged();
+    void editorSnapIntervalXChanged();
+    void editorSnapIntervalYChanged();
+    void editorSnapOverrideModifierChanged();
+    void fillOnDropEnabledChanged();
+    void fillOnDropModifierChanged();
 
 private:
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -1422,6 +1504,7 @@ private:
     void loadPerScreenOverrides(IConfigBackend* backend);
     void loadShortcutConfig(ConfigGroup& globalShortcuts);
     void loadAutotilingConfig(IConfigBackend* backend);
+    void loadEditorConfig(ConfigGroup& editor);
 
     // ─── save() helpers (decomposed for SRP) ────────────────────────────
     void saveActivationConfig(ConfigGroup& activation);
@@ -1433,6 +1516,7 @@ private:
     void saveAllPerScreenOverrides(IConfigBackend* backend);
     void saveShortcutConfig(ConfigGroup& globalShortcuts);
     void saveAutotilingConfig(IConfigBackend* backend);
+    void saveEditorConfig(ConfigGroup& editor);
 
     // Config backend (replaces KSharedConfig)
     std::unique_ptr<IConfigBackend> m_configBackend;
@@ -1651,6 +1735,19 @@ private:
 
     // Toggle Layout Lock (Meta+Ctrl+L)
     QString m_toggleLayoutLockShortcut = QStringLiteral("Meta+Ctrl+L");
+
+    // Editor Settings ([Editor] group in plasmazonesrc)
+    QString m_editorDuplicateShortcut = QStringLiteral("Ctrl+D");
+    QString m_editorSplitHorizontalShortcut = QStringLiteral("Ctrl+Shift+H");
+    QString m_editorSplitVerticalShortcut = QStringLiteral("Ctrl+Alt+V");
+    QString m_editorFillShortcut = QStringLiteral("Ctrl+Shift+F");
+    bool m_editorGridSnappingEnabled = true;
+    bool m_editorEdgeSnappingEnabled = true;
+    qreal m_editorSnapIntervalX = 0.05;
+    qreal m_editorSnapIntervalY = 0.05;
+    int m_editorSnapOverrideModifier = static_cast<int>(Qt::ShiftModifier);
+    bool m_fillOnDropEnabled = true;
+    int m_fillOnDropModifier = static_cast<int>(Qt::ControlModifier);
 };
 
 } // namespace PlasmaZones

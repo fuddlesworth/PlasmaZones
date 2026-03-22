@@ -471,7 +471,61 @@ void Settings::loadAutotilingConfig(IConfigBackend* backend)
     }
 }
 
+void Settings::loadEditorConfig(ConfigGroup& editor)
+{
+    m_editorDuplicateShortcut = editor.readString(QStringLiteral("EditorDuplicateShortcut"), QStringLiteral("Ctrl+D"));
+    m_editorSplitHorizontalShortcut =
+        editor.readString(QStringLiteral("EditorSplitHorizontalShortcut"), QStringLiteral("Ctrl+Shift+H"));
+    m_editorSplitVerticalShortcut =
+        editor.readString(QStringLiteral("EditorSplitVerticalShortcut"), QStringLiteral("Ctrl+Alt+V"));
+    m_editorFillShortcut = editor.readString(QStringLiteral("EditorFillShortcut"), QStringLiteral("Ctrl+Shift+F"));
+    m_editorGridSnappingEnabled = editor.readBool(QStringLiteral("GridSnappingEnabled"), true);
+    m_editorEdgeSnappingEnabled = editor.readBool(QStringLiteral("EdgeSnappingEnabled"), true);
+
+    double intervalX = editor.readDouble(QStringLiteral("SnapIntervalX"), -1.0);
+    if (intervalX < 0.0)
+        intervalX = editor.readDouble(QStringLiteral("SnapInterval"), 0.05);
+    m_editorSnapIntervalX = intervalX;
+
+    double intervalY = editor.readDouble(QStringLiteral("SnapIntervalY"), -1.0);
+    if (intervalY < 0.0)
+        intervalY = editor.readDouble(QStringLiteral("SnapInterval"), 0.05);
+    m_editorSnapIntervalY = intervalY;
+
+    m_editorSnapOverrideModifier =
+        editor.readInt(QStringLiteral("SnapOverrideModifier"), static_cast<int>(Qt::ShiftModifier));
+    m_fillOnDropEnabled = editor.readBool(QStringLiteral("FillOnDropEnabled"), true);
+    m_fillOnDropModifier = editor.readInt(QStringLiteral("FillOnDropModifier"), static_cast<int>(Qt::ControlModifier));
+
+    Q_EMIT editorDuplicateShortcutChanged();
+    Q_EMIT editorSplitHorizontalShortcutChanged();
+    Q_EMIT editorSplitVerticalShortcutChanged();
+    Q_EMIT editorFillShortcutChanged();
+    Q_EMIT editorGridSnappingEnabledChanged();
+    Q_EMIT editorEdgeSnappingEnabledChanged();
+    Q_EMIT editorSnapIntervalXChanged();
+    Q_EMIT editorSnapIntervalYChanged();
+    Q_EMIT editorSnapOverrideModifierChanged();
+    Q_EMIT fillOnDropEnabledChanged();
+    Q_EMIT fillOnDropModifierChanged();
+}
+
 // ── save() helpers ───────────────────────────────────────────────────────────
+
+void Settings::saveEditorConfig(ConfigGroup& editor)
+{
+    editor.writeString(QStringLiteral("EditorDuplicateShortcut"), m_editorDuplicateShortcut);
+    editor.writeString(QStringLiteral("EditorSplitHorizontalShortcut"), m_editorSplitHorizontalShortcut);
+    editor.writeString(QStringLiteral("EditorSplitVerticalShortcut"), m_editorSplitVerticalShortcut);
+    editor.writeString(QStringLiteral("EditorFillShortcut"), m_editorFillShortcut);
+    editor.writeBool(QStringLiteral("GridSnappingEnabled"), m_editorGridSnappingEnabled);
+    editor.writeBool(QStringLiteral("EdgeSnappingEnabled"), m_editorEdgeSnappingEnabled);
+    editor.writeDouble(QStringLiteral("SnapIntervalX"), m_editorSnapIntervalX);
+    editor.writeDouble(QStringLiteral("SnapIntervalY"), m_editorSnapIntervalY);
+    editor.writeInt(QStringLiteral("SnapOverrideModifier"), m_editorSnapOverrideModifier);
+    editor.writeBool(QStringLiteral("FillOnDropEnabled"), m_fillOnDropEnabled);
+    editor.writeInt(QStringLiteral("FillOnDropModifier"), m_fillOnDropModifier);
+}
 
 void Settings::saveActivationConfig(ConfigGroup& activation)
 {

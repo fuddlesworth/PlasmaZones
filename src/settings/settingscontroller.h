@@ -8,7 +8,6 @@
 #pragma once
 
 #include "../config/settings.h"
-#include "../config/configbackend.h"
 #include "../common/daemoncontroller.h"
 #include "screenhelper.h"
 #include "../core/constants.h"
@@ -231,10 +230,7 @@ public:
     Q_INVOKABLE void toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity,
                                        int mode);
 
-    // ── Editor settings ──────────────────────────────────────────────────────
-    // These duplicate the [Editor] config group handling from kcm/editor/kcmeditor.cpp.
-    // TODO: Extract shared EditorSettings helper to avoid duplication.
-    // Both read/write the same [Editor] group in plasmazonesrc.
+    // ── Editor settings (delegated to Settings class) ─────────────────────
     QString editorDuplicateShortcut() const;
     QString editorSplitHorizontalShortcut() const;
     QString editorSplitVerticalShortcut() const;
@@ -337,9 +333,11 @@ Q_SIGNALS:
     void layoutsChanged();
     void screensChanged();
 
-    // Virtual desktop / activity signals
+    // Virtual desktop / activity / assignment signals
     void virtualDesktopsChanged();
     void activitiesChanged();
+    void screenLayoutChanged();
+    void quickLayoutSlotsChanged();
 
     // Trigger signals
     void alwaysActivateOnDragChanged();
@@ -371,12 +369,11 @@ private Q_SLOTS:
     void loadLayoutsAsync();
     void onVirtualDesktopsChanged();
     void onActivitiesChanged();
+    void onScreenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
 
 private:
     void setNeedsSave(bool needs);
     void scheduleLayoutLoad();
-    void loadEditorSettings();
-    void saveEditorSettings();
     void refreshVirtualDesktops();
     void refreshActivities();
 
@@ -388,7 +385,6 @@ private:
     Settings m_settings;
     DaemonController m_daemonController;
     ScreenHelper m_screenHelper;
-    std::unique_ptr<IConfigBackend> m_editorConfig;
     QString m_activePage = QStringLiteral("overview");
     bool m_needsSave = false;
     bool m_saving = false;
@@ -421,6 +417,11 @@ private:
     };
     QHash<QString, StagedAssignment> m_stagedAssignments;
 
+    // Staged quick layout slot changes (flushed on Apply via D-Bus)
+    QHash<int, QString> m_stagedQuickSlots;
+    // Staged tiling quick layout slot changes (flushed on Apply to config)
+    QHash<int, QString> m_stagedTilingQuickSlots;
+
     static QString assignmentCacheKey(const QString& screen, int desktop, const QString& activity);
     StagedAssignment& stagedEntry(const QString& screen, int desktop, const QString& activity);
     const StagedAssignment* stagedEntryConst(const QString& screen, int desktop, const QString& activity) const;
@@ -435,19 +436,6 @@ private:
     // Staged getter helpers — return true if handled (result set), false to fall through to D-Bus
     bool stagedSnappingLayout(const QString& screen, int desktop, const QString& activity, QString& out) const;
     bool stagedTilingLayout(const QString& screen, int desktop, const QString& activity, QString& out) const;
-
-    // Editor settings cache
-    QString m_editorDuplicateShortcut;
-    QString m_editorSplitHorizontalShortcut;
-    QString m_editorSplitVerticalShortcut;
-    QString m_editorFillShortcut;
-    bool m_editorGridSnappingEnabled = true;
-    bool m_editorEdgeSnappingEnabled = true;
-    qreal m_editorSnapIntervalX = 0.05;
-    qreal m_editorSnapIntervalY = 0.05;
-    int m_editorSnapOverrideModifier = static_cast<int>(Qt::ShiftModifier);
-    bool m_fillOnDropEnabled = true;
-    int m_fillOnDropModifier = static_cast<int>(Qt::ControlModifier);
 };
 
 } // namespace PlasmaZones

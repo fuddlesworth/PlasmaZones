@@ -192,6 +192,10 @@ void Settings::load()
         loadShortcutConfig(*globalShortcuts);
     }
     loadAutotilingConfig(m_configBackend.get());
+    {
+        auto editor = m_configBackend->group(QStringLiteral("Editor"));
+        loadEditorConfig(*editor);
+    }
 
     if (m_useSystemColors) {
         applySystemColorScheme();
@@ -247,6 +251,10 @@ void Settings::save()
         saveShortcutConfig(*globalShortcuts);
     }
     saveAutotilingConfig(m_configBackend.get());
+    {
+        auto editor = m_configBackend->group(QStringLiteral("Editor"));
+        saveEditorConfig(*editor);
+    }
 
     // Shader Effects (4 entries, not worth a separate helper)
     {
@@ -264,12 +272,21 @@ void Settings::save()
 
 void Settings::reset()
 {
-    const QStringList groups = {
-        QStringLiteral("Activation"),   QStringLiteral("Display"),           QStringLiteral("Appearance"),
-        QStringLiteral("Zones"),        QStringLiteral("Behavior"),          QStringLiteral("Exclusions"),
-        QStringLiteral("ZoneSelector"), QStringLiteral("Shaders"),           QStringLiteral("GlobalShortcuts"),
-        QStringLiteral("Autotiling"),   QStringLiteral("AutotileShortcuts"), QStringLiteral("Animations"),
-        QStringLiteral("Updates")};
+    const QStringList groups = {QStringLiteral("Activation"),
+                                QStringLiteral("Display"),
+                                QStringLiteral("Appearance"),
+                                QStringLiteral("Zones"),
+                                QStringLiteral("Behavior"),
+                                QStringLiteral("Exclusions"),
+                                QStringLiteral("ZoneSelector"),
+                                QStringLiteral("Shaders"),
+                                QStringLiteral("GlobalShortcuts"),
+                                QStringLiteral("Autotiling"),
+                                QStringLiteral("AutotileShortcuts"),
+                                QStringLiteral("Animations"),
+                                QStringLiteral("Updates"),
+                                QStringLiteral("Editor"),
+                                QStringLiteral("TilingQuickLayoutSlots")};
     for (const QString& groupName : groups) {
         m_configBackend->deleteGroup(groupName);
     }
@@ -286,6 +303,124 @@ void Settings::reset()
     load();
     qCInfo(lcConfig) << "Settings reset to defaults";
 }
+
+// ── Editor setters ────────────────────────────────────────────────────────────
+
+void Settings::setEditorDuplicateShortcut(const QString& shortcut)
+{
+    if (m_editorDuplicateShortcut != shortcut) {
+        m_editorDuplicateShortcut = shortcut;
+        Q_EMIT editorDuplicateShortcutChanged();
+    }
+}
+
+void Settings::setEditorSplitHorizontalShortcut(const QString& shortcut)
+{
+    if (m_editorSplitHorizontalShortcut != shortcut) {
+        m_editorSplitHorizontalShortcut = shortcut;
+        Q_EMIT editorSplitHorizontalShortcutChanged();
+    }
+}
+
+void Settings::setEditorSplitVerticalShortcut(const QString& shortcut)
+{
+    if (m_editorSplitVerticalShortcut != shortcut) {
+        m_editorSplitVerticalShortcut = shortcut;
+        Q_EMIT editorSplitVerticalShortcutChanged();
+    }
+}
+
+void Settings::setEditorFillShortcut(const QString& shortcut)
+{
+    if (m_editorFillShortcut != shortcut) {
+        m_editorFillShortcut = shortcut;
+        Q_EMIT editorFillShortcutChanged();
+    }
+}
+
+void Settings::setEditorGridSnappingEnabled(bool enabled)
+{
+    if (m_editorGridSnappingEnabled != enabled) {
+        m_editorGridSnappingEnabled = enabled;
+        Q_EMIT editorGridSnappingEnabledChanged();
+    }
+}
+
+void Settings::setEditorEdgeSnappingEnabled(bool enabled)
+{
+    if (m_editorEdgeSnappingEnabled != enabled) {
+        m_editorEdgeSnappingEnabled = enabled;
+        Q_EMIT editorEdgeSnappingEnabledChanged();
+    }
+}
+
+void Settings::setEditorSnapIntervalX(qreal interval)
+{
+    interval = qBound(0.01, interval, 1.0);
+    if (!qFuzzyCompare(m_editorSnapIntervalX, interval)) {
+        m_editorSnapIntervalX = interval;
+        Q_EMIT editorSnapIntervalXChanged();
+    }
+}
+
+void Settings::setEditorSnapIntervalY(qreal interval)
+{
+    interval = qBound(0.01, interval, 1.0);
+    if (!qFuzzyCompare(m_editorSnapIntervalY, interval)) {
+        m_editorSnapIntervalY = interval;
+        Q_EMIT editorSnapIntervalYChanged();
+    }
+}
+
+void Settings::setEditorSnapOverrideModifier(int mod)
+{
+    if (m_editorSnapOverrideModifier != mod) {
+        m_editorSnapOverrideModifier = mod;
+        Q_EMIT editorSnapOverrideModifierChanged();
+    }
+}
+
+void Settings::setFillOnDropEnabled(bool enabled)
+{
+    if (m_fillOnDropEnabled != enabled) {
+        m_fillOnDropEnabled = enabled;
+        Q_EMIT fillOnDropEnabledChanged();
+    }
+}
+
+void Settings::setFillOnDropModifier(int mod)
+{
+    if (m_fillOnDropModifier != mod) {
+        m_fillOnDropModifier = mod;
+        Q_EMIT fillOnDropModifierChanged();
+    }
+}
+
+// ── TilingQuickLayoutSlots helpers ───────────────────────────────────────────
+
+QString Settings::readTilingQuickLayoutSlot(int slotNumber) const
+{
+    if (slotNumber < 1 || slotNumber > 9)
+        return {};
+    m_configBackend->reparseConfiguration();
+    auto group = m_configBackend->group(QStringLiteral("TilingQuickLayoutSlots"));
+    return group->readString(QString::number(slotNumber));
+}
+
+void Settings::writeTilingQuickLayoutSlot(int slotNumber, const QString& layoutId)
+{
+    if (slotNumber < 1 || slotNumber > 9)
+        return;
+    auto group = m_configBackend->group(QStringLiteral("TilingQuickLayoutSlots"));
+    group->writeString(QString::number(slotNumber), layoutId);
+}
+
+void Settings::syncConfig()
+{
+    m_configBackend->sync();
+}
+
+// ── Color helpers ────────────────────────────────────────────────────────────
 
 QString Settings::loadColorsFromFile(const QString& filePath)
 {
