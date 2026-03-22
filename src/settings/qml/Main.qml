@@ -69,12 +69,8 @@ ApplicationWindow {
             "label": "Behavior",
             "iconName": "preferences-system"
         }, {
-            "name": "snap-gaps",
-            "label": "Gaps",
-            "iconName": "distribute-horizontal"
-        }, {
             "name": "snap-zoneselector",
-            "label": "Zone Selector",
+            "label": "Zone Layout",
             "iconName": "view-choose"
         }, {
             "name": "snap-effects",
@@ -98,10 +94,6 @@ ApplicationWindow {
             "label": "Behavior",
             "iconName": "preferences-system"
         }, {
-            "name": "tile-gaps",
-            "label": "Gaps",
-            "iconName": "distribute-horizontal"
-        }, {
             "name": "tile-algorithm",
             "label": "Algorithm",
             "iconName": "view-grid"
@@ -120,12 +112,10 @@ ApplicationWindow {
         "layouts": "LayoutsPage.qml",
         "snap-appearance": "SnappingAppearancePage.qml",
         "snap-behavior": "SnappingBehaviorPage.qml",
-        "snap-gaps": "SnappingGapsPage.qml",
         "snap-zoneselector": "SnappingZoneSelectorPage.qml",
         "snap-effects": "SnappingEffectsPage.qml",
         "tile-appearance": "TilingAppearancePage.qml",
         "tile-behavior": "TilingBehaviorPage.qml",
-        "tile-gaps": "TilingGapsPage.qml",
         "tile-algorithm": "TilingAlgorithmPage.qml",
         "snap-assignments": "SnappingAssignmentsPage.qml",
         "snap-shortcuts": "SnappingQuickShortcutsPage.qml",
@@ -685,9 +675,9 @@ ApplicationWindow {
                     spacing: Kirigami.Units.smallSpacing
 
                     Label {
-                        text: {
-                            // Show "Parent > Child"
+                        // Show "Parent > Child"
 
+                        text: {
                             if (window._sidebarMode !== "main")
                                 return window._parentLabel() + "  \u203A  " + window._subPageLabel(settingsController.activePage);
 

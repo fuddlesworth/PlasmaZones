@@ -38,11 +38,9 @@ qt_add_qml_module(plasmazones-settings
         qml/SnappingAppearancePage.qml
         qml/SnappingEffectsPage.qml
         qml/SnappingBehaviorPage.qml
-        qml/SnappingGapsPage.qml
         qml/SnappingZoneSelectorPage.qml
         qml/TilingAppearancePage.qml
         qml/TilingBehaviorPage.qml
-        qml/TilingGapsPage.qml
         qml/TilingAlgorithmPage.qml
         qml/ExclusionsPage.qml
         qml/EditorPage.qml
