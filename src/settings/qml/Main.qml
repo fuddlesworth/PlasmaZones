@@ -144,9 +144,45 @@ ApplicationWindow {
         if (_sidebarMode === "main") {
             for (let i = 0; i < _mainItems.length; i++) {
                 let item = _mainItems[i];
-                if (searchText && item.label.toLowerCase().indexOf(searchText) < 0)
-                    continue;
+                if (searchText) {
+                    // Search both item label and children labels
+                    let itemMatches = item.label.toLowerCase().indexOf(searchText) >= 0;
+                    let matchingChildren = [];
+                    if (item.hasChildren) {
+                        let children = _childItems[item.name] || [];
+                        for (let j = 0; j < children.length; j++) {
+                            if (children[j].label.toLowerCase().indexOf(searchText) >= 0)
+                                matchingChildren.push(children[j]);
 
+                        }
+                    }
+                    if (!itemMatches && matchingChildren.length === 0)
+                        continue;
+
+                    // Show parent (disable drill-in if showing matched children)
+                    sidebarModel.append({
+                        "name": item.name,
+                        "label": item.label,
+                        "iconName": item.iconName,
+                        "hasChildren": matchingChildren.length === 0 && item.hasChildren,
+                        "isBackButton": false,
+                        "hasDividerAfter": false,
+                        "isDivider": false
+                    });
+                    // Show matching children inline
+                    for (let j = 0; j < matchingChildren.length; j++) {
+                        sidebarModel.append({
+                            "name": matchingChildren[j].name,
+                            "label": "  " + matchingChildren[j].label,
+                            "iconName": matchingChildren[j].iconName,
+                            "hasChildren": false,
+                            "isBackButton": false,
+                            "hasDividerAfter": false,
+                            "isDivider": false
+                        });
+                    }
+                    continue;
+                }
                 sidebarModel.append({
                     "name": item.name,
                     "label": item.label,
@@ -156,7 +192,6 @@ ApplicationWindow {
                     "hasDividerAfter": false,
                     "isDivider": false
                 });
-                // Insert divider after this item
                 if (item.hasDividerAfter)
                     sidebarModel.append({
                     "name": "__divider__",
@@ -387,6 +422,7 @@ ApplicationWindow {
 
     Shortcut {
         sequence: "?"
+        enabled: !sidebarSearch.activeFocus
         onActivated: window._showShortcuts = !window._showShortcuts
     }
 
@@ -493,6 +529,22 @@ ApplicationWindow {
                                 return ;
                             }
                             window._previousIndex = sidebar.currentIndex;
+                            // If selecting an inline search result child, clear search and drill into parent
+                            if (sidebarSearch.text.length > 0 && _sidebarMode === "main") {
+                                let parents = Object.keys(_childItems);
+                                for (let p = 0; p < parents.length; p++) {
+                                    let children = _childItems[parents[p]];
+                                    for (let c = 0; c < children.length; c++) {
+                                        if (children[c].name === name) {
+                                            sidebarSearch.text = "";
+                                            _sidebarMode = parents[p];
+                                            _rebuildSidebar();
+                                            settingsController.activePage = name;
+                                            return ;
+                                        }
+                                    }
+                                }
+                            }
                             settingsController.activePage = name;
                         }
                         leftPadding: window.sidebarCompact ? 0 : Kirigami.Units.smallSpacing
