@@ -238,6 +238,8 @@ struct SailHit {
     float edgeDist;   // always positive edge distance
     int sailIndex;    // 0=red(coral), 1=purple, 2=blue -- painter's order
     vec3 sailColor;   // fill color for this sail
+    float unionDist;  // min signed distance across all 3 sails
+    int overlapCount; // number of sails overlapping at this point (0-3)
 };
 
 // Evaluate all 3 sails at point p, return the topmost hit (painter's order)
@@ -248,10 +250,15 @@ SailHit evalEosSails(vec2 p, vec3 colBlue, vec3 colCoral, vec3 colPurple) {
     vec2 blueResult = sdBlueWithEdge(p);
 
     SailHit hit;
-    hit.dist = min(redResult.x, min(purpResult.x, blueResult.x));
+    hit.unionDist = min(redResult.x, min(purpResult.x, blueResult.x));
+    hit.dist = hit.unionDist;
     hit.edgeDist = min(redResult.y, min(purpResult.y, blueResult.y));
     hit.sailIndex = -1;
     hit.sailColor = vec3(0.0);
+    hit.overlapCount = 0;
+    if (redResult.x < 0.0) hit.overlapCount++;
+    if (purpResult.x < 0.0) hit.overlapCount++;
+    if (blueResult.x < 0.0) hit.overlapCount++;
 
     // Topmost layer wins (blue on top)
     if (redResult.x < 0.0) {
@@ -276,19 +283,6 @@ SailHit evalEosSails(vec2 p, vec3 colBlue, vec3 colCoral, vec3 colPurple) {
     return hit;
 }
 
-// Minimum signed distance across all sails (for outer effects)
-float sdEosUnion(vec2 p) {
-    return min(sdRedWithEdge(p).x, min(sdPurpWithEdge(p).x, sdBlueWithEdge(p).x));
-}
-
-// Count how many sails overlap at point p (0-3)
-int sailOverlapCount(vec2 p) {
-    int count = 0;
-    if (sdRedWithEdge(p).x < 0.0) count++;
-    if (sdPurpWithEdge(p).x < 0.0) count++;
-    if (sdBlueWithEdge(p).x < 0.0) count++;
-    return count;
-}
 
 
 // -- Per-instance UV computation ------------------------------------------
@@ -328,6 +322,7 @@ const int CONSTELLATION_COUNT = 24;
 
 vec3 constellationNetwork(vec2 uv, float time, float bassEnv, float midsEnv, float trebleEnv,
                           float particleStr, float connThreshold,
+                          float orbitScale, float lineStr, vec2 orbitCenter,
                           vec3 palPrimary, vec3 palSecondary, vec3 palAccent, vec3 palGlow) {
     vec3 col = vec3(0.0);
     vec2 dots[24]; vec3 dotColors[24];
@@ -336,8 +331,8 @@ vec3 constellationNetwork(vec2 uv, float time, float bassEnv, float midsEnv, flo
     for (int i = 0; i < CONSTELLATION_COUNT; i++) {
         float fi = float(i);
         float h1=hash21(vec2(fi*7.13,3.91)), h2=hash21(vec2(fi*11.37,17.53)), h3=hash21(vec2(fi*5.79,23.11));
-        dots[i] = vec2(0.5 + sin(time*(0.12+h1*0.18)+h1*TAU)*(0.32+h3*0.15)*scatter,
-                        0.5 + cos(time*(0.10+h2*0.16)+h2*TAU)*(0.28+h1*0.12)*scatter);
+        dots[i] = vec2(orbitCenter.x + sin(time*(0.12+h1*0.18)+h1*TAU)*(0.32+h3*0.15)*(orbitScale)*scatter,
+                        orbitCenter.y + cos(time*(0.10+h2*0.16)+h2*TAU)*(0.28+h1*0.12)*(orbitScale)*scatter);
         float cs = mod(fi, 3.0);
         dotColors[i] = cs < 1.0 ? palPrimary : cs < 2.0 ? palSecondary : palAccent;
     }
@@ -379,7 +374,7 @@ vec3 constellationNetwork(vec2 uv, float time, float bassEnv, float midsEnv, flo
                 float linePulse = 0.5 + 0.5 * sin(linePhase * TAU);
 
                 vec3 lineCol = mix(dotColors[i], dotColors[j], 0.5);
-                col += lineCol * 0.5 * lineMask * proximity * linePulse * lineBass * particleStr;
+                col += lineCol * 0.5 * lineMask * proximity * linePulse * lineBass * particleStr * lineStr;
             }
         }
     }
@@ -399,17 +394,14 @@ vec3 constellationNetwork(vec2 uv, float time, float bassEnv, float midsEnv, flo
         }
     }
 
-    // ── Treble flash: random dots burst bright on treble ──
+    // ── Treble flash: random dots burst bright on treble (branchless) ──
     if (trebleEnv > 0.05) {
         for (int i = 0; i < CONSTELLATION_COUNT; i++) {
             float fi = float(i);
-            // Each dot has a chance to flash on treble
             float flashChance = step(0.5, hash21(vec2(fi, floor(time * 6.0))));
-            if (flashChance > 0.5) {
-                float dist = length(uv - dots[i]);
-                float flash = exp(-dist * 30.0) * trebleEnv * 2.0;
-                col += dotColors[i] * flash;
-            }
+            float dist = length(uv - dots[i]);
+            float flash = exp(-dist * 30.0) * trebleEnv * 2.0 * flashChance;
+            col += dotColors[i] * flash;
         }
     }
 
@@ -450,6 +442,7 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
     float logoSizeMax = customParams[6].z >= 0.0 ? customParams[6].z : 1.0;
     float gradCenterX = customParams[6].w >= -1.5 ? customParams[6].w : 0.5;
     float gradCenterY = customParams[7].x >= -1.5 ? customParams[7].x : 0.5;
+    float gradAngle   = customParams[4].w >= 0.0 ? customParams[4].w : 0.6;
     float idleStrength = customParams[7].w >= 0.0 ? customParams[7].w : 0.5;
 
     vec2 rectPos = zoneRectPos(rect);
@@ -485,7 +478,7 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
 
         // Warm gradient fill: purple (top-left) to coral (bottom-right)
         // This IS the background — rich and visible, not a faint tint
-        float gradT = globalUV.x * 0.5 + globalUV.y * 0.5;
+        float gradT = dot(globalUV, vec2(cos(gradAngle), sin(gradAngle)));
         vec3 gradBase = mix(palSecondary * 0.35, palAccent * 0.25, smoothstep(0.0, 1.0, gradT));
         vec3 col = gradBase * brightness;
 
@@ -507,6 +500,8 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
             float orbitTime = time * flowSpeed;
             vec3 network = constellationNetwork(globalUV, orbitTime, bassEnv, midsEnv, trebleEnv,
                                                 particleStr * 2.5, connThreshold,
+                                                gridScale / 5.0, gridStrength * 5.0,
+                                                vec2(gradCenterX, gradCenterY),
                                                 palPrimary, palSecondary, palAccent, palGlow);
             col += network * brightness * 1.5;
         }
@@ -561,12 +556,10 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
             float iHash = hash21(vec2(float(li) * 7.31, 3.17));
             float iPhase = iHash * TAU;
 
-            // Union SDF for outer effects
-            float unionDist = sdEosUnion(iLogoUV);
-            if (unionDist > 0.25) continue;
-
-            // Evaluate per-sail hit
+            // Evaluate per-sail hit (also computes union SDF and overlap count)
             SailHit sail = evalEosSails(iLogoUV, palPrimary, palAccent, palSecondary);
+            float unionDist = sail.unionDist;
+            if (unionDist > 0.25) continue;
 
             vec3 logoCol = vec3(0.0);
             vec3 outerCol = vec3(0.0);
@@ -625,7 +618,7 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
                 // Each sail's noise flows in a unique direction (0°, 120°, 240°)
                 float sailAngle = float(sail.sailIndex) * TAU / 3.0;
                 vec2 sailFlowDir = vec2(cos(sailAngle), sin(sailAngle));
-                vec2 flowUV = iLogoUV * 5.0 + iSeed * 10.0;
+                vec2 flowUV = iLogoUV * noiseScale * 1.5 + iSeed * 10.0;
                 flowUV += sailFlowDir * time * speed * 2.0;
 
                 // Domain warp for organic motion
@@ -641,7 +634,7 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
                 // --- Layer 2: Overlap interference pattern ---
                 // Where 2+ sails share space, blend their directional flows
                 {
-                    int overlapN = sailOverlapCount(iLogoUV);
+                    int overlapN = sail.overlapCount;
                     if (overlapN >= 2) {
                         // Compute the OTHER sails' flows too
                         vec3 blendCol = vec3(0.0);
@@ -649,7 +642,7 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
                         for (int si = 0; si < 3; si++) {
                             float sAngle = float(si) * TAU / 3.0;
                             vec2 sDir = vec2(cos(sAngle), sin(sAngle));
-                            vec2 sUV = iLogoUV * 5.0 + iSeed * 10.0 + sDir * time * speed * 2.0;
+                            vec2 sUV = iLogoUV * noiseScale * 1.5 + iSeed * 10.0 + sDir * time * speed * 2.0;
                             float sFlow = simplex2D(sUV * 2.0 + time * 0.15) * 0.5 + 0.5;
                             vec3 sCol = si == 0 ? palPrimary : si == 1 ? palAccent : palSecondary;
                             blendCol += sCol * sFlow;
