@@ -327,14 +327,14 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
 //  CONSTELLATION NETWORK BACKGROUND
 // =========================================================================
 
-const int CONSTELLATION_COUNT = 24;
+const int CONSTELLATION_COUNT = 14;
 
 vec3 constellationNetwork(vec2 uv, float time, float bassEnv, float midsEnv, float trebleEnv,
                           float particleStr, float connThreshold,
                           float orbitScale, float lineStr, vec2 orbitCenter,
                           vec3 palPrimary, vec3 palSecondary, vec3 palAccent, vec3 palGlow) {
     vec3 col = vec3(0.0);
-    vec2 dots[24]; vec3 dotColors[24];
+    vec2 dots[14]; vec3 dotColors[14];
     // Bass makes dots scatter outward from center (explosive feel)
     float scatter = 1.0 + bassEnv * 0.6;
     for (int i = 0; i < CONSTELLATION_COUNT; i++) {
@@ -363,22 +363,20 @@ vec3 constellationNetwork(vec2 uv, float time, float bassEnv, float midsEnv, flo
 
         col += dotColors[i] * (dotMask + dotHalo) * dotBright * particleStr;
 
+        // Treble flash (merged here to reuse dist — avoids second 14-iteration loop)
+        float flashChance = step(0.5, hash21(vec2(fi, floor(time * 6.0))));
+        col += dotColors[i] * exp(-dist * 30.0) * trebleEnv * 2.0 * flashChance;
+
+        // Skip inner loop if fragment is far from this dot — no connection
+        // line can be visible if we're further than the max connection range
+        if (dist > connectionThreshold + 0.04) continue;
+
         // Connection lines to nearby dots
-        // Pre-compute: if fragment is far from this dot, most connections won't
-        // produce visible line contribution. Use cheap distance-to-midpoint check.
-        float distToDot_i = length(uv - dPos);
         for (int j = i + 1; j < CONSTELLATION_COUNT; j++) {
             vec2 dPos2 = dots[j];
             float dotDist = length(dPos - dPos2);
 
             if (dotDist < connectionThreshold) {
-                // Skip sdSegment if fragment is far from both endpoints
-                // (the segment can't be closer than max(distToA, distToB) - segLen)
-                float distToDot_j = length(uv - dPos2);
-                float minApproach = min(distToDot_i, distToDot_j);
-                // lineWidth is 0.003, use generous cutoff of 0.04 (includes halo)
-                if (minApproach > dotDist + 0.04) continue;
-
                 float lineDist = sdSegment(uv, dPos, dPos2);
                 float lineWidth = 0.003;
                 float lineMask = smoothstep(lineWidth, lineWidth * 0.1, lineDist);
@@ -386,9 +384,7 @@ vec3 constellationNetwork(vec2 uv, float time, float bassEnv, float midsEnv, flo
                 float proximity = 1.0 - dotDist / connectionThreshold;
                 proximity *= proximity;
 
-                // Lines brighten on bass
                 float lineBass = 0.6 + bassEnv * 1.5;
-
                 float linePhase = fract(time * 0.25 + hash21(vec2(fi, float(j))) * TAU);
                 float linePulse = 0.5 + 0.5 * sin(linePhase * TAU);
 
@@ -413,17 +409,7 @@ vec3 constellationNetwork(vec2 uv, float time, float bassEnv, float midsEnv, flo
         }
     }
 
-    // ── Treble flash: random dots burst bright on treble ──
-    // Branch is worthwhile here: skips 24 exp+length when treble is silent
-    if (trebleEnv > 0.05) {
-        for (int i = 0; i < CONSTELLATION_COUNT; i++) {
-            float fi = float(i);
-            float flashChance = step(0.5, hash21(vec2(fi, floor(time * 6.0))));
-            float dist = length(uv - dots[i]);
-            float flash = exp(-dist * 30.0) * trebleEnv * 2.0 * flashChance;
-            col += dotColors[i] * flash;
-        }
-    }
+    // (treble flash merged into main dot loop above)
 
     return col;
 }
@@ -647,7 +633,7 @@ vec4 renderEosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, 
                 float warp2 = simplex2D(warpBase + vec2(50.0)) * 0.4;
                 flowUV += vec2(warp1, warp2) * 0.5;
 
-                float flow = simplexFBM(flowUV, max(octaves - 1, 3));
+                float flow = simplexFBM(flowUV, min(max(octaves - 2, 3), 4));
 
                 // Base: sail color modulated by flow
                 vec3 interiorCol = mix(sail.sailColor * 0.4, sail.sailColor, flow) * brightness * 1.4;
