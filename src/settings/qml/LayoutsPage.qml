@@ -20,6 +20,14 @@ ColumnLayout {
     readonly property int layoutListMinHeight: Kirigami.Units.gridUnit * 20
     // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms
     property int viewMode: 0
+    // Shared aspect ratio labels (used in context menu + section headers)
+    readonly property var aspectRatioLabels: ({
+        "any": i18n("All Monitors"),
+        "standard": i18n("Standard (16:9)"),
+        "ultrawide": i18n("Ultrawide (21:9)"),
+        "super-ultrawide": i18n("Super-Ultrawide (32:9)"),
+        "portrait": i18n("Portrait (9:16)")
+    })
 
     spacing: 0
 
@@ -190,35 +198,35 @@ ColumnLayout {
                     visible: !layoutContextMenu.isAutotile
 
                     MenuItem {
-                        text: i18n("Any")
+                        text: root.aspectRatioLabels["any"]
                         checkable: true
                         checked: layoutContextMenu.layout && (layoutContextMenu.layout.aspectRatioClass || "any") === "any"
                         onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 0)
                     }
 
                     MenuItem {
-                        text: i18n("Standard (16:9)")
+                        text: root.aspectRatioLabels["standard"]
                         checkable: true
                         checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "standard"
                         onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 1)
                     }
 
                     MenuItem {
-                        text: i18n("Ultrawide (21:9)")
+                        text: root.aspectRatioLabels["ultrawide"]
                         checkable: true
                         checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "ultrawide"
                         onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 2)
                     }
 
                     MenuItem {
-                        text: i18n("Super-Ultrawide (32:9)")
+                        text: root.aspectRatioLabels["super-ultrawide"]
                         checkable: true
                         checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "super-ultrawide"
                         onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 3)
                     }
 
                     MenuItem {
-                        text: i18n("Portrait (9:16)")
+                        text: root.aspectRatioLabels["portrait"]
                         checkable: true
                         checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "portrait"
                         onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 4)
@@ -297,13 +305,7 @@ ColumnLayout {
                     }
                     // Group by aspect ratio class
                     let aspectOrder = ["any", "standard", "ultrawide", "super-ultrawide", "portrait"];
-                    let aspectLabels = {
-                        "any": i18n("All Monitors"),
-                        "standard": i18n("Standard (16:9)"),
-                        "ultrawide": i18n("Ultrawide (21:9)"),
-                        "super-ultrawide": i18n("Super-Ultrawide (32:9)"),
-                        "portrait": i18n("Portrait (9:16)")
-                    };
+                    let aspectLabels = root.aspectRatioLabels;
                     let groups = {
                     };
                     for (let i = 0; i < filtered.length; i++) {
