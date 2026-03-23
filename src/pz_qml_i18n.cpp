@@ -12,16 +12,22 @@ PzLocalizedContext::PzLocalizedContext(QObject* parent)
 QString PzLocalizedContext::substituteArgs(QString text, const QVariant& a1, const QVariant& a2, const QVariant& a3,
                                            const QVariant& a4, const QVariant& a5)
 {
+    // Use multi-arg QString::arg() to prevent double-substitution when
+    // argument values themselves contain %N markers. Sequential .arg()
+    // calls would replace markers introduced by earlier substitutions.
+    QStringList args;
     if (a1.isValid())
-        text = text.arg(a1.toString());
+        args << a1.toString();
     if (a2.isValid())
-        text = text.arg(a2.toString());
+        args << a2.toString();
     if (a3.isValid())
-        text = text.arg(a3.toString());
+        args << a3.toString();
     if (a4.isValid())
-        text = text.arg(a4.toString());
+        args << a4.toString();
     if (a5.isValid())
-        text = text.arg(a5.toString());
+        args << a5.toString();
+    for (int i = 0; i < args.size(); ++i)
+        text = text.replace(QStringLiteral("%") + QString::number(i + 1), args.at(i));
     return text;
 }
 

@@ -22,5 +22,4 @@ target_link_libraries(kcm_plasmazones_about
         plasmazones_core
         Qt6::DBus
         KF6::KCMUtils
-        KF6::ConfigWidgets
 )

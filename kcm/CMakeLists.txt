@@ -4,11 +4,6 @@
 # Minimal KCM — version info + launcher for plasmazones-settings app.
 # All settings configuration is handled by the standalone plasmazones-settings app.
 
-find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
-    Config
-    ConfigWidgets
-)
-
 add_subdirectory(about)
 
 # Install category desktop file for System Settings subcategory

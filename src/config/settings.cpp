@@ -402,7 +402,8 @@ QString Settings::readTilingQuickLayoutSlot(int slotNumber) const
 {
     if (slotNumber < 1 || slotNumber > 9)
         return {};
-    m_configBackend->reparseConfiguration();
+    // Config is already current from load() — no reparse needed per read.
+    // The staged value check in getTilingQuickLayoutSlot() handles unsaved changes.
     auto group = m_configBackend->group(QStringLiteral("TilingQuickLayoutSlots"));
     return group->readString(QString::number(slotNumber));
 }

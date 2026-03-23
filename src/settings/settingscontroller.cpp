@@ -702,7 +702,7 @@ void SettingsController::clearScreenAssignment(const QString& screenName)
 
 void SettingsController::clearTilingScreenAssignment(const QString& screenName)
 {
-    stageFullClear(screenName, 0, QString());
+    stageTilingClear(screenName, 0, QString());
 }
 
 void SettingsController::clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
