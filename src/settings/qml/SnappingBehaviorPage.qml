@@ -10,7 +10,7 @@ Flickable {
     id: root
 
     readonly property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
-    readonly property int thresholdMax: 100
+    readonly property int thresholdMax: 500
 
     contentHeight: content.implicitHeight
     clip: true
