@@ -1,0 +1,84 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <interface name="org.plasmazones.Shader">
+        <annotation name="org.gtk.GDBus.DocString" value="Shader management interface. Provides shader discovery, parameter introspection, compilation lifecycle, and user shader directory monitoring."/>
+
+        <method name="availableShaders">
+            <annotation name="org.gtk.GDBus.DocString" value="Get list of available shader effects with metadata."/>
+            <arg name="shaders" type="av" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="List of shader metadata maps."/>
+            </arg>
+        </method>
+        <method name="shaderInfo">
+            <annotation name="org.gtk.GDBus.DocString" value="Get detailed information about a specific shader."/>
+            <arg name="shaderId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Shader UUID."/>
+            </arg>
+            <arg name="info" type="a{sv}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Shader metadata map (empty if not found)."/>
+            </arg>
+        </method>
+        <method name="defaultShaderParams">
+            <annotation name="org.gtk.GDBus.DocString" value="Get default parameter values for a shader."/>
+            <arg name="shaderId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Shader UUID."/>
+            </arg>
+            <arg name="params" type="a{sv}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of parameter IDs to default values."/>
+            </arg>
+        </method>
+        <method name="translateShaderParams">
+            <annotation name="org.gtk.GDBus.DocString" value="Translate shader params from semantic IDs to uniform names for the renderer."/>
+            <arg name="shaderId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Shader UUID."/>
+            </arg>
+            <arg name="params" type="a{sv}" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Params with semantic ID keys."/>
+            </arg>
+            <arg name="uniforms" type="a{sv}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Params with uniform name keys."/>
+            </arg>
+        </method>
+        <method name="shadersEnabled">
+            <annotation name="org.gtk.GDBus.DocString" value="Check if shader effects are enabled (compiled with shader support)."/>
+            <arg name="enabled" type="b" direction="out"/>
+        </method>
+        <method name="userShadersEnabled">
+            <annotation name="org.gtk.GDBus.DocString" value="Check if user-installed shaders are supported."/>
+            <arg name="enabled" type="b" direction="out"/>
+        </method>
+        <method name="userShaderDirectory">
+            <annotation name="org.gtk.GDBus.DocString" value="Get path to user shader installation directory."/>
+            <arg name="path" type="s" direction="out"/>
+        </method>
+        <method name="openUserShaderDirectory">
+            <annotation name="org.gtk.GDBus.DocString" value="Open user shader directory in the file manager."/>
+        </method>
+        <method name="refreshShaders">
+            <annotation name="org.gtk.GDBus.DocString" value="Reload all shaders from disk."/>
+        </method>
+
+        <signal name="shaderCompilationStarted">
+            <annotation name="org.gtk.GDBus.DocString" value="Shader compilation/bake started."/>
+            <arg name="shaderId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Shader being compiled."/>
+            </arg>
+        </signal>
+        <signal name="shaderCompilationFinished">
+            <annotation name="org.gtk.GDBus.DocString" value="Shader compilation/bake completed."/>
+            <arg name="shaderId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Shader that was compiled."/>
+            </arg>
+            <arg name="success" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="True if compilation succeeded."/>
+            </arg>
+            <arg name="error" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Error message if failed."/>
+            </arg>
+        </signal>
+        <signal name="shadersChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Shader list changed (added, removed, or reloaded)."/>
+        </signal>
+    </interface>
+</node>

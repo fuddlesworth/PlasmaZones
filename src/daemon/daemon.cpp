@@ -30,6 +30,7 @@
 #include "../config/settings.h"
 #include "../dbus/layoutadaptor.h"
 #include "../dbus/settingsadaptor.h"
+#include "../dbus/shaderadaptor.h"
 #include "../dbus/overlayadaptor.h"
 #include "../dbus/zonedetectionadaptor.h"
 #include "../dbus/windowtrackingadaptor.h"
@@ -284,6 +285,9 @@ bool Daemon::init()
     // Invalidate D-Bus getActiveLayout() cache when the default layout changes in settings
     connect(m_settings.get(), &Settings::defaultLayoutIdChanged, m_layoutAdaptor, &LayoutAdaptor::invalidateCache);
     m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), this);
+
+    // Shader adaptor - shader discovery, compilation lifecycle, file monitoring
+    new ShaderAdaptor(ShaderRegistry::instance(), this);
 
     // Overlay adaptor - overlay visibility and highlighting
     m_overlayAdaptor =
