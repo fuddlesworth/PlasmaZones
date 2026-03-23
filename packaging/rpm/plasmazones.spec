@@ -57,15 +57,13 @@ BuildRequires:  qt6-qtshadertools-devel
 
 # KDE Frameworks 6 (6.6+ for Plasma 6.6 API)
 %if 0%{?suse_version}
-BuildRequires:  cmake(KF6Config) >= 6.6.0
-BuildRequires:  cmake(KF6ConfigWidgets)
 BuildRequires:  cmake(KF6KCMUtils)
 BuildRequires:  cmake(KF6GlobalAccel)
+BuildRequires:  cmake(KF6Kirigami)
 %else
-BuildRequires:  kf6-kconfig-devel >= 6.6.0
-BuildRequires:  kf6-kconfigwidgets-devel >= 6.6.0
 BuildRequires:  kf6-kcmutils-devel >= 6.6.0
 BuildRequires:  kf6-kglobalaccel-devel >= 6.6.0
+BuildRequires:  kf6-kirigami-devel >= 6.6.0
 %endif
 
 # Plasma 6.6 / KWin 6.6 (effect API), LayerShellQt 6.6 (setScreen API)
@@ -94,8 +92,7 @@ BuildRequires:  systemd-rpm-macros
 Requires:       qt6-qtbase >= 6.6.0
 Requires:       qt6-qtdeclarative
 Requires:       qt6-qtshadertools
-Requires:       kf6-kconfig >= 6.6.0
-Requires:       kf6-kconfigwidgets >= 6.6.0
+Requires:       kf6-kirigami >= 6.6.0
 Requires:       kf6-kcmutils >= 6.6.0
 Requires:       layer-shell-qt >= 6.6.0
 Requires:       kwin >= 6.6.0
@@ -154,6 +151,7 @@ echo ""
 # Executables
 %{_bindir}/plasmazonesd
 %{_bindir}/plasmazones-editor
+%{_bindir}/plasmazones-settings
 
 # Libraries
 %{_libdir}/libplasmazones_core.so*
