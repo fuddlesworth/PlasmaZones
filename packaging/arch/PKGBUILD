@@ -14,16 +14,9 @@ depends=(
     'qt6-base'
     'qt6-declarative'
     'qt6-shadertools'
-    'kconfig'
-    'kconfigwidgets'
-    'kcoreaddons'
-    'kdbusaddons'
-    'ki18n'
+    'kirigami'
     'kcmutils'
-    'kwindowsystem'
     'kglobalaccel'
-    'knotifications'
-    'kcolorscheme'
     'layer-shell-qt'
 )
 makedepends=(

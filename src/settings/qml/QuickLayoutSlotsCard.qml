@@ -1,0 +1,148 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
+
+/**
+ * @brief Quick layout slots card - Assign layouts to keyboard shortcuts
+ *
+ * Refactored to use cleaner structure with LayoutComboBox.
+ */
+SettingsCard {
+    id: root
+
+    required property var appSettings
+    // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
+    property int viewMode: 0
+
+    function getSlot(slotNumber) {
+        return viewMode === 1 ? (appSettings.getTilingQuickLayoutSlot(slotNumber) || "") : (appSettings.getQuickLayoutSlot(slotNumber) || "");
+    }
+
+    function setSlot(slotNumber, value) {
+        if (viewMode === 1)
+            appSettings.setTilingQuickLayoutSlot(slotNumber, value);
+        else
+            appSettings.setQuickLayoutSlot(slotNumber, value);
+    }
+
+    headerText: root.viewMode === 1 ? i18n("Tiling Quick Shortcuts") : i18n("Quick Layout Shortcuts")
+    collapsible: true
+
+    contentItem: ColumnLayout {
+        spacing: Kirigami.Units.smallSpacing
+
+        Label {
+            Layout.fillWidth: true
+            Layout.margins: Kirigami.Units.smallSpacing
+            text: root.viewMode === 1 ? i18n("Assign tiling algorithms to keyboard shortcuts for instant switching.") : i18n("Assign layouts to keyboard shortcuts for instant switching.")
+            wrapMode: Text.WordWrap
+            opacity: 0.7
+        }
+
+        ListView {
+            id: quickLayoutListView
+
+            Layout.fillWidth: true
+            Layout.preferredHeight: contentHeight
+            Layout.margins: Kirigami.Units.smallSpacing
+            clip: true
+            model: 9
+            interactive: false
+            Accessible.name: i18n("Quick layout shortcuts list")
+            Accessible.role: Accessible.List
+
+            delegate: Item {
+                id: slotDelegate
+
+                required property int index
+                property int slotNumber: index + 1
+                property string shortcutText: root.appSettings.getQuickLayoutShortcut(slotNumber)
+                property int _slotRevision: 0
+
+                width: ListView.view.width
+                height: slotRow.implicitHeight + Kirigami.Units.smallSpacing * 2
+
+                RowLayout {
+                    id: slotRow
+
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.smallSpacing
+                    spacing: Kirigami.Units.smallSpacing
+
+                    // Slot label + shortcut
+                    ColumnLayout {
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                        spacing: 0
+
+                        Label {
+                            text: root.viewMode === 1 ? i18n("Quick Tiling %1", slotDelegate.slotNumber) : i18n("Quick Layout %1", slotDelegate.slotNumber)
+                        }
+
+                        Label {
+                            text: slotDelegate.shortcutText !== "" ? slotDelegate.shortcutText : i18n("No shortcut assigned")
+                            font: Kirigami.Theme.smallFont
+                            opacity: slotDelegate.shortcutText !== "" ? 0.7 : 0.4
+                        }
+
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    // Layout selection
+                    LayoutComboBox {
+                        id: slotLayoutCombo
+
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 16
+                        appSettings: root.appSettings
+                        noneText: i18n("None")
+                        showPreview: root.viewMode === 0
+                        layoutFilter: root.viewMode === 1 ? 1 : 0
+                        resolvedDefaultId: ""
+                        currentLayoutId: {
+                            void (slotDelegate._slotRevision);
+                            return root.getSlot(slotDelegate.slotNumber);
+                        }
+                        onActivated: {
+                            root.setSlot(slotDelegate.slotNumber, model[currentIndex].value);
+                        }
+
+                        Connections {
+                            function onQuickLayoutSlotsChanged() {
+                                slotDelegate._slotRevision++;
+                            }
+
+                            function onTilingQuickLayoutSlotsChanged() {
+                                slotDelegate._slotRevision++;
+                            }
+
+                            target: root.appSettings
+                        }
+
+                    }
+
+                    ToolButton {
+                        icon.name: "edit-clear"
+                        onClicked: {
+                            root.setSlot(slotDelegate.slotNumber, "");
+                            slotLayoutCombo.clearSelection();
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("Clear shortcut")
+                        Accessible.name: i18n("Clear shortcut %1", slotDelegate.slotNumber)
+                    }
+
+                }
+
+            }
+
+        }
+
+    }
+
+}

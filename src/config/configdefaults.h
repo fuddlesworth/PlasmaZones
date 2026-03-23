@@ -3,32 +3,25 @@
 
 #pragma once
 
-#include "plasmazones.h" // Generated from plasmazones.kcfg via KConfigXT
-
 #include <QColor>
-#include <QtCore/qnamespace.h>
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QtCore/qnamespace.h>
 
 namespace PlasmaZones {
 
 /**
  * @brief Provides static access to default configuration values
  *
- * This class wraps the KConfigXT-generated PlasmaZonesConfig class to provide
- * static access to default values. The .kcfg file is the SINGLE SOURCE OF TRUTH
- * for all defaults - this class simply exposes those generated defaults.
+ * Hardcoded defaults matching the plasmazones.kcfg schema.
+ * The .kcfg file remains the canonical reference; these values are copied
+ * from it so that the daemon and editor can build without KConfigXT.
  *
  * Usage:
- *   int cols = ConfigDefaults::gridColumns();  // Returns 5 (from .kcfg)
- *   int rows = ConfigDefaults::maxRows();      // Returns 4 (from .kcfg)
- *
- * Benefits:
- * - Single source of truth (.kcfg file)
- * - Compile-time type safety
- * - No magic numbers scattered across codebase
- * - Changes to .kcfg automatically propagate everywhere
+ *   int cols = ConfigDefaults::gridColumns();  // Returns 5
+ *   int rows = ConfigDefaults::maxRows();      // Returns 4
  */
 class ConfigDefaults
 {
@@ -39,15 +32,15 @@ public:
 
     static bool shiftDrag()
     {
-        return instance().defaultShiftDragValue();
+        return true;
     }
     static int dragActivationModifier()
     {
-        return instance().defaultDragActivationModifierValue();
+        return 3;
     }
     static int dragActivationMouseButton()
     {
-        return instance().defaultDragActivationMouseButtonValue();
+        return 0;
     }
     static QVariantList dragActivationTriggers()
     {
@@ -59,19 +52,19 @@ public:
     }
     static bool toggleActivation()
     {
-        return instance().defaultToggleActivationValue();
+        return false;
     }
     static bool snappingEnabled()
     {
-        return instance().defaultSnappingEnabledValue();
+        return true;
     }
     static bool zoneSpanEnabled()
     {
-        return instance().defaultZoneSpanEnabledValue();
+        return true;
     }
     static int zoneSpanModifier()
     {
-        return instance().defaultZoneSpanModifierValue();
+        return 2;
     }
     static QVariantList zoneSpanTriggers()
     {
@@ -87,31 +80,31 @@ public:
 
     static bool showOnAllMonitors()
     {
-        return instance().defaultShowOnAllMonitorsValue();
+        return false;
     }
     static bool showNumbers()
     {
-        return instance().defaultShowNumbersValue();
+        return true;
     }
     static bool flashOnSwitch()
     {
-        return instance().defaultFlashOnSwitchValue();
+        return true;
     }
     static bool showOsdOnLayoutSwitch()
     {
-        return instance().defaultShowOsdOnLayoutSwitchValue();
+        return true;
     }
     static bool showNavigationOsd()
     {
-        return instance().defaultShowNavigationOsdValue();
+        return true;
     }
     static int osdStyle()
     {
-        return instance().defaultOsdStyleValue();
+        return 2;
     }
     static int overlayDisplayMode()
     {
-        return instance().defaultOverlayDisplayModeValue();
+        return 0;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -120,69 +113,71 @@ public:
 
     static bool useSystemColors()
     {
-        return instance().defaultUseSystemColorsValue();
+        return true;
     }
     static QColor highlightColor()
     {
-        return instance().defaultHighlightColorValue();
+        // #AARRGGBB: #800078D4 → A=0x80, R=0x00, G=0x78, B=0xD4
+        return QColor(0x00, 0x78, 0xD4, 0x80);
     }
     static QColor inactiveColor()
     {
-        return instance().defaultInactiveColorValue();
+        // #40808080
+        return QColor(0x80, 0x80, 0x80, 0x40);
     }
     static QColor borderColor()
     {
-        return instance().defaultBorderColorValue();
+        // #C8FFFFFF
+        return QColor(0xFF, 0xFF, 0xFF, 0xC8);
     }
     static QColor labelFontColor()
     {
-        return instance().defaultLabelFontColorValue();
+        // #FFFFFFFF
+        return QColor(0xFF, 0xFF, 0xFF, 0xFF);
     }
     static double activeOpacity()
     {
-        return instance().defaultActiveOpacityValue();
+        return 0.5;
     }
     static double inactiveOpacity()
     {
-        return instance().defaultInactiveOpacityValue();
+        return 0.3;
     }
     static int borderWidth()
     {
-        return instance().defaultBorderWidthValue();
+        return 2;
     }
     static int borderRadius()
     {
-        return instance().defaultBorderRadiusValue();
+        return 8;
     }
     static bool enableBlur()
     {
-        return instance().defaultEnableBlurValue();
+        return true;
     }
-    // KConfigXT doesn't generate a public defaultLabelFontFamilyValue() for
-    // String entries with empty <default></default>, so we hardcode here.
     static QString labelFontFamily()
     {
         return QString();
     }
     static double labelFontSizeScale()
     {
-        return instance().defaultLabelFontSizeScaleValue();
+        return 1.0;
     }
     static int labelFontWeight()
     {
-        return instance().defaultLabelFontWeightValue();
+        return 700;
     }
     static bool labelFontItalic()
     {
-        return instance().defaultLabelFontItalicValue();
+        return false;
     }
     static bool labelFontUnderline()
     {
-        return instance().defaultLabelFontUnderlineValue();
+        return false;
     }
     static bool labelFontStrikeout()
     {
-        return instance().defaultLabelFontStrikeoutValue();
+        return false;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -191,35 +186,35 @@ public:
 
     static int zonePadding()
     {
-        return instance().defaultPaddingValue();
+        return 8;
     }
     static int outerGap()
     {
-        return instance().defaultOuterGapValue();
+        return 8;
     }
     static bool usePerSideOuterGap()
     {
-        return instance().defaultUsePerSideOuterGapValue();
+        return false;
     }
     static int outerGapTop()
     {
-        return instance().defaultOuterGapTopValue();
+        return 8;
     }
     static int outerGapBottom()
     {
-        return instance().defaultOuterGapBottomValue();
+        return 8;
     }
     static int outerGapLeft()
     {
-        return instance().defaultOuterGapLeftValue();
+        return 8;
     }
     static int outerGapRight()
     {
-        return instance().defaultOuterGapRightValue();
+        return 8;
     }
     static int adjacentThreshold()
     {
-        return instance().defaultAdjacentThresholdValue();
+        return 20;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -228,15 +223,15 @@ public:
 
     static int pollIntervalMs()
     {
-        return instance().defaultPollIntervalMsValue();
+        return 50;
     }
     static int minimumZoneSizePx()
     {
-        return instance().defaultMinimumZoneSizePxValue();
+        return 100;
     }
     static int minimumZoneDisplaySizePx()
     {
-        return instance().defaultMinimumZoneDisplaySizePxValue();
+        return 10;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -245,36 +240,35 @@ public:
 
     static bool keepWindowsInZonesOnResolutionChange()
     {
-        return instance().defaultKeepOnResolutionChangeValue();
+        return true;
     }
     static bool moveNewWindowsToLastZone()
     {
-        return instance().defaultMoveNewToLastZoneValue();
+        return false;
     }
     static bool restoreOriginalSizeOnUnsnap()
     {
-        return instance().defaultRestoreSizeOnUnsnapValue();
+        return true;
     }
     static int stickyWindowHandling()
     {
-        return instance().defaultStickyWindowHandlingValue();
+        return 0;
     }
     static bool restoreWindowsToZonesOnLogin()
     {
-        return instance().defaultRestoreWindowsToZonesOnLoginValue();
+        return true;
     }
     static bool snapAssistFeatureEnabled()
     {
-        return instance().defaultSnapAssistFeatureEnabledValue();
+        return true;
     }
     static bool snapAssistEnabled()
     {
-        return instance().defaultSnapAssistEnabledValue();
+        return true;
     }
     static QVariantList snapAssistTriggers()
     {
-        // Default: Middle mouse — avoids conflict with Alt (zone activation) which would make Snap Assist always-on
-        // when using overlay
+        // Default: Middle mouse
         QVariantMap trigger;
         trigger[QStringLiteral("modifier")] = 0;
         trigger[QStringLiteral("mouseButton")] = static_cast<int>(Qt::MiddleButton);
@@ -287,15 +281,15 @@ public:
 
     static bool excludeTransientWindows()
     {
-        return instance().defaultExcludeTransientWindowsValue();
+        return true;
     }
     static int minimumWindowWidth()
     {
-        return instance().defaultMinimumWindowWidthValue();
+        return 200;
     }
     static int minimumWindowHeight()
     {
-        return instance().defaultMinimumWindowHeightValue();
+        return 150;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -304,43 +298,43 @@ public:
 
     static bool zoneSelectorEnabled()
     {
-        return instance().defaultEnabledValue();
+        return true;
     }
     static int triggerDistance()
     {
-        return instance().defaultTriggerDistanceValue();
+        return 50;
     }
     static int position()
     {
-        return instance().defaultPositionValue();
+        return 1;
     }
     static int layoutMode()
     {
-        return instance().defaultLayoutModeValue();
+        return 0;
     }
     static int sizeMode()
     {
-        return instance().defaultSizeModeValue();
+        return 0;
     }
     static int maxRows()
     {
-        return instance().defaultMaxRowsValue();
+        return 4;
     }
     static int previewWidth()
     {
-        return instance().defaultPreviewWidthValue();
+        return 180;
     }
     static int previewHeight()
     {
-        return instance().defaultPreviewHeightValue();
+        return 101;
     }
     static bool previewLockAspect()
     {
-        return instance().defaultPreviewLockAspectValue();
+        return true;
     }
     static int gridColumns()
     {
-        return instance().defaultGridColumnsValue();
+        return 5;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -349,19 +343,19 @@ public:
 
     static bool enableShaderEffects()
     {
-        return instance().defaultEnableShaderEffectsValue();
+        return true;
     }
     static int shaderFrameRate()
     {
-        return instance().defaultShaderFrameRateValue();
+        return 60;
     }
     static bool enableAudioVisualizer()
     {
-        return instance().defaultEnableAudioVisualizerValue();
+        return false;
     }
     static int audioSpectrumBarCount()
     {
-        return instance().defaultAudioSpectrumBarCountValue();
+        return 64;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -370,142 +364,143 @@ public:
 
     static bool autotileEnabled()
     {
-        return instance().defaultAutotileEnabledValue();
+        return false;
     }
     static QString autotileAlgorithm()
     {
-        return instance().defaultAutotileAlgorithmValue();
+        return QStringLiteral("bsp");
     }
     static double autotileSplitRatio()
     {
-        return instance().defaultAutotileSplitRatioValue();
+        return 0.5;
     }
     static int autotileMasterCount()
     {
-        return instance().defaultAutotileMasterCountValue();
+        return 1;
     }
     static double autotileCenteredMasterSplitRatio()
     {
-        return instance().defaultAutotileCenteredMasterSplitRatioValue();
+        return 0.5;
     }
     static int autotileCenteredMasterMasterCount()
     {
-        return instance().defaultAutotileCenteredMasterMasterCountValue();
+        return 1;
     }
     static int autotileInnerGap()
     {
-        return instance().defaultAutotileInnerGapValue();
+        return 8;
     }
     static int autotileOuterGap()
     {
-        return instance().defaultAutotileOuterGapValue();
+        return 8;
     }
     static bool autotileUsePerSideOuterGap()
     {
-        return instance().defaultAutotileUsePerSideOuterGapValue();
+        return false;
     }
     static int autotileOuterGapTop()
     {
-        return instance().defaultAutotileOuterGapTopValue();
+        return 8;
     }
     static int autotileOuterGapBottom()
     {
-        return instance().defaultAutotileOuterGapBottomValue();
+        return 8;
     }
     static int autotileOuterGapLeft()
     {
-        return instance().defaultAutotileOuterGapLeftValue();
+        return 8;
     }
     static int autotileOuterGapRight()
     {
-        return instance().defaultAutotileOuterGapRightValue();
+        return 8;
     }
     static bool autotileFocusNewWindows()
     {
-        return instance().defaultAutotileFocusNewWindowsValue();
+        return true;
     }
     static bool autotileSmartGaps()
     {
-        return instance().defaultAutotileSmartGapsValue();
+        return true;
     }
     static int autotileInsertPosition()
     {
-        return instance().defaultAutotileInsertPositionValue();
+        return 0;
     }
     static int autotileMaxWindows()
     {
-        return instance().defaultAutotileMaxWindowsValue();
+        return 5;
     }
     static bool animationsEnabled()
     {
-        return instance().defaultAnimationsEnabledValue();
+        return true;
     }
     static int animationDuration()
     {
-        return instance().defaultAnimationDurationValue();
+        return 300;
     }
     static int animationSequenceMode()
     {
-        return instance().defaultAnimationSequenceModeValue();
+        return 1;
     }
     static int animationStaggerInterval()
     {
-        return instance().defaultAnimationStaggerIntervalValue();
+        return 50;
     }
     static QString animationEasingCurve()
     {
-        return instance().defaultAnimationEasingCurveValue();
+        return QStringLiteral("0.33,1.00,0.68,1.00");
     }
     static int animationMinDistance()
     {
-        return instance().defaultAnimationMinDistanceValue();
+        return 0;
     }
     static bool autotileFocusFollowsMouse()
     {
-        return instance().defaultAutotileFocusFollowsMouseValue();
+        return false;
     }
     static bool autotileRespectMinimumSize()
     {
-        return instance().defaultAutotileRespectMinimumSizeValue();
+        return true;
     }
     static bool autotileHideTitleBars()
     {
-        return instance().defaultAutotileHideTitleBarsValue();
+        return true;
     }
     static bool autotileShowBorder()
     {
-        return instance().defaultAutotileShowBorderValue();
+        return true;
     }
     static int autotileBorderWidth()
     {
-        return instance().defaultAutotileBorderWidthValue();
+        return 2;
     }
     static int autotileBorderRadius()
     {
-        return instance().defaultAutotileBorderRadiusValue();
+        return 0;
     }
     static QColor autotileBorderColor()
     {
-        return instance().defaultAutotileBorderColorValue();
+        // #800078D4
+        return QColor(0x00, 0x78, 0xD4, 0x80);
     }
     static QColor autotileInactiveBorderColor()
     {
-        return instance().defaultAutotileInactiveBorderColorValue();
+        // #40808080
+        return QColor(0x80, 0x80, 0x80, 0x40);
     }
     static bool autotileUseSystemBorderColors()
     {
-        return instance().defaultAutotileUseSystemBorderColorsValue();
+        return true;
     }
     static QStringList lockedScreens()
     {
         return {};
     }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Update Notification Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // KConfigXT doesn't generate a public defaultDismissedUpdateVersionValue() for
-    // String entries with empty <default></default>, so we hardcode here.
     static QString dismissedUpdateVersion()
     {
         return QString();
@@ -517,51 +512,55 @@ public:
 
     static QString openEditorShortcut()
     {
-        return instance().defaultOpenEditorShortcutValue();
+        return QStringLiteral("Meta+Shift+E");
+    }
+    static QString openSettingsShortcut()
+    {
+        return QStringLiteral("Meta+Shift+P");
     }
     static QString previousLayoutShortcut()
     {
-        return instance().defaultPreviousLayoutShortcutValue();
+        return QStringLiteral("Meta+Alt+[");
     }
     static QString nextLayoutShortcut()
     {
-        return instance().defaultNextLayoutShortcutValue();
+        return QStringLiteral("Meta+Alt+]");
     }
     static QString quickLayout1Shortcut()
     {
-        return instance().defaultQuickLayout1ShortcutValue();
+        return QStringLiteral("Meta+Alt+1");
     }
     static QString quickLayout2Shortcut()
     {
-        return instance().defaultQuickLayout2ShortcutValue();
+        return QStringLiteral("Meta+Alt+2");
     }
     static QString quickLayout3Shortcut()
     {
-        return instance().defaultQuickLayout3ShortcutValue();
+        return QStringLiteral("Meta+Alt+3");
     }
     static QString quickLayout4Shortcut()
     {
-        return instance().defaultQuickLayout4ShortcutValue();
+        return QStringLiteral("Meta+Alt+4");
     }
     static QString quickLayout5Shortcut()
     {
-        return instance().defaultQuickLayout5ShortcutValue();
+        return QStringLiteral("Meta+Alt+5");
     }
     static QString quickLayout6Shortcut()
     {
-        return instance().defaultQuickLayout6ShortcutValue();
+        return QStringLiteral("Meta+Alt+6");
     }
     static QString quickLayout7Shortcut()
     {
-        return instance().defaultQuickLayout7ShortcutValue();
+        return QStringLiteral("Meta+Alt+7");
     }
     static QString quickLayout8Shortcut()
     {
-        return instance().defaultQuickLayout8ShortcutValue();
+        return QStringLiteral("Meta+Alt+8");
     }
     static QString quickLayout9Shortcut()
     {
-        return instance().defaultQuickLayout9ShortcutValue();
+        return QStringLiteral("Meta+Alt+9");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -570,131 +569,131 @@ public:
 
     static QString moveWindowLeftShortcut()
     {
-        return instance().defaultMoveWindowLeftValue();
+        return QStringLiteral("Meta+Alt+Shift+Left");
     }
     static QString moveWindowRightShortcut()
     {
-        return instance().defaultMoveWindowRightValue();
+        return QStringLiteral("Meta+Alt+Shift+Right");
     }
     static QString moveWindowUpShortcut()
     {
-        return instance().defaultMoveWindowUpValue();
+        return QStringLiteral("Meta+Alt+Shift+Up");
     }
     static QString moveWindowDownShortcut()
     {
-        return instance().defaultMoveWindowDownValue();
+        return QStringLiteral("Meta+Alt+Shift+Down");
     }
     static QString swapWindowLeftShortcut()
     {
-        return instance().defaultSwapWindowLeftValue();
+        return QStringLiteral("Meta+Ctrl+Alt+Left");
     }
     static QString swapWindowRightShortcut()
     {
-        return instance().defaultSwapWindowRightValue();
+        return QStringLiteral("Meta+Ctrl+Alt+Right");
     }
     static QString swapWindowUpShortcut()
     {
-        return instance().defaultSwapWindowUpValue();
+        return QStringLiteral("Meta+Ctrl+Alt+Up");
     }
     static QString swapWindowDownShortcut()
     {
-        return instance().defaultSwapWindowDownValue();
+        return QStringLiteral("Meta+Ctrl+Alt+Down");
     }
     static QString focusZoneLeftShortcut()
     {
-        return instance().defaultFocusZoneLeftValue();
+        return QStringLiteral("Alt+Shift+Left");
     }
     static QString focusZoneRightShortcut()
     {
-        return instance().defaultFocusZoneRightValue();
+        return QStringLiteral("Alt+Shift+Right");
     }
     static QString focusZoneUpShortcut()
     {
-        return instance().defaultFocusZoneUpValue();
+        return QStringLiteral("Alt+Shift+Up");
     }
     static QString focusZoneDownShortcut()
     {
-        return instance().defaultFocusZoneDownValue();
+        return QStringLiteral("Alt+Shift+Down");
     }
     static QString pushToEmptyZoneShortcut()
     {
-        return instance().defaultPushToEmptyZoneValue();
+        return QStringLiteral("Meta+Alt+Return");
     }
     static QString restoreWindowSizeShortcut()
     {
-        return instance().defaultRestoreWindowSizeValue();
+        return QStringLiteral("Meta+Alt+Escape");
     }
     static QString toggleWindowFloatShortcut()
     {
-        return instance().defaultToggleWindowFloatValue();
+        return QStringLiteral("Meta+F");
     }
     static QString snapToZone1Shortcut()
     {
-        return instance().defaultSnapToZone1Value();
+        return QStringLiteral("Meta+Ctrl+1");
     }
     static QString snapToZone2Shortcut()
     {
-        return instance().defaultSnapToZone2Value();
+        return QStringLiteral("Meta+Ctrl+2");
     }
     static QString snapToZone3Shortcut()
     {
-        return instance().defaultSnapToZone3Value();
+        return QStringLiteral("Meta+Ctrl+3");
     }
     static QString snapToZone4Shortcut()
     {
-        return instance().defaultSnapToZone4Value();
+        return QStringLiteral("Meta+Ctrl+4");
     }
     static QString snapToZone5Shortcut()
     {
-        return instance().defaultSnapToZone5Value();
+        return QStringLiteral("Meta+Ctrl+5");
     }
     static QString snapToZone6Shortcut()
     {
-        return instance().defaultSnapToZone6Value();
+        return QStringLiteral("Meta+Ctrl+6");
     }
     static QString snapToZone7Shortcut()
     {
-        return instance().defaultSnapToZone7Value();
+        return QStringLiteral("Meta+Ctrl+7");
     }
     static QString snapToZone8Shortcut()
     {
-        return instance().defaultSnapToZone8Value();
+        return QStringLiteral("Meta+Ctrl+8");
     }
     static QString snapToZone9Shortcut()
     {
-        return instance().defaultSnapToZone9Value();
+        return QStringLiteral("Meta+Ctrl+9");
     }
     static QString rotateWindowsClockwiseShortcut()
     {
-        return instance().defaultRotateWindowsClockwiseValue();
+        return QStringLiteral("Meta+Ctrl+]");
     }
     static QString rotateWindowsCounterclockwiseShortcut()
     {
-        return instance().defaultRotateWindowsCounterclockwiseValue();
+        return QStringLiteral("Meta+Ctrl+[");
     }
     static QString cycleWindowForwardShortcut()
     {
-        return instance().defaultCycleWindowForwardValue();
+        return QStringLiteral("Meta+Alt+.");
     }
     static QString cycleWindowBackwardShortcut()
     {
-        return instance().defaultCycleWindowBackwardValue();
+        return QStringLiteral("Meta+Alt+,");
     }
     static QString resnapToNewLayoutShortcut()
     {
-        return instance().defaultResnapToNewLayoutShortcutValue();
+        return QStringLiteral("Meta+Ctrl+Z");
     }
     static QString snapAllWindowsShortcut()
     {
-        return instance().defaultSnapAllWindowsShortcutValue();
+        return QStringLiteral("Meta+Ctrl+S");
     }
     static QString layoutPickerShortcut()
     {
-        return instance().defaultLayoutPickerShortcutValue();
+        return QStringLiteral("Meta+Alt+Space");
     }
     static QString toggleLayoutLockShortcut()
     {
-        return instance().defaultToggleLayoutLockShortcutValue();
+        return QStringLiteral("Meta+Ctrl+L");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -703,45 +702,38 @@ public:
 
     static QString autotileToggleShortcut()
     {
-        return instance().defaultToggleAutotileShortcutValue();
+        return QStringLiteral("Meta+Shift+T");
     }
     static QString autotileFocusMasterShortcut()
     {
-        return instance().defaultFocusMasterShortcutValue();
+        return QStringLiteral("Meta+Shift+M");
     }
     static QString autotileSwapMasterShortcut()
     {
-        return instance().defaultSwapWithMasterShortcutValue();
+        return QStringLiteral("Meta+Shift+Return");
     }
     static QString autotileIncMasterRatioShortcut()
     {
-        return instance().defaultIncreaseMasterRatioShortcutValue();
+        return QStringLiteral("Meta+Shift+L");
     }
     static QString autotileDecMasterRatioShortcut()
     {
-        return instance().defaultDecreaseMasterRatioShortcutValue();
+        return QStringLiteral("Meta+Shift+H");
     }
     static QString autotileIncMasterCountShortcut()
     {
-        return instance().defaultIncreaseMasterCountShortcutValue();
+        return QStringLiteral("Meta+Shift+]");
     }
     static QString autotileDecMasterCountShortcut()
     {
-        return instance().defaultDecreaseMasterCountShortcutValue();
+        return QStringLiteral("Meta+Shift+[");
     }
     static QString autotileRetileShortcut()
     {
-        return instance().defaultRetileShortcutValue();
+        return QStringLiteral("Meta+Shift+R");
     }
 
 private:
-    // Lazily-initialized singleton instance
-    static PlasmaZonesConfig& instance()
-    {
-        static PlasmaZonesConfig config;
-        return config;
-    }
-
     // Non-instantiable
     ConfigDefaults() = delete;
 };

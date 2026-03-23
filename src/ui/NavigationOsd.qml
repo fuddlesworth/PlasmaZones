@@ -69,7 +69,7 @@ Window {
         if (action === "rotate") {
             var arrow = (reason === "clockwise") ? "↻" : "↺";
             if (windowCount > 1)
-                return arrow + " " + i18np("Rotated %1 window", "Rotated %1 windows", windowCount);
+                return arrow + " " + i18np("Rotated %n window", "Rotated %n windows", windowCount);
             else
                 return arrow + " " + i18n("Rotated");
         } else if (action === "move") {
@@ -125,7 +125,7 @@ Window {
             return i18n("Layout refreshed");
         } else if (action === "resnap") {
             if (windowCount > 1)
-                return i18np("Rearranged %1 window", "Rearranged %1 windows", windowCount);
+                return i18np("Rearranged %n window", "Rearranged %n windows", windowCount);
 
             return i18n("Windows rearranged");
         } else if (action === "algorithm") {

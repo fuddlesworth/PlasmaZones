@@ -19,7 +19,7 @@ namespace PlasmaZones {
  * Usage:
  * @code
  * {
- *     BatchOperationScope scope(m_undoController, m_zoneManager, i18nc("@action", "Move %1 Zones", count));
+ *     BatchOperationScope scope(m_undoController, m_zoneManager, PzI18n::tr("Move %1 Zones", "@action").arg(count));
  *     // ... perform operations ...
  * } // endMacro and endBatchUpdate called automatically
  * @endcode

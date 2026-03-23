@@ -14,8 +14,7 @@
 #include <QJsonObject>
 #include <QScopedPointer>
 #include <QUuid>
-#include <KConfigGroup>
-#include <KSharedConfig>
+#include "config/configbackend_qsettings.h"
 #include <memory>
 #include <vector>
 
@@ -447,22 +446,24 @@ private Q_SLOTS:
         mgr->addLayout(layout);
         QString layoutId = layout->id().toString();
 
-        // Pre-populate KConfig with an Assignment entry that has autotile but no snappingLayout
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
+        // Pre-populate config with an Assignment entry that has autotile but no snappingLayout
         {
-            KConfigGroup grp = config->group(QStringLiteral("Assignment:DP-1"));
-            grp.writeEntry(QStringLiteral("Mode"), 1); // Autotile
-            grp.writeEntry(QStringLiteral("TilingAlgorithm"), QStringLiteral("dwindle"));
-            // SnappingLayout intentionally empty
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            {
+                auto grp = backend->group(QStringLiteral("Assignment:DP-1"));
+                grp->writeInt(QStringLiteral("Mode"), 1); // Autotile
+                grp->writeString(QStringLiteral("TilingAlgorithm"), QStringLiteral("dwindle"));
+                // SnappingLayout intentionally empty
+            }
+            // Write old ModeTracking group with the manual layout ID
+            {
+                auto mt = backend->group(QStringLiteral("ModeTracking"));
+                mt->writeString(QStringLiteral("LastManualLayoutId"), layoutId);
+                mt->writeString(QStringLiteral("LastAutotileAlgorithm"), QStringLiteral("wide"));
+                mt->writeInt(QStringLiteral("LastTilingMode"), 1);
+            }
+            backend->sync();
         }
-        // Write old ModeTracking group with the manual layout ID
-        {
-            KConfigGroup mt = config->group(QStringLiteral("ModeTracking"));
-            mt.writeEntry(QStringLiteral("LastManualLayoutId"), layoutId);
-            mt.writeEntry(QStringLiteral("LastAutotileAlgorithm"), QStringLiteral("wide"));
-            mt.writeEntry(QStringLiteral("LastTilingMode"), 1);
-        }
-        config->sync();
 
         mgr->loadAssignments();
 
@@ -472,8 +473,8 @@ private Q_SLOTS:
         QCOMPARE(entry.snappingLayout, layoutId); // Filled from ModeTracking
 
         // ModeTracking group should be deleted
-        config->reparseConfiguration();
-        QVERIFY(!config->hasGroup(QStringLiteral("ModeTracking")));
+        auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+        QVERIFY(!backend->groupList().contains(QStringLiteral("ModeTracking")));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

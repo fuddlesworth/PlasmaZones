@@ -1,11 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#define TRANSLATION_DOMAIN "plasmazones-editor"
-
 #include "EditorController.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
+#include "../core/translationloader.h"
 #include "version.h"
 #include "../daemon/rendering/zoneshaderitem.h"
 
@@ -20,9 +19,8 @@
 #include <QCursor>
 #include <QObject>
 
-#include <KLocalizedString>
-#include <KLocalizedContext>
-#include <KAboutData>
+#include "pz_i18n.h"
+#include "pz_qml_i18n.h"
 #include <QtQml/qqml.h>
 
 using namespace PlasmaZones;
@@ -42,34 +40,40 @@ int main(int argc, char* argv[])
     }
 
     QGuiApplication app(argc, argv);
+    PlasmaZones::loadTranslations(&app);
 
-    KLocalizedString::setApplicationDomain("plasmazones-editor");
-
-    KAboutData aboutData(QStringLiteral("plasmazones-editor"), i18n("PlasmaZones Layout Editor"),
-                         PlasmaZones::VERSION_STRING, i18n("Visual layout editor for PlasmaZones"),
-                         KAboutLicense::GPL_V3, i18n("(c) 2026 fuddlesworth"));
-    aboutData.addAuthor(i18n("fuddlesworth"));
-    aboutData.setDesktopFileName(QStringLiteral("org.plasmazones.editor"));
-    KAboutData::setApplicationData(aboutData);
+    app.setApplicationName(QStringLiteral("plasmazones-editor"));
+    app.setApplicationVersion(PlasmaZones::VERSION_STRING);
+    app.setOrganizationName(QStringLiteral("plasmazones"));
+    app.setOrganizationDomain(QStringLiteral("org.plasmazones"));
+    app.setDesktopFileName(QStringLiteral("org.plasmazones.editor"));
 
     // Command line options
     QCommandLineParser parser;
-    aboutData.setupCommandLine(&parser);
+    parser.setApplicationDescription(PzI18n::tr("Visual layout editor for PlasmaZones"));
+    parser.addHelpOption();
+    parser.addVersionOption();
 
     QCommandLineOption layoutIdOption(QStringList{QStringLiteral("l"), QStringLiteral("layout")},
-                                      i18n("Layout ID to edit"), QStringLiteral("uuid"));
+                                      PzI18n::tr("Layout ID to edit"), QStringLiteral("uuid"));
     QCommandLineOption screenOption(QStringList{QStringLiteral("s"), QStringLiteral("screen")},
-                                    i18n("Target screen name"), QStringLiteral("name"));
+                                    PzI18n::tr("Target screen name"), QStringLiteral("name"));
     QCommandLineOption newLayoutOption(QStringList{QStringLiteral("n"), QStringLiteral("new")},
-                                       i18n("Create new layout"));
-    QCommandLineOption previewOption(QStringLiteral("preview"), i18n("Open in read-only preview mode"));
+                                       PzI18n::tr("Create new layout"));
+    QCommandLineOption previewOption(QStringLiteral("preview"), PzI18n::tr("Open in read-only preview mode"));
 
     parser.addOptions({layoutIdOption, screenOption, newLayoutOption, previewOption});
     parser.process(app);
-    aboutData.processCommandLine(&parser);
 
-    // Use Fusion style for consistent look
-    QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
+    // Use platform style if available, fall back to Fusion for non-KDE environments
+    if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
+        const QString desktop = qEnvironmentVariable("XDG_CURRENT_DESKTOP").toLower();
+        if (desktop.contains(QLatin1String("kde")) || desktop.contains(QLatin1String("plasma"))) {
+            QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
+        } else {
+            QQuickStyle::setStyle(QStringLiteral("Fusion"));
+        }
+    }
 
     // Register ZoneShaderItem for QML (shader preview in ShaderSettingsDialog)
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
@@ -128,9 +132,8 @@ int main(int argc, char* argv[])
     // Set up QML engine
     QQmlApplicationEngine engine;
 
-    // Set up i18n for QML (this makes i18n() available in QML)
-    // Note: KLocalizedContext is deprecated in KF6 6.8+ but works in earlier versions
-    KLocalizedContext* localizedContext = new KLocalizedContext(&engine);
+    // Set up i18n for QML (makes i18n() available in QML)
+    auto* localizedContext = new PzLocalizedContext(&engine);
     engine.rootContext()->setContextObject(localizedContext);
 
     // Expose controller to QML

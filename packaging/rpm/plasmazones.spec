@@ -29,10 +29,8 @@ BuildRequires:  extra-cmake-modules >= 6.6.0
 BuildRequires:  gcc-c++
 %if 0%{?suse_version}
 BuildRequires:  ninja
-BuildRequires:  gettext-tools
 %else
 BuildRequires:  ninja-build
-BuildRequires:  gettext
 %endif
 
 # Qt6
@@ -59,27 +57,13 @@ BuildRequires:  qt6-qtshadertools-devel
 
 # KDE Frameworks 6 (6.6+ for Plasma 6.6 API)
 %if 0%{?suse_version}
-BuildRequires:  cmake(KF6Config) >= 6.6.0
-BuildRequires:  cmake(KF6ConfigWidgets)
-BuildRequires:  cmake(KF6CoreAddons)
-BuildRequires:  cmake(KF6DBusAddons)
-BuildRequires:  cmake(KF6I18n)
 BuildRequires:  cmake(KF6KCMUtils)
-BuildRequires:  cmake(KF6WindowSystem)
 BuildRequires:  cmake(KF6GlobalAccel)
-BuildRequires:  cmake(KF6Notifications)
-BuildRequires:  cmake(KF6ColorScheme)
+BuildRequires:  cmake(KF6Kirigami)
 %else
-BuildRequires:  kf6-kconfig-devel >= 6.6.0
-BuildRequires:  kf6-kconfigwidgets-devel >= 6.6.0
-BuildRequires:  kf6-kcoreaddons-devel >= 6.6.0
-BuildRequires:  kf6-kdbusaddons-devel >= 6.6.0
-BuildRequires:  kf6-ki18n-devel >= 6.6.0
 BuildRequires:  kf6-kcmutils-devel >= 6.6.0
-BuildRequires:  kf6-kwindowsystem-devel >= 6.6.0
 BuildRequires:  kf6-kglobalaccel-devel >= 6.6.0
-BuildRequires:  kf6-knotifications-devel >= 6.6.0
-BuildRequires:  kf6-kcolorscheme-devel >= 6.6.0
+BuildRequires:  kf6-kirigami-devel >= 6.6.0
 %endif
 
 # Plasma 6.6 / KWin 6.6 (effect API), LayerShellQt 6.6 (setScreen API)
@@ -108,16 +92,8 @@ BuildRequires:  systemd-rpm-macros
 Requires:       qt6-qtbase >= 6.6.0
 Requires:       qt6-qtdeclarative
 Requires:       qt6-qtshadertools
-Requires:       kf6-kconfig >= 6.6.0
-Requires:       kf6-kconfigwidgets >= 6.6.0
-Requires:       kf6-kcoreaddons >= 6.6.0
-Requires:       kf6-kdbusaddons >= 6.6.0
-Requires:       kf6-ki18n >= 6.6.0
+Requires:       kf6-kirigami >= 6.6.0
 Requires:       kf6-kcmutils >= 6.6.0
-Requires:       kf6-kwindowsystem >= 6.6.0
-Requires:       kf6-kglobalaccel >= 6.6.0
-Requires:       kf6-knotifications >= 6.6.0
-Requires:       kf6-kcolorscheme >= 6.6.0
 Requires:       layer-shell-qt >= 6.6.0
 Requires:       kwin >= 6.6.0
 %endif
@@ -175,6 +151,7 @@ echo ""
 # Executables
 %{_bindir}/plasmazonesd
 %{_bindir}/plasmazones-editor
+%{_bindir}/plasmazones-settings
 
 # Libraries
 %{_libdir}/libplasmazones_core.so*
@@ -215,10 +192,8 @@ echo ""
 # Snap Assist: env.d config for KWin screenshot auth (system installs use .desktop; this is fallback)
 %{_libdir}/environment.d/99-plasmazones-screenshot.conf
 
-# Translations
-%{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
-%{_datadir}/locale/*/LC_MESSAGES/kcm_plasmazones.mo
-%{_datadir}/locale/*/LC_MESSAGES/plasmazones-editor.mo
+# Translations (Qt .qm files)
+%{_datadir}/plasmazones/translations/*.qm
 
 %changelog
 # Generated from CHANGELOG.md by packaging/generate-changelog.sh during CI.

@@ -66,15 +66,15 @@ If you're adding new functionality, add tests for it. If you're fixing a bug, a 
 
 ## Translations
 
-PlasmaZones uses [KI18n](https://api.kde.org/frameworks/ki18n/html/) (Gettext) with three domains: `plasmazonesd` (daemon/overlay), `plasmazones-editor` (editor), and `kcm_plasmazones` (System Settings).
+PlasmaZones uses Qt Linguist (`.ts`/`.qm`) for all translations. C++ uses `PzI18n::tr()`; QML uses `i18n()` via `PzLocalizedContext`.
 
-- **Extract strings** after changing user-visible text:  
-  `cmake --build build --target extract-pot`  
-  This updates `po/*.pot`. Commit them so translators can merge.
+- **Extract strings** after changing user-visible text:
+  `cmake --build build --target update-ts`
+  This runs `lupdate` and updates `translations/*.ts`. Commit the results.
 
-- **Add or update a translation**: see `po/README.md` for `msginit`, `msgmerge`, and the `po/<lang>/<domain>.po` layout.
+- **Add or update a translation**: see `translations/README.md`.
 
-- **Build/install**: `.po` in `po/<lang>/` are compiled to `.mo` and installed automatically.
+- **Build/install**: `.ts` files are compiled to `.qm` and installed automatically.
 
 ## Questions
 

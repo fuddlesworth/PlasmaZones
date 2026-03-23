@@ -10,6 +10,7 @@
 #include "../../core/utils.h"
 #include "../../core/constants.h"
 #include "../../autotile/AlgorithmRegistry.h"
+#include "../../autotile/TilingAlgorithm.h"
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -228,6 +229,54 @@ QString LayoutAdaptor::getSnappingLayoutForScreenDesktop(const QString& screenId
 QString LayoutAdaptor::getTilingAlgorithmForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
     return m_layoutManager->tilingAlgorithmForScreen(Utils::screenIdForName(screenId), virtualDesktop, QString());
+}
+
+QString LayoutAdaptor::getScreenStates()
+{
+    if (!m_layoutManager)
+        return QStringLiteral("[]");
+
+    QJsonArray result;
+
+    const int desktop = m_layoutManager->currentVirtualDesktop();
+    const QString activity = m_layoutManager->currentActivity();
+
+    for (QScreen* screen : Utils::allScreens()) {
+        const QString screenId = Utils::screenIdentifier(screen);
+
+        const auto entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);
+
+        QJsonObject obj;
+        obj[QLatin1String("screenName")] = screenId;
+        obj[QLatin1String("virtualDesktop")] = desktop;
+        obj[QLatin1String("activity")] = activity;
+        obj[QLatin1String("mode")] = static_cast<int>(entry.mode);
+
+        // Snapping layout — use resolved layout (includes default fallback)
+        Layout* resolvedLayout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
+        if (resolvedLayout) {
+            obj[QLatin1String("layoutId")] = resolvedLayout->id().toString();
+            obj[QLatin1String("layoutName")] = resolvedLayout->name();
+        } else {
+            obj[QLatin1String("layoutId")] = QString();
+            obj[QLatin1String("layoutName")] = QString();
+        }
+
+        // Tiling algorithm — use resolved algorithm (includes fallback)
+        const QString algoId = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
+        obj[QLatin1String("algorithmId")] = algoId;
+        if (!algoId.isEmpty()) {
+            auto* registry = AlgorithmRegistry::instance();
+            TilingAlgorithm* algo = registry->algorithm(algoId);
+            obj[QLatin1String("algorithmName")] = algo ? algo->name() : algoId;
+        } else {
+            obj[QLatin1String("algorithmName")] = QString();
+        }
+
+        result.append(obj);
+    }
+
+    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 }
 
 void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)

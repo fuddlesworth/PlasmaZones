@@ -3,17 +3,18 @@
 
 #include "daemon.h"
 #include "../core/logging.h"
+#include "../core/translationloader.h"
 #include "version.h"
 #include "rendering/zoneshaderitem.h"
 #include <QGuiApplication>
 #include <QCommandLineParser>
 #include <QDBusConnection>
+#include <QDBusInterface>
+#include <QThread>
 #include <QTimer>
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtQml/qqml.h>
-#include <KAboutData>
-#include <KLocalizedString>
-#include <KDBusService>
+#include "pz_i18n.h"
 #include <signal.h>
 
 // Import static QML module for shared components
@@ -34,6 +35,7 @@ void signalHandler(int /*signal*/)
 int main(int argc, char* argv[])
 {
     QGuiApplication app(argc, argv);
+    PlasmaZones::loadTranslations(&app);
 
     // Daemon must survive monitor power-off (DP disconnect destroys all overlay
     // windows; without this, Qt sees zero windows and calls quit()).
@@ -43,38 +45,53 @@ int main(int argc, char* argv[])
     // This enables RenderNodeOverlay.qml to use the GPU-accelerated shader item
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
-    // Set translation domain BEFORE any i18n() calls
-    KLocalizedString::setApplicationDomain("plasmazonesd");
-
     // Set up application metadata
-    KAboutData aboutData(QStringLiteral("plasmazonesd"), i18n("PlasmaZones Daemon"), PlasmaZones::VERSION_STRING,
-                         i18n("Window tiling and zone management for KDE Plasma"), KAboutLicense::GPL_V3,
-                         i18n("© 2026 fuddlesworth"));
-    aboutData.addAuthor(i18n("fuddlesworth"));
-    aboutData.setHomepage(QStringLiteral("https://github.com/plasmazones/plasmazones"));
-    aboutData.setBugAddress(QByteArrayLiteral("https://github.com/plasmazones/plasmazones/issues"));
-    aboutData.setDesktopFileName(QStringLiteral("org.plasmazones.daemon"));
-
-    KAboutData::setApplicationData(aboutData);
+    app.setApplicationName(QStringLiteral("plasmazonesd"));
+    app.setApplicationVersion(PlasmaZones::VERSION_STRING);
+    app.setOrganizationName(QStringLiteral("plasmazones"));
+    app.setOrganizationDomain(QStringLiteral("org.plasmazones"));
+    app.setDesktopFileName(QStringLiteral("org.plasmazones.daemon"));
 
     // Command line options
     QCommandLineParser parser;
-    aboutData.setupCommandLine(&parser);
+    parser.setApplicationDescription(PzI18n::tr("Window tiling and zone management"));
+    parser.addHelpOption();
+    parser.addVersionOption();
 
     QCommandLineOption replaceOption(QStringList{QStringLiteral("r"), QStringLiteral("replace")},
-                                     i18n("Replace existing daemon instance"));
+                                     PzI18n::tr("Replace existing daemon instance"));
     parser.addOption(replaceOption);
 
     parser.process(app);
-    aboutData.processCommandLine(&parser);
 
-    // Ensure single instance
-    KDBusService::StartupOptions options = KDBusService::Unique;
-    if (parser.isSet(replaceOption)) {
-        options |= KDBusService::Replace;
+    // Ensure single instance via D-Bus service name registration
+    const QString serviceName = QStringLiteral("org.plasmazones.daemon");
+    QDBusConnection bus = QDBusConnection::sessionBus();
+
+    if (!bus.registerService(serviceName)) {
+        if (parser.isSet(replaceOption)) {
+            // Ask existing instance to quit, then retry with exponential backoff
+            QDBusInterface existing(serviceName, QStringLiteral("/Daemon"), serviceName);
+            if (existing.isValid()) {
+                existing.call(QStringLiteral("Quit"));
+            }
+            bool registered = false;
+            for (int attempt = 0; attempt < 10; ++attempt) {
+                QThread::msleep(100 * (1 << qMin(attempt, 3))); // 100, 200, 400, 800ms...
+                if (bus.registerService(serviceName)) {
+                    registered = true;
+                    break;
+                }
+            }
+            if (!registered) {
+                qCCritical(PlasmaZones::lcDaemon) << "Failed to register D-Bus service after --replace";
+                return 1;
+            }
+        } else {
+            qCWarning(PlasmaZones::lcDaemon) << "Already running (D-Bus name taken)";
+            return 0;
+        }
     }
-
-    KDBusService service(options);
 
     // Set up signal handling for clean shutdown
     signal(SIGINT, signalHandler);
@@ -92,12 +109,6 @@ int main(int argc, char* argv[])
 
     qCInfo(PlasmaZones::lcDaemon) << "Daemon started";
     daemon.start();
-
-    // Handle activation requests (e.g., user launches plasmazonesd when already running)
-    // Log the activation but don't take action - overlay activation is via drag+modifier
-    QObject::connect(&service, &KDBusService::activateRequested, &daemon, []() {
-        qCInfo(PlasmaZones::lcDaemon) << "Activation: already running, ignored";
-    });
 
     int result = app.exec();
 

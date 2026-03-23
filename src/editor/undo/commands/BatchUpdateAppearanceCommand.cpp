@@ -3,7 +3,7 @@
 
 #include "BatchUpdateAppearanceCommand.h"
 #include "../../services/ZoneManager.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 using namespace PlasmaZones;
 
@@ -16,9 +16,9 @@ BatchUpdateAppearanceCommand::BatchUpdateAppearanceCommand(QPointer<ZoneManager>
                                                            const QMap<QString, QVariant>& oldValues,
                                                            const QVariant& newValue, const QString& text,
                                                            QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager,
-                      text.isEmpty() ? i18nc("@action", "Update Appearance for %1 Zones", zoneIds.count()) : text,
-                      parent)
+    : BaseZoneCommand(
+          zoneManager,
+          text.isEmpty() ? PzI18n::tr("Update Appearance for %1 Zones", "@action").arg(zoneIds.count()) : text, parent)
     , m_zoneIds(zoneIds)
     , m_propertyName(propertyName)
     , m_oldValues(oldValues)
@@ -68,7 +68,8 @@ BatchUpdateColorCommand::BatchUpdateColorCommand(QPointer<ZoneManager> zoneManag
                                                  const QString& colorType, const QMap<QString, QString>& oldColors,
                                                  const QString& newColor, const QString& text, QUndoCommand* parent)
     : BaseZoneCommand(zoneManager,
-                      text.isEmpty() ? i18nc("@action", "Update Color for %1 Zones", zoneIds.count()) : text, parent)
+                      text.isEmpty() ? PzI18n::tr("Update Color for %1 Zones", "@action").arg(zoneIds.count()) : text,
+                      parent)
     , m_zoneIds(zoneIds)
     , m_colorType(colorType)
     , m_oldColors(oldColors)

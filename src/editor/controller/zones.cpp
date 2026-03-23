@@ -14,7 +14,7 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <QPointer>
 #include <QtMath>
 
@@ -103,7 +103,7 @@ void EditorController::updateZoneGeometry(const QString& zoneId, qreal x, qreal 
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
         qCWarning(lcEditor) << "Zone not found for geometry update:" << zoneId;
-        Q_EMIT layoutSaveFailed(i18nc("@info", "Zone not found"));
+        Q_EMIT layoutSaveFailed(PzI18n::tr("Zone not found", "@info"));
         return;
     }
 
@@ -192,7 +192,7 @@ void EditorController::updateZoneName(const QString& zoneId, const QString& name
 {
     if (!m_undoController || !m_zoneManager) {
         qCWarning(lcEditor) << "updateZoneName: undo controller or zone manager is null";
-        Q_EMIT zoneNameValidationError(zoneId, i18nc("@info", "Services not initialized"));
+        Q_EMIT zoneNameValidationError(zoneId, PzI18n::tr("Services not initialized", "@info"));
         return;
     }
 
@@ -207,7 +207,7 @@ void EditorController::updateZoneName(const QString& zoneId, const QString& name
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
         qCWarning(lcEditor) << "Zone not found for name update:" << zoneId;
-        Q_EMIT zoneNameValidationError(zoneId, i18nc("@info", "Zone not found"));
+        Q_EMIT zoneNameValidationError(zoneId, PzI18n::tr("Zone not found", "@info"));
         return;
     }
 
@@ -228,7 +228,7 @@ void EditorController::updateZoneNumber(const QString& zoneId, int number)
 {
     if (!m_undoController || !m_zoneManager) {
         qCWarning(lcEditor) << "updateZoneNumber: undo controller or zone manager is null";
-        Q_EMIT zoneNumberValidationError(zoneId, i18nc("@info", "Services not initialized"));
+        Q_EMIT zoneNumberValidationError(zoneId, PzI18n::tr("Services not initialized", "@info"));
         return;
     }
 
@@ -243,7 +243,7 @@ void EditorController::updateZoneNumber(const QString& zoneId, int number)
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
         qCWarning(lcEditor) << "Zone not found for number update:" << zoneId;
-        Q_EMIT zoneNumberValidationError(zoneId, i18nc("@info", "Zone not found"));
+        Q_EMIT zoneNumberValidationError(zoneId, PzI18n::tr("Zone not found", "@info"));
         return;
     }
 
@@ -322,7 +322,7 @@ void EditorController::deleteZone(const QString& zoneId)
     QVariantMap zoneData = m_zoneManager->getZoneById(zoneId);
     if (zoneData.isEmpty()) {
         qCWarning(lcEditor) << "Zone not found for deletion:" << zoneId;
-        Q_EMIT layoutSaveFailed(i18nc("@info", "Zone not found"));
+        Q_EMIT layoutSaveFailed(PzI18n::tr("Zone not found", "@info"));
         return;
     }
 

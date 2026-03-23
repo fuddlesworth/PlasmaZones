@@ -5,7 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 namespace PlasmaZones {
 
@@ -21,12 +21,12 @@ RowsAlgorithm::RowsAlgorithm(QObject* parent)
 
 QString RowsAlgorithm::name() const
 {
-    return i18n("Rows");
+    return PzI18n::tr("Rows");
 }
 
 QString RowsAlgorithm::description() const
 {
-    return i18n("Equal-height horizontal rows");
+    return PzI18n::tr("Equal-height horizontal rows");
 }
 
 QString RowsAlgorithm::icon() const noexcept

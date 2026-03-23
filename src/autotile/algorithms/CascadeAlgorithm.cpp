@@ -5,7 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <cmath>
 
 namespace PlasmaZones {
@@ -21,12 +21,12 @@ CascadeAlgorithm::CascadeAlgorithm(QObject* parent)
 
 QString CascadeAlgorithm::name() const
 {
-    return i18n("Cascade");
+    return PzI18n::tr("Cascade");
 }
 
 QString CascadeAlgorithm::description() const
 {
-    return i18n("Overlapping windows in a diagonal cascade");
+    return PzI18n::tr("Overlapping windows in a diagonal cascade");
 }
 
 QString CascadeAlgorithm::icon() const noexcept

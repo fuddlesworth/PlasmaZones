@@ -163,6 +163,17 @@ public Q_SLOTS:
     void clearAssignmentForScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                  const QString& activityId);
 
+    /**
+     * @brief Get current mode, layout, and algorithm for all screens
+     *
+     * Returns a JSON array with one object per screen:
+     *   screenName, mode (0=Snapping, 1=Autotile), layoutId, layoutName,
+     *   algorithmId, algorithmName.
+     *
+     * @return JSON string
+     */
+    QString getScreenStates();
+
     // Screen layout lock
     void toggleScreenLock(const QString& screenId);
     bool isScreenLocked(const QString& screenId);

@@ -14,10 +14,12 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../dbus/layoutadaptor.h"
+#include "../../dbus/settingsadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include "../../autotile/AutotileEngine.h"
 #include "../../autotile/AlgorithmRegistry.h"
 #include "../../autotile/TilingAlgorithm.h"
+#include <QProcess>
 #include "../config/settings.h"
 #include <QGuiApplication>
 #include <QScreen>
@@ -227,6 +229,16 @@ void Daemon::connectShortcutSignals()
     // Screen detection: On X11, QCursor::pos() works; on Wayland, background daemons
     // get stale cursor data. resolveShortcutScreen() handles both by falling back to
     // the screen reported by the KWin effect's windowActivated D-Bus call.
+    connect(m_shortcutManager.get(), &ShortcutManager::openSettingsRequested, this, []() {
+        // Launch in its own systemd scope so stopping the daemon service
+        // doesn't kill the settings app (they'd share a cgroup otherwise).
+        if (!QProcess::startDetached(
+                QStringLiteral("systemd-run"),
+                {QStringLiteral("--user"), QStringLiteral("--scope"), QStringLiteral("plasmazones-settings")})) {
+            // Fallback if systemd-run is unavailable
+            QProcess::startDetached(QStringLiteral("plasmazones-settings"), {});
+        }
+    });
     connect(m_shortcutManager.get(), &ShortcutManager::openEditorRequested, this, [this]() {
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
         if (!screen && m_unifiedLayoutController && !m_unifiedLayoutController->currentScreenName().isEmpty()) {
@@ -377,8 +389,7 @@ void Daemon::connectShortcutSignals()
         // Check if screen is locked for its current mode
         QString screenId = m_unifiedLayoutController->currentScreenName();
         if (!screenId.isEmpty() && m_layoutManager) {
-            int mode =
-                static_cast<int>(m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity()));
+            int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity()));
             if (isCurrentContextLockedForMode(screenId, mode)) {
                 showLockedPreviewOsd(screenId);
                 return;
@@ -406,8 +417,18 @@ void Daemon::connectShortcutSignals()
         // Lock at screen-level (desktop=0, activity="") so it applies to all desktops/activities
         // and matches the KCM's screen-level lock button
         bool wasLocked = m_settings->isScreenLocked(key);
-        m_settings->setScreenLocked(key, !wasLocked);
+        // Block settingsChanged during mutation — the signal triggers a
+        // D-Bus relay, and external consumers (settings app) read from disk.
+        // If the signal fires before save(), they read stale data.
+        {
+            QSignalBlocker blocker(m_settings.get());
+            m_settings->setScreenLocked(key, !wasLocked);
+        }
         m_settings->save();
+        // Now that the file is written, notify external consumers
+        if (m_settingsAdaptor) {
+            Q_EMIT m_settingsAdaptor->settingsChanged();
+        }
 
         if (wasLocked) {
             Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);

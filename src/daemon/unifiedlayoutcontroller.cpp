@@ -197,13 +197,12 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
             // Without this ordering, setAlgorithm's retile uses stale per-screen
             // overrides (old algorithm), producing wrong zone geometries.
             if (!m_currentScreenName.isEmpty()) {
-                // Write per-desktop assignment with empty activity so it applies
-                // regardless of which activity is active.  Activity-specific
-                // overrides are a separate KCM-only feature.
-                if (!m_currentActivity.isEmpty()) {
-                    m_layoutManager->clearAssignment(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity);
-                }
-                m_layoutManager->assignLayoutById(m_currentScreenName, m_currentVirtualDesktop, QString(), entry.id);
+                // Write to the current context (screen, desktop, activity).
+                // Most specific context wins — an activity-keyed entry takes
+                // priority over a desktop-only entry in the cascade, and a
+                // different activity falls through to the broader entry.
+                m_layoutManager->assignLayoutById(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity,
+                                                  entry.id);
             }
             m_autotileEngine->setAlgorithm(algoId);
             setCurrentLayoutId(entry.id);
@@ -223,20 +222,14 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
         Layout* layout = m_layoutManager->layoutById(*uuidOpt);
         if (layout) {
             if (!m_currentScreenName.isEmpty()) {
-                // Write per-desktop assignment with empty activity so it applies
-                // regardless of which activity is active.  Activity-specific
-                // overrides are a separate KCM-only feature.
-                // Clear any stale activity-keyed entry that would shadow this one
-                // in the cascade (exact match takes priority over desktop-only).
-                if (!m_currentActivity.isEmpty()) {
-                    m_layoutManager->clearAssignment(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity);
-                }
-                // assignLayout FIRST so the per-desktop assignment is stored
-                // before setActiveLayout fires activeLayoutChanged →
-                // onLayoutChanged(). That handler calls resolveLayoutForScreen()
-                // which reads per-desktop assignments — it must see the new
-                // assignment to correctly populate the resnap buffer.
-                m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop, QString(), layout);
+                // Write to the current context (screen, desktop, activity).
+                // Most specific context wins — assignLayout FIRST so the
+                // per-context assignment is stored before setActiveLayout fires
+                // activeLayoutChanged → onLayoutChanged(). That handler calls
+                // resolveLayoutForScreen() which reads per-context assignments —
+                // it must see the new assignment to correctly populate the
+                // resnap buffer.
+                m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity, layout);
             }
             // Update global active layout pointer so overlay/zone detector
             // queries see the new layout, but suppress activeLayoutChanged

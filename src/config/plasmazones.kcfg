@@ -324,6 +324,10 @@
       <label>Shortcut to open layout editor</label>
       <default>Meta+Shift+E</default>
     </entry>
+    <entry name="OpenSettingsShortcut" type="String">
+      <label>Shortcut to open the settings application</label>
+      <default>Meta+Shift+P</default>
+    </entry>
     <entry name="PreviousLayoutShortcut" type="String">
       <label>Shortcut to switch to previous layout</label>
       <default>Meta+Alt+[</default>

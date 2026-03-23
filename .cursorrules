@@ -249,38 +249,47 @@ PlasmaZones is a window tiling and zone management tool for KDE Plasma. Features
 
 ### Error Handling
 - Show user-friendly error messages (use `Kirigami.OverlaySheet` or `MessageDialog`)
-- Use `i18n()` for all user-facing strings (never hardcode English)
+- Use `PzI18n::tr()` (C++) or `i18n()` (QML) for all user-facing strings (never hardcode English)
 - Provide actionable error messages (tell user how to fix issue)
 - Log errors to console for debugging (use `qWarning()`, `qCritical()` in C++)
 
 ## Internationalization (i18n)
 
-### QML i18n
-- Use `i18n()` function for all user-visible strings
-- Use `i18nc()` with context when needed: `i18nc("@title", "Layout Editor")`
-- Provide context comments for translators: `// TRANSLATORS: Tooltip for save button`
-- Never concatenate strings for translation (use `i18n("Text %1", variable)`)
+PlasmaZones uses Qt Linguist (`.ts`/`.qm`) for all translations. No KDE KI18n/gettext dependency.
 
 ### C++ i18n
-- Use `i18n()` from `KLocalizedString` (KF6::I18n)
-- Use `i18nc()` with context: `i18nc("@info", "Zone deleted")`
-- Mark strings in `Q_PROPERTY` with `QT_TR_NOOP()` if needed
-- Export translatable strings: `XGETTEXT_OPTIONS` in CMake
+- Use `PzI18n::tr()` for all translatable strings (include `pz_i18n.h`)
+- Use disambiguation (second arg) for translator context: `PzI18n::tr("Delete Zone", "@action")`
+- For substitution: `PzI18n::tr("Apply Layout %1").arg(i + 1)`
+- `PzI18n` uses `Q_DECLARE_TR_FUNCTIONS(plasmazones)` — `lupdate` extracts strings natively
+- **NEVER** use `KLocalizedString`, `i18n()`, or `i18nc()` in C++ code — those are removed
 
-## Settings & KConfigXT Conventions
+### QML i18n
+- Use `i18n()` function for all user-visible strings (provided by `PzLocalizedContext`)
+- Use `i18nc()` with context when needed: `i18nc("@title", "Layout Editor")`
+- Never concatenate strings for translation: use `i18n("Text %1", variable)`
+
+### Translation workflow
+- Extract strings: `cmake --build build --target update-ts` (runs `lupdate`)
+- Source template: `translations/plasmazones_en.ts`
+- Per-language files: `translations/plasmazones_<lang>.ts`
+- Compiled to `.qm` at build time, loaded at runtime via `PlasmaZones::loadTranslations()`
+
+## Settings & Config Conventions
 
 ### Architecture Overview
 - **ISettings interface** (`interfaces.h`): Abstract interface declaring all settings methods and signals
-- **Settings class** (`settings.h/cpp`): Concrete implementation with KConfig persistence
-- **kcfg schema** (`plasmazones.kcfg`): KConfigXT XML schema defining settings structure - **SINGLE SOURCE OF TRUTH for defaults**
-- **kcfgc config** (`plasmazones.kcfgc`): Code generator configuration (generates PlasmaZonesConfig)
-- **ConfigDefaults class** (`configdefaults.h`): Static wrapper exposing .kcfg defaults via `ConfigDefaults::xxx()` methods
+- **Settings class** (`settings.h/cpp`): Concrete implementation with `IConfigBackend` persistence
+- **IConfigBackend** (`configbackend.h`): Abstract config read/write interface — pluggable for different environments
+- **QSettingsConfigBackend** (`configbackend_qsettings.cpp`): Default backend, reads/writes `~/.config/plasmazonesrc` in INI format
+- **kcfg schema** (`plasmazones.kcfg`): KConfigXT XML schema — **KCM-only**, used by `ConfigDefaults` for default values
+- **kcfgc config** (`plasmazones.kcfgc`): Code generator configuration (generates PlasmaZonesConfig) — **KCM-only**
+- **ConfigDefaults class** (`configdefaults.h`): Standalone header with hardcoded default constants (independent of KConfigXT)
 
-**KConfigXT and ConfigDefaults Usage:**
-The kcfgc generates a `PlasmaZonesConfig` class with `defaultXxxValue()` methods. The `ConfigDefaults`
-wrapper class provides static access to these generated defaults. The Settings class uses `ConfigDefaults`
-for all default values in `load()` and `reset()` methods, ensuring the .kcfg file is the single source
-of truth for all user-configurable settings.
+**ConfigDefaults Usage:**
+`ConfigDefaults` provides static methods for all settings defaults. The Settings class uses `ConfigDefaults`
+for all default values in `load()` and `reset()` methods. The `.kcfg` schema is only used by the KCM
+(System Settings module) and is NOT required for the daemon or editor builds.
 
 **When to use which:**
 - `ConfigDefaults::xxx()` - For settings defaults (config module and daemon)
@@ -337,18 +346,18 @@ When adding a new setting, you MUST update ALL of these files in order:
    }
 
    // In load() - use ConfigDefaults for default:
-   KConfigGroup group = config->group(QStringLiteral("GroupName"));
-   m_settingName = group.readEntry("SettingName", ConfigDefaults::settingName());
+   auto group = m_configBackend->group(QStringLiteral("GroupName"));
+   m_settingName = group->readString(QStringLiteral("SettingName"), ConfigDefaults::settingName());
 
    // In save():
-   KConfigGroup group = config->group(QStringLiteral("GroupName"));
-   group.writeEntry("SettingName", m_settingName);
+   auto group = m_configBackend->group(QStringLiteral("GroupName"));
+   group->writeString(QStringLiteral("SettingName"), m_settingName);
 
    // In reset() - use ConfigDefaults for default:
    m_settingName = ConfigDefaults::settingName();
    ```
 
-### KConfigXT (kcfg) Conventions
+### KConfigXT (kcfg) Conventions — KCM Only
 
 #### Key Naming
 - **Entry names**: `PascalCase` (e.g., `ShowOnAllMonitors`, `BorderWidth`, `OpenEditorShortcut`)
@@ -455,16 +464,19 @@ void Settings::setQuickLayoutShortcut(int index, const QString &shortcut) {
 }
 ```
 
-### KGlobalAccel Shortcut Integration
+### Global Shortcut Integration (IShortcutBackend)
+
+Uses `IShortcutBackend` (pluggable: KGlobalAccel, XDG Portal, D-Bus fallback).
+Factory auto-detects at runtime. **NEVER** use `KGlobalAccel` directly.
 
 #### Registration Pattern (ShortcutManager)
 ```cpp
-// Create action with i18n name:
-auto *action = new QAction(i18n("Action Description"), this);
+// Create action with translated name:
+auto *action = new QAction(PzI18n::tr("Action Description"), this);
 action->setObjectName(QStringLiteral("unique_action_id"));
 
 // Register with shortcut from settings:
-KGlobalAccel::setGlobalShortcut(action, QKeySequence(m_settings->shortcutSetting()));
+m_shortcutBackend->setGlobalShortcut(action, QKeySequence(m_settings->shortcutSetting()));
 
 // Connect signal for dynamic updates:
 connect(m_settings, &Settings::shortcutSettingChanged,
@@ -475,7 +487,7 @@ connect(m_settings, &Settings::shortcutSettingChanged,
 ```cpp
 void ShortcutManager::updateShortcut() {
     if (m_action) {
-        KGlobalAccel::setGlobalShortcut(m_action,
+        m_shortcutBackend->setGlobalShortcut(m_action,
             QKeySequence(m_settings->shortcutSetting()));
     }
 }
@@ -595,10 +607,24 @@ TODO: Consider having EditorController get zonePadding via D-Bus from Settings i
   ```
 
 ### KDE Frameworks
-- Required: `KF6::Config`, `KF6::CoreAddons`, `KF6::DBusAddons`, `KF6::I18n`, `KF6::WindowSystem`
-- Optional: `KF6::Activities` (for activity-based layouts)
-- Use `find_package(KF6 REQUIRED COMPONENTS ...)`
-- Use `kcoreaddons_desktop_to_json()` for `.desktop` files
+- **Build option**: `cmake -DUSE_KDE_FRAMEWORKS=ON` (default) or `OFF` for portable Qt-only build
+- When `ON`: `KF6::KCMUtils`, `KF6::GlobalAccel` (KCM + shortcut backend)
+- When `OFF`: daemon + editor only, no KDE deps. Shortcuts use XDG Portal or D-Bus trigger fallback
+- **NOT used** (removed): `KF6::I18n`, `KF6::CoreAddons`, `KF6::DBusAddons`, `KF6::WindowSystem`, `KF6::Notifications`, `KF6::ColorScheme`
+- Translations use Qt Linguist (`PzI18n::tr()`) instead of KI18n
+- Optional: `KF6::Activities` / `PlasmaActivities` (for activity-based layouts, KDE-only)
+
+### Pluggable Backends
+Three interfaces enable compositor-agnostic operation:
+- **`IConfigBackend`** (`configbackend.h`): grouped key-value config with typed reads/writes
+- **`IShortcutBackend`** (`shortcutbackend.h`): global shortcut registration (KGlobalAccel, XDG Portal, D-Bus fallback)
+- **`IWallpaperProvider`** (`wallpaperprovider.h`): desktop wallpaper path for shader textures (KDE, Hyprland, Sway, GNOME)
+
+### Standalone Settings App (`plasmazones-settings`)
+- A standalone Kirigami-based settings application in `src/settings/`
+- Reads/writes settings via the same `IConfigBackend` as the daemon (editor group, main settings)
+- Communicates with the daemon via D-Bus for layout CRUD, screen queries, virtual desktop/activity info
+- The KCM (`kcm/`) is now a minimal launcher: daemon toggle + "Open Settings" button that launches this app
 
 ### Export/Installation
 - Use `kf6_install_cmake_config_file()` for CMake config
@@ -614,11 +640,12 @@ src/
   core/          # Core domain models (Zone, Layout, ScreenManager)
   daemon/        # Background daemon service
   editor/        # Layout editor application
+  settings/      # Standalone settings application (plasmazones-settings)
   dbus/          # D-Bus adaptors and interfaces
-  config/        # Configuration (KConfig)
+  config/        # Configuration (IConfigBackend / QSettings)
   ui/            # Shared QML components
   editor/qml/    # Editor-specific QML components
-kcm/             # System Settings module
+kcm/             # System Settings module (minimal launcher)
 kwin/            # KWin script integration
 tests/           # Test files
 data/layouts/    # Default layout templates (JSON)

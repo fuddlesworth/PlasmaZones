@@ -13,17 +13,16 @@ qt_policy(SET QTP0004 NEW)
 # ═══════════════════════════════════════════════════════════════════════════════
 add_subdirectory(shared)
 
-# KConfigXT for settings (GENERATE_MOC ensures Q_OBJECT is processed)
-kconfig_add_kcfg_files(plasmazones_settings_SRCS
-    config/plasmazones.kcfgc
-    GENERATE_MOC
-)
-
 # Core library sources
 set(plasmazones_core_SRCS
+    pz_qml_i18n.h
     core/constants.h
     core/logging.h
     core/logging.cpp
+    core/translationloader.h
+    core/translationloader.cpp
+    core/wallpaperprovider.h
+    core/wallpaperprovider.cpp
     core/enums.h
     core/interfaces.h
     core/interfaces.cpp
@@ -83,6 +82,8 @@ set(plasmazones_core_SRCS
     config/settings/setters.cpp
     config/settings/perscreen.cpp
     config/settings.h
+    config/configbackend_qsettings.h
+    config/configbackend_qsettings.cpp
     config/colorimporter.cpp
     config/colorimporter.h
     config/updatechecker.cpp
@@ -112,6 +113,8 @@ set(plasmazones_core_SRCS
     dbus/windowdragadaptor/drag.cpp
     dbus/windowdragadaptor/drop.cpp
     dbus/windowdragadaptor.h
+    daemon/shortcutbackend.h
+    daemon/shortcutbackend.cpp
     dbus/autotileadaptor.cpp
     dbus/autotileadaptor/config.cpp
     dbus/autotileadaptor.h
@@ -168,11 +171,12 @@ set(plasmazones_core_SRCS
     snap/snapengine/float.cpp
     snap/snapengine/lifecycle.cpp
     snap/snapengine/navigation.cpp
-    ${plasmazones_settings_SRCS}
 )
 
 # Create core library
 add_library(plasmazones_core SHARED ${plasmazones_core_SRCS})
+
+target_sources(plasmazones_core PRIVATE pz_qml_i18n.cpp)
 
 # Generate export header
 generate_export_header(plasmazones_core
@@ -188,17 +192,14 @@ target_link_libraries(plasmazones_core
         Qt6::Quick
         Qt6::Gui
         Qt6::DBus
-        KF6::ConfigCore
-        KF6::ConfigGui
-        KF6::CoreAddons
-        KF6::GlobalAccel
-        KF6::WindowSystem
-        KF6::I18n
-        KF6::ColorScheme
 )
 
+# KDE-specific link dependencies (only when building with KDE Frameworks)
+if(USE_KDE_FRAMEWORKS)
+    target_link_libraries(plasmazones_core PUBLIC KF6::GlobalAccel)
+endif()
+
 # Conditionally link PlasmaActivities/KActivities if available
-# Plasma 6 uses Plasma::Activities, KF6 uses KF6::Activities, KF5 uses KActivities
 if(PlasmaActivities_FOUND)
     # Check for Plasma 6 target first
     if(TARGET Plasma::Activities)
@@ -326,13 +327,6 @@ install(TARGETS plasmazones_rendering
 )
 
 # Daemon executable
-# Note: We need to add kcfg files here too because KConfigXT generates local symbols
-# that can't be exported from plasmazones_core shared library.
-kconfig_add_kcfg_files(plasmazones_daemon_kcfg_SRCS
-    config/plasmazones.kcfgc
-    GENERATE_MOC
-)
-
 set(plasmazones_daemon_SRCS
     daemon/main.cpp
     daemon/daemon.cpp
@@ -370,8 +364,6 @@ set(plasmazones_daemon_SRCS
     daemon/unifiedlayoutcontroller.cpp
     daemon/unifiedlayoutcontroller.h
     # Shader rendering: ZoneShaderItem from plasmazones_rendering
-    # KConfigXT-generated config class (for ConfigDefaults)
-    ${plasmazones_daemon_kcfg_SRCS}
 )
 
 # QML resources for the daemon overlay
@@ -392,9 +384,6 @@ target_link_libraries(plasmazonesd
         Qt6::QuickControls2
         Qt6::Concurrent  # Pre-load shader bake cache on registry refresh
         Qt6::ShaderTools  # QShaderBaker for ZoneShaderNodeRhi (runtime GLSL bake)
-        KF6::DBusAddons
-        KF6::GlobalAccel
-        KF6::Notifications
 )
 
 # Qt6::GuiPrivate (QRhi) for daemon's include of zoneshadernoderhi.h (warmShaderBakeCacheForPaths)
@@ -610,10 +599,6 @@ target_link_libraries(plasmazones-editor
         Qt6::QuickControls2
         Qt6::Widgets
         Qt6::DBus
-        KF6::I18n
-        KF6::I18nQml
-        KF6::CoreAddons
-        KF6::WindowSystem
 )
 
 # Qt6::GuiPrivate and Qt6::ShaderToolsPrivate for ZoneShaderItem (shader preview)
@@ -626,6 +611,9 @@ target_link_libraries(plasmazones-editor
 )
 
 install(TARGETS plasmazones-editor DESTINATION ${KDE_INSTALL_BINDIR})
+
+# Standalone settings app (no KDE Frameworks required)
+add_subdirectory(settings)
 
 # Separate precompiled headers for executables (different PIC/PIE settings than shared lib)
 if(ENABLE_PCH)

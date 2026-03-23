@@ -5,7 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <algorithm>
 
 namespace PlasmaZones {
@@ -24,12 +24,12 @@ MasterStackAlgorithm::MasterStackAlgorithm(QObject* parent)
 
 QString MasterStackAlgorithm::name() const
 {
-    return i18n("Master + Stack");
+    return PzI18n::tr("Master + Stack");
 }
 
 QString MasterStackAlgorithm::description() const
 {
-    return i18n("Large master area with stacked secondary windows");
+    return PzI18n::tr("Large master area with stacked secondary windows");
 }
 
 QString MasterStackAlgorithm::icon() const noexcept

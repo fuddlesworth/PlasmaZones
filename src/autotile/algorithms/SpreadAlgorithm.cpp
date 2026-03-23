@@ -5,7 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <cmath>
 
 namespace PlasmaZones {
@@ -21,12 +21,12 @@ SpreadAlgorithm::SpreadAlgorithm(QObject* parent)
 
 QString SpreadAlgorithm::name() const
 {
-    return i18n("Spread");
+    return PzI18n::tr("Spread");
 }
 
 QString SpreadAlgorithm::description() const
 {
-    return i18n("Windows spread evenly across the screen");
+    return PzI18n::tr("Windows spread evenly across the screen");
 }
 
 QString SpreadAlgorithm::icon() const noexcept

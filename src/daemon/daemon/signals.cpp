@@ -230,7 +230,13 @@ void Daemon::initializeAutotile()
             if (wasAutotile) {
                 // Autotile → Snapping: restore this context's snappingLayout
                 // from the AssignmentEntry (preserved even when mode is Autotile).
-                QString layoutId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, QString());
+                // Try current context first; fall back to broader scopes when the
+                // context-specific entry has no snappingLayout (e.g., fresh KCM
+                // autotile entry that never had a manual layout assigned).
+                QString layoutId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
+                if (layoutId.isEmpty() && !activity.isEmpty()) {
+                    layoutId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, QString());
+                }
                 if (!layoutId.isEmpty()) {
                     applied = m_unifiedLayoutController->applyLayoutById(layoutId);
                 }
@@ -256,9 +262,12 @@ void Daemon::initializeAutotile()
                 seedAutotileOrderForScreen(screenId);
 
                 // Resolve algorithm from the AssignmentEntry's tilingAlgorithm
-                // (preserved even when mode is Snapping), then fall back to the
-                // user's configured default (settings).
-                QString algoId = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, QString());
+                // (preserved even when mode is Snapping), then fall back to broader
+                // scopes, then to the user's configured default (settings).
+                QString algoId = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
+                if (algoId.isEmpty() && !activity.isEmpty()) {
+                    algoId = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, QString());
+                }
                 if (algoId.isEmpty() && m_settings) {
                     algoId = m_settings->autotileAlgorithm();
                 }

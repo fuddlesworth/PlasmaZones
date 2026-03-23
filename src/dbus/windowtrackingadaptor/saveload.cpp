@@ -12,9 +12,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
-#include <KConfig>
-#include <KConfigGroup>
-#include <KSharedConfig>
+#include "../../config/configbackend_qsettings.h"
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -52,12 +50,12 @@ static QHash<QString, QStringList> parseZoneListMap(const QString& json)
 
 void WindowTrackingAdaptor::saveState()
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup tracking = config->group(QStringLiteral("WindowTracking"));
+    auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+    auto tracking = backend->group(QStringLiteral("WindowTracking"));
 
     // Save active layout ID so we can restore it after daemon restart.
     if (m_layoutManager && m_layoutManager->activeLayout()) {
-        tracking.writeEntry(QStringLiteral("ActiveLayoutId"), m_layoutManager->activeLayout()->id().toString());
+        tracking->writeString(QStringLiteral("ActiveLayoutId"), m_layoutManager->activeLayout()->id().toString());
     }
 
     // Save zone assignments with full windowIds (appId|uuid) to preserve multi-instance
@@ -72,8 +70,8 @@ void WindowTrackingAdaptor::saveState()
         entry[QLatin1String("desktop")] = m_service->desktopAssignments().value(it.key(), 0);
         fullAssignments.append(entry);
     }
-    tracking.writeEntry(QStringLiteral("WindowZoneAssignmentsFull"),
-                        QString::fromUtf8(QJsonDocument(fullAssignments).toJson(QJsonDocument::Compact)));
+    tracking->writeString(QStringLiteral("WindowZoneAssignmentsFull"),
+                          QString::fromUtf8(QJsonDocument(fullAssignments).toJson(QJsonDocument::Compact)));
 
     // Save pending restore queues as JSON: appId -> array of entry objects
     // Each entry: {zoneIds: [...], screen: "...", desktop: N, layout: "...", zoneNumbers: [...]}
@@ -106,36 +104,36 @@ void WindowTrackingAdaptor::saveState()
             pendingQueuesObj[it.key()] = entryArray;
         }
     }
-    tracking.writeEntry(QStringLiteral("PendingRestoreQueues"),
-                        QString::fromUtf8(QJsonDocument(pendingQueuesObj).toJson(QJsonDocument::Compact)));
+    tracking->writeString(QStringLiteral("PendingRestoreQueues"),
+                          QString::fromUtf8(QJsonDocument(pendingQueuesObj).toJson(QJsonDocument::Compact)));
 
     // Clean up obsolete keys from old formats
-    tracking.deleteEntry(QStringLiteral("PendingWindowScreenAssignments"));
-    tracking.deleteEntry(QStringLiteral("PendingWindowDesktopAssignments"));
-    tracking.deleteEntry(QStringLiteral("PendingWindowLayoutAssignments"));
-    tracking.deleteEntry(QStringLiteral("PendingWindowZoneNumbers"));
-    tracking.deleteEntry(QStringLiteral("WindowZoneAssignments"));
-    tracking.deleteEntry(QStringLiteral("WindowScreenAssignments"));
-    tracking.deleteEntry(QStringLiteral("WindowDesktopAssignments"));
+    tracking->deleteKey(QStringLiteral("PendingWindowScreenAssignments"));
+    tracking->deleteKey(QStringLiteral("PendingWindowDesktopAssignments"));
+    tracking->deleteKey(QStringLiteral("PendingWindowLayoutAssignments"));
+    tracking->deleteKey(QStringLiteral("PendingWindowZoneNumbers"));
+    tracking->deleteKey(QStringLiteral("WindowZoneAssignments"));
+    tracking->deleteKey(QStringLiteral("WindowScreenAssignments"));
+    tracking->deleteKey(QStringLiteral("WindowDesktopAssignments"));
 
     // Save pre-tile geometries so float-toggle restores to the correct position
     // even after daemon restart (windows stay at their zone positions across restarts).
     // Save full windowId format for daemon-only restarts (UUIDs stable, multi-instance distinction).
     // Save appId format as fallback for KWin restarts (UUIDs change).
-    tracking.writeEntry(QStringLiteral("PreTileGeometriesFull"),
-                        serializeGeometryMapFull(m_service->preTileGeometries()));
-    tracking.writeEntry(QStringLiteral("PreTileGeometries"), serializeGeometryMap(m_service->preTileGeometries()));
+    tracking->writeString(QStringLiteral("PreTileGeometriesFull"),
+                          serializeGeometryMapFull(m_service->preTileGeometries()));
+    tracking->writeString(QStringLiteral("PreTileGeometries"), serializeGeometryMap(m_service->preTileGeometries()));
     // Remove old split keys if present (migration)
-    tracking.deleteEntry(QStringLiteral("PreSnapGeometries"));
-    tracking.deleteEntry(QStringLiteral("PreAutotileGeometries"));
+    tracking->deleteKey(QStringLiteral("PreSnapGeometries"));
+    tracking->deleteKey(QStringLiteral("PreAutotileGeometries"));
 
     // Save last used zone info (from service)
-    tracking.writeEntry(QStringLiteral("LastUsedZoneId"), m_service->lastUsedZoneId());
+    tracking->writeString(QStringLiteral("LastUsedZoneId"), m_service->lastUsedZoneId());
     // Note: Other last-used fields would need accessors in service
 
     // Float state is ephemeral (session-only) — do NOT persist across restarts.
     // Clear any stale entry from older versions so restored sessions start clean.
-    tracking.deleteEntry(QStringLiteral("FloatingWindows"));
+    tracking->deleteKey(QStringLiteral("FloatingWindows"));
 
     // Save pre-float zone assignments (for unfloating after session restore).
     // Runtime keys may be full window IDs; convert to
@@ -146,8 +144,8 @@ void WindowTrackingAdaptor::saveState()
         QString key = Utils::extractAppId(it.key());
         preFloatZonesObj[key] = toJsonArray(it.value());
     }
-    tracking.writeEntry(QStringLiteral("PreFloatZoneAssignments"),
-                        QString::fromUtf8(QJsonDocument(preFloatZonesObj).toJson(QJsonDocument::Compact)));
+    tracking->writeString(QStringLiteral("PreFloatZoneAssignments"),
+                          QString::fromUtf8(QJsonDocument(preFloatZonesObj).toJson(QJsonDocument::Compact)));
 
     // Save pre-float screen assignments (for unfloating to correct monitor).
     // Same app ID conversion as above, plus translate to screen IDs.
@@ -157,19 +155,20 @@ void WindowTrackingAdaptor::saveState()
         QString key = Utils::extractAppId(it.key());
         preFloatScreensObj[key] = Utils::screenIdForName(it.value());
     }
-    tracking.writeEntry(QStringLiteral("PreFloatScreenAssignments"),
-                        QString::fromUtf8(QJsonDocument(preFloatScreensObj).toJson(QJsonDocument::Compact)));
+    tracking->writeString(QStringLiteral("PreFloatScreenAssignments"),
+                          QString::fromUtf8(QJsonDocument(preFloatScreensObj).toJson(QJsonDocument::Compact)));
 
     // Save user-snapped classes
     QJsonArray userSnappedArray;
     for (const QString& windowClass : m_service->userSnappedClasses()) {
         userSnappedArray.append(windowClass);
     }
-    tracking.writeEntry(QStringLiteral("UserSnappedClasses"),
-                        QString::fromUtf8(QJsonDocument(userSnappedArray).toJson(QJsonDocument::Compact)));
+    tracking->writeString(QStringLiteral("UserSnappedClasses"),
+                          QString::fromUtf8(QJsonDocument(userSnappedArray).toJson(QJsonDocument::Compact)));
 
-    config->sync();
-    qCInfo(lcDbusWindow) << "Saved state to KConfig:"
+    tracking.reset(); // release group before sync
+    backend->sync();
+    qCInfo(lcDbusWindow) << "Saved state:"
                          << "zones=" << fullAssignments.size() << "pending=" << pendingQueuesObj.size()
                          << "preTile=" << m_service->preTileGeometries().size()
                          << "preFloat=" << preFloatZonesObj.size() << "userSnapped=" << userSnappedArray.size();
@@ -190,8 +189,8 @@ void WindowTrackingAdaptor::saveStateOnShutdown()
 
 void WindowTrackingAdaptor::loadState()
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup tracking = config->group(QStringLiteral("WindowTracking"));
+    auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+    auto tracking = backend->group(QStringLiteral("WindowTracking"));
 
     // Build pending restore queues from:
     // 1. Active zone assignments — windows still open at daemon shutdown
@@ -222,7 +221,7 @@ void WindowTrackingAdaptor::loadState()
     QHash<QString, QString> fullScreens;
     QHash<QString, int> fullDesktops;
 
-    QString fullJson = tracking.readEntry(QStringLiteral("WindowZoneAssignmentsFull"), QString());
+    QString fullJson = tracking->readString(QStringLiteral("WindowZoneAssignmentsFull"), QString());
     if (!fullJson.isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(fullJson.toUtf8());
         if (doc.isArray()) {
@@ -273,7 +272,7 @@ void WindowTrackingAdaptor::loadState()
     // Load persisted pending restore queues (appId -> array of entry objects).
     // These go directly into pendingQueues. Persisted entries are richer than
     // active-derived ones (they include layoutId and zoneNumbers).
-    QString pendingQueuesJson = tracking.readEntry(QStringLiteral("PendingRestoreQueues"), QString());
+    QString pendingQueuesJson = tracking->readString(QStringLiteral("PendingRestoreQueues"), QString());
     if (!pendingQueuesJson.isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(pendingQueuesJson.toUtf8());
         if (doc.isObject()) {
@@ -381,7 +380,7 @@ void WindowTrackingAdaptor::loadState()
     // Load full windowId format first (preserves multi-instance distinction for
     // daemon-only restarts where KWin UUIDs are still valid). Each entry stores
     // both the full windowId key AND the appId key, mirroring storePreTileGeometry().
-    QString fullTileJson = tracking.readEntry(QStringLiteral("PreTileGeometriesFull"), QString());
+    QString fullTileJson = tracking->readString(QStringLiteral("PreTileGeometriesFull"), QString());
     if (!fullTileJson.isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(fullTileJson.toUtf8());
         if (doc.isArray()) {
@@ -411,7 +410,7 @@ void WindowTrackingAdaptor::loadState()
     }
 
     // Load appId-keyed format (fallback for KWin restarts or entries without full format)
-    QString tileJson = tracking.readEntry(QStringLiteral("PreTileGeometries"), QString());
+    QString tileJson = tracking->readString(QStringLiteral("PreTileGeometries"), QString());
     if (!tileJson.isEmpty()) {
         // Only fill in keys not already loaded from full format
         QHash<QString, PreTileGeometry> appIdGeometries;
@@ -423,16 +422,16 @@ void WindowTrackingAdaptor::loadState()
         }
     } else if (preTileGeometries.isEmpty()) {
         // Migration: merge old split keys
-        loadGeometries(tracking.readEntry(QStringLiteral("PreAutotileGeometries"), QString()), preTileGeometries);
-        loadGeometries(tracking.readEntry(QStringLiteral("PreSnapGeometries"), QString()), preTileGeometries);
+        loadGeometries(tracking->readString(QStringLiteral("PreAutotileGeometries"), QString()), preTileGeometries);
+        loadGeometries(tracking->readString(QStringLiteral("PreSnapGeometries"), QString()), preTileGeometries);
     }
     m_service->setPreTileGeometries(preTileGeometries);
 
     // Load last used zone info
-    QString lastZoneId = tracking.readEntry(QStringLiteral("LastUsedZoneId"), QString());
-    QString lastScreenId = tracking.readEntry(QStringLiteral("LastUsedScreenName"), QString());
-    QString lastZoneClass = tracking.readEntry(QStringLiteral("LastUsedZoneClass"), QString());
-    int lastDesktop = tracking.readEntry(QStringLiteral("LastUsedDesktop"), 0);
+    QString lastZoneId = tracking->readString(QStringLiteral("LastUsedZoneId"), QString());
+    QString lastScreenId = tracking->readString(QStringLiteral("LastUsedScreenName"), QString());
+    QString lastZoneClass = tracking->readString(QStringLiteral("LastUsedZoneClass"), QString());
+    int lastDesktop = tracking->readInt(QStringLiteral("LastUsedDesktop"), 0);
     m_service->setLastUsedZone(lastZoneId, lastScreenId, lastZoneClass, lastDesktop);
 
     // Float state is ephemeral (session-only) — skip loading.
@@ -441,13 +440,13 @@ void WindowTrackingAdaptor::loadState()
     // Load pre-float zone assignments (for unfloating after session restore)
     // Supports both old format (string) and new format (JSON array) for backward compat
     QHash<QString, QStringList> preFloatZones =
-        parseZoneListMap(tracking.readEntry(QStringLiteral("PreFloatZoneAssignments"), QString()));
+        parseZoneListMap(tracking->readString(QStringLiteral("PreFloatZoneAssignments"), QString()));
     m_service->setPreFloatZoneAssignments(preFloatZones);
 
     // Load pre-float screen assignments (for unfloating to correct monitor)
     // Values may be screen IDs (new) or connector names (legacy) — resolve to current connector name
     QHash<QString, QString> preFloatScreens;
-    QString preFloatScreensJson = tracking.readEntry(QStringLiteral("PreFloatScreenAssignments"), QString());
+    QString preFloatScreensJson = tracking->readString(QStringLiteral("PreFloatScreenAssignments"), QString());
     if (!preFloatScreensJson.isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(preFloatScreensJson.toUtf8());
         if (doc.isObject()) {
@@ -470,7 +469,7 @@ void WindowTrackingAdaptor::loadState()
 
     // Load user-snapped classes
     QSet<QString> userSnappedClasses;
-    QString userSnappedJson = tracking.readEntry(QStringLiteral("UserSnappedClasses"), QString());
+    QString userSnappedJson = tracking->readString(QStringLiteral("UserSnappedClasses"), QString());
     if (!userSnappedJson.isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(userSnappedJson.toUtf8());
         if (doc.isArray()) {
@@ -497,7 +496,7 @@ void WindowTrackingAdaptor::loadState()
     // defaultLayout() instead of the restored layout. Zone assignments from the
     // saved layout get purged because those zones don't exist in defaultLayout().
     // This is a state restoration, not a real layout switch — no signal needed.
-    QString savedActiveLayoutId = tracking.readEntry(QStringLiteral("ActiveLayoutId"), QString());
+    QString savedActiveLayoutId = tracking->readString(QStringLiteral("ActiveLayoutId"), QString());
     if (!savedActiveLayoutId.isEmpty() && m_layoutManager) {
         auto savedUuid = Utils::parseUuid(savedActiveLayoutId);
         if (savedUuid) {

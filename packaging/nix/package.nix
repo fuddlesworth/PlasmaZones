@@ -80,17 +80,9 @@ stdenv.mkDerivation {
     qt6.qtshadertools    # ShaderTools ShaderToolsPrivate (zone overlay shaders)
   ] ++ (with kdePackages; [
     # KDE Frameworks 6 (6.6+ for Plasma 6.6)
-    kconfig
-    kconfigwidgets
-    kcoreaddons
-    kdbusaddons
-    ki18n
     kcmutils
-    kwindowsystem
     kglobalaccel
-    knotifications
-    kcolorscheme
-
+    kirigami
     # Wayland overlay support (required; 6.6+ for setScreen API)
     layer-shell-qt
 

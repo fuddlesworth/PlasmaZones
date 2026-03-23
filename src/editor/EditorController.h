@@ -13,7 +13,7 @@
 #include <QQuickWindow>
 #include <QSize>
 #include <QVector>
-#include <KConfigGroup>
+#include "../config/configbackend_qsettings.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "undo/UndoController.h"
@@ -764,10 +764,10 @@ private:
      * @param emitSignal Lambda to emit the changed signal
      */
     template<typename F>
-    void loadShortcutSetting(KConfigGroup& group, const QString& key, const QString& defaultValue, QString& member,
-                             F emitSignal)
+    void loadShortcutSetting(QSettingsConfigGroup& group, const QString& key, const QString& defaultValue,
+                             QString& member, F emitSignal)
     {
-        QString value = group.readEntry(key, defaultValue);
+        QString value = group.readString(key, defaultValue);
         if (value.isEmpty()) {
             qCWarning(lcEditor) << "Invalid editor shortcut" << key << "(empty), using default";
             value = defaultValue;

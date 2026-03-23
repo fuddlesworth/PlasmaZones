@@ -54,15 +54,15 @@ jobs:
       - name: Install build dependencies
         run: |
           apt-get install -y --no-install-recommends \
-            cmake ninja-build extra-cmake-modules gettext g++ pkg-config \
+            cmake ninja-build extra-cmake-modules g++ pkg-config \
             build-essential pkg-kde-tools \
             devscripts debhelper fakeroot dpkg-dev \
             qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-tools-dev qt6-shadertools-dev \
             kwin-dev libwayland-dev libepoxy-dev libdrm-dev libxkbcommon-dev \
-            libkf6config-dev libkf6configwidgets-dev libkf6coreaddons-dev \
-            libkf6dbusaddons-dev libkf6i18n-dev libkf6kcmutils-dev \
+            libkf6config-dev libkf6configwidgets-dev \
+            libkf6kcmutils-dev \
             libkf6windowsystem-dev libkf6globalaccel-dev \
-            libkf6notifications-dev kf6-kcolorscheme-dev \
+            libkf6notifications-dev \
             liblayershellqtinterface-dev plasma-activities-dev
 
       - name: Generate Debian changelog from CHANGELOG.md
@@ -105,15 +105,14 @@ jobs:
       - name: Install build dependencies
         run: |
           dnf install -y \
-            cmake ninja-build extra-cmake-modules gettext gcc-c++ \
+            cmake ninja-build extra-cmake-modules gcc-c++ \
             qt6-qtbase-devel qt6-qtbase-private-devel \
             qt6-qtdeclarative-devel qt6-qttools-devel qt6-qtshadertools-devel \
             kwin-devel wayland-devel libepoxy-devel libdrm-devel \
             kf6-kconfig-devel kf6-kconfigwidgets-devel \
-            kf6-kcoreaddons-devel kf6-kdbusaddons-devel \
-            kf6-ki18n-devel kf6-kcmutils-devel \
-            kf6-kwindowsystem-devel kf6-kglobalaccel-devel \
-            kf6-knotifications-devel kf6-kcolorscheme-devel \
+            \
+            kf6-kcmutils-devel \
+            kf6-kglobalaccel-devel \
             layer-shell-qt-devel plasma-activities-devel
 
       - name: Setup rpmbuild
@@ -167,17 +166,16 @@ jobs:
       - name: Install build dependencies
         run: |
           zypper -n install \
-            cmake ninja extra-cmake-modules gettext-tools gcc-c++ \
+            cmake ninja extra-cmake-modules-tools gcc-c++ \
             qt6-core-private-devel qt6-gui-private-devel \
             'cmake(Qt6Core)' 'cmake(Qt6DBus)' 'cmake(Qt6Gui)' \
             'cmake(Qt6Qml)' 'cmake(Qt6Quick)' 'cmake(Qt6QuickControls2)' \
             'cmake(Qt6Widgets)' 'cmake(Qt6Concurrent)' \
             'cmake(Qt6ShaderTools)' 'cmake(Qt6ShaderToolsPrivate)' \
             'cmake(KF6Config)' 'cmake(KF6ConfigWidgets)' \
-            'cmake(KF6CoreAddons)' 'cmake(KF6DBusAddons)' \
-            'cmake(KF6I18n)' 'cmake(KF6KCMUtils)' \
-            'cmake(KF6WindowSystem)' 'cmake(KF6GlobalAccel)' \
-            'cmake(KF6Notifications)' 'cmake(KF6ColorScheme)' \
+            \
+            'cmake(KF6KCMUtils)' \
+            'cmake(KF6GlobalAccel)' \
             kwin6-devel 'cmake(LayerShellQt)' 'cmake(PlasmaActivities)' \
             'pkgconfig(systemd)'
 
@@ -233,12 +231,11 @@ jobs:
       - name: Install build dependencies
         run: |
           pacman -S --noconfirm --needed \
-            cmake ninja extra-cmake-modules gettext base-devel \
+            cmake ninja extra-cmake-modules base-devel \
             qt6-base qt6-declarative qt6-tools qt6-shadertools \
             kwin wayland libepoxy libdrm \
-            kconfig kconfigwidgets kcoreaddons kdbusaddons \
-            ki18n kcmutils kwindowsystem kglobalaccel \
-            knotifications kcolorscheme \
+            kconfig kconfigwidgets \
+            kcmutils kglobalaccel \
             layer-shell-qt plasma-activities
 
       - name: Configure
@@ -317,12 +314,11 @@ jobs:
       - name: Install build dependencies
         run: |
           pacman -S --noconfirm --needed \
-            cmake ninja extra-cmake-modules gettext \
+            cmake ninja extra-cmake-modules \
             qt6-base qt6-declarative qt6-tools \
             kwin \
-            kconfig kconfigwidgets kcoreaddons kdbusaddons \
-            ki18n kcmutils kwindowsystem kglobalaccel \
-            knotifications kcolorscheme \
+            kconfig kconfigwidgets \
+            kcmutils kglobalaccel \
             layer-shell-qt plasma-activities
 
       - name: Prepare PKGBUILD
@@ -346,9 +342,8 @@ jobs:
           license=('GPL-3.0-or-later')
           depends=(
               'qt6-base' 'qt6-declarative'
-              'kconfig' 'kconfigwidgets' 'kcoreaddons' 'kdbusaddons'
-              'ki18n' 'kcmutils' 'kwindowsystem' 'kglobalaccel'
-              'knotifications' 'kcolorscheme' 'layer-shell-qt'
+              'kconfig' 'kconfigwidgets'
+              'kcmutils' 'kwindowsystem' 'kglobalaccel'
           )
           makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja')
           optdepends=('plasma-activities: activity-based layouts')
