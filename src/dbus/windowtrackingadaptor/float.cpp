@@ -118,6 +118,15 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     // Use the window's tracked screen if available, otherwise fall back to last active screen.
     QString screen = m_service->screenAssignments().value(windowId, m_lastActiveScreenId);
     Q_EMIT windowFloatingChanged(windowId, floating, screen);
+
+    // Emit unified state change
+    QJsonObject stateObj;
+    stateObj[QLatin1String("windowId")] = windowId;
+    stateObj[QLatin1String("zoneId")] = m_service->zoneForWindow(windowId);
+    stateObj[QLatin1String("screenId")] = screen;
+    stateObj[QLatin1String("isFloating")] = floating;
+    stateObj[QLatin1String("changeType")] = floating ? QStringLiteral("floated") : QStringLiteral("unfloated");
+    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
 QStringList WindowTrackingAdaptor::getFloatingWindows()

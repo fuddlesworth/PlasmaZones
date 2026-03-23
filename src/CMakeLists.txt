@@ -105,6 +105,7 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/persistence.cpp
     dbus/windowtrackingadaptor/saveload.cpp
     dbus/windowtrackingadaptor/snaprestore.cpp
+    dbus/windowtrackingadaptor/convenience.cpp
     dbus/windowtrackingadaptor.h
     dbus/windowtrackingadaptor/internal.h
     dbus/screenadaptor.cpp

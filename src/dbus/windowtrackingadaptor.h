@@ -542,6 +542,41 @@ public Q_SLOTS:
      */
     void snapAllWindows(const QString& screenId);
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Phase 1 Convenience Methods (TUI/CLI support)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Convenience: snap a window to a specific zone by ID
+     * @param windowId Window to snap
+     * @param zoneId Target zone UUID
+     * @note Resolves geometry from zone ID, handles windowSnapped bookkeeping,
+     *       emits applyGeometryRequested for the compositor bridge
+     */
+    void moveWindowToZone(const QString& windowId, const QString& zoneId);
+
+    /**
+     * @brief Convenience: swap two specific windows by ID
+     * @param windowId1 First window
+     * @param windowId2 Second window
+     * @note Resolves both geometries, handles windowSnapped for both,
+     *       emits two applyGeometryRequested signals
+     */
+    void swapWindowsById(const QString& windowId1, const QString& windowId2);
+
+    /**
+     * @brief Get comprehensive state for a single window
+     * @param windowId Window to query
+     * @return JSON: {windowId, zoneId, screenId, isFloating, isSticky}
+     */
+    QString getWindowState(const QString& windowId);
+
+    /**
+     * @brief Get state for all tracked windows (TUI dashboard)
+     * @return JSON array of window state objects
+     */
+    QString getAllWindowStates();
+
     /**
      * @brief Check if a window is temporarily floating (excluded from snapping)
      * @param windowId Window ID
@@ -658,6 +693,14 @@ Q_SIGNALS:
      * @param isFloating The new floating state
      */
     void windowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
+
+    /**
+     * @brief Unified window state change stream
+     * @param windowId Window whose state changed
+     * @param stateJson JSON: {windowId, zoneId, screenId, isFloating, changeType}
+     *        changeType: "snapped", "unsnapped", "floated", "unfloated", "screen_changed"
+     */
+    void windowStateChanged(const QString& windowId, const QString& stateJson);
 
     /**
      * @brief Emitted when pending window restores become available

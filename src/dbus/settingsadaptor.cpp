@@ -68,7 +68,8 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
         m_settings->setter(v.toString());                                                                              \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("string");
 
 #define REGISTER_BOOL_SETTING(name, getter, setter)                                                                    \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
@@ -77,7 +78,8 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
         m_settings->setter(v.toBool());                                                                                \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("bool");
 
 #define REGISTER_INT_SETTING(name, getter, setter)                                                                     \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
@@ -86,7 +88,8 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
         m_settings->setter(v.toInt());                                                                                 \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("int");
 
 #define REGISTER_DOUBLE_SETTING(name, getter, setter)                                                                  \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
@@ -95,7 +98,8 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
         m_settings->setter(v.toDouble());                                                                              \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("double");
 
 #define REGISTER_COLOR_SETTING(keyName, getter, setter)                                                                \
     m_getters[QStringLiteral(keyName)] = [this]() {                                                                    \
@@ -105,7 +109,8 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(keyName)] = [this](const QVariant& v) {                                                   \
         m_settings->setter(QColor(v.toString()));                                                                      \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(keyName)] = QStringLiteral("color");
 
 #define REGISTER_STRINGLIST_SETTING(name, getter, setter)                                                              \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
@@ -114,7 +119,8 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
         m_settings->setter(v.toStringList());                                                                          \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("stringlist");
 
     // Concrete Settings pointer for properties not on ISettings interface
     auto* concrete = qobject_cast<Settings*>(m_settings);
@@ -127,7 +133,8 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
         concrete->setter(v.toBool());                                                                                  \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("bool");
 #define REGISTER_CONCRETE_INT(name, getter, setter)                                                                    \
     m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
         return concrete->getter();                                                                                     \
@@ -135,7 +142,8 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
         concrete->setter(v.toInt());                                                                                   \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("int");
 #define REGISTER_CONCRETE_DOUBLE(name, getter, setter)                                                                 \
     m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
         return concrete->getter();                                                                                     \
@@ -143,7 +151,8 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
         concrete->setter(v.toDouble());                                                                                \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("double");
 #define REGISTER_CONCRETE_STRING(name, getter, setter)                                                                 \
     m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
         return concrete->getter();                                                                                     \
@@ -151,7 +160,8 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
         concrete->setter(v.toString());                                                                                \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("string");
 
     // Activation settings
     REGISTER_BOOL_SETTING("shiftDragToActivate", shiftDragToActivate, setShiftDragToActivate)
@@ -164,6 +174,7 @@ void SettingsAdaptor::initializeRegistry()
         m_settings->setDragActivationTriggers(v.toList());
         return true;
     };
+    m_schemas[QStringLiteral("dragActivationTriggers")] = QStringLiteral("stringlist");
 
     REGISTER_BOOL_SETTING("zoneSpanEnabled", zoneSpanEnabled, setZoneSpanEnabled)
 
@@ -179,6 +190,7 @@ void SettingsAdaptor::initializeRegistry()
         }
         return false;
     };
+    m_schemas[QStringLiteral("zoneSpanModifier")] = QStringLiteral("int");
 
     // Zone span triggers list (multi-bind)
     m_getters[QStringLiteral("zoneSpanTriggers")] = [this]() {
@@ -188,6 +200,7 @@ void SettingsAdaptor::initializeRegistry()
         m_settings->setZoneSpanTriggers(v.toList());
         return true;
     };
+    m_schemas[QStringLiteral("zoneSpanTriggers")] = QStringLiteral("stringlist");
 
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
     REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
@@ -210,6 +223,7 @@ void SettingsAdaptor::initializeRegistry()
         }
         return false;
     };
+    m_schemas[QStringLiteral("osdStyle")] = QStringLiteral("int");
     // overlayDisplayMode: enum (0=ZoneRectangles, 1=LayoutPreview)
     m_getters[QStringLiteral("overlayDisplayMode")] = [this]() {
         return static_cast<int>(m_settings->overlayDisplayMode());
@@ -222,6 +236,7 @@ void SettingsAdaptor::initializeRegistry()
         }
         return false;
     };
+    m_schemas[QStringLiteral("overlayDisplayMode")] = QStringLiteral("int");
     REGISTER_STRINGLIST_SETTING("disabledMonitors", disabledMonitors, setDisabledMonitors)
 
     // Appearance settings
@@ -249,6 +264,7 @@ void SettingsAdaptor::initializeRegistry()
         m_settings->setLabelFontSizeScale(val);
         return true;
     };
+    m_schemas[QStringLiteral("labelFontSizeScale")] = QStringLiteral("double");
     REGISTER_INT_SETTING("labelFontWeight", labelFontWeight, setLabelFontWeight)
     REGISTER_BOOL_SETTING("labelFontItalic", labelFontItalic, setLabelFontItalic)
     REGISTER_BOOL_SETTING("labelFontUnderline", labelFontUnderline, setLabelFontUnderline)
@@ -288,6 +304,7 @@ void SettingsAdaptor::initializeRegistry()
         }
         return false;
     };
+    m_schemas[QStringLiteral("stickyWindowHandling")] = QStringLiteral("int");
     REGISTER_BOOL_SETTING("restoreWindowsToZonesOnLogin", restoreWindowsToZonesOnLogin, setRestoreWindowsToZonesOnLogin)
     REGISTER_BOOL_SETTING("snapAssistFeatureEnabled", snapAssistFeatureEnabled, setSnapAssistFeatureEnabled)
     REGISTER_BOOL_SETTING("snapAssistEnabled", snapAssistEnabled, setSnapAssistEnabled)
@@ -300,6 +317,7 @@ void SettingsAdaptor::initializeRegistry()
         m_settings->setSnapAssistTriggers(v.toList());
         return true;
     };
+    m_schemas[QStringLiteral("snapAssistTriggers")] = QStringLiteral("stringlist");
 
     // Default layout
     REGISTER_STRING_SETTING("defaultLayoutId", defaultLayoutId, setDefaultLayoutId)
@@ -326,6 +344,7 @@ void SettingsAdaptor::initializeRegistry()
         }
         return false;
     };
+    m_schemas[QStringLiteral("zoneSelectorPosition")] = QStringLiteral("int");
     // zoneSelectorLayoutMode: enum (0=Grid, 1=Horizontal, 2=Vertical)
     m_getters[QStringLiteral("zoneSelectorLayoutMode")] = [this]() {
         return static_cast<int>(m_settings->zoneSelectorLayoutMode());
@@ -338,6 +357,7 @@ void SettingsAdaptor::initializeRegistry()
         }
         return false;
     };
+    m_schemas[QStringLiteral("zoneSelectorLayoutMode")] = QStringLiteral("int");
     // zoneSelectorSizeMode: enum (0=Auto, 1=Manual)
     m_getters[QStringLiteral("zoneSelectorSizeMode")] = [this]() {
         return static_cast<int>(m_settings->zoneSelectorSizeMode());
@@ -350,6 +370,7 @@ void SettingsAdaptor::initializeRegistry()
         }
         return false;
     };
+    m_schemas[QStringLiteral("zoneSelectorSizeMode")] = QStringLiteral("int");
     REGISTER_INT_SETTING("zoneSelectorMaxRows", zoneSelectorMaxRows, setZoneSelectorMaxRows)
     REGISTER_INT_SETTING("zoneSelectorPreviewWidth", zoneSelectorPreviewWidth, setZoneSelectorPreviewWidth)
     REGISTER_INT_SETTING("zoneSelectorPreviewHeight", zoneSelectorPreviewHeight, setZoneSelectorPreviewHeight)
@@ -398,6 +419,7 @@ void SettingsAdaptor::initializeRegistry()
             }
             return false;
         };
+        m_schemas[QStringLiteral("autotileInsertPosition")] = QStringLiteral("int");
     }
 
     // Autotile decoration settings (on ISettings interface)
@@ -627,6 +649,39 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
 QStringList SettingsAdaptor::getSettingKeys()
 {
     return m_getters.keys();
+}
+
+QString SettingsAdaptor::getSettingSchema(const QString& key)
+{
+    QJsonObject result;
+
+    if (key.isEmpty()) {
+        qCWarning(lcDbusSettings) << "getSettingSchema: empty key";
+        return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+    }
+
+    auto it = m_schemas.find(key);
+    if (it != m_schemas.end()) {
+        result[QLatin1String("key")] = key;
+        result[QLatin1String("type")] = it.value();
+    } else {
+        qCWarning(lcDbusSettings) << "getSettingSchema: unknown key" << key;
+    }
+
+    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+}
+
+QString SettingsAdaptor::getAllSettingSchemas()
+{
+    QJsonObject result;
+
+    for (auto it = m_schemas.constBegin(); it != m_schemas.constEnd(); ++it) {
+        QJsonObject entry;
+        entry[QLatin1String("type")] = it.value();
+        result[it.key()] = entry;
+    }
+
+    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

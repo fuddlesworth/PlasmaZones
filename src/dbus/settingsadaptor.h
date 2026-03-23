@@ -140,6 +140,19 @@ public Q_SLOTS:
      */
     void provideRunningWindows(const QString& json);
 
+    /**
+     * @brief Get metadata for a single setting
+     * @param key Setting key name
+     * @return JSON: {key, type} — type is "bool"|"int"|"double"|"string"|"color"|"stringlist"
+     */
+    QString getSettingSchema(const QString& key);
+
+    /**
+     * @brief Get metadata for all settings
+     * @return JSON object: {key: {type}, ...}
+     */
+    QString getAllSettingSchemas();
+
 Q_SIGNALS:
     void settingsChanged();
     void runningWindowsRequested();
@@ -167,6 +180,7 @@ private:
 
     QHash<QString, Getter> m_getters;
     QHash<QString, Setter> m_setters;
+    QHash<QString, QString> m_schemas; // key -> type ("bool"|"int"|"double"|"string"|"color"|"stringlist")
 
     // Debounced save timer (performance optimization)
     QTimer* m_saveTimer = nullptr;

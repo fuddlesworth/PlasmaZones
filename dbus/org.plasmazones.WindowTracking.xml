@@ -648,5 +648,48 @@
                 <annotation name="org.gtk.GDBus.DocString" value="JSON {x, y, width, height} for the zone."/>
             </arg>
         </signal>
+        <!-- Phase 1 Convenience Methods (TUI/CLI support) -->
+        <method name="moveWindowToZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Convenience: snap a window to a specific zone by ID. Resolves geometry, handles bookkeeping, emits applyGeometryRequested."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="zoneId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Target zone UUID."/>
+            </arg>
+        </method>
+        <method name="swapWindowsById">
+            <annotation name="org.gtk.GDBus.DocString" value="Convenience: swap two specific windows by their IDs. Resolves geometries, handles bookkeeping for both, emits applyGeometryRequested for each."/>
+            <arg name="windowId1" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="First window identifier."/>
+            </arg>
+            <arg name="windowId2" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Second window identifier."/>
+            </arg>
+        </method>
+        <method name="getWindowState">
+            <annotation name="org.gtk.GDBus.DocString" value="Get comprehensive state for a single window. Returns JSON with windowId, zoneId, screenId, isFloating, isSticky."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="stateJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {windowId, zoneId, screenId, isFloating, isSticky}."/>
+            </arg>
+        </method>
+        <method name="getAllWindowStates">
+            <annotation name="org.gtk.GDBus.DocString" value="Get state for all tracked windows (TUI dashboard). Returns JSON array of window state objects."/>
+            <arg name="statesJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of {windowId, zoneId, screenId, isFloating, isSticky}."/>
+            </arg>
+        </method>
+        <signal name="windowStateChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Unified window state change stream. Emitted on snap, unsnap, float, unfloat, and screen change events."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window whose state changed."/>
+            </arg>
+            <arg name="stateJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {windowId, zoneId, screenId, isFloating, changeType}. changeType: snapped, unsnapped, floated, unfloated, screen_changed."/>
+            </arg>
+        </signal>
     </interface>
 </node>

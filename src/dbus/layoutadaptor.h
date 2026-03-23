@@ -121,6 +121,12 @@ public Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /**
+     * @brief Get the current virtual desktop number (1-indexed)
+     * @return Current desktop number, or 0 if unavailable
+     */
+    int getCurrentVirtualDesktop();
+
+    /**
      * @brief Check if KDE Activities support is available
      * @return true if KActivities is running
      */

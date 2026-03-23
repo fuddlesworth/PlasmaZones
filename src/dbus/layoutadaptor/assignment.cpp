@@ -29,6 +29,12 @@ QJsonObject LayoutAdaptor::buildActivityInfoJson(const QString& activityId) cons
     return info;
 }
 
+// Virtual Desktop Query
+int LayoutAdaptor::getCurrentVirtualDesktop()
+{
+    return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+}
+
 // Screen Assignments
 QString LayoutAdaptor::getLayoutForScreen(const QString& screenId)
 {

@@ -178,6 +178,15 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
     }
 
     qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to zone" << zoneId << "on screen" << resolvedScreen;
+
+    // Emit unified state change
+    QJsonObject stateObj;
+    stateObj[QLatin1String("windowId")] = windowId;
+    stateObj[QLatin1String("zoneId")] = zoneId;
+    stateObj[QLatin1String("screenId")] = resolvedScreen;
+    stateObj[QLatin1String("isFloating")] = false;
+    stateObj[QLatin1String("changeType")] = QStringLiteral("snapped");
+    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
 void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds,
@@ -239,6 +248,15 @@ void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
     m_service->unassignWindow(windowId);
 
     qCInfo(lcDbusWindow) << "Window" << windowId << "unsnapped from zone" << previousZoneId;
+
+    // Emit unified state change
+    QJsonObject stateObj;
+    stateObj[QLatin1String("windowId")] = windowId;
+    stateObj[QLatin1String("zoneId")] = QString();
+    stateObj[QLatin1String("screenId")] = QString();
+    stateObj[QLatin1String("isFloating")] = false;
+    stateObj[QLatin1String("changeType")] = QStringLiteral("unsnapped");
+    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
 void WindowTrackingAdaptor::windowsSnappedBatch(const QString& batchJson)
@@ -300,6 +318,15 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
                          << "- unsnapping";
     m_service->clearStalePendingAssignment(windowId);
     m_service->unassignWindow(windowId);
+
+    // Emit unified state change for screen-change-triggered unsnap
+    QJsonObject stateObj;
+    stateObj[QLatin1String("windowId")] = windowId;
+    stateObj[QLatin1String("zoneId")] = QString();
+    stateObj[QLatin1String("screenId")] = newScreenId;
+    stateObj[QLatin1String("isFloating")] = false;
+    stateObj[QLatin1String("changeType")] = QStringLiteral("screen_changed");
+    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
 void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky)

@@ -105,6 +105,22 @@
             </arg>
         </signal>
 
+        <method name="getSettingSchema">
+            <annotation name="org.gtk.GDBus.DocString" value="Get metadata for a single setting key. Returns JSON with key and type fields."/>
+            <arg name="key" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Setting key name."/>
+            </arg>
+            <arg name="schemaJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {key, type}. Type is bool, int, double, string, color, or stringlist."/>
+            </arg>
+        </method>
+        <method name="getAllSettingSchemas">
+            <annotation name="org.gtk.GDBus.DocString" value="Get metadata for all settings. Returns JSON object mapping keys to type info."/>
+            <arg name="schemasJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object: {key: {type}, ...}."/>
+            </arg>
+        </method>
+
         <method name="translateShaderParams">
             <annotation name="org.gtk.GDBus.DocString" value="Translate shader params from param IDs to uniform names for ZoneShaderItem."/>
             <arg name="shaderId" type="s" direction="in">
