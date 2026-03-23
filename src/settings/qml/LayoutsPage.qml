@@ -45,6 +45,8 @@ ColumnLayout {
         viewMode: root.viewMode
         onRequestCreateNewLayout: settingsController.createNewLayout()
         onRequestImportLayout: importDialog.open()
+        onRequestImportFromKZones: settingsController.importFromKZones()
+        onRequestImportKZonesFile: kzonesFileDialog.open()
         onRequestOpenLayoutsFolder: settingsController.openLayoutsFolder()
         onViewModeRequested: (mode) => {
             root.viewMode = mode;
@@ -447,6 +449,29 @@ ColumnLayout {
         onAccepted: {
             settingsController.exportLayout(exportDialog.layoutId, selectedFile.toString().replace(/^file:\/\/+/, "/"));
         }
+    }
+
+    // KZones file import dialog
+    FileDialog {
+        id: kzonesFileDialog
+
+        title: i18n("Import KZones Layout File")
+        nameFilters: ["JSON files (*.json)", "All files (*)"]
+        fileMode: FileDialog.OpenFile
+        onAccepted: {
+            settingsController.importFromKZonesFile(selectedFile.toString().replace(/^file:\/\/+/, "/"));
+        }
+    }
+
+    // KZones import result notification — uses Main.qml's toast
+    Connections {
+        function onKzonesImportFinished(count, message) {
+            if (window && window.showToast)
+                window.showToast(message);
+
+        }
+
+        target: settingsController
     }
 
     // Delete confirmation dialog

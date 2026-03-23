@@ -170,6 +170,11 @@ public:
     Q_INVOKABLE void openLayoutsFolder();
     Q_INVOKABLE void importLayout(const QString& filePath);
     Q_INVOKABLE void exportLayout(const QString& layoutId, const QString& filePath);
+
+    // KZones import
+    Q_INVOKABLE bool hasKZonesConfig();
+    Q_INVOKABLE int importFromKZones();
+    Q_INVOKABLE int importFromKZonesFile(const QString& filePath);
     Q_INVOKABLE void setLayoutHidden(const QString& layoutId, bool hidden);
     Q_INVOKABLE void setLayoutAutoAssign(const QString& layoutId, bool enabled);
 
@@ -364,6 +369,9 @@ Q_SIGNALS:
     // Color import signals
     void colorImportError(const QString& error);
     void colorImportSuccess();
+
+    // KZones import signals
+    void kzonesImportFinished(int count, const QString& message);
     void lockedScreensChanged();
 
     // Editor signals
@@ -394,6 +402,7 @@ private:
     void refreshActivities();
 
     void saveAppRulesToDaemon(const QString& layoutId, const QVariantList& rules);
+    int importKZonesLayouts(const QJsonArray& kzonesArray);
 
     static QVariantList convertTriggersForQml(const QVariantList& triggers);
     static QVariantList convertTriggersForStorage(const QVariantList& triggers);

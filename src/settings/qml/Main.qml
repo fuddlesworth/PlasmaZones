@@ -292,6 +292,11 @@ ApplicationWindow {
         sidebarTransition.restart();
     }
 
+    // Show a toast notification from any child page
+    function showToast(msg) {
+        toast.show(msg);
+    }
+
     // Return to the main sidebar list, selecting the parent category
     function _drillOut() {
         sidebarTransition.pendingMode = "main";

@@ -20,6 +20,8 @@ RowLayout {
 
     signal requestCreateNewLayout()
     signal requestImportLayout()
+    signal requestImportFromKZones()
+    signal requestImportKZonesFile()
     signal requestOpenLayoutsFolder()
     signal viewModeRequested(int mode)
 
@@ -33,12 +35,42 @@ RowLayout {
         onClicked: root.requestCreateNewLayout()
     }
 
-    // Import — only in Snapping view
+    // Import — only in Snapping view (dropdown menu)
     Button {
+        id: importButton
+
         visible: root.viewMode === 0
         text: i18n("Import")
         icon.name: "document-import"
-        onClicked: root.requestImportLayout()
+        onClicked: importMenu.popup()
+
+        Menu {
+            id: importMenu
+
+            MenuItem {
+                text: i18n("Import Layout File…")
+                icon.name: "document-open"
+                onTriggered: root.requestImportLayout()
+            }
+
+            MenuSeparator {
+            }
+
+            MenuItem {
+                text: i18n("Import from KZones")
+                icon.name: "document-import"
+                enabled: settingsController.hasKZonesConfig()
+                onTriggered: root.requestImportFromKZones()
+            }
+
+            MenuItem {
+                text: i18n("Import KZones File…")
+                icon.name: "document-open-folder"
+                onTriggered: root.requestImportKZonesFile()
+            }
+
+        }
+
     }
 
     // Open Layouts Folder — only in Snapping view
