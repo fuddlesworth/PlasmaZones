@@ -9,6 +9,8 @@ import org.kde.kirigami as Kirigami
 ApplicationWindow {
     id: window
 
+    // Expose the layout context menu so Loader-loaded pages can connect to its signals
+    readonly property alias layoutContextMenu: layoutContextMenu
     // Responsive sidebar: collapse to icon-only below 750px
     readonly property bool sidebarCompact: window.width < Kirigami.Units.gridUnit * 50
     // Track page navigation for transitions
@@ -143,6 +145,14 @@ ApplicationWindow {
         "editor": "EditorPage.qml",
         "general": "GeneralPage.qml",
         "about": "AboutPage.qml"
+    })
+    // Shared aspect ratio labels (used in context menu + LayoutsPage section headers)
+    readonly property var aspectRatioLabels: ({
+        "any": i18n("All Monitors"),
+        "standard": i18n("Standard (16:9)"),
+        "ultrawide": i18n("Ultrawide (21:9)"),
+        "super-ultrawide": i18n("Super-Ultrawide (32:9)"),
+        "portrait": i18n("Portrait (9:16)")
     })
 
     function _rebuildSidebar() {
@@ -295,6 +305,11 @@ ApplicationWindow {
     // Show a toast notification from any child page
     function showToast(msg) {
         toast.show(msg);
+    }
+
+    // Show the layout context menu (called from LayoutsPage.qml via window.showLayoutContextMenu)
+    function showLayoutContextMenu(layout) {
+        layoutContextMenu.showForLayout(layout);
     }
 
     // Return to the main sidebar list, selecting the parent category
@@ -1097,6 +1112,191 @@ ApplicationWindow {
 
                     }
 
+                }
+
+            }
+
+            // ── Layout context menu (lives outside Loader to avoid Qt6 SIGSEGV on Menu destruction) ──
+            Menu {
+                id: layoutContextMenu
+
+                property var layout: null
+                property int viewMode: 0
+                property var _screenItems: []
+                readonly property bool isAutotile: layout && layout.isAutotile === true
+                readonly property string layoutId: layout ? (layout.id || "") : ""
+
+                // Signals for dialogs that live in LayoutsPage
+                signal deleteRequested(var layout)
+                signal exportRequested(string layoutId)
+
+                function showForLayout(layout) {
+                    layoutContextMenu.layout = layout;
+                    layoutContextMenu.viewMode = (layout && layout.isAutotile === true) ? 1 : 0;
+                    // Rebuild dynamic "Edit on <screen>" items
+                    for (let j = 0; j < _screenItems.length; j++) {
+                        layoutContextMenu.removeItem(_screenItems[j]);
+                        _screenItems[j].destroy();
+                    }
+                    _screenItems = [];
+                    let screens = settingsController.screens || [];
+                    if (screens.length > 1) {
+                        for (let i = 0; i < screens.length; i++) {
+                            let s = screens[i];
+                            let parts = [s.manufacturer || "", s.model || ""].filter((p) => {
+                                return p !== "";
+                            });
+                            let label = parts.length > 0 ? parts.join(" ") : (s.name || "");
+                            if (s.resolution)
+                                label += " (" + s.resolution + ")";
+
+                            let item = screenMenuItemComponent.createObject(layoutContextMenu, {
+                                "text": i18n("Edit on %1", label),
+                                "icon.name": s.isPrimary ? "starred-symbolic" : "monitor"
+                            });
+                            item._screenName = s.name;
+                            // Insert after the Edit item (index 1+)
+                            layoutContextMenu.insertItem(1 + i, item);
+                            _screenItems.push(item);
+                        }
+                    }
+                    screenSeparator.visible = _screenItems.length > 0;
+                    layoutContextMenu.popup();
+                }
+
+                // -- Edit --
+                MenuItem {
+                    text: i18n("Edit")
+                    icon.name: "document-edit"
+                    onTriggered: settingsController.editLayout(layoutContextMenu.layoutId)
+                }
+
+                // -- Dynamic "Edit on <screen>" items inserted here by showForLayout --
+                MenuSeparator {
+                    id: screenSeparator
+
+                    visible: false
+                }
+
+                // -- State --
+                MenuItem {
+                    text: i18n("Set as Default")
+                    icon.name: "favorite"
+                    enabled: {
+                        if (!layoutContextMenu.layout)
+                            return false;
+
+                        if (layoutContextMenu.viewMode === 1)
+                            return layoutContextMenu.layoutId !== ("autotile:" + appSettings.autotileAlgorithm);
+
+                        return layoutContextMenu.layoutId !== appSettings.defaultLayoutId;
+                    }
+                    onTriggered: {
+                        if (layoutContextMenu.viewMode === 1)
+                            appSettings.autotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
+                        else
+                            appSettings.defaultLayoutId = layoutContextMenu.layoutId;
+                    }
+                }
+
+                MenuItem {
+                    text: layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector ? i18n("Show in Zone Selector") : i18n("Hide from Zone Selector")
+                    icon.name: layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector ? "view-visible" : "view-hidden"
+                    onTriggered: settingsController.setLayoutHidden(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector))
+                }
+
+                MenuItem {
+                    text: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign")
+                    icon.name: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true ? "window-duplicate" : "window-new"
+                    visible: !layoutContextMenu.isAutotile
+                    onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true))
+                }
+
+                // -- Aspect Ratio (flat, no nested Menu — Qt6 crashes with submenu) --
+                MenuSeparator {
+                    visible: !layoutContextMenu.isAutotile
+                }
+
+                MenuItem {
+                    text: "  " + window.aspectRatioLabels["any"]
+                    checkable: true
+                    visible: !layoutContextMenu.isAutotile
+                    checked: layoutContextMenu.layout && (layoutContextMenu.layout.aspectRatioClass || "any") === "any"
+                    onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 0)
+                }
+
+                MenuItem {
+                    text: "  " + window.aspectRatioLabels["standard"]
+                    checkable: true
+                    visible: !layoutContextMenu.isAutotile
+                    checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "standard"
+                    onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 1)
+                }
+
+                MenuItem {
+                    text: "  " + window.aspectRatioLabels["ultrawide"]
+                    checkable: true
+                    visible: !layoutContextMenu.isAutotile
+                    checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "ultrawide"
+                    onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 2)
+                }
+
+                MenuItem {
+                    text: "  " + window.aspectRatioLabels["super-ultrawide"]
+                    checkable: true
+                    visible: !layoutContextMenu.isAutotile
+                    checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "super-ultrawide"
+                    onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 3)
+                }
+
+                MenuItem {
+                    text: "  " + window.aspectRatioLabels["portrait"]
+                    checkable: true
+                    visible: !layoutContextMenu.isAutotile
+                    checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "portrait"
+                    onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 4)
+                }
+
+                // -- Manage --
+                MenuSeparator {
+                    visible: layoutContextMenu.viewMode === 0 && !layoutContextMenu.isAutotile
+                }
+
+                MenuItem {
+                    text: i18n("Duplicate")
+                    icon.name: "edit-copy"
+                    visible: layoutContextMenu.viewMode === 0 && !layoutContextMenu.isAutotile
+                    onTriggered: settingsController.duplicateLayout(layoutContextMenu.layoutId)
+                }
+
+                MenuItem {
+                    text: i18n("Export")
+                    icon.name: "document-export"
+                    visible: layoutContextMenu.viewMode === 0
+                    onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId)
+                }
+
+                MenuSeparator {
+                    visible: layoutContextMenu.viewMode === 0 && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
+                }
+
+                MenuItem {
+                    text: i18n("Delete")
+                    icon.name: "edit-delete"
+                    visible: layoutContextMenu.viewMode === 0 && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
+                    onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
+                }
+
+            }
+
+            // Component for dynamic "Edit on <screen>" menu items
+            Component {
+                id: screenMenuItemComponent
+
+                MenuItem {
+                    property string _screenName: ""
+
+                    onTriggered: settingsController.editLayoutOnScreen(layoutContextMenu.layoutId, _screenName)
                 }
 
             }
