@@ -369,94 +369,86 @@ public Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Move the focused window to an adjacent zone
+     * @brief Move the focused window to an adjacent zone (daemon-driven)
      * @param direction Direction to move ("left", "right", "up", "down")
-     * @note Emits moveWindowToZoneRequested signal for KWin script to handle
+     * @note Computes geometry internally, emits applyGeometryRequested
      */
     void moveWindowToAdjacentZone(const QString& direction);
 
     /**
-     * @brief Focus a window in an adjacent zone
+     * @brief Focus a window in an adjacent zone (daemon-driven)
      * @param direction Direction to look for windows ("left", "right", "up", "down")
-     * @note Emits focusWindowInZoneRequested signal for KWin script to handle
+     * @note Computes target internally, emits activateWindowRequested
      */
     void focusAdjacentZone(const QString& direction);
 
     /**
-     * @brief Push the focused window to the first empty zone
+     * @brief Push the focused window to the first empty zone (daemon-driven)
      * @param screenId Screen to find layout/geometry for (empty = active layout)
-     * @note Emits moveWindowToZoneRequested signal for KWin script to handle
+     * @note Computes geometry internally, emits applyGeometryRequested
      */
     void pushToEmptyZone(const QString& screenId = QString());
 
     /**
-     * @brief Restore the focused window to its original size
-     * @note Emits restoreWindowRequested signal for KWin script to handle
+     * @brief Restore the focused window to its original size (daemon-driven)
+     * @note Computes restore geometry, emits applyGeometryRequested with empty zoneId
      */
     void restoreWindowSize();
 
     /**
      * @brief Toggle float state for the focused window
-     * @note Emits toggleWindowFloatRequested signal for KWin script to handle
+     * @note Emits toggleWindowFloatRequested for effect to call toggleFloatForWindow
      */
     void toggleWindowFloat();
 
     /**
-     * @brief Swap the focused window with the window in an adjacent zone
+     * @brief Swap the focused window with the window in an adjacent zone (daemon-driven)
      * @param direction Direction to swap ("left", "right", "up", "down")
      * @note If target zone is empty, behaves like regular move
-     * @note Emits swapWindowsRequested signal for KWin script to handle
+     * @note Computes both geometries, emits applyGeometryRequested for each window
      */
     void swapWindowWithAdjacentZone(const QString& direction);
 
     /**
-     * @brief Snap the focused window to a zone by its number
+     * @brief Snap the focused window to a zone by its number (daemon-driven)
      * @param zoneNumber Zone number (1-9)
      * @param screenId Screen to resolve layout for (empty = active layout)
-     * @note Finds zone with matching zoneNumber property in the screen's layout and snaps window to it
+     * @note Computes geometry internally, emits applyGeometryRequested
      */
     void snapToZoneByNumber(int zoneNumber, const QString& screenId = QString());
 
     /**
-     * @brief Rotate windows in the layout for a specific screen
+     * @brief Rotate windows in the layout for a specific screen (daemon-driven)
      * @param clockwise true for clockwise rotation, false for counterclockwise
      * @param screenId Screen to rotate on (empty = all screens)
-     * @note Windows in zone N move to zone N+1 (clockwise) or N-1 (counterclockwise)
-     * @note Last zone wraps around to first zone and vice versa
-     * @note Emits rotateWindowsRequested signal for KWin effect to handle
+     * @note Handles windowSnapped bookkeeping, emits applyGeometriesBatch
      */
     void rotateWindowsInLayout(bool clockwise, const QString& screenId = QString());
 
     /**
-     * @brief Cycle focus between windows stacked in the same zone
+     * @brief Cycle focus between windows stacked in the same zone (daemon-driven)
      * @param forward true to cycle to next window, false to cycle to previous
-     * @note This is useful for monocle-style workflows where multiple windows are snapped
-     *       to the same zone and the user wants to cycle through them without using Alt+Tab
-     * @note Emits cycleWindowsInZoneRequested signal for KWin effect to handle
+     * @note Computes target internally, emits activateWindowRequested
      */
     void cycleWindowsInZone(bool forward);
 
     /**
-     * @brief Resnap all windows from the previous layout to the current layout
+     * @brief Resnap all windows from the previous layout to the current layout (daemon-driven)
      *
      * When switching layouts (e.g. A -> B), windows that were snapped to layout A
      * are remapped to layout B by zone number: 1->1, 2->2, etc. If the new layout
      * has fewer zones, cycles: e.g. 5 zones -> 3 zones means zone 4->1, 5->2.
      *
-     * @note Only works if layout was switched recently; buffers windows on layout change.
-     * @note Emits resnapToNewLayoutRequested signal for KWin effect to handle
+     * @note Handles windowSnapped bookkeeping, emits applyGeometriesBatch
      */
     void resnapToNewLayout();
 
     /**
-     * @brief Resnap windows to their current zone assignments
+     * @brief Resnap windows to their current zone assignments (daemon-driven)
      *
-     * Used when restoring windows after autotile toggle-off. Autotile bypasses the
-     * normal zone-snap tracking, so the pre-autotile zone assignments are still valid.
-     * This method computes zone geometries from those assignments and emits
-     * resnapToNewLayoutRequested for the KWin effect to reposition windows.
-     *
+     * Used when restoring windows after autotile toggle-off.
      * @param screenFilter When non-empty, only resnap windows on this screen
+     * @note Handles windowSnapped bookkeeping, emits applyGeometriesBatch
      */
     void resnapCurrentAssignments(const QString& screenFilter = QString());
 
@@ -639,6 +631,17 @@ public Q_SLOTS:
      */
     void requestReapplyWindowGeometries();
 
+    /**
+     * @brief Process a batch of resnap entries: bookkeeping + emit applyGeometriesBatch
+     *
+     * Called by SnapEngine::emitBatchedResnap (via SnapAdaptor relay) for the
+     * autotile→snapping transition. The Daemon layer calls emitBatchedResnap
+     * directly on the SnapEngine, bypassing the WTA's navigation methods.
+     *
+     * @param resnapData Serialized RotationEntry JSON array
+     */
+    void handleBatchedResnap(const QString& resnapData);
+
 Q_SIGNALS:
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
 
@@ -693,61 +696,12 @@ Q_SIGNALS:
     void navigationFeedback(bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
                             const QString& targetZoneId, const QString& screenId);
 
-    // Keyboard Navigation signals (for KWin script)
-    /**
-     * @brief Request to move a window to a specific zone
-     * @param targetZoneId Zone ID to move to
-     * @param zoneGeometry JSON geometry {x, y, width, height}
-     */
-    void moveWindowToZoneRequested(const QString& targetZoneId, const QString& zoneGeometry);
-
-    /**
-     * @brief Request to focus a window in a specific zone
-     * @param targetZoneId Zone ID containing target window
-     * @param windowId Window ID to focus (first window in zone)
-     */
-    void focusWindowInZoneRequested(const QString& targetZoneId, const QString& windowId);
-
-    /**
-     * @brief Request to restore the focused window to its original size
-     */
-    void restoreWindowRequested();
-
+    // Navigation signals (daemon → effect)
     /**
      * @brief Request to toggle float state for the focused window
      * @param shouldFloat true to float (exclude), false to unfloat
      */
     void toggleWindowFloatRequested(bool shouldFloat);
-
-    /**
-     * @brief Request to swap two windows between zones
-     * @param targetZoneId Zone ID containing target window
-     * @param targetWindowId Window ID to swap with (may be empty if zone is empty)
-     * @param zoneGeometry JSON geometry {x, y, width, height} for the target zone
-     */
-    void swapWindowsRequested(const QString& targetZoneId, const QString& targetWindowId, const QString& zoneGeometry);
-
-    /**
-     * @brief Request to rotate all windows in the layout
-     * @param clockwise true for clockwise rotation, false for counterclockwise
-     * @param rotationData JSON array of window moves: [{windowId, targetZoneId, x, y, w, h}, ...]
-     */
-    void rotateWindowsRequested(bool clockwise, const QString& rotationData);
-
-    /**
-     * @brief Request to cycle focus within the same zone as the currently focused window
-     * @param directive Cycle directive (e.g., "cycle:forward", "cycle:backward")
-     * @param unused Reserved for future use (currently empty)
-     * @note The KWin effect will determine the active window and cycle within its zone
-     */
-    void cycleWindowsInZoneRequested(const QString& directive, const QString& unused);
-
-    /**
-     * @brief Request to resnap windows from previous layout to current layout
-     * @param resnapData JSON array of window moves: [{windowId, targetZoneId, x, y, w, h}, ...]
-     * @note Same format as rotateWindowsRequested; KWin effect applies geometries and calls windowSnapped
-     */
-    void resnapToNewLayoutRequested(const QString& resnapData);
 
     /**
      * @brief Request KWin effect to collect unsnapped windows and snap them all
@@ -772,6 +726,29 @@ Q_SIGNALS:
      */
     void applyGeometryRequested(const QString& windowId, const QString& geometryJson, const QString& zoneId,
                                 const QString& screenId);
+
+    /**
+     * @brief Daemon requests KWin to activate (focus) a window
+     * @param windowId Window to activate
+     * @note Used by daemon-driven focus/cycle navigation — daemon resolves the target,
+     *       effect just calls KWin::effects->activateWindow()
+     */
+    void activateWindowRequested(const QString& windowId);
+
+    /**
+     * @brief Daemon requests KWin to apply geometries for a batch of windows
+     * @param batchJson JSON array of [{windowId, x, y, width, height, targetZoneId, sourceZoneId}]
+     * @param action Navigation action type ("rotate", "resnap", "snap_all") for feedback
+     * @note Daemon handles windowSnapped bookkeeping internally before emitting.
+     *       Effect just applies geometry with stagger — no windowsSnappedBatch callback.
+     */
+    void applyGeometriesBatch(const QString& batchJson, const QString& action);
+
+    /**
+     * @brief Daemon requests KWin to raise windows in order (z-order restoration)
+     * @param windowIds Ordered list of window IDs (bottom-to-top)
+     */
+    void raiseWindowsRequested(const QStringList& windowIds);
 
 public Q_SLOTS:
     /**
@@ -889,6 +866,7 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Screen tracking (from KWin effect's D-Bus calls)
     // ═══════════════════════════════════════════════════════════════════════════════
+    QString m_lastActiveWindowId; // From windowActivated (focused window's ID)
     QString m_lastActiveScreenId; // From windowActivated (focused window's screen)
     QString m_lastCursorScreenId; // From cursorScreenChanged (cursor's screen)
 

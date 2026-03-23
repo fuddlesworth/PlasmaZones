@@ -95,24 +95,28 @@ private Q_SLOTS:
     void slotSettingsChanged();
 
     // Keyboard Navigation handlers
-    void slotMoveWindowToZoneRequested(const QString& targetZoneId, const QString& zoneGeometry);
-    void slotFocusWindowInZoneRequested(const QString& targetZoneId, const QString& windowId);
-    void slotRestoreWindowRequested();
-    void slotToggleWindowFloatRequested(bool shouldFloat);
+    // Daemon-driven navigation: daemon computes geometry/target and emits these signals
     void slotApplyGeometryRequested(const QString& windowId, const QString& geometryJson, const QString& zoneId,
                                     const QString& screenId);
-    void slotSwapWindowsRequested(const QString& targetZoneId, const QString& targetWindowId,
-                                  const QString& zoneGeometry);
-    void slotRotateWindowsRequested(bool clockwise, const QString& rotationData);
-    void slotResnapToNewLayoutRequested(const QString& resnapData);
+    void slotActivateWindowRequested(const QString& windowId);
+
+    // Float toggle: daemon handles full flow via toggleFloatForWindow
+    void slotToggleWindowFloatRequested(bool shouldFloat);
+
+    // Daemon-driven batch operations (rotate, resnap)
+    void slotApplyGeometriesBatch(const QString& batchJson, const QString& action);
+    void slotRaiseWindowsRequested(const QStringList& windowIds);
+
+    // Snap-all (effect collects candidates, daemon computes assignments)
     void slotSnapAllWindowsRequested(const QString& screenId);
-    void slotCycleWindowsInZoneRequested(const QString& directive, const QString& unused);
     void slotPendingRestoresAvailable();
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
     void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId,
                                                const QString& geometryJson);
+
+    // Snap-mode minimize/unminimize float tracking
     void slotWindowMinimizedChanged(KWin::EffectWindow* w);
 
     // Daemon lifecycle
@@ -126,7 +130,6 @@ private:
     QString getWindowId(KWin::EffectWindow* w) const;
     bool shouldHandleWindow(KWin::EffectWindow* w) const;
     bool isTileableWindow(KWin::EffectWindow* w) const;
-    bool shouldAutoSnapWindow(KWin::EffectWindow* w) const;
     bool hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow* w) const;
     bool isWindowSticky(KWin::EffectWindow* w) const;
     void updateWindowStickyState(KWin::EffectWindow* w);
@@ -270,9 +273,8 @@ private:
                           std::function<void(const QString&, const QString&)> onSnapSuccess = nullptr,
                           bool skipAnimation = false, std::function<void()> onComplete = nullptr);
 
-    // Extract app identity from window ID (the portion before the '|' separator)
-    // New format: "appId|internalUuid" → returns "appId"
-    // Legacy format: "windowClass:resourceName:ptr" → returns everything before last ':'
+    // Extract app identity from window ID (portion before the '|' separator)
+    // Format: "appId|internalUuid" → returns "appId"
     static QString extractAppId(const QString& windowId);
 
     /**
@@ -435,10 +437,9 @@ private:
      */
     void sendDeferredDragStarted();
 
-    // Cached exclusion settings (loaded from daemon via D-Bus)
-    bool m_excludeTransientWindows = true;
-    int m_minimumWindowWidth = 200;
-    int m_minimumWindowHeight = 150;
+    // User-configured exclusion lists — cached from daemon for shouldHandleWindow() gating.
+    // The daemon also enforces these for keyboard navigation, but the effect needs them
+    // for drag operations and window lifecycle reporting (slotWindowAdded, dragTracker).
     QStringList m_excludedApplications;
     QStringList m_excludedWindowClasses;
 

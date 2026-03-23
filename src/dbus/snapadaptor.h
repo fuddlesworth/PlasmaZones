@@ -12,23 +12,18 @@ class SnapEngine;
 class WindowTrackingAdaptor;
 
 /**
- * @brief Signal relay from SnapEngine to WindowTrackingAdaptor D-Bus signals
+ * @brief Signal relay from SnapEngine to WindowTrackingAdaptor
  *
- * Mirrors AutotileAdaptor's pattern: engine signals are connected in the
- * constructor, providing a single place for all SnapEngine → D-Bus wiring.
+ * Connects SnapEngine's remaining signals (navigationFeedback, windowFloatingChanged,
+ * applyGeometryRequested, resnapToNewLayoutRequested, snapAllWindowsRequested) to
+ * the WTA for D-Bus relay to the KWin effect.
  *
- * Unlike AutotileAdaptor (which is a QDBusAbstractAdaptor owning its own
- * D-Bus interface), SnapAdaptor relays through WindowTrackingAdaptor's
- * existing org.plasmazones.WindowTracking interface. The snap navigation
- * signals (moveWindowToZoneRequested, focusWindowInZoneRequested, etc.)
- * are intrinsically part of the window tracking domain — the KWin effect
- * listens for them on that interface.
+ * Navigation operations (move, focus, swap, rotate, cycle, snap-by-number) are now
+ * daemon-driven: the Daemon routes through WTA methods directly, which compute
+ * geometry internally and emit applyGeometryRequested / activateWindowRequested.
+ * The SnapEngine's IWindowEngine navigation stubs are no longer called.
  *
- * Pattern summary (both engines follow the same shape):
- *   AutotileEngine → AutotileAdaptor → org.plasmazones.Autotile D-Bus
- *   SnapEngine     → SnapAdaptor     → org.plasmazones.WindowTracking D-Bus
- *
- * @see AutotileAdaptor, SnapEngine, WindowTrackingAdaptor
+ * @see SnapEngine, WindowTrackingAdaptor
  */
 class PLASMAZONES_EXPORT SnapAdaptor : public QObject
 {

@@ -202,15 +202,6 @@ inline QString extractAppId(const QString& windowId)
 }
 
 /**
- * @deprecated Use extractAppId() instead
- */
-[[deprecated("Use extractAppId() instead")]]
-inline QString extractStableId(const QString& windowId)
-{
-    return extractAppId(windowId);
-}
-
-/**
  * @brief Extract window class from a window ID
  *
  * With the new "appId|internalId" format, the app ID is the window class.

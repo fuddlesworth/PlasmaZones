@@ -32,35 +32,24 @@ SnapAdaptor::SnapAdaptor(SnapEngine* engine, WindowTrackingAdaptor* adaptor, QOb
     // Float state changes
     connect(m_engine, &SnapEngine::windowFloatingChanged, adaptor, &WindowTrackingAdaptor::windowFloatingChanged);
 
-    // Zone navigation signals (effect-first: daemon → engine → signal → effect)
-    connect(m_engine, &SnapEngine::moveWindowToZoneRequested, adaptor,
-            &WindowTrackingAdaptor::moveWindowToZoneRequested);
-    connect(m_engine, &SnapEngine::focusWindowInZoneRequested, adaptor,
-            &WindowTrackingAdaptor::focusWindowInZoneRequested);
-    connect(m_engine, &SnapEngine::swapWindowsRequested, adaptor, &WindowTrackingAdaptor::swapWindowsRequested);
-    connect(m_engine, &SnapEngine::rotateWindowsRequested, adaptor, &WindowTrackingAdaptor::rotateWindowsRequested);
-
-    // Daemon-driven geometry application
+    // Daemon-driven geometry application (used by autotile float restore via SnapEngine)
     connect(m_engine, &SnapEngine::applyGeometryRequested, adaptor, &WindowTrackingAdaptor::applyGeometryRequested);
 
-    // Layout change resnap
-    connect(m_engine, &SnapEngine::resnapToNewLayoutRequested, adaptor,
-            &WindowTrackingAdaptor::resnapToNewLayoutRequested);
-
-    // In-zone cycling
-    connect(m_engine, &SnapEngine::cycleWindowsInZoneRequested, adaptor,
-            &WindowTrackingAdaptor::cycleWindowsInZoneRequested);
-
-    // Snap-all-windows
+    // Snap-all-windows (effect collects candidates, daemon calculates)
     connect(m_engine, &SnapEngine::snapAllWindowsRequested, adaptor, &WindowTrackingAdaptor::snapAllWindowsRequested);
 
-    qCDebug(lcDbusWindow) << "SnapAdaptor initialized with 10 signal connections";
+    // Batched resnap: emitBatchedResnap is called from the Daemon layer (autotile→snap
+    // transition) which bypasses WTA navigation methods. Route through handleBatchedResnap
+    // for proper bookkeeping (windowSnapped per entry) + applyGeometriesBatch emission.
+    connect(m_engine, &SnapEngine::resnapToNewLayoutRequested, adaptor, &WindowTrackingAdaptor::handleBatchedResnap);
+
+    qCDebug(lcDbusWindow) << "SnapAdaptor initialized with 5 signal connections";
 }
 
 void SnapAdaptor::clearEngine()
 {
     if (m_engine && m_adaptor) {
-        // All 10 connections are m_engine → m_adaptor (not m_engine → this),
+        // All connections are m_engine → m_adaptor (not m_engine → this),
         // so we must disconnect from the actual receiver.
         disconnect(m_engine, nullptr, m_adaptor, nullptr);
     }

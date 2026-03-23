@@ -219,63 +219,24 @@ public:
 
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
-    // Signals for KWin effect (via D-Bus adaptor)
+    // Signals (relayed via SnapAdaptor → WTA → D-Bus → effect)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /**
-     * @brief Navigation feedback for OSD display
-     */
+    /// Navigation feedback for OSD display
     void navigationFeedback(bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
                             const QString& targetZoneId, const QString& screenId);
 
-    /**
-     * @brief Window floating state changed (for KWin effect sync)
-     */
+    /// Window floating state changed (for KWin effect sync)
     void windowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
 
-    /**
-     * @brief Request to move a window to a zone (for KWin effect)
-     */
-    void moveWindowToZoneRequested(const QString& targetZoneId, const QString& zoneGeometry);
-
-    /**
-     * @brief Request to focus a window in a zone (for KWin effect)
-     */
-    void focusWindowInZoneRequested(const QString& targetZoneId, const QString& windowId);
-
-    /**
-     * @brief Request to swap two windows (for KWin effect)
-     */
-    void swapWindowsRequested(const QString& targetZoneId, const QString& targetWindowId, const QString& zoneGeometry);
-
-    /**
-     * @brief Request to rotate windows in layout (for KWin effect)
-     */
-    void rotateWindowsRequested(bool clockwise, const QString& rotationData);
-
-    /**
-     * @brief Request to apply geometry to a window (daemon-driven flow)
-     */
+    /// Daemon-driven geometry application (used by autotile float restore)
     void applyGeometryRequested(const QString& windowId, const QString& geometryJson, const QString& zoneId,
                                 const QString& screenId);
 
-    /**
-     * @brief Request to resnap windows from previous layout to current layout
-     * @param resnapData JSON array of window moves (same format as rotateWindowsRequested)
-     */
+    /// Batched resnap data (routed through WTA::handleBatchedResnap for bookkeeping)
     void resnapToNewLayoutRequested(const QString& resnapData);
 
-    /**
-     * @brief Request to cycle focus within the same zone as the currently focused window
-     * @param directive Cycle directive (e.g., "cycle:forward", "cycle:backward")
-     * @param unused Reserved for future use (currently empty)
-     */
-    void cycleWindowsInZoneRequested(const QString& directive, const QString& unused);
-
-    /**
-     * @brief Request KWin effect to collect unsnapped windows and snap them all
-     * @param screenId Screen to operate on
-     */
+    /// Request KWin effect to collect unsnapped windows and snap them all
     void snapAllWindowsRequested(const QString& screenId);
 
 private:
