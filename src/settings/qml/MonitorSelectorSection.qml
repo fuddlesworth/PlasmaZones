@@ -22,18 +22,30 @@ ColumnLayout {
     property bool showAllMonitors: true
     property bool physicalOnly: false // When true, filter out virtual screens (e.g., for virtual screen config page)
     readonly property bool isPerScreen: selectedScreenName !== ""
-    // Filtered screen list: removes virtual screens when physicalOnly is true
+    // Filtered screen list: when physicalOnly, deduplicate to physical screens only
+    // (virtual screens like "id/vs:0" are collapsed to their physical parent "id")
     readonly property var _filteredScreens: {
         var all = appSettings.screens;
         if (!physicalOnly)
             return all;
 
+        // Collect unique physical screen IDs
+        var seen = {
+        };
         var result = [];
         for (var i = 0; i < all.length; i++) {
             var name = all[i].name || "";
-            if (name.indexOf("/vs:") === -1)
-                result.push(all[i]);
-
+            var vsIdx = name.indexOf("/vs:");
+            var physId = vsIdx >= 0 ? name.substring(0, vsIdx) : name;
+            if (!seen[physId]) {
+                seen[physId] = true;
+                // Use the physical screen's data (first occurrence or non-virtual entry)
+                var entry = {
+                };
+                for (var key in all[i]) entry[key] = all[i][key]
+                entry["name"] = physId; // Override name to physical ID
+                result.push(entry);
+            }
         }
         return result;
     }
