@@ -66,23 +66,43 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenId)
         return QString();
     }
 
+    // For virtual screens, resolve the backing physical screen for metadata
+    // (manufacturer, model, refresh rate) and use ScreenManager for geometry
+    auto* mgr = ScreenManager::instance();
     const QScreen* screen = Utils::findScreenByIdOrName(screenId);
+    if (!screen && mgr) {
+        screen = mgr->physicalQScreenFor(screenId);
+    }
+
     if (screen) {
+        // Use virtual screen geometry if available, otherwise physical
+        QRect geom = screen->geometry();
+        if (mgr && VirtualScreenId::isVirtual(screenId)) {
+            QRect vsGeom = mgr->screenGeometry(screenId);
+            if (vsGeom.isValid()) {
+                geom = vsGeom;
+            }
+        }
+
         QJsonObject info;
         info[JsonKeys::Name] = screen->name();
         info[JsonKeys::Manufacturer] = screen->manufacturer();
         info[JsonKeys::Model] = screen->model();
-        info[JsonKeys::Geometry] = QJsonObject{{JsonKeys::X, screen->geometry().x()},
-                                               {JsonKeys::Y, screen->geometry().y()},
-                                               {JsonKeys::Width, screen->geometry().width()},
-                                               {JsonKeys::Height, screen->geometry().height()}};
+        info[JsonKeys::Geometry] = QJsonObject{{JsonKeys::X, geom.x()},
+                                               {JsonKeys::Y, geom.y()},
+                                               {JsonKeys::Width, geom.width()},
+                                               {JsonKeys::Height, geom.height()}};
         info[JsonKeys::PhysicalSize] = QJsonObject{{JsonKeys::Width, screen->physicalSize().width()},
                                                    {JsonKeys::Height, screen->physicalSize().height()}};
         info[JsonKeys::DevicePixelRatio] = screen->devicePixelRatio();
         info[JsonKeys::RefreshRate] = screen->refreshRate();
         info[JsonKeys::Depth] = screen->depth();
-        info[JsonKeys::ScreenId] = Utils::screenIdentifier(screen);
+        info[JsonKeys::ScreenId] = screenId;
         info[QLatin1String("serialNumber")] = screen->serialNumber();
+        if (VirtualScreenId::isVirtual(screenId)) {
+            info[QLatin1String("isVirtualScreen")] = true;
+            info[QLatin1String("physicalScreenId")] = VirtualScreenId::extractPhysicalId(screenId);
+        }
 
         return QString::fromUtf8(QJsonDocument(info).toJson());
     }
