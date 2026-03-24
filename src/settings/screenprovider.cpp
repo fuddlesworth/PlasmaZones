@@ -101,8 +101,11 @@ QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
             map[QStringLiteral("manufacturer")] = s.manufacturer;
         if (!s.model.isEmpty())
             map[QStringLiteral("model")] = s.model;
-        if (s.width > 0 && s.height > 0)
+        if (s.width > 0 && s.height > 0) {
             map[QStringLiteral("resolution")] = QStringLiteral("%1\u00d7%2").arg(s.width).arg(s.height);
+            map[QStringLiteral("width")] = s.width;
+            map[QStringLiteral("height")] = s.height;
+        }
         if (!s.screenId.isEmpty())
             map[QStringLiteral("screenId")] = s.screenId;
         list.append(map);
