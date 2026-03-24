@@ -293,6 +293,19 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
 
         layerWindow->setAnchors(getAnchorsForPosition(pos));
+
+        // For virtual screens, add margins to confine the zone selector within
+        // the virtual screen region of the physical monitor
+        const bool isVirtualScreen = (screenGeom != physScreen->geometry());
+        if (isVirtualScreen) {
+            const QRect physGeom = physScreen->geometry();
+            const int leftOff = screenGeom.x() - physGeom.x();
+            const int topOff = screenGeom.y() - physGeom.y();
+            const int rightOff = (physGeom.right() - screenGeom.right());
+            const int bottomOff = (physGeom.bottom() - screenGeom.bottom());
+            layerWindow->setMargins(QMargins(leftOff, topOff, rightOff, bottomOff));
+        }
+
         layerWindow->setExclusiveZone(-1);
         layerWindow->setScope(QStringLiteral("plasmazones-selector-%1").arg(screenId));
     }
