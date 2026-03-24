@@ -8,6 +8,7 @@
 #include "../../core/geometryutils.h"
 #include "../../core/layoutmanager.h"
 #include "../../core/layout.h"
+#include "../../core/screenmanager.h"
 
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -296,13 +297,20 @@ static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<Ro
             adaptor->windowUnsnapped(entry.windowId);
             adaptor->clearPreTileGeometry(entry.windowId);
         } else {
-            // Detect screen from zone geometry center
+            // Detect screen from zone geometry center (virtual-screen-aware)
             QString screenId;
             QPoint center = entry.targetGeometry.center();
-            for (QScreen* screen : QGuiApplication::screens()) {
-                if (screen->geometry().contains(center)) {
-                    screenId = Utils::screenIdentifier(screen);
-                    break;
+            auto* mgr = ScreenManager::instance();
+            if (mgr) {
+                screenId = mgr->effectiveScreenAt(center);
+            }
+            if (screenId.isEmpty()) {
+                // Fallback: no ScreenManager or point not in any effective screen
+                for (QScreen* screen : QGuiApplication::screens()) {
+                    if (screen->geometry().contains(center)) {
+                        screenId = Utils::screenIdentifier(screen);
+                        break;
+                    }
                 }
             }
             // Fallback: use cursor/active screen if geometry doesn't resolve to a screen

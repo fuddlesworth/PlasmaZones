@@ -30,7 +30,11 @@ void updateZoneSelectorComputedProperties(QQuickWindow* window, QScreen* screen,
         return;
     }
 
-    const QRect screenGeom = screen->geometry();
+    // Use virtual screen geometry if available, falling back to physical
+    auto* mgr = ScreenManager::instance();
+    const QString screenId = Utils::screenIdentifier(screen);
+    QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
+    const QRect screenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
     const int screenWidth = screenGeom.width();
     const int indicatorWidth = layout.indicatorWidth;
 

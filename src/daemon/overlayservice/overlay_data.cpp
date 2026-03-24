@@ -90,7 +90,8 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
     // Physical screen overload: delegates to screenId overload.
     // Callers with virtual screen context should use the screenId overload directly.
     const QString screenId = Utils::screenIdentifier(screen);
-    return zoneToVariantMap(zone, screenId, screen, screen->geometry(), layout);
+    QRect overlayGeom = m_overlayGeometries.value(screenId, screen->geometry());
+    return zoneToVariantMap(zone, screenId, screen, overlayGeom, layout);
 }
 
 QVariantMap OverlayService::zoneToVariantMap(Zone* zone, const QString& screenId, QScreen* physScreen,

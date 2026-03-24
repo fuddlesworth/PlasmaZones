@@ -114,10 +114,26 @@ bool WindowTrackingAdaptor::isGeometryOnScreen(int x, int y, int width, int heig
     }
 
     QRect geometry(x, y, width, height);
-    for (QScreen* screen : Utils::allScreens()) {
-        QRect intersection = screen->geometry().intersected(geometry);
-        if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
-            return true;
+    // Use effective screen IDs (virtual if subdivided) for correct geometry checks
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        for (const QString& sid : mgr->effectiveScreenIds()) {
+            QRect screenGeom = mgr->screenGeometry(sid);
+            if (!screenGeom.isValid()) {
+                continue;
+            }
+            QRect intersection = screenGeom.intersected(geometry);
+            if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
+                return true;
+            }
+        }
+    } else {
+        // Fallback: no ScreenManager, use physical screens
+        for (QScreen* screen : Utils::allScreens()) {
+            QRect intersection = screen->geometry().intersected(geometry);
+            if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
+                return true;
+            }
         }
     }
     return false;
@@ -230,13 +246,35 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
     if (!zone) {
         return QString();
     }
-    for (QScreen* screen : Utils::allScreens()) {
-        QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
-        QRectF normGeom = zone->normalizedGeometry(refGeom);
-        QPoint zoneCenter(refGeom.x() + static_cast<int>(normGeom.center().x() * refGeom.width()),
-                          refGeom.y() + static_cast<int>(normGeom.center().y() * refGeom.height()));
-        if (screen->geometry().contains(zoneCenter)) {
-            return Utils::screenIdentifier(screen);
+    // Use effective screen IDs for virtual screen support
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        for (const QString& sid : mgr->effectiveScreenIds()) {
+            QScreen* screen = mgr->physicalQScreenFor(sid);
+            if (!screen) {
+                continue;
+            }
+            QRect effGeom = mgr->screenGeometry(sid);
+            if (!effGeom.isValid()) {
+                continue;
+            }
+            QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
+            QRectF normGeom = zone->normalizedGeometry(refGeom);
+            QPoint zoneCenter(refGeom.x() + static_cast<int>(normGeom.center().x() * refGeom.width()),
+                              refGeom.y() + static_cast<int>(normGeom.center().y() * refGeom.height()));
+            if (effGeom.contains(zoneCenter)) {
+                return sid;
+            }
+        }
+    } else {
+        for (QScreen* screen : Utils::allScreens()) {
+            QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
+            QRectF normGeom = zone->normalizedGeometry(refGeom);
+            QPoint zoneCenter(refGeom.x() + static_cast<int>(normGeom.center().x() * refGeom.width()),
+                              refGeom.y() + static_cast<int>(normGeom.center().y() * refGeom.height()));
+            if (screen->geometry().contains(zoneCenter)) {
+                return Utils::screenIdentifier(screen);
+            }
         }
     }
     return QString();
