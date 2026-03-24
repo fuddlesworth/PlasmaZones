@@ -338,7 +338,10 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     m_shaderPreviewWindow->setGeometry(x, y, width, height);
 
     if (auto* layerWindow = LayerShellQt::Window::get(m_shaderPreviewWindow)) {
-        const QRect screenGeom = screen->geometry();
+        // Use ScreenManager geometry (virtual screen aware) with physical fallback
+        auto* mgr = ScreenManager::instance();
+        QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
+        const QRect screenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
         const int localX = x - screenGeom.x();
         const int localY = y - screenGeom.y();
         layerWindow->setAnchors(
@@ -393,7 +396,11 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
         if (screen) {
             m_shaderPreviewWindow->setGeometry(x, y, width, height);
             if (auto* layerWindow = LayerShellQt::Window::get(m_shaderPreviewWindow)) {
-                const QRect screenGeom = screen->geometry();
+                // Use ScreenManager geometry (virtual screen aware) with physical fallback
+                auto* mgr = ScreenManager::instance();
+                const QString sid = Utils::screenIdentifier(screen);
+                QRect vsGeom = mgr ? mgr->screenGeometry(sid) : QRect();
+                const QRect screenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
                 const int localX = x - screenGeom.x();
                 const int localY = y - screenGeom.y();
                 layerWindow->setMargins(QMargins(localX, localY, 0, 0));

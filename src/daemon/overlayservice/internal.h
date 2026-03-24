@@ -130,7 +130,10 @@ inline QRect resolveScreenGeometry(const QString& screenId)
             return geom;
         }
     }
-    // Fallback: try as physical screen
+    // Fallback: physical screen geometry only. This path is hit when ScreenManager
+    // is unavailable (e.g. early startup) or when screenId doesn't match any virtual
+    // screen. The caller gets raw QScreen::geometry() which is always the full
+    // physical monitor — acceptable as a last-resort fallback.
     QScreen* screen = resolveTargetScreen(screenId);
     return screen ? screen->geometry() : QRect();
 }

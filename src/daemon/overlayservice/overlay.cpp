@@ -131,8 +131,8 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             }
             if (auto* window = m_overlayWindows.value(screenId)) {
                 assertWindowOnScreen(window, screen);
-                qCDebug(lcOverlay) << "initializeOverlay: screen=" << screen->name()
-                                   << "screenGeom=" << screen->geometry()
+                qCDebug(lcOverlay) << "initializeOverlay (physical fallback): screenId=" << screenId
+                                   << "physGeom=" << screen->geometry()
                                    << "availGeom=" << ScreenManager::actualAvailableGeometry(screen) << "windowScreen="
                                    << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
                 updateOverlayWindow(screen);

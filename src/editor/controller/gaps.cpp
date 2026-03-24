@@ -11,6 +11,7 @@
 #include "../helpers/SettingsDbusQueries.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
+#include "../../core/screenmanager.h"
 #include "../../core/utils.h"
 
 #include "pz_i18n.h"
@@ -389,15 +390,23 @@ void EditorController::setAspectRatioClass(int cls)
 
 QSize EditorController::targetScreenSize() const
 {
-    // Get the target screen size for fixed geometry coordinate conversion
+    // Get the target screen size for fixed geometry coordinate conversion.
+    // Prefer ScreenManager geometry which is virtual-screen aware.
     if (!m_targetScreen.isEmpty()) {
+        auto* mgr = ScreenManager::instance();
+        if (mgr) {
+            QRect vsGeom = mgr->screenGeometry(m_targetScreen);
+            if (vsGeom.isValid()) {
+                return vsGeom.size();
+            }
+        }
         for (QScreen* screen : QGuiApplication::screens()) {
             if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
                 return screen->geometry().size();
             }
         }
     }
-    // Fallback to primary screen
+    // Fallback to primary screen (physical geometry)
     QScreen* primary = QGuiApplication::primaryScreen();
     return primary ? primary->geometry().size() : QSize(1920, 1080);
 }

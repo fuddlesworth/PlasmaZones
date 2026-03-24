@@ -100,12 +100,17 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
                         }
                         safeWindow->destroy();
                         safeWindow->setScreen(targetScreen);
+                        // Physical QScreen::geometry() is intentional here: the editor
+                        // is a standalone full-screen window that always covers the
+                        // entire physical monitor, not a per-virtual-screen surface.
                         safeWindow->setGeometry(targetScreen->geometry());
                         safeWindow->showFullScreen();
                     });
                     return;
                 }
 
+                // Physical QScreen::geometry() is intentional: the editor window
+                // covers the full physical monitor (see comment above).
                 window->setScreen(screen);
                 window->setGeometry(screen->geometry());
                 break;
