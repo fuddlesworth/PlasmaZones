@@ -119,14 +119,27 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
         writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderRadius"), m_settings->borderRadius());
     }
 
-    // Match main overlay: full-screen anchors so zone coordinates (overlay-local) line up
+    // Match main overlay: position to cover virtual or physical screen
     if (auto* layerWindow = LayerShellQt::Window::get(m_snapAssistWindow)) {
         layerWindow->setScreen(screen);
         layerWindow->setLayer(LayerShellQt::Window::LayerTop);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
-        layerWindow->setAnchors(
-            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
+
+        // For virtual screens, position within the physical screen using margins
+        // (same pattern as createOverlayWindow)
+        const bool isVirtualScreen = (screenGeom != screen->geometry());
+        if (isVirtualScreen) {
+            layerWindow->setAnchors(
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft));
+            const QRect physGeom = screen->geometry();
+            const int localX = screenGeom.x() - physGeom.x();
+            const int localY = screenGeom.y() - physGeom.y();
+            layerWindow->setMargins(QMargins(localX, localY, 0, 0));
+        } else {
+            layerWindow->setAnchors(
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
+                                              | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
+        }
         layerWindow->setExclusiveZone(-1);
         layerWindow->setScope(QStringLiteral("plasmazones-snap-assist"));
     }
@@ -381,19 +394,30 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         writeQmlProperty(m_layoutPickerWindow, QStringLiteral("inactiveOpacity"), m_settings->inactiveOpacity());
     }
 
-    // Full-screen layer shell with keyboard interactivity
+    // Layer shell with keyboard interactivity — position to virtual or physical screen
     if (auto* layerWindow = LayerShellQt::Window::get(m_layoutPickerWindow)) {
         layerWindow->setScreen(screen);
         layerWindow->setLayer(LayerShellQt::Window::LayerTop);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
-        layerWindow->setAnchors(
-            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
+
+        const bool isVirtualScreen = (screenGeom != screen->geometry());
+        if (isVirtualScreen) {
+            layerWindow->setAnchors(
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft));
+            const QRect physGeom = screen->geometry();
+            const int localX = screenGeom.x() - physGeom.x();
+            const int localY = screenGeom.y() - physGeom.y();
+            layerWindow->setMargins(QMargins(localX, localY, 0, 0));
+        } else {
+            layerWindow->setAnchors(
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
+                                              | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
+        }
         layerWindow->setExclusiveZone(-1);
         layerWindow->setScope(QStringLiteral("plasmazones-layout-picker"));
     }
 
-    assertWindowOnScreen(m_layoutPickerWindow, screen);
+    assertWindowOnScreen(m_layoutPickerWindow, screen, screenGeom);
     m_layoutPickerWindow->setGeometry(screenGeom);
     QMetaObject::invokeMethod(m_layoutPickerWindow, "show");
     m_layoutPickerWindow->requestActivate();
