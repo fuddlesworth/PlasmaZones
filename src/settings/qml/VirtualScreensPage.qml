@@ -10,8 +10,9 @@ import org.kde.kirigami as Kirigami
  * @brief Settings page for virtual screen configuration.
  *
  * Allows splitting a physical monitor into multiple virtual screens
- * with preset layouts or custom split ratios. Changes are staged
- * locally and only sent to the daemon on explicit Apply.
+ * with preset layouts or custom split ratios. Changes are staged via
+ * settingsController and flushed to the daemon when the global Apply
+ * button is clicked.
  */
 Flickable {
     id: root
@@ -20,12 +21,6 @@ Flickable {
     property string _selectedScreen: ""
     property var _pendingScreens: [] // Local editable state
     property var _savedScreens: [] // What is actually applied in daemon
-    // Revision-counter approach: QML reactively evaluates _dirty as a binding.
-    // Imperative _markDirty() can miss change notifications; revision counters
-    // always trigger binding re-evaluation when either side changes.
-    property int _pendingRevision: 0
-    property int _savedRevision: 0
-    property bool _dirty: _pendingRevision !== _savedRevision
     property int _screenWidth: 1920 // Actual pixel width of selected screen
     property int _screenHeight: 1080 // Actual pixel height of selected screen
 
@@ -33,45 +28,23 @@ Flickable {
         if (_selectedScreen === "")
             return ;
 
+        // Check for staged config first
+        if (settingsController.hasUnsavedVirtualScreenConfig(_selectedScreen))
+            _pendingScreens = settingsController.getStagedVirtualScreenConfig(_selectedScreen);
+        else
+            _pendingScreens = settingsController.getVirtualScreenConfig(_selectedScreen);
         _savedScreens = settingsController.getVirtualScreenConfig(_selectedScreen);
-        _pendingScreens = _deepCopy(_savedScreens);
-        // Sync revisions — not dirty after refresh
-        _savedRevision = _pendingRevision;
     }
 
     function _deepCopy(arr) {
         return JSON.parse(JSON.stringify(arr));
     }
 
-    function _markDirty() {
-        _pendingRevision++;
-    }
-
-    function _applyConfig() {
-        if (_selectedScreen === "")
+    function _stageCurrentConfig() {
+        if (_selectedScreen === "" || _pendingScreens.length === 0)
             return ;
 
-        settingsController.applyVirtualScreenConfig(_selectedScreen, _pendingScreens);
-        _savedScreens = _deepCopy(_pendingScreens);
-        // Sync revisions — not dirty after apply
-        _savedRevision = _pendingRevision;
-    }
-
-    function _discard() {
-        _pendingScreens = _deepCopy(_savedScreens);
-        // Sync revisions — not dirty after discard
-        _savedRevision = _pendingRevision;
-    }
-
-    function _removeSubdivisions() {
-        if (_selectedScreen === "")
-            return ;
-
-        settingsController.removeVirtualScreenConfig(_selectedScreen);
-        _savedScreens = [];
-        _pendingScreens = [];
-        // Sync revisions — not dirty after removal
-        _savedRevision = _pendingRevision;
+        settingsController.stageVirtualScreenConfig(_selectedScreen, _pendingScreens);
     }
 
     function _loadPreset(ratios, names) {
@@ -89,7 +62,7 @@ Flickable {
             xPos += w;
         }
         _pendingScreens = screens;
-        _markDirty();
+        _stageCurrentConfig();
     }
 
     function _updateScreenGeometry() {
@@ -129,7 +102,7 @@ Flickable {
             });
         }
         _pendingScreens = screens;
-        _markDirty();
+        _stageCurrentConfig();
     }
 
     // Clamp divider move: ensure both adjacent regions have at least 10%
@@ -148,7 +121,7 @@ Flickable {
         screens[rightIdx].x = newDivPos;
         screens[rightIdx].width = rightEnd - newDivPos;
         _pendingScreens = screens;
-        _markDirty();
+        _stageCurrentConfig();
     }
 
     contentHeight: content.implicitHeight
@@ -175,6 +148,17 @@ Flickable {
         function onScreensChanged() {
             root._updateScreenGeometry();
             root._refreshConfig();
+        }
+
+        target: settingsController
+    }
+
+    // Refresh when global discard resets needsSave to false
+    Connections {
+        function onNeedsSaveChanged() {
+            if (!settingsController.needsSave)
+                root._refreshConfig();
+
         }
 
         target: settingsController
@@ -534,7 +518,7 @@ Flickable {
                                 if (index >= 0 && index < screens.length) {
                                     screens[index].displayName = text;
                                     root._pendingScreens = screens;
-                                    root._markDirty();
+                                    root._stageCurrentConfig();
                                 }
                             }
                         }
@@ -569,46 +553,16 @@ Flickable {
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // APPLY / DISCARD / REMOVE BAR
+        // REMOVE SUBDIVISIONS
         // ═══════════════════════════════════════════════════════════════
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-
-            Button {
-                text: i18n("Remove Subdivisions")
-                icon.name: "edit-delete"
-                enabled: root._selectedScreen !== "" && root._savedScreens.length > 0
-                onClicked: root._removeSubdivisions()
+        Button {
+            text: i18n("Remove Subdivisions")
+            icon.name: "edit-delete"
+            enabled: root._selectedScreen !== "" && (root._pendingScreens.length > 0 || root._savedScreens.length > 0)
+            onClicked: {
+                settingsController.stageVirtualScreenRemoval(root._selectedScreen);
+                root._pendingScreens = [];
             }
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            Button {
-                text: i18n("Discard")
-                icon.name: "edit-undo"
-                visible: root._dirty
-                onClicked: root._discard()
-            }
-
-            Button {
-                text: i18n("Apply")
-                icon.name: "dialog-ok-apply"
-                enabled: root._dirty && root._pendingScreens.length > 0
-                highlighted: root._dirty
-                onClicked: root._applyConfig()
-            }
-
-        }
-
-        // Dirty state indicator
-        Kirigami.InlineMessage {
-            Layout.fillWidth: true
-            type: Kirigami.MessageType.Warning
-            text: i18n("You have unsaved changes. Click Apply to send them to the daemon.")
-            visible: root._dirty
         }
 
     }

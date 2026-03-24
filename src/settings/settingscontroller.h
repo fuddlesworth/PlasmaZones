@@ -338,6 +338,12 @@ public:
     Q_INVOKABLE void removeVirtualScreenConfig(const QString& physicalScreenId);
     Q_INVOKABLE void applyVirtualScreenPreset(const QString& physicalScreenId, const QString& preset);
 
+    // ── Staged virtual screen configuration (flushed on Apply) ──────────────
+    Q_INVOKABLE void stageVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens);
+    Q_INVOKABLE void stageVirtualScreenRemoval(const QString& physicalScreenId);
+    Q_INVOKABLE bool hasUnsavedVirtualScreenConfig(const QString& physicalScreenId) const;
+    Q_INVOKABLE QVariantList getStagedVirtualScreenConfig(const QString& physicalScreenId) const;
+
     // ── Per-screen zone selector overrides ───────────────────────────────────
     Q_INVOKABLE QVariantMap getPerScreenZoneSelectorSettings(const QString& screenName) const;
     Q_INVOKABLE void setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key,
@@ -457,6 +463,9 @@ private:
     QHash<int, QString> m_stagedQuickSlots;
     // Staged tiling quick layout slot changes (flushed on Apply to config)
     QHash<int, QString> m_stagedTilingQuickSlots;
+
+    // Staged virtual screen configurations (physicalScreenId → staged screens; empty list = remove)
+    QHash<QString, QVariantList> m_stagedVirtualScreenConfigs;
 
     static QString assignmentCacheKey(const QString& screen, int desktop, const QString& activity);
     StagedAssignment& stagedEntry(const QString& screen, int desktop, const QString& activity);

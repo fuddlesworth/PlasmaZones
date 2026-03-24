@@ -172,6 +172,7 @@ void SettingsController::load()
     m_stagedAssignments.clear();
     m_stagedQuickSlots.clear();
     m_stagedTilingQuickSlots.clear();
+    m_stagedVirtualScreenConfigs.clear();
     setNeedsSave(false);
 }
 
@@ -212,6 +213,18 @@ void SettingsController::save()
         DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setSaveBatchMode"), {false});
     }
 
+    // Flush staged virtual screen configurations to daemon
+    if (!m_stagedVirtualScreenConfigs.isEmpty()) {
+        for (auto it = m_stagedVirtualScreenConfigs.constBegin(); it != m_stagedVirtualScreenConfigs.constEnd(); ++it) {
+            if (it.value().isEmpty()) {
+                removeVirtualScreenConfig(it.key());
+            } else {
+                applyVirtualScreenConfig(it.key(), it.value());
+            }
+        }
+        m_stagedVirtualScreenConfigs.clear();
+    }
+
     // Safe to clear immediately: notifyReload() is synchronous, so the daemon
     // has already processed the reload and emitted settingsChanged before we
     // reach this line. No deferred reset needed.
@@ -230,6 +243,7 @@ void SettingsController::defaults()
     m_stagedAssignments.clear();
     m_stagedQuickSlots.clear();
     m_stagedTilingQuickSlots.clear();
+    m_stagedVirtualScreenConfigs.clear();
 
     // Notify daemon to reload — reset() wrote defaults to disk
     DaemonDBus::notifyReload();
@@ -2090,6 +2104,28 @@ void SettingsController::applyVirtualScreenConfig(const QString& physicalScreenI
 void SettingsController::removeVirtualScreenConfig(const QString& physicalScreenId)
 {
     applyVirtualScreenConfig(physicalScreenId, {});
+}
+
+void SettingsController::stageVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens)
+{
+    m_stagedVirtualScreenConfigs.insert(physicalScreenId, screens);
+    setNeedsSave(true);
+}
+
+void SettingsController::stageVirtualScreenRemoval(const QString& physicalScreenId)
+{
+    m_stagedVirtualScreenConfigs.insert(physicalScreenId, QVariantList()); // empty = remove
+    setNeedsSave(true);
+}
+
+bool SettingsController::hasUnsavedVirtualScreenConfig(const QString& physicalScreenId) const
+{
+    return m_stagedVirtualScreenConfigs.contains(physicalScreenId);
+}
+
+QVariantList SettingsController::getStagedVirtualScreenConfig(const QString& physicalScreenId) const
+{
+    return m_stagedVirtualScreenConfigs.value(physicalScreenId);
 }
 
 void SettingsController::applyVirtualScreenPreset(const QString& physicalScreenId, const QString& preset)
