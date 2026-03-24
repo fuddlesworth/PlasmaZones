@@ -187,9 +187,8 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     writeQmlProperty(window, QStringLiteral("screenWidth"), screenGeom.width());
 
     // Build resolved per-screen config
-    const ZoneSelectorConfig config = m_settings
-        ? m_settings->resolvedZoneSelectorConfig(Utils::screenIdentifier(screen))
-        : defaultZoneSelectorConfig();
+    const ZoneSelectorConfig config =
+        m_settings ? m_settings->resolvedZoneSelectorConfig(screenId) : defaultZoneSelectorConfig();
 
     // Update settings-based properties
     if (m_settings) {
@@ -212,13 +211,13 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     writeQmlProperty(window, QStringLiteral("previewLockAspect"), config.previewLockAspect);
 
     // Build and pass layout data (filtered per-screen mode)
-    QVariantList layouts = buildLayoutsList(Utils::screenIdentifier(screen));
+    QVariantList layouts = buildLayoutsList(screenId);
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
 
     // Set active layout ID for this screen
     // Per-screen assignment takes priority so each monitor highlights its own layout
     QString activeLayoutId;
-    Layout* screenLayout = resolveScreenLayout(screen);
+    Layout* screenLayout = resolveScreenLayout(screenId);
     if (screenLayout) {
         activeLayoutId = screenLayout->id().toString();
     }
@@ -230,10 +229,8 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     if (m_settings && m_layoutManager) {
         int curDesktop = m_layoutManager->currentVirtualDesktop();
         QString curActivity = m_layoutManager->currentActivity();
-        locked =
-            m_settings->isContextLocked(QStringLiteral("0:") + Utils::screenIdentifier(screen), curDesktop, curActivity)
-            || m_settings->isContextLocked(QStringLiteral("1:") + Utils::screenIdentifier(screen), curDesktop,
-                                           curActivity);
+        locked = m_settings->isContextLocked(QStringLiteral("0:") + screenId, curDesktop, curActivity)
+            || m_settings->isContextLocked(QStringLiteral("1:") + screenId, curDesktop, curActivity);
     }
     writeQmlProperty(window, QStringLiteral("locked"), locked);
 

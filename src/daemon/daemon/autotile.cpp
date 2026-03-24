@@ -42,8 +42,8 @@ void Daemon::updateAutotileScreens()
 
     QSet<QString> autotileScreens;
     QHash<QString, QString> screenAlgorithms;
-    for (QScreen* screen : m_screenManager->screens()) {
-        QString screenId = Utils::screenIdentifier(screen);
+    const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+    for (const QString& screenId : effectiveIds) {
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
         if (LayoutId::isAutotile(assignmentId)) {
             autotileScreens.insert(screenId);
@@ -59,8 +59,7 @@ void Daemon::updateAutotileScreens()
     // fallback).  applyPerScreenConfig lazily creates TilingStates via
     // stateForScreen(), which setAutotileScreens reuses for added screens.
     if (m_settings) {
-        for (QScreen* screen : m_screenManager->screens()) {
-            QString screenId = Utils::screenIdentifier(screen);
+        for (const QString& screenId : effectiveIds) {
             if (!autotileScreens.contains(screenId))
                 continue;
             QVariantMap overrides = m_settings->getPerScreenAutotileSettings(screenId);
@@ -107,7 +106,7 @@ void Daemon::updateAutotileScreens()
                         }
                     } else {
                         qCWarning(lcDaemon) << "updateAutotileScreens: unknown per-screen algorithm" << screenAlgo
-                                            << "for screen" << screen->name();
+                                            << "for screen" << screenId;
                     }
                 }
             }
@@ -169,7 +168,11 @@ void Daemon::handleAutotileDisabled()
         // Resolve a manual layout to restore. Use the first screen's snappingLayout
         // from AssignmentEntry (preserved when mode flips to Snapping).
         QString lastLayoutId;
-        if (!m_screenManager->screens().isEmpty()) {
+        const QStringList effectiveIds2 = m_screenManager->effectiveScreenIds();
+        if (!effectiveIds2.isEmpty()) {
+            lastLayoutId =
+                m_layoutManager->snappingLayoutForScreen(effectiveIds2.first(), currentDesktop(), currentActivity());
+        } else if (!m_screenManager->screens().isEmpty()) {
             QString screenId = Utils::screenIdentifier(m_screenManager->screens().first());
             lastLayoutId = m_layoutManager->snappingLayoutForScreen(screenId, currentDesktop(), currentActivity());
         }
@@ -190,8 +193,8 @@ void Daemon::handleAutotileDisabled()
             // Write with empty activity so entries are visible to D-Bus/KCM queries.
             {
                 QSignalBlocker blocker(m_layoutManager.get());
-                for (QScreen* screen : m_screenManager->screens()) {
-                    QString screenId = Utils::screenIdentifier(screen);
+                const QStringList ids = m_screenManager->effectiveScreenIds();
+                for (const QString& screenId : ids) {
                     if (!activity.isEmpty()) {
                         m_layoutManager->clearAssignment(screenId, desktop, activity);
                     }
@@ -246,8 +249,9 @@ void Daemon::handleSnappingToAutotile()
 
     // Pre-seed autotile engine with zone-ordered windows BEFORE layout switch.
     // This ensures deterministic window ordering: zone 1 → master, zone 2 → second, etc.
-    for (QScreen* screen : m_screenManager->screens()) {
-        seedAutotileOrderForScreen(Utils::screenIdentifier(screen));
+    const QStringList seedIds = m_screenManager->effectiveScreenIds();
+    for (const QString& sid : seedIds) {
+        seedAutotileOrderForScreen(sid);
     }
 
     // Assign autotile layout to ALL screens (global toggle).
@@ -259,8 +263,8 @@ void Daemon::handleSnappingToAutotile()
     const QString activity = currentActivity();
     {
         QSignalBlocker blocker(m_layoutManager.get());
-        for (QScreen* screen : m_screenManager->screens()) {
-            QString screenId = Utils::screenIdentifier(screen);
+        const QStringList assignIds = m_screenManager->effectiveScreenIds();
+        for (const QString& screenId : assignIds) {
             if (!activity.isEmpty()) {
                 m_layoutManager->clearAssignment(screenId, desktop, activity);
             }

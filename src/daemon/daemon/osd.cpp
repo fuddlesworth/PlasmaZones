@@ -35,8 +35,9 @@ void Daemon::showOverlay()
         const auto& autotileScreens = m_autotileEngine->autotileScreens();
         if (!autotileScreens.isEmpty()) {
             bool allAutotile = true;
-            for (QScreen* screen : m_screenManager->screens()) {
-                if (!autotileScreens.contains(Utils::screenIdentifier(screen))) {
+            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+            for (const QString& screenId : effectiveIds) {
+                if (!autotileScreens.contains(screenId)) {
                     allAutotile = false;
                     break;
                 }
@@ -251,9 +252,9 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
                 manualActive = true;
             }
         } else {
-            // Global filter: union of all screens
-            for (QScreen* screen : m_screenManager->screens()) {
-                const QString screenId = Utils::screenIdentifier(screen);
+            // Global filter: union of all effective screens (includes virtual screens)
+            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+            for (const QString& screenId : effectiveIds) {
                 const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
                 if (LayoutId::isAutotile(assignmentId)) {
                     autotileActive = true;
@@ -293,8 +294,13 @@ void Daemon::syncModeFromAssignments()
     if (m_unifiedLayoutController) {
         QString focusedScreenId =
             m_windowTrackingAdaptor ? resolveShortcutScreenId(m_windowTrackingAdaptor) : QString();
-        if (focusedScreenId.isEmpty() && !m_screenManager->screens().isEmpty()) {
-            focusedScreenId = Utils::screenIdentifier(m_screenManager->screens().first());
+        if (focusedScreenId.isEmpty()) {
+            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+            if (!effectiveIds.isEmpty()) {
+                focusedScreenId = effectiveIds.first();
+            } else if (!m_screenManager->screens().isEmpty()) {
+                focusedScreenId = Utils::screenIdentifier(m_screenManager->screens().first());
+            }
         }
         if (!focusedScreenId.isEmpty()) {
             const QString focusedAssignmentId =
@@ -345,8 +351,8 @@ void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
     }
     // Show OSD on ALL screens — each screen may have a different per-desktop
     // assignment (autotile vs snapping, different layouts/algorithms).
-    for (QScreen* screen : m_screenManager->screens()) {
-        const QString screenId = Utils::screenIdentifier(screen);
+    const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+    for (const QString& screenId : effectiveIds) {
         const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
         if (LayoutId::isAutotile(assignmentId)) {
             const QString algoId = LayoutId::extractAlgorithmId(assignmentId);

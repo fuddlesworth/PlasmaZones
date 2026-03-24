@@ -255,9 +255,21 @@ void OverlayService::warmUpLayoutOsd()
     // Also warm up screens added later (hot-plug)
     if (!m_screenAddedConnected) {
         connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
-            QString sid = Utils::screenIdentifier(screen);
-            if (!m_layoutOsdWindows.contains(sid)) {
-                createLayoutOsdWindow(sid, screen, screen->geometry());
+            auto* mgr2 = ScreenManager::instance();
+            QString physId = Utils::screenIdentifier(screen);
+            if (mgr2 && mgr2->hasVirtualScreens(physId)) {
+                for (const QString& vsId : mgr2->virtualScreenIdsFor(physId)) {
+                    if (!m_layoutOsdWindows.contains(vsId)) {
+                        QRect vsGeom = mgr2->screenGeometry(vsId);
+                        if (vsGeom.isValid()) {
+                            createLayoutOsdWindow(vsId, screen, vsGeom);
+                        }
+                    }
+                }
+            } else {
+                if (!m_layoutOsdWindows.contains(physId)) {
+                    createLayoutOsdWindow(physId, screen, screen->geometry());
+                }
             }
         });
         m_screenAddedConnected = true;

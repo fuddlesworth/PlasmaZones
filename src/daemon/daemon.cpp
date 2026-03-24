@@ -386,8 +386,8 @@ bool Daemon::init()
             QString algoId;
         };
         QVector<ScreenOsd> osdEntries;
-        for (QScreen* screen : m_screenManager->screens()) {
-            const QString screenId = Utils::screenIdentifier(screen);
+        const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+        for (const QString& screenId : effectiveIds) {
             const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
             if (LayoutId::isAutotile(assignmentId)) {
                 autotileScreens.insert(screenId);
@@ -401,7 +401,7 @@ bool Daemon::init()
         // Suppress all resnap/retile navigation OSD feedback from this batch.
         // The counter is decremented per feedback event (one per screen that has
         // resnapped windows). Set it to the screen count to cover all of them.
-        m_suppressResnapOsd = m_screenManager->screens().size();
+        m_suppressResnapOsd = effectiveIds.size();
         m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens);
         m_snapEngine->resnapToNewLayout();
 

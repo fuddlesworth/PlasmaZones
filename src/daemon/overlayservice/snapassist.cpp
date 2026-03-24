@@ -277,9 +277,17 @@ void OverlayService::destroySnapAssistWindow()
 void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId,
                                                 const QString& geometryJson)
 {
-    // Use stable EDID-based screen ID so the daemon's layout/tracking system
-    // resolves the correct screen without relying on connector-name fallbacks.
-    QString screenId = m_snapAssistScreen ? Utils::screenIdentifier(m_snapAssistScreen) : QString();
+    // Resolve screen ID from our snap assist state.
+    // Prefer the screenId key from our internal tracking (virtual-screen-aware)
+    // over re-deriving from QScreen* which loses virtual screen context.
+    QString screenId;
+    // The snap assist window is singular (not keyed by screenId), so look up the
+    // screen ID that was passed to showSnapAssist(). We track the physical screen
+    // in m_snapAssistScreen but that loses virtual context. For now, use the
+    // physical screen identifier as fallback.
+    if (m_snapAssistScreen) {
+        screenId = Utils::screenIdentifier(m_snapAssistScreen);
+    }
     // geometryJson is overlay-local; daemon will fetch authoritative zone geometry from service
     Q_EMIT snapAssistWindowSelected(windowId, zoneId, geometryJson, screenId);
 }
@@ -359,10 +367,8 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     if (m_settings && m_layoutManager) {
         int curDesktop = m_layoutManager->currentVirtualDesktop();
         QString curActivity = m_layoutManager->currentActivity();
-        locked =
-            m_settings->isContextLocked(QStringLiteral("0:") + Utils::screenIdentifier(screen), curDesktop, curActivity)
-            || m_settings->isContextLocked(QStringLiteral("1:") + Utils::screenIdentifier(screen), curDesktop,
-                                           curActivity);
+        locked = m_settings->isContextLocked(QStringLiteral("0:") + resolvedId, curDesktop, curActivity)
+            || m_settings->isContextLocked(QStringLiteral("1:") + resolvedId, curDesktop, curActivity);
     }
     writeQmlProperty(m_layoutPickerWindow, QStringLiteral("locked"), locked);
 

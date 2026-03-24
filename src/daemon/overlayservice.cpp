@@ -232,8 +232,19 @@ void OverlayService::show()
             cursorScreen = Utils::primaryScreen();
         }
         // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
-        if (cursorScreen && m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(cursorScreen))) {
-            return;
+        // Check both physical and effective (virtual) screen IDs
+        if (cursorScreen && m_settings) {
+            auto* mgr = ScreenManager::instance();
+            QString effectiveId;
+            if (mgr) {
+                effectiveId = mgr->effectiveScreenAt(QCursor::pos());
+            }
+            if (effectiveId.isEmpty()) {
+                effectiveId = Utils::screenIdentifier(cursorScreen);
+            }
+            if (m_settings->isMonitorDisabled(effectiveId)) {
+                return;
+            }
         }
     }
 
@@ -391,18 +402,12 @@ void OverlayService::setLayout(Layout* layout)
 
 Layout* OverlayService::resolveScreenLayout(QScreen* screen) const
 {
-    Layout* screenLayout = nullptr;
-    if (m_layoutManager && screen) {
-        screenLayout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                                                        m_currentActivity);
-        if (!screenLayout) {
-            screenLayout = m_layoutManager->defaultLayout();
-        }
+    // Physical QScreen* overload: derives screenId and delegates.
+    // Callers with a known virtual screenId should use the QString overload directly.
+    if (!screen) {
+        return m_layout;
     }
-    if (!screenLayout) {
-        screenLayout = m_layout;
-    }
-    return screenLayout;
+    return resolveScreenLayout(Utils::screenIdentifier(screen));
 }
 
 Layout* OverlayService::resolveScreenLayout(const QString& screenId) const
@@ -470,9 +475,20 @@ void OverlayService::setCurrentActivity(const QString& activityId)
 
 void OverlayService::setupForScreen(QScreen* screen)
 {
-    const QString screenId = Utils::screenIdentifier(screen);
-    if (!m_overlayWindows.contains(screenId)) {
-        createOverlayWindow(screen);
+    // Set up overlay windows for all effective screens on this physical screen
+    auto* mgr = ScreenManager::instance();
+    const QString physId = Utils::screenIdentifier(screen);
+    if (mgr && mgr->hasVirtualScreens(physId)) {
+        for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
+            if (!m_overlayWindows.contains(vsId)) {
+                QRect vsGeom = mgr->screenGeometry(vsId);
+                createOverlayWindow(vsId, screen, vsGeom.isValid() ? vsGeom : screen->geometry());
+            }
+        }
+    } else {
+        if (!m_overlayWindows.contains(physId)) {
+            createOverlayWindow(screen);
+        }
     }
 }
 

@@ -53,12 +53,17 @@ void Daemon::connectScreenSignals()
         // (handles the case where EDID wasn't available during very early startup)
         Utils::invalidateEdidCache(screen->name());
         m_overlayService->handleScreenAdded(screen);
-        // Use per-screen layout (falls back to activeLayout if no assignment)
-        Layout* screenLayout = m_layoutManager->layoutForScreen(
-            Utils::screenIdentifier(screen), m_virtualDesktopManager->currentDesktop(),
-            m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString());
-        if (screenLayout) {
-            screenLayout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(screenLayout, screen));
+        // Recalculate zone geometries for all effective screen IDs on this physical screen
+        const QString physId = Utils::screenIdentifier(screen);
+        const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
+        const int desktop = m_virtualDesktopManager->currentDesktop();
+        const QString activity =
+            m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
+        for (const QString& sid : vsIds) {
+            Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
+            if (screenLayout) {
+                screenLayout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(screenLayout, screen));
+            }
         }
     });
 

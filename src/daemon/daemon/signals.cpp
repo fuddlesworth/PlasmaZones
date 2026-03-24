@@ -545,8 +545,15 @@ void Daemon::connectOverlaySignals()
             // Resolve screen ID; fall back to primary screen
             QString geometryToUse = geometryJson;
             QString effectiveScreenId = screenId;
-            if (effectiveScreenId.isEmpty() && QGuiApplication::primaryScreen()) {
-                effectiveScreenId = Utils::screenIdentifier(QGuiApplication::primaryScreen());
+            if (effectiveScreenId.isEmpty()) {
+                // Prefer effective screen IDs (virtual-screen-aware) over physical screen
+                auto* mgr = ScreenManager::instance();
+                const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
+                if (!effectiveIds.isEmpty()) {
+                    effectiveScreenId = effectiveIds.first();
+                } else if (QGuiApplication::primaryScreen()) {
+                    effectiveScreenId = Utils::screenIdentifier(QGuiApplication::primaryScreen());
+                }
             }
             // Snap assist is a manual-mode concept; ignore if this screen uses autotile.
             if (m_autotileEngine && m_autotileEngine->isAutotileScreen(effectiveScreenId)) {
@@ -615,8 +622,8 @@ void Daemon::finalizeStartup()
     if (m_settings && m_settings->showOsdOnLayoutSwitch() && m_layoutManager && m_screenManager) {
         const int desktop = currentDesktop();
         const QString activity = currentActivity();
-        for (QScreen* screen : m_screenManager->screens()) {
-            const QString screenId = Utils::screenIdentifier(screen);
+        const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+        for (const QString& screenId : effectiveIds) {
             const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
             if (LayoutId::isAutotile(assignmentId)) {
                 const QString algoId = LayoutId::extractAlgorithmId(assignmentId);

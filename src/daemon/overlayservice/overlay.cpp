@@ -47,6 +47,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     // For virtual screens we must resolve to the specific virtual screen under
     // the cursor, not just the physical monitor (all virtual screens on one
     // physical monitor share the same QScreen*).
+    // Use physical screen ID as initial value; effectiveScreenAt() below refines to virtual
     const QString cursorScreenId = cursorScreen ? Utils::screenIdentifier(cursorScreen) : QString();
     QString cursorEffectiveId = cursorScreenId;
     if (!showOnAllMonitors && cursorScreen) {

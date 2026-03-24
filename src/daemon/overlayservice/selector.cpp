@@ -41,29 +41,61 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         targetScreen = mgr ? mgr->physicalQScreenFor(targetScreenId) : Utils::findScreenByIdOrName(targetScreenId);
     }
 
-    for (auto* screen : Utils::allScreens()) {
-        // Only show on the target screen (nullptr = all screens)
-        if (targetScreen && screen != targetScreen) {
-            continue;
+    const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
+
+    if (mgr && !effectiveIds.isEmpty()) {
+        for (const QString& screenId : effectiveIds) {
+            QScreen* physScreen = mgr->physicalQScreenFor(screenId);
+            if (!physScreen) {
+                continue;
+            }
+            // Only show on the target screen (nullptr = all screens)
+            if (targetScreen && physScreen != targetScreen && screenId != targetScreenId) {
+                continue;
+            }
+            // Skip monitors where PlasmaZones is disabled
+            if (m_settings && m_settings->isMonitorDisabled(screenId)) {
+                continue;
+            }
+            // Skip autotile-managed screens (zone selector is for manual zone selection)
+            if (m_excludedScreens.contains(screenId)) {
+                continue;
+            }
+            const QRect geom = mgr->screenGeometry(screenId);
+            if (!m_zoneSelectorWindows.contains(screenId)) {
+                createZoneSelectorWindow(screenId, physScreen, geom.isValid() ? geom : physScreen->geometry());
+            }
+            if (auto* window = m_zoneSelectorWindows.value(screenId)) {
+                assertWindowOnScreen(window, physScreen, geom.isValid() ? geom : physScreen->geometry());
+                updateZoneSelectorWindow(screenId);
+                window->show();
+            } else {
+                qCWarning(lcOverlay) << "No window found for screen" << screenId;
+            }
         }
-        QString screenId = Utils::screenIdentifier(screen);
-        // Skip monitors where PlasmaZones is disabled
-        if (m_settings && m_settings->isMonitorDisabled(screenId)) {
-            continue;
-        }
-        // Skip autotile-managed screens (zone selector is for manual zone selection)
-        if (m_excludedScreens.contains(screenId)) {
-            continue;
-        }
-        if (!m_zoneSelectorWindows.contains(screenId)) {
-            createZoneSelectorWindow(screenId, screen, screen->geometry());
-        }
-        if (auto* window = m_zoneSelectorWindows.value(screenId)) {
-            assertWindowOnScreen(window, screen);
-            updateZoneSelectorWindow(screenId);
-            window->show();
-        } else {
-            qCWarning(lcOverlay) << "No window found for screen" << screen->name();
+    } else {
+        // Fallback: no ScreenManager
+        for (auto* screen : Utils::allScreens()) {
+            if (targetScreen && screen != targetScreen) {
+                continue;
+            }
+            QString screenId = Utils::screenIdentifier(screen);
+            if (m_settings && m_settings->isMonitorDisabled(screenId)) {
+                continue;
+            }
+            if (m_excludedScreens.contains(screenId)) {
+                continue;
+            }
+            if (!m_zoneSelectorWindows.contains(screenId)) {
+                createZoneSelectorWindow(screenId, screen, screen->geometry());
+            }
+            if (auto* window = m_zoneSelectorWindows.value(screenId)) {
+                assertWindowOnScreen(window, screen);
+                updateZoneSelectorWindow(screenId);
+                window->show();
+            } else {
+                qCWarning(lcOverlay) << "No window found for screen" << screen->name();
+            }
         }
     }
 
@@ -104,7 +136,15 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
     }
 
     // Update the zone selector window with cursor position for hover effects
-    QString cursorScreenId = Utils::screenIdentifier(screen);
+    // Resolve to effective (virtual) screen ID if applicable
+    auto* mgr = ScreenManager::instance();
+    QString cursorScreenId;
+    if (mgr) {
+        cursorScreenId = mgr->effectiveScreenAt(QPoint(cursorX, cursorY));
+    }
+    if (cursorScreenId.isEmpty()) {
+        cursorScreenId = Utils::screenIdentifier(screen);
+    }
     if (auto* window = m_zoneSelectorWindows.value(cursorScreenId)) {
         // With exclusiveZone=-1, the window is positioned deterministically
         // and mapFromGlobal gives us accurate local coordinates without compensation
@@ -122,9 +162,8 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         }
 
         const int layoutCount = layouts.size();
-        const ZoneSelectorConfig selectorConfig = m_settings
-            ? m_settings->resolvedZoneSelectorConfig(Utils::screenIdentifier(screen))
-            : defaultZoneSelectorConfig();
+        const ZoneSelectorConfig selectorConfig =
+            m_settings ? m_settings->resolvedZoneSelectorConfig(cursorScreenId) : defaultZoneSelectorConfig();
         const ZoneSelectorLayout layout = computeZoneSelectorLayout(selectorConfig, screen, layoutCount);
 
         // Get grid position from QML - it knows exactly where the content is rendered
@@ -159,13 +198,12 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 if (m_settings && m_layoutManager) {
                     int curDesktop = m_layoutManager->currentVirtualDesktop();
                     QString curActivity = m_layoutManager->currentActivity();
-                    bool locked = m_settings->isContextLocked(QStringLiteral("0:") + Utils::screenIdentifier(screen),
-                                                              curDesktop, curActivity)
-                        || m_settings->isContextLocked(QStringLiteral("1:") + Utils::screenIdentifier(screen),
-                                                       curDesktop, curActivity);
+                    bool locked =
+                        m_settings->isContextLocked(QStringLiteral("0:") + cursorScreenId, curDesktop, curActivity)
+                        || m_settings->isContextLocked(QStringLiteral("1:") + cursorScreenId, curDesktop, curActivity);
                     if (locked) {
                         // Only allow zone selection from the active layout
-                        Layout* activeLayout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
+                        Layout* activeLayout = m_layoutManager->resolveLayoutForScreen(cursorScreenId);
                         if (activeLayout && layoutId != activeLayout->id().toString()) {
                             continue; // Skip this non-active layout entirely
                         }
@@ -319,36 +357,8 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
     if (!hasSelectedZone() || !screen) {
         return QRect();
     }
-
-    // Use the same geometry pipeline as the overlay snap path
-    // (GeometryUtils::getZoneGeometryWithGaps) so that gap handling,
-    // outer-gap vs inner-gap edge detection, and usable-geometry respect
-    // are identical regardless of whether the user snaps via the overlay
-    // or the zone selector.
-    if (m_layoutManager && !m_selectedLayoutId.isEmpty()) {
-        Layout* selectedLayout = m_layoutManager->layoutById(QUuid::fromString(m_selectedLayoutId));
-        if (selectedLayout && m_selectedZoneIndex >= 0
-            && m_selectedZoneIndex < static_cast<int>(selectedLayout->zones().size())) {
-            Zone* zone = selectedLayout->zones().at(m_selectedZoneIndex);
-            if (zone) {
-                QString screenId = Utils::screenIdentifier(screen);
-                int zonePadding = GeometryUtils::getEffectiveZonePadding(selectedLayout, m_settings, screenId);
-                EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(selectedLayout, m_settings, screenId);
-                bool useAvail = !(selectedLayout && selectedLayout->useFullScreenGeometry());
-                QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
-                return GeometryUtils::snapToRect(geom);
-            }
-        }
-    }
-
-    // Fallback: manual calculation when layout/zone lookup fails
-    // Use snapToRect for edge-consistent rounding (matches primary path)
-    QRect availableGeom = ScreenManager::actualAvailableGeometry(screen);
-    QRectF geom(availableGeom.x() + m_selectedZoneRelGeo.x() * availableGeom.width(),
-                availableGeom.y() + m_selectedZoneRelGeo.y() * availableGeom.height(),
-                m_selectedZoneRelGeo.width() * availableGeom.width(),
-                m_selectedZoneRelGeo.height() * availableGeom.height());
-    return GeometryUtils::snapToRect(geom);
+    // Delegate to screenId overload for virtual-screen-aware geometry
+    return getSelectedZoneGeometry(Utils::screenIdentifier(screen));
 }
 
 QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
