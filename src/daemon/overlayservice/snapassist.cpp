@@ -394,10 +394,6 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         writeQmlProperty(m_layoutPickerWindow, QStringLiteral("inactiveOpacity"), m_settings->inactiveOpacity());
     }
 
-    // Disable backdrop for virtual screens (half-screen dimming looks wrong)
-    const bool isVirtualScreen = (screenGeom != screen->geometry());
-    writeQmlProperty(m_layoutPickerWindow, QStringLiteral("showBackdrop"), !isVirtualScreen);
-
     // Layer shell with keyboard interactivity — position to virtual or physical screen
     if (auto* layerWindow = LayerShellQt::Window::get(m_layoutPickerWindow)) {
         layerWindow->setScreen(screen);
