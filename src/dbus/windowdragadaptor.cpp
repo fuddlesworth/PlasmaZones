@@ -146,10 +146,27 @@ QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<Zone*>& zone
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
     EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
     bool useAvail = !(layout && layout->useFullScreenGeometry());
-    QRectF combined = GeometryUtils::getZoneGeometryWithGaps(zones.first(), screen, zonePadding, outerGaps, useAvail);
-    for (int i = 1; i < zones.size(); ++i) {
+
+    // Use virtual screen geometry when available
+    auto* mgr = ScreenManager::instance();
+    QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
+    QRect vsAvailGeom = mgr ? mgr->screenAvailableGeometry(screenId) : QRect();
+
+    QRectF combined;
+    if (vsGeom.isValid()) {
+        QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
         combined =
-            combined.united(GeometryUtils::getZoneGeometryWithGaps(zones[i], screen, zonePadding, outerGaps, useAvail));
+            GeometryUtils::getZoneGeometryWithGaps(zones.first(), vsGeom, availGeom, zonePadding, outerGaps, useAvail);
+        for (int i = 1; i < zones.size(); ++i) {
+            combined = combined.united(
+                GeometryUtils::getZoneGeometryWithGaps(zones[i], vsGeom, availGeom, zonePadding, outerGaps, useAvail));
+        }
+    } else {
+        combined = GeometryUtils::getZoneGeometryWithGaps(zones.first(), screen, zonePadding, outerGaps, useAvail);
+        for (int i = 1; i < zones.size(); ++i) {
+            combined = combined.united(
+                GeometryUtils::getZoneGeometryWithGaps(zones[i], screen, zonePadding, outerGaps, useAvail));
+        }
     }
     return combined;
 }

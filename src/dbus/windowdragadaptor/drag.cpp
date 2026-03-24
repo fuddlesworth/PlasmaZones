@@ -91,9 +91,21 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
                 EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
                 bool useAvail = !(layout && layout->useFullScreenGeometry());
 
+                // Use virtual screen geometry for zone matching
+                auto* mgr = ScreenManager::instance();
+                QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
+                QRect vsAvailGeom = mgr ? mgr->screenAvailableGeometry(screenId) : QRect();
+
                 for (auto* zone : layout->zones()) {
-                    QRectF zoneGeom =
-                        GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
+                    QRectF zoneGeom;
+                    if (vsGeom.isValid()) {
+                        QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
+                        zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding,
+                                                                          outerGaps, useAvail);
+                    } else {
+                        zoneGeom =
+                            GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
+                    }
                     QRect zoneRect = GeometryUtils::snapToRect(zoneGeom);
 
                     // Use class constants for tolerances
@@ -338,8 +350,19 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
             EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
             bool useAvail = !(layout && layout->useFullScreenGeometry());
-            QRectF geom =
-                GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, screen, zonePadding, outerGaps, useAvail);
+            // Use virtual screen geometry for zone calculation
+            auto* mgr = ScreenManager::instance();
+            QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
+            QRect vsAvailGeom = mgr ? mgr->screenAvailableGeometry(screenId) : QRect();
+            QRectF geom;
+            if (vsGeom.isValid()) {
+                QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
+                geom = GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, vsGeom, availGeom, zonePadding,
+                                                              outerGaps, useAvail);
+            } else {
+                geom = GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, screen, zonePadding, outerGaps,
+                                                              useAvail);
+            }
             m_currentZoneGeometry = GeometryUtils::snapToRect(geom);
             m_currentMultiZoneGeometry = QRect();
         }
