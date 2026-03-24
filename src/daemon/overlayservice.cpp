@@ -511,9 +511,14 @@ void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen, cons
     if (window->screen() != screen) {
         window->setScreen(screen);
     }
-    // Use provided geometry (for virtual screens), otherwise fall back to physical screen geometry
+    // For virtual screens (geometry differs from physical), positioning is handled by
+    // LayerShellQt margins. Calling setGeometry with absolute coordinates would override
+    // those margins, causing double-positioning. Only set geometry for physical screens.
     const QRect targetGeom = geometry.isValid() ? geometry : screen->geometry();
-    window->setGeometry(targetGeom);
+    if (targetGeom == screen->geometry()) {
+        window->setGeometry(targetGeom);
+    }
+    // Virtual screens: size is set by the caller; position is set by LayerShellQt margins.
 }
 
 void OverlayService::handleScreenAdded(QScreen* screen)

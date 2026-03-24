@@ -145,7 +145,14 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     }
 
     assertWindowOnScreen(m_snapAssistWindow, screen, screenGeom);
-    m_snapAssistWindow->setGeometry(screenGeom);
+    // Only use setGeometry for physical screens; virtual screens are positioned
+    // by LayerShellQt margins and setGeometry would override/fight with them.
+    if (screenGeom == screen->geometry()) {
+        m_snapAssistWindow->setGeometry(screenGeom);
+    } else {
+        m_snapAssistWindow->setWidth(screenGeom.width());
+        m_snapAssistWindow->setHeight(screenGeom.height());
+    }
     m_snapAssistWindow->show();
     // Ensure the window receives keyboard focus for Escape handling on Wayland.
     // KeyboardInteractivityExclusive tells the compositor to send keyboard events,
@@ -418,7 +425,14 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
 
     assertWindowOnScreen(m_layoutPickerWindow, screen, screenGeom);
-    m_layoutPickerWindow->setGeometry(screenGeom);
+    // Only use setGeometry for physical screens; virtual screens are positioned
+    // by LayerShellQt margins and setGeometry would override/fight with them.
+    if (screenGeom == screen->geometry()) {
+        m_layoutPickerWindow->setGeometry(screenGeom);
+    } else {
+        m_layoutPickerWindow->setWidth(screenGeom.width());
+        m_layoutPickerWindow->setHeight(screenGeom.height());
+    }
     QMetaObject::invokeMethod(m_layoutPickerWindow, "show");
     m_layoutPickerWindow->requestActivate();
 
