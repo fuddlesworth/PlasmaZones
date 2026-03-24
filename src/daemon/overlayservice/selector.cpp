@@ -149,19 +149,12 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         cursorScreenId = Utils::screenIdentifier(screen);
     }
     if (auto* window = m_zoneSelectorWindows.value(cursorScreenId)) {
-        // Compute local coordinates using the known virtual screen geometry.
-        // mapFromGlobal is unreliable on Wayland for LayerShellQt windows
-        // because the compositor doesn't always report the window's global position.
-        QRect vsGeom = mgr ? mgr->screenGeometry(cursorScreenId) : QRect();
-        int localX, localY;
-        if (vsGeom.isValid()) {
-            localX = cursorX - vsGeom.x();
-            localY = cursorY - vsGeom.y();
-        } else {
-            const QPoint localPos = window->mapFromGlobal(QPoint(cursorX, cursorY));
-            localX = localPos.x();
-            localY = localPos.y();
-        }
+        // Convert global cursor position to window-local coordinates.
+        // The zone selector is a small bar (not full-screen), positioned by LayerShellQt.
+        const QPoint localPos = window->mapFromGlobal(QPoint(cursorX, cursorY));
+        int localX = localPos.x();
+        int localY = localPos.y();
+        QRect vsGeom; // for later use
 
         window->setProperty("cursorX", localX);
         window->setProperty("cursorY", localY);
