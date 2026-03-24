@@ -282,10 +282,10 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             // Use screen-filtered occupancy — without this, zones occupied on
             // other screens appear occupied here when layouts share zone IDs.
             QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(releaseScreenId);
-            QString emptyJson =
-                GeometryUtils::buildEmptyZonesJson(layout, releaseScreen, m_settings, [&occupied](const Zone* z) {
-                    return !occupied.contains(z->id());
-                });
+            QString emptyJson = GeometryUtils::buildEmptyZonesJson(layout, releaseScreenId, releaseScreen, m_settings,
+                                                                   [&occupied](const Zone* z) {
+                                                                       return !occupied.contains(z->id());
+                                                                   });
             if (!emptyJson.isEmpty() && emptyJson != QLatin1String("[]")) {
                 snapAssistRequestedOut = true;
                 emptyZonesJsonOut = emptyJson;

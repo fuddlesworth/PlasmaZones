@@ -167,6 +167,16 @@ PLASMAZONES_EXPORT QString buildEmptyZonesJson(Layout* layout, QScreen* screen, 
                                                const std::function<bool(const Zone*)>& isZoneEmpty);
 
 /**
+ * @brief Build JSON array of empty zones using explicit screen ID (virtual-screen-aware)
+ *
+ * Uses ScreenManager to resolve virtual screen geometry when available,
+ * falling back to the physical QScreen* geometry.
+ */
+PLASMAZONES_EXPORT QString buildEmptyZonesJson(Layout* layout, const QString& screenId, QScreen* physScreen,
+                                               ISettings* settings,
+                                               const std::function<bool(const Zone*)>& isZoneEmpty);
+
+/**
  * @brief Enforce minimum size constraints on zones by borrowing space from neighbors
  * @param zones List of zone geometries to adjust (in-place)
  * @param minSizes List of minimum sizes for each zone (same index as zones)

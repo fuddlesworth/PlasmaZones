@@ -395,6 +395,60 @@ QString serializeRotationEntries(const QVector<RotationEntry>& entries)
     return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
 }
 
+QString buildEmptyZonesJson(Layout* layout, const QString& screenId, QScreen* physScreen, ISettings* settings,
+                            const std::function<bool(const Zone*)>& isZoneEmpty)
+{
+    if (!layout) {
+        return QStringLiteral("[]");
+    }
+
+    // Use virtual screen geometry when available
+    auto* mgr = ScreenManager::instance();
+    QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
+    QRect vsAvailGeom = mgr ? mgr->screenAvailableGeometry(screenId) : QRect();
+
+    if (vsGeom.isValid()) {
+        bool useAvail = !(layout && layout->useFullScreenGeometry());
+        QRectF effectiveGeom = useAvail && vsAvailGeom.isValid() ? QRectF(vsAvailGeom) : QRectF(vsGeom);
+        layout->recalculateZoneGeometries(effectiveGeom);
+
+        int zonePadding = getEffectiveZonePadding(layout, settings, screenId);
+        EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, screenId);
+
+        QJsonArray arr;
+        for (Zone* zone : layout->zones()) {
+            if (!isZoneEmpty(zone)) {
+                continue;
+            }
+            QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
+            QRectF geom = getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding, outerGaps, useAvail);
+            QRectF overlayGeom = availableAreaToOverlayCoordinates(geom, vsGeom);
+
+            QJsonObject obj;
+            obj[JsonKeys::ZoneId] = zone->id().toString();
+            obj[JsonKeys::X] = overlayGeom.x();
+            obj[JsonKeys::Y] = overlayGeom.y();
+            obj[JsonKeys::Width] = overlayGeom.width();
+            obj[JsonKeys::Height] = overlayGeom.height();
+            obj[JsonKeys::UseCustomColors] = zone->useCustomColors();
+            obj[JsonKeys::HighlightColor] = zone->highlightColor().name(QColor::HexArgb);
+            obj[JsonKeys::InactiveColor] = zone->inactiveColor().name(QColor::HexArgb);
+            obj[JsonKeys::BorderColor] = zone->borderColor().name(QColor::HexArgb);
+            obj[JsonKeys::ActiveOpacity] = zone->activeOpacity();
+            obj[JsonKeys::InactiveOpacity] = zone->inactiveOpacity();
+            obj[JsonKeys::BorderWidth] =
+                zone->useCustomColors() ? zone->borderWidth() : (settings ? settings->borderWidth() : 2);
+            obj[JsonKeys::BorderRadius] =
+                zone->useCustomColors() ? zone->borderRadius() : (settings ? settings->borderRadius() : 4);
+            arr.append(obj);
+        }
+        return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+    }
+
+    // Fallback: use physical QScreen*
+    return physScreen ? buildEmptyZonesJson(layout, physScreen, settings, isZoneEmpty) : QStringLiteral("[]");
+}
+
 } // namespace GeometryUtils
 
 } // namespace PlasmaZones

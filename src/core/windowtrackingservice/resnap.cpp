@@ -7,6 +7,7 @@
 #include "../windowtrackingservice.h"
 #include "../geometryutils.h"
 #include "../layout.h"
+#include "../screenmanager.h"
 #include "../zone.h"
 #include "../layoutmanager.h"
 #include "../utils.h"
@@ -292,13 +293,19 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(c
     sortZonesByNumber(zones);
 
     // Get screen and gap settings for geometry calculation
-    QScreen* screen = screenId.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenId);
+    auto* smgr = ScreenManager::instance();
+    QScreen* screen = smgr ? smgr->physicalQScreenFor(screenId) : nullptr;
+    if (!screen) {
+        screen = screenId.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenId);
+    }
     if (!screen) {
         screen = Utils::primaryScreen();
     }
     if (!screen) {
         return result;
     }
+    QRect vsGeom = smgr ? smgr->screenGeometry(screenId) : QRect();
+    QRect vsAvailGeom = smgr ? smgr->screenAvailableGeometry(screenId) : QRect();
 
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
     EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
@@ -346,7 +353,14 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(c
             continue; // Already claimed by another window
 
         bool useAvail = !layout->useFullScreenGeometry();
-        QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
+        QRectF geoF;
+        if (vsGeom.isValid()) {
+            QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
+            geoF =
+                GeometryUtils::getZoneGeometryWithGaps(targetZone, vsGeom, availGeom, zonePadding, outerGaps, useAvail);
+        } else {
+            geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
+        }
         QRect geo = GeometryUtils::snapToRect(geoF);
 
         if (geo.isValid()) {
@@ -389,7 +403,14 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(c
 
         Zone* targetZone = zones.at(zoneIdx);
         bool useAvail = !layout->useFullScreenGeometry();
-        QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
+        QRectF geoF;
+        if (vsGeom.isValid()) {
+            QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
+            geoF =
+                GeometryUtils::getZoneGeometryWithGaps(targetZone, vsGeom, availGeom, zonePadding, outerGaps, useAvail);
+        } else {
+            geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
+        }
         QRect geo = GeometryUtils::snapToRect(geoF);
 
         if (geo.isValid()) {
@@ -489,13 +510,19 @@ QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStr
     QSet<QUuid> occupiedZoneIds = buildOccupiedZoneSet(screenId);
 
     // Get screen and gap settings for geometry calculation
-    QScreen* screen = screenId.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenId);
+    auto* smgr = ScreenManager::instance();
+    QScreen* screen = smgr ? smgr->physicalQScreenFor(screenId) : nullptr;
+    if (!screen) {
+        screen = screenId.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenId);
+    }
     if (!screen) {
         screen = Utils::primaryScreen();
     }
     if (!screen) {
         return result;
     }
+    QRect vsGeom = smgr ? smgr->screenGeometry(screenId) : QRect();
+    QRect vsAvailGeom = smgr ? smgr->screenAvailableGeometry(screenId) : QRect();
 
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
     EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
@@ -519,7 +546,14 @@ QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStr
         }
 
         bool useAvail = !(layout && layout->useFullScreenGeometry());
-        QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
+        QRectF geoF;
+        if (vsGeom.isValid()) {
+            QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
+            geoF =
+                GeometryUtils::getZoneGeometryWithGaps(targetZone, vsGeom, availGeom, zonePadding, outerGaps, useAvail);
+        } else {
+            geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
+        }
         QRect geo = GeometryUtils::snapToRect(geoF);
 
         if (geo.isValid()) {
