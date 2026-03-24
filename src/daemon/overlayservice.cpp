@@ -285,7 +285,13 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
 
     if (m_visible) {
         // Already visible: when single-monitor mode, switch overlay if cursor moved to different screen (#136)
-        if (!showOnAllMonitors && cursorScreen && m_currentOverlayScreen != cursorScreen) {
+        // Use effective (virtual-aware) screen ID to detect cross-virtual-screen movement
+        auto* mgr2 = ScreenManager::instance();
+        QString cursorEffectiveId = mgr2 ? mgr2->effectiveScreenAt(QPoint(cursorX, cursorY)) : QString();
+        if (cursorEffectiveId.isEmpty() && cursorScreen) {
+            cursorEffectiveId = Utils::screenIdentifier(cursorScreen);
+        }
+        if (!showOnAllMonitors && !cursorEffectiveId.isEmpty() && m_currentOverlayScreenId != cursorEffectiveId) {
             initializeOverlay(cursorScreen, cursorPos);
         }
         return;
@@ -301,7 +307,7 @@ void OverlayService::hide()
     }
 
     m_visible = false;
-    m_currentOverlayScreen = nullptr;
+    m_currentOverlayScreenId.clear();
 
     // Stop shader animation
     stopShaderAnimation();

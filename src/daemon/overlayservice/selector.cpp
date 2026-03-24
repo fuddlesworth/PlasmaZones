@@ -49,8 +49,8 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             if (!physScreen) {
                 continue;
             }
-            // Only show on the target screen (nullptr = all screens)
-            if (targetScreen && physScreen != targetScreen && screenId != targetScreenId) {
+            // Only show on the target screen (nullptr/empty = all screens)
+            if (!targetScreenId.isEmpty() && screenId != targetScreenId) {
                 continue;
             }
             // Skip monitors where PlasmaZones is disabled

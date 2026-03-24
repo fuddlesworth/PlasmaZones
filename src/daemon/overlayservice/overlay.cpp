@@ -29,7 +29,6 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     const bool showOnAllMonitors = (cursorScreen == nullptr);
 
     m_visible = true;
-    m_currentOverlayScreen = showOnAllMonitors ? nullptr : cursorScreen;
 
     // Initialize shader timing (shared across all monitors for synchronized effects)
     // Only start timer if invalid - preserves iTime across show/hide for less predictable animations
@@ -60,6 +59,9 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             }
         }
     }
+
+    // Store the effective screen ID for cross-virtual-screen detection in showAtPosition()
+    m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
 
     // When single-monitor mode, hide overlay on screens we're switching away from (#136)
     if (!showOnAllMonitors) {
