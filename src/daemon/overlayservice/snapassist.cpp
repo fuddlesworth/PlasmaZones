@@ -47,7 +47,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
 
     // Always destroy and recreate to avoid stale QML state (zone sizes wrong after continuation)
     destroySnapAssistWindow();
-    createSnapAssistWindow();
+    createSnapAssistWindow(screenId, screen, screen->geometry());
     if (!m_snapAssistWindow) {
         Q_EMIT snapAssistDismissed();
         return;
@@ -208,13 +208,15 @@ bool OverlayService::isSnapAssistVisible() const
     return m_snapAssistWindow && m_snapAssistWindow->isVisible();
 }
 
-void OverlayService::createSnapAssistWindow()
+void OverlayService::createSnapAssistWindow(const QString& screenId, QScreen* physScreen, const QRect& geom)
 {
+    Q_UNUSED(screenId)
+    Q_UNUSED(geom)
     if (m_snapAssistWindow) {
         return;
     }
 
-    QScreen* screen = Utils::primaryScreen();
+    QScreen* screen = physScreen ? physScreen : Utils::primaryScreen();
     if (!screen) {
         qCWarning(lcOverlay) << "createSnapAssistWindow: no screen";
         return;
@@ -304,7 +306,8 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
     // Always destroy and recreate for fresh state
     destroyLayoutPickerWindow();
-    createLayoutPickerWindow(screen);
+    const QString resolvedId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
+    createLayoutPickerWindow(resolvedId, screen, screen->geometry());
     if (!m_layoutPickerWindow) {
         return;
     }
@@ -394,12 +397,15 @@ bool OverlayService::isLayoutPickerVisible() const
     return m_layoutPickerWindow && m_layoutPickerWindow->isVisible();
 }
 
-void OverlayService::createLayoutPickerWindow(QScreen* screen)
+void OverlayService::createLayoutPickerWindow(const QString& screenId, QScreen* physScreen, const QRect& geom)
 {
+    Q_UNUSED(screenId)
+    Q_UNUSED(geom)
     if (m_layoutPickerWindow) {
         return;
     }
 
+    QScreen* screen = physScreen ? physScreen : Utils::primaryScreen();
     auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/LayoutPickerOverlay.qml")), screen, "layout picker");
     if (!window) {
         qCWarning(lcOverlay) << "Failed to create layout picker overlay";

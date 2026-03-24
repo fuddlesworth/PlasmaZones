@@ -59,6 +59,38 @@ inline QScreen* resolveShortcutScreen(const WindowTrackingAdaptor* trackingAdapt
 }
 
 /**
+ * @brief Resolve the screen ID for a keyboard shortcut action (virtual-screen-aware).
+ *
+ * Returns the virtual screen ID (e.g., "Dell:U2722D:115107/vs:0") if the cursor
+ * is on a subdivided screen, otherwise the physical screen ID.  Unlike
+ * resolveShortcutScreen() which returns a QScreen* (losing the virtual component),
+ * this returns the raw string from the KWin effect -- preserving virtual screen IDs.
+ */
+inline QString resolveShortcutScreenId(const WindowTrackingAdaptor* trackingAdaptor)
+{
+    if (!trackingAdaptor) {
+        QScreen* primary = Utils::primaryScreen();
+        return primary ? Utils::screenIdentifier(primary) : QString();
+    }
+
+    // Primary: cursor screen (may be virtual ID from effect)
+    const QString cursorScreen = trackingAdaptor->lastCursorScreenName();
+    if (!cursorScreen.isEmpty()) {
+        return cursorScreen; // Return as-is — preserves virtual screen ID
+    }
+
+    // Fallback: focused window's screen (also may be virtual)
+    const QString activeScreen = trackingAdaptor->lastActiveScreenName();
+    if (!activeScreen.isEmpty()) {
+        return activeScreen;
+    }
+
+    // Last resort: primary screen physical ID
+    QScreen* primary = Utils::primaryScreen();
+    return primary ? Utils::screenIdentifier(primary) : QString();
+}
+
+/**
  * @brief Convert NavigationDirection enum to string for D-Bus/engine calls
  */
 inline QString navigationDirectionToString(NavigationDirection direction)

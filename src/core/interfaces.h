@@ -472,7 +472,7 @@ public:
 
     // Zone selector methods
     virtual bool isZoneSelectorVisible() const = 0;
-    virtual void showZoneSelector(QScreen* screen = nullptr) = 0;
+    virtual void showZoneSelector(const QString& targetScreenId = QString()) = 0;
     virtual void hideZoneSelector() = 0;
     virtual void updateSelectorPosition(int cursorX, int cursorY) = 0;
     virtual void scrollZoneSelector(int angleDeltaY) = 0;

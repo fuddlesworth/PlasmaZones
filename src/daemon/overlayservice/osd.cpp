@@ -6,6 +6,7 @@
 #include "../../core/logging.h"
 #include "../../core/layout.h"
 #include "../../core/layoututils.h"
+#include "../../core/screenmanager.h"
 #include "../../core/utils.h"
 #include <QQuickWindow>
 #include <QScreen>
@@ -63,35 +64,38 @@ void sizeAndCenterOsd(QQuickWindow* window, const QRect& screenGeom, qreal previ
 bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio,
                                             const QString& screenId)
 {
-    // Resolve target screen: explicit name/ID > primary
-    // Note: QCursor::pos() is NOT used here — it returns stale data for background
-    // daemons on Wayland. Callers should always pass screenId from KWin effect data.
-    // Accepts both connector name (e.g. "DP-2") and EDID-based screen ID (e.g. from currentScreenName).
-    QScreen* screen = nullptr;
-    if (!screenId.isEmpty()) {
-        screen = Utils::findScreenByIdOrName(screenId);
+    // Resolve target screen via ScreenManager for virtual screen support
+    auto* mgr = ScreenManager::instance();
+    QScreen* physScreen = mgr ? mgr->physicalQScreenFor(screenId) : nullptr;
+    if (!physScreen && !screenId.isEmpty()) {
+        physScreen = Utils::findScreenByIdOrName(screenId);
     }
-    if (!screen) {
-        screen = Utils::primaryScreen();
+    if (!physScreen) {
+        physScreen = Utils::primaryScreen();
     }
-    if (!screen) {
+    if (!physScreen) {
         qCWarning(lcOverlay) << "No screen available for layout OSD";
         return false;
     }
 
-    if (!m_layoutOsdWindows.contains(screen)) {
-        createLayoutOsdWindow(screen);
+    // Use virtual screen geometry if applicable, otherwise physical
+    QRect vsGeom = (mgr && !screenId.isEmpty()) ? mgr->screenGeometry(screenId) : QRect();
+    screenGeom = vsGeom.isValid() ? vsGeom : physScreen->geometry();
+
+    QString effectiveId = screenId.isEmpty() ? Utils::screenIdentifier(physScreen) : screenId;
+
+    if (!m_layoutOsdWindows.contains(effectiveId)) {
+        createLayoutOsdWindow(effectiveId, physScreen, screenGeom);
     }
 
-    window = m_layoutOsdWindows.value(screen);
+    window = m_layoutOsdWindows.value(effectiveId);
     if (!window) {
         qCWarning(lcOverlay) << "Failed to get layout OSD window";
         return false;
     }
 
-    assertWindowOnScreen(window, screen);
+    assertWindowOnScreen(window, physScreen, screenGeom);
 
-    screenGeom = screen->geometry();
     aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
     aspectRatio = qBound(0.5, aspectRatio, 4.0);
@@ -221,71 +225,92 @@ void OverlayService::hideLayoutOsd()
 
 void OverlayService::warmUpLayoutOsd()
 {
-    const auto screens = QGuiApplication::screens();
-    for (QScreen* screen : screens) {
-        if (!m_layoutOsdWindows.contains(screen)) {
-            createLayoutOsdWindow(screen);
-        }
-    }
-    qCInfo(lcOverlay) << "Pre-warmed Layout OSD windows for" << screens.size() << "screens";
+    auto* mgr = ScreenManager::instance();
+    const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
 
-    // Also warm up screens added later (hot-plug) so the first OSD on a
-    // newly connected screen doesn't incur the ~100-300ms QML compilation delay.
-    // Note: Qt::UniqueConnection cannot be used with lambdas (causes ASSERT crash in Qt6).
-    // Use a bool guard instead to prevent duplicate connections.
+    if (!effectiveIds.isEmpty()) {
+        // Virtual-screen-aware warm-up: create OSD for each effective screen
+        for (const QString& sid : effectiveIds) {
+            if (!m_layoutOsdWindows.contains(sid)) {
+                QScreen* physScreen = mgr->physicalQScreenFor(sid);
+                QRect geom = mgr->screenGeometry(sid);
+                if (physScreen && geom.isValid()) {
+                    createLayoutOsdWindow(sid, physScreen, geom);
+                }
+            }
+        }
+        qCInfo(lcOverlay) << "Pre-warmed Layout OSD windows for" << effectiveIds.size() << "effective screens";
+    } else {
+        // Fallback: no ScreenManager or no effective IDs, warm up for physical screens
+        const auto screens = QGuiApplication::screens();
+        for (QScreen* screen : screens) {
+            QString sid = Utils::screenIdentifier(screen);
+            if (!m_layoutOsdWindows.contains(sid)) {
+                createLayoutOsdWindow(sid, screen, screen->geometry());
+            }
+        }
+        qCInfo(lcOverlay) << "Pre-warmed Layout OSD windows for" << QGuiApplication::screens().size() << "screens";
+    }
+
+    // Also warm up screens added later (hot-plug)
     if (!m_screenAddedConnected) {
         connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
-            if (!m_layoutOsdWindows.contains(screen)) {
-                createLayoutOsdWindow(screen);
+            QString sid = Utils::screenIdentifier(screen);
+            if (!m_layoutOsdWindows.contains(sid)) {
+                createLayoutOsdWindow(sid, screen, screen->geometry());
             }
         });
         m_screenAddedConnected = true;
     }
 }
 
-void OverlayService::createLayoutOsdWindow(QScreen* screen)
+void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* physScreen, const QRect& screenGeom)
 {
-    if (m_layoutOsdWindows.contains(screen)) {
+    Q_UNUSED(screenGeom)
+    if (m_layoutOsdWindows.contains(screenId)) {
         return;
     }
 
-    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/LayoutOsd.qml")), screen, "layout OSD");
+    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/LayoutOsd.qml")), physScreen, "layout OSD");
     if (!window) {
         return;
     }
 
     // Configure LayerShellQt for Wayland overlay (prevents window from appearing in taskbar)
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        layerWindow->setScreen(screen);
+        layerWindow->setScreen(physScreen);
         layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
         // Anchors will be set dynamically in showLayoutOsd() based on window size
-        layerWindow->setScope(QStringLiteral("plasmazones-layout-osd-%1").arg(screen->name()));
+        // Use screenId in scope to make it unique per virtual screen
+        layerWindow->setScope(QStringLiteral("plasmazones-layout-osd-%1").arg(screenId));
         layerWindow->setExclusiveZone(-1);
     }
 
     auto layoutOsdConn = connect(window, SIGNAL(dismissed()), this, SLOT(hideLayoutOsd()));
     if (!layoutOsdConn) {
-        qCWarning(lcOverlay) << "Failed to connect dismissed signal for layout OSD on screen" << screen->name();
+        qCWarning(lcOverlay) << "Failed to connect dismissed signal for layout OSD on screen" << screenId;
     }
     window->setVisible(false);
-    m_layoutOsdWindows.insert(screen, window);
+    m_layoutOsdWindows.insert(screenId, window);
+    m_layoutOsdPhysScreens.insert(screenId, physScreen);
 }
 
-void OverlayService::destroyLayoutOsdWindow(QScreen* screen)
+void OverlayService::destroyLayoutOsdWindow(const QString& screenId)
 {
-    if (auto* window = m_layoutOsdWindows.take(screen)) {
+    if (auto* window = m_layoutOsdWindows.take(screenId)) {
         window->close();
         window->deleteLater();
     }
+    m_layoutOsdPhysScreens.remove(screenId);
 }
 
 void OverlayService::showNavigationOsd(bool success, const QString& action, const QString& reason,
                                        const QString& sourceZoneId, const QString& targetZoneId,
                                        const QString& screenId)
 {
-    qCDebug(lcOverlay) << "showNavigationOsd called: action=" << action << "reason=" << reason
-                       << "screen=" << screenId << "success=" << success;
+    qCDebug(lcOverlay) << "showNavigationOsd called: action=" << action << "reason=" << reason << "screen=" << screenId
+                       << "success=" << success;
 
     // Only show OSD for successful actions - failures (no windows, no zones, etc.) don't need feedback
     if (!success) {
@@ -304,16 +329,25 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     m_lastNavigationReason = reason;
     m_lastNavigationTime.restart();
 
-    // Show on the screen where the navigation occurred, fallback to primary
-    // Accepts both connector name and EDID-based screen ID for flexibility
-    QScreen* screen = Utils::findScreenByIdOrName(screenId);
-    if (!screen) {
-        screen = Utils::primaryScreen();
+    // Resolve target screen via ScreenManager for virtual screen support
+    auto* mgr = ScreenManager::instance();
+    QScreen* physScreen = mgr ? mgr->physicalQScreenFor(screenId) : nullptr;
+    if (!physScreen && !screenId.isEmpty()) {
+        physScreen = Utils::findScreenByIdOrName(screenId);
     }
-    if (!screen) {
+    if (!physScreen) {
+        physScreen = Utils::primaryScreen();
+    }
+    if (!physScreen) {
         qCWarning(lcOverlay) << "No screen available for navigation OSD";
         return;
     }
+
+    // Use virtual screen geometry if applicable, otherwise physical
+    QRect vsGeom = (mgr && !screenId.isEmpty()) ? mgr->screenGeometry(screenId) : QRect();
+    const QRect navScreenGeom = vsGeom.isValid() ? vsGeom : physScreen->geometry();
+
+    QString effectiveId = screenId.isEmpty() ? Utils::screenIdentifier(physScreen) : screenId;
 
     // Resolve per-screen layout (not the global m_layout which may belong to another screen)
     // Float, algorithm, rotate, and autotile-only actions don't need layout/zones
@@ -322,30 +356,30 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
                                              QStringLiteral("swap_master"),  QStringLiteral("master_ratio"),
                                              QStringLiteral("master_count"), QStringLiteral("retile")};
     const bool needsLayout = !noLayoutActions.contains(action);
-    Layout* screenLayout = resolveScreenLayout(screen);
+    Layout* screenLayout = resolveScreenLayout(effectiveId);
     if ((needsLayout && !screenLayout) || (screenLayout && screenLayout->zones().isEmpty() && needsLayout)) {
-        qCDebug(lcOverlay) << "No layout or zones for navigation OSD: screen=" << screen->name()
+        qCDebug(lcOverlay) << "No layout or zones for navigation OSD: screen=" << effectiveId
                            << "layout=" << (screenLayout ? screenLayout->name() : QStringLiteral("null"))
                            << "zones=" << (screenLayout ? screenLayout->zones().size() : 0) << "action=" << action;
         return;
     }
 
     // Create window if needed
-    if (!m_navigationOsdWindows.contains(screen)) {
+    if (!m_navigationOsdWindows.contains(effectiveId)) {
         // Only try to create if we haven't failed before (prevents log spam)
-        if (!m_navigationOsdCreationFailed.value(screen, false)) {
-            createNavigationOsdWindow(screen);
+        if (!m_navigationOsdCreationFailed.value(effectiveId, false)) {
+            createNavigationOsdWindow(effectiveId, physScreen, navScreenGeom);
         }
     }
 
-    auto* window = m_navigationOsdWindows.value(screen);
+    auto* window = m_navigationOsdWindows.value(effectiveId);
     if (!window) {
         // Only warn once per screen to prevent log spam
-        if (!m_navigationOsdCreationFailed.value(screen, false)) {
-            qCWarning(lcOverlay) << "Failed to get navigation OSD window for screen=" << screen->name();
-            m_navigationOsdCreationFailed.insert(screen, true);
+        if (!m_navigationOsdCreationFailed.value(effectiveId, false)) {
+            qCWarning(lcOverlay) << "Failed to get navigation OSD window for screen=" << effectiveId;
+            m_navigationOsdCreationFailed.insert(effectiveId, true);
         }
-        qCDebug(lcOverlay) << "No navigation OSD window for screen=" << screen->name();
+        qCDebug(lcOverlay) << "No navigation OSD window for screen=" << effectiveId;
         return;
     }
 
@@ -392,13 +426,13 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // Hide any existing navigation OSD before showing new one (prevent overlap)
     hideNavigationOsd();
 
-    // Ensure the window is on the correct Wayland output (must come before sizing —
+    // Ensure the window is on the correct Wayland output (must come before sizing --
     // assertWindowOnScreen calls setGeometry(screen) which would override setWidth/setHeight)
-    assertWindowOnScreen(window, screen);
+    assertWindowOnScreen(window, physScreen, navScreenGeom);
 
     // Size and center: setWidth/setHeight AFTER assertWindowOnScreen so the final
     // QWindow geometry matches the OSD size (same pattern as sizeAndCenterOsd for LayoutOsd)
-    const QRect screenGeom = screen->geometry();
+    const QRect screenGeom = navScreenGeom;
     const int osdWidth = 240; // Compact width for text
     const int osdHeight = 70; // Text message + margins
     window->setWidth(osdWidth);
@@ -421,44 +455,47 @@ void OverlayService::hideNavigationOsd()
     }
 }
 
-void OverlayService::createNavigationOsdWindow(QScreen* screen)
+void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen* physScreen, const QRect& screenGeom)
 {
-    if (m_navigationOsdWindows.contains(screen)) {
+    Q_UNUSED(screenGeom)
+    if (m_navigationOsdWindows.contains(screenId)) {
         return;
     }
 
-    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/NavigationOsd.qml")), screen, "navigation OSD");
+    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/NavigationOsd.qml")), physScreen, "navigation OSD");
     if (!window) {
-        m_navigationOsdCreationFailed.insert(screen, true);
+        m_navigationOsdCreationFailed.insert(screenId, true);
         return;
     }
 
     // Configure LayerShellQt for Wayland overlay
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        layerWindow->setScreen(screen);
+        layerWindow->setScreen(physScreen);
         layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-        layerWindow->setScope(QStringLiteral("plasmazones-navigation-osd-%1").arg(screen->name()));
+        layerWindow->setScope(QStringLiteral("plasmazones-navigation-osd-%1").arg(screenId));
         layerWindow->setExclusiveZone(-1);
     }
 
     auto navOsdConn = connect(window, SIGNAL(dismissed()), this, SLOT(hideNavigationOsd()));
     if (!navOsdConn) {
-        qCWarning(lcOverlay) << "Failed to connect dismissed signal for navigation OSD on screen" << screen->name();
+        qCWarning(lcOverlay) << "Failed to connect dismissed signal for navigation OSD on screen" << screenId;
     }
     window->setVisible(false);
-    m_navigationOsdWindows.insert(screen, window);
-    m_navigationOsdCreationFailed.remove(screen);
+    m_navigationOsdWindows.insert(screenId, window);
+    m_navigationOsdPhysScreens.insert(screenId, physScreen);
+    m_navigationOsdCreationFailed.remove(screenId);
 }
 
-void OverlayService::destroyNavigationOsdWindow(QScreen* screen)
+void OverlayService::destroyNavigationOsdWindow(const QString& screenId)
 {
-    if (auto* window = m_navigationOsdWindows.take(screen)) {
+    if (auto* window = m_navigationOsdWindows.take(screenId)) {
         window->close();
         window->deleteLater();
     }
+    m_navigationOsdPhysScreens.remove(screenId);
     // Clear failed flag when destroying window
-    m_navigationOsdCreationFailed.remove(screen);
+    m_navigationOsdCreationFailed.remove(screenId);
 }
 
 } // namespace PlasmaZones

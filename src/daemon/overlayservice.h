@@ -102,7 +102,7 @@ public:
 
     // Zone selector management (IOverlayService interface)
     bool isZoneSelectorVisible() const override;
-    void showZoneSelector(QScreen* screen = nullptr) override;
+    void showZoneSelector(const QString& targetScreenId = QString()) override;
     void hideZoneSelector() override;
     void updateSelectorPosition(int cursorX, int cursorY) override;
     void scrollZoneSelector(int angleDeltaY) override;
@@ -225,7 +225,8 @@ private:
     QHash<QString, QQuickWindow*> m_overlayWindows; // Keyed by screen ID (physical or virtual)
     QHash<QString, QScreen*> m_overlayPhysScreens; // screenId -> backing QScreen* (for layer-shell)
     QHash<QString, QRect> m_overlayGeometries; // screenId -> overlay geometry (virtual or physical)
-    QHash<QScreen*, QQuickWindow*> m_zoneSelectorWindows;
+    QHash<QString, QQuickWindow*> m_zoneSelectorWindows; // Keyed by screen ID (physical or virtual)
+    QHash<QString, QScreen*> m_zoneSelectorPhysScreens; // screenId -> backing QScreen*
     QPointer<Layout> m_layout;
     QPointer<ISettings> m_settings;
     ILayoutManager* m_layoutManager = nullptr;
@@ -240,11 +241,13 @@ private:
     int m_selectedZoneIndex = -1;
     QRectF m_selectedZoneRelGeo;
 
-    // Layout OSD windows
-    QHash<QScreen*, QQuickWindow*> m_layoutOsdWindows;
+    // Layout OSD windows (keyed by screen ID -- physical or virtual)
+    QHash<QString, QQuickWindow*> m_layoutOsdWindows;
+    QHash<QString, QScreen*> m_layoutOsdPhysScreens;
 
-    // Navigation OSD windows
-    QHash<QScreen*, QQuickWindow*> m_navigationOsdWindows;
+    // Navigation OSD windows (keyed by screen ID -- physical or virtual)
+    QHash<QString, QQuickWindow*> m_navigationOsdWindows;
+    QHash<QString, QScreen*> m_navigationOsdPhysScreens;
 
     // Shader preview overlay (editor dialog)
     QQuickWindow* m_shaderPreviewWindow = nullptr;
@@ -254,37 +257,40 @@ private:
     // Snap Assist overlay (window picker after snapping)
     QQuickWindow* m_snapAssistWindow = nullptr;
     QScreen* m_snapAssistScreen = nullptr;
+    QString m_snapAssistScreenId;
     std::unique_ptr<WindowThumbnailService> m_thumbnailService;
     QVariantList m_snapAssistCandidates; // Mutable copy for async thumbnail updates
     QStringList m_thumbnailCaptureQueue; // Sequential capture to avoid overwhelming KWin
     QHash<QString, QString> m_thumbnailCache; // kwinHandle -> dataUrl; reused across continuation
     // Layout Picker overlay (interactive layout browser)
     QQuickWindow* m_layoutPickerWindow = nullptr;
+    QScreen* m_layoutPickerScreen = nullptr;
+    QString m_layoutPickerScreenId;
 
     bool m_screenAddedConnected = false; // Guard for screenAdded connection (lambdas can't use UniqueConnection)
 
     // Track screens with failed window creation to prevent log spam
-    QHash<QScreen*, bool> m_navigationOsdCreationFailed;
+    QHash<QString, bool> m_navigationOsdCreationFailed;
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
     QString m_lastNavigationAction;
     QString m_lastNavigationReason;
     QElapsedTimer m_lastNavigationTime;
 
-    void createZoneSelectorWindow(QScreen* screen);
-    void destroyZoneSelectorWindow(QScreen* screen);
-    void updateZoneSelectorWindow(QScreen* screen);
-    void createLayoutOsdWindow(QScreen* screen);
-    void destroyLayoutOsdWindow(QScreen* screen);
-    void createNavigationOsdWindow(QScreen* screen);
-    void destroyNavigationOsdWindow(QScreen* screen);
+    void createZoneSelectorWindow(const QString& screenId, QScreen* physScreen, const QRect& geom);
+    void destroyZoneSelectorWindow(const QString& screenId);
+    void updateZoneSelectorWindow(const QString& screenId);
+    void createLayoutOsdWindow(const QString& screenId, QScreen* physScreen, const QRect& screenGeom);
+    void destroyLayoutOsdWindow(const QString& screenId);
+    void createNavigationOsdWindow(const QString& screenId, QScreen* physScreen, const QRect& screenGeom);
+    void destroyNavigationOsdWindow(const QString& screenId);
 
     void createShaderPreviewWindow(QScreen* screen);
     void destroyShaderPreviewWindow();
 
-    void createSnapAssistWindow();
+    void createSnapAssistWindow(const QString& screenId, QScreen* physScreen, const QRect& geom);
     void destroySnapAssistWindow();
 
-    void createLayoutPickerWindow(QScreen* screen);
+    void createLayoutPickerWindow(const QString& screenId, QScreen* physScreen, const QRect& geom);
     void destroyLayoutPickerWindow();
 
     /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML. */

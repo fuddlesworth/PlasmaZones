@@ -51,9 +51,7 @@ void Daemon::initializeAutotile()
                 QString screenId =
                     m_unifiedLayoutController ? m_unifiedLayoutController->currentScreenName() : QString();
                 if (screenId.isEmpty() && m_windowTrackingAdaptor) {
-                    if (QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor)) {
-                        screenId = Utils::screenIdentifier(screen);
-                    }
+                    screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
                 }
                 showAlgorithmOsdDeferred(algorithmId, displayName, screenId);
             }
@@ -190,11 +188,10 @@ void Daemon::initializeAutotile()
             }
 
             // Resolve focused screen
-            QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-            if (!screen) {
+            const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+            if (screenId.isEmpty()) {
                 return;
             }
-            QString screenId = Utils::screenIdentifier(screen);
             int desktop = currentDesktop();
             QString activity = currentActivity();
 
@@ -565,20 +562,20 @@ void Daemon::connectOverlaySignals()
         });
 
     // Connect navigation feedback signal to show OSD (manual mode: from WindowTrackingAdaptor via KWin effect)
-    connect(
-        m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
-        [this](bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
-               const QString& targetZoneId, const QString& screenId) {
-            // Suppress resnap OSD when triggered by a mode/layout change
-            // (layout switch OSD already provides feedback)
-            if (m_suppressResnapOsd > 0 && (action == QStringLiteral("resnap") || action == QStringLiteral("retile"))) {
-                m_suppressResnapOsd = std::max(0, m_suppressResnapOsd - 1);
-                return;
-            }
-            if (m_settings && m_settings->showNavigationOsd()) {
-                m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenId);
-            }
-        });
+    connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
+            [this](bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
+                   const QString& targetZoneId, const QString& screenId) {
+                // Suppress resnap OSD when triggered by a mode/layout change
+                // (layout switch OSD already provides feedback)
+                if (m_suppressResnapOsd > 0
+                    && (action == QStringLiteral("resnap") || action == QStringLiteral("retile"))) {
+                    m_suppressResnapOsd = std::max(0, m_suppressResnapOsd - 1);
+                    return;
+                }
+                if (m_settings && m_settings->showNavigationOsd()) {
+                    m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenId);
+                }
+            });
 
     // Note: AutotileEngine::navigationFeedbackRequested is relayed through
     // WindowTrackingAdaptor::navigationFeedback via setEngines(), so both engines

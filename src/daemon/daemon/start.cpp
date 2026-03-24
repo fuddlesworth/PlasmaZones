@@ -240,12 +240,18 @@ void Daemon::connectShortcutSignals()
         }
     });
     connect(m_shortcutManager.get(), &ShortcutManager::openEditorRequested, this, [this]() {
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen && m_unifiedLayoutController && !m_unifiedLayoutController->currentScreenName().isEmpty()) {
-            screen = Utils::findScreenByIdOrName(m_unifiedLayoutController->currentScreenName());
+        QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+        if (screenId.isEmpty() && m_unifiedLayoutController) {
+            screenId = m_unifiedLayoutController->currentScreenName();
         }
-        if (screen) {
-            m_layoutAdaptor->openEditorForScreen(screen->name());
+        if (!screenId.isEmpty()) {
+            // openEditorForScreen expects the connector name, resolve from screen ID
+            QScreen* screen = Utils::findScreenByIdOrName(screenId);
+            if (screen) {
+                m_layoutAdaptor->openEditorForScreen(screen->name());
+            } else {
+                m_layoutAdaptor->openEditor();
+            }
         } else {
             m_layoutAdaptor->openEditor();
         }
@@ -255,19 +261,17 @@ void Daemon::connectShortcutSignals()
         if (!m_unifiedLayoutController) {
             return;
         }
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (screen) {
-            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
-        } else {
+        const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+        if (screenId.isEmpty()) {
             qCDebug(lcDaemon) << "QuickLayout shortcut: no screen info";
             return;
         }
+        m_unifiedLayoutController->setCurrentScreenName(screenId);
         // Check if screen is locked for its current mode
         if (m_layoutManager) {
-            int mode = static_cast<int>(
-                m_layoutManager->modeForScreen(Utils::screenIdentifier(screen), currentDesktop(), currentActivity()));
-            if (isCurrentContextLockedForMode(Utils::screenIdentifier(screen), mode)) {
-                showLockedPreviewOsd(Utils::screenIdentifier(screen));
+            int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity()));
+            if (isCurrentContextLockedForMode(screenId, mode)) {
+                showLockedPreviewOsd(screenId);
                 return;
             }
         }
@@ -282,23 +286,21 @@ void Daemon::connectShortcutSignals()
         if (!m_unifiedLayoutController) {
             return;
         }
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (screen) {
-            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
-        } else {
+        const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+        if (screenId.isEmpty()) {
             qCDebug(lcDaemon) << "PreviousLayout shortcut: no screen info";
             return;
         }
+        m_unifiedLayoutController->setCurrentScreenName(screenId);
         // Check if screen is locked for its current mode
         if (m_layoutManager) {
-            int mode = static_cast<int>(
-                m_layoutManager->modeForScreen(Utils::screenIdentifier(screen), currentDesktop(), currentActivity()));
-            if (isCurrentContextLockedForMode(Utils::screenIdentifier(screen), mode)) {
-                showLockedPreviewOsd(Utils::screenIdentifier(screen));
+            int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity()));
+            if (isCurrentContextLockedForMode(screenId, mode)) {
+                showLockedPreviewOsd(screenId);
                 return;
             }
         }
-        updateLayoutFilterForScreen(Utils::screenIdentifier(screen));
+        updateLayoutFilterForScreen(screenId);
         m_unifiedLayoutController->cyclePrevious();
         resnapIfManualMode();
     });
@@ -306,23 +308,21 @@ void Daemon::connectShortcutSignals()
         if (!m_unifiedLayoutController) {
             return;
         }
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (screen) {
-            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
-        } else {
+        const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+        if (screenId.isEmpty()) {
             qCDebug(lcDaemon) << "NextLayout shortcut: no screen info";
             return;
         }
+        m_unifiedLayoutController->setCurrentScreenName(screenId);
         // Check if screen is locked for its current mode
         if (m_layoutManager) {
-            int mode = static_cast<int>(
-                m_layoutManager->modeForScreen(Utils::screenIdentifier(screen), currentDesktop(), currentActivity()));
-            if (isCurrentContextLockedForMode(Utils::screenIdentifier(screen), mode)) {
-                showLockedPreviewOsd(Utils::screenIdentifier(screen));
+            int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity()));
+            if (isCurrentContextLockedForMode(screenId, mode)) {
+                showLockedPreviewOsd(screenId);
                 return;
             }
         }
-        updateLayoutFilterForScreen(Utils::screenIdentifier(screen));
+        updateLayoutFilterForScreen(screenId);
         m_unifiedLayoutController->cycleNext();
         resnapIfManualMode();
     });
@@ -372,12 +372,11 @@ void Daemon::connectShortcutSignals()
         if (!m_unifiedLayoutController) {
             return;
         }
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen) {
+        const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+        if (screenId.isEmpty()) {
             qCDebug(lcDaemon) << "LayoutPicker shortcut: no screen info";
             return;
         }
-        const QString screenId = Utils::screenIdentifier(screen);
         m_unifiedLayoutController->setCurrentScreenName(screenId);
         updateLayoutFilterForScreen(screenId);
         m_overlayService->showLayoutPicker(screenId);
@@ -404,11 +403,10 @@ void Daemon::connectShortcutSignals()
 
     // Toggle layout lock shortcut — locks/unlocks current screen at screen-level for current mode
     connect(m_shortcutManager.get(), &ShortcutManager::toggleLayoutLockRequested, this, [this]() {
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen || !m_settings || !m_layoutManager) {
+        const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+        if (screenId.isEmpty() || !m_settings || !m_layoutManager) {
             return;
         }
-        QString screenId = Utils::screenIdentifier(screen);
         int desktop = currentDesktop();
         QString activity = currentActivity();
         int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, desktop, activity));
@@ -436,7 +434,7 @@ void Daemon::connectShortcutSignals()
                 showLayoutOsd(layout, screenId);
             }
         } else {
-            showLockedPreviewOsd(Utils::screenIdentifier(screen));
+            showLockedPreviewOsd(screenId);
         }
         qCInfo(lcDaemon) << "Toggle layout lock:" << (wasLocked ? "unlocked" : "locked") << "screen=" << screenId
                          << "mode=" << mode;

@@ -148,8 +148,7 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
     showLockedOsd(screenId);
 }
 
-void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName,
-                                       const QString& screenId)
+void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)
 {
     auto* algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
     if (!algo) {
@@ -209,8 +208,7 @@ void Daemon::showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenI
     });
 }
 
-void Daemon::showAlgorithmOsdDeferred(const QString& algorithmId, const QString& algorithmName,
-                                      const QString& screenId)
+void Daemon::showAlgorithmOsdDeferred(const QString& algorithmId, const QString& algorithmName, const QString& screenId)
 {
     QTimer::singleShot(0, this, [this, algorithmId, algorithmName, screenId]() {
         showLayoutOsdForAlgorithm(algorithmId, algorithmName, screenId);
@@ -293,12 +291,12 @@ void Daemon::syncModeFromAssignments()
     // Sync UnifiedLayoutController's current layout ID to match this desktop.
     // Without this, layout cycling uses the old desktop's current index.
     if (m_unifiedLayoutController) {
-        QScreen* focusedScreen = m_windowTrackingAdaptor ? resolveShortcutScreen(m_windowTrackingAdaptor) : nullptr;
-        if (!focusedScreen && !m_screenManager->screens().isEmpty()) {
-            focusedScreen = m_screenManager->screens().first();
+        QString focusedScreenId =
+            m_windowTrackingAdaptor ? resolveShortcutScreenId(m_windowTrackingAdaptor) : QString();
+        if (focusedScreenId.isEmpty() && !m_screenManager->screens().isEmpty()) {
+            focusedScreenId = Utils::screenIdentifier(m_screenManager->screens().first());
         }
-        if (focusedScreen) {
-            const QString focusedScreenId = Utils::screenIdentifier(focusedScreen);
+        if (!focusedScreenId.isEmpty()) {
             const QString focusedAssignmentId =
                 m_layoutManager->assignmentIdForScreen(focusedScreenId, desktop, activity);
             m_unifiedLayoutController->setCurrentScreenName(focusedScreenId);
@@ -326,8 +324,8 @@ void Daemon::syncModeFromAssignments()
         }
 
         // Update ModeTracker context to reflect this desktop
-        if (m_modeTracker && focusedScreen) {
-            m_modeTracker->setContext(Utils::screenIdentifier(focusedScreen), desktop, activity);
+        if (m_modeTracker && !focusedScreenId.isEmpty()) {
+            m_modeTracker->setContext(focusedScreenId, desktop, activity);
         }
     }
 

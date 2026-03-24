@@ -161,19 +161,26 @@ void applyZoneSelectorGeometry(QQuickWindow* window, QScreen* screen, const Zone
 
 } // namespace
 
-void OverlayService::updateZoneSelectorWindow(QScreen* screen)
+void OverlayService::updateZoneSelectorWindow(const QString& screenId)
 {
-    if (!screen) {
+    if (screenId.isEmpty()) {
         return;
     }
 
-    auto* window = m_zoneSelectorWindows.value(screen);
+    auto* window = m_zoneSelectorWindows.value(screenId);
     if (!window) {
         return;
     }
 
+    QScreen* screen = m_zoneSelectorPhysScreens.value(screenId);
+    if (!screen) {
+        return;
+    }
+
     // Update screen properties (in case screen geometry changed)
-    const QRect screenGeom = screen->geometry();
+    auto* mgr = ScreenManager::instance();
+    QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
+    const QRect screenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);

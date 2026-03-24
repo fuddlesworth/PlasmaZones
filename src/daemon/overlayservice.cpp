@@ -85,6 +85,28 @@ OverlayService::OverlayService(QObject* parent)
                 destroyOverlayWindow(id);
             }
 
+            // Remove existing layout OSD windows for this physical screen
+            QStringList layoutOsdToRemove;
+            for (auto it = m_layoutOsdPhysScreens.constBegin(); it != m_layoutOsdPhysScreens.constEnd(); ++it) {
+                if (it.value() == physScreen) {
+                    layoutOsdToRemove.append(it.key());
+                }
+            }
+            for (const QString& id : layoutOsdToRemove) {
+                destroyLayoutOsdWindow(id);
+            }
+
+            // Remove existing navigation OSD windows for this physical screen
+            QStringList navOsdToRemove;
+            for (auto it = m_navigationOsdPhysScreens.constBegin(); it != m_navigationOsdPhysScreens.constEnd(); ++it) {
+                if (it.value() == physScreen) {
+                    navOsdToRemove.append(it.key());
+                }
+            }
+            for (const QString& id : navOsdToRemove) {
+                destroyNavigationOsdWindow(id);
+            }
+
             // Recreate with new virtual screen config if visible
             if (isVisible()) {
                 auto* mgr2 = ScreenManager::instance();
@@ -306,9 +328,9 @@ void OverlayService::updateSettings(ISettings* settings)
                 }
             }
         }
-        for (auto* screen : m_zoneSelectorWindows.keys()) {
-            if (m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
-                if (auto* window = m_zoneSelectorWindows.value(screen)) {
+        for (const QString& selectorScreenId : m_zoneSelectorWindows.keys()) {
+            if (m_settings->isMonitorDisabled(selectorScreenId)) {
+                if (auto* window = m_zoneSelectorWindows.value(selectorScreenId)) {
                     window->hide();
                 }
             }
@@ -332,11 +354,11 @@ void OverlayService::updateSettings(ISettings* settings)
     // and anchors, causing corrupted rendering or incorrect window sizing.
     // Skip disabled monitors.
     if (!m_zoneSelectorWindows.isEmpty()) {
-        for (auto* screen : m_zoneSelectorWindows.keys()) {
-            if (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
+        for (const QString& selectorScreenId : m_zoneSelectorWindows.keys()) {
+            if (m_settings && m_settings->isMonitorDisabled(selectorScreenId)) {
                 continue;
             }
-            updateZoneSelectorWindow(screen);
+            updateZoneSelectorWindow(selectorScreenId);
         }
     }
 
@@ -394,8 +416,8 @@ void OverlayService::setCurrentVirtualDesktop(int desktop)
 
         // Update zone selector windows with the new active layout for this desktop
         if (!m_zoneSelectorWindows.isEmpty()) {
-            for (auto* screen : m_zoneSelectorWindows.keys()) {
-                updateZoneSelectorWindow(screen);
+            for (const QString& selectorScreenId : m_zoneSelectorWindows.keys()) {
+                updateZoneSelectorWindow(selectorScreenId);
             }
         }
         // Also refresh overlay windows when visible (symmetry with activity; overlay shows per-desktop layout)
@@ -418,8 +440,8 @@ void OverlayService::setCurrentActivity(const QString& activityId)
 
         // Update zone selector windows with the new active layout for this activity
         if (!m_zoneSelectorWindows.isEmpty()) {
-            for (auto* screen : m_zoneSelectorWindows.keys()) {
-                updateZoneSelectorWindow(screen);
+            for (const QString& selectorScreenId : m_zoneSelectorWindows.keys()) {
+                updateZoneSelectorWindow(selectorScreenId);
             }
         }
         // Also refresh overlay windows when visible (symmetry with desktop; overlay shows per-activity layout)
@@ -504,11 +526,29 @@ void OverlayService::handleScreenRemoved(QScreen* screen)
             destroyOverlayWindow(screenId);
         }
     }
-    destroyZoneSelectorWindow(screen);
-    destroyLayoutOsdWindow(screen);
-    destroyNavigationOsdWindow(screen);
-    // Clean up failed creation tracking
-    m_navigationOsdCreationFailed.remove(screen);
+    // Remove zone selector windows for this physical screen
+    const QStringList selectorIds = m_zoneSelectorWindows.keys();
+    for (const QString& id : selectorIds) {
+        if (m_zoneSelectorPhysScreens.value(id) == screen) {
+            destroyZoneSelectorWindow(id);
+        }
+    }
+
+    // Remove layout OSD windows for this physical screen
+    const QStringList layoutOsdIds = m_layoutOsdWindows.keys();
+    for (const QString& id : layoutOsdIds) {
+        if (m_layoutOsdPhysScreens.value(id) == screen) {
+            destroyLayoutOsdWindow(id);
+        }
+    }
+
+    // Remove navigation OSD windows for this physical screen
+    const QStringList navOsdIds = m_navigationOsdWindows.keys();
+    for (const QString& id : navOsdIds) {
+        if (m_navigationOsdPhysScreens.value(id) == screen) {
+            destroyNavigationOsdWindow(id);
+        }
+    }
 }
 
 QVariantList OverlayService::buildLayoutsList(const QString& screenId) const

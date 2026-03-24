@@ -248,7 +248,13 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
         // Show zone selector on the cursor's screen only
         m_zoneSelectorShown = true;
         // Call directly - QDBusAbstractAdaptor signals don't work for internal Qt connections
-        m_overlayService->showZoneSelector(screen);
+        // Pass screen ID string (supports virtual screen IDs like "physicalId/vs:N")
+        auto* smgr = ScreenManager::instance();
+        QString zoneScreenId = smgr ? smgr->effectiveScreenAt(QPoint(cursorX, cursorY)) : QString();
+        if (zoneScreenId.isEmpty()) {
+            zoneScreenId = Utils::screenIdentifier(screen);
+        }
+        m_overlayService->showZoneSelector(zoneScreenId);
     } else if (!nearEdge && m_zoneSelectorShown) {
         // Hide zone selector when cursor moves away from edge
         m_zoneSelectorShown = false;

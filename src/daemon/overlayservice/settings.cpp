@@ -35,8 +35,8 @@ void OverlayService::setSettings(ISettings* settings)
         // Connect to new settings signals
         if (m_settings) {
             auto refreshZoneSelectors = [this]() {
-                for (QScreen* screen : m_zoneSelectorWindows.keys()) {
-                    updateZoneSelectorWindow(screen);
+                for (const QString& sid : m_zoneSelectorWindows.keys()) {
+                    updateZoneSelectorWindow(sid);
                 }
             };
             connect(m_settings, &ISettings::settingsChanged, this, refreshZoneSelectors);
@@ -162,8 +162,8 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
 void OverlayService::refreshVisibleWindows()
 {
     if (m_zoneSelectorVisible) {
-        for (QScreen* screen : m_zoneSelectorWindows.keys()) {
-            updateZoneSelectorWindow(screen);
+        for (const QString& sid : m_zoneSelectorWindows.keys()) {
+            updateZoneSelectorWindow(sid);
         }
     }
     if (m_visible) {
