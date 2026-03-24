@@ -356,8 +356,8 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(c
         QRectF geoF;
         if (vsGeom.isValid()) {
             QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
-            geoF =
-                GeometryUtils::getZoneGeometryWithGaps(targetZone, vsGeom, availGeom, zonePadding, outerGaps, useAvail);
+            geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, vsGeom, availGeom, zonePadding, outerGaps,
+                                                          useAvail, screenId);
         } else {
             geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
         }
@@ -406,8 +406,8 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(c
         QRectF geoF;
         if (vsGeom.isValid()) {
             QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
-            geoF =
-                GeometryUtils::getZoneGeometryWithGaps(targetZone, vsGeom, availGeom, zonePadding, outerGaps, useAvail);
+            geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, vsGeom, availGeom, zonePadding, outerGaps,
+                                                          useAvail, screenId);
         } else {
             geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
         }
@@ -549,8 +549,8 @@ QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStr
         QRectF geoF;
         if (vsGeom.isValid()) {
             QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
-            geoF =
-                GeometryUtils::getZoneGeometryWithGaps(targetZone, vsGeom, availGeom, zonePadding, outerGaps, useAvail);
+            geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, vsGeom, availGeom, zonePadding, outerGaps,
+                                                          useAvail, screenId);
         } else {
             geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
         }

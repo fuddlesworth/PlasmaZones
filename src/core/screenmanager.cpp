@@ -570,6 +570,29 @@ bool ScreenManager::hasVirtualScreens(const QString& physicalScreenId) const
     return m_virtualConfigs.contains(physicalScreenId) && m_virtualConfigs.value(physicalScreenId).hasSubdivisions();
 }
 
+VirtualScreenDef::PhysicalEdges ScreenManager::physicalEdgesFor(const QString& screenId) const
+{
+    // Physical screens: all edges are at the physical boundary
+    if (!VirtualScreenId::isVirtual(screenId)) {
+        return {true, true, true, true};
+    }
+
+    QString physId = VirtualScreenId::extractPhysicalId(screenId);
+    int vsIndex = VirtualScreenId::extractIndex(screenId);
+    if (!m_virtualConfigs.contains(physId)) {
+        return {true, true, true, true};
+    }
+
+    const auto& config = m_virtualConfigs.value(physId);
+    for (const auto& vs : config.screens) {
+        if (vs.index == vsIndex) {
+            return vs.physicalEdges();
+        }
+    }
+
+    return {true, true, true, true};
+}
+
 QString ScreenManager::virtualScreenAt(const QPoint& globalPos, const QString& physicalScreenId) const
 {
     if (!m_virtualConfigs.contains(physicalScreenId)) {

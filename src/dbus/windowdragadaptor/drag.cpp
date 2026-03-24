@@ -101,7 +101,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
                     if (vsGeom.isValid()) {
                         QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
                         zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding,
-                                                                          outerGaps, useAvail);
+                                                                          outerGaps, useAvail, screenId);
                     } else {
                         zoneGeom =
                             GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
@@ -358,7 +358,7 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             if (vsGeom.isValid()) {
                 QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
                 geom = GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, vsGeom, availGeom, zonePadding,
-                                                              outerGaps, useAvail);
+                                                              outerGaps, useAvail, screenId);
             } else {
                 geom = GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, screen, zonePadding, outerGaps,
                                                               useAvail);

@@ -155,11 +155,11 @@ QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<Zone*>& zone
     QRectF combined;
     if (vsGeom.isValid()) {
         QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
-        combined =
-            GeometryUtils::getZoneGeometryWithGaps(zones.first(), vsGeom, availGeom, zonePadding, outerGaps, useAvail);
+        combined = GeometryUtils::getZoneGeometryWithGaps(zones.first(), vsGeom, availGeom, zonePadding, outerGaps,
+                                                          useAvail, screenId);
         for (int i = 1; i < zones.size(); ++i) {
-            combined = combined.united(
-                GeometryUtils::getZoneGeometryWithGaps(zones[i], vsGeom, availGeom, zonePadding, outerGaps, useAvail));
+            combined = combined.united(GeometryUtils::getZoneGeometryWithGaps(zones[i], vsGeom, availGeom, zonePadding,
+                                                                              outerGaps, useAvail, screenId));
         }
     } else {
         combined = GeometryUtils::getZoneGeometryWithGaps(zones.first(), screen, zonePadding, outerGaps, useAvail);

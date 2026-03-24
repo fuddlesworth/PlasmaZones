@@ -106,16 +106,19 @@ static EdgeBoundaries detectEdgeBoundaries(Zone* zone, const QRectF& screenGeom)
  * Shared helper used by both QScreen* and QRect overloads of getZoneGeometryWithGaps.
  */
 static QRectF applyGapsToZoneGeometry(const QRectF& zoneGeom, Zone* zone, const QRectF& referenceGeom, int innerGap,
-                                      const EdgeGaps& outerGaps)
+                                      const EdgeGaps& outerGaps, bool isVirtualScreen = false, bool physEdgeLeft = true,
+                                      bool physEdgeTop = true, bool physEdgeRight = true, bool physEdgeBottom = true)
 {
     // Detect which edges are at screen boundaries
     EdgeBoundaries edges = detectEdgeBoundaries(zone, referenceGeom);
 
-    // Calculate adjustments for each edge
-    qreal leftAdj = edges.left ? outerGaps.left : (innerGap / 2.0);
-    qreal topAdj = edges.top ? outerGaps.top : (innerGap / 2.0);
-    qreal rightAdj = edges.right ? outerGaps.right : (innerGap / 2.0);
-    qreal bottomAdj = edges.bottom ? outerGaps.bottom : (innerGap / 2.0);
+    // For virtual screens, only apply outer gaps on edges that are at the PHYSICAL
+    // screen boundary. Internal edges (shared with another virtual screen) get inner
+    // gap to avoid double gaps.
+    qreal leftAdj = (edges.left && (!isVirtualScreen || physEdgeLeft)) ? outerGaps.left : (innerGap / 2.0);
+    qreal topAdj = (edges.top && (!isVirtualScreen || physEdgeTop)) ? outerGaps.top : (innerGap / 2.0);
+    qreal rightAdj = (edges.right && (!isVirtualScreen || physEdgeRight)) ? outerGaps.right : (innerGap / 2.0);
+    qreal bottomAdj = (edges.bottom && (!isVirtualScreen || physEdgeBottom)) ? outerGaps.bottom : (innerGap / 2.0);
 
     // Apply the adjustments (positive inset from edges)
     return zoneGeom.adjusted(leftAdj, topAdj, -rightAdj, -bottomAdj);
@@ -149,7 +152,7 @@ QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, const QRect& ov
 }
 
 QRectF getZoneGeometryWithGaps(Zone* zone, const QRect& screenGeometry, const QRect& availableGeometry, int innerGap,
-                               const EdgeGaps& outerGaps, bool useAvailableGeometry)
+                               const EdgeGaps& outerGaps, bool useAvailableGeometry, const QString& screenId)
 {
     if (!zone) {
         return QRectF();
@@ -158,6 +161,19 @@ QRectF getZoneGeometryWithGaps(Zone* zone, const QRect& screenGeometry, const QR
     // Calculate absolute zone geometry against the chosen reference area
     QRectF referenceGeom = useAvailableGeometry ? QRectF(availableGeometry) : QRectF(screenGeometry);
     QRectF geom = zone->calculateAbsoluteGeometry(referenceGeom);
+
+    // For virtual screens, determine which edges are at the physical screen boundary.
+    // Internal edges (shared with another virtual screen) get inner gap instead of
+    // outer gap to avoid double gaps at virtual screen boundaries.
+    bool isVirtual = !screenId.isEmpty() && VirtualScreenId::isVirtual(screenId);
+    if (isVirtual) {
+        auto* mgr = ScreenManager::instance();
+        if (mgr) {
+            auto pe = mgr->physicalEdgesFor(screenId);
+            return applyGapsToZoneGeometry(geom, zone, referenceGeom, innerGap, outerGaps, true, pe.left, pe.top,
+                                           pe.right, pe.bottom);
+        }
+    }
 
     return applyGapsToZoneGeometry(geom, zone, referenceGeom, innerGap, outerGaps);
 }
@@ -421,7 +437,7 @@ QString buildEmptyZonesJson(Layout* layout, const QString& screenId, QScreen* ph
                 continue;
             }
             QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
-            QRectF geom = getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding, outerGaps, useAvail);
+            QRectF geom = getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding, outerGaps, useAvail, screenId);
             QRectF overlayGeom = availableAreaToOverlayCoordinates(geom, vsGeom);
 
             QJsonObject obj;

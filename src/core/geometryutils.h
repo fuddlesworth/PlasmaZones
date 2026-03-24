@@ -73,7 +73,8 @@ PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geomet
  */
 PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, const QRect& screenGeometry,
                                                   const QRect& availableGeometry, int innerGap,
-                                                  const EdgeGaps& outerGaps, bool useAvailableGeometry = true);
+                                                  const EdgeGaps& outerGaps, bool useAvailableGeometry = true,
+                                                  const QString& screenId = {});
 
 /**
  * @brief Get effective zone padding for a layout

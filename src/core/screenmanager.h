@@ -185,6 +185,17 @@ public:
     bool hasVirtualScreens(const QString& physicalScreenId) const;
 
     /**
+     * @brief Get which edges of a virtual screen are at the physical screen boundary
+     *
+     * Internal edges (shared with another virtual screen) should use inner gap
+     * instead of outer gap to avoid double gaps at virtual screen boundaries.
+     *
+     * @param screenId Screen identifier (returns all-true for physical screens)
+     * @return PhysicalEdges struct (true = at physical boundary, false = internal)
+     */
+    VirtualScreenDef::PhysicalEdges physicalEdgesFor(const QString& screenId) const;
+
+    /**
      * @brief Find which virtual screen contains a global point
      * @param globalPos Point in global compositor coordinates
      * @param physicalScreenId Physical screen to search within

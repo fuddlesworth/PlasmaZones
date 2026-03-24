@@ -155,7 +155,8 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
     QRectF geoF;
     if (vsGeom.isValid()) {
         QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
-        geoF = GeometryUtils::getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding, outerGaps, useAvail);
+        geoF =
+            GeometryUtils::getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding, outerGaps, useAvail, screenId);
     } else {
         geoF = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
     }

@@ -50,6 +50,24 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
         return !id.isEmpty() && region.x() >= 0 && region.y() >= 0 && region.width() > 0 && region.height() > 0
             && region.x() + region.width() <= 1.0 + 1e-6 && region.y() + region.height() <= 1.0 + 1e-6;
     }
+
+    /// Check which edges of this virtual screen are at the physical screen boundary
+    /// (vs internal edges shared with another virtual screen).
+    /// An edge at the physical boundary should get outer gaps;
+    /// an internal edge should get inner gap (like zone padding) to avoid double gaps.
+    struct PhysicalEdges
+    {
+        bool left = true;
+        bool top = true;
+        bool right = true;
+        bool bottom = true;
+    };
+    PhysicalEdges physicalEdges() const
+    {
+        constexpr qreal tolerance = 0.01;
+        return {region.left() < tolerance, region.top() < tolerance, region.right() > (1.0 - tolerance),
+                region.bottom() > (1.0 - tolerance)};
+    }
 };
 
 /**
