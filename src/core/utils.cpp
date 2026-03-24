@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "utils.h"
+#include "screenmanager.h"
 #include "virtualscreen.h"
 #include <QGuiApplication>
 #include <QScreen>
@@ -240,6 +241,23 @@ bool isVirtualScreenId(const QString& screenId)
 QString physicalScreenId(const QString& screenId)
 {
     return VirtualScreenId::extractPhysicalId(screenId);
+}
+
+qreal screenAspectRatio(const QString& screenNameOrId)
+{
+    // For virtual screen IDs, use ScreenManager geometry
+    if (VirtualScreenId::isVirtual(screenNameOrId)) {
+        auto* mgr = ScreenManager::instance();
+        if (mgr) {
+            QRect geom = mgr->screenGeometry(screenNameOrId);
+            if (geom.isValid() && geom.height() > 0) {
+                return static_cast<qreal>(geom.width()) / geom.height();
+            }
+        }
+    }
+
+    // Fallback: physical screen lookup
+    return screenAspectRatio(findScreenByIdOrName(screenNameOrId));
 }
 
 } // namespace Utils

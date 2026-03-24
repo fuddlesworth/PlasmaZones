@@ -55,14 +55,14 @@ inline qreal screenAspectRatio(QScreen* screen)
 }
 
 /**
- * @brief Get the aspect ratio of a screen by name/ID
- * @param screenNameOrId Screen connector name or EDID-based ID
+ * @brief Get the aspect ratio of a screen by name/ID (virtual-screen-aware)
+ * @param screenNameOrId Screen connector name, EDID-based ID, or virtual screen ID
  * @return width/height ratio, or 0.0 if screen not found
+ *
+ * For virtual screen IDs, uses ScreenManager::screenGeometry() to get the
+ * virtual screen dimensions. Falls back to physical QScreen* for non-virtual IDs.
  */
-inline qreal screenAspectRatio(const QString& screenNameOrId)
-{
-    return screenAspectRatio(findScreenByIdOrName(screenNameOrId));
-}
+PLASMAZONES_EXPORT qreal screenAspectRatio(const QString& screenNameOrId);
 
 /**
  * @brief Get the primary screen
