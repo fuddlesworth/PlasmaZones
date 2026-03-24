@@ -149,11 +149,19 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         cursorScreenId = Utils::screenIdentifier(screen);
     }
     if (auto* window = m_zoneSelectorWindows.value(cursorScreenId)) {
-        // With exclusiveZone=-1, the window is positioned deterministically
-        // and mapFromGlobal gives us accurate local coordinates without compensation
-        const QPoint localPos = window->mapFromGlobal(QPoint(cursorX, cursorY));
-        int localX = localPos.x();
-        int localY = localPos.y();
+        // Compute local coordinates using the known virtual screen geometry.
+        // mapFromGlobal is unreliable on Wayland for LayerShellQt windows
+        // because the compositor doesn't always report the window's global position.
+        QRect vsGeom = mgr ? mgr->screenGeometry(cursorScreenId) : QRect();
+        int localX, localY;
+        if (vsGeom.isValid()) {
+            localX = cursorX - vsGeom.x();
+            localY = cursorY - vsGeom.y();
+        } else {
+            const QPoint localPos = window->mapFromGlobal(QPoint(cursorX, cursorY));
+            localX = localPos.x();
+            localY = localPos.y();
+        }
 
         window->setProperty("cursorX", localX);
         window->setProperty("cursorY", localY);
@@ -167,7 +175,12 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         const int layoutCount = layouts.size();
         const ZoneSelectorConfig selectorConfig =
             m_settings ? m_settings->resolvedZoneSelectorConfig(cursorScreenId) : defaultZoneSelectorConfig();
-        const ZoneSelectorLayout layout = computeZoneSelectorLayout(selectorConfig, screen, layoutCount);
+        // Use virtual screen geometry for layout computation (reuse vsGeom from cursor resolution above)
+        if (!vsGeom.isValid()) {
+            vsGeom = mgr ? mgr->screenGeometry(cursorScreenId) : QRect();
+        }
+        const QRect effectiveGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
+        const ZoneSelectorLayout layout = computeZoneSelectorLayout(selectorConfig, effectiveGeom, layoutCount);
 
         // Get grid position from QML - it knows exactly where the content is rendered
         int contentGridX = 0;
