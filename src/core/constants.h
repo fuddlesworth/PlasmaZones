@@ -272,7 +272,6 @@ inline constexpr QLatin1String IsHighlighted{"isHighlighted"};
 
 // Layout keys
 inline constexpr QLatin1String DefaultOrder{"defaultOrder"};
-inline constexpr QLatin1String Type{"type"};
 inline constexpr QLatin1String Description{"description"};
 inline constexpr QLatin1String Zones{"zones"};
 inline constexpr QLatin1String ZonePadding{"zonePadding"};

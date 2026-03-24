@@ -474,7 +474,6 @@ void EditorController::saveLayout()
     QJsonObject layoutObj;
     layoutObj[QLatin1String(JsonKeys::Id)] = m_layoutId;
     layoutObj[QLatin1String(JsonKeys::Name)] = m_layoutName;
-    layoutObj[QLatin1String(JsonKeys::Type)] = 0; // Custom type
     layoutObj[QLatin1String(JsonKeys::IsBuiltIn)] = false;
 
     QJsonArray zonesArray;

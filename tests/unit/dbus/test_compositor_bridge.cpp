@@ -749,7 +749,7 @@ private Q_SLOTS:
         m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, m_settings, nullptr, m_wtaParent);
 
         // Create a test layout so getFullState has data
-        auto* layout = new Layout(QStringLiteral("TestLayout"), LayoutType::Custom, m_layoutManager);
+        auto* layout = new Layout(QStringLiteral("TestLayout"), m_layoutManager);
         auto* zone = new Zone(layout);
         zone->setRelativeGeometry(QRectF(0.0, 0.0, 1.0, 1.0));
         zone->setZoneNumber(1);

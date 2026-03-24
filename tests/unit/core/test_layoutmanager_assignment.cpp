@@ -35,7 +35,7 @@ class TestLayoutManagerAssignment : public QObject
 private:
     Layout* createTestLayout(const QString& name, QObject* parent = nullptr)
     {
-        auto* layout = new Layout(name, LayoutType::Custom, parent);
+        auto* layout = new Layout(name, parent);
         auto* zone = new Zone();
         zone->setRelativeGeometry(QRectF(0, 0, 1, 1));
         layout->addZone(zone);

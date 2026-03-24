@@ -84,7 +84,6 @@ QJsonObject Layout::toJson() const
     QJsonObject json;
     json[JsonKeys::Id] = m_id.toString();
     json[JsonKeys::Name] = m_name;
-    json[JsonKeys::Type] = static_cast<int>(m_type);
     if (!m_description.isEmpty()) {
         json[JsonKeys::Description] = m_description;
     }
@@ -194,7 +193,7 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     }
 
     layout->m_name = json[JsonKeys::Name].toString();
-    layout->m_type = static_cast<LayoutType>(json[JsonKeys::Type].toInt());
+    // Note: "type" key is silently ignored for backward compatibility
     layout->m_description = json[JsonKeys::Description].toString();
     // Gap overrides: -1 means use global setting (key absent = no override)
     layout->m_zonePadding = json.contains(JsonKeys::ZonePadding) ? json[JsonKeys::ZonePadding].toInt(-1) : -1;

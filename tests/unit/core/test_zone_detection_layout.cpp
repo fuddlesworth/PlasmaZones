@@ -26,7 +26,7 @@ class TestZoneDetectionLayout : public QObject
 private Q_SLOTS:
     void init()
     {
-        m_layout = new Layout(QStringLiteral("TestLayout"), LayoutType::Custom, nullptr);
+        m_layout = new Layout(QStringLiteral("TestLayout"), nullptr);
     }
 
     void cleanup()

@@ -1939,7 +1939,6 @@ int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
         pzLayout[QLatin1String(JsonKeys::Name)] =
             kzLayout[QStringLiteral("name")].toString(QStringLiteral("Imported Layout"));
         pzLayout[QLatin1String(JsonKeys::Description)] = QStringLiteral("Imported from KZones");
-        pzLayout[QLatin1String(JsonKeys::Type)] = 0; // LayoutType::Custom
         pzLayout[QLatin1String(JsonKeys::IsBuiltIn)] = false;
         pzLayout[QLatin1String(JsonKeys::ShowZoneNumbers)] = true;
 

@@ -349,7 +349,6 @@ QVariantMap AlgorithmRegistry::algorithmToVariantMap(TilingAlgorithm* algorithm,
     map[QLatin1String("id")] = LayoutId::makeAutotileId(algorithmId);
     map[QLatin1String("name")] = algorithm->name();
     map[QLatin1String("description")] = algorithm->description();
-    map[QLatin1String("type")] = -1; // Not a standard LayoutType
     map[QLatin1String("zoneCount")] = effectiveMaxWindows(algorithm);
     map[QLatin1String("zones")] = generatePreviewZones(algorithm);
     map[QLatin1String("category")] = static_cast<int>(LayoutCategory::Autotile);

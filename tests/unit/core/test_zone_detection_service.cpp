@@ -106,7 +106,7 @@ private Q_SLOTS:
         QScopedPointer<WindowTrackingService> service(
             new WindowTrackingService(layoutManager.data(), detector.data(), settings.data(), nullptr, nullptr));
 
-        auto* layout = new Layout(QStringLiteral("Test"), LayoutType::Custom, layoutManager.data());
+        auto* layout = new Layout(QStringLiteral("Test"), layoutManager.data());
         auto* z1 = new Zone(layout);
         z1->setRelativeGeometry(QRectF(0.0, 0.0, 0.5, 1.0));
         z1->setZoneNumber(1);
@@ -138,7 +138,7 @@ private Q_SLOTS:
         QScopedPointer<WindowTrackingService> service(
             new WindowTrackingService(layoutManager.data(), detector.data(), settings.data(), nullptr, nullptr));
 
-        auto* layout = new Layout(QStringLiteral("Test"), LayoutType::Custom, layoutManager.data());
+        auto* layout = new Layout(QStringLiteral("Test"), layoutManager.data());
         auto* z1 = new Zone(layout);
         z1->setRelativeGeometry(QRectF(0.0, 0.0, 0.5, 1.0));
         z1->setZoneNumber(1);

@@ -319,7 +319,6 @@ private Q_SLOTS:
         QJsonObject json;
         json[QStringLiteral("id")] = QStringLiteral("{00000000-0000-0000-0000-000000000001}");
         json[QStringLiteral("name")] = QStringLiteral("NoAR");
-        json[QStringLiteral("type")] = 0;
         json[QStringLiteral("showZoneNumbers")] = true;
         json[QStringLiteral("zones")] = QJsonArray();
 

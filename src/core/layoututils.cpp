@@ -131,7 +131,6 @@ QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields)
     map[Id] = layout->id().toString();
     map[Name] = layout->name();
     map[Description] = layout->description();
-    map[Type] = static_cast<int>(layout->type());
     map[ZoneCount] = layout->zoneCount();
     map[Zones] = zonesToVariantList(layout, zoneFields);
     map[Category] = static_cast<int>(LayoutCategory::Manual);
@@ -323,7 +322,6 @@ QVariantMap toVariantMap(const UnifiedLayoutEntry& entry)
     map[Id] = entry.id;
     map[Name] = entry.name;
     map[Description] = entry.description;
-    map[Type] = 0;
     map[ZoneCount] = entry.zoneCount;
     map[Zones] = entry.zones;
     map[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
@@ -361,7 +359,6 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
     json[Description] = entry.description;
     json[ZoneCount] = entry.zoneCount;
     json[IsSystem] = false;
-    json[Type] = 0;
     json[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
     json[QLatin1String("isAutotile")] = entry.isAutotile;
     if (entry.aspectRatioClass != 0) {

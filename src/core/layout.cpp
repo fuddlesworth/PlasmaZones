@@ -60,11 +60,10 @@ Layout::Layout(QObject* parent)
 {
 }
 
-Layout::Layout(const QString& name, LayoutType type, QObject* parent)
+Layout::Layout(const QString& name, QObject* parent)
     : QObject(parent)
     , m_id(QUuid::createUuid())
     , m_name(name)
-    , m_type(type)
 {
 }
 
@@ -72,7 +71,6 @@ Layout::Layout(const Layout& other)
     : QObject(other.parent())
     , m_id(QUuid::createUuid()) // New layout gets new ID
     , m_name(other.m_name)
-    , m_type(other.m_type)
     , m_description(other.m_description)
     , m_zonePadding(other.m_zonePadding)
     , m_outerGap(other.m_outerGap)
@@ -122,7 +120,6 @@ Layout& Layout::operator=(const Layout& other)
         bool activitiesChanged = m_allowedActivities != other.m_allowedActivities;
 
         m_name = other.m_name;
-        m_type = other.m_type;
         m_description = other.m_description;
         m_zonePadding = other.m_zonePadding;
         m_outerGap = other.m_outerGap;
@@ -195,7 +192,6 @@ Layout& Layout::operator=(const Layout& other)
 
 // Simple property setters
 LAYOUT_SETTER(const QString&, Name, m_name, nameChanged)
-LAYOUT_SETTER(LayoutType, Type, m_type, typeChanged)
 LAYOUT_SETTER(const QString&, Description, m_description, descriptionChanged)
 LAYOUT_SETTER(bool, ShowZoneNumbers, m_showZoneNumbers, showZoneNumbersChanged)
 LAYOUT_SETTER_MIN_NEGATIVE_ONE(OverlayDisplayMode, m_overlayDisplayMode, overlayDisplayModeChanged)

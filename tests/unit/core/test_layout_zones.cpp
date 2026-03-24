@@ -24,7 +24,7 @@ class TestLayoutZones : public QObject
 private:
     Layout* createLayoutWithZones(int zoneCount, QObject* parent = nullptr)
     {
-        auto* layout = new Layout(QStringLiteral("test"), LayoutType::Custom, parent);
+        auto* layout = new Layout(QStringLiteral("test"), parent);
         for (int i = 0; i < zoneCount; ++i) {
             auto* zone = new Zone();
             zone->setRelativeGeometry(QRectF(qreal(i) / zoneCount, 0.0, 1.0 / zoneCount, 1.0));
@@ -141,7 +141,7 @@ private Q_SLOTS:
 
     void testLayout_serialization_roundtrip_allProperties()
     {
-        Layout original(QStringLiteral("Roundtrip Test"), LayoutType::Grid);
+        Layout original(QStringLiteral("Roundtrip Test"));
         original.setDescription(QStringLiteral("A test layout"));
         original.setZonePadding(12);
         original.setOuterGap(8);
@@ -175,7 +175,6 @@ private Q_SLOTS:
 
         QCOMPARE(restored->id(), original.id());
         QCOMPARE(restored->name(), QStringLiteral("Roundtrip Test"));
-        QCOMPARE(restored->type(), LayoutType::Grid);
         QCOMPARE(restored->description(), QStringLiteral("A test layout"));
         QCOMPARE(restored->zonePadding(), 12);
         QCOMPARE(restored->outerGap(), 8);

@@ -128,7 +128,7 @@ buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenId, i
  * @brief Convert a unified layout entry to QVariantMap for QML
  *
  * Creates a map with keys matching the zone selector's expectations:
- * - id, name, description, type, zoneCount, zones, category
+ * - id, name, description, zoneCount, zones, category
  *
  * @param entry The unified layout entry
  * @return QVariantMap suitable for QML consumption

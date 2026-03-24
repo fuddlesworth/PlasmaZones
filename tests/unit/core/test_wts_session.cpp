@@ -753,7 +753,7 @@ private:
 
 static Layout* createTestLayout(int zoneCount, QObject* parent)
 {
-    auto* layout = new Layout(QStringLiteral("TestLayout"), LayoutType::Custom, parent);
+    auto* layout = new Layout(QStringLiteral("TestLayout"), parent);
     for (int i = 0; i < zoneCount; ++i) {
         auto* zone = new Zone(layout);
         qreal x = static_cast<qreal>(i) / zoneCount;

@@ -57,18 +57,6 @@ struct PLASMAZONES_EXPORT AppRuleMatch
 };
 
 /**
- * @brief Layout types for zone configurations
- */
-enum class LayoutType {
-    Custom, // User-defined canvas layout
-    Grid, // Grid-based layout
-    Columns, // Vertical columns
-    Rows, // Horizontal rows
-    PriorityGrid, // Primary zone with grid
-    Focus // Large center with sides
-};
-
-/**
  * @brief Category for layout type
  *
  * QML Note: Passed as int to QML. Values: 0 = Manual, 1 = Autotile
@@ -91,7 +79,6 @@ class PLASMAZONES_EXPORT Layout : public QObject
 
     Q_PROPERTY(QUuid id READ id CONSTANT)
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
-    Q_PROPERTY(LayoutType type READ type WRITE setType NOTIFY typeChanged)
     Q_PROPERTY(QString description READ description WRITE setDescription NOTIFY descriptionChanged)
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
     Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
@@ -139,7 +126,7 @@ class PLASMAZONES_EXPORT Layout : public QObject
 
 public:
     explicit Layout(QObject* parent = nullptr);
-    explicit Layout(const QString& name, LayoutType type = LayoutType::Custom, QObject* parent = nullptr);
+    explicit Layout(const QString& name, QObject* parent = nullptr);
     Layout(const Layout& other);
     ~Layout() override;
 
@@ -155,12 +142,6 @@ public:
         return m_name;
     }
     void setName(const QString& name);
-
-    LayoutType type() const
-    {
-        return m_type;
-    }
-    void setType(LayoutType type);
 
     QString description() const
     {
@@ -437,7 +418,6 @@ public:
 
 Q_SIGNALS:
     void nameChanged();
-    void typeChanged();
     void descriptionChanged();
     void zonePaddingChanged();
     void outerGapChanged();
@@ -464,7 +444,6 @@ private:
 
     QUuid m_id;
     QString m_name;
-    LayoutType m_type = LayoutType::Custom;
     QString m_description;
     int m_zonePadding = -1; // -1 = use global setting
     int m_outerGap = -1; // -1 = use global setting
@@ -514,5 +493,4 @@ private:
 
 } // namespace PlasmaZones
 
-Q_DECLARE_METATYPE(PlasmaZones::LayoutType)
 Q_DECLARE_METATYPE(PlasmaZones::LayoutCategory)
