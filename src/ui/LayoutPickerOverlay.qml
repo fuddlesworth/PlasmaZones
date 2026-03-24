@@ -42,6 +42,7 @@ Window {
     property bool fontUnderline: false
     property bool fontStrikeout: false
     property bool locked: false
+    property bool showBackdrop: true
     // Current keyboard selection index — binding is intentionally broken on first
     // keyboard/mouse interaction; the picker is recreated each time so this is safe.
     property int selectedIndex: {
@@ -236,7 +237,7 @@ Window {
         // Backdrop - semi-transparent dim, click outside to close
         Rectangle {
             anchors.fill: parent
-            color: Qt.rgba(0, 0, 0, metrics.backdropAlpha)
+            color: root.showBackdrop ? Qt.rgba(0, 0, 0, metrics.backdropAlpha) : "transparent"
 
             MouseArea {
                 anchors.fill: parent
