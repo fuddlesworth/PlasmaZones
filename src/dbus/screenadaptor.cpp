@@ -41,6 +41,17 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
 
 QStringList ScreenAdaptor::getScreens()
 {
+    // Return effective screen IDs (virtual screens when configured, physical otherwise)
+    // so consumers (settings app, KCM) see virtual screens as first-class entries.
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        QStringList effective = mgr->effectiveScreenIds();
+        if (!effective.isEmpty()) {
+            return effective;
+        }
+    }
+
+    // Fallback: no ScreenManager or no screens tracked yet
     QStringList result;
     for (const auto* screen : Utils::allScreens()) {
         result.append(Utils::screenIdentifier(screen));

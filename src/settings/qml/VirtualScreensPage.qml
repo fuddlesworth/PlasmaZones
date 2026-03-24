@@ -20,7 +20,12 @@ Flickable {
     property string _selectedScreen: ""
     property var _pendingScreens: [] // Local editable state
     property var _savedScreens: [] // What is actually applied in daemon
-    property bool _dirty: false
+    // Revision-counter approach: QML reactively evaluates _dirty as a binding.
+    // Imperative _markDirty() can miss change notifications; revision counters
+    // always trigger binding re-evaluation when either side changes.
+    property int _pendingRevision: 0
+    property int _savedRevision: 0
+    property bool _dirty: _pendingRevision !== _savedRevision
     property int _screenWidth: 1920 // Actual pixel width of selected screen
     property int _screenHeight: 1080 // Actual pixel height of selected screen
 
@@ -30,7 +35,8 @@ Flickable {
 
         _savedScreens = settingsController.getVirtualScreenConfig(_selectedScreen);
         _pendingScreens = _deepCopy(_savedScreens);
-        _dirty = false;
+        // Sync revisions — not dirty after refresh
+        _savedRevision = _pendingRevision;
     }
 
     function _deepCopy(arr) {
@@ -38,25 +44,7 @@ Flickable {
     }
 
     function _markDirty() {
-        _dirty = !_arraysEqual(_pendingScreens, _savedScreens);
-    }
-
-    function _arraysEqual(a, b) {
-        if (a.length !== b.length)
-            return false;
-
-        for (var i = 0; i < a.length; i++) {
-            if (Math.abs((a[i].x || 0) - (b[i].x || 0)) > 0.001)
-                return false;
-
-            if (Math.abs((a[i].width || 0) - (b[i].width || 0)) > 0.001)
-                return false;
-
-            if ((a[i].displayName || "") !== (b[i].displayName || ""))
-                return false;
-
-        }
-        return true;
+        _pendingRevision++;
     }
 
     function _applyConfig() {
@@ -65,12 +53,14 @@ Flickable {
 
         settingsController.applyVirtualScreenConfig(_selectedScreen, _pendingScreens);
         _savedScreens = _deepCopy(_pendingScreens);
-        _dirty = false;
+        // Sync revisions — not dirty after apply
+        _savedRevision = _pendingRevision;
     }
 
     function _discard() {
         _pendingScreens = _deepCopy(_savedScreens);
-        _dirty = false;
+        // Sync revisions — not dirty after discard
+        _savedRevision = _pendingRevision;
     }
 
     function _removeSubdivisions() {
@@ -80,7 +70,8 @@ Flickable {
         settingsController.removeVirtualScreenConfig(_selectedScreen);
         _savedScreens = [];
         _pendingScreens = [];
-        _dirty = false;
+        // Sync revisions — not dirty after removal
+        _savedRevision = _pendingRevision;
     }
 
     function _loadPreset(ratios, names) {

@@ -35,6 +35,18 @@ void Daemon::connectScreenSignals()
     // Warn about identical monitors producing duplicate screen IDs
     Utils::warnDuplicateScreenIds();
 
+    // Load saved virtual screen configs from Settings into ScreenManager
+    const auto vsConfigs = m_settings->virtualScreenConfigs();
+    for (auto it = vsConfigs.constBegin(); it != vsConfigs.constEnd(); ++it) {
+        m_screenManager->setVirtualScreenConfig(it.key(), it.value());
+    }
+
+    // Persist virtual screen config changes back to Settings
+    connect(m_screenManager.get(), &ScreenManager::virtualScreensChanged, this, [this](const QString& physId) {
+        auto config = m_screenManager->virtualScreenConfig(physId);
+        m_settings->setVirtualScreenConfig(physId, config);
+    });
+
     // Connect screen manager signals
     connect(m_screenManager.get(), &ScreenManager::screenAdded, this, [this](QScreen* screen) {
         // Invalidate cached EDID serial so a fresh sysfs read happens for this connector

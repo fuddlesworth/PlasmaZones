@@ -43,20 +43,26 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
     }
     m_zoneDataDirty = true; // Rebuild zone data on next frame
 
-    // Determine the cursor's screen ID for single-monitor filtering
+    // Determine the cursor's effective screen ID for single-monitor filtering.
+    // For virtual screens we must resolve to the specific virtual screen under
+    // the cursor, not just the physical monitor (all virtual screens on one
+    // physical monitor share the same QScreen*).
     const QString cursorScreenId = cursorScreen ? Utils::screenIdentifier(cursorScreen) : QString();
+    QString cursorEffectiveId = cursorScreenId;
+    if (!showOnAllMonitors && cursorScreen) {
+        auto* mgr = ScreenManager::instance();
+        if (mgr) {
+            QString resolved = mgr->effectiveScreenAt(QCursor::pos());
+            if (!resolved.isEmpty()) {
+                cursorEffectiveId = resolved;
+            }
+        }
+    }
 
     // When single-monitor mode, hide overlay on screens we're switching away from (#136)
     if (!showOnAllMonitors) {
         for (const QString& screenId : m_overlayWindows.keys()) {
-            // Hide overlays not on cursor screen (for virtual screens, check physical parent too)
-            auto* mgr = ScreenManager::instance();
-            bool isCursorScreen = (screenId == cursorScreenId);
-            if (!isCursorScreen && mgr && cursorScreen) {
-                // Virtual screen on the cursor's physical screen should also be shown
-                QScreen* physScreen = mgr->physicalQScreenFor(screenId);
-                isCursorScreen = (physScreen == cursorScreen);
-            }
+            bool isCursorScreen = (screenId == cursorEffectiveId);
             if (!isCursorScreen) {
                 if (auto* window = m_overlayWindows.value(screenId)) {
                     window->hide();
@@ -76,8 +82,8 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
             if (!physScreen) {
                 continue;
             }
-            // Skip screens that aren't the cursor's screen when single-monitor mode is enabled
-            if (!showOnAllMonitors && physScreen != cursorScreen) {
+            // Skip screens that aren't the cursor's effective screen when single-monitor mode is enabled
+            if (!showOnAllMonitors && screenId != cursorEffectiveId) {
                 continue;
             }
             // Skip monitors where PlasmaZones is disabled

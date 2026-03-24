@@ -254,8 +254,18 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
             // Fallback to primary screen if no screen contains the cursor position
             cursorScreen = Utils::primaryScreen();
         }
-        // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
-        if (cursorScreen && m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(cursorScreen))) {
+
+        // Check disabled status using the effective (virtual-aware) screen ID,
+        // not just the physical screen, so per-virtual-screen disabling works.
+        auto* mgr = ScreenManager::instance();
+        QString effectiveId;
+        if (mgr) {
+            effectiveId = mgr->effectiveScreenAt(QPoint(cursorX, cursorY));
+        }
+        if (effectiveId.isEmpty() && cursorScreen) {
+            effectiveId = Utils::screenIdentifier(cursorScreen);
+        }
+        if (m_settings && !effectiveId.isEmpty() && m_settings->isMonitorDisabled(effectiveId)) {
             return;
         }
     }

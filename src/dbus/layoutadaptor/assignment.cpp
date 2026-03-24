@@ -9,6 +9,7 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../core/constants.h"
+#include "../../core/screenmanager.h"
 #include "../../autotile/AlgorithmRegistry.h"
 #include "../../autotile/TilingAlgorithm.h"
 #include <QJsonDocument>
@@ -247,9 +248,22 @@ QString LayoutAdaptor::getScreenStates()
     const int desktop = m_layoutManager->currentVirtualDesktop();
     const QString activity = m_layoutManager->currentActivity();
 
-    for (QScreen* screen : Utils::allScreens()) {
-        const QString screenId = Utils::screenIdentifier(screen);
+    // Use effective screen IDs (includes virtual screens when configured)
+    // so the settings app sees one entry per virtual screen, not per physical monitor.
+    auto* mgr = ScreenManager::instance();
+    const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
 
+    // Build list of screen IDs to iterate — fall back to physical screens if no ScreenManager
+    QStringList screenIds;
+    if (!effectiveIds.isEmpty()) {
+        screenIds = effectiveIds;
+    } else {
+        for (QScreen* screen : Utils::allScreens()) {
+            screenIds.append(Utils::screenIdentifier(screen));
+        }
+    }
+
+    for (const QString& screenId : std::as_const(screenIds)) {
         const auto entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);
 
         QJsonObject obj;
