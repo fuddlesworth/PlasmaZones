@@ -121,8 +121,8 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, const QString& screenId
         // Virtual screen: calculate zones against virtual screen bounds
         auto* mgr = ScreenManager::instance();
         QRect availGeom = mgr ? mgr->screenAvailableGeometry(screenId) : overlayGeometry;
-        geom =
-            GeometryUtils::getZoneGeometryWithGaps(zone, overlayGeometry, availGeom, zonePadding, outerGaps, useAvail);
+        geom = GeometryUtils::getZoneGeometryWithGaps(zone, overlayGeometry, availGeom, zonePadding, outerGaps,
+                                                      useAvail, screenId);
         overlayGeom = GeometryUtils::availableAreaToOverlayCoordinates(geom, overlayGeometry);
     } else {
         // Physical screen: existing path

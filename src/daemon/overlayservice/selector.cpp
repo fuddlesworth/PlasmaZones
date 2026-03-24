@@ -388,7 +388,7 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
                     if (vsGeom.isValid()) {
                         QRectF geom = GeometryUtils::getZoneGeometryWithGaps(
                             zone, vsGeom, vsAvailGeom.isValid() ? vsAvailGeom : vsGeom, zonePadding, outerGaps,
-                            useAvail);
+                            useAvail, screenId);
                         return GeometryUtils::snapToRect(geom);
                     }
                 }
