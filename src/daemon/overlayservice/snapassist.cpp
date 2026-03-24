@@ -32,8 +32,10 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
         return;
     }
 
-    QScreen* screen = nullptr;
-    if (!screenId.isEmpty()) {
+    // Resolve physical screen (virtual IDs resolve to their backing physical screen)
+    auto* mgr = ScreenManager::instance();
+    QScreen* screen = mgr ? mgr->physicalQScreenFor(screenId) : nullptr;
+    if (!screen && !screenId.isEmpty()) {
         screen = Utils::findScreenByIdOrName(screenId);
     }
     if (!screen) {
@@ -45,9 +47,13 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
         return;
     }
 
+    // Use virtual screen geometry when available, otherwise physical
+    QRect screenGeom =
+        (mgr && mgr->screenGeometry(screenId).isValid()) ? mgr->screenGeometry(screenId) : screen->geometry();
+
     // Always destroy and recreate to avoid stale QML state (zone sizes wrong after continuation)
     destroySnapAssistWindow();
-    createSnapAssistWindow(screenId, screen, screen->geometry());
+    createSnapAssistWindow(screenId, screen, screenGeom);
     if (!m_snapAssistWindow) {
         Q_EMIT snapAssistDismissed();
         return;
@@ -99,8 +105,8 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
 
     writeQmlProperty(m_snapAssistWindow, QStringLiteral("emptyZones"), zonesList);
     writeQmlProperty(m_snapAssistWindow, QStringLiteral("candidates"), m_snapAssistCandidates);
-    writeQmlProperty(m_snapAssistWindow, QStringLiteral("screenWidth"), screen->geometry().width());
-    writeQmlProperty(m_snapAssistWindow, QStringLiteral("screenHeight"), screen->geometry().height());
+    writeQmlProperty(m_snapAssistWindow, QStringLiteral("screenWidth"), screenGeom.width());
+    writeQmlProperty(m_snapAssistWindow, QStringLiteral("screenHeight"), screenGeom.height());
 
     // Zone appearance defaults (used when zone.useCustomColors is false) - match main overlay
     if (m_settings) {
@@ -125,8 +131,8 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
         layerWindow->setScope(QStringLiteral("plasmazones-snap-assist"));
     }
 
-    assertWindowOnScreen(m_snapAssistWindow, screen);
-    m_snapAssistWindow->setGeometry(screen->geometry());
+    assertWindowOnScreen(m_snapAssistWindow, screen, screenGeom);
+    m_snapAssistWindow->setGeometry(screenGeom);
     m_snapAssistWindow->show();
     // Ensure the window receives keyboard focus for Escape handling on Wayland.
     // KeyboardInteractivityExclusive tells the compositor to send keyboard events,
@@ -291,9 +297,10 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         return;
     }
 
-    // Resolve target screen
-    QScreen* screen = nullptr;
-    if (!screenId.isEmpty()) {
+    // Resolve target screen (virtual IDs resolve to backing physical screen)
+    auto* mgr = ScreenManager::instance();
+    QScreen* screen = mgr ? mgr->physicalQScreenFor(screenId) : nullptr;
+    if (!screen && !screenId.isEmpty()) {
         screen = Utils::findScreenByIdOrName(screenId);
     }
     if (!screen) {
@@ -304,19 +311,22 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         return;
     }
 
+    // Use virtual screen geometry when available
+    const QString resolvedId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
+    QRect screenGeom =
+        (mgr && mgr->screenGeometry(resolvedId).isValid()) ? mgr->screenGeometry(resolvedId) : screen->geometry();
+
     // Always destroy and recreate for fresh state
     destroyLayoutPickerWindow();
-    const QString resolvedId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
-    createLayoutPickerWindow(resolvedId, screen, screen->geometry());
+    createLayoutPickerWindow(resolvedId, screen, screenGeom);
     if (!m_layoutPickerWindow) {
         return;
     }
 
     m_layoutPickerWindow->setScreen(screen);
 
-    // Build layouts list
-    const QString resolvedScreenId = Utils::screenIdentifier(screen);
-    QVariantList layoutsList = buildLayoutsList(resolvedScreenId);
+    // Build layouts list (use virtual-aware screen ID for correct layout resolution)
+    QVariantList layoutsList = buildLayoutsList(resolvedId);
     if (layoutsList.isEmpty()) {
         qCDebug(lcOverlay) << "showLayoutPicker: no layouts available";
         destroyLayoutPickerWindow();
@@ -326,14 +336,13 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     // Determine active layout ID
     QString activeId;
     if (m_layoutManager) {
-        Layout* activeLayout = resolveScreenLayout(screen);
+        Layout* activeLayout = resolveScreenLayout(resolvedId);
         if (activeLayout) {
             activeId = activeLayout->id().toString();
         }
     }
 
-    // Calculate screen aspect ratio
-    const QRect screenGeom = screen->geometry();
+    // Calculate screen aspect ratio (use virtual screen geometry)
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
     aspectRatio = qBound(0.5, aspectRatio, 4.0);
