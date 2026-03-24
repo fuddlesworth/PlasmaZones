@@ -270,15 +270,17 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         }
     }
 
+    const QPoint cursorPos(cursorX, cursorY);
+
     if (m_visible) {
         // Already visible: when single-monitor mode, switch overlay if cursor moved to different screen (#136)
         if (!showOnAllMonitors && cursorScreen && m_currentOverlayScreen != cursorScreen) {
-            initializeOverlay(cursorScreen);
+            initializeOverlay(cursorScreen, cursorPos);
         }
         return;
     }
 
-    initializeOverlay(cursorScreen);
+    initializeOverlay(cursorScreen, cursorPos);
 }
 
 void OverlayService::hide()

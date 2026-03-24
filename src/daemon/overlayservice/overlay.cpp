@@ -23,7 +23,7 @@
 
 namespace PlasmaZones {
 
-void OverlayService::initializeOverlay(QScreen* cursorScreen)
+void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& cursorPos)
 {
     // Determine if we should show on all monitors (cursorScreen == nullptr means all)
     const bool showOnAllMonitors = (cursorScreen == nullptr);
@@ -52,7 +52,8 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
     if (!showOnAllMonitors && cursorScreen) {
         auto* mgr = ScreenManager::instance();
         if (mgr) {
-            QString resolved = mgr->effectiveScreenAt(QCursor::pos());
+            QPoint pos = (cursorPos.x() >= 0) ? cursorPos : QCursor::pos();
+            QString resolved = mgr->effectiveScreenAt(pos);
             if (!resolved.isEmpty()) {
                 cursorEffectiveId = resolved;
             }

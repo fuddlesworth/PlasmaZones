@@ -72,6 +72,20 @@ QScreen* WindowDragAdaptor::screenAtPoint(int x, int y) const
     return Utils::findScreenAtPosition(x, y);
 }
 
+QString WindowDragAdaptor::effectiveScreenIdAt(int x, int y) const
+{
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        QString id = mgr->effectiveScreenAt(QPoint(x, y));
+        if (!id.isEmpty()) {
+            return id;
+        }
+    }
+    // Fallback: physical screen
+    QScreen* screen = Utils::findScreenAtPosition(x, y);
+    return screen ? Utils::screenIdentifier(screen) : QString();
+}
+
 bool WindowDragAdaptor::checkModifier(int modifierSetting, Qt::KeyboardModifiers mods) const
 {
     bool shiftHeld = mods.testFlag(Qt::ShiftModifier);
@@ -233,8 +247,16 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
         return;
     }
 
-    QScreen* screen = screenAtPoint(cursorX, cursorY);
-    if (screen && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
+    // Resolve effective (virtual-aware) screen ID for disabled-monitor check
+    QString selectorScreenId = effectiveScreenIdAt(cursorX, cursorY);
+    QScreen* screen = Utils::findScreenByIdOrName(Utils::physicalScreenId(selectorScreenId));
+    if (!screen) {
+        screen = screenAtPoint(cursorX, cursorY);
+    }
+    if (selectorScreenId.isEmpty() && screen) {
+        selectorScreenId = Utils::screenIdentifier(screen);
+    }
+    if (screen && m_settings->isMonitorDisabled(selectorScreenId)) {
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;
             m_overlayService->hideZoneSelector();
@@ -340,6 +362,7 @@ void WindowDragAdaptor::hideOverlayAndSelector()
         m_overlayService->hide();
         m_overlayShown = false;
         m_overlayScreen = nullptr;
+        m_overlayScreenId.clear();
     }
 
     // Hide zone selector and clear selection

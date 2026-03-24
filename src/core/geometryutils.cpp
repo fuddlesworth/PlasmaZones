@@ -288,6 +288,24 @@ QRectF effectiveScreenGeometry(Layout* layout, QScreen* screen)
     return ScreenManager::actualAvailableGeometry(screen);
 }
 
+QRectF effectiveScreenGeometry(Layout* layout, const QString& screenId)
+{
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        QRect geom = mgr->screenGeometry(screenId);
+        if (geom.isValid()) {
+            if (layout && layout->useFullScreenGeometry()) {
+                return QRectF(geom);
+            }
+            QRect availGeom = mgr->screenAvailableGeometry(screenId);
+            return availGeom.isValid() ? QRectF(availGeom) : QRectF(geom);
+        }
+    }
+    // Fallback to physical screen
+    QScreen* screen = Utils::findScreenByIdOrName(screenId);
+    return effectiveScreenGeometry(layout, screen);
+}
+
 QRectF extractZoneGeometry(const QVariantMap& zone)
 {
     return QRectF(zone.value(QLatin1String("x")).toDouble(), zone.value(QLatin1String("y")).toDouble(),

@@ -350,7 +350,7 @@ private:
      * This is the common implementation for show() and showAtPosition().
      * Extracts ~100 lines of duplicate code from both methods.
      */
-    void initializeOverlay(QScreen* cursorScreen);
+    void initializeOverlay(QScreen* cursorScreen, const QPoint& cursorPos = QPoint(-1, -1));
 
 private Q_SLOTS:
     // System sleep/resume handler (connected to logind PrepareForSleep signal)

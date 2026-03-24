@@ -40,11 +40,17 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     }
 
     // Release screen: use cursor position passed from effect (at release time), not last dragMoved.
-    // Return the stable EDID-based screen ID so the effect passes a consistent identifier
-    // to daemon D-Bus methods (layout resolution, windowSnapped tracking, snap assist).
-    QScreen* releaseScreen = screenAtPoint(cursorX, cursorY);
+    // Resolve the effective (virtual-aware) screen ID so zones are calculated against
+    // virtual screen bounds, not physical screen bounds.
+    QString releaseScreenId = effectiveScreenIdAt(cursorX, cursorY);
+    QScreen* releaseScreen = Utils::findScreenByIdOrName(Utils::physicalScreenId(releaseScreenId));
+    if (!releaseScreen) {
+        releaseScreen = screenAtPoint(cursorX, cursorY);
+    }
+    if (releaseScreenId.isEmpty() && releaseScreen) {
+        releaseScreenId = Utils::screenIdentifier(releaseScreen);
+    }
     QString releaseScreenName = releaseScreen ? releaseScreen->name() : QString();
-    QString releaseScreenId = releaseScreen ? Utils::screenIdentifier(releaseScreen) : QString();
     releaseScreenIdOut = releaseScreenId;
     qCDebug(lcDbusWindow) << "dragStopped: cursor=" << cursorX << "," << cursorY
                           << "releaseScreen=" << releaseScreenName << "releaseScreenId=" << releaseScreenId;

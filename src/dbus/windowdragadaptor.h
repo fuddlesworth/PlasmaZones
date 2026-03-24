@@ -162,6 +162,10 @@ private:
     // Helper: Find screen containing a point (returns primary screen if not found)
     QScreen* screenAtPoint(int x, int y) const;
 
+    // Helper: Returns the effective (virtual-aware) screen ID for a cursor position.
+    // Prefers virtual screen resolution via ScreenManager, falls back to physical screen.
+    QString effectiveScreenIdAt(int x, int y) const;
+
     // Shared preamble for drag handler methods (DRY extraction)
     // Returns layout for the screen at (x,y), or nullptr if screen disabled/no layout.
     // Shows overlay if not visible. Sets outScreen to the resolved screen.
@@ -197,6 +201,7 @@ private:
     bool m_prevTriggerHeld = false; // Previous frame's trigger state for edge detection
     bool m_overlayShown = false;
     QScreen* m_overlayScreen = nullptr; // Screen overlay is shown on (single-monitor mode only)
+    QString m_overlayScreenId; // Virtual-aware screen ID for overlay tracking
     bool m_zoneSelectorShown = false;
     int m_lastCursorX = 0;
     int m_lastCursorY = 0;

@@ -123,6 +123,17 @@ PLASMAZONES_EXPORT EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* set
 PLASMAZONES_EXPORT QRectF effectiveScreenGeometry(Layout* layout, QScreen* screen);
 
 /**
+ * @brief Get the effective screen geometry for a layout using a screen ID
+ * @param layout Layout to check (may use full screen geometry)
+ * @param screenId Screen identifier (physical or virtual, e.g. "physicalId/vs:N")
+ * @return Virtual screen geometry if available, otherwise falls back to physical screen geometry
+ *
+ * Virtual-screen-aware overload: resolves geometry via ScreenManager first,
+ * then falls back to finding the physical QScreen by ID.
+ */
+PLASMAZONES_EXPORT QRectF effectiveScreenGeometry(Layout* layout, const QString& screenId);
+
+/**
  * @brief Extract geometry as QRectF from a zone QVariantMap
  * @param zone Zone data map containing x, y, width, height keys
  * @return QRectF with the zone's geometry
