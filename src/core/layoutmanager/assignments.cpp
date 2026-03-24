@@ -8,6 +8,7 @@
 #include "../constants.h"
 #include "../logging.h"
 #include "../utils.h"
+#include "../virtualscreen.h"
 #include <QFile>
 #include <QJsonDocument>
 
@@ -128,6 +129,18 @@ Layout* LayoutManager::layoutForScreen(const QString& screenId, int virtualDeskt
         }
     }
 
+    // Virtual screen fallback: try physical screen ID if this is a virtual screen.
+    // This lets virtual screens inherit the physical screen's assignment when no
+    // per-virtual-screen assignment exists. The physical ID does not contain "/vs:"
+    // so the recursive call will not re-enter this branch.
+    if (VirtualScreenId::isVirtual(screenId)) {
+        const QString physId = VirtualScreenId::extractPhysicalId(screenId);
+        Layout* physLayout = layoutForScreen(physId, virtualDesktop, activity);
+        if (physLayout) {
+            return physLayout;
+        }
+    }
+
     // No assignment: use defaultLayoutId from settings when set, else first layout (by defaultOrder)
     if (m_settings && !m_settings->defaultLayoutId().isEmpty()) {
         if (Layout* L = layoutById(QUuid(m_settings->defaultLayoutId()))) {
@@ -180,6 +193,15 @@ QString LayoutManager::assignmentIdForScreen(const QString& screenId, int virtua
         }
     }
 
+    // Virtual screen fallback: inherit from physical screen
+    if (VirtualScreenId::isVirtual(screenId)) {
+        const QString physId = VirtualScreenId::extractPhysicalId(screenId);
+        QString physResult = assignmentIdForScreen(physId, virtualDesktop, activity);
+        if (!physResult.isEmpty()) {
+            return physResult;
+        }
+    }
+
     return QString();
 }
 
@@ -208,6 +230,12 @@ AssignmentEntry LayoutManager::assignmentEntryForScreen(const QString& screenId,
         if (resolved != screenId) {
             return assignmentEntryForScreen(resolved, virtualDesktop, activity);
         }
+    }
+
+    // Virtual screen fallback: inherit from physical screen
+    if (VirtualScreenId::isVirtual(screenId)) {
+        const QString physId = VirtualScreenId::extractPhysicalId(screenId);
+        return assignmentEntryForScreen(physId, virtualDesktop, activity);
     }
 
     return AssignmentEntry{};

@@ -25,6 +25,7 @@
 #include "core/layoutmanager.h"
 #include "core/logging.h"
 #include "core/screenmanager.h"
+#include "core/virtualscreen.h"
 #include "core/windowtrackingservice.h"
 #include "core/zone.h"
 
@@ -1665,6 +1666,12 @@ QRect AutotileEngine::screenGeometry(const QString& screenId) const
         return QRect();
     }
 
+    // Virtual screens: use ScreenManager's virtual-aware geometry
+    if (VirtualScreenId::isVirtual(screenId)) {
+        return m_screenManager->screenAvailableGeometry(screenId);
+    }
+
+    // Physical screens: existing behavior
     QScreen* screen = Utils::findScreenByIdOrName(screenId);
     if (!screen) {
         return QRect();

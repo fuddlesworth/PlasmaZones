@@ -64,18 +64,26 @@ void OverlayService::setSettings(ISettings* settings)
                         const bool wasVisible = m_visible;
 
                         // Recreate all overlay windows (each gets correct type per-screen)
-                        const auto screens = m_overlayWindows.keys();
-                        for (QScreen* screen : screens) {
-                            destroyOverlayWindow(screen);
+                        const auto screenIds = m_overlayWindows.keys();
+                        // Snapshot phys screens before destroying
+                        QHash<QString, QScreen*> savedPhysScreens = m_overlayPhysScreens;
+                        QHash<QString, QRect> savedGeometries = m_overlayGeometries;
+                        for (const QString& screenId : screenIds) {
+                            destroyOverlayWindow(screenId);
                         }
 
                         // Recreate windows with correct type per-screen
-                        for (QScreen* screen : screens) {
-                            if (!m_settings || !m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
-                                createOverlayWindow(screen);
-                                updateOverlayWindow(screen);
-                                if (wasVisible && m_overlayWindows.value(screen)) {
-                                    m_overlayWindows.value(screen)->show();
+                        for (const QString& screenId : screenIds) {
+                            if (!m_settings || !m_settings->isMonitorDisabled(screenId)) {
+                                QScreen* physScreen = savedPhysScreens.value(screenId);
+                                if (!physScreen) {
+                                    continue;
+                                }
+                                const QRect geom = savedGeometries.value(screenId, physScreen->geometry());
+                                createOverlayWindow(screenId, physScreen, geom);
+                                updateOverlayWindow(screenId, physScreen);
+                                if (wasVisible && m_overlayWindows.value(screenId)) {
+                                    m_overlayWindows.value(screenId)->show();
                                 }
                             }
                         }
@@ -89,12 +97,9 @@ void OverlayService::setSettings(ISettings* settings)
                 }
             });
 
-            connect(m_settings, &ISettings::enableAudioVisualizerChanged, this,
-                    &OverlayService::syncCavaState);
-            connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this,
-                    &OverlayService::syncCavaState);
-            connect(m_settings, &ISettings::shaderFrameRateChanged, this,
-                    &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::shaderFrameRateChanged, this, &OverlayService::syncCavaState);
 
             // Hot-reload shaders when files change on disk.
             // ShaderRegistry detects file changes via QFileSystemWatcher and emits
@@ -162,8 +167,11 @@ void OverlayService::refreshVisibleWindows()
         }
     }
     if (m_visible) {
-        for (QScreen* screen : m_overlayWindows.keys()) {
-            updateOverlayWindow(screen);
+        for (const QString& screenId : m_overlayWindows.keys()) {
+            QScreen* physScreen = m_overlayPhysScreens.value(screenId);
+            if (physScreen) {
+                updateOverlayWindow(screenId, physScreen);
+            }
         }
     }
 }

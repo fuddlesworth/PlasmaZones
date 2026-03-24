@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "screenmanager.h"
+#include "virtualscreen.h"
 #include "platform.h"
 #include "logging.h"
 #include "utils.h"
@@ -437,6 +438,9 @@ void ScreenManager::onScreenGeometryChanged(const QRect& geometry)
 {
     auto* screen = qobject_cast<QScreen*>(sender());
     if (screen) {
+        // Invalidate virtual geometry caches — physical geometry changed
+        invalidateVirtualGeometryCache();
+
         // Screen geometry changed - the sensor window will be reconfigured by compositor
         // which will trigger onSensorGeometryChanged automatically
         Q_EMIT screenGeometryChanged(screen, geometry);
@@ -459,6 +463,192 @@ void ScreenManager::disconnectScreenSignals(QScreen* screen)
     }
 
     disconnect(screen, &QScreen::geometryChanged, this, nullptr);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Virtual Screen Management
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config)
+{
+    if (config.isEmpty()) {
+        m_virtualConfigs.remove(physicalScreenId);
+    } else {
+        m_virtualConfigs.insert(physicalScreenId, config);
+    }
+
+    invalidateVirtualGeometryCache(physicalScreenId);
+    Q_EMIT virtualScreensChanged(physicalScreenId);
+}
+
+VirtualScreenConfig ScreenManager::virtualScreenConfig(const QString& physicalScreenId) const
+{
+    return m_virtualConfigs.value(physicalScreenId);
+}
+
+QStringList ScreenManager::effectiveScreenIds() const
+{
+    QStringList result;
+
+    for (auto* screen : m_trackedScreens) {
+        QString physId = Utils::screenIdentifier(screen);
+        if (m_virtualConfigs.contains(physId) && m_virtualConfigs.value(physId).hasSubdivisions()) {
+            const auto& config = m_virtualConfigs.value(physId);
+            for (const auto& vs : config.screens) {
+                result.append(vs.id);
+            }
+        } else {
+            result.append(physId);
+        }
+    }
+
+    return result;
+}
+
+QStringList ScreenManager::virtualScreenIdsFor(const QString& physicalScreenId) const
+{
+    if (m_virtualConfigs.contains(physicalScreenId) && m_virtualConfigs.value(physicalScreenId).hasSubdivisions()) {
+        QStringList ids;
+        const auto& config = m_virtualConfigs.value(physicalScreenId);
+        for (const auto& vs : config.screens) {
+            ids.append(vs.id);
+        }
+        return ids;
+    }
+
+    return {physicalScreenId};
+}
+
+QRect ScreenManager::screenGeometry(const QString& screenId) const
+{
+    if (VirtualScreenId::isVirtual(screenId)) {
+        if (!m_virtualGeometryCache.contains(screenId)) {
+            QString physId = VirtualScreenId::extractPhysicalId(screenId);
+            rebuildVirtualGeometryCache(physId);
+        }
+        return m_virtualGeometryCache.value(screenId);
+    }
+
+    // Physical screen — resolve to QScreen
+    QScreen* screen = Utils::findScreenByIdOrName(screenId);
+    return screen ? screen->geometry() : QRect();
+}
+
+QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
+{
+    if (VirtualScreenId::isVirtual(screenId)) {
+        QRect vsGeom = screenGeometry(screenId);
+        if (!vsGeom.isValid()) {
+            return QRect();
+        }
+
+        // Get the physical screen's available geometry and intersect
+        QString physId = VirtualScreenId::extractPhysicalId(screenId);
+        QScreen* screen = Utils::findScreenByIdOrName(physId);
+        if (!screen) {
+            return vsGeom;
+        }
+
+        QRect physAvail = actualAvailableGeometry(screen);
+        return vsGeom.intersected(physAvail);
+    }
+
+    // Physical screen
+    QScreen* screen = Utils::findScreenByIdOrName(screenId);
+    return screen ? actualAvailableGeometry(screen) : QRect();
+}
+
+QScreen* ScreenManager::physicalQScreenFor(const QString& screenId) const
+{
+    QString physId = VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId;
+
+    return Utils::findScreenByIdOrName(physId);
+}
+
+bool ScreenManager::hasVirtualScreens(const QString& physicalScreenId) const
+{
+    return m_virtualConfigs.contains(physicalScreenId) && m_virtualConfigs.value(physicalScreenId).hasSubdivisions();
+}
+
+QString ScreenManager::virtualScreenAt(const QPoint& globalPos, const QString& physicalScreenId) const
+{
+    if (!m_virtualConfigs.contains(physicalScreenId)) {
+        return {};
+    }
+
+    const auto& config = m_virtualConfigs.value(physicalScreenId);
+    QScreen* screen = Utils::findScreenByIdOrName(physicalScreenId);
+    if (!screen) {
+        return {};
+    }
+
+    QRect physGeom = screen->geometry();
+    for (const auto& vs : config.screens) {
+        QRect absGeom = vs.absoluteGeometry(physGeom);
+        if (absGeom.contains(globalPos)) {
+            return vs.id;
+        }
+    }
+
+    return {};
+}
+
+QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
+{
+    for (auto* screen : m_trackedScreens) {
+        if (!screen->geometry().contains(globalPos)) {
+            continue;
+        }
+
+        QString physId = Utils::screenIdentifier(screen);
+        if (hasVirtualScreens(physId)) {
+            QString vsId = virtualScreenAt(globalPos, physId);
+            if (!vsId.isEmpty()) {
+                return vsId;
+            }
+        }
+
+        return physId;
+    }
+
+    return {};
+}
+
+void ScreenManager::invalidateVirtualGeometryCache(const QString& physicalScreenId)
+{
+    if (physicalScreenId.isEmpty()) {
+        m_virtualGeometryCache.clear();
+        return;
+    }
+
+    // Remove all cached entries belonging to this physical screen
+    const QString prefix = physicalScreenId + VirtualScreenId::Separator;
+    auto it = m_virtualGeometryCache.begin();
+    while (it != m_virtualGeometryCache.end()) {
+        if (it.key().startsWith(prefix)) {
+            it = m_virtualGeometryCache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void ScreenManager::rebuildVirtualGeometryCache(const QString& physicalScreenId) const
+{
+    if (!m_virtualConfigs.contains(physicalScreenId)) {
+        return;
+    }
+
+    QScreen* screen = Utils::findScreenByIdOrName(physicalScreenId);
+    if (!screen) {
+        return;
+    }
+
+    QRect physGeom = screen->geometry();
+    const auto& config = m_virtualConfigs.value(physicalScreenId);
+    for (const auto& vs : config.screens) {
+        m_virtualGeometryCache.insert(vs.id, vs.absoluteGeometry(physGeom));
+    }
 }
 
 } // namespace PlasmaZones

@@ -58,5 +58,53 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Screen whose geometry changed."/>
             </arg>
         </signal>
+        <method name="getVirtualScreenConfig">
+            <annotation name="org.gtk.GDBus.DocString" value="Get the virtual screen subdivision configuration for a physical screen as JSON."/>
+            <arg name="physicalScreenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Stable EDID-based physical screen identifier."/>
+            </arg>
+            <arg name="config" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual screen config as JSON."/>
+            </arg>
+        </method>
+        <method name="setVirtualScreenConfig">
+            <annotation name="org.gtk.GDBus.DocString" value="Set the virtual screen subdivision configuration for a physical screen from JSON."/>
+            <arg name="physicalScreenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Stable EDID-based physical screen identifier."/>
+            </arg>
+            <arg name="configJson" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual screen config as JSON."/>
+            </arg>
+        </method>
+        <method name="getPhysicalScreens">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the list of physical screen identifiers (stable EDID-based IDs)."/>
+            <arg name="screens" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="List of physical screen identifiers."/>
+            </arg>
+        </method>
+        <method name="getEffectiveScreens">
+            <annotation name="org.gtk.GDBus.DocString" value="Return all effective screen IDs. For subdivided physical screens, returns virtual screen IDs; otherwise returns the physical screen ID."/>
+            <arg name="screens" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="List of effective screen identifiers."/>
+            </arg>
+        </method>
+        <method name="getEffectiveScreenAt">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the effective screen ID (virtual or physical) containing the given global coordinates."/>
+            <arg name="x" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Global X coordinate."/>
+            </arg>
+            <arg name="y" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Global Y coordinate."/>
+            </arg>
+            <arg name="screenId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Effective screen ID at the given point, or empty if none."/>
+            </arg>
+        </method>
+        <signal name="virtualScreensChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when virtual screen subdivisions change for a physical screen."/>
+            <arg name="physicalScreenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Physical screen whose virtual screen configuration changed."/>
+            </arg>
+        </signal>
     </interface>
 </node>

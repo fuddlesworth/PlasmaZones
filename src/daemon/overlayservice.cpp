@@ -65,6 +65,43 @@ OverlayService::OverlayService(QObject* parent)
         qCWarning(lcOverlay) << "Overlay: created before QGuiApplication, screen signals not connected";
     }
 
+    // Connect to virtual screen configuration changes
+    if (auto* mgr = ScreenManager::instance()) {
+        connect(mgr, &ScreenManager::virtualScreensChanged, this, [this](const QString& physicalScreenId) {
+            // Destroy old overlays for this physical screen, recreate with new config
+            QScreen* physScreen = Utils::findScreenByIdOrName(physicalScreenId);
+            if (!physScreen) {
+                return;
+            }
+
+            // Remove existing overlays for this physical screen
+            QStringList toRemove;
+            for (auto it = m_overlayPhysScreens.constBegin(); it != m_overlayPhysScreens.constEnd(); ++it) {
+                if (it.value() == physScreen) {
+                    toRemove.append(it.key());
+                }
+            }
+            for (const QString& id : toRemove) {
+                destroyOverlayWindow(id);
+            }
+
+            // Recreate with new virtual screen config if visible
+            if (isVisible()) {
+                auto* mgr2 = ScreenManager::instance();
+                if (mgr2 && mgr2->hasVirtualScreens(physicalScreenId)) {
+                    for (const QString& vsId : mgr2->virtualScreenIdsFor(physicalScreenId)) {
+                        QRect vsGeom = mgr2->screenGeometry(vsId);
+                        if (vsGeom.isValid()) {
+                            createOverlayWindow(vsId, physScreen, vsGeom);
+                        }
+                    }
+                } else {
+                    createOverlayWindow(physScreen);
+                }
+            }
+        });
+    }
+
     // Connect to system sleep/resume via logind to restart shader timer after wake
     // This prevents large iTimeDelta jumps when system resumes from sleep
     QDBusConnection::systemBus().connect(QStringLiteral("org.freedesktop.login1"),
@@ -262,9 +299,9 @@ void OverlayService::updateSettings(ISettings* settings)
 
     // Hide overlay and zone selector on monitors that are now disabled
     if (m_settings) {
-        for (auto* screen : m_overlayWindows.keys()) {
-            if (m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
-                if (auto* window = m_overlayWindows.value(screen)) {
+        for (const QString& screenId : m_overlayWindows.keys()) {
+            if (m_settings->isMonitorDisabled(screenId)) {
+                if (auto* window = m_overlayWindows.value(screenId)) {
                     window->hide();
                 }
             }
@@ -279,11 +316,14 @@ void OverlayService::updateSettings(ISettings* settings)
     }
 
     if (m_visible) {
-        for (auto* screen : m_overlayWindows.keys()) {
-            if (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
+        for (const QString& screenId : m_overlayWindows.keys()) {
+            if (m_settings && m_settings->isMonitorDisabled(screenId)) {
                 continue;
             }
-            updateOverlayWindow(screen);
+            QScreen* physScreen = m_overlayPhysScreens.value(screenId);
+            if (physScreen) {
+                updateOverlayWindow(screenId, physScreen);
+            }
         }
     }
 
@@ -331,6 +371,21 @@ Layout* OverlayService::resolveScreenLayout(QScreen* screen) const
     return screenLayout;
 }
 
+Layout* OverlayService::resolveScreenLayout(const QString& screenId) const
+{
+    Layout* screenLayout = nullptr;
+    if (m_layoutManager && !screenId.isEmpty()) {
+        screenLayout = m_layoutManager->layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
+        if (!screenLayout) {
+            screenLayout = m_layoutManager->defaultLayout();
+        }
+    }
+    if (!screenLayout) {
+        screenLayout = m_layout;
+    }
+    return screenLayout;
+}
+
 void OverlayService::setCurrentVirtualDesktop(int desktop)
 {
     if (m_currentVirtualDesktop != desktop) {
@@ -345,8 +400,11 @@ void OverlayService::setCurrentVirtualDesktop(int desktop)
         }
         // Also refresh overlay windows when visible (symmetry with activity; overlay shows per-desktop layout)
         if (m_visible && !m_overlayWindows.isEmpty()) {
-            for (auto* screen : m_overlayWindows.keys()) {
-                updateOverlayWindow(screen);
+            for (const QString& screenId : m_overlayWindows.keys()) {
+                QScreen* physScreen = m_overlayPhysScreens.value(screenId);
+                if (physScreen) {
+                    updateOverlayWindow(screenId, physScreen);
+                }
             }
         }
     }
@@ -366,8 +424,11 @@ void OverlayService::setCurrentActivity(const QString& activityId)
         }
         // Also refresh overlay windows when visible (symmetry with desktop; overlay shows per-activity layout)
         if (m_visible && !m_overlayWindows.isEmpty()) {
-            for (auto* screen : m_overlayWindows.keys()) {
-                updateOverlayWindow(screen);
+            for (const QString& screenId : m_overlayWindows.keys()) {
+                QScreen* physScreen = m_overlayPhysScreens.value(screenId);
+                if (physScreen) {
+                    updateOverlayWindow(screenId, physScreen);
+                }
             }
         }
     }
@@ -375,7 +436,8 @@ void OverlayService::setCurrentActivity(const QString& activityId)
 
 void OverlayService::setupForScreen(QScreen* screen)
 {
-    if (!m_overlayWindows.contains(screen)) {
+    const QString screenId = Utils::screenIdentifier(screen);
+    if (!m_overlayWindows.contains(screenId)) {
         createOverlayWindow(screen);
     }
 }
@@ -385,7 +447,7 @@ void OverlayService::removeScreen(QScreen* screen)
     destroyOverlayWindow(screen);
 }
 
-void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen)
+void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen, const QRect& geometry)
 {
     if (!window || !screen) {
         return;
@@ -393,15 +455,39 @@ void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen)
     if (window->screen() != screen) {
         window->setScreen(screen);
     }
-    window->setGeometry(screen->geometry());
+    // Use provided geometry (for virtual screens), otherwise fall back to physical screen geometry
+    const QRect targetGeom = geometry.isValid() ? geometry : screen->geometry();
+    window->setGeometry(targetGeom);
 }
 
 void OverlayService::handleScreenAdded(QScreen* screen)
 {
-    if (m_visible && screen && (!m_settings || !m_settings->isMonitorDisabled(Utils::screenIdentifier(screen)))) {
+    if (!m_visible || !screen) {
+        return;
+    }
+    const QString physScreenId = Utils::screenIdentifier(screen);
+    if (m_settings && m_settings->isMonitorDisabled(physScreenId)) {
+        return;
+    }
+
+    auto* mgr = ScreenManager::instance();
+    if (mgr && mgr->hasVirtualScreens(physScreenId)) {
+        // Create overlays for each virtual screen on this physical screen
+        for (const QString& vsId : mgr->virtualScreenIdsFor(physScreenId)) {
+            QRect vsGeom = mgr->screenGeometry(vsId);
+            if (vsGeom.isValid()) {
+                createOverlayWindow(vsId, screen, vsGeom);
+                updateOverlayWindow(vsId, screen);
+                if (auto* window = m_overlayWindows.value(vsId)) {
+                    assertWindowOnScreen(window, screen, vsGeom);
+                    window->show();
+                }
+            }
+        }
+    } else {
         createOverlayWindow(screen);
         updateOverlayWindow(screen);
-        if (auto* window = m_overlayWindows.value(screen)) {
+        if (auto* window = m_overlayWindows.value(physScreenId)) {
             assertWindowOnScreen(window, screen);
             window->show();
         }
@@ -410,7 +496,14 @@ void OverlayService::handleScreenAdded(QScreen* screen)
 
 void OverlayService::handleScreenRemoved(QScreen* screen)
 {
-    destroyOverlayWindow(screen);
+    // Remove all overlay windows associated with this physical screen
+    // (includes any virtual screens on this physical screen)
+    const QStringList screenIds = m_overlayWindows.keys();
+    for (const QString& screenId : screenIds) {
+        if (m_overlayPhysScreens.value(screenId) == screen) {
+            destroyOverlayWindow(screenId);
+        }
+    }
     destroyZoneSelectorWindow(screen);
     destroyLayoutOsdWindow(screen);
     destroyNavigationOsdWindow(screen);

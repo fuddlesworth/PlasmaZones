@@ -86,6 +86,13 @@ void ScreenChangeHandler::applyScreenGeometryChange()
     }
 
     m_lastVirtualScreenGeometry = currentGeometry;
+
+    // Refresh virtual screen definitions — physical screen geometry changed, so
+    // virtual screen absolute coordinates need recalculation from the daemon.
+    if (m_effect->m_daemonServiceRegistered) {
+        m_effect->fetchAllVirtualScreenConfigs();
+    }
+
     if (m_reapplyInProgress) {
         m_reapplyPending = true;
         return;
@@ -109,8 +116,8 @@ void ScreenChangeHandler::fetchAndApplyWindowGeometries()
         return;
     }
     m_reapplyInProgress = true;
-    QDBusPendingCall pendingCall = m_effect->asyncMethodCall(
-        PlasmaZones::DBus::Interface::WindowTracking, QStringLiteral("getUpdatedWindowGeometries"));
+    QDBusPendingCall pendingCall = m_effect->asyncMethodCall(PlasmaZones::DBus::Interface::WindowTracking,
+                                                             QStringLiteral("getUpdatedWindowGeometries"));
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
     QPointer<ScreenChangeHandler> self(this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [self](QDBusPendingCallWatcher* w) {

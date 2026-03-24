@@ -51,6 +51,31 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, i
                                                   bool useAvailableGeometry = true);
 
 /**
+ * @brief Convert zone geometry to overlay-local coordinates using explicit geometry
+ * @param geometry Absolute geometry in screen coordinates
+ * @param overlayGeometry The overlay window's full geometry (origin + size)
+ * @return Geometry in overlay window local coordinates
+ *
+ * For virtual screens, the overlay covers the virtual screen bounds,
+ * so we subtract the virtual screen origin to get overlay-local coords.
+ */
+PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, const QRect& overlayGeometry);
+
+/**
+ * @brief Get zone geometry with gaps, using explicit screen geometry
+ * @param zone Zone to get geometry for
+ * @param screenGeometry Screen (or virtual screen) geometry in absolute pixels
+ * @param availableGeometry Available area within the screen (excluding panels)
+ * @param innerGap Gap between adjacent zones (zonePadding)
+ * @param outerGaps Per-side edge gaps
+ * @param useAvailableGeometry If true, calculate relative to available area
+ * @return Geometry with appropriate gaps applied
+ */
+PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, const QRect& screenGeometry,
+                                                  const QRect& availableGeometry, int innerGap,
+                                                  const EdgeGaps& outerGaps, bool useAvailableGeometry = true);
+
+/**
  * @brief Get effective zone padding for a layout
  * @param layout Layout to get padding for (may have per-layout override)
  * @param settings Global settings (used if layout has no override)

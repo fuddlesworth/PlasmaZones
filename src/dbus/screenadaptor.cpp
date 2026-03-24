@@ -4,9 +4,12 @@
 #include "screenadaptor.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
+#include "../core/screenmanager.h"
 #include "../core/utils.h"
+#include "../core/virtualscreen.h"
 #include <QGuiApplication>
 #include <QScreen>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -104,6 +107,105 @@ QString ScreenAdaptor::getScreenId(const QString& connectorName)
         return QString();
     }
     return Utils::screenIdForName(connectorName);
+}
+
+QString ScreenAdaptor::getVirtualScreenConfig(const QString& physicalScreenId)
+{
+    auto* mgr = ScreenManager::instance();
+    if (!mgr) {
+        qCWarning(lcDbus) << "getVirtualScreenConfig: no ScreenManager instance";
+        return QString();
+    }
+
+    VirtualScreenConfig config = mgr->virtualScreenConfig(physicalScreenId);
+
+    QJsonObject root;
+    root[QLatin1String("physicalScreenId")] = physicalScreenId;
+
+    QJsonArray screensArr;
+    for (const auto& vs : config.screens) {
+        QJsonObject screenObj;
+        screenObj[JsonKeys::Id] = vs.id;
+        screenObj[QLatin1String("index")] = vs.index;
+        screenObj[QLatin1String("displayName")] = vs.displayName;
+        screenObj[QLatin1String("region")] = QJsonObject{{JsonKeys::X, vs.region.x()},
+                                                         {JsonKeys::Y, vs.region.y()},
+                                                         {JsonKeys::Width, vs.region.width()},
+                                                         {JsonKeys::Height, vs.region.height()}};
+        screensArr.append(screenObj);
+    }
+    root[QLatin1String("screens")] = screensArr;
+
+    return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+}
+
+void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, const QString& configJson)
+{
+    auto* mgr = ScreenManager::instance();
+    if (!mgr) {
+        qCWarning(lcDbus) << "setVirtualScreenConfig: no ScreenManager instance";
+        return;
+    }
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(configJson.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qCWarning(lcDbus) << "setVirtualScreenConfig: invalid JSON:" << parseError.errorString();
+        return;
+    }
+
+    QJsonObject root = doc.object();
+    QJsonArray screensArr = root[QLatin1String("screens")].toArray();
+
+    VirtualScreenConfig config;
+    config.physicalScreenId = physicalScreenId;
+
+    for (const auto& entry : screensArr) {
+        QJsonObject screenObj = entry.toObject();
+        QJsonObject regionObj = screenObj[QLatin1String("region")].toObject();
+
+        VirtualScreenDef def;
+        def.index = screenObj[QLatin1String("index")].toInt();
+        def.id = VirtualScreenId::make(physicalScreenId, def.index);
+        def.physicalScreenId = physicalScreenId;
+        def.displayName = screenObj[QLatin1String("displayName")].toString();
+        def.region = QRectF(regionObj[JsonKeys::X].toDouble(), regionObj[JsonKeys::Y].toDouble(),
+                            regionObj[JsonKeys::Width].toDouble(), regionObj[JsonKeys::Height].toDouble());
+        config.screens.append(def);
+    }
+
+    mgr->setVirtualScreenConfig(physicalScreenId, config);
+}
+
+QStringList ScreenAdaptor::getPhysicalScreens()
+{
+    QStringList result;
+    auto* mgr = ScreenManager::instance();
+    if (!mgr) {
+        return result;
+    }
+    for (const auto* screen : mgr->screens()) {
+        result.append(Utils::screenIdentifier(screen));
+    }
+    return result;
+}
+
+QStringList ScreenAdaptor::getEffectiveScreens()
+{
+    auto* mgr = ScreenManager::instance();
+    if (!mgr) {
+        return {};
+    }
+    return mgr->effectiveScreenIds();
+}
+
+QString ScreenAdaptor::getEffectiveScreenAt(int x, int y)
+{
+    auto* mgr = ScreenManager::instance();
+    if (!mgr) {
+        return QString();
+    }
+    return mgr->effectiveScreenAt(QPoint(x, y));
 }
 
 } // namespace PlasmaZones

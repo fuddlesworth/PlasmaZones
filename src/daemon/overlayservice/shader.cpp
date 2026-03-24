@@ -133,12 +133,44 @@ bool OverlayService::anyScreenUsesShader() const
     if (m_settings && !m_settings->enableShaderEffects()) {
         return false;
     }
-    for (auto* screen : m_overlayWindows.keys()) {
-        if (useShaderForScreen(screen)) {
+    for (const QString& screenId : m_overlayWindows.keys()) {
+        if (useShaderForScreen(screenId)) {
             return true;
         }
     }
     return false;
+}
+
+bool OverlayService::useShaderForScreen(const QString& screenId) const
+{
+    if (!canUseShaders()) {
+        return false;
+    }
+    if (m_settings && !m_settings->enableShaderEffects()) {
+        return false;
+    }
+    Layout* screenLayout = resolveScreenLayout(screenId);
+    if (!screenLayout) {
+        return false;
+    }
+    if (ShaderRegistry::isNoneShader(screenLayout->shaderId())) {
+        return false;
+    }
+
+    // LayoutPreview mode requires standard QML overlay (ZonePreview can't be rendered in GLSL).
+    // If any zone resolves to LayoutPreview mode, fall back to standard overlay for this screen.
+    int globalMode = m_settings ? static_cast<int>(m_settings->overlayDisplayMode()) : 0;
+    int layoutMode = screenLayout->overlayDisplayMode();
+    for (const auto* zone : screenLayout->zones()) {
+        int resolved =
+            zone->overlayDisplayMode() >= 0 ? zone->overlayDisplayMode() : (layoutMode >= 0 ? layoutMode : globalMode);
+        if (resolved == 1) { // OverlayDisplayMode::LayoutPreview
+            return false;
+        }
+    }
+
+    auto* registry = ShaderRegistry::instance();
+    return registry && registry->shader(screenLayout->shaderId()).isValid();
 }
 
 void OverlayService::startShaderAnimation()

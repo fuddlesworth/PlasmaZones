@@ -36,10 +36,18 @@ public Q_SLOTS:
     QString getScreenId(const QString& connectorName);
     void setPrimaryScreenFromKWin(const QString& connectorName);
 
+    // Virtual screen management
+    QString getVirtualScreenConfig(const QString& physicalScreenId);
+    void setVirtualScreenConfig(const QString& physicalScreenId, const QString& configJson);
+    QStringList getPhysicalScreens();
+    QStringList getEffectiveScreens();
+    QString getEffectiveScreenAt(int x, int y);
+
 Q_SIGNALS:
     void screenAdded(const QString& screenId);
     void screenRemoved(const QString& screenId);
     void screenGeometryChanged(const QString& screenId);
+    void virtualScreensChanged(const QString& physicalScreenId);
 
 private:
     QString m_primaryScreenOverride;

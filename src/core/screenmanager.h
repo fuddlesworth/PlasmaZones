@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "virtualscreen.h"
 #include <QObject>
 #include <QScreen>
 #include <QVector>
@@ -118,6 +119,86 @@ public:
      */
     void scheduleDelayedPanelRequery(int delayMs);
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Virtual Screen Management
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Set virtual screen configuration for a physical screen
+     *
+     * Defines how a physical screen is subdivided into virtual screens.
+     * Pass an empty config to remove subdivisions.
+     *
+     * @param physicalScreenId Stable EDID-based physical screen identifier
+     * @param config Virtual screen configuration (regions + names)
+     */
+    void setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config);
+
+    /**
+     * @brief Get virtual screen configuration for a physical screen
+     * @param physicalScreenId Physical screen identifier
+     * @return Configuration, or empty config if no subdivisions
+     */
+    VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
+
+    /**
+     * @brief Get all virtual screen IDs across all physical screens
+     *
+     * For physical screens without subdivisions, returns the physical screen ID.
+     * For subdivided screens, returns all virtual screen IDs.
+     */
+    QStringList effectiveScreenIds() const;
+
+    /**
+     * @brief Get virtual screen IDs for a specific physical screen
+     * @param physicalScreenId Physical screen identifier
+     * @return Virtual screen IDs, or single-element list with physical ID if not subdivided
+     */
+    QStringList virtualScreenIdsFor(const QString& physicalScreenId) const;
+
+    /**
+     * @brief Get absolute geometry for a virtual or physical screen
+     * @param screenId Virtual or physical screen identifier
+     * @return Geometry in global compositor coordinates
+     */
+    QRect screenGeometry(const QString& screenId) const;
+
+    /**
+     * @brief Get available geometry (minus panels) for a virtual or physical screen
+     * @param screenId Virtual or physical screen identifier
+     * @return Available geometry in global compositor coordinates
+     */
+    QRect screenAvailableGeometry(const QString& screenId) const;
+
+    /**
+     * @brief Get the physical QScreen backing a screen ID
+     * @param screenId Virtual or physical screen identifier
+     * @return QScreen pointer, or nullptr if not found
+     */
+    QScreen* physicalQScreenFor(const QString& screenId) const;
+
+    /**
+     * @brief Check if a screen ID has virtual subdivisions
+     * @param physicalScreenId Physical screen identifier
+     * @return true if the screen has been subdivided
+     */
+    bool hasVirtualScreens(const QString& physicalScreenId) const;
+
+    /**
+     * @brief Find which virtual screen contains a global point
+     * @param globalPos Point in global compositor coordinates
+     * @param physicalScreenId Physical screen to search within
+     * @return Virtual screen ID, or empty string if not found
+     */
+    QString virtualScreenAt(const QPoint& globalPos, const QString& physicalScreenId) const;
+
+    /**
+     * @brief Find which effective screen (virtual or physical) contains a global point
+     * @param globalPos Point in global compositor coordinates
+     * @return Screen ID (virtual if subdivided, physical otherwise), or empty string
+     */
+    QString effectiveScreenAt(const QPoint& globalPos) const;
+
 Q_SIGNALS:
     /**
      * @brief Emitted when a screen is added
@@ -161,6 +242,12 @@ Q_SIGNALS:
      * so that the geometry debounce and processPendingGeometryUpdates run first.
      */
     void delayedPanelRequeryCompleted();
+
+    /**
+     * @brief Emitted when virtual screen configuration changes
+     * @param physicalScreenId Physical screen whose subdivisions changed
+     */
+    void virtualScreensChanged(const QString& physicalScreenId);
 
 private Q_SLOTS:
     void onScreenAdded(QScreen* screen);
@@ -225,6 +312,15 @@ private:
 
     // Watch for org.kde.plasmashell registration to query panels on arrival
     QDBusServiceWatcher* m_plasmaShellWatcher = nullptr;
+
+    // Virtual screen configuration per physical screen
+    QHash<QString, VirtualScreenConfig> m_virtualConfigs;
+
+    // Cached absolute geometries for virtual screens (invalidated on screen geometry change)
+    mutable QHash<QString, QRect> m_virtualGeometryCache;
+
+    void invalidateVirtualGeometryCache(const QString& physicalScreenId = {});
+    void rebuildVirtualGeometryCache(const QString& physicalScreenId) const;
 };
 
 } // namespace PlasmaZones

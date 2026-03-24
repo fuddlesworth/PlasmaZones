@@ -737,4 +737,95 @@ void Settings::saveAutotilingConfig(QSettingsConfigBackend* backend)
     }
 }
 
+// ── Virtual screen config load/save ──────────────────────────────────────────
+
+void Settings::loadVirtualScreenConfigs(QSettingsConfigBackend* backend)
+{
+    m_virtualScreenConfigs.clear();
+    const QStringList allGroups = backend->groupList();
+    const QLatin1String prefix("VirtualScreen:");
+
+    for (const QString& groupName : allGroups) {
+        if (!groupName.startsWith(prefix))
+            continue;
+
+        const QString physId = groupName.mid(prefix.size());
+        if (physId.isEmpty())
+            continue;
+
+        auto group = backend->group(groupName);
+        int count = group->readInt(QStringLiteral("count"), 0);
+        if (count <= 0) {
+            qCWarning(lcConfig) << "VirtualScreen config for" << physId << "has invalid count:" << count;
+            continue;
+        }
+
+        VirtualScreenConfig config;
+        config.physicalScreenId = physId;
+
+        for (int i = 0; i < count; ++i) {
+            const QString p = QString::number(i) + QLatin1Char('/');
+            VirtualScreenDef vs;
+            vs.physicalScreenId = physId;
+            vs.index = i;
+            vs.id = VirtualScreenId::make(physId, i);
+            vs.displayName = group->readString(p + QStringLiteral("name"), QStringLiteral("Screen %1").arg(i + 1));
+            qreal x = group->readDouble(p + QStringLiteral("x"), 0.0);
+            qreal y = group->readDouble(p + QStringLiteral("y"), 0.0);
+            qreal w = group->readDouble(p + QStringLiteral("width"), 1.0);
+            qreal h = group->readDouble(p + QStringLiteral("height"), 1.0);
+            vs.region = QRectF(x, y, w, h);
+            config.screens.append(vs);
+        }
+
+        // Validate loaded regions
+        bool valid = true;
+        for (const auto& vs : config.screens) {
+            if (vs.region.x() < 0 || vs.region.y() < 0 || vs.region.width() <= 0 || vs.region.height() <= 0
+                || vs.region.x() + vs.region.width() > 1.0 + 1e-6 || vs.region.y() + vs.region.height() > 1.0 + 1e-6) {
+                qCWarning(lcConfig) << "VirtualScreen" << vs.id << "has invalid region:" << vs.region;
+                valid = false;
+                break;
+            }
+        }
+
+        if (valid && !config.screens.isEmpty()) {
+            m_virtualScreenConfigs.insert(physId, config);
+        }
+    }
+}
+
+void Settings::saveVirtualScreenConfigs(QSettingsConfigBackend* backend)
+{
+    // Remove old VirtualScreen: groups that are no longer in the config
+    const QStringList allGroups = backend->groupList();
+    const QLatin1String prefix("VirtualScreen:");
+    for (const QString& groupName : allGroups) {
+        if (groupName.startsWith(prefix)) {
+            backend->deleteGroup(groupName);
+        }
+    }
+
+    // Write current configs
+    for (auto it = m_virtualScreenConfigs.constBegin(); it != m_virtualScreenConfigs.constEnd(); ++it) {
+        const QString& physId = it.key();
+        const VirtualScreenConfig& config = it.value();
+        if (config.screens.isEmpty())
+            continue;
+
+        auto group = backend->group(prefix + physId);
+        group->writeInt(QStringLiteral("count"), config.screens.size());
+
+        for (int i = 0; i < config.screens.size(); ++i) {
+            const VirtualScreenDef& vs = config.screens[i];
+            const QString p = QString::number(i) + QLatin1Char('/');
+            group->writeString(p + QStringLiteral("name"), vs.displayName);
+            group->writeDouble(p + QStringLiteral("x"), vs.region.x());
+            group->writeDouble(p + QStringLiteral("y"), vs.region.y());
+            group->writeDouble(p + QStringLiteral("width"), vs.region.width());
+            group->writeDouble(p + QStringLiteral("height"), vs.region.height());
+        }
+    }
+}
+
 } // namespace PlasmaZones

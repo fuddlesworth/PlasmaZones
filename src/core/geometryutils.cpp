@@ -94,6 +94,33 @@ static EdgeBoundaries detectEdgeBoundaries(Zone* zone, const QRectF& screenGeom)
     return edges;
 }
 
+/**
+ * @brief Apply gap adjustments to a zone's absolute geometry
+ * @param zoneGeom Absolute zone geometry (already calculated against reference area)
+ * @param zone Zone for edge boundary detection
+ * @param referenceGeom Reference geometry for fixed-mode edge detection
+ * @param innerGap Gap between adjacent zones (zonePadding)
+ * @param outerGaps Per-side edge gaps
+ * @return Geometry with gaps applied
+ *
+ * Shared helper used by both QScreen* and QRect overloads of getZoneGeometryWithGaps.
+ */
+static QRectF applyGapsToZoneGeometry(const QRectF& zoneGeom, Zone* zone, const QRectF& referenceGeom, int innerGap,
+                                      const EdgeGaps& outerGaps)
+{
+    // Detect which edges are at screen boundaries
+    EdgeBoundaries edges = detectEdgeBoundaries(zone, referenceGeom);
+
+    // Calculate adjustments for each edge
+    qreal leftAdj = edges.left ? outerGaps.left : (innerGap / 2.0);
+    qreal topAdj = edges.top ? outerGaps.top : (innerGap / 2.0);
+    qreal rightAdj = edges.right ? outerGaps.right : (innerGap / 2.0);
+    qreal bottomAdj = edges.bottom ? outerGaps.bottom : (innerGap / 2.0);
+
+    // Apply the adjustments (positive inset from edges)
+    return zoneGeom.adjusted(leftAdj, topAdj, -rightAdj, -bottomAdj);
+}
+
 QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps,
                                bool useAvailableGeometry)
 {
@@ -111,18 +138,28 @@ QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const 
 
     // Detect which edges are at screen boundaries
     QRectF screenGeom = useAvailableGeometry ? ScreenManager::actualAvailableGeometry(screen) : screen->geometry();
-    EdgeBoundaries edges = detectEdgeBoundaries(zone, screenGeom);
 
-    // Calculate adjustments for each edge
-    qreal leftAdj = edges.left ? outerGaps.left : (innerGap / 2.0);
-    qreal topAdj = edges.top ? outerGaps.top : (innerGap / 2.0);
-    qreal rightAdj = edges.right ? outerGaps.right : (innerGap / 2.0);
-    qreal bottomAdj = edges.bottom ? outerGaps.bottom : (innerGap / 2.0);
+    return applyGapsToZoneGeometry(geom, zone, screenGeom, innerGap, outerGaps);
+}
 
-    // Apply the adjustments (positive inset from edges)
-    geom = geom.adjusted(leftAdj, topAdj, -rightAdj, -bottomAdj);
+QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, const QRect& overlayGeometry)
+{
+    return QRectF(geometry.x() - overlayGeometry.x(), geometry.y() - overlayGeometry.y(), geometry.width(),
+                  geometry.height());
+}
 
-    return geom;
+QRectF getZoneGeometryWithGaps(Zone* zone, const QRect& screenGeometry, const QRect& availableGeometry, int innerGap,
+                               const EdgeGaps& outerGaps, bool useAvailableGeometry)
+{
+    if (!zone) {
+        return QRectF();
+    }
+
+    // Calculate absolute zone geometry against the chosen reference area
+    QRectF referenceGeom = useAvailableGeometry ? QRectF(availableGeometry) : QRectF(screenGeometry);
+    QRectF geom = zone->calculateAbsoluteGeometry(referenceGeom);
+
+    return applyGapsToZoneGeometry(geom, zone, referenceGeom, innerGap, outerGaps);
 }
 
 int getEffectiveZonePadding(Layout* layout, ISettings* settings, const QString& screenId)

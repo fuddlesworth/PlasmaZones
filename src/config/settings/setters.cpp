@@ -638,4 +638,42 @@ SETTINGS_SETTER(const QString&, SnapAllWindowsShortcut, m_snapAllWindowsShortcut
 SETTINGS_SETTER(const QString&, LayoutPickerShortcut, m_layoutPickerShortcut, layoutPickerShortcutChanged)
 SETTINGS_SETTER(const QString&, ToggleLayoutLockShortcut, m_toggleLayoutLockShortcut, toggleLayoutLockShortcutChanged)
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Virtual screen config setters
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QHash<QString, VirtualScreenConfig> Settings::virtualScreenConfigs() const
+{
+    return m_virtualScreenConfigs;
+}
+
+void Settings::setVirtualScreenConfigs(const QHash<QString, VirtualScreenConfig>& configs)
+{
+    if (m_virtualScreenConfigs != configs) {
+        m_virtualScreenConfigs = configs;
+        save();
+        Q_EMIT virtualScreenConfigsChanged();
+    }
+}
+
+void Settings::setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config)
+{
+    if (config.screens.isEmpty()) {
+        if (!m_virtualScreenConfigs.contains(physicalScreenId))
+            return;
+        m_virtualScreenConfigs.remove(physicalScreenId);
+    } else {
+        if (m_virtualScreenConfigs.value(physicalScreenId) == config)
+            return;
+        m_virtualScreenConfigs.insert(physicalScreenId, config);
+    }
+    save();
+    Q_EMIT virtualScreenConfigsChanged();
+}
+
+VirtualScreenConfig Settings::virtualScreenConfig(const QString& physicalScreenId) const
+{
+    return m_virtualScreenConfigs.value(physicalScreenId);
+}
+
 } // namespace PlasmaZones

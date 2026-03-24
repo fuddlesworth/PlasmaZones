@@ -172,6 +172,7 @@ void Settings::load()
         loadZoneSelectorConfig(*zoneSelector);
     }
     loadPerScreenOverrides(m_configBackend.get());
+    loadVirtualScreenConfigs(m_configBackend.get());
 
     // Shaders (small enough to stay inline)
     {
@@ -246,6 +247,7 @@ void Settings::save()
         saveZoneSelectorConfig(*zoneSelector);
     }
     saveAllPerScreenOverrides(m_configBackend.get());
+    saveVirtualScreenConfigs(m_configBackend.get());
     {
         auto globalShortcuts = m_configBackend->group(QStringLiteral("GlobalShortcuts"));
         saveShortcutConfig(*globalShortcuts);
@@ -295,7 +297,8 @@ void Settings::reset()
     for (const QString& groupName : allGroups) {
         if (groupName.startsWith(QLatin1String("ZoneSelector:"))
             || groupName.startsWith(QLatin1String("AutotileScreen:"))
-            || groupName.startsWith(QLatin1String("SnappingScreen:"))) {
+            || groupName.startsWith(QLatin1String("SnappingScreen:"))
+            || groupName.startsWith(QLatin1String("VirtualScreen:"))) {
             m_configBackend->deleteGroup(groupName);
         }
     }

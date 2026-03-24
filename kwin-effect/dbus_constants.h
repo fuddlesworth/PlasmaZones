@@ -24,6 +24,7 @@ inline const QString WindowTracking = QStringLiteral("org.plasmazones.WindowTrac
 inline const QString Overlay = QStringLiteral("org.plasmazones.Overlay");
 inline const QString Autotile = QStringLiteral("org.plasmazones.Autotile");
 inline const QString LayoutManager = QStringLiteral("org.plasmazones.LayoutManager");
+inline const QString Screen = QStringLiteral("org.plasmazones.Screen");
 }
 }
 

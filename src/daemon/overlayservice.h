@@ -156,8 +156,7 @@ public:
     void hideShaderPreview() override;
 
     // Snap Assist overlay (window picker after snapping)
-    void showSnapAssist(const QString& screenId, const QString& emptyZonesJson,
-                        const QString& candidatesJson) override;
+    void showSnapAssist(const QString& screenId, const QString& emptyZonesJson, const QString& candidatesJson) override;
     void hideSnapAssist() override;
     bool isSnapAssistVisible() const override;
     void setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl) override;
@@ -193,11 +192,26 @@ private:
     void createOverlayWindow(QScreen* screen);
     void destroyOverlayWindow(QScreen* screen);
     void updateOverlayWindow(QScreen* screen);
+
+    /**
+     * @brief Create/destroy/update overlay windows keyed by screen ID
+     *
+     * Virtual-screen-aware overloads. The screenId can be a physical screen ID
+     * or a virtual screen ID (format "physicalId/vs:N"). The physScreen is the
+     * backing QScreen* for Wayland layer-shell parenting.
+     */
+    void createOverlayWindow(const QString& screenId, QScreen* physScreen, const QRect& geometry);
+    void destroyOverlayWindow(const QString& screenId);
+    void updateOverlayWindow(const QString& screenId, QScreen* physScreen);
+
     void updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
                                       Layout* screenLayout);
     QVariantList buildZonesList(QScreen* screen) const;
+    QVariantList buildZonesList(const QString& screenId, QScreen* physScreen) const;
     QVariantList buildLayoutsList(const QString& screenId = QString()) const;
     QVariantMap zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout = nullptr) const;
+    QVariantMap zoneToVariantMap(Zone* zone, const QString& screenId, QScreen* physScreen, const QRect& overlayGeometry,
+                                 Layout* layout = nullptr) const;
 
     /**
      * @brief Resolve the layout for a given screen with fallback chain
@@ -205,9 +219,12 @@ private:
      * Tries: per-screen assignment → activeLayout → m_layout
      */
     Layout* resolveScreenLayout(QScreen* screen) const;
+    Layout* resolveScreenLayout(const QString& screenId) const;
 
     std::unique_ptr<QQmlEngine> m_engine;
-    QHash<QScreen*, QQuickWindow*> m_overlayWindows;
+    QHash<QString, QQuickWindow*> m_overlayWindows; // Keyed by screen ID (physical or virtual)
+    QHash<QString, QScreen*> m_overlayPhysScreens; // screenId -> backing QScreen* (for layer-shell)
+    QHash<QString, QRect> m_overlayGeometries; // screenId -> overlay geometry (virtual or physical)
     QHash<QScreen*, QQuickWindow*> m_zoneSelectorWindows;
     QPointer<Layout> m_layout;
     QPointer<ISettings> m_settings;
@@ -281,7 +298,7 @@ private:
      * On Wayland, LayerShellQt reads QWindow::screen() at surface commit time.
      * Call this before show() to ensure the window maps to the correct output.
      */
-    static void assertWindowOnScreen(QWindow* window, QScreen* screen);
+    static void assertWindowOnScreen(QWindow* window, QScreen* screen, const QRect& geometry = QRect());
 
     /**
      * @brief Prepare layout OSD window for display
@@ -312,6 +329,7 @@ private:
 
     // Shader support methods
     bool useShaderForScreen(QScreen* screen) const;
+    bool useShaderForScreen(const QString& screenId) const;
     bool anyScreenUsesShader() const;
     bool canUseShaders() const;
     void startShaderAnimation();

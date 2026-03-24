@@ -23,6 +23,7 @@
 #include <LayerShellQt/Window>
 
 #include "../../core/logging.h"
+#include "../../core/screenmanager.h"
 #include "../../core/settings_interfaces.h"
 #include "../../core/shaderregistry.h"
 #include "../../core/utils.h"
@@ -116,6 +117,24 @@ inline QScreen* resolveTargetScreen(const QString& screenId)
     return screen;
 }
 
+/// Resolve target screen geometry for a screen ID (virtual or physical).
+/// For virtual screens (format "physicalId/vs:N"), returns the virtual screen
+/// geometry from ScreenManager. For physical screens, falls back to QScreen::geometry().
+/// Returns the geometry the overlay window should cover.
+inline QRect resolveScreenGeometry(const QString& screenId)
+{
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        QRect geom = mgr->screenGeometry(screenId);
+        if (geom.isValid()) {
+            return geom;
+        }
+    }
+    // Fallback: try as physical screen
+    QScreen* screen = resolveTargetScreen(screenId);
+    return screen ? screen->geometry() : QRect();
+}
+
 // Write shader properties (shaderSource, bufferShaderPath, bufferShaderPaths,
 // bufferFeedback, bufferScale, bufferWrap, shaderParams) from ShaderInfo to a QML window.
 // Replaces 3 occurrences of the shader-info-to-window property push pattern.
@@ -145,19 +164,6 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
     }
     // shaderSource LAST — triggers statusChanged() → QML binding cascade
     writeQmlProperty(window, QStringLiteral("shaderSource"), info.shaderUrl);
-}
-
-// Initialize shader timer if not already running. Prevents large iTimeDelta jumps
-// by only starting if invalid. Replaces 3 occurrences of mutex-guarded timer init.
-inline void ensureShaderTimerStarted(QElapsedTimer& timer, QMutex& mutex, std::atomic<qint64>& lastFrame,
-                                     std::atomic<int>& frameCount)
-{
-    QMutexLocker locker(&mutex);
-    if (!timer.isValid()) {
-        timer.start();
-        lastFrame.store(0);
-        frameCount.store(0);
-    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

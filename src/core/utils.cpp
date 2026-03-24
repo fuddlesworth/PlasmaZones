@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "utils.h"
+#include "virtualscreen.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QDir>
@@ -229,6 +230,16 @@ void warnDuplicateScreenIds()
                 qPrintable(it.key()), qPrintable(it.value().join(QStringLiteral(", "))));
         }
     }
+}
+
+bool isVirtualScreenId(const QString& screenId)
+{
+    return VirtualScreenId::isVirtual(screenId);
+}
+
+QString physicalScreenId(const QString& screenId)
+{
+    return VirtualScreenId::extractPhysicalId(screenId);
 }
 
 } // namespace Utils

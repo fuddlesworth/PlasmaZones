@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "EditorController.h"
+#include "services/VirtualScreenService.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/translationloader.h"
@@ -138,6 +139,10 @@ int main(int argc, char* argv[])
 
     // Expose controller to QML
     engine.rootContext()->setContextProperty(QStringLiteral("editorController"), &controller);
+
+    // Expose virtual screen service to QML
+    PlasmaZones::VirtualScreenService virtualScreenService;
+    engine.rootContext()->setContextProperty(QStringLiteral("virtualScreenService"), &virtualScreenService);
 
     // Expose screen list to QML
     engine.rootContext()->setContextProperty(QStringLiteral("availableScreens"), QVariant::fromValue(app.screens()));

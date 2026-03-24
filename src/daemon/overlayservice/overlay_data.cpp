@@ -53,27 +53,32 @@ void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QV
 
 QVariantList OverlayService::buildZonesList(QScreen* screen) const
 {
+    return buildZonesList(Utils::screenIdentifier(screen), screen);
+}
+
+QVariantList OverlayService::buildZonesList(const QString& screenId, QScreen* physScreen) const
+{
     QVariantList zonesList;
 
-    if (!screen) {
+    if (!physScreen) {
         return zonesList;
     }
 
     // Get the layout for this specific screen, fall back to global active layout
     // Per-screen assignments take priority so each monitor shows its own layout
-    Layout* screenLayout = resolveScreenLayout(screen);
+    Layout* screenLayout = resolveScreenLayout(screenId);
 
     if (!screenLayout) {
         return zonesList;
     }
 
-    qCDebug(lcOverlay) << "buildZonesList: screen=" << screen->name() << "screenGeom=" << screen->geometry()
-                       << "availGeom=" << ScreenManager::actualAvailableGeometry(screen)
+    const QRect overlayGeom = m_overlayGeometries.value(screenId, physScreen->geometry());
+    qCDebug(lcOverlay) << "buildZonesList: screenId=" << screenId << "overlayGeom=" << overlayGeom
                        << "layout=" << screenLayout->name() << "zones=" << screenLayout->zones().size();
 
     for (auto* zone : screenLayout->zones()) {
         if (zone) {
-            zonesList.append(zoneToVariantMap(zone, screen, screenLayout));
+            zonesList.append(zoneToVariantMap(zone, screenId, physScreen, overlayGeom, screenLayout));
         }
     }
 
@@ -81,6 +86,13 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
 }
 
 QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout) const
+{
+    const QString screenId = Utils::screenIdentifier(screen);
+    return zoneToVariantMap(zone, screenId, screen, screen->geometry(), layout);
+}
+
+QVariantMap OverlayService::zoneToVariantMap(Zone* zone, const QString& screenId, QScreen* physScreen,
+                                             const QRect& overlayGeometry, Layout* layout) const
 {
     QVariantMap map;
 
@@ -94,15 +106,27 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
     // Uses the layout's geometry preference: available area (excluding panels/taskbars)
     // or full screen geometry depending on useFullScreenGeometry setting.
     // Layout's zonePadding/outerGap takes precedence over global settings
-    QString screenId = Utils::screenIdentifier(screen);
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
     EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
     bool useAvail = !(layout && layout->useFullScreenGeometry());
-    QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
 
-    // Convert to overlay window local coordinates
-    // The overlay covers the full screen, but zones are positioned within available area
-    QRectF overlayGeom = GeometryUtils::availableAreaToOverlayCoordinates(geom, screen);
+    // Determine if this is a virtual screen (overlay geometry differs from physical screen)
+    const bool isVirtual = (overlayGeometry.isValid() && overlayGeometry != physScreen->geometry());
+
+    QRectF geom;
+    QRectF overlayGeom;
+    if (isVirtual) {
+        // Virtual screen: calculate zones against virtual screen bounds
+        auto* mgr = ScreenManager::instance();
+        QRect availGeom = mgr ? mgr->screenAvailableGeometry(screenId) : overlayGeometry;
+        geom =
+            GeometryUtils::getZoneGeometryWithGaps(zone, overlayGeometry, availGeom, zonePadding, outerGaps, useAvail);
+        overlayGeom = GeometryUtils::availableAreaToOverlayCoordinates(geom, overlayGeometry);
+    } else {
+        // Physical screen: existing path
+        geom = GeometryUtils::getZoneGeometryWithGaps(zone, physScreen, zonePadding, outerGaps, useAvail);
+        overlayGeom = GeometryUtils::availableAreaToOverlayCoordinates(geom, physScreen);
+    }
 
     map[JsonKeys::Id] = zone->id().toString(); // Include zone ID for stable selection
     map[JsonKeys::X] = overlayGeom.x();
@@ -155,12 +179,12 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
     // Shader-specific data (ZoneDataProvider texture)
     // ═══════════════════════════════════════════════════════════════════════════════
 
-    // Normalized coordinates 0-1 over the overlay (full screen). relativeGeometry is 0-1
-    // over the available area only; the overlay covers the full screen, so we must use
-    // overlay-based normalized so shader (rect * iResolution) matches overlay pixels.
-    const QRectF screenGeom = screen->geometry();
-    const qreal ow = screenGeom.width() > 0 ? screenGeom.width() : 1.0;
-    const qreal oh = screenGeom.height() > 0 ? screenGeom.height() : 1.0;
+    // Normalized coordinates 0-1 over the overlay window. For virtual screens,
+    // the overlay covers the virtual screen geometry (not the full physical screen),
+    // so normalize against the overlay geometry.
+    const QRectF normGeom = QRectF(overlayGeometry);
+    const qreal ow = normGeom.width() > 0 ? normGeom.width() : 1.0;
+    const qreal oh = normGeom.height() > 0 ? normGeom.height() : 1.0;
     map[QLatin1String("normalizedX")] = overlayGeom.x() / ow;
     map[QLatin1String("normalizedY")] = overlayGeom.y() / oh;
     map[QLatin1String("normalizedWidth")] = overlayGeom.width() / ow;
@@ -197,14 +221,15 @@ void OverlayService::updateZonesForAllWindows()
     m_zoneDataDirty = false;
 
     for (auto it = m_overlayWindows.begin(); it != m_overlayWindows.end(); ++it) {
-        QScreen* screen = it.key();
+        const QString& screenId = it.key();
         QQuickWindow* window = it.value();
 
         if (!window) {
             continue;
         }
 
-        QVariantList zones = buildZonesList(screen);
+        QScreen* physScreen = m_overlayPhysScreens.value(screenId);
+        QVariantList zones = buildZonesList(screenId, physScreen);
         QVariantList patched = patchZonesWithHighlight(zones, window);
 
         int highlightedCount = 0;
@@ -218,9 +243,9 @@ void OverlayService::updateZonesForAllWindows()
         writeQmlProperty(window, QStringLiteral("zoneCount"), patched.size());
         writeQmlProperty(window, QStringLiteral("highlightedCount"), highlightedCount);
 
-        if (useShaderForScreen(screen)) {
-            Layout* screenLayout = resolveScreenLayout(screen);
-            updateLabelsTextureForWindow(window, patched, screen, screenLayout);
+        if (useShaderForScreen(screenId)) {
+            Layout* screenLayout = resolveScreenLayout(screenId);
+            updateLabelsTextureForWindow(window, patched, physScreen, screenLayout);
         }
     }
 

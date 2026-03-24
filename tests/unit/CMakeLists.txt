@@ -138,6 +138,12 @@ pz_add_test(test_layoutmanager_cycling core/test_layoutmanager_cycling.cpp)
 pz_add_test(test_layoutmanager_assignment core/test_layoutmanager_assignment.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# core/ — Virtual Screen Tests (ID utilities, data model, ScreenManager)
+# ═══════════════════════════════════════════════════════════════════════════════
+pz_add_test(test_virtual_screen core/test_virtual_screen.cpp)
+pz_add_test(test_virtual_screen_manager core/test_virtual_screen_manager.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # core/ — Zone Detection Tests (layout, service)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_zone_detection_layout core/test_zone_detection_layout.cpp)
@@ -214,6 +220,7 @@ set(_all_tests
     test_configdefaults
     test_layout_core test_layout_zones
     test_layoutmanager_persistence test_layoutmanager_cycling test_layoutmanager_assignment
+    test_virtual_screen test_virtual_screen_manager
     test_zone_detection_layout test_zone_detection_service
     test_per_screen_config test_navigation_controller test_settings_bridge
     test_zone_shader_item test_overlay_helpers

@@ -176,8 +176,7 @@ private:
      * @param args       Method arguments
      * @return QDBusPendingCall for attaching a watcher
      */
-    QDBusPendingCall asyncMethodCall(const QString& interface, const QString& method,
-                                     const QVariantList& args = {});
+    QDBusPendingCall asyncMethodCall(const QString& interface, const QString& method, const QVariantList& args = {});
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
@@ -307,7 +306,6 @@ public Q_SLOTS:
     // These methods are used by NavigationHandler, WindowAnimator, and DragTracker
     // ═══════════════════════════════════════════════════════════════════════════════
 public:
-
     // Animation sequence mode: 0=all at once, 1=one by one in zone order (for batch snaps)
     int cachedAnimationSequenceMode() const
     {
@@ -509,6 +507,54 @@ private:
     // Stores the connector name of the last output the cursor was on.
     // Used for deduplication only — the actual D-Bus call sends the EDID screen ID.
     QString m_lastCursorOutput;
+
+    // Last effective screen ID reported to daemon (physical or virtual).
+    // Used for deduplication of cursorScreenChanged D-Bus calls when virtual
+    // screens subdivide a physical monitor — detects sub-screen crossings.
+    QString m_lastEffectiveScreenId;
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Virtual Screen Support
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief A single virtual screen subdivision within a physical monitor.
+     *
+     * Virtual screens divide a physical monitor into independent sub-screens,
+     * each with its own zones, autotile state, etc. The daemon manages
+     * definitions; the effect fetches them via D-Bus and resolves positions.
+     */
+    struct VirtualScreenDef
+    {
+        QString id; ///< e.g., "Dell:U2722D:115107/vs:0"
+        QRect geometry; ///< Absolute geometry in global compositor coords
+    };
+
+    /// Physical screen ID -> list of virtual screens (empty = no subdivisions)
+    QHash<QString, QVector<VirtualScreenDef>> m_virtualScreenDefs;
+
+    /**
+     * @brief Resolve a global point to the effective screen ID (virtual-aware).
+     *
+     * If the physical screen (from output) has virtual subdivisions, returns
+     * the virtual screen ID whose geometry contains pos. Otherwise returns
+     * the physical screen ID unchanged.
+     *
+     * @param pos Global compositor-space point
+     * @param output The KWin output the point is on
+     * @return Effective screen ID (virtual or physical)
+     */
+    QString resolveEffectiveScreenId(const QPoint& pos, const KWin::LogicalOutput* output) const;
+
+    /// Fetch virtual screen config from daemon for a single physical screen
+    void fetchVirtualScreenConfig(const QString& physicalScreenId);
+
+    /// Fetch virtual screen configs for all connected physical screens
+    void fetchAllVirtualScreenConfigs();
+
+private Q_SLOTS:
+    /// Handle daemon signal when virtual screen definitions change
+    void onVirtualScreensChanged(const QString& physicalScreenId);
 };
 
 } // namespace PlasmaZones
