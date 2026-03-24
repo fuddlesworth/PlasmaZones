@@ -31,20 +31,17 @@ struct OsdWindowSetup
     }
 };
 
-// Center an OSD/layer window on screen using LayerShellQt margins
+// Center an OSD/layer window within a screen geometry (virtual or physical).
+// Uses setGeometry with absolute coordinates so it works correctly for virtual
+// screens that are sub-regions of a physical monitor.
 void centerLayerWindowOnScreen(QQuickWindow* window, const QRect& screenGeom, int osdWidth, int osdHeight)
 {
     if (!window) {
         return;
     }
-    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        const int hMargin = qMax(0, (screenGeom.width() - osdWidth) / 2);
-        const int vMargin = qMax(0, (screenGeom.height() - osdHeight) / 2);
-        layerWindow->setAnchors(
-            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
-        layerWindow->setMargins(QMargins(hMargin, vMargin, hMargin, vMargin));
-    }
+    const int x = screenGeom.x() + qMax(0, (screenGeom.width() - osdWidth) / 2);
+    const int y = screenGeom.y() + qMax(0, (screenGeom.height() - osdHeight) / 2);
+    window->setGeometry(x, y, osdWidth, osdHeight);
 }
 
 // Calculate OSD size and center window
