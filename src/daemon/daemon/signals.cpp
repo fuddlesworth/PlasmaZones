@@ -503,13 +503,13 @@ void Daemon::connectLayoutSignals()
                     return;
                 }
                 // Check if snapping layout is locked
-                const QString resolvedScreenId = screenId.isEmpty() ? QString() : Utils::screenIdForName(screenId);
-                if (!resolvedScreenId.isEmpty() && isCurrentContextLockedForMode(resolvedScreenId, 0)) {
+                // screenId is already a virtual-aware ID from the zone selector
+                if (!screenId.isEmpty() && isCurrentContextLockedForMode(screenId, 0)) {
                     showLockedPreviewOsd(screenId);
                     return;
                 }
-                if (!resolvedScreenId.isEmpty()) {
-                    m_unifiedLayoutController->setCurrentScreenName(resolvedScreenId);
+                if (!screenId.isEmpty()) {
+                    m_unifiedLayoutController->setCurrentScreenName(screenId);
                 }
                 if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {
                     return;
@@ -527,12 +527,15 @@ void Daemon::connectOverlaySignals()
     connect(m_overlayService.get(), &IOverlayService::autotileLayoutSelected, this,
             [this](const QString& algorithmId, const QString& screenId) {
                 // Check if tiling algorithm is locked
-                QString lockScreenId = screenId.isEmpty() ? QString() : Utils::screenIdForName(screenId);
-                if (!lockScreenId.isEmpty() && isCurrentContextLockedForMode(lockScreenId, 1)) {
+                // screenId is already a virtual-aware ID from the zone selector
+                if (!screenId.isEmpty() && isCurrentContextLockedForMode(screenId, 1)) {
                     showLockedPreviewOsd(screenId);
                     return;
                 }
                 if (m_unifiedLayoutController) {
+                    if (!screenId.isEmpty()) {
+                        m_unifiedLayoutController->setCurrentScreenName(screenId);
+                    }
                     m_unifiedLayoutController->applyLayoutById(LayoutId::makeAutotileId(algorithmId));
                 }
             });
