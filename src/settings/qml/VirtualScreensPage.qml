@@ -184,6 +184,7 @@ Flickable {
             Layout.fillWidth: true
             appSettings: settingsController
             showAllMonitors: false
+            physicalOnly: true
             selectedScreenName: root._selectedScreen
             onSelectedScreenNameChanged: {
                 root._selectedScreen = selectedScreenName;

@@ -20,11 +20,27 @@ ColumnLayout {
     property string selectedScreenName: ""
     property bool hasOverrides: false
     property bool showAllMonitors: true
+    property bool physicalOnly: false // When true, filter out virtual screens (e.g., for virtual screen config page)
     readonly property bool isPerScreen: selectedScreenName !== ""
+    // Filtered screen list: removes virtual screens when physicalOnly is true
+    readonly property var _filteredScreens: {
+        var all = appSettings.screens;
+        if (!physicalOnly)
+            return all;
+
+        var result = [];
+        for (var i = 0; i < all.length; i++) {
+            var name = all[i].name || "";
+            if (name.indexOf("/vs:") === -1)
+                result.push(all[i]);
+
+        }
+        return result;
+    }
 
     signal resetClicked()
 
-    visible: showAllMonitors ? appSettings.screens.length > 1 : appSettings.screens.length > 0
+    visible: showAllMonitors ? _filteredScreens.length > 1 : _filteredScreens.length > 0
     spacing: Kirigami.Units.smallSpacing
 
     // Hot-unplug: reset selection if selected screen disappears
@@ -33,7 +49,7 @@ ColumnLayout {
             if (root.selectedScreenName === "")
                 return ;
 
-            let screens = root.appSettings.screens;
+            let screens = root._filteredScreens;
             for (let i = 0; i < screens.length; i++) {
                 if (screens[i].name === root.selectedScreenName)
                     return ;
@@ -119,7 +135,7 @@ ColumnLayout {
 
             // Individual monitors
             Repeater {
-                model: root.appSettings.screens
+                model: root._filteredScreens
 
                 delegate: Rectangle {
                     required property var modelData
