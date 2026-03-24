@@ -331,6 +331,13 @@ public:
     Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenName) const;
 
+    // ── Virtual screen configuration ──────────────────────────────────────────
+    Q_INVOKABLE QStringList getPhysicalScreens() const;
+    Q_INVOKABLE QVariantList getVirtualScreenConfig(const QString& physicalScreenId) const;
+    Q_INVOKABLE void applyVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens);
+    Q_INVOKABLE void removeVirtualScreenConfig(const QString& physicalScreenId);
+    Q_INVOKABLE void applyVirtualScreenPreset(const QString& physicalScreenId, const QString& preset);
+
     // ── Per-screen zone selector overrides ───────────────────────────────────
     Q_INVOKABLE QVariantMap getPerScreenZoneSelectorSettings(const QString& screenName) const;
     Q_INVOKABLE void setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key,

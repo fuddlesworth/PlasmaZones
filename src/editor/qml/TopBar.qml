@@ -22,7 +22,6 @@ ToolBar {
     required property var shaderDialog
     required property var visibilityDialog
     required property var layoutSettingsDialog
-    required property var virtualScreenDialog
     required property var importDialog
     required property var exportDialog
     required property var editorWindow
@@ -299,27 +298,6 @@ ToolBar {
             ToolTip.visible: hovered
             Accessible.name: i18nc("@action", "Layout Visibility")
             Accessible.description: i18nc("@info", "Configure where this layout appears in the zone selector")
-        }
-
-        // ═══════════════════════════════════════════════════════════════
-        // VIRTUAL SCREEN SETTINGS BUTTON
-        // ═══════════════════════════════════════════════════════════════
-        ToolButton {
-            id: virtualScreenButton
-
-            icon.name: "view-split-left-right"
-            enabled: editorController !== null && editorController !== undefined
-            onClicked: topBar.virtualScreenDialog.open()
-            ToolTip.text: i18nc("@tooltip", "Virtual screen subdivisions")
-            ToolTip.visible: hovered
-            Accessible.name: i18nc("@action", "Virtual Screens")
-            Accessible.description: i18nc("@info", "Split physical monitors into virtual screens")
-        }
-
-        // Visual separator
-        Kirigami.Separator {
-            Layout.fillHeight: true
-            Layout.preferredWidth: 1
         }
 
         // ═══════════════════════════════════════════════════════════════

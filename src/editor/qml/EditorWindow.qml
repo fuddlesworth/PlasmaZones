@@ -243,7 +243,6 @@ Window {
         shaderDialog: shaderDialog
         visibilityDialog: visibilityDialog
         layoutSettingsDialog: layoutSettingsDialog
-        virtualScreenDialog: virtualScreenDialog
         importDialog: importDialog
         editorWindow: editorWindow
         exportDialog: exportDialog
@@ -699,15 +698,6 @@ Window {
         id: layoutSettingsDialog
 
         editorController: editorWindow._editorController
-    }
-
-    // ═══════════════════════════════════════════════════════════════════
-    // VIRTUAL SCREEN SETTINGS DIALOG
-    // ═══════════════════════════════════════════════════════════════════
-    VirtualScreenPanel {
-        id: virtualScreenDialog
-
-        virtualScreenService: virtualScreenService
     }
 
     Connections {

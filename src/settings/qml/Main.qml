@@ -28,6 +28,12 @@ ApplicationWindow {
         "hasChildren": false,
         "hasDividerAfter": true
     }, {
+        "name": "virtualscreens",
+        "label": i18n("Virtual Screens"),
+        "iconName": "view-split-left-right",
+        "hasChildren": false,
+        "hasDividerAfter": false
+    }, {
         "name": "layouts",
         "label": i18n("Layouts"),
         "iconName": "view-grid",
@@ -128,6 +134,7 @@ ApplicationWindow {
     // Page component map -- loaded on demand by Loader
     readonly property var _pageComponents: ({
         "overview": "MonitorStatePage.qml",
+        "virtualscreens": "VirtualScreensPage.qml",
         "layouts": "LayoutsPage.qml",
         "snap-appearance": "SnappingAppearancePage.qml",
         "snap-behavior": "SnappingBehaviorPage.qml",

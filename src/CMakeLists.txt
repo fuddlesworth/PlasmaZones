@@ -486,8 +486,6 @@ set(plasmazones_editor_SRCS
     editor/services/TemplateService.cpp
     editor/services/TemplateService.h
     editor/services/TemplateStrategy.h
-    editor/services/VirtualScreenService.cpp
-    editor/services/VirtualScreenService.h
     editor/undo/UndoController.cpp
     editor/undo/UndoController.h
     editor/undo/commands/BaseZoneCommand.cpp
@@ -596,7 +594,6 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/OpacitySliderRow.qml
         editor/qml/AppearanceSpinBox.qml
         editor/qml/ZoneColorDialog.qml
-        editor/qml/VirtualScreenPanel.qml
     )
 
 target_link_libraries(plasmazones-editor
