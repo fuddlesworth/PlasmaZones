@@ -488,6 +488,7 @@ public:
     virtual QString selectedLayoutId() const = 0;
     virtual int selectedZoneIndex() const = 0;
     virtual QRect getSelectedZoneGeometry(QScreen* screen) const = 0;
+    virtual QRect getSelectedZoneGeometry(const QString& screenId) const = 0;
     virtual void clearSelectedZone() = 0;
 
     // Shader preview overlay (editor dialog - dedicated window avoids multi-pass clear)

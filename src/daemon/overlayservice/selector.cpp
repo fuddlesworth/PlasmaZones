@@ -351,6 +351,69 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
     return GeometryUtils::snapToRect(geom);
 }
 
+QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
+{
+    if (!hasSelectedZone()) {
+        return QRect();
+    }
+
+    auto* mgr = ScreenManager::instance();
+    QScreen* physScreen = mgr ? mgr->physicalQScreenFor(screenId) : Utils::findScreenByIdOrName(screenId);
+
+    // Primary path: use layout/zone geometry pipeline with virtual screen bounds
+    if (m_layoutManager && !m_selectedLayoutId.isEmpty()) {
+        Layout* selectedLayout = m_layoutManager->layoutById(QUuid::fromString(m_selectedLayoutId));
+        if (selectedLayout && m_selectedZoneIndex >= 0
+            && m_selectedZoneIndex < static_cast<int>(selectedLayout->zones().size())) {
+            Zone* zone = selectedLayout->zones().at(m_selectedZoneIndex);
+            if (zone) {
+                int zonePadding = GeometryUtils::getEffectiveZonePadding(selectedLayout, m_settings, screenId);
+                EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(selectedLayout, m_settings, screenId);
+                bool useAvail = !(selectedLayout && selectedLayout->useFullScreenGeometry());
+
+                // Use virtual screen geometry when available
+                if (mgr) {
+                    QRect vsGeom = mgr->screenGeometry(screenId);
+                    QRect vsAvailGeom = mgr->screenAvailableGeometry(screenId);
+                    if (vsGeom.isValid()) {
+                        QRectF geom = GeometryUtils::getZoneGeometryWithGaps(
+                            zone, vsGeom, vsAvailGeom.isValid() ? vsAvailGeom : vsGeom, zonePadding, outerGaps,
+                            useAvail);
+                        return GeometryUtils::snapToRect(geom);
+                    }
+                }
+
+                // Fallback to physical screen
+                if (physScreen) {
+                    QRectF geom =
+                        GeometryUtils::getZoneGeometryWithGaps(zone, physScreen, zonePadding, outerGaps, useAvail);
+                    return GeometryUtils::snapToRect(geom);
+                }
+            }
+        }
+    }
+
+    // Fallback: manual calculation using relative geometry
+    QRect areaGeom;
+    if (mgr) {
+        QRect vsAvailGeom = mgr->screenAvailableGeometry(screenId);
+        if (vsAvailGeom.isValid()) {
+            areaGeom = vsAvailGeom;
+        }
+    }
+    if (!areaGeom.isValid() && physScreen) {
+        areaGeom = ScreenManager::actualAvailableGeometry(physScreen);
+    }
+    if (!areaGeom.isValid()) {
+        return QRect();
+    }
+
+    QRectF geom(areaGeom.x() + m_selectedZoneRelGeo.x() * areaGeom.width(),
+                areaGeom.y() + m_selectedZoneRelGeo.y() * areaGeom.height(),
+                m_selectedZoneRelGeo.width() * areaGeom.width(), m_selectedZoneRelGeo.height() * areaGeom.height());
+    return GeometryUtils::snapToRect(geom);
+}
+
 void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry)
 {
     m_selectedLayoutId = layoutId;

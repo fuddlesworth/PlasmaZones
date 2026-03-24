@@ -124,6 +124,7 @@ public:
         return m_selectedZoneIndex;
     }
     QRect getSelectedZoneGeometry(QScreen* screen) const override;
+    QRect getSelectedZoneGeometry(const QString& screenId) const override;
     void clearSelectedZone() override;
 
     // Layout OSD (visual preview when switching layouts)

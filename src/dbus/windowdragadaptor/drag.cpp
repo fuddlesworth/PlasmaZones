@@ -81,10 +81,12 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         QScreen* screen = screenAtPoint(m_originalGeometry.center().x(), m_originalGeometry.center().y());
 
         if (screen) {
-            auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
+            QString screenId = effectiveScreenIdAt(m_originalGeometry.center().x(), m_originalGeometry.center().y());
+            if (screenId.isEmpty())
+                screenId = Utils::screenIdentifier(screen);
+            auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
-                layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screen));
-                QString screenId = Utils::screenIdentifier(screen);
+                layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screenId));
                 int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
                 EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
                 bool useAvail = !(layout && layout->useFullScreenGeometry());
@@ -112,7 +114,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     }
 }
 
-Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScreen)
+Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScreen, QString& outScreenId)
 {
     // Resolve effective (virtual-aware) screen ID
     QString screenId = effectiveScreenIdAt(x, y);
@@ -126,6 +128,7 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
     if (screenId.isEmpty()) {
         screenId = Utils::screenIdentifier(outScreen);
     }
+    outScreenId = screenId;
     if (m_settings && m_settings->isMonitorDisabled(screenId)) {
         return nullptr;
     }
@@ -207,7 +210,8 @@ void WindowDragAdaptor::hideOverlayAndClearZoneState()
 void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
 {
     QScreen* screen = nullptr;
-    auto* layout = prepareHandlerContext(x, y, screen);
+    QString screenId;
+    auto* layout = prepareHandlerContext(x, y, screen, screenId);
     if (!layout) {
         return;
     }
@@ -247,7 +251,7 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
                 return;
             }
 
-            QRectF combinedGeom = computeCombinedZoneGeometry(zonesToSnap, screen, layout);
+            QRectF combinedGeom = computeCombinedZoneGeometry(zonesToSnap, screen, layout, screenId);
 
             // Update multi-zone state from expanded zones (what we actually snap to)
             QVector<QUuid> zoneIds;
@@ -274,7 +278,8 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
 void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
 {
     QScreen* screen = nullptr;
-    auto* layout = prepareHandlerContext(x, y, screen);
+    QString screenId;
+    auto* layout = prepareHandlerContext(x, y, screen, screenId);
     if (!layout) {
         return;
     }
@@ -316,7 +321,7 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             }
 
             m_currentMultiZoneGeometry =
-                GeometryUtils::snapToRect(computeCombinedZoneGeometry(zonesToHighlight, screen, layout));
+                GeometryUtils::snapToRect(computeCombinedZoneGeometry(zonesToHighlight, screen, layout, screenId));
             m_zoneDetector->highlightZones(zonesToHighlight);
             m_overlayService->highlightZones(zoneIdsToStringList(m_currentAdjacentZoneIds));
         }
@@ -330,7 +335,6 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             m_zoneDetector->highlightZone(result.primaryZone);
             m_overlayService->highlightZone(zoneId);
 
-            QString screenId = Utils::screenIdentifier(screen);
             int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
             EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
             bool useAvail = !(layout && layout->useFullScreenGeometry());

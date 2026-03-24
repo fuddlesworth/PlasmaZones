@@ -168,11 +168,14 @@ private:
 
     // Shared preamble for drag handler methods (DRY extraction)
     // Returns layout for the screen at (x,y), or nullptr if screen disabled/no layout.
-    // Shows overlay if not visible. Sets outScreen to the resolved screen.
-    Layout* prepareHandlerContext(int x, int y, QScreen*& outScreen);
+    // Shows overlay if not visible. Sets outScreen to the resolved physical screen
+    // and outScreenId to the virtual-aware screen identifier.
+    Layout* prepareHandlerContext(int x, int y, QScreen*& outScreen, QString& outScreenId);
 
     // Compute bounding rectangle of multiple zones with gaps applied
-    QRectF computeCombinedZoneGeometry(const QVector<Zone*>& zones, QScreen* screen, Layout* layout) const;
+    // screenId is the virtual-aware screen identifier for gap/padding lookups.
+    QRectF computeCombinedZoneGeometry(const QVector<Zone*>& zones, QScreen* screen, Layout* layout,
+                                       const QString& screenId) const;
 
     // Convert zone UUIDs to string list (for overlay service)
     static QStringList zoneIdsToStringList(const QVector<QUuid>& ids);
@@ -228,7 +231,7 @@ private:
 
     // Zone selector methods
     void checkZoneSelectorTrigger(int cursorX, int cursorY);
-    bool isNearTriggerEdge(QScreen* screen, int cursorX, int cursorY) const;
+    bool isNearTriggerEdge(QScreen* screen, int cursorX, int cursorY, const QString& screenId = QString()) const;
 
     // dragStopped() helpers
     void hideOverlayAndSelector();

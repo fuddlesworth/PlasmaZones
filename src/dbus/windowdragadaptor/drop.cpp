@@ -102,22 +102,26 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     if (!capturedSnapCancelled && capturedZoneSelectorShown && m_overlayService
         && m_overlayService->hasSelectedZone()) {
         QString selectedLayoutId = m_overlayService->selectedLayoutId();
-        QScreen* screen = screenAtPoint(capturedLastCursorX, capturedLastCursorY);
+        // Resolve virtual-aware screen ID for the zone selector position
+        QString selectorScreenId = effectiveScreenIdAt(capturedLastCursorX, capturedLastCursorY);
+        QScreen* screen = Utils::findScreenByIdOrName(Utils::physicalScreenId(selectorScreenId));
+        if (!screen)
+            screen = screenAtPoint(capturedLastCursorX, capturedLastCursorY);
+        if (selectorScreenId.isEmpty() && screen)
+            selectorScreenId = Utils::screenIdentifier(screen);
 
         // Block entire zone selector snap path when screen is locked for its current mode
         bool selectorScreenLocked = false;
         if (screen && m_settings && m_layoutManager) {
             int curDesktop = m_layoutManager->currentVirtualDesktop();
             QString curActivity = m_layoutManager->currentActivity();
-            QString prefix = QString::number(static_cast<int>(m_layoutManager->modeForScreen(
-                                 Utils::screenIdentifier(screen), curDesktop, curActivity)))
+            QString prefix = QString::number(static_cast<int>(
+                                 m_layoutManager->modeForScreen(selectorScreenId, curDesktop, curActivity)))
                 + QStringLiteral(":");
-            selectorScreenLocked =
-                m_settings->isContextLocked(prefix + Utils::screenIdentifier(screen), curDesktop, curActivity);
+            selectorScreenLocked = m_settings->isContextLocked(prefix + selectorScreenId, curDesktop, curActivity);
         }
-        if (screen && !selectorScreenLocked
-            && (!m_settings || !m_settings->isMonitorDisabled(Utils::screenIdentifier(screen)))) {
-            QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(screen);
+        if (screen && !selectorScreenLocked && (!m_settings || !m_settings->isMonitorDisabled(selectorScreenId))) {
+            QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(selectorScreenId);
             if (zoneGeom.isValid()) {
                 snapX = zoneGeom.x();
                 snapY = zoneGeom.y();
@@ -167,23 +171,20 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                         // Check lock before applying layout change from drag-drop
                         int layoutChangeDesktop = m_layoutManager->currentVirtualDesktop();
                         QString layoutChangeActivity = m_layoutManager->currentActivity();
-                        QString layoutChangePrefix =
-                            QString::number(static_cast<int>(m_layoutManager->modeForScreen(
-                                Utils::screenIdentifier(screen), layoutChangeDesktop, layoutChangeActivity)))
+                        QString layoutChangePrefix = QString::number(static_cast<int>(m_layoutManager->modeForScreen(
+                                                         selectorScreenId, layoutChangeDesktop, layoutChangeActivity)))
                             + QStringLiteral(":");
                         bool screenLocked = m_settings
-                            && m_settings->isContextLocked(layoutChangePrefix + Utils::screenIdentifier(screen),
-                                                           layoutChangeDesktop, layoutChangeActivity);
-                        Layout* currentLayout =
-                            m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
+                            && m_settings->isContextLocked(layoutChangePrefix + selectorScreenId, layoutChangeDesktop,
+                                                           layoutChangeActivity);
+                        Layout* currentLayout = m_layoutManager->resolveLayoutForScreen(selectorScreenId);
                         if (currentLayout != selectedLayout && !screenLocked) {
                             // Hide overlay/selector BEFORE the layout change so signal
                             // handlers (updateZoneSelectorWindow, updateOverlayWindow) find
                             // hidden windows and skip heavy QML property updates / LayerShell
                             // recalculations. All overlay queries are already done above.
                             hideOverlayAndSelector();
-                            m_layoutManager->assignLayout(Utils::screenIdentifier(screen),
-                                                          m_layoutManager->currentVirtualDesktop(),
+                            m_layoutManager->assignLayout(selectorScreenId, m_layoutManager->currentVirtualDesktop(),
                                                           m_layoutManager->currentActivity(), selectedLayout);
                             m_layoutManager->setActiveLayout(selectedLayout);
                         }
