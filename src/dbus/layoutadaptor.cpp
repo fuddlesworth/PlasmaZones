@@ -15,6 +15,7 @@
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
+#include "../core/screenmanager.h"
 #include "../core/utils.h"
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -372,10 +373,13 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
 
     layout->setName(name);
 
-    // Auto-detect aspect ratio class from the primary screen
+    // Auto-detect aspect ratio class from the primary screen (virtual-screen-aware)
     QScreen* screen = Utils::primaryScreen();
     if (screen) {
-        QRect geo = screen->geometry();
+        const QString primaryId = Utils::screenIdentifier(screen);
+        auto* mgr = ScreenManager::instance();
+        QRect geo =
+            (mgr && mgr->screenGeometry(primaryId).isValid()) ? mgr->screenGeometry(primaryId) : screen->geometry();
         layout->setAspectRatioClass(ScreenClassification::classify(geo.width(), geo.height()));
     }
 

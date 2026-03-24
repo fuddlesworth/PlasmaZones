@@ -282,7 +282,11 @@ void OverlayService::warmUpLayoutOsd()
                 }
             } else {
                 if (!m_layoutOsdWindows.contains(physId)) {
-                    createLayoutOsdWindow(physId, screen, screen->geometry());
+                    QRect geom = mgr2->screenGeometry(physId);
+                    if (!geom.isValid()) {
+                        geom = screen->geometry();
+                    }
+                    createLayoutOsdWindow(physId, screen, geom);
                 }
             }
         });

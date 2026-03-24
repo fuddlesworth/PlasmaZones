@@ -310,7 +310,9 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
 void OverlayService::createOverlayWindow(QScreen* screen)
 {
     const QString screenId = Utils::screenIdentifier(screen);
-    createOverlayWindow(screenId, screen, screen->geometry());
+    auto* mgr = ScreenManager::instance();
+    QRect geom = (mgr && mgr->screenGeometry(screenId).isValid()) ? mgr->screenGeometry(screenId) : screen->geometry();
+    createOverlayWindow(screenId, screen, geom);
 }
 
 void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physScreen, const QRect& geometry)

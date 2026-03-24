@@ -87,7 +87,10 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
                 continue;
             }
             if (!m_zoneSelectorWindows.contains(screenId)) {
-                createZoneSelectorWindow(screenId, screen, screen->geometry());
+                auto* smgr = ScreenManager::instance();
+                QRect geom = (smgr && smgr->screenGeometry(screenId).isValid()) ? smgr->screenGeometry(screenId)
+                                                                                : screen->geometry();
+                createZoneSelectorWindow(screenId, screen, geom);
             }
             if (auto* window = m_zoneSelectorWindows.value(screenId)) {
                 assertWindowOnScreen(window, screen);
