@@ -212,9 +212,11 @@ Flickable {
                     id: previewRect
 
                     Layout.fillWidth: true
+                    Layout.maximumWidth: Kirigami.Units.gridUnit * 30
+                    Layout.alignment: Qt.AlignHCenter
                     Layout.preferredHeight: {
                         var ratio = root._screenHeight / root._screenWidth;
-                        return width * ratio;
+                        return Math.min(width * ratio, Kirigami.Units.gridUnit * 10);
                     }
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
