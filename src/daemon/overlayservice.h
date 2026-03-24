@@ -315,7 +315,7 @@ private:
      * @param screenId Target screen (empty = primary)
      * @return true if window is ready, false on failure
      */
-    bool prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio,
+    bool prepareLayoutOsdWindow(QQuickWindow*& window, QScreen*& outPhysScreen, QRect& screenGeom, qreal& aspectRatio,
                                 const QString& screenId = QString());
 
     /**

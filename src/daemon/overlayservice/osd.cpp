@@ -31,21 +31,32 @@ struct OsdWindowSetup
     }
 };
 
-// Center an OSD/layer window within a screen geometry (virtual or physical).
-// Uses setGeometry with absolute coordinates so it works correctly for virtual
-// screens that are sub-regions of a physical monitor.
-void centerLayerWindowOnScreen(QQuickWindow* window, const QRect& screenGeom, int osdWidth, int osdHeight)
+// Center an OSD/layer window within a screen geometry using LayerShellQt margins.
+// physScreenGeom is the full physical screen; targetGeom is the area to center within
+// (same as physScreenGeom for physical screens, or a sub-region for virtual screens).
+void centerLayerWindowOnScreen(QQuickWindow* window, const QRect& physScreenGeom, const QRect& targetGeom, int osdWidth,
+                               int osdHeight)
 {
     if (!window) {
         return;
     }
-    const int x = screenGeom.x() + qMax(0, (screenGeom.width() - osdWidth) / 2);
-    const int y = screenGeom.y() + qMax(0, (screenGeom.height() - osdHeight) / 2);
-    window->setGeometry(x, y, osdWidth, osdHeight);
+    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
+        // Compute center position within the target area, expressed as margins from physical screen edges
+        const int targetCenterX = (targetGeom.x() - physScreenGeom.x()) + qMax(0, (targetGeom.width() - osdWidth) / 2);
+        const int targetCenterY =
+            (targetGeom.y() - physScreenGeom.y()) + qMax(0, (targetGeom.height() - osdHeight) / 2);
+        const int rightMargin = qMax(0, physScreenGeom.width() - targetCenterX - osdWidth);
+        const int bottomMargin = qMax(0, physScreenGeom.height() - targetCenterY - osdHeight);
+
+        layerWindow->setAnchors(
+            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
+                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
+        layerWindow->setMargins(QMargins(targetCenterX, targetCenterY, rightMargin, bottomMargin));
+    }
 }
 
 // Calculate OSD size and center window
-void sizeAndCenterOsd(QQuickWindow* window, const QRect& screenGeom, qreal previewAspectRatio)
+void sizeAndCenterOsd(QQuickWindow* window, QScreen* physScreen, const QRect& targetGeom, qreal previewAspectRatio)
 {
     constexpr int osdWidth = 280;
     // Clamp AR to sane range to prevent absurd OSD sizes
@@ -53,13 +64,14 @@ void sizeAndCenterOsd(QQuickWindow* window, const QRect& screenGeom, qreal previ
     const int osdHeight = static_cast<int>(200 / safeAR) + 80;
     window->setWidth(osdWidth);
     window->setHeight(osdHeight);
-    centerLayerWindowOnScreen(window, screenGeom, osdWidth, osdHeight);
+    const QRect physGeom = physScreen ? physScreen->geometry() : targetGeom;
+    centerLayerWindowOnScreen(window, physGeom, targetGeom, osdWidth, osdHeight);
 }
 
 } // namespace
 
-bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio,
-                                            const QString& screenId)
+bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QScreen*& outPhysScreen, QRect& screenGeom,
+                                            qreal& aspectRatio, const QString& screenId)
 {
     // Resolve target screen via ScreenManager for virtual screen support
     auto* mgr = ScreenManager::instance();
@@ -74,6 +86,8 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screen
         qCWarning(lcOverlay) << "No screen available for layout OSD";
         return false;
     }
+
+    outPhysScreen = physScreen;
 
     // Use virtual screen geometry if applicable, otherwise physical
     QRect vsGeom = (mgr && !screenId.isEmpty()) ? mgr->screenGeometry(screenId) : QRect();
@@ -113,9 +127,10 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenId)
     }
 
     QQuickWindow* window = nullptr;
+    QScreen* physScreen = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio, screenId)) {
+    if (!prepareLayoutOsdWindow(window, physScreen, screenGeom, aspectRatio, screenId)) {
         return;
     }
 
@@ -132,7 +147,7 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenId)
 
     // Size OSD using layout's intended AR for correct preview proportions
     qreal layoutAR = ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
-    sizeAndCenterOsd(window, screenGeom, layoutAR);
+    sizeAndCenterOsd(window, physScreen, screenGeom, layoutAR);
     QMetaObject::invokeMethod(window, "show");
     qCInfo(lcOverlay) << "Layout OSD: layout=" << layout->name() << "screen=" << screenId;
 }
@@ -144,9 +159,10 @@ void OverlayService::showLockedLayoutOsd(Layout* layout, const QString& screenId
     }
 
     QQuickWindow* window = nullptr;
+    QScreen* physScreen = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio, screenId)) {
+    if (!prepareLayoutOsdWindow(window, physScreen, screenGeom, aspectRatio, screenId)) {
         return;
     }
 
@@ -164,7 +180,7 @@ void OverlayService::showLockedLayoutOsd(Layout* layout, const QString& screenId
     writeFontProperties(window, m_settings);
 
     qreal layoutAR = ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
-    sizeAndCenterOsd(window, screenGeom, layoutAR);
+    sizeAndCenterOsd(window, physScreen, screenGeom, layoutAR);
     QMetaObject::invokeMethod(window, "show");
     qCInfo(lcOverlay) << "Locked OSD: layout=" << layout->name() << "screen=" << screenId;
 }
@@ -178,9 +194,10 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     }
 
     QQuickWindow* window = nullptr;
+    QScreen* physScreen = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio, screenId)) {
+    if (!prepareLayoutOsdWindow(window, physScreen, screenGeom, aspectRatio, screenId)) {
         return;
     }
 
@@ -206,7 +223,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     writeQmlProperty(window, QStringLiteral("zones"), zones);
     writeFontProperties(window, m_settings);
 
-    sizeAndCenterOsd(window, screenGeom, layoutAR);
+    sizeAndCenterOsd(window, physScreen, screenGeom, layoutAR);
     QMetaObject::invokeMethod(window, "show");
     qCInfo(lcOverlay) << "Layout OSD: name=" << name << "category=" << category << "screen=" << screenId;
 }
@@ -446,7 +463,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     const int osdHeight = 70; // Text message + margins
     window->setWidth(osdWidth);
     window->setHeight(osdHeight);
-    centerLayerWindowOnScreen(window, screenGeom, osdWidth, osdHeight);
+    const QRect physGeom = physScreen ? physScreen->geometry() : screenGeom;
+    centerLayerWindowOnScreen(window, physGeom, screenGeom, osdWidth, osdHeight);
 
     // Show with animation
     QMetaObject::invokeMethod(window, "show");
