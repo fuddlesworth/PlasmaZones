@@ -56,10 +56,10 @@ struct ZoneSelectorLayout
  * based on size mode (Auto/Manual), layout mode (Grid/Horizontal/Vertical),
  * and screen constraints.
  */
-inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& config, QScreen* screen, int layoutCount)
+inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& config, const QRect& screenGeom,
+                                                    int layoutCount)
 {
     ZoneSelectorLayout layout;
-    const QRect screenGeom = screen ? screen->geometry() : QRect(0, 0, 1920, 1080);
     const qreal screenAspectRatio =
         screenGeom.height() > 0 ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
 
@@ -142,6 +142,13 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
     layout.barWidth = layout.containerSideMargin + layout.containerWidth + layout.containerSideMargin;
 
     return layout;
+}
+
+/// Convenience overload: uses QScreen geometry (for physical screens only)
+inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& config, QScreen* screen, int layoutCount)
+{
+    const QRect screenGeom = screen ? screen->geometry() : QRect(0, 0, 1920, 1080);
+    return computeZoneSelectorLayout(config, screenGeom, layoutCount);
 }
 
 } // namespace PlasmaZones

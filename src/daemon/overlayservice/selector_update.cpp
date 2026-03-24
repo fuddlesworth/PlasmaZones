@@ -93,14 +93,12 @@ void applyZoneSelectorLayout(QQuickWindow* window, const ZoneSelectorLayout& lay
     writeQmlProperty(window, QStringLiteral("barHeight"), layout.barHeight);
 }
 
-void applyZoneSelectorGeometry(QQuickWindow* window, QScreen* screen, const ZoneSelectorLayout& layout,
+void applyZoneSelectorGeometry(QQuickWindow* window, const QRect& screenGeom, const ZoneSelectorLayout& layout,
                                ZoneSelectorPosition pos)
 {
-    if (!window || !screen) {
+    if (!window || !screenGeom.isValid()) {
         return;
     }
-
-    const QRect screenGeom = screen->geometry();
 
     // Calculate base positions - window positioned at screen edges
     // QML handles internal margins within the window
@@ -236,7 +234,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
 
     // Compute layout for geometry updates using per-screen config
     const int layoutCount = layouts.size();
-    const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screen, layoutCount);
+    const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screenGeom, layoutCount);
 
     // Set positionIsVertical before layout properties; QML anchors depend on it for
     // containerWidth/Height, so it has to be correct before we apply the layout.
@@ -324,7 +322,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         layerWindow->setAnchors(anchors);
         layerWindow->setMargins(margins);
     }
-    applyZoneSelectorGeometry(window, screen, layout, pos);
+    applyZoneSelectorGeometry(window, screenGeom, layout, pos);
 
     if (auto* contentRoot = window->contentItem()) {
         // Ensure the root item matches the window size after geometry changes.
