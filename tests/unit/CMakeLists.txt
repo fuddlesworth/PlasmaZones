@@ -163,6 +163,7 @@ add_test(NAME test_snap_assist_virtual COMMAND test_snap_assist_virtual)
 # core/ — Zone Detection Tests (layout, service)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_zone_detection_layout core/test_zone_detection_layout.cpp)
+pz_add_test(test_zone_detector_overlap core/test_zone_detector_overlap.cpp)
 
 add_executable(test_zone_detection_service core/test_zone_detection_service.cpp)
 target_link_libraries(test_zone_detection_service PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
@@ -238,7 +239,7 @@ set(_all_tests
     test_layout_core test_layout_zones
     test_layoutmanager_persistence test_layoutmanager_cycling test_layoutmanager_assignment
     test_virtual_screen test_virtual_screen_manager test_snap_assist_virtual
-    test_zone_detection_layout test_zone_detection_service
+    test_zone_detection_layout test_zone_detector_overlap test_zone_detection_service
     test_per_screen_config test_navigation_controller test_settings_bridge
     test_zone_shader_item test_overlay_helpers
     test_wta_convenience test_settings_schema test_compositor_bridge
