@@ -183,6 +183,7 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
     QJsonObject stateObj;
     stateObj[QLatin1String("windowId")] = windowId;
     stateObj[QLatin1String("zoneId")] = zoneId;
+    stateObj[QLatin1String("zoneIds")] = QJsonArray{zoneId};
     stateObj[QLatin1String("screenId")] = resolvedScreen;
     stateObj[QLatin1String("isFloating")] = false;
     stateObj[QLatin1String("changeType")] = QStringLiteral("snapped");
@@ -231,6 +232,10 @@ void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, cons
     QJsonObject stateObj;
     stateObj[QLatin1String("windowId")] = windowId;
     stateObj[QLatin1String("zoneId")] = primaryZoneId;
+    QJsonArray zoneIdsArr;
+    for (const QString& zid : zoneIds)
+        zoneIdsArr.append(zid);
+    stateObj[QLatin1String("zoneIds")] = zoneIdsArr;
     stateObj[QLatin1String("screenId")] = resolvedScreen;
     stateObj[QLatin1String("isFloating")] = false;
     stateObj[QLatin1String("changeType")] = QStringLiteral("snapped");

@@ -101,6 +101,11 @@ QString WindowTrackingAdaptor::getWindowState(const QString& windowId)
 
     result[QLatin1String("windowId")] = windowId;
     result[QLatin1String("zoneId")] = m_service->zoneForWindow(windowId);
+    QStringList zones = m_service->zonesForWindow(windowId);
+    QJsonArray zonesArr;
+    for (const QString& z : zones)
+        zonesArr.append(z);
+    result[QLatin1String("zoneIds")] = zonesArr;
     result[QLatin1String("screenId")] = m_service->screenAssignments().value(windowId);
     result[QLatin1String("isFloating")] = m_service->isWindowFloating(windowId);
     result[QLatin1String("isSticky")] = m_service->isWindowSticky(windowId);
@@ -132,6 +137,11 @@ QString WindowTrackingAdaptor::getAllWindowStates()
         QJsonObject state;
         state[QLatin1String("windowId")] = windowId;
         state[QLatin1String("zoneId")] = m_service->zoneForWindow(windowId);
+        QStringList zones = m_service->zonesForWindow(windowId);
+        QJsonArray zonesArr;
+        for (const QString& z : zones)
+            zonesArr.append(z);
+        state[QLatin1String("zoneIds")] = zonesArr;
         state[QLatin1String("screenId")] = m_service->screenAssignments().value(windowId);
         state[QLatin1String("isFloating")] = m_service->isWindowFloating(windowId);
         state[QLatin1String("isSticky")] = m_service->isWindowSticky(windowId);
