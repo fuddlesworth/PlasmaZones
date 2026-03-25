@@ -132,6 +132,13 @@ Flickable {
         _stageCurrentConfig();
     }
 
+    // Strip "/vs:N" suffix to get physical screen ID (MonitorSelectorSection
+    // uses physicalOnly:true which deduplicates to physical IDs)
+    function _toPhysicalId(name) {
+        var vsIdx = name.indexOf("/vs:");
+        return vsIdx >= 0 ? name.substring(0, vsIdx) : name;
+    }
+
     contentHeight: content.implicitHeight
     clip: true
     Component.onCompleted: {
@@ -140,11 +147,11 @@ Flickable {
             var screens = settingsController.screens;
             for (var i = 0; i < screens.length; i++) {
                 if (screens[i].isPrimary) {
-                    _selectedScreen = screens[i].name || "";
+                    _selectedScreen = _toPhysicalId(screens[i].name || "");
                     return ;
                 }
             }
-            _selectedScreen = screens[0].name || "";
+            _selectedScreen = _toPhysicalId(screens[0].name || "");
         }
     }
     on_SelectedScreenChanged: {
