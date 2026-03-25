@@ -704,6 +704,47 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                                       {windowId, newScreenId}, QStringLiteral("cross-screen move"));
             }
         });
+        // Virtual screen boundary detection: KWin's outputChanged only fires when
+        // the physical monitor changes. Moving a window between virtual screens on the
+        // same physical monitor (e.g., A/vs:0 → A/vs:1) is invisible to outputChanged.
+        // Detect these crossings via frameGeometryChanged, using the same trackedScreen
+        // state as the outputChanged handler above.
+        // (The autotile handler has its own detection in slotWindowFrameGeometryChanged;
+        // this covers snapping-mode windows which autotile doesn't track.)
+        connect(safeW, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW, trackedScreen]() {
+            if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty()) {
+                return;
+            }
+            const QString newScreenId = getWindowScreenId(safeW);
+            const QString oldScreenId = *trackedScreen;
+            if (oldScreenId == newScreenId || newScreenId.isEmpty()) {
+                return;
+            }
+            // Only act on virtual screen changes (same physical monitor).
+            // Physical monitor changes are handled by outputChanged above.
+            const int vsOld = oldScreenId.indexOf(QLatin1String("/vs:"));
+            const int vsNew = newScreenId.indexOf(QLatin1String("/vs:"));
+            if (vsOld < 0 && vsNew < 0) {
+                return; // Both physical — outputChanged will handle it
+            }
+            const QString physOld = vsOld >= 0 ? oldScreenId.left(vsOld) : oldScreenId;
+            const QString physNew = vsNew >= 0 ? newScreenId.left(vsNew) : newScreenId;
+            if (physOld != physNew) {
+                return; // Different physical monitors — outputChanged will handle it
+            }
+            *trackedScreen = newScreenId;
+
+            // Autotile virtual screen transfers are already handled by
+            // AutotileHandler::slotWindowFrameGeometryChanged (connected
+            // to the same signal). Only handle snapping-mode windows here.
+            if (!m_autotileHandler->isAutotileScreen(oldScreenId) && !m_autotileHandler->isAutotileScreen(newScreenId)
+                && !m_dragTracker->isDragging() && !m_screenChangeHandler->isScreenChangeInProgress()) {
+                const QString windowId = getWindowId(safeW);
+                fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("windowScreenChanged"),
+                                      {windowId, newScreenId}, QStringLiteral("virtual screen crossing"));
+            }
+        });
+
         // Clean up the tracked screen string when the window is destroyed
         connect(safeW, &QObject::destroyed, this, [trackedScreen]() {
             delete trackedScreen;
