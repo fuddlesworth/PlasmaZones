@@ -60,6 +60,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     }
 
     m_snapAssistScreen = screen;
+    m_snapAssistScreenId = screenId;
     m_snapAssistWindow->setScreen(screen);
 
     // Parse JSON using shared helper (same format: array of objects)
@@ -257,6 +258,7 @@ void OverlayService::createSnapAssistWindow(const QString& screenId, QScreen* ph
     connect(window, &QObject::destroyed, this, [this]() {
         m_snapAssistWindow = nullptr;
         m_snapAssistScreen = nullptr;
+        m_snapAssistScreenId.clear();
     });
 
     // Emit snapAssistDismissed when the window is closed by QML (user selection, backdrop click, Escape)
@@ -292,6 +294,7 @@ void OverlayService::destroySnapAssistWindow()
         m_snapAssistWindow = nullptr;
     }
     m_snapAssistScreen = nullptr;
+    m_snapAssistScreenId.clear();
 }
 
 void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId,
