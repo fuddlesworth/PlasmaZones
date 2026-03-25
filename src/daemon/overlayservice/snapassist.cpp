@@ -297,15 +297,9 @@ void OverlayService::destroySnapAssistWindow()
 void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId,
                                                 const QString& geometryJson)
 {
-    // Resolve screen ID from our snap assist state.
-    // Prefer the screenId key from our internal tracking (virtual-screen-aware)
-    // over re-deriving from QScreen* which loses virtual screen context.
-    QString screenId;
-    // The snap assist window is singular (not keyed by screenId), so look up the
-    // screen ID that was passed to showSnapAssist(). We track the physical screen
-    // in m_snapAssistScreen but that loses virtual context. For now, use the
-    // physical screen identifier as fallback.
-    if (m_snapAssistScreen) {
+    // Use the virtual-aware screen ID stored when snap assist was shown
+    QString screenId = m_snapAssistScreenId;
+    if (screenId.isEmpty() && m_snapAssistScreen) {
         screenId = Utils::screenIdentifier(m_snapAssistScreen);
     }
     // geometryJson is overlay-local; daemon will fetch authoritative zone geometry from service
