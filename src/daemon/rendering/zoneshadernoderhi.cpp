@@ -102,13 +102,13 @@ QString detail::loadAndExpandShader(const QString& path, QString* outError)
 
 QShader detail::cachedBake(QShaderBaker& baker, const QByteArray& source, QShader::Stage stage)
 {
-    // Key: source hash + stage (vertex vs fragment use different compilation)
-    const auto hash = qHash(source) ^ qHash(static_cast<int>(stage));
+    // Key by full source + stage to avoid hash collisions returning wrong shaders
+    const ShaderBakeCache::Key key(source, static_cast<int>(stage));
 
     auto& cache = ShaderBakeCache::instance();
     {
         QMutexLocker lock(&cache.mutex);
-        auto it = cache.entries.constFind(hash);
+        auto it = cache.entries.constFind(key);
         if (it != cache.entries.constEnd() && it->isValid()) {
             return *it;
         }
@@ -120,7 +120,7 @@ QShader detail::cachedBake(QShaderBaker& baker, const QByteArray& source, QShade
 
     if (result.isValid()) {
         QMutexLocker lock(&cache.mutex);
-        cache.entries.insert(hash, result);
+        cache.entries.insert(key, result);
     }
 
     return result;

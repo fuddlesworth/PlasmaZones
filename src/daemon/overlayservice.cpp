@@ -17,6 +17,7 @@
 
 #include <QCoreApplication>
 #include <QCursor>
+#include <QDir>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QQmlEngine>
@@ -221,10 +222,13 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* scree
     // Enable persistent RHI pipeline cache — compiled GPU programs survive across sessions.
     // This eliminates shader recompilation on subsequent daemon starts.
     // Must be called before the window is shown (before scene graph initialization).
-    QQuickGraphicsConfiguration config = window->graphicsConfiguration();
-    config.setPipelineCacheSaveFile(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
-                                    + QStringLiteral("/plasmazones-pipeline.cache"));
-    window->setGraphicsConfiguration(config);
+    const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    if (!cacheDir.isEmpty()) {
+        QDir().mkpath(cacheDir);
+        QQuickGraphicsConfiguration config = window->graphicsConfiguration();
+        config.setPipelineCacheSaveFile(cacheDir + QStringLiteral("/plasmazones-pipeline.cache"));
+        window->setGraphicsConfiguration(config);
+    }
 
     // Set the screen before configuring LayerShellQt
     window->setScreen(screen);

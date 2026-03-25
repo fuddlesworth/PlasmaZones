@@ -243,11 +243,10 @@ void OverlayService::warmUpLayoutOsd()
     const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
 
     if (!effectiveIds.isEmpty()) {
-        // Warm up one OSD per PHYSICAL screen (not per virtual screen).
-        // Virtual screens share the same backing QScreen and creating
-        // separate QML windows per virtual screen wastes memory and GPU
-        // contexts at startup. The OSD will be repositioned within the
-        // correct virtual screen when shown.
+        // Warm up one OSD per physical screen. For monitors with virtual screens,
+        // create the window keyed by the FIRST effective ID on that physical screen
+        // (so showLayoutOsd can find it). Skip subsequent virtual screens on the
+        // same physical monitor — the OSD is repositioned when shown.
         QSet<QString> seenPhysical;
         for (const QString& sid : effectiveIds) {
             QString physId = VirtualScreenId::isVirtual(sid) ? VirtualScreenId::extractPhysicalId(sid) : sid;
@@ -255,10 +254,10 @@ void OverlayService::warmUpLayoutOsd()
                 continue;
             }
             seenPhysical.insert(physId);
-            if (!m_layoutOsdWindows.contains(physId)) {
-                QScreen* physScreen = mgr->physicalQScreenFor(physId);
+            if (!m_layoutOsdWindows.contains(sid)) {
+                QScreen* physScreen = mgr->physicalQScreenFor(sid);
                 if (physScreen) {
-                    createLayoutOsdWindow(physId, physScreen, physScreen->geometry());
+                    createLayoutOsdWindow(sid, physScreen, physScreen->geometry());
                 }
             }
         }

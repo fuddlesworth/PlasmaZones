@@ -51,11 +51,12 @@ const QList<QShaderBaker::GeneratedShader>& bakeTargets();
 /// Load shader file, expand #include directives. Defined in zoneshadernoderhi.cpp.
 QString loadAndExpandShader(const QString& path, QString* outError);
 
-/// Thread-safe singleton cache for baked QShader objects, keyed by source hash + stage.
+/// Thread-safe singleton cache for baked QShader objects, keyed by (source, stage).
 struct ShaderBakeCache
 {
+    using Key = QPair<QByteArray, int>;
     QMutex mutex;
-    QHash<size_t, QShader> entries;
+    QHash<Key, QShader> entries;
 
     static ShaderBakeCache& instance()
     {
