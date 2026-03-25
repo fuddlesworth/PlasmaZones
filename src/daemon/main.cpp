@@ -10,6 +10,7 @@
 #include <QCommandLineParser>
 #include <QDBusConnection>
 #include <QDBusInterface>
+#include <QIcon>
 #include <QThread>
 #include <QTimer>
 #include <QtQml/qqmlextensionplugin.h>
@@ -46,11 +47,14 @@ int main(int argc, char* argv[])
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
     // Set up application metadata
+    // applicationName is the KGlobalAccel component key — must match plasmazonesd.desktop
     app.setApplicationName(QStringLiteral("plasmazonesd"));
+    app.setApplicationDisplayName(QStringLiteral("PlasmaZones"));
     app.setApplicationVersion(PlasmaZones::VERSION_STRING);
     app.setOrganizationName(QStringLiteral("plasmazones"));
     app.setOrganizationDomain(QStringLiteral("org.plasmazones"));
     app.setDesktopFileName(QStringLiteral("org.plasmazones.daemon"));
+    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("plasmazones")));
 
     // Command line options
     QCommandLineParser parser;
