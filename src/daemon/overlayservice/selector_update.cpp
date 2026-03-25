@@ -23,8 +23,9 @@ namespace PlasmaZones {
 
 namespace {
 
-void updateZoneSelectorComputedProperties(QQuickWindow* window, QScreen* screen, const ZoneSelectorConfig& config,
-                                          ISettings* settings, const ZoneSelectorLayout& layout)
+void updateZoneSelectorComputedProperties(QQuickWindow* window, QScreen* screen, const QString& virtualScreenId,
+                                          const ZoneSelectorConfig& config, ISettings* settings,
+                                          const ZoneSelectorLayout& layout)
 {
     if (!window || !screen) {
         return;
@@ -32,8 +33,7 @@ void updateZoneSelectorComputedProperties(QQuickWindow* window, QScreen* screen,
 
     // Use virtual screen geometry if available, falling back to physical
     auto* mgr = ScreenManager::instance();
-    const QString screenId = Utils::screenIdentifier(screen);
-    QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
+    QRect vsGeom = mgr ? mgr->screenGeometry(virtualScreenId) : QRect();
     const QRect screenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
     const int screenWidth = screenGeom.width();
     const int indicatorWidth = layout.indicatorWidth;
@@ -205,7 +205,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     applyZoneSelectorLayout(window, layout);
 
     // Update computed properties that depend on layout and settings
-    updateZoneSelectorComputedProperties(window, screen, config, m_settings, layout);
+    updateZoneSelectorComputedProperties(window, screen, screenId, config, m_settings, layout);
 
     // Schedule QML polish for next render frame (do NOT call processEvents here —
     // re-entrant event processing during a Wayland drag can deadlock with the
