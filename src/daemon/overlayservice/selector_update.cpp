@@ -104,9 +104,52 @@ void applyZoneSelectorGeometry(QQuickWindow* window, const QRect& screenGeom, co
         return;
     }
 
-    // On Wayland with LayerShellQt, positioning is handled entirely by anchors + margins
-    // in updateZoneSelectorWindow. Calling setX/setY fights with LayerShellQt and causes
-    // double-positioning on virtual screens. Only set the window size here.
+    // Calculate base positions using the screen geometry (virtual or physical).
+    // setX/setY provide position hints; on Wayland, LayerShellQt anchors+margins
+    // are the authoritative positioning, but setX/setY help mapFromGlobal work.
+    const int centeredX = screenGeom.x() + (screenGeom.width() - layout.barWidth) / 2;
+    const int centeredY = screenGeom.y() + (screenGeom.height() - layout.barHeight) / 2;
+    const int rightX = screenGeom.x() + screenGeom.width() - layout.barWidth;
+    const int bottomY = screenGeom.y() + screenGeom.height() - layout.barHeight;
+
+    switch (pos) {
+    case ZoneSelectorPosition::TopLeft:
+        window->setX(screenGeom.x());
+        window->setY(screenGeom.y());
+        break;
+    case ZoneSelectorPosition::Top:
+        window->setX(centeredX);
+        window->setY(screenGeom.y());
+        break;
+    case ZoneSelectorPosition::TopRight:
+        window->setX(rightX);
+        window->setY(screenGeom.y());
+        break;
+    case ZoneSelectorPosition::Left:
+        window->setX(screenGeom.x());
+        window->setY(centeredY);
+        break;
+    case ZoneSelectorPosition::Right:
+        window->setX(rightX);
+        window->setY(centeredY);
+        break;
+    case ZoneSelectorPosition::BottomLeft:
+        window->setX(screenGeom.x());
+        window->setY(bottomY);
+        break;
+    case ZoneSelectorPosition::Bottom:
+        window->setX(centeredX);
+        window->setY(bottomY);
+        break;
+    case ZoneSelectorPosition::BottomRight:
+        window->setX(rightX);
+        window->setY(bottomY);
+        break;
+    case ZoneSelectorPosition::Center:
+        window->setX(screenGeom.x());
+        window->setY(screenGeom.y());
+        break;
+    }
     if (pos == ZoneSelectorPosition::Center) {
         window->setWidth(screenGeom.width());
         window->setHeight(screenGeom.height());
@@ -219,14 +262,13 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         const int hMargin = std::max(0, (screenW - layout.barWidth) / 2);
         const int vMargin = std::max(0, (screenH - layout.barHeight) / 2);
 
-        // LayerShellQt margins are relative to the PHYSICAL screen edges, not the
-        // virtual screen. For virtual screens offset within a physical screen, add
-        // the virtual screen's offset from each physical edge to every margin.
-        const QRect physGeom = screen->geometry();
-        const int vsLeftOff = screenGeom.x() - physGeom.x();
-        const int vsTopOff = screenGeom.y() - physGeom.y();
-        const int vsRightOff = physGeom.right() - screenGeom.right();
-        const int vsBottomOff = physGeom.bottom() - screenGeom.bottom();
+        // No virtual screen offsets in margins — positioning is handled by
+        // applyZoneSelectorGeometry's setX/setY using virtual screen coordinates.
+        // Margins are only for centering within the anchored space.
+        const int vsLeftOff = 0;
+        const int vsTopOff = 0;
+        const int vsRightOff = 0;
+        const int vsBottomOff = 0;
 
         // exclusiveZone(-1) ignores panel geometry; the popup renders at absolute screen
         // coordinates over any panels, so hover coordinates match (no offset mismatch).
