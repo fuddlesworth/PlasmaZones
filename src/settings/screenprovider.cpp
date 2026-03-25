@@ -34,7 +34,10 @@ QList<ScreenInfo> fetchScreens()
         for (const QString& screenName : screenNames) {
             ScreenInfo info;
             info.name = screenName;
-            info.isPrimary = (screenName == primaryScreenName);
+            // Compare physical parent for virtual screens (primary is always a physical ID)
+            int vsPos = screenName.indexOf(QLatin1String("/vs:"));
+            QString physName = (vsPos >= 0) ? screenName.left(vsPos) : screenName;
+            info.isPrimary = (physName == primaryScreenName);
 
             QDBusMessage infoReply =
                 DaemonDBus::callDaemon(QString(DBus::Interface::Screen), QStringLiteral("getScreenInfo"), {screenName});
@@ -57,6 +60,15 @@ QList<ScreenInfo> fetchScreens()
                         QJsonObject geom = jsonObj[JsonKeys::Geometry].toObject();
                         info.width = geom[JsonKeys::Width].toInt();
                         info.height = geom[JsonKeys::Height].toInt();
+                    }
+                    if (jsonObj.contains(JsonKeys::Name))
+                        info.connectorName = jsonObj[JsonKeys::Name].toString();
+                    if (jsonObj.value(QLatin1String("isVirtualScreen")).toBool()) {
+                        info.isVirtualScreen = true;
+                        int vsIdx = screenName.lastIndexOf(QLatin1String("/vs:"));
+                        if (vsIdx >= 0)
+                            info.virtualIndex = QStringView(screenName).mid(vsIdx + 4).toInt();
+                        info.virtualDisplayName = jsonObj.value(QLatin1String("virtualDisplayName")).toString();
                     }
                 } else {
                     info.screenId = screenName;
@@ -108,6 +120,14 @@ QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
         }
         if (!s.screenId.isEmpty())
             map[QStringLiteral("screenId")] = s.screenId;
+        if (s.isVirtualScreen) {
+            map[QStringLiteral("isVirtualScreen")] = true;
+            map[QStringLiteral("virtualIndex")] = s.virtualIndex;
+            if (!s.virtualDisplayName.isEmpty())
+                map[QStringLiteral("virtualDisplayName")] = s.virtualDisplayName;
+        }
+        if (!s.connectorName.isEmpty())
+            map[QStringLiteral("connectorName")] = s.connectorName;
         list.append(map);
     }
 

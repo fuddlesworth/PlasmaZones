@@ -193,8 +193,16 @@ ColumnLayout {
                                     parts.push(screenName);
 
                                 let label = parts.join(" ");
+                                // Virtual screen: append display name (skip in physicalOnly mode)
+                                if (s.isVirtualScreen && !root.physicalOnly) {
+                                    let vsName = s.virtualDisplayName || i18n("VS %1", s.virtualIndex + 1);
+                                    label += " (" + vsName + ")";
+                                }
+                                if (s.connectorName)
+                                    label += " · " + s.connectorName;
+
                                 if (s.isPrimary)
-                                    label += " " + i18n("(Primary)");
+                                    label = "* " + label;
 
                                 return label;
                             }

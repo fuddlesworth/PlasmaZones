@@ -26,6 +26,10 @@ struct ScreenInfo
     int width = 0;
     int height = 0;
     QString screenId;
+    bool isVirtualScreen = false;
+    QString connectorName; ///< Physical connector (e.g. "DP-2")
+    int virtualIndex = -1; ///< 0-based index within the physical screen (-1 = not virtual)
+    QString virtualDisplayName; ///< User-facing name (e.g. "Left", "Right")
 };
 
 /**

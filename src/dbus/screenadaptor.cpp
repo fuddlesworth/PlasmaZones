@@ -101,7 +101,16 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenId)
         info[QLatin1String("serialNumber")] = screen->serialNumber();
         if (VirtualScreenId::isVirtual(screenId)) {
             info[QLatin1String("isVirtualScreen")] = true;
-            info[QLatin1String("physicalScreenId")] = VirtualScreenId::extractPhysicalId(screenId);
+            QString physId = VirtualScreenId::extractPhysicalId(screenId);
+            info[QLatin1String("physicalScreenId")] = physId;
+            // Include the user-facing display name (e.g. "Left", "Right")
+            if (mgr) {
+                VirtualScreenConfig config = mgr->virtualScreenConfig(physId);
+                int vsIndex = VirtualScreenId::extractIndex(screenId);
+                if (vsIndex >= 0 && vsIndex < config.screens.size()) {
+                    info[QLatin1String("virtualDisplayName")] = config.screens[vsIndex].displayName;
+                }
+            }
         }
 
         return QString::fromUtf8(QJsonDocument(info).toJson());
