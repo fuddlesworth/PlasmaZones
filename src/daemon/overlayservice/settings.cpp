@@ -4,6 +4,7 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../cavaservice.h"
+#include "../rendering/zoneshadernoderhi/internal.h"
 #include "../../core/logging.h"
 #include "../../core/layout.h"
 #include "../../core/layoutmanager.h"
@@ -111,6 +112,7 @@ void OverlayService::setSettings(ISettings* settings)
                         return;
                     }
                     qCInfo(lcOverlay) << "Shader files changed on disk, triggering hot-reload";
+                    detail::clearBakeCache();
                     for (auto* window : std::as_const(m_overlayWindows)) {
                         if (window && window->property("isShaderOverlay").toBool()) {
                             QMetaObject::invokeMethod(window, "loadShader");

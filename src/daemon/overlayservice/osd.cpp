@@ -243,17 +243,26 @@ void OverlayService::warmUpLayoutOsd()
     const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
 
     if (!effectiveIds.isEmpty()) {
-        // Virtual-screen-aware warm-up: create OSD for each effective screen
+        // Warm up one OSD per PHYSICAL screen (not per virtual screen).
+        // Virtual screens share the same backing QScreen and creating
+        // separate QML windows per virtual screen wastes memory and GPU
+        // contexts at startup. The OSD will be repositioned within the
+        // correct virtual screen when shown.
+        QSet<QString> seenPhysical;
         for (const QString& sid : effectiveIds) {
-            if (!m_layoutOsdWindows.contains(sid)) {
-                QScreen* physScreen = mgr->physicalQScreenFor(sid);
-                QRect geom = mgr->screenGeometry(sid);
-                if (physScreen && geom.isValid()) {
-                    createLayoutOsdWindow(sid, physScreen, geom);
+            QString physId = VirtualScreenId::isVirtual(sid) ? VirtualScreenId::extractPhysicalId(sid) : sid;
+            if (seenPhysical.contains(physId)) {
+                continue;
+            }
+            seenPhysical.insert(physId);
+            if (!m_layoutOsdWindows.contains(physId)) {
+                QScreen* physScreen = mgr->physicalQScreenFor(physId);
+                if (physScreen) {
+                    createLayoutOsdWindow(physId, physScreen, physScreen->geometry());
                 }
             }
         }
-        qCInfo(lcOverlay) << "Pre-warmed Layout OSD windows for" << effectiveIds.size() << "effective screens";
+        qCInfo(lcOverlay) << "Pre-warmed Layout OSD windows for" << seenPhysical.size() << "physical screens";
     } else {
         // Fallback: no ScreenManager or no effective IDs, warm up for physical screens
         const auto screens = QGuiApplication::screens();

@@ -21,7 +21,9 @@
 #include <QScreen>
 #include <QQmlEngine>
 #include <QQmlContext>
+#include <QQuickGraphicsConfiguration>
 #include <QQuickWindow>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QMutexLocker>
 #include "../core/logging.h"
@@ -215,6 +217,14 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* scree
 
     // Take C++ ownership so QML's GC doesn't delete the window
     QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
+
+    // Enable persistent RHI pipeline cache — compiled GPU programs survive across sessions.
+    // This eliminates shader recompilation on subsequent daemon starts.
+    // Must be called before the window is shown (before scene graph initialization).
+    QQuickGraphicsConfiguration config = window->graphicsConfiguration();
+    config.setPipelineCacheSaveFile(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+                                    + QStringLiteral("/plasmazones-pipeline.cache"));
+    window->setGraphicsConfiguration(config);
 
     // Set the screen before configuring LayerShellQt
     window->setScreen(screen);

@@ -11,10 +11,14 @@
  * declarations for cross-TU access after splitting zoneshadernoderhi.cpp.
  */
 
+#include <QHash>
 #include <QList>
+#include <QMutex>
 #include <QString>
 
 #include <rhi/qshaderbaker.h>
+
+#include <plasmazones_rendering_export.h>
 
 namespace PlasmaZones {
 
@@ -46,6 +50,26 @@ const QList<QShaderBaker::GeneratedShader>& bakeTargets();
 
 /// Load shader file, expand #include directives. Defined in zoneshadernoderhi.cpp.
 QString loadAndExpandShader(const QString& path, QString* outError);
+
+/// Thread-safe singleton cache for baked QShader objects, keyed by source hash + stage.
+struct ShaderBakeCache
+{
+    QMutex mutex;
+    QHash<size_t, QShader> entries;
+
+    static ShaderBakeCache& instance()
+    {
+        static ShaderBakeCache s;
+        return s;
+    }
+};
+
+/// Cache baked QShader objects by source hash to avoid redundant compilation.
+/// Thread-safe: prepare() runs on the render thread; multiple windows may bake concurrently.
+QShader cachedBake(QShaderBaker& baker, const QByteArray& source, QShader::Stage stage);
+
+/// Clear the bake cache (e.g. on shader hot-reload so stale SPIR-V is discarded).
+PLASMAZONES_RENDERING_EXPORT void clearBakeCache();
 
 } // namespace detail
 

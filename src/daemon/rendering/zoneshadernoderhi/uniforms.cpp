@@ -469,8 +469,7 @@ void ZoneShaderNodeRhi::bakeBufferShaders()
             QShaderBaker fragmentBaker;
             fragmentBaker.setGeneratedShaderVariants({QShader::StandardShader});
             fragmentBaker.setGeneratedShaders(targets);
-            fragmentBaker.setSourceString(src.toUtf8(), QShader::FragmentStage);
-            m_multiBufferFragmentShaders[i] = fragmentBaker.bake();
+            m_multiBufferFragmentShaders[i] = detail::cachedBake(fragmentBaker, src.toUtf8(), QShader::FragmentStage);
             if (!m_multiBufferFragmentShaders[i].isValid()) {
                 qCWarning(lcOverlay) << "Multi-buffer shader" << i << "compile failed, path=" << path
                                      << "error=" << fragmentBaker.errorMessage();
@@ -508,8 +507,8 @@ void ZoneShaderNodeRhi::bakeBufferShaders()
             QShaderBaker fragmentBaker;
             fragmentBaker.setGeneratedShaderVariants({QShader::StandardShader});
             fragmentBaker.setGeneratedShaders(targets);
-            fragmentBaker.setSourceString(m_bufferFragmentShaderSource.toUtf8(), QShader::FragmentStage);
-            m_bufferFragmentShader = fragmentBaker.bake();
+            m_bufferFragmentShader =
+                detail::cachedBake(fragmentBaker, m_bufferFragmentShaderSource.toUtf8(), QShader::FragmentStage);
             if (m_bufferFragmentShader.isValid()) {
                 m_bufferShaderReady = true;
                 m_bufferPipeline.reset();
