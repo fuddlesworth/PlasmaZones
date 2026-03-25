@@ -262,13 +262,15 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         const int hMargin = std::max(0, (screenW - layout.barWidth) / 2);
         const int vMargin = std::max(0, (screenH - layout.barHeight) / 2);
 
-        // No virtual screen offsets in margins — positioning is handled by
-        // applyZoneSelectorGeometry's setX/setY using virtual screen coordinates.
-        // Margins are only for centering within the anchored space.
-        const int vsLeftOff = 0;
-        const int vsTopOff = 0;
-        const int vsRightOff = 0;
-        const int vsBottomOff = 0;
+        // Virtual screen offsets: margins are relative to PHYSICAL screen edges.
+        // For virtual screens, add the offset from each physical edge.
+        // setX/setY in applyZoneSelectorGeometry provides position hints for mapFromGlobal;
+        // margins are what the compositor actually uses for rendering on Wayland.
+        const QRect physGeom = screen->geometry();
+        const int vsLeftOff = screenGeom.x() - physGeom.x();
+        const int vsTopOff = screenGeom.y() - physGeom.y();
+        const int vsRightOff = physGeom.right() - screenGeom.right();
+        const int vsBottomOff = physGeom.bottom() - screenGeom.bottom();
 
         // exclusiveZone(-1) ignores panel geometry; the popup renders at absolute screen
         // coordinates over any panels, so hover coordinates match (no offset mismatch).
