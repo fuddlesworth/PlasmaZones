@@ -734,11 +734,24 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             }
             *trackedScreen = newScreenId;
 
-            // Autotile virtual screen transfers are already handled by
-            // AutotileHandler::slotWindowFrameGeometryChanged (connected
-            // to the same signal). Only handle snapping-mode windows here.
+            // Skip during drag — the drag system owns state transitions.
+            // Autotile drag handles VS transfers in dragStopped (line 262-285).
+            // Snapping drag handles cross-screen unsnap in dragStopped via daemon.
+            if (m_dragTracker->isDragging()) {
+                return;
+            }
+
+            // Delegate autotile handling for ALL cross-VS transitions
+            // (snapping→autotile, autotile→snapping, autotile→autotile).
+            // The autotile handler's own slotWindowFrameGeometryChanged only
+            // detects VS changes for windows it already tracks (m_notifiedWindows).
+            // A snapping-mode window entering an autotile VS wouldn't be caught
+            // without this explicit delegation.
+            m_autotileHandler->handleWindowOutputChanged(safeW);
+
+            // For snapping→snapping cross-VS moves: notify the daemon
             if (!m_autotileHandler->isAutotileScreen(oldScreenId) && !m_autotileHandler->isAutotileScreen(newScreenId)
-                && !m_dragTracker->isDragging() && !m_screenChangeHandler->isScreenChangeInProgress()) {
+                && !m_screenChangeHandler->isScreenChangeInProgress()) {
                 const QString windowId = getWindowId(safeW);
                 fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("windowScreenChanged"),
                                       {windowId, newScreenId}, QStringLiteral("virtual screen crossing"));
