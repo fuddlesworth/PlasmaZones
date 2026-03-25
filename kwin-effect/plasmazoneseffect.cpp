@@ -2686,6 +2686,14 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
                 if (snapAssistRequested && !emptyZonesJson.isEmpty() && !releaseScreenId.isEmpty()) {
                     m_snapAssistHandler->asyncShow(windowId, releaseScreenId, emptyZonesJson);
                 }
+
+                // Cross-VS autotile transfer: if the window was dropped on an autotile
+                // virtual screen (from a snapping VS on the same physical monitor),
+                // add it to autotile. KWin's outputChanged won't fire (same physical
+                // monitor), so the autotile handler doesn't see the transfer.
+                if (safeWindow && !releaseScreenId.isEmpty() && m_autotileHandler->isAutotileScreen(releaseScreenId)) {
+                    m_autotileHandler->notifyWindowAdded(safeWindow);
+                }
             });
 }
 
