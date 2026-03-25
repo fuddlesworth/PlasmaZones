@@ -489,6 +489,12 @@ void WindowTrackingAdaptor::handleBatchedResnap(const QString& resnapData)
         entry.windowId = obj.value(QLatin1String("windowId")).toString();
         entry.targetZoneId = obj.value(QLatin1String("targetZoneId")).toString();
         entry.sourceZoneId = obj.value(QLatin1String("sourceZoneId")).toString();
+        // Deserialize multi-zone IDs (for zone-spanning windows)
+        const QJsonArray zoneIdsArr = obj.value(QLatin1String("targetZoneIds")).toArray();
+        if (!zoneIdsArr.isEmpty()) {
+            for (const QJsonValue& v : zoneIdsArr)
+                entry.targetZoneIds.append(v.toString());
+        }
         entry.targetGeometry =
             QRect(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
                   obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());

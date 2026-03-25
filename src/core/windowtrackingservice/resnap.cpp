@@ -254,6 +254,8 @@ WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& scre
         entry.windowId = windowId;
         entry.sourceZoneId = QString();
         entry.targetZoneId = zoneIds.first();
+        if (zoneIds.size() > 1)
+            entry.targetZoneIds = zoneIds;
         entry.targetGeometry = geo;
         result.append(entry);
     }
@@ -296,18 +298,6 @@ WindowTrackingService::calculateResnapFromAutotileOrder(const QStringList& autot
     QVector<Zone*> zones = layout->zones();
     sortZonesByNumber(zones);
 
-    // Get screen and gap settings for geometry calculation
-    QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
-    if (!screen) {
-        return result;
-    }
-    auto* smgr = ScreenManager::instance();
-    QRect vsGeom = smgr ? smgr->screenGeometry(screenId) : QRect();
-    QRect vsAvailGeom = smgr ? smgr->screenAvailableGeometry(screenId) : QRect();
-
-    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
-    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
-
     const int zoneCount = zones.size();
     const int windowCount = autotileWindowOrder.size();
 
@@ -340,35 +330,42 @@ WindowTrackingService::calculateResnapFromAutotileOrder(const QStringList& autot
         if (savedZones.isEmpty())
             continue;
 
-        // Use the first saved zone assignment (primary zone for multi-zone snaps)
-        const QString& savedZoneId = savedZones.first();
-        Zone* targetZone = zoneById.value(savedZoneId);
-        if (!targetZone)
-            continue; // Zone no longer exists in the restored layout
-
-        int zoneIdx = zones.indexOf(targetZone);
-        if (zoneIdx < 0 || claimedZoneIndices.contains(zoneIdx))
-            continue; // Already claimed by another window
-
-        bool useAvail = !layout->useFullScreenGeometry();
-        QRectF geoF;
-        if (vsGeom.isValid()) {
-            QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
-            geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, vsGeom, availGeom, zonePadding, outerGaps,
-                                                          useAvail, screenId);
-        } else {
-            geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
+        // Restore to ALL saved zone assignments (supports multi-zone spans).
+        // Verify all zones still exist in the restored layout.
+        QStringList validZoneIds;
+        QList<int> validZoneIndices;
+        for (const QString& zid : savedZones) {
+            Zone* z = zoneById.value(zid);
+            if (!z)
+                continue;
+            int idx = zones.indexOf(z);
+            if (idx < 0 || claimedZoneIndices.contains(idx))
+                continue;
+            validZoneIds.append(zid);
+            validZoneIndices.append(idx);
         }
-        QRect geo = GeometryUtils::snapToRect(geoF);
+        if (validZoneIds.isEmpty())
+            continue;
+
+        // Compute geometry: combined for multi-zone, single for normal
+        QRect geo;
+        if (validZoneIds.size() > 1) {
+            geo = multiZoneGeometry(validZoneIds, screenId);
+        } else {
+            geo = zoneGeometry(validZoneIds.first(), screenId);
+        }
 
         if (geo.isValid()) {
             ZoneAssignmentEntry entry;
             entry.windowId = windowId;
             entry.sourceZoneId = QString();
-            entry.targetZoneId = targetZone->id().toString();
+            entry.targetZoneId = validZoneIds.first();
+            if (validZoneIds.size() > 1)
+                entry.targetZoneIds = validZoneIds;
             entry.targetGeometry = geo;
             result.append(entry);
-            claimedZoneIndices.insert(zoneIdx);
+            for (int idx : validZoneIndices)
+                claimedZoneIndices.insert(idx);
         }
     }
 
@@ -400,16 +397,7 @@ WindowTrackingService::calculateResnapFromAutotileOrder(const QStringList& autot
             break; // No more zones available
 
         Zone* targetZone = zones.at(zoneIdx);
-        bool useAvail = !layout->useFullScreenGeometry();
-        QRectF geoF;
-        if (vsGeom.isValid()) {
-            QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
-            geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, vsGeom, availGeom, zonePadding, outerGaps,
-                                                          useAvail, screenId);
-        } else {
-            geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
-        }
-        QRect geo = GeometryUtils::snapToRect(geoF);
+        QRect geo = zoneGeometry(targetZone->id().toString(), screenId);
 
         if (geo.isValid()) {
             ZoneAssignmentEntry entry;
