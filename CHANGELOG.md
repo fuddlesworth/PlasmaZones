@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.4.2] - 2026-03-25
+
+### Fixed
+- **Multi-zone span pulls in background zones** ([#249]): Spanning adjacent sub-zones (e.g. zones 7 & 9) while a larger zone existed underneath incorrectly included the background zone, making the window much larger than intended. Fixed both proximity-snap and paint-to-span code paths to exclude background/overlay zones from the span.
+- **Settings UI not refreshing when daemon starts from toggle**: UI data now reloads when the daemon is started via the settings toggle.
+
 ## [2.4.1] - 2026-03-25
 
 ### Fixed
@@ -964,7 +970,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.1...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.2...HEAD
+[2.4.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.16...v2.4.0
 [2.3.16]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.15...v2.3.16
