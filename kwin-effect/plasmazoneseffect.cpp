@@ -1877,23 +1877,11 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
     ensurePreSnapGeometryStored(targetWindow, getWindowId(targetWindow));
     applySnapGeometry(targetWindow, geometry);
 
-    // Derive screen from the applied geometry (authoritative absolute coordinates)
-    // rather than querying the window's current screen. After a cross-screen snap
-    // assist selection, KWin may not have updated the window's output assignment
-    // yet, causing getWindowScreenId() to return the OLD screen.
-    QString screenId;
-    const auto outputs = KWin::effects->screens();
+    // Derive screen from the applied geometry center. Use resolveEffectiveScreenId
+    // to get the virtual screen ID (not just the physical output).
     QPoint geoCenter = geometry.center();
-    for (const auto* output : outputs) {
-        if (output->geometry().contains(geoCenter)) {
-            screenId = outputScreenId(output);
-            break;
-        }
-    }
-    // Fallback to window's reported screen if geometry doesn't resolve
-    if (screenId.isEmpty()) {
-        screenId = getWindowScreenId(targetWindow);
-    }
+    const auto* output = KWin::effects->screenAt(geoCenter);
+    QString screenId = output ? resolveEffectiveScreenId(geoCenter, output) : getWindowScreenId(targetWindow);
 
     if (isDaemonReady("snap assist windowSnapped")) {
         fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("windowSnapped"),
