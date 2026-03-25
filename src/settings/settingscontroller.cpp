@@ -2129,6 +2129,8 @@ QVariantList SettingsController::getStagedVirtualScreenConfig(const QString& phy
     return m_stagedVirtualScreenConfigs.value(physicalScreenId);
 }
 
+// NOTE: This is unused by the QML UI (VirtualScreensPage uses _loadPreset instead).
+// Kept as a public API for scripting/D-Bus consumers.
 void SettingsController::applyVirtualScreenPreset(const QString& physicalScreenId, const QString& preset)
 {
     QVariantList screens;

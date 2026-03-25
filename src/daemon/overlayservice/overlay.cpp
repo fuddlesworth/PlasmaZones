@@ -382,25 +382,9 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     // to the virtual screen geometry. LayerShellQt anchors are NOT set to all-edges
     // for virtual screens since the window doesn't cover the full physical screen.
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        layerWindow->setScreen(physScreen);
         layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-
-        const bool isVirtualScreen = (geometry != physScreen->geometry());
-        if (isVirtualScreen) {
-            // Virtual screen: anchor top-left and use margins to position within physical screen
-            layerWindow->setAnchors(
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft));
-            const QRect physGeom = physScreen->geometry();
-            const int localX = geometry.x() - physGeom.x();
-            const int localY = geometry.y() - physGeom.y();
-            layerWindow->setMargins(QMargins(localX, localY, 0, 0));
-        } else {
-            // Physical screen: anchor to all edges for full-screen coverage
-            layerWindow->setAnchors(
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                              | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
-        }
+        applyLayerShellScreenPosition(window, physScreen, geometry);
         layerWindow->setExclusiveZone(-1);
         layerWindow->setScope(QStringLiteral("plasmazones-overlay-%1").arg(screenId));
     }

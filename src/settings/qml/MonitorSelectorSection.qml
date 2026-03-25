@@ -44,6 +44,13 @@ ColumnLayout {
                 };
                 for (var key in all[i]) entry[key] = all[i][key]
                 entry["name"] = physId; // Override name to physical ID
+                // Virtual screen entries have sub-geometry (e.g. 960x1080 for a 50/50 split);
+                // clear resolution fields so the monitor selector doesn't show misleading values.
+                if (all[i].isVirtualScreen) {
+                    delete entry["resolution"];
+                    delete entry["width"];
+                    delete entry["height"];
+                }
                 result.push(entry);
             }
         }

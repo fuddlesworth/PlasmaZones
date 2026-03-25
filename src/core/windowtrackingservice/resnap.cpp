@@ -293,17 +293,11 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(c
     sortZonesByNumber(zones);
 
     // Get screen and gap settings for geometry calculation
-    auto* smgr = ScreenManager::instance();
-    QScreen* screen = smgr ? smgr->physicalQScreenFor(screenId) : nullptr;
-    if (!screen) {
-        screen = screenId.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenId);
-    }
-    if (!screen) {
-        screen = Utils::primaryScreen();
-    }
+    QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
     if (!screen) {
         return result;
     }
+    auto* smgr = ScreenManager::instance();
     QRect vsGeom = smgr ? smgr->screenGeometry(screenId) : QRect();
     QRect vsAvailGeom = smgr ? smgr->screenAvailableGeometry(screenId) : QRect();
 
@@ -510,17 +504,11 @@ QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStr
     QSet<QUuid> occupiedZoneIds = buildOccupiedZoneSet(screenId);
 
     // Get screen and gap settings for geometry calculation
-    auto* smgr = ScreenManager::instance();
-    QScreen* screen = smgr ? smgr->physicalQScreenFor(screenId) : nullptr;
-    if (!screen) {
-        screen = screenId.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenId);
-    }
-    if (!screen) {
-        screen = Utils::primaryScreen();
-    }
+    QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
     if (!screen) {
         return result;
     }
+    auto* smgr = ScreenManager::instance();
     QRect vsGeom = smgr ? smgr->screenGeometry(screenId) : QRect();
     QRect vsAvailGeom = smgr ? smgr->screenAvailableGeometry(screenId) : QRect();
 

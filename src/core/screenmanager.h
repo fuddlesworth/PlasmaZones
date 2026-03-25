@@ -110,6 +110,17 @@ public:
     static ScreenManager* instance();
 
     /**
+     * @brief Resolve a screen ID (physical or virtual) to the backing QScreen*.
+     *
+     * Tries ScreenManager::physicalQScreenFor first, then Utils::findScreenByIdOrName,
+     * then Utils::primaryScreen as final fallback.
+     *
+     * @param screenId Screen identifier (physical or virtual)
+     * @return QScreen pointer, or nullptr if no screen could be resolved
+     */
+    static QScreen* resolvePhysicalScreen(const QString& screenId);
+
+    /**
      * @brief Schedule a one-shot panel re-query after a delay
      *
      * Use after applying geometry updates so we pick up the settled panel state

@@ -90,14 +90,7 @@ QString WindowTrackingService::getEmptyZonesJson(const QString& screenId) const
     }
 
     // Resolve physical screen for fallback (virtual screen IDs resolve to their backing QScreen*)
-    auto* mgr = ScreenManager::instance();
-    QScreen* screen = mgr ? mgr->physicalQScreenFor(screenId) : nullptr;
-    if (!screen) {
-        screen = screenId.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenId);
-    }
-    if (!screen) {
-        screen = Utils::primaryScreen();
-    }
+    QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
     if (!screen) {
         return QStringLiteral("[]");
     }
@@ -132,19 +125,13 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
     }
 
     // Resolve physical screen (virtual IDs resolve to backing QScreen*)
-    auto* smgr = ScreenManager::instance();
-    QScreen* screen = smgr ? smgr->physicalQScreenFor(screenId) : nullptr;
-    if (!screen) {
-        screen = screenId.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenId);
-    }
-    if (!screen) {
-        screen = Utils::primaryScreen();
-    }
+    QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
     if (!screen) {
         return QRect();
     }
 
     // Use the zone's own layout for per-layout gap overrides
+    auto* smgr = ScreenManager::instance();
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
     EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
     bool useAvail = !(layout && layout->useFullScreenGeometry());
@@ -261,17 +248,11 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise, 
         }
 
         // Get screen and gap settings for geometry calculation
-        auto* smgr = ScreenManager::instance();
-        QScreen* screen = smgr ? smgr->physicalQScreenFor(screenId) : nullptr;
-        if (!screen) {
-            screen = screenId.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenId);
-        }
-        if (!screen) {
-            screen = Utils::primaryScreen();
-        }
+        QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
         if (!screen) {
             continue;
         }
+        auto* smgr = ScreenManager::instance();
 
         int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
         EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);

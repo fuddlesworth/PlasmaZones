@@ -35,6 +35,7 @@ static QPointer<ScreenManager> s_instance;
 ScreenManager::ScreenManager(QObject* parent)
     : QObject(parent)
 {
+    Q_ASSERT_X(!s_instance, "ScreenManager", "Multiple ScreenManager instances created");
     s_instance = this;
     m_delayedPanelRequeryTimer.setSingleShot(true);
     connect(&m_delayedPanelRequeryTimer, &QTimer::timeout, this, [this]() {
@@ -403,6 +404,19 @@ bool ScreenManager::isPanelGeometryReady()
 ScreenManager* ScreenManager::instance()
 {
     return s_instance;
+}
+
+QScreen* ScreenManager::resolvePhysicalScreen(const QString& screenId)
+{
+    auto* mgr = instance();
+    QScreen* screen = mgr ? mgr->physicalQScreenFor(screenId) : nullptr;
+    if (!screen) {
+        screen = screenId.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenId);
+    }
+    if (!screen) {
+        screen = Utils::primaryScreen();
+    }
+    return screen;
 }
 
 void ScreenManager::onScreenAdded(QScreen* screen)

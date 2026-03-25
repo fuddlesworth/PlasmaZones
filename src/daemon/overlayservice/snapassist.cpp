@@ -122,25 +122,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
 
     // Match main overlay: position to cover virtual or physical screen
     if (auto* layerWindow = LayerShellQt::Window::get(m_snapAssistWindow)) {
-        layerWindow->setScreen(screen);
         layerWindow->setLayer(LayerShellQt::Window::LayerTop);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
-
-        // For virtual screens, position within the physical screen using margins
-        // (same pattern as createOverlayWindow)
-        const bool isVirtualScreen = (screenGeom != screen->geometry());
-        if (isVirtualScreen) {
-            layerWindow->setAnchors(
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft));
-            const QRect physGeom = screen->geometry();
-            const int localX = screenGeom.x() - physGeom.x();
-            const int localY = screenGeom.y() - physGeom.y();
-            layerWindow->setMargins(QMargins(localX, localY, 0, 0));
-        } else {
-            layerWindow->setAnchors(
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                              | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
-        }
+        applyLayerShellScreenPosition(m_snapAssistWindow, screen, screenGeom);
         layerWindow->setExclusiveZone(-1);
         layerWindow->setScope(QStringLiteral("plasmazones-snap-assist"));
     }
@@ -400,23 +384,9 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
     // Layer shell with keyboard interactivity — position to virtual or physical screen
     if (auto* layerWindow = LayerShellQt::Window::get(m_layoutPickerWindow)) {
-        layerWindow->setScreen(screen);
         layerWindow->setLayer(LayerShellQt::Window::LayerTop);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
-
-        const bool isVirtualScreen = (screenGeom != screen->geometry());
-        if (isVirtualScreen) {
-            layerWindow->setAnchors(
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft));
-            const QRect physGeom = screen->geometry();
-            const int localX = screenGeom.x() - physGeom.x();
-            const int localY = screenGeom.y() - physGeom.y();
-            layerWindow->setMargins(QMargins(localX, localY, 0, 0));
-        } else {
-            layerWindow->setAnchors(
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                              | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
-        }
+        applyLayerShellScreenPosition(m_layoutPickerWindow, screen, screenGeom);
         layerWindow->setExclusiveZone(-1);
         layerWindow->setScope(QStringLiteral("plasmazones-layout-picker"));
     }

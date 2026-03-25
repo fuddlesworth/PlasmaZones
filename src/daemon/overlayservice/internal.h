@@ -169,6 +169,30 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
     writeQmlProperty(window, QStringLiteral("shaderSource"), info.shaderUrl);
 }
 
+/// Configure LayerShellQt anchors and margins for a window on a virtual or physical screen.
+/// For virtual screens (screenGeom != physScreen->geometry()), anchors top-left with offset margins.
+/// For physical screens, anchors all four edges for full coverage.
+inline void applyLayerShellScreenPosition(QWindow* window, QScreen* physScreen, const QRect& screenGeom)
+{
+    auto* layerWindow = LayerShellQt::Window::get(window);
+    if (!layerWindow || !physScreen)
+        return;
+
+    layerWindow->setScreen(physScreen);
+
+    const bool isVirtualScreen = screenGeom.isValid() && (screenGeom != physScreen->geometry());
+    if (isVirtualScreen) {
+        layerWindow->setAnchors(
+            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft));
+        const QRect physGeom = physScreen->geometry();
+        layerWindow->setMargins(QMargins(screenGeom.x() - physGeom.x(), screenGeom.y() - physGeom.y(), 0, 0));
+    } else {
+        layerWindow->setAnchors(
+            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
+                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Zone selector helpers shared across overlayservice_selector*.cpp TUs
 // ═══════════════════════════════════════════════════════════════════════════════

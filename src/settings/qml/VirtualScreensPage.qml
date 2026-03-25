@@ -120,6 +120,14 @@ Flickable {
         screens[leftIdx].width = newDivPos - leftStart;
         screens[rightIdx].x = newDivPos;
         screens[rightIdx].width = rightEnd - newDivPos;
+        // Normalize: ensure total width is exactly 1.0
+        var total = 0;
+        for (var k = 0; k < screens.length - 1; k++) {
+            total += screens[k].width;
+        }
+        screens[screens.length - 1].width = 1 - total;
+        // Also fix the x position of the last screen
+        screens[screens.length - 1].x = total;
         _pendingScreens = screens;
         _stageCurrentConfig();
     }
