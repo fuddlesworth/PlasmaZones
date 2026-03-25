@@ -137,6 +137,27 @@ QStringList WindowTrackingService::snappedWindows() const
     return m_windowZoneAssignments.keys();
 }
 
+int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
+{
+    int pruned = 0;
+    auto it = m_windowZoneAssignments.begin();
+    while (it != m_windowZoneAssignments.end()) {
+        if (!aliveWindowIds.contains(it.key())) {
+            const QString& wid = it.key();
+            m_windowScreenAssignments.remove(wid);
+            m_windowDesktopAssignments.remove(wid);
+            m_preTileGeometries.remove(wid);
+            m_preFloatZoneAssignments.remove(wid);
+            m_preFloatScreenAssignments.remove(wid);
+            it = m_windowZoneAssignments.erase(it);
+            ++pruned;
+        } else {
+            ++it;
+        }
+    }
+    return pruned;
+}
+
 bool WindowTrackingService::isWindowSnapped(const QString& windowId) const
 {
     auto it = m_windowZoneAssignments.constFind(windowId);

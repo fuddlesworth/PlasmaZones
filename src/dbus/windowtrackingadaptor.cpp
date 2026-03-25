@@ -433,6 +433,16 @@ QStringList WindowTrackingAdaptor::getSnappedWindows()
     return m_service->snappedWindows();
 }
 
+void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
+{
+    const QSet<QString> alive(aliveWindowIds.begin(), aliveWindowIds.end());
+    int pruned = m_service->pruneStaleAssignments(alive);
+    if (pruned > 0) {
+        qCInfo(lcDbusWindow) << "Pruned" << pruned << "stale window assignments (not in KWin)";
+        scheduleSaveState();
+    }
+}
+
 QString WindowTrackingAdaptor::getEmptyZonesJson(const QString& screenId)
 {
     return m_service->getEmptyZonesJson(screenId);

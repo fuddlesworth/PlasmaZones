@@ -1023,6 +1023,19 @@ void PlasmaZonesEffect::slotDaemonReady()
     const auto windows = KWin::effects->stackingOrder();
     m_autotileHandler->notifyWindowsAddedBatch(windows);
 
+    // Report all live window IDs to the daemon so it can prune stale
+    // entries from KConfig (windows that were snapped but no longer exist).
+    {
+        QStringList aliveWindowIds;
+        for (KWin::EffectWindow* w : windows) {
+            if (w && shouldHandleWindow(w)) {
+                aliveWindowIds.append(getWindowId(w));
+            }
+        }
+        fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("pruneStaleWindows"),
+                              {QVariant::fromValue(aliveWindowIds)}, QStringLiteral("pruneStaleWindows"));
+    }
+
     // Restore snap state for non-autotile windows.
     // pendingRestoresAvailable may have fired BEFORE daemonReady, causing
     // slotPendingRestoresAvailable to bail out (m_daemonServiceRegistered was false).

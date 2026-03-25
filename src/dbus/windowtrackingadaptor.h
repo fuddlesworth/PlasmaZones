@@ -267,6 +267,11 @@ public Q_SLOTS:
     QStringList getWindowsInZone(const QString& zoneId);
     QStringList getSnappedWindows();
 
+    /// Remove zone/screen/desktop assignments for windows not in the alive set.
+    /// Called by the KWin effect after daemon ready to clean up stale KConfig entries
+    /// from windows that no longer exist (closed between save and daemon restart).
+    void pruneStaleWindows(const QStringList& aliveWindowIds);
+
     /**
      * Get JSON array of empty zones for Snap Assist continuation
      * @param screenId Screen ID (e.g. DP-1)

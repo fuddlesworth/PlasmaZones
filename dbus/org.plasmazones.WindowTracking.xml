@@ -73,6 +73,12 @@
                 <annotation name="org.gtk.GDBus.DocString" value="All snapped window IDs."/>
             </arg>
         </method>
+        <method name="pruneStaleWindows">
+            <annotation name="org.gtk.GDBus.DocString" value="Remove zone assignments for windows not in the alive set. Called by KWin effect after daemon ready to clean up stale KConfig entries."/>
+            <arg name="aliveWindowIds" type="as" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window IDs currently known to KWin."/>
+            </arg>
+        </method>
         <method name="getEmptyZonesJson">
             <annotation name="org.gtk.GDBus.DocString" value="Return JSON array of empty zones for Snap Assist continuation. Same format as emptyZonesJson from dragStopped."/>
             <arg name="screenName" type="s" direction="in">

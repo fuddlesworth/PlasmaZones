@@ -112,6 +112,10 @@ public:
      */
     QStringList snappedWindows() const;
 
+    /// Remove zone/screen/desktop assignments for windows not in the alive set.
+    /// Returns the number of pruned entries.
+    int pruneStaleAssignments(const QSet<QString>& aliveWindowIds);
+
     /**
      * @brief Check if a window is assigned to any zone
      */
