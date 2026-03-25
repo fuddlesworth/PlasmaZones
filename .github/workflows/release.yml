@@ -166,7 +166,7 @@ jobs:
       - name: Install build dependencies
         run: |
           zypper -n install \
-            cmake ninja extra-cmake-modules-tools gcc-c++ \
+            cmake ninja extra-cmake-modules gcc-c++ \
             qt6-core-private-devel qt6-gui-private-devel \
             'cmake(Qt6Core)' 'cmake(Qt6DBus)' 'cmake(Qt6Gui)' \
             'cmake(Qt6Qml)' 'cmake(Qt6Quick)' 'cmake(Qt6QuickControls2)' \
