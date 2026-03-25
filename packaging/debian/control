@@ -16,7 +16,7 @@ Build-Depends:
  qt6-shadertools-dev,
  libkf6kcmutils-dev (>= 6.6.0),
  libkf6globalaccel-dev (>= 6.6.0),
- libkf6kirigami-dev (>= 6.6.0),
+ libkf6kirigami-dev (>= 6.6.0) | kf6-kirigami-dev (>= 6.6.0),
  kwin-dev (>= 6.6.0),
  libxkbcommon-dev,
  liblayershellqtinterface-dev (>= 6.4.0),

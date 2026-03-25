@@ -60,11 +60,13 @@ jobs:
             qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-tools-dev qt6-shadertools-dev \
             kwin-dev libwayland-dev libepoxy-dev libdrm-dev libxkbcommon-dev \
             libkf6config-dev libkf6configwidgets-dev \
-            libkf6kirigami-dev \
             libkf6kcmutils-dev \
             libkf6windowsystem-dev libkf6globalaccel-dev \
             libkf6notifications-dev \
             liblayershellqtinterface-dev plasma-activities-dev
+          # Kirigami dev package name varies across distros
+          apt-get install -y --no-install-recommends libkf6kirigami-dev 2>/dev/null \
+            || apt-get install -y --no-install-recommends kf6-kirigami-dev
 
       - name: Generate Debian changelog from CHANGELOG.md
         run: bash packaging/generate-changelog.sh debian
