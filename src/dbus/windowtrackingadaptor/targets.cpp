@@ -140,7 +140,7 @@ QString WindowTrackingAdaptor::getMoveTargetForWindow(const QString& windowId, c
                                          .toJson(QJsonDocument::Compact));
         }
     } else {
-        targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction);
+        targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
         if (targetZoneId.isEmpty()) {
             Q_EMIT navigationFeedback(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"), currentZoneId,
                                       QString(), effectiveScreenId);
@@ -188,12 +188,12 @@ QString WindowTrackingAdaptor::getFocusTargetForWindow(const QString& windowId, 
     if (currentZoneId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("not_snapped"), QString(), QString(),
                                   screenId);
-        return QString::fromUtf8(QJsonDocument(focusResult(false, QStringLiteral("not_snapped"), QString(), QString(),
-                                                           QString(), screenId))
-                                     .toJson(QJsonDocument::Compact));
+        return QString::fromUtf8(
+            QJsonDocument(focusResult(false, QStringLiteral("not_snapped"), QString(), QString(), QString(), screenId))
+                .toJson(QJsonDocument::Compact));
     }
 
-    QString targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction);
+    QString targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction, screenId);
     if (targetZoneId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"), currentZoneId,
                                   QString(), screenId);
@@ -339,7 +339,7 @@ QString WindowTrackingAdaptor::getSwapTargetForWindow(const QString& windowId, c
         }
     }
 
-    QString targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction);
+    QString targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
     if (targetZoneId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("no_adjacent_zone"), currentZoneId,
                                   QString(), effectiveScreenId);

@@ -44,11 +44,12 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
             && region == other.region && index == other.index;
     }
 
-    /// Check if the region has valid values (non-negative, non-zero size, within [0,1] bounds)
+    /// Check if the definition is valid: non-empty id, non-negative origin, non-zero size,
+    /// region within [0,1] bounds. Uses 1e-3 tolerance to handle float serialization precision loss.
     bool isValid() const
     {
         return !id.isEmpty() && region.x() >= 0 && region.y() >= 0 && region.width() > 0 && region.height() > 0
-            && region.x() + region.width() <= 1.0 + 1e-6 && region.y() + region.height() <= 1.0 + 1e-6;
+            && region.x() + region.width() <= 1.0 + 1e-3 && region.y() + region.height() <= 1.0 + 1e-3;
     }
 
     /// Check which edges of this virtual screen are at the physical screen boundary

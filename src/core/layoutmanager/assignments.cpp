@@ -82,6 +82,10 @@ void LayoutManager::setAssignmentEntryDirect(const QString& screenId, int virtua
     saveAssignments();
 }
 
+// NOTE: layoutForScreen, assignmentIdForScreen, and assignmentEntryForScreen
+// share the same fallback cascade (exact -> desktop -> screen -> connector -> virtual -> default).
+// Changes to the cascade order must be replicated across all three methods.
+
 Layout* LayoutManager::layoutForScreen(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
     // Helper: resolve stored assignment to Layout* (returns nullptr for autotile mode)

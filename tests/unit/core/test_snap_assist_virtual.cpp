@@ -1016,22 +1016,16 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // screensMatch — Dead code detection
-    // The current implementation extracts physA/physB but never uses them.
-    // These tests document the current (potentially buggy) behavior and
-    // will need updating when the dead code is fixed.
+    // screensMatch — Virtual screen ID handling
+    // Virtual screen IDs from different indices are distinct screens, even
+    // if they share the same physical parent. A physical ID vs a virtual
+    // ID is also not a match (the physical screen was subdivided).
     // =====================================================================
 
-    void testScreensMatch_deadCode_physicalIdsExtractedButNotCompared()
+    void testScreensMatch_virtualScreenIdsAreDistinct()
     {
-        // This test documents the dead code in screensMatch():
-        // When one or both IDs are virtual, physA and physB are extracted
-        // but the function unconditionally returns false (after the a==b check).
-        //
-        // The fix would be to use physA/physB for meaningful comparison,
-        // but the correct behavior depends on product requirements.
-        // For now, just verify the function doesn't crash and returns false
-        // for non-identical virtual IDs.
+        // Verify that virtual screen IDs with different indices are never
+        // considered matching, and that physical vs virtual IDs don't match.
         QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
         QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
 

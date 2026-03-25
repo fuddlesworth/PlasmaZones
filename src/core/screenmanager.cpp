@@ -53,6 +53,7 @@ ScreenManager::~ScreenManager()
 
 bool ScreenManager::init()
 {
+    // Placeholder — initialization logic moved to start(). Kept for API compatibility.
     return true;
 }
 

@@ -779,11 +779,9 @@ void Settings::loadVirtualScreenConfigs(QSettingsConfigBackend* backend)
         }
 
         // Validate loaded regions — skip invalid entries instead of discarding entire config
-        // Use 1e-3 tolerance to handle float serialization precision loss
         QVector<VirtualScreenDef> validScreens;
         for (const auto& vs : config.screens) {
-            if (vs.region.x() < 0 || vs.region.y() < 0 || vs.region.width() <= 0 || vs.region.height() <= 0
-                || vs.region.x() + vs.region.width() > 1.0 + 1e-3 || vs.region.y() + vs.region.height() > 1.0 + 1e-3) {
+            if (!vs.isValid()) {
                 qCWarning(lcConfig) << "Skipping VirtualScreen" << vs.id << "with invalid region:" << vs.region;
                 continue;
             }

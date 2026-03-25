@@ -152,13 +152,7 @@ QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenId)
         return zoneIds;
     }
 
-    // Find screen
-    QScreen* screen = Utils::findScreenByIdOrName(screenId);
-    if (!screen) {
-        return zoneIds;
-    }
-
-    // Get all zones for this screen
+    // Get all zones for this screen's layout
     for (auto* zone : layout->zones()) {
         zoneIds.append(zone->id().toString());
     }
@@ -217,7 +211,8 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
     return zoneIds;
 }
 
-QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, const QString& direction)
+QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, const QString& direction,
+                                              const QString& screenId)
 {
     if (!DbusHelpers::validateNonEmpty(direction, QStringLiteral("direction"), QStringLiteral("get adjacent zone"))) {
         return QString();
@@ -239,11 +234,21 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
     }
 
     // Get reference geometry for normalizedGeometry() (needed for fixed-mode zones)
-    QScreen* refScreen = Utils::primaryScreen();
-    if (!refScreen) {
-        return QString();
+    // Use virtual-screen-aware resolution: prefer caller-supplied screenId,
+    // then ScreenManager geometry, then fall back to QScreen.
+    QString resolvedId = screenId.isEmpty() ? screenId : Utils::screenIdForName(screenId);
+    auto* smgr = ScreenManager::instance();
+    QRect vsGeom = smgr ? smgr->screenGeometry(resolvedId) : QRect();
+    QRectF refGeom;
+    if (vsGeom.isValid()) {
+        refGeom = GeometryUtils::effectiveScreenGeometry(layout, resolvedId);
+    } else {
+        QScreen* refScreen = ScreenManager::resolvePhysicalScreen(resolvedId);
+        if (!refScreen) {
+            return QString();
+        }
+        refGeom = GeometryUtils::effectiveScreenGeometry(layout, refScreen);
     }
-    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, refScreen);
 
     QRectF currentGeom = currentZone->normalizedGeometry(refGeom);
     QPointF currentCenter(currentGeom.center());

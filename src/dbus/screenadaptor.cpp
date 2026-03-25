@@ -214,6 +214,19 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
         config.screens.append(def);
     }
 
+    // Validate regions before applying
+    for (const auto& def : config.screens) {
+        if (def.region.width() <= 0 || def.region.height() <= 0 || def.region.x() < -1e-3 || def.region.y() < -1e-3
+            || def.region.x() + def.region.width() > 1.0 + 1e-3 || def.region.y() + def.region.height() > 1.0 + 1e-3) {
+            qCWarning(lcDbus) << "setVirtualScreenConfig: invalid region for screen" << def.index;
+            return;
+        }
+    }
+    if (config.screens.size() < 2) {
+        qCWarning(lcDbus) << "setVirtualScreenConfig: need at least 2 screens for subdivision";
+        return;
+    }
+
     mgr->setVirtualScreenConfig(physicalScreenId, config);
 }
 
