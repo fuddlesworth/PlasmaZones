@@ -158,7 +158,9 @@ jobs:
 
     steps:
       - name: Install prerequisites
-        run: zypper -n install git rpm-build rpmdevtools
+        run: |
+          zypper -n --gpg-auto-import-keys refresh --force
+          zypper -n install git rpm-build rpmdevtools
 
       - name: Checkout
         uses: actions/checkout@v6
