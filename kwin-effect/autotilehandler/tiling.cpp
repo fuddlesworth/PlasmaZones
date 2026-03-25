@@ -336,11 +336,34 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
 void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const QRectF& oldGeometry)
 {
     Q_UNUSED(oldGeometry)
-    if (!w || m_autotileTargetZones.isEmpty()) {
+    if (!w) {
         return;
     }
 
     const QString windowId = m_effect->getWindowId(w);
+
+    // Virtual screen change detection: KWin's outputChanged only fires on
+    // physical monitor changes. When a window moves between virtual screens
+    // on the same physical monitor (e.g., A/vs:0 → A/vs:1), no outputChanged
+    // fires. Detect the change here so the autotile engine can transfer the
+    // window. Only check windows we're already tracking (m_notifiedWindowScreens)
+    // and only when the physical screen has virtual subdivisions.
+    if (m_notifiedWindows.contains(windowId) && !m_effect->m_virtualScreenDefs.isEmpty()) {
+        const QString newScreenId = m_effect->getWindowScreenId(w);
+        const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
+        if (!oldScreenId.isEmpty() && oldScreenId != newScreenId) {
+            // Virtual screen changed — delegate to the same handler used by
+            // outputChanged. The re-entrancy guard inside handleWindowOutputChanged
+            // prevents infinite loops from geometry changes caused by tiling.
+            handleWindowOutputChanged(w);
+            return;
+        }
+    }
+
+    if (m_autotileTargetZones.isEmpty()) {
+        return;
+    }
+
     auto it = m_autotileTargetZones.find(windowId);
     if (it == m_autotileTargetZones.end()) {
         return;

@@ -261,12 +261,35 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // to ensure consistent behavior even if autotile screens changed mid-drag.
                 if (m_dragBypassedForAutotile) {
                     if (!cancelled) {
-                        // Use screen captured at drag start — the window may have moved
-                        // to a different screen during the drag.
-                        fireAndForgetDBusCall(
-                            DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
-                            {windowId, m_dragBypassScreenId, true}, QStringLiteral("setWindowFloatingForScreen"));
-                        qCInfo(lcEffect) << "Autotile drag-to-float:" << windowId;
+                        // Re-resolve the window's virtual screen at drop time.
+                        // KWin's outputChanged only fires on physical monitor changes,
+                        // so moving between virtual screens on the same monitor
+                        // (e.g., A/vs:0 → A/vs:1) is invisible to the outputChanged
+                        // handler. Detect the change here and trigger a transfer.
+                        const QString dropScreenId = w ? getWindowScreenId(w) : m_dragBypassScreenId;
+                        if (dropScreenId != m_dragBypassScreenId) {
+                            qCInfo(lcEffect) << "Autotile drag: virtual screen changed" << m_dragBypassScreenId << "->"
+                                             << dropScreenId;
+                            // Transfer: remove from old virtual screen, add to new one.
+                            // handleWindowOutputChanged won't fire (same physical monitor),
+                            // so manually perform the close/open cycle.
+                            m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
+                            if (w && m_autotileHandler->isAutotileScreen(dropScreenId)) {
+                                m_autotileHandler->notifyWindowAdded(w);
+                            } else {
+                                // Dropped on a non-autotile screen — float it
+                                fireAndForgetDBusCall(DBus::Interface::WindowTracking,
+                                                      QStringLiteral("setWindowFloatingForScreen"),
+                                                      {windowId, m_dragBypassScreenId, true},
+                                                      QStringLiteral("setWindowFloatingForScreen"));
+                            }
+                        } else {
+                            // Same virtual screen — normal drag-to-float behavior
+                            fireAndForgetDBusCall(
+                                DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
+                                {windowId, m_dragBypassScreenId, true}, QStringLiteral("setWindowFloatingForScreen"));
+                            qCInfo(lcEffect) << "Autotile drag-to-float:" << windowId;
+                        }
                     }
                     return;
                 }
