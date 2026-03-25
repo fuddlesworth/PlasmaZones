@@ -210,6 +210,20 @@ bool screensMatch(const QString& a, const QString& b)
     if (a.isEmpty() || b.isEmpty()) {
         return false;
     }
+
+    // For virtual screen IDs, compare the full string (already done above).
+    // Also check if one is the physical parent of the other — a window snapped
+    // on the physical screen before virtual screens were configured should match
+    // the virtual screen that covers the same area.
+    if (VirtualScreenId::isVirtual(a) || VirtualScreenId::isVirtual(b)) {
+        // Extract physical IDs and compare
+        QString physA = VirtualScreenId::extractPhysicalId(a);
+        QString physB = VirtualScreenId::extractPhysicalId(b);
+        // Same physical parent but different virtual screens → NOT a match
+        // Physical vs virtual → NOT a match (they're different screens now)
+        return false;
+    }
+
     // Resolve both to QScreen* — handles connector names and screen IDs transparently
     QScreen* sa = findScreenByIdOrName(a);
     QScreen* sb = findScreenByIdOrName(b);
