@@ -144,6 +144,13 @@ pz_add_test(test_virtual_screen core/test_virtual_screen.cpp)
 pz_add_test(test_virtual_screen_manager core/test_virtual_screen_manager.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# core/ — Snap Assist Virtual Screen Tests (screensMatch, buildOccupiedZoneSet)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_snap_assist_virtual core/test_snap_assist_virtual.cpp)
+target_link_libraries(test_snap_assist_virtual PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_assist_virtual COMMAND test_snap_assist_virtual)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # core/ — Zone Detection Tests (layout, service)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_zone_detection_layout core/test_zone_detection_layout.cpp)
@@ -220,7 +227,7 @@ set(_all_tests
     test_configdefaults
     test_layout_core test_layout_zones
     test_layoutmanager_persistence test_layoutmanager_cycling test_layoutmanager_assignment
-    test_virtual_screen test_virtual_screen_manager
+    test_virtual_screen test_virtual_screen_manager test_snap_assist_virtual
     test_zone_detection_layout test_zone_detection_service
     test_per_screen_config test_navigation_controller test_settings_bridge
     test_zone_shader_item test_overlay_helpers

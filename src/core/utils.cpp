@@ -185,16 +185,23 @@ QScreen* findScreenByIdOrName(const QString& identifier)
     if (identifier.isEmpty()) {
         return QGuiApplication::primaryScreen();
     }
+
+    // Virtual screen IDs (e.g. "LG:Model:Serial/vs:0") resolve to their
+    // backing physical QScreen* — strip the "/vs:N" suffix and look up
+    // the physical parent.
+    const QString physId =
+        VirtualScreenId::isVirtual(identifier) ? VirtualScreenId::extractPhysicalId(identifier) : identifier;
+
     // Fast path: try connector name match first
     for (QScreen* screen : QGuiApplication::screens()) {
-        if (screen->name() == identifier) {
+        if (screen->name() == physId) {
             return screen;
         }
     }
     // Slow path: try screen ID match (only if it looks like a screen ID)
-    if (identifier.contains(QLatin1Char(':'))) {
+    if (physId.contains(QLatin1Char(':'))) {
         for (QScreen* screen : QGuiApplication::screens()) {
-            if (screenIdentifier(screen) == identifier) {
+            if (screenIdentifier(screen) == physId) {
                 return screen;
             }
         }
@@ -211,16 +218,12 @@ bool screensMatch(const QString& a, const QString& b)
         return false;
     }
 
-    // For virtual screen IDs, compare the full string (already done above).
-    // Also check if one is the physical parent of the other — a window snapped
-    // on the physical screen before virtual screens were configured should match
-    // the virtual screen that covers the same area.
+    // Virtual screen IDs: exact string match was already handled above (a == b).
+    // Different virtual IDs are never equivalent — even if they share the same
+    // physical parent (e.g. "A/vs:0" vs "A/vs:1" are distinct screens).
+    // A physical ID vs a virtual ID is also not a match (the physical screen
+    // was subdivided; the physical ID no longer represents a usable screen).
     if (VirtualScreenId::isVirtual(a) || VirtualScreenId::isVirtual(b)) {
-        // Extract physical IDs and compare
-        QString physA = VirtualScreenId::extractPhysicalId(a);
-        QString physB = VirtualScreenId::extractPhysicalId(b);
-        // Same physical parent but different virtual screens → NOT a match
-        // Physical vs virtual → NOT a match (they're different screens now)
         return false;
     }
 
