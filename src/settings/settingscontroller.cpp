@@ -42,8 +42,17 @@ SettingsController::SettingsController(QObject* parent)
                                           QString(DBus::Interface::Settings), QStringLiteral("settingsChanged"), this,
                                           SLOT(onExternalSettingsChanged()));
 
-    // Forward daemon running state changes
-    connect(&m_daemonController, &DaemonController::runningChanged, this, &SettingsController::daemonRunningChanged);
+    // Forward daemon running state changes and refresh data when daemon starts
+    connect(&m_daemonController, &DaemonController::runningChanged, this, [this]() {
+        Q_EMIT daemonRunningChanged();
+        if (m_daemonController.isRunning()) {
+            // Daemon just came online — reload all D-Bus-dependent data
+            scheduleLayoutLoad();
+            refreshVirtualDesktops();
+            refreshActivities();
+            m_screenHelper.refreshScreens();
+        }
+    });
 
     // Mark needsSave when any Settings property changes (from QML edits)
     // Use a meta-object connection to catch all NOTIFY signals

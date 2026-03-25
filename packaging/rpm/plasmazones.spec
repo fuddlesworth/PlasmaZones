@@ -171,6 +171,9 @@ echo ""
 %{_datadir}/applications/org.plasmazones.daemon.desktop
 %{_datadir}/applications/kcm_plasmazones_*.desktop
 
+# KGlobalAccel component (display name + icon in Shortcuts KCM)
+%{_datadir}/kglobalaccel/plasmazonesd.desktop
+
 # System Settings category
 %{_datadir}/systemsettings/categories/settings-windowmanagement-plasmazones.desktop
 
