@@ -32,7 +32,7 @@ ApplicationWindow {
         "label": i18n("Virtual Screens"),
         "iconName": "view-split-left-right",
         "hasChildren": false,
-        "hasDividerAfter": false
+        "hasDividerAfter": true
     }, {
         "name": "layouts",
         "label": i18n("Layouts"),
