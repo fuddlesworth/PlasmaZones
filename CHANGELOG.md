@@ -7,6 +7,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.4.1] - 2026-03-25
+
+### Fixed
+- **Edge threshold resets to 100px** ([#237]): The UI allowed up to 500px but the C++ setter/loader still clamped to 100. Values above 100 were silently clamped back on save. Also fixed the `.kcfg` schema max to match.
+- **Per-screen autotile split ratio using wrong default**: Per-screen overrides fell back to the algorithm default (0.6) instead of the config default (0.5) when no override was stored.
+- **Shortcuts KCM shows "plasmazonesd" with no icon**: Added KGlobalAccel component desktop file and restored `setApplicationDisplayName`/`setWindowIcon` lost during KAboutData removal.
+- **Retile shortcut conflicts with Spectacle**: Changed default from Meta+Shift+R (Spectacle rectangular region capture) to Meta+Ctrl+R.
+
+### Changed
+- **ConfigDefaults is now the single source of truth** for all setting defaults, min/max bounds, and shortcut defaults. Previously duplicated across `configdefaults.h`, `settings.h`, `setters.cpp`, `loadsave.cpp`, `perscreen.cpp`, QML pages, `.kcfg`, and tests — now every consumer references `ConfigDefaults`. Changing a bound or default requires editing exactly one place.
+- **Settings bounds exposed to QML** via `SettingsController` constant Q_PROPERTYs. All QML `from:`/`to:` values reference the controller instead of hardcoded literals.
+- **Removed dead code**: Unused `ZoneSelectorCard.qml`.
+- **Added `FilterLayoutsByAspectRatio` to `.kcfg`**: Was implemented in code but missing from the schema.
+- **Editor defaults consolidated**: Previously hardcoded in `loadsave.cpp`, now in `ConfigDefaults`.
+
 ## [2.4.0] - 2026-03-25
 
 ### Added
@@ -949,7 +964,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.1...HEAD
+[2.4.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.16...v2.4.0
 [2.3.16]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.15...v2.3.16
 [2.3.15]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.14...v2.3.15
