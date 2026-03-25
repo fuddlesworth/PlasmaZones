@@ -208,9 +208,6 @@ ColumnLayout {
                                 if (s.connectorName)
                                     label += " · " + s.connectorName;
 
-                                if (s.isPrimary)
-                                    label = "* " + label;
-
                                 return label;
                             }
                             font: Kirigami.Theme.smallFont
@@ -218,6 +215,25 @@ ColumnLayout {
                             opacity: isSelected ? 1 : 0.5
                             elide: Text.ElideRight
                             Layout.maximumWidth: Kirigami.Units.gridUnit * 15
+                        }
+
+                        Rectangle {
+                            Layout.alignment: Qt.AlignHCenter
+                            width: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
+                            height: primaryLabel.implicitHeight + 2
+                            radius: height / 2
+                            color: (modelData.isPrimary || false) ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.15) : "transparent"
+
+                            Label {
+                                id: primaryLabel
+
+                                anchors.centerIn: parent
+                                text: i18n("Primary")
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize - 1
+                                color: Kirigami.Theme.positiveTextColor
+                                opacity: (modelData.isPrimary || false) ? 1 : 0
+                            }
+
                         }
 
                     }

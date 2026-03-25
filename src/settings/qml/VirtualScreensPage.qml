@@ -132,6 +132,19 @@ Flickable {
         _stageCurrentConfig();
     }
 
+    // Check if current config matches a preset (by ratio count and approximate widths)
+    function _matchesPreset(ratios) {
+        if (_pendingScreens.length !== ratios.length)
+            return false;
+
+        for (var i = 0; i < ratios.length; i++) {
+            if (Math.abs(_pendingScreens[i].width - ratios[i] / 100) > 0.005)
+                return false;
+
+        }
+        return true;
+    }
+
     // Strip "/vs:N" suffix to get physical screen ID (MonitorSelectorSection
     // uses physicalOnly:true which deduplicates to physical IDs)
     function _toPhysicalId(name) {
@@ -215,10 +228,18 @@ Flickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
-                // Split direction indicator
+                // Resolution and split count
                 Label {
                     Layout.leftMargin: Kirigami.Units.largeSpacing
-                    text: i18n("Horizontal Split")
+                    text: {
+                        let res = root._screenWidth + " \u00d7 " + root._screenHeight;
+                        let count = root._pendingScreens.length;
+                        if (count > 1)
+                            return res + " · " + i18n("%1-Way Split", count);
+                        else if (count === 1)
+                            return res + " · " + i18n("Single Region");
+                        return res;
+                    }
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
                 }
@@ -283,7 +304,7 @@ Flickable {
 
                                 Label {
                                     Layout.alignment: Qt.AlignHCenter
-                                    text: Math.round(modelData.width * 100) + "%"
+                                    text: Math.round(modelData.width * root._screenWidth) + "px · " + Math.round(modelData.width * 100) + "%"
                                     font.pixelSize: Math.max(9, Math.min(12, parent.parent.width / 10))
                                     color: Kirigami.Theme.disabledTextColor
                                 }
@@ -428,6 +449,7 @@ Flickable {
                         Layout.fillWidth: true
                         text: i18n("50 / 50")
                         enabled: root._selectedScreen !== ""
+                        highlighted: root._matchesPreset([50, 50])
                         onClicked: root._loadPreset([50, 50], [i18n("Left"), i18n("Right")])
                     }
 
@@ -435,6 +457,7 @@ Flickable {
                         Layout.fillWidth: true
                         text: i18n("60 / 40")
                         enabled: root._selectedScreen !== ""
+                        highlighted: root._matchesPreset([60, 40])
                         onClicked: root._loadPreset([60, 40], [i18n("Main"), i18n("Side")])
                     }
 
@@ -442,6 +465,7 @@ Flickable {
                         Layout.fillWidth: true
                         text: i18n("33 / 33 / 33")
                         enabled: root._selectedScreen !== ""
+                        highlighted: root._matchesPreset([33.34, 33.33, 33.33])
                         onClicked: root._loadPreset([33.34, 33.33, 33.33], [i18n("Left"), i18n("Center"), i18n("Right")])
                     }
 
@@ -449,6 +473,7 @@ Flickable {
                         Layout.fillWidth: true
                         text: i18n("40 / 20 / 40")
                         enabled: root._selectedScreen !== ""
+                        highlighted: root._matchesPreset([40, 20, 40])
                         onClicked: root._loadPreset([40, 20, 40], [i18n("Left"), i18n("Center"), i18n("Right")])
                     }
 
@@ -571,16 +596,19 @@ Flickable {
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // REMOVE SUBDIVISIONS
+        // ACTIONS
         // ═══════════════════════════════════════════════════════════════
         Button {
             text: i18n("Remove Subdivisions")
             icon.name: "edit-delete"
+            palette.buttonText: Kirigami.Theme.negativeTextColor
             enabled: root._selectedScreen !== "" && (root._pendingScreens.length > 0 || root._savedScreens.length > 0)
             onClicked: {
                 settingsController.stageVirtualScreenRemoval(root._selectedScreen);
                 root._pendingScreens = [];
             }
+            ToolTip.text: i18n("Remove all virtual screen subdivisions from this monitor")
+            ToolTip.visible: hovered
         }
 
     }
