@@ -2266,7 +2266,7 @@ void PlasmaZonesEffect::slotSnapAllWindowsRequested(const QString& screenId)
             slotApplyGeometriesBatch(snapData, QStringLiteral("snap_all"));
 
             // Confirm snap assignments with daemon. calculateSnapAllWindows returns
-            // serialized RotationEntry format ({windowId, targetZoneId, ...}), but
+            // serialized ZoneAssignmentEntry format ({windowId, targetZoneId, ...}), but
             // windowsSnappedBatch expects {windowId, zoneId, screenId}. Transform:
             if (isDaemonReady("snap-all confirmation")) {
                 QJsonDocument snapDoc = QJsonDocument::fromJson(snapData.toUtf8());

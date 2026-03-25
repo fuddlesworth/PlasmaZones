@@ -462,20 +462,20 @@ public:
      * @brief Calculate rotation data for windows on a specific screen
      * @param clockwise true for clockwise rotation
      * @param screenFilter When non-empty, only rotate windows on this screen
-     * @return List of rotation entries
+     * @return List of zone assignment entries
      */
-    QVector<RotationEntry> calculateRotation(bool clockwise, const QString& screenFilter = QString()) const;
+    QVector<ZoneAssignmentEntry> calculateRotation(bool clockwise, const QString& screenFilter = QString()) const;
 
     /**
      * @brief Calculate snap assignments for all unsnapped windows
      * @param windowIds List of unsnapped window IDs (from KWin effect)
      * @param screenId Screen for layout/geometry resolution
-     * @return List of RotationEntry with target zone assignments
+     * @return List of ZoneAssignmentEntry with target zone assignments
      *
      * Assigns windows to zones in zone-number order, skipping already-occupied
      * zones. If more windows than zones, extra windows are left unassigned.
      */
-    QVector<RotationEntry> calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId) const;
+    QVector<ZoneAssignmentEntry> calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId) const;
 
     /**
      * @brief Calculate resnap data for windows from previous layout to current layout
@@ -485,9 +485,9 @@ public:
      * with cycling when the new layout has fewer zones (e.g. zone 4->1, 5->2 when
      * going from 5 zones to 3).
      *
-     * @return List of rotation entries (same format as rotate) for KWin to apply
+     * @return List of zone assignment entries for KWin to apply
      */
-    QVector<RotationEntry> calculateResnapFromPreviousLayout();
+    QVector<ZoneAssignmentEntry> calculateResnapFromPreviousLayout();
 
     /**
      * @brief Populate the resnap buffer for all screens independently.
@@ -513,9 +513,9 @@ public:
      * so windows can be moved back to their zone positions.
      *
      * @param screenFilter When non-empty, only include windows on this screen
-     * @return List of rotation entries for KWin to apply
+     * @return List of zone assignment entries for KWin to apply
      */
-    QVector<RotationEntry> calculateResnapFromCurrentAssignments(const QString& screenFilter = QString()) const;
+    QVector<ZoneAssignmentEntry> calculateResnapFromCurrentAssignments(const QString& screenFilter = QString()) const;
 
     /**
      * @brief Calculate resnap data from an explicit autotile window order
@@ -527,10 +527,10 @@ public:
      *
      * @param autotileWindowOrder Ordered list of window IDs from autotile (master first)
      * @param screenId Screen for layout/geometry resolution
-     * @return List of rotation entries for KWin to apply
+     * @return List of zone assignment entries for KWin to apply
      */
-    QVector<RotationEntry> calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder,
-                                                            const QString& screenId) const;
+    QVector<ZoneAssignmentEntry> calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder,
+                                                                  const QString& screenId) const;
 
     /**
      * @brief Build a zone-ordered window list for a screen from current zone assignments

@@ -861,7 +861,7 @@ private Q_SLOTS:
             QStringLiteral("new2:win:222"),
         };
 
-        QVector<RotationEntry> entries = m_service->calculateSnapAllWindows(unsnappedWindows, QString());
+        QVector<ZoneAssignmentEntry> entries = m_service->calculateSnapAllWindows(unsnappedWindows, QString());
 
         // In headless mode, result is empty (no screen -> no geometry)
         Q_UNUSED(entries);

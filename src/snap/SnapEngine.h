@@ -107,22 +107,22 @@ public:
     /**
      * @brief Calculate resnap entries from autotile order WITHOUT emitting signal
      *
-     * Returns the computed RotationEntry vector so the caller can batch entries
+     * Returns the computed ZoneAssignmentEntry vector so the caller can batch entries
      * from multiple screens into a single resnapToNewLayoutRequested emission.
      * Falls back to current-assignment entries if autotile order yields nothing.
      *
      * @param autotileWindowOrder Ordered list of window IDs from autotile engine
      * @param screenId Screen to resnap on
-     * @return Vector of RotationEntry (may be empty)
+     * @return Vector of ZoneAssignmentEntry (may be empty)
      */
-    QVector<RotationEntry> calculateResnapEntriesFromAutotileOrder(const QStringList& autotileWindowOrder,
-                                                                   const QString& screenId);
+    QVector<ZoneAssignmentEntry> calculateResnapEntriesFromAutotileOrder(const QStringList& autotileWindowOrder,
+                                                                         const QString& screenId);
 
     /**
      * @brief Calculate snap-all-windows assignments without applying them
      * @param windowIds List of window IDs to snap
      * @param screenId Screen to snap on
-     * @return JSON array of rotation entries for KWin effect to apply
+     * @return JSON array of zone assignment entries for KWin effect to apply
      */
     QString calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId);
 
@@ -133,9 +133,9 @@ public:
      * Used by the daemon to combine entries from multiple screens into
      * one signal, eliminating the per-screen race condition.
      *
-     * @param entries Combined RotationEntry vector from all screens
+     * @param entries Combined ZoneAssignmentEntry vector from all screens
      */
-    void emitBatchedResnap(const QVector<RotationEntry>& entries);
+    void emitBatchedResnap(const QVector<ZoneAssignmentEntry>& entries);
 
     /**
      * @brief Request the KWin effect to collect and snap all unsnapped windows

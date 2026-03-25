@@ -678,7 +678,7 @@ public Q_SLOTS:
      * autotile→snapping transition. The Daemon layer calls emitBatchedResnap
      * directly on the SnapEngine, bypassing the WTA's navigation methods.
      *
-     * @param resnapData Serialized RotationEntry JSON array
+     * @param resnapData Serialized ZoneAssignmentEntry JSON array
      */
     void handleBatchedResnap(const QString& resnapData);
 

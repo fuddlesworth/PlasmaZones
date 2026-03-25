@@ -167,9 +167,9 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
     return combined;
 }
 
-QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise, const QString& screenFilter) const
+QVector<ZoneAssignmentEntry> WindowTrackingService::calculateRotation(bool clockwise, const QString& screenFilter) const
 {
-    QVector<RotationEntry> result;
+    QVector<ZoneAssignmentEntry> result;
 
     // Group snapped windows by screen so each screen rotates independently
     // using its own per-screen layout (not the global active layout)
@@ -281,7 +281,7 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise, 
             QRect geo = GeometryUtils::snapToRect(geoF);
 
             if (geo.isValid()) {
-                RotationEntry entry;
+                ZoneAssignmentEntry entry;
                 entry.windowId = pair.first;
                 entry.sourceZoneId = sourceZone->id().toString();
                 entry.targetZoneId = targetZone->id().toString();

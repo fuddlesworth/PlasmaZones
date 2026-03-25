@@ -3,11 +3,11 @@
 
 /**
  * @file test_geometry_utils_serialization.cpp
- * @brief Unit tests for GeometryUtils::rectToJson() and serializeRotationEntries()
+ * @brief Unit tests for GeometryUtils::rectToJson() and serializeZoneAssignments()
  *
  * Tests cover:
  * - rectToJson with valid and empty/invalid QRects
- * - serializeRotationEntries with empty, single, and multiple entries
+ * - serializeZoneAssignments with empty, single, and multiple entries
  * - Entries with empty string fields
  * - Round-trip: serialize then parse back and verify all fields match
  */
@@ -76,24 +76,25 @@ private Q_SLOTS:
         QCOMPARE(obj.value(QStringLiteral("height")).toInt(), 150);
     }
 
-    void test_serializeRotationEntries_empty()
+    void test_serializeZoneAssignments_empty()
     {
-        QVector<RotationEntry> entries;
-        QString result = GeometryUtils::serializeRotationEntries(entries);
+        QVector<ZoneAssignmentEntry> entries;
+        QString result = GeometryUtils::serializeZoneAssignments(entries);
         QCOMPARE(result, QStringLiteral("[]"));
     }
 
-    void test_serializeRotationEntries_single()
+    void test_serializeZoneAssignments_single()
     {
-        QVector<RotationEntry> entries;
-        entries.append(RotationEntry{
+        QVector<ZoneAssignmentEntry> entries;
+        entries.append(ZoneAssignmentEntry{
             QStringLiteral("win-abc"),
             QStringLiteral("zone-src-1"),
             QStringLiteral("zone-tgt-1"),
+            {},
             QRect(100, 200, 500, 600),
         });
 
-        QString json = GeometryUtils::serializeRotationEntries(entries);
+        QString json = GeometryUtils::serializeZoneAssignments(entries);
 
         QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         QVERIFY(!doc.isNull());
@@ -112,29 +113,32 @@ private Q_SLOTS:
         QCOMPARE(obj.value(QStringLiteral("height")).toInt(), 600);
     }
 
-    void test_serializeRotationEntries_multiple()
+    void test_serializeZoneAssignments_multiple()
     {
-        QVector<RotationEntry> entries;
-        entries.append(RotationEntry{
+        QVector<ZoneAssignmentEntry> entries;
+        entries.append(ZoneAssignmentEntry{
             QStringLiteral("win-1"),
             QStringLiteral("src-A"),
             QStringLiteral("tgt-B"),
+            {},
             QRect(0, 0, 960, 1080),
         });
-        entries.append(RotationEntry{
+        entries.append(ZoneAssignmentEntry{
             QStringLiteral("win-2"),
             QStringLiteral("src-B"),
             QStringLiteral("tgt-C"),
+            {},
             QRect(960, 0, 960, 540),
         });
-        entries.append(RotationEntry{
+        entries.append(ZoneAssignmentEntry{
             QStringLiteral("win-3"),
             QStringLiteral("src-C"),
             QStringLiteral("tgt-A"),
+            {},
             QRect(960, 540, 960, 540),
         });
 
-        QString json = GeometryUtils::serializeRotationEntries(entries);
+        QString json = GeometryUtils::serializeZoneAssignments(entries);
 
         QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         QVERIFY(doc.isArray());
@@ -155,17 +159,18 @@ private Q_SLOTS:
         QCOMPARE(third.value(QStringLiteral("height")).toInt(), 540);
     }
 
-    void test_serializeRotationEntries_emptyStrings()
+    void test_serializeZoneAssignments_emptyStrings()
     {
-        QVector<RotationEntry> entries;
-        entries.append(RotationEntry{
+        QVector<ZoneAssignmentEntry> entries;
+        entries.append(ZoneAssignmentEntry{
             QString(),
             QString(),
             QString(),
+            {},
             QRect(10, 20, 30, 40),
         });
 
-        QString json = GeometryUtils::serializeRotationEntries(entries);
+        QString json = GeometryUtils::serializeZoneAssignments(entries);
 
         QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         QVERIFY(doc.isArray());
@@ -182,25 +187,27 @@ private Q_SLOTS:
         QCOMPARE(obj.value(QStringLiteral("height")).toInt(), 40);
     }
 
-    void test_serializeRotationEntries_roundTrip()
+    void test_serializeZoneAssignments_roundTrip()
     {
         // Build original entries
-        QVector<RotationEntry> original;
-        original.append(RotationEntry{
+        QVector<ZoneAssignmentEntry> original;
+        original.append(ZoneAssignmentEntry{
             QStringLiteral("org.kde.konsole|a1b2c3d4"),
             QStringLiteral("{aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee}"),
             QStringLiteral("{11111111-2222-3333-4444-555555555555}"),
+            {},
             QRect(0, 0, 960, 1080),
         });
-        original.append(RotationEntry{
+        original.append(ZoneAssignmentEntry{
             QStringLiteral("org.kde.dolphin|f5e6d7c8"),
             QStringLiteral("{11111111-2222-3333-4444-555555555555}"),
             QStringLiteral("{aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee}"),
+            {},
             QRect(960, 0, 960, 1080),
         });
 
         // Serialize
-        QString json = GeometryUtils::serializeRotationEntries(original);
+        QString json = GeometryUtils::serializeZoneAssignments(original);
 
         // Parse back
         QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
@@ -211,7 +218,7 @@ private Q_SLOTS:
         // Verify each entry round-trips correctly
         for (int i = 0; i < original.size(); ++i) {
             QJsonObject obj = arr[i].toObject();
-            const RotationEntry& expected = original[i];
+            const ZoneAssignmentEntry& expected = original[i];
 
             QCOMPARE(obj.value(QStringLiteral("windowId")).toString(), expected.windowId);
             QCOMPARE(obj.value(QStringLiteral("sourceZoneId")).toString(), expected.sourceZoneId);

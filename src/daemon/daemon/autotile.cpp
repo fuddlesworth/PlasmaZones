@@ -318,10 +318,10 @@ void Daemon::restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows, 
     }
 }
 
-QVector<RotationEntry> Daemon::buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
-                                                           const QString& activity)
+QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
+                                                                 const QString& activity)
 {
-    QVector<RotationEntry> entries;
+    QVector<ZoneAssignmentEntry> entries;
     if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
         return entries;
     }
@@ -344,7 +344,7 @@ QVector<RotationEntry> Daemon::buildAutotileRestoreEntries(const QSet<QString>& 
                 continue;
             auto geo = wts->validatedPreTileGeometry(windowId, screenId);
             if (geo) {
-                RotationEntry entry;
+                ZoneAssignmentEntry entry;
                 entry.windowId = windowId;
                 entry.targetZoneId = restoreSentinel;
                 entry.targetGeometry = *geo;

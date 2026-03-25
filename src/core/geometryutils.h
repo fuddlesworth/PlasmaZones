@@ -218,14 +218,14 @@ PLASMAZONES_EXPORT void removeZoneOverlaps(QVector<QRect>& zones, const QVector<
 PLASMAZONES_EXPORT QString rectToJson(const QRect& rect);
 
 /**
- * @brief Serialize rotation/resnap entries to compact JSON array
- * @param entries Vector of rotation entries (window moves with source/target zones)
+ * @brief Serialize zone assignment entries to compact JSON array
+ * @param entries Vector of zone assignment entries (window moves with source/target zones)
  * @return JSON array string suitable for D-Bus signals
  *
  * Shared by SnapEngine navigation (rotate, resnap) and any future code
- * that needs to serialize RotationEntry vectors for D-Bus exchange.
+ * that needs to serialize ZoneAssignmentEntry vectors for D-Bus exchange.
  */
-PLASMAZONES_EXPORT QString serializeRotationEntries(const QVector<RotationEntry>& entries);
+PLASMAZONES_EXPORT QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries);
 
 } // namespace GeometryUtils
 

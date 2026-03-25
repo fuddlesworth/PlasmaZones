@@ -391,17 +391,23 @@ QString rectToJson(const QRect& rect)
     return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
 }
 
-QString serializeRotationEntries(const QVector<RotationEntry>& entries)
+QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries)
 {
     if (entries.isEmpty()) {
         return QStringLiteral("[]");
     }
     QJsonArray array;
-    for (const RotationEntry& entry : entries) {
+    for (const ZoneAssignmentEntry& entry : entries) {
         QJsonObject obj;
         obj[QStringLiteral("windowId")] = entry.windowId;
         obj[QStringLiteral("sourceZoneId")] = entry.sourceZoneId;
         obj[QStringLiteral("targetZoneId")] = entry.targetZoneId;
+        if (!entry.targetZoneIds.isEmpty()) {
+            QJsonArray zoneIdsArr;
+            for (const QString& zid : entry.targetZoneIds)
+                zoneIdsArr.append(zid);
+            obj[QStringLiteral("targetZoneIds")] = zoneIdsArr;
+        }
         obj[QStringLiteral("x")] = entry.targetGeometry.x();
         obj[QStringLiteral("y")] = entry.targetGeometry.y();
         obj[QStringLiteral("width")] = entry.targetGeometry.width();

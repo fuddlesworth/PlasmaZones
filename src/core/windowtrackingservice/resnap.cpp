@@ -33,9 +33,9 @@ void sortZonesByNumber(QVector<Zone*>& zones)
 }
 } // anonymous namespace
 
-QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout()
+QVector<ZoneAssignmentEntry> WindowTrackingService::calculateResnapFromPreviousLayout()
 {
-    QVector<RotationEntry> result;
+    QVector<ZoneAssignmentEntry> result;
     if (m_resnapBuffer.isEmpty()) {
         qCDebug(lcCore) << "calculateResnapFromPreviousLayout: buffer is empty";
         return result;
@@ -50,7 +50,7 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
             preTile = preTileGeometry(Utils::extractAppId(entry->windowId));
         }
         if (preTile && preTile->isValid()) {
-            RotationEntry rotEntry;
+            ZoneAssignmentEntry rotEntry;
             rotEntry.windowId = entry->windowId;
             rotEntry.sourceZoneId = QString();
             rotEntry.targetZoneId = QStringLiteral("__restore__");
@@ -99,10 +99,12 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
                     QRect geo = (targetZoneIds.size() > 1) ? multiZoneGeometry(targetZoneIds, screenId)
                                                            : zoneGeometry(targetZoneIds.first(), screenId);
                     if (geo.isValid()) {
-                        RotationEntry rotEntry;
+                        ZoneAssignmentEntry rotEntry;
                         rotEntry.windowId = entry->windowId;
                         rotEntry.sourceZoneId = QString();
                         rotEntry.targetZoneId = targetZoneIds.first();
+                        if (targetZoneIds.size() > 1)
+                            rotEntry.targetZoneIds = targetZoneIds;
                         rotEntry.targetGeometry = geo;
                         result.append(rotEntry);
                     }
@@ -129,7 +131,7 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
                     continue;
                 }
 
-                RotationEntry rotEntry;
+                ZoneAssignmentEntry rotEntry;
                 rotEntry.windowId = entry->windowId;
                 rotEntry.sourceZoneId = QString();
                 rotEntry.targetZoneId = targetZone->id().toString();
@@ -219,9 +221,10 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     }
 }
 
-QVector<RotationEntry> WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& screenFilter) const
+QVector<ZoneAssignmentEntry>
+WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& screenFilter) const
 {
-    QVector<RotationEntry> result;
+    QVector<ZoneAssignmentEntry> result;
 
     for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
         const QString& windowId = it.key();
@@ -247,7 +250,7 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromCurrentAssignme
             continue;
         }
 
-        RotationEntry entry;
+        ZoneAssignmentEntry entry;
         entry.windowId = windowId;
         entry.sourceZoneId = QString();
         entry.targetZoneId = zoneIds.first();
@@ -274,10 +277,11 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromCurrentAssignme
     return result;
 }
 
-QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder,
-                                                                               const QString& screenId) const
+QVector<ZoneAssignmentEntry>
+WindowTrackingService::calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder,
+                                                        const QString& screenId) const
 {
-    QVector<RotationEntry> result;
+    QVector<ZoneAssignmentEntry> result;
 
     if (autotileWindowOrder.isEmpty()) {
         return result;
@@ -358,7 +362,7 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(c
         QRect geo = GeometryUtils::snapToRect(geoF);
 
         if (geo.isValid()) {
-            RotationEntry entry;
+            ZoneAssignmentEntry entry;
             entry.windowId = windowId;
             entry.sourceZoneId = QString();
             entry.targetZoneId = targetZone->id().toString();
@@ -408,7 +412,7 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(c
         QRect geo = GeometryUtils::snapToRect(geoF);
 
         if (geo.isValid()) {
-            RotationEntry entry;
+            ZoneAssignmentEntry entry;
             entry.windowId = windowId;
             entry.sourceZoneId = QString();
             entry.targetZoneId = targetZone->id().toString();
@@ -488,10 +492,10 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
     return result;
 }
 
-QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStringList& windowIds,
-                                                                      const QString& screenId) const
+QVector<ZoneAssignmentEntry> WindowTrackingService::calculateSnapAllWindows(const QStringList& windowIds,
+                                                                            const QString& screenId) const
 {
-    QVector<RotationEntry> result;
+    QVector<ZoneAssignmentEntry> result;
 
     Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout || layout->zoneCount() == 0) {
@@ -545,7 +549,7 @@ QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStr
         QRect geo = GeometryUtils::snapToRect(geoF);
 
         if (geo.isValid()) {
-            RotationEntry entry;
+            ZoneAssignmentEntry entry;
             entry.windowId = windowId;
             entry.sourceZoneId = QString(); // Not previously snapped
             entry.targetZoneId = targetZone->id().toString();

@@ -274,17 +274,17 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& sc
 }
 
 /**
- * @brief Process a vector of RotationEntry: call windowSnapped for each, emit applyGeometriesBatch.
+ * @brief Process a vector of ZoneAssignmentEntry: call windowSnapped for each, emit applyGeometriesBatch.
  *
  * Shared by rotate, resnap, and snap-all. Handles bookkeeping (zone assignment,
  * floating state clear, snap intent recording) on the daemon side so the effect
  * only needs to apply geometries.
  *
- * @param entries Rotation/resnap entries to process
+ * @param entries Zone assignment entries to process
  * @param action Action name for the applyGeometriesBatch signal ("rotate", "resnap", "snap_all")
  * @return true if entries were processed and signal emitted
  */
-static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<RotationEntry>& entries,
+static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<ZoneAssignmentEntry>& entries,
                                 const QString& action)
 {
     if (entries.isEmpty()) {
@@ -321,12 +321,16 @@ static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<Ro
                     screenId = adaptor->lastActiveScreenName();
                 }
             }
-            adaptor->windowSnapped(entry.windowId, entry.targetZoneId, screenId);
+            if (entry.targetZoneIds.size() > 1) {
+                adaptor->windowSnappedMultiZone(entry.windowId, entry.targetZoneIds, screenId);
+            } else {
+                adaptor->windowSnapped(entry.windowId, entry.targetZoneId, screenId);
+            }
         }
     }
 
     // Serialize and emit batch for effect to apply geometries
-    QString batchJson = GeometryUtils::serializeRotationEntries(entries);
+    QString batchJson = GeometryUtils::serializeZoneAssignments(entries);
     Q_EMIT adaptor->applyGeometriesBatch(batchJson, action);
     return true;
 }
@@ -335,7 +339,7 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise, const QString&
 {
     qCDebug(lcDbusWindow) << "rotateWindowsInLayout: clockwise=" << clockwise << "screen=" << screenId;
 
-    QVector<RotationEntry> entries = m_service->calculateRotation(clockwise, screenId);
+    QVector<ZoneAssignmentEntry> entries = m_service->calculateRotation(clockwise, screenId);
 
     if (entries.isEmpty()) {
         // Emit feedback for empty rotation (mirrors SnapEngine::rotateWindows logic)
@@ -390,7 +394,7 @@ void WindowTrackingAdaptor::resnapToNewLayout()
 {
     qCDebug(lcDbusWindow) << "resnapToNewLayout";
 
-    QVector<RotationEntry> entries = m_service->calculateResnapFromPreviousLayout();
+    QVector<ZoneAssignmentEntry> entries = m_service->calculateResnapFromPreviousLayout();
 
     if (entries.isEmpty()) {
         auto* layout = m_layoutManager->activeLayout();
@@ -416,7 +420,7 @@ void WindowTrackingAdaptor::resnapCurrentAssignments(const QString& screenFilter
     qCDebug(lcDbusWindow) << "resnapCurrentAssignments: screen="
                           << (screenFilter.isEmpty() ? QStringLiteral("all") : screenFilter);
 
-    QVector<RotationEntry> entries = m_service->calculateResnapFromCurrentAssignments(screenFilter);
+    QVector<ZoneAssignmentEntry> entries = m_service->calculateResnapFromCurrentAssignments(screenFilter);
 
     if (entries.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"), QString(),
@@ -433,7 +437,7 @@ void WindowTrackingAdaptor::resnapFromAutotileOrder(const QStringList& autotileW
 
     if (m_snapEngine) {
         // Use SnapEngine's fallback logic (autotile order → current assignments)
-        QVector<RotationEntry> entries =
+        QVector<ZoneAssignmentEntry> entries =
             m_snapEngine->calculateResnapEntriesFromAutotileOrder(autotileWindowOrder, screenId);
         if (!entries.isEmpty()) {
             processBatchEntries(this, entries, QStringLiteral("resnap"));
@@ -476,12 +480,12 @@ void WindowTrackingAdaptor::handleBatchedResnap(const QString& resnapData)
         return;
     }
 
-    // Deserialize RotationEntry array
-    QVector<RotationEntry> entries;
+    // Deserialize ZoneAssignmentEntry array
+    QVector<ZoneAssignmentEntry> entries;
     const QJsonArray arr = doc.array();
     for (const QJsonValue& val : arr) {
         QJsonObject obj = val.toObject();
-        RotationEntry entry;
+        ZoneAssignmentEntry entry;
         entry.windowId = obj.value(QLatin1String("windowId")).toString();
         entry.targetZoneId = obj.value(QLatin1String("targetZoneId")).toString();
         entry.sourceZoneId = obj.value(QLatin1String("sourceZoneId")).toString();

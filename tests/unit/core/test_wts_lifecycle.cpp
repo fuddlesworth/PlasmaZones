@@ -909,7 +909,7 @@ private Q_SLOTS:
         m_layoutManager->setActiveLayout(newLayout);
         m_service->onLayoutChanged();
 
-        QVector<RotationEntry> resnap = m_service->calculateResnapFromPreviousLayout();
+        QVector<ZoneAssignmentEntry> resnap = m_service->calculateResnapFromPreviousLayout();
         // In headless mode the buffer may be empty but the call must not crash.
         // The original assertion `resnap.size() >= 0` was always true;
         // we keep this as a smoke-test and document the limitation.
@@ -927,8 +927,8 @@ private Q_SLOTS:
         m_layoutManager->setActiveLayout(newLayout);
         m_service->onLayoutChanged();
 
-        QVector<RotationEntry> resnap = m_service->calculateResnapFromPreviousLayout();
-        for (const RotationEntry& entry : resnap) {
+        QVector<ZoneAssignmentEntry> resnap = m_service->calculateResnapFromPreviousLayout();
+        for (const ZoneAssignmentEntry& entry : resnap) {
             QVERIFY(entry.windowId != windowId);
         }
     }

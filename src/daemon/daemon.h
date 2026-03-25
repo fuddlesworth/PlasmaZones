@@ -222,8 +222,8 @@ private:
      */
     void restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows = {}, int desktop = -1,
                                        const QString& activity = QString());
-    QVector<RotationEntry> buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
-                                                       const QString& activity);
+    QVector<ZoneAssignmentEntry> buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
+                                                             const QString& activity);
 
     /** @brief Show layout OSD deferred (avoids blocking on first-time QML compilation) */
     void showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenId);
@@ -326,7 +326,7 @@ private:
 
     // Snap-float restore entries collected during windowsReleasedFromTiling.
     // Consumed by the toggle handler to batch geometry restores into the resnap signal.
-    QVector<RotationEntry> m_pendingSnapFloatRestores;
+    QVector<ZoneAssignmentEntry> m_pendingSnapFloatRestores;
 
     // State tracking for settingsChanged delta detection (replaces individual signal handlers)
     // Initialized from m_settings in init() before settingsChanged is connected.

@@ -160,7 +160,7 @@ void Daemon::initializeAutotile()
                                 QString screen = wts->screenAssignments().value(windowId);
                                 auto geo = wts->validatedPreTileGeometry(windowId, screen);
                                 if (geo) {
-                                    RotationEntry entry;
+                                    ZoneAssignmentEntry entry;
                                     entry.windowId = windowId;
                                     entry.targetZoneId = restoreSentinel;
                                     entry.targetGeometry = *geo;
@@ -304,7 +304,7 @@ void Daemon::initializeAutotile()
                 // and resnap in parallel.
                 WindowTrackingService* wts = m_windowTrackingAdaptor ? m_windowTrackingAdaptor->service() : nullptr;
                 QSet<QString> resnappedWindows;
-                QVector<RotationEntry> allResnapEntries;
+                QVector<ZoneAssignmentEntry> allResnapEntries;
                 for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
                     if (it.key().desktop != desktop || it.key().activity != activity) {
                         continue;
@@ -337,7 +337,7 @@ void Daemon::initializeAutotile()
                     for (int i = 0; i < std::min(static_cast<int>(windowOrder.size()), zoneCount); ++i) {
                         resnappedWindows.insert(windowOrder.at(i));
                     }
-                    QVector<RotationEntry> entries =
+                    QVector<ZoneAssignmentEntry> entries =
                         m_snapEngine->calculateResnapEntriesFromAutotileOrder(windowOrder, resnapScreenId);
                     allResnapEntries.append(entries);
                 }
@@ -348,7 +348,7 @@ void Daemon::initializeAutotile()
                 // the resnap, causing visible delay for floating/new windows.
                 allResnapEntries.append(m_pendingSnapFloatRestores);
                 m_pendingSnapFloatRestores.clear();
-                QVector<RotationEntry> restoreEntries =
+                QVector<ZoneAssignmentEntry> restoreEntries =
                     buildAutotileRestoreEntries(resnappedWindows, desktop, activity);
                 allResnapEntries.append(restoreEntries);
 
