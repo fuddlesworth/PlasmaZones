@@ -11,6 +11,7 @@
 #include "../layoutmanager.h"
 #include "../virtualdesktopmanager.h"
 #include "../utils.h"
+#include "../screenmanager.h"
 #include "../logging.h"
 #include <QScreen>
 #include <QSet>
@@ -111,23 +112,49 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
         checkedLayouts.insert(currentLayout->id());
     }
 
-    for (QScreen* screen : Utils::allScreens()) {
-        QString screenId = Utils::screenIdentifier(screen);
-        if (Utils::screensMatch(screenId, windowScreenName)) {
-            continue;
-        }
+    // Use effective screen IDs (includes virtual screens) when available,
+    // falling back to physical screens when ScreenManager is not initialized
+    auto* smgr = ScreenManager::instance();
+    const QStringList effectiveIds = smgr ? smgr->effectiveScreenIds() : QStringList();
+    if (!effectiveIds.isEmpty()) {
+        for (const QString& screenId : effectiveIds) {
+            if (Utils::screensMatch(screenId, windowScreenName)) {
+                continue;
+            }
 
-        Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
-        if (!layout || checkedLayouts.contains(layout->id())) {
-            continue;
-        }
-        checkedLayouts.insert(layout->id());
+            Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+            if (!layout || checkedLayouts.contains(layout->id())) {
+                continue;
+            }
+            checkedLayouts.insert(layout->id());
 
-        AppRuleMatch match = layout->matchAppRule(windowClass);
-        if (match.matched() && !match.targetScreen.isEmpty()) {
-            SnapResult result = buildResult(match, screenId);
-            if (result.isValid()) {
-                return result;
+            AppRuleMatch match = layout->matchAppRule(windowClass);
+            if (match.matched() && !match.targetScreen.isEmpty()) {
+                SnapResult result = buildResult(match, screenId);
+                if (result.isValid()) {
+                    return result;
+                }
+            }
+        }
+    } else {
+        for (QScreen* screen : Utils::allScreens()) {
+            QString screenId = Utils::screenIdentifier(screen);
+            if (Utils::screensMatch(screenId, windowScreenName)) {
+                continue;
+            }
+
+            Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+            if (!layout || checkedLayouts.contains(layout->id())) {
+                continue;
+            }
+            checkedLayouts.insert(layout->id());
+
+            AppRuleMatch match = layout->matchAppRule(windowClass);
+            if (match.matched() && !match.targetScreen.isEmpty()) {
+                SnapResult result = buildResult(match, screenId);
+                if (result.isValid()) {
+                    return result;
+                }
             }
         }
     }

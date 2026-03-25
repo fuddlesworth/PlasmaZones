@@ -136,6 +136,14 @@ public:
 
     // Screen management
     void setScreen(QScreen* screen);
+    void setScreenId(const QString& screenId)
+    {
+        m_screenId = screenId;
+    }
+    QString screenId() const
+    {
+        return m_screenId;
+    }
     QScreen* screen() const
     {
         return m_screen;
@@ -243,6 +251,7 @@ private:
     QPointer<LayoutManager> m_layoutManager;
     QPointer<ISettings> m_settings;
     QPointer<QScreen> m_screen;
+    QString m_screenId; // Virtual-aware screen ID (set explicitly or derived from m_screen)
     QPointer<QQuickItem> m_qmlItem;
     int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based)
     QString m_currentActivity; // Current KDE activity (empty = all activities)

@@ -379,8 +379,19 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
     if (!hasSelectedZone() || !screen) {
         return QRect();
     }
-    // Delegate to screenId overload for virtual-screen-aware geometry
-    return getSelectedZoneGeometry(Utils::screenIdentifier(screen));
+    // Delegate to screenId overload for virtual-screen-aware geometry.
+    // Try to find the virtual-aware screen ID from the zone selector's screen map first.
+    QString screenId;
+    for (auto it = m_zoneSelectorPhysScreens.constBegin(); it != m_zoneSelectorPhysScreens.constEnd(); ++it) {
+        if (it.value() == screen) {
+            screenId = it.key();
+            break;
+        }
+    }
+    if (screenId.isEmpty()) {
+        screenId = Utils::screenIdentifier(screen);
+    }
+    return getSelectedZoneGeometry(screenId);
 }
 
 QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const

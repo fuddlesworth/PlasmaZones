@@ -39,8 +39,15 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
         return QString();
     }
 
+    // Resolve to effective (virtual) screen ID at the cursor position
+    auto* smgr = ScreenManager::instance();
+    QString screenId = smgr ? smgr->effectiveScreenAt(QPoint(x, y)) : QString();
+    if (screenId.isEmpty()) {
+        screenId = Utils::screenIdentifier(screen);
+    }
+
     // Use per-screen layout resolution instead of global activeLayout
-    auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
+    auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout) {
         return QString();
     }
@@ -108,7 +115,9 @@ QString ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& zoneId, co
     // Use geometry with gaps (matches snap behavior)
     // Use per-layout zonePadding/outerGap if set, otherwise fall back to global settings
     Layout* zoneLayout = qobject_cast<Layout*>(zone->parent());
-    QString resolvedScreenId = Utils::screenIdentifier(screen);
+    // Prefer the caller-supplied screenId (may be a virtual screen ID) over
+    // deriving from QScreen which always yields the physical screen ID
+    QString resolvedScreenId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
     int zonePadding = GeometryUtils::getEffectiveZonePadding(zoneLayout, m_settings, resolvedScreenId);
     EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(zoneLayout, m_settings, resolvedScreenId);
     bool useAvail = !(zoneLayout && zoneLayout->useFullScreenGeometry());
@@ -156,7 +165,14 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
         return zoneIds;
     }
 
-    auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
+    // Resolve to effective (virtual) screen ID at the cursor position
+    auto* smgr2 = ScreenManager::instance();
+    QString effectiveId = smgr2 ? smgr2->effectiveScreenAt(QPoint(x, y)) : QString();
+    if (effectiveId.isEmpty()) {
+        effectiveId = Utils::screenIdentifier(screen);
+    }
+
+    auto* layout = m_layoutManager->resolveLayoutForScreen(effectiveId);
     if (!layout) {
         qCWarning(lcDbus) << "detectMultiZone: no layout for screen" << screen->name();
         return zoneIds;
@@ -378,7 +394,9 @@ QStringList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& screenId)
     }
 
     // Use per-layout zonePadding/outerGap if set, otherwise fall back to global settings
-    QString resolvedScreenId = Utils::screenIdentifier(screen);
+    // Prefer the caller-supplied screenId (may be a virtual screen ID) over
+    // deriving from QScreen which always yields the physical screen ID
+    QString resolvedScreenId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : Utils::screenIdForName(screenId);
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, resolvedScreenId);
     EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, resolvedScreenId);
     bool useAvail = !(layout && layout->useFullScreenGeometry());

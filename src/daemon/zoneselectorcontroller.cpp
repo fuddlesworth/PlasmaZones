@@ -87,7 +87,7 @@ QVariantList ZoneSelectorController::layouts() const
     // and mode-based filtering (manual-only vs autotile-only)
     QString screenId;
     if (m_screen) {
-        screenId = Utils::screenIdentifier(m_screen);
+        screenId = m_screenId;
     }
     const auto entries = LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
@@ -178,8 +178,8 @@ void ZoneSelectorController::setLayoutManager(LayoutManager* layoutManager)
             // Pass current virtual desktop for per-desktop layout lookup
             Layout* effectiveLayout = nullptr;
             if (m_screen) {
-                effectiveLayout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen),
-                                                                   m_currentVirtualDesktop, m_currentActivity);
+                effectiveLayout =
+                    m_layoutManager->layoutForScreen(m_screenId, m_currentVirtualDesktop, m_currentActivity);
             }
             if (!effectiveLayout) {
                 effectiveLayout = layout;
@@ -198,7 +198,7 @@ void ZoneSelectorController::setLayoutManager(LayoutManager* layoutManager)
                     // 2. This assignment is for our screen
                     // 3. Layout is valid
                     // This prevents cascading updates during startup
-                    if (m_isDragging && m_screen && Utils::screenIdentifier(m_screen) == screenId && layout) {
+                    if (m_isDragging && m_screen && m_screenId == screenId && layout) {
                         setActiveLayoutId(layout->id().toString());
                     }
                 });
@@ -215,11 +215,14 @@ void ZoneSelectorController::setSettings(ISettings* settings)
 void ZoneSelectorController::setScreen(QScreen* screen)
 {
     m_screen = screen;
+    // Derive screen ID from QScreen if not already set by setScreenId()
+    if (m_screenId.isEmpty() && screen) {
+        m_screenId = Utils::screenIdentifier(screen);
+    }
 
     // Update active layout ID for this screen and current desktop
     if (m_screen && m_layoutManager) {
-        Layout* screenLayout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen),
-                                                                m_currentVirtualDesktop, m_currentActivity);
+        Layout* screenLayout = m_layoutManager->layoutForScreen(m_screenId, m_currentVirtualDesktop, m_currentActivity);
         if (screenLayout) {
             setActiveLayoutId(screenLayout->id().toString());
         } else if (auto* def = m_layoutManager->defaultLayout()) {
@@ -235,8 +238,8 @@ void ZoneSelectorController::setCurrentVirtualDesktop(int desktop)
         m_currentVirtualDesktop = desktop;
         // Update active layout ID when desktop changes
         if (m_screen && m_layoutManager) {
-            Layout* screenLayout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen),
-                                                                    m_currentVirtualDesktop, m_currentActivity);
+            Layout* screenLayout =
+                m_layoutManager->layoutForScreen(m_screenId, m_currentVirtualDesktop, m_currentActivity);
             if (screenLayout) {
                 setActiveLayoutId(screenLayout->id().toString());
             }
@@ -377,12 +380,11 @@ bool ZoneSelectorController::isScreenLocked() const
 {
     if (m_layoutManager && m_settings && m_screen) {
         int desktop = m_layoutManager->currentVirtualDesktop();
-        return m_settings->isContextLocked(
-            (QString::number(static_cast<int>(m_layoutManager->modeForScreen(Utils::screenIdentifier(m_screen), desktop,
-                                                                             m_layoutManager->currentActivity())))
-             + QStringLiteral(":"))
-                + Utils::screenIdentifier(m_screen),
-            desktop, m_layoutManager->currentActivity());
+        return m_settings->isContextLocked((QString::number(static_cast<int>(m_layoutManager->modeForScreen(
+                                                m_screenId, desktop, m_layoutManager->currentActivity())))
+                                            + QStringLiteral(":"))
+                                               + m_screenId,
+                                           desktop, m_layoutManager->currentActivity());
     }
     return false;
 }
@@ -434,6 +436,17 @@ void ZoneSelectorController::updateProximity()
         QScreen* cursorScreen = QGuiApplication::screenAt(m_cursorPosition.toPoint());
         if (cursorScreen) {
             m_screen = cursorScreen;
+            // Resolve to effective (virtual) screen ID at the cursor position
+            auto* smgr = ScreenManager::instance();
+            if (smgr) {
+                QString resolved = smgr->effectiveScreenAt(m_cursorPosition.toPoint());
+                if (!resolved.isEmpty()) {
+                    m_screenId = resolved;
+                }
+            }
+            if (m_screenId.isEmpty()) {
+                m_screenId = Utils::screenIdentifier(cursorScreen);
+            }
         }
     }
 
@@ -447,7 +460,7 @@ void ZoneSelectorController::updateProximity()
 
     // Use virtual screen geometry if available, falling back to physical
     auto* mgr = ScreenManager::instance();
-    const QString screenId = Utils::screenIdentifier(m_screen);
+    const QString screenId = m_screenId;
     QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
     const QRectF screenGeometry = vsGeom.isValid() ? QRectF(vsGeom) : QRectF(m_screen->geometry());
     const qreal distanceFromTop = m_cursorPosition.y() - screenGeometry.top();

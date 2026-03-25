@@ -53,7 +53,20 @@ void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QV
 
 QVariantList OverlayService::buildZonesList(QScreen* screen) const
 {
-    return buildZonesList(Utils::screenIdentifier(screen), screen);
+    // Try to find the virtual-aware screen ID from the overlay's screen map first,
+    // since the overlay windows are keyed by effective (possibly virtual) screen IDs.
+    // Falls back to physical screen ID if no mapping exists.
+    QString screenId;
+    for (auto it = m_overlayPhysScreens.constBegin(); it != m_overlayPhysScreens.constEnd(); ++it) {
+        if (it.value() == screen) {
+            screenId = it.key();
+            break;
+        }
+    }
+    if (screenId.isEmpty()) {
+        screenId = Utils::screenIdentifier(screen);
+    }
+    return buildZonesList(screenId, screen);
 }
 
 QVariantList OverlayService::buildZonesList(const QString& screenId, QScreen* physScreen) const
@@ -88,8 +101,18 @@ QVariantList OverlayService::buildZonesList(const QString& screenId, QScreen* ph
 QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout) const
 {
     // Physical screen overload: delegates to screenId overload.
+    // Try to find the virtual-aware screen ID from the overlay's screen map first.
     // Callers with virtual screen context should use the screenId overload directly.
-    const QString screenId = Utils::screenIdentifier(screen);
+    QString screenId;
+    for (auto it = m_overlayPhysScreens.constBegin(); it != m_overlayPhysScreens.constEnd(); ++it) {
+        if (it.value() == screen) {
+            screenId = it.key();
+            break;
+        }
+    }
+    if (screenId.isEmpty()) {
+        screenId = Utils::screenIdentifier(screen);
+    }
     QRect overlayGeom = m_overlayGeometries.value(screenId, screen->geometry());
     return zoneToVariantMap(zone, screenId, screen, overlayGeom, layout);
 }
