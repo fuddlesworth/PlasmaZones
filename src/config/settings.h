@@ -1536,26 +1536,26 @@ private:
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Activation
-    bool m_shiftDragToActivate = true; // Deprecated - kept for migration
+    bool m_shiftDragToActivate = ConfigDefaults::shiftDrag(); // Deprecated - kept for migration
     QVariantList m_dragActivationTriggers; // [{modifier: int, mouseButton: int}, ...]
-    bool m_zoneSpanEnabled = true;
+    bool m_zoneSpanEnabled = ConfigDefaults::zoneSpanEnabled();
     DragModifier m_zoneSpanModifier = DragModifier::Ctrl;
     QVariantList m_zoneSpanTriggers; // [{modifier: int, mouseButton: int}, ...]
-    bool m_toggleActivation = false;
-    bool m_snappingEnabled = true;
+    bool m_toggleActivation = ConfigDefaults::toggleActivation();
+    bool m_snappingEnabled = ConfigDefaults::snappingEnabled();
 
     // Display
-    bool m_showZonesOnAllMonitors = false;
+    bool m_showZonesOnAllMonitors = ConfigDefaults::showOnAllMonitors();
     QStringList m_disabledMonitors;
-    bool m_showZoneNumbers = true;
-    bool m_flashZonesOnSwitch = true;
-    bool m_showOsdOnLayoutSwitch = true;
-    bool m_showNavigationOsd = true;
+    bool m_showZoneNumbers = ConfigDefaults::showNumbers();
+    bool m_flashZonesOnSwitch = ConfigDefaults::flashOnSwitch();
+    bool m_showOsdOnLayoutSwitch = ConfigDefaults::showOsdOnLayoutSwitch();
+    bool m_showNavigationOsd = ConfigDefaults::showNavigationOsd();
     OsdStyle m_osdStyle = OsdStyle::Preview; // Default to visual preview
     OverlayDisplayMode m_overlayDisplayMode = OverlayDisplayMode::ZoneRectangles;
 
     // Appearance
-    bool m_useSystemColors = true;
+    bool m_useSystemColors = ConfigDefaults::useSystemColors();
     QColor m_highlightColor = ConfigDefaults::highlightColor();
     QColor m_inactiveColor = ConfigDefaults::inactiveColor();
     QColor m_borderColor = ConfigDefaults::borderColor();
@@ -1564,18 +1564,18 @@ private:
     qreal m_inactiveOpacity = ConfigDefaults::inactiveOpacity();
     int m_borderWidth = ConfigDefaults::borderWidth();
     int m_borderRadius = ConfigDefaults::borderRadius();
-    bool m_enableBlur = true;
+    bool m_enableBlur = ConfigDefaults::enableBlur();
     QString m_labelFontFamily;
-    qreal m_labelFontSizeScale = 1.0;
+    qreal m_labelFontSizeScale = ConfigDefaults::labelFontSizeScale();
     int m_labelFontWeight = QFont::Bold;
-    bool m_labelFontItalic = false;
-    bool m_labelFontUnderline = false;
-    bool m_labelFontStrikeout = false;
+    bool m_labelFontItalic = ConfigDefaults::labelFontItalic();
+    bool m_labelFontUnderline = ConfigDefaults::labelFontUnderline();
+    bool m_labelFontStrikeout = ConfigDefaults::labelFontStrikeout();
 
     // Zone settings
     int m_zonePadding = ConfigDefaults::zonePadding();
     int m_outerGap = ConfigDefaults::outerGap();
-    bool m_usePerSideOuterGap = false;
+    bool m_usePerSideOuterGap = ConfigDefaults::usePerSideOuterGap();
     int m_outerGapTop = ConfigDefaults::outerGapTop();
     int m_outerGapBottom = ConfigDefaults::outerGapBottom();
     int m_outerGapLeft = ConfigDefaults::outerGapLeft();
@@ -1588,42 +1588,39 @@ private:
     int m_minimumZoneDisplaySizePx = ConfigDefaults::minimumZoneDisplaySizePx();
 
     // Window behavior
-    bool m_keepWindowsInZonesOnResolutionChange = true;
-    bool m_moveNewWindowsToLastZone = false;
-    bool m_restoreOriginalSizeOnUnsnap = true;
+    bool m_keepWindowsInZonesOnResolutionChange = ConfigDefaults::keepWindowsInZonesOnResolutionChange();
+    bool m_moveNewWindowsToLastZone = ConfigDefaults::moveNewWindowsToLastZone();
+    bool m_restoreOriginalSizeOnUnsnap = ConfigDefaults::restoreOriginalSizeOnUnsnap();
     StickyWindowHandling m_stickyWindowHandling = StickyWindowHandling::TreatAsNormal;
-    bool m_restoreWindowsToZonesOnLogin = true;
-    bool m_snapAssistFeatureEnabled = true;
-    bool m_snapAssistEnabled = true;
+    bool m_restoreWindowsToZonesOnLogin = ConfigDefaults::restoreWindowsToZonesOnLogin();
+    bool m_snapAssistFeatureEnabled = ConfigDefaults::snapAssistFeatureEnabled();
+    bool m_snapAssistEnabled = ConfigDefaults::snapAssistEnabled();
     QVariantList m_snapAssistTriggers; // [{modifier: int, mouseButton: int}, ...]
 
     // Default layout (used when no explicit assignment exists)
     QString m_defaultLayoutId;
 
     // Layout filtering
-    bool m_filterLayoutsByAspectRatio = true;
+    bool m_filterLayoutsByAspectRatio = ConfigDefaults::filterLayoutsByAspectRatio();
 
     // Exclusions
     QStringList m_excludedApplications;
     QStringList m_excludedWindowClasses;
-    bool m_excludeTransientWindows = true;
-    int m_minimumWindowWidth = 200;
-    int m_minimumWindowHeight = 150;
+    bool m_excludeTransientWindows = ConfigDefaults::excludeTransientWindows();
+    int m_minimumWindowWidth = ConfigDefaults::minimumWindowWidth();
+    int m_minimumWindowHeight = ConfigDefaults::minimumWindowHeight();
 
     // Zone Selector
-    // Note: These member initializers are fallbacks only. Actual defaults come from
-    // plasmazones.kcfg via ConfigDefaults. See reset() and load() methods.
-    // If you change a default here, also update plasmazones.kcfg to match.
-    bool m_zoneSelectorEnabled = true;
-    int m_zoneSelectorTriggerDistance = 50; // pixels from edge to trigger
+    bool m_zoneSelectorEnabled = ConfigDefaults::zoneSelectorEnabled();
+    int m_zoneSelectorTriggerDistance = ConfigDefaults::triggerDistance();
     ZoneSelectorPosition m_zoneSelectorPosition = ZoneSelectorPosition::Top;
     ZoneSelectorLayoutMode m_zoneSelectorLayoutMode = ZoneSelectorLayoutMode::Grid;
     ZoneSelectorSizeMode m_zoneSelectorSizeMode = ZoneSelectorSizeMode::Auto;
-    int m_zoneSelectorMaxRows = 4; // max visible rows before scrolling
-    int m_zoneSelectorPreviewWidth = 180; // preview width in pixels (Manual mode)
-    int m_zoneSelectorPreviewHeight = 101; // preview height in pixels (Manual mode, when unlocked)
-    bool m_zoneSelectorPreviewLockAspect = true;
-    int m_zoneSelectorGridColumns = 5; // grid columns (Manual mode)
+    int m_zoneSelectorMaxRows = ConfigDefaults::maxRows();
+    int m_zoneSelectorPreviewWidth = ConfigDefaults::previewWidth();
+    int m_zoneSelectorPreviewHeight = ConfigDefaults::previewHeight();
+    bool m_zoneSelectorPreviewLockAspect = ConfigDefaults::previewLockAspect();
+    int m_zoneSelectorGridColumns = ConfigDefaults::gridColumns();
 
     // Per-screen zone selector overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenZoneSelectorSettings;
@@ -1635,134 +1632,138 @@ private:
     QHash<QString, QVariantMap> m_perScreenSnappingSettings;
 
     // Autotiling Settings
-    bool m_autotileEnabled = false;
+    bool m_autotileEnabled = ConfigDefaults::autotileEnabled();
     QString m_autotileAlgorithm = QString(DBus::AutotileAlgorithm::BSP);
-    qreal m_autotileSplitRatio = 0.5;
-    int m_autotileMasterCount = 1;
-    qreal m_autotileCenteredMasterSplitRatio = 0.5;
-    int m_autotileCenteredMasterMasterCount = 1;
-    int m_autotileInnerGap = 8;
-    int m_autotileOuterGap = 8;
-    bool m_autotileUsePerSideOuterGap = false;
-    int m_autotileOuterGapTop = 8;
-    int m_autotileOuterGapBottom = 8;
-    int m_autotileOuterGapLeft = 8;
-    int m_autotileOuterGapRight = 8;
-    bool m_autotileFocusNewWindows = true;
-    bool m_autotileSmartGaps = true;
-    int m_autotileMaxWindows = 5;
+    qreal m_autotileSplitRatio = ConfigDefaults::autotileSplitRatio();
+    int m_autotileMasterCount = ConfigDefaults::autotileMasterCount();
+    qreal m_autotileCenteredMasterSplitRatio = ConfigDefaults::autotileCenteredMasterSplitRatio();
+    int m_autotileCenteredMasterMasterCount = ConfigDefaults::autotileCenteredMasterMasterCount();
+    int m_autotileInnerGap = ConfigDefaults::autotileInnerGap();
+    int m_autotileOuterGap = ConfigDefaults::autotileOuterGap();
+    bool m_autotileUsePerSideOuterGap = ConfigDefaults::autotileUsePerSideOuterGap();
+    int m_autotileOuterGapTop = ConfigDefaults::autotileOuterGapTop();
+    int m_autotileOuterGapBottom = ConfigDefaults::autotileOuterGapBottom();
+    int m_autotileOuterGapLeft = ConfigDefaults::autotileOuterGapLeft();
+    int m_autotileOuterGapRight = ConfigDefaults::autotileOuterGapRight();
+    bool m_autotileFocusNewWindows = ConfigDefaults::autotileFocusNewWindows();
+    bool m_autotileSmartGaps = ConfigDefaults::autotileSmartGaps();
+    int m_autotileMaxWindows = ConfigDefaults::autotileMaxWindows();
     AutotileInsertPosition m_autotileInsertPosition = AutotileInsertPosition::End;
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
-    bool m_animationsEnabled = true;
-    int m_animationDuration = 300; // milliseconds
-    QString m_animationEasingCurve = QStringLiteral("0.33,1.00,0.68,1.00");
-    int m_animationMinDistance = 0; // pixels — skip animation for smaller changes
-    int m_animationSequenceMode = 1; // 0=all at once, 1=one by one in zone order
-    int m_animationStaggerInterval = 50; // ms between windows when animating one by one
+    bool m_animationsEnabled = ConfigDefaults::animationsEnabled();
+    int m_animationDuration = ConfigDefaults::animationDuration();
+    QString m_animationEasingCurve = ConfigDefaults::animationEasingCurve();
+    int m_animationMinDistance = ConfigDefaults::animationMinDistance();
+    int m_animationSequenceMode = ConfigDefaults::animationSequenceMode();
+    int m_animationStaggerInterval = ConfigDefaults::animationStaggerInterval();
 
-    // Additional Autotiling Settings (must match plasmazones.kcfg Autotiling defaults)
-    bool m_autotileFocusFollowsMouse = false;
-    bool m_autotileRespectMinimumSize = true;
-    bool m_autotileHideTitleBars = true;
-    bool m_autotileShowBorder = true;
-    int m_autotileBorderWidth = 2;
-    int m_autotileBorderRadius = 0;
+    // Additional Autotiling Settings
+    bool m_autotileFocusFollowsMouse = ConfigDefaults::autotileFocusFollowsMouse();
+    bool m_autotileRespectMinimumSize = ConfigDefaults::autotileRespectMinimumSize();
+    bool m_autotileHideTitleBars = ConfigDefaults::autotileHideTitleBars();
+    bool m_autotileShowBorder = ConfigDefaults::autotileShowBorder();
+    int m_autotileBorderWidth = ConfigDefaults::autotileBorderWidth();
+    int m_autotileBorderRadius = ConfigDefaults::autotileBorderRadius();
     QColor m_autotileBorderColor = QColor(0, 120, 212, 128); // #800078D4 — same as highlightColor
     QColor m_autotileInactiveBorderColor = QColor(128, 128, 128, 64); // #40808080 — same as inactiveColor
-    bool m_autotileUseSystemBorderColors = true;
+    bool m_autotileUseSystemBorderColors = ConfigDefaults::autotileUseSystemBorderColors();
     QStringList m_lockedScreens;
-    // Autotile Shortcuts (must match plasmazones.kcfg GlobalShortcuts defaults)
-    QString m_autotileToggleShortcut = QStringLiteral("Meta+Shift+T");
-    QString m_autotileFocusMasterShortcut = QStringLiteral("Meta+Shift+M");
-    QString m_autotileSwapMasterShortcut = QStringLiteral("Meta+Shift+Return");
-    QString m_autotileIncMasterRatioShortcut = QStringLiteral("Meta+Shift+L");
-    QString m_autotileDecMasterRatioShortcut = QStringLiteral("Meta+Shift+H");
-    QString m_autotileIncMasterCountShortcut = QStringLiteral("Meta+Shift+]");
-    QString m_autotileDecMasterCountShortcut = QStringLiteral("Meta+Shift+[");
-    QString m_autotileRetileShortcut = QStringLiteral("Meta+Ctrl+R");
+    // Autotile Shortcuts (defaults from ConfigDefaults, canonical source)
+    QString m_autotileToggleShortcut = ConfigDefaults::autotileToggleShortcut();
+    QString m_autotileFocusMasterShortcut = ConfigDefaults::autotileFocusMasterShortcut();
+    QString m_autotileSwapMasterShortcut = ConfigDefaults::autotileSwapMasterShortcut();
+    QString m_autotileIncMasterRatioShortcut = ConfigDefaults::autotileIncMasterRatioShortcut();
+    QString m_autotileDecMasterRatioShortcut = ConfigDefaults::autotileDecMasterRatioShortcut();
+    QString m_autotileIncMasterCountShortcut = ConfigDefaults::autotileIncMasterCountShortcut();
+    QString m_autotileDecMasterCountShortcut = ConfigDefaults::autotileDecMasterCountShortcut();
+    QString m_autotileRetileShortcut = ConfigDefaults::autotileRetileShortcut();
 
-    // Shader Effects (defaults from plasmazones.kcfg via ConfigDefaults)
-    bool m_enableShaderEffects = true;
-    int m_shaderFrameRate = 60;
-    bool m_enableAudioVisualizer = false;
-    int m_audioSpectrumBarCount = 64;
+    // Shader Effects
+    bool m_enableShaderEffects = ConfigDefaults::enableShaderEffects();
+    int m_shaderFrameRate = ConfigDefaults::shaderFrameRate();
+    bool m_enableAudioVisualizer = ConfigDefaults::enableAudioVisualizer();
+    int m_audioSpectrumBarCount = ConfigDefaults::audioSpectrumBarCount();
 
-    // Global Shortcuts (configurable, registered with KGlobalAccel)
-    QString m_openEditorShortcut = QStringLiteral("Meta+Shift+E");
-    QString m_openSettingsShortcut = QStringLiteral("Meta+Shift+P");
-    QString m_previousLayoutShortcut = QStringLiteral("Meta+Alt+[");
-    QString m_nextLayoutShortcut = QStringLiteral("Meta+Alt+]");
+    // Global Shortcuts (defaults from ConfigDefaults, canonical source)
+    QString m_openEditorShortcut = ConfigDefaults::openEditorShortcut();
+    QString m_openSettingsShortcut = ConfigDefaults::openSettingsShortcut();
+    QString m_previousLayoutShortcut = ConfigDefaults::previousLayoutShortcut();
+    QString m_nextLayoutShortcut = ConfigDefaults::nextLayoutShortcut();
     QString m_quickLayoutShortcuts[9] = {
-        QStringLiteral("Meta+Alt+1"), QStringLiteral("Meta+Alt+2"), QStringLiteral("Meta+Alt+3"),
-        QStringLiteral("Meta+Alt+4"), QStringLiteral("Meta+Alt+5"), QStringLiteral("Meta+Alt+6"),
-        QStringLiteral("Meta+Alt+7"), QStringLiteral("Meta+Alt+8"), QStringLiteral("Meta+Alt+9")};
+        ConfigDefaults::quickLayout1Shortcut(), ConfigDefaults::quickLayout2Shortcut(),
+        ConfigDefaults::quickLayout3Shortcut(), ConfigDefaults::quickLayout4Shortcut(),
+        ConfigDefaults::quickLayout5Shortcut(), ConfigDefaults::quickLayout6Shortcut(),
+        ConfigDefaults::quickLayout7Shortcut(), ConfigDefaults::quickLayout8Shortcut(),
+        ConfigDefaults::quickLayout9Shortcut()};
 
     // Keyboard Navigation Shortcuts
     // Meta+Shift+Left/Right conflicts with KDE's "Window to Next/Previous Screen";
     // we use Meta+Alt+Shift+Arrow instead.
-    QString m_moveWindowLeftShortcut = QStringLiteral("Meta+Alt+Shift+Left");
-    QString m_moveWindowRightShortcut = QStringLiteral("Meta+Alt+Shift+Right");
-    QString m_moveWindowUpShortcut = QStringLiteral("Meta+Alt+Shift+Up");
-    QString m_moveWindowDownShortcut = QStringLiteral("Meta+Alt+Shift+Down");
+    QString m_moveWindowLeftShortcut = ConfigDefaults::moveWindowLeftShortcut();
+    QString m_moveWindowRightShortcut = ConfigDefaults::moveWindowRightShortcut();
+    QString m_moveWindowUpShortcut = ConfigDefaults::moveWindowUpShortcut();
+    QString m_moveWindowDownShortcut = ConfigDefaults::moveWindowDownShortcut();
     // Meta+Arrow conflicts with KDE's Quick Tile; we use Alt+Shift+Arrow instead.
-    QString m_focusZoneLeftShortcut = QStringLiteral("Alt+Shift+Left");
-    QString m_focusZoneRightShortcut = QStringLiteral("Alt+Shift+Right");
-    QString m_focusZoneUpShortcut = QStringLiteral("Alt+Shift+Up");
-    QString m_focusZoneDownShortcut = QStringLiteral("Alt+Shift+Down");
-    QString m_pushToEmptyZoneShortcut = QStringLiteral("Meta+Alt+Return");
-    QString m_restoreWindowSizeShortcut = QStringLiteral("Meta+Alt+Escape");
-    QString m_toggleWindowFloatShortcut = QStringLiteral("Meta+F");
+    QString m_focusZoneLeftShortcut = ConfigDefaults::focusZoneLeftShortcut();
+    QString m_focusZoneRightShortcut = ConfigDefaults::focusZoneRightShortcut();
+    QString m_focusZoneUpShortcut = ConfigDefaults::focusZoneUpShortcut();
+    QString m_focusZoneDownShortcut = ConfigDefaults::focusZoneDownShortcut();
+    QString m_pushToEmptyZoneShortcut = ConfigDefaults::pushToEmptyZoneShortcut();
+    QString m_restoreWindowSizeShortcut = ConfigDefaults::restoreWindowSizeShortcut();
+    QString m_toggleWindowFloatShortcut = ConfigDefaults::toggleWindowFloatShortcut();
 
     // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
     // Swaps focused window with window in adjacent zone
     // Meta+Ctrl+Arrow conflicts with KDE's virtual desktop switching;
     // we add Alt to make Meta+Ctrl+Alt+Arrow for swap operations.
-    QString m_swapWindowLeftShortcut = QStringLiteral("Meta+Ctrl+Alt+Left");
-    QString m_swapWindowRightShortcut = QStringLiteral("Meta+Ctrl+Alt+Right");
-    QString m_swapWindowUpShortcut = QStringLiteral("Meta+Ctrl+Alt+Up");
-    QString m_swapWindowDownShortcut = QStringLiteral("Meta+Ctrl+Alt+Down");
+    QString m_swapWindowLeftShortcut = ConfigDefaults::swapWindowLeftShortcut();
+    QString m_swapWindowRightShortcut = ConfigDefaults::swapWindowRightShortcut();
+    QString m_swapWindowUpShortcut = ConfigDefaults::swapWindowUpShortcut();
+    QString m_swapWindowDownShortcut = ConfigDefaults::swapWindowDownShortcut();
 
     // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
     // Meta+1-9 conflicts with KDE's virtual desktop switching; we use Meta+Ctrl+1-9 instead.
     QString m_snapToZoneShortcuts[9] = {
-        QStringLiteral("Meta+Ctrl+1"), QStringLiteral("Meta+Ctrl+2"), QStringLiteral("Meta+Ctrl+3"),
-        QStringLiteral("Meta+Ctrl+4"), QStringLiteral("Meta+Ctrl+5"), QStringLiteral("Meta+Ctrl+6"),
-        QStringLiteral("Meta+Ctrl+7"), QStringLiteral("Meta+Ctrl+8"), QStringLiteral("Meta+Ctrl+9")};
+        ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
+        ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
+        ConfigDefaults::snapToZone5Shortcut(), ConfigDefaults::snapToZone6Shortcut(),
+        ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
+        ConfigDefaults::snapToZone9Shortcut()};
 
     // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
     // Rotates all windows in the current layout clockwise or counterclockwise
-    QString m_rotateWindowsClockwiseShortcut = QStringLiteral("Meta+Ctrl+]");
-    QString m_rotateWindowsCounterclockwiseShortcut = QStringLiteral("Meta+Ctrl+[");
+    QString m_rotateWindowsClockwiseShortcut = ConfigDefaults::rotateWindowsClockwiseShortcut();
+    QString m_rotateWindowsCounterclockwiseShortcut = ConfigDefaults::rotateWindowsCounterclockwiseShortcut();
 
     // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
     // Cycles focus between windows stacked in the same zone (monocle-style navigation)
-    QString m_cycleWindowForwardShortcut = QStringLiteral("Meta+Alt+.");
-    QString m_cycleWindowBackwardShortcut = QStringLiteral("Meta+Alt+,");
+    QString m_cycleWindowForwardShortcut = ConfigDefaults::cycleWindowForwardShortcut();
+    QString m_cycleWindowBackwardShortcut = ConfigDefaults::cycleWindowBackwardShortcut();
 
     // Resnap to New Layout (Meta+Ctrl+Z, easy pinky key)
-    QString m_resnapToNewLayoutShortcut = QStringLiteral("Meta+Ctrl+Z");
+    QString m_resnapToNewLayoutShortcut = ConfigDefaults::resnapToNewLayoutShortcut();
 
     // Snap All Windows (Meta+Ctrl+S — same namespace as rotate/resnap batch ops)
-    QString m_snapAllWindowsShortcut = QStringLiteral("Meta+Ctrl+S");
+    QString m_snapAllWindowsShortcut = ConfigDefaults::snapAllWindowsShortcut();
 
     // Layout Picker (Meta+Alt+Space — browse and switch layouts interactively)
-    QString m_layoutPickerShortcut = QStringLiteral("Meta+Alt+Space");
+    QString m_layoutPickerShortcut = ConfigDefaults::layoutPickerShortcut();
 
     // Toggle Layout Lock (Meta+Ctrl+L)
-    QString m_toggleLayoutLockShortcut = QStringLiteral("Meta+Ctrl+L");
+    QString m_toggleLayoutLockShortcut = ConfigDefaults::toggleLayoutLockShortcut();
 
     // Editor Settings ([Editor] group in plasmazonesrc)
-    QString m_editorDuplicateShortcut = QStringLiteral("Ctrl+D");
-    QString m_editorSplitHorizontalShortcut = QStringLiteral("Ctrl+Shift+H");
-    QString m_editorSplitVerticalShortcut = QStringLiteral("Ctrl+Alt+V");
-    QString m_editorFillShortcut = QStringLiteral("Ctrl+Shift+F");
-    bool m_editorGridSnappingEnabled = true;
-    bool m_editorEdgeSnappingEnabled = true;
-    qreal m_editorSnapIntervalX = 0.05;
-    qreal m_editorSnapIntervalY = 0.05;
+    QString m_editorDuplicateShortcut = ConfigDefaults::editorDuplicateShortcut();
+    QString m_editorSplitHorizontalShortcut = ConfigDefaults::editorSplitHorizontalShortcut();
+    QString m_editorSplitVerticalShortcut = ConfigDefaults::editorSplitVerticalShortcut();
+    QString m_editorFillShortcut = ConfigDefaults::editorFillShortcut();
+    bool m_editorGridSnappingEnabled = ConfigDefaults::editorGridSnappingEnabled();
+    bool m_editorEdgeSnappingEnabled = ConfigDefaults::editorEdgeSnappingEnabled();
+    qreal m_editorSnapIntervalX = ConfigDefaults::editorSnapInterval();
+    qreal m_editorSnapIntervalY = ConfigDefaults::editorSnapInterval();
     int m_editorSnapOverrideModifier = static_cast<int>(Qt::ShiftModifier);
-    bool m_fillOnDropEnabled = true;
+    bool m_fillOnDropEnabled = ConfigDefaults::fillOnDropEnabled();
     int m_fillOnDropModifier = static_cast<int>(Qt::ControlModifier);
 };
 
