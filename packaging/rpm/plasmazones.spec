@@ -180,8 +180,10 @@ echo ""
 # Icons
 %{_datadir}/icons/hicolor/scalable/apps/plasmazones.svg
 %{_datadir}/icons/hicolor/scalable/apps/plasmazones-editor.svg
+%{_datadir}/icons/hicolor/scalable/apps/plasmazones-settings.svg
 %{_datadir}/icons/hicolor-light/scalable/apps/plasmazones.svg
 %{_datadir}/icons/hicolor-light/scalable/apps/plasmazones-editor.svg
+%{_datadir}/icons/hicolor-light/scalable/apps/plasmazones-settings.svg
 
 # KConfig
 %{_datadir}/config.kcfg/plasmazones.kcfg
@@ -191,9 +193,6 @@ echo ""
 
 # Snap Assist: env.d config for KWin screenshot auth (system installs use .desktop; this is fallback)
 %{_libdir}/environment.d/99-plasmazones-screenshot.conf
-
-# Translations (Qt .qm files)
-%{_datadir}/plasmazones/translations/*.qm
 
 %changelog
 # Generated from CHANGELOG.md by packaging/generate-changelog.sh during CI.
