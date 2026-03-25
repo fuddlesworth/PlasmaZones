@@ -1680,7 +1680,7 @@ private:
     QString m_autotileDecMasterRatioShortcut = QStringLiteral("Meta+Shift+H");
     QString m_autotileIncMasterCountShortcut = QStringLiteral("Meta+Shift+]");
     QString m_autotileDecMasterCountShortcut = QStringLiteral("Meta+Shift+[");
-    QString m_autotileRetileShortcut = QStringLiteral("Meta+Shift+R");
+    QString m_autotileRetileShortcut = QStringLiteral("Meta+Ctrl+R");
 
     // Shader Effects (defaults from plasmazones.kcfg via ConfigDefaults)
     bool m_enableShaderEffects = true;

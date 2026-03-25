@@ -872,7 +872,7 @@ public:
     }
     static QString autotileRetileShortcut()
     {
-        return QStringLiteral("Meta+Shift+R");
+        return QStringLiteral("Meta+Ctrl+R");
     }
 
 private:

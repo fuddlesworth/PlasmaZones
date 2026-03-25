@@ -539,7 +539,7 @@
     </entry>
     <entry name="RetileShortcut" type="String">
       <label>Shortcut to retile all windows</label>
-      <default>Meta+Shift+R</default>
+      <default>Meta+Ctrl+R</default>
     </entry>
     <entry name="FocusMasterShortcut" type="String">
       <label>Shortcut to focus master window</label>
