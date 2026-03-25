@@ -39,12 +39,25 @@ void Daemon::connectScreenSignals()
     const auto vsConfigs = m_settings->virtualScreenConfigs();
     for (auto it = vsConfigs.constBegin(); it != vsConfigs.constEnd(); ++it) {
         m_screenManager->setVirtualScreenConfig(it.key(), it.value());
+        // Migrate any window screen assignments from physical to virtual IDs.
+        // Windows snapped before virtual screens were configured have physical screen IDs
+        // and would be invisible to zone occupancy, snap assist, float/unfloat, etc.
+        if (it.value().hasSubdivisions() && m_windowTrackingAdaptor) {
+            QStringList vsIds = m_screenManager->virtualScreenIdsFor(it.key());
+            m_windowTrackingAdaptor->service()->migrateScreenAssignmentsToVirtual(it.key(), vsIds,
+                                                                                  m_screenManager.get());
+        }
     }
 
-    // Persist virtual screen config changes back to Settings
+    // Persist virtual screen config changes back to Settings, and migrate screen assignments
     connect(m_screenManager.get(), &ScreenManager::virtualScreensChanged, this, [this](const QString& physId) {
         auto config = m_screenManager->virtualScreenConfig(physId);
         m_settings->setVirtualScreenConfig(physId, config);
+        // Migrate window screen assignments when virtual screens change at runtime
+        if (config.hasSubdivisions() && m_windowTrackingAdaptor) {
+            QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
+            m_windowTrackingAdaptor->service()->migrateScreenAssignmentsToVirtual(physId, vsIds, m_screenManager.get());
+        }
     });
 
     // Connect screen manager signals

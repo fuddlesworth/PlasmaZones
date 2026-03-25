@@ -9,6 +9,7 @@
 #include "../layout.h"
 #include "../zone.h"
 #include "../layoutmanager.h"
+#include "../screenmanager.h"
 #include "../virtualdesktopmanager.h"
 #include "../utils.h"
 #include "../logging.h"
@@ -16,6 +17,98 @@
 #include <QUuid>
 
 namespace PlasmaZones {
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Virtual Screen Migration
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& physicalScreenId,
+                                                              const QStringList& virtualScreenIds, ScreenManager* mgr)
+{
+    if (virtualScreenIds.isEmpty() || !mgr) {
+        return;
+    }
+
+    // Helper: determine which virtual screen a zone center falls within.
+    // Returns the first virtual screen as default if the zone can't be resolved.
+    auto resolveVirtualScreen = [&](const QStringList& zoneIds) -> QString {
+        if (zoneIds.isEmpty() || !m_layoutManager) {
+            return virtualScreenIds.first();
+        }
+
+        // Resolve the layout for the physical screen
+        Layout* layout = m_layoutManager->resolveLayoutForScreen(physicalScreenId);
+        if (!layout) {
+            return virtualScreenIds.first();
+        }
+
+        // Find the zone object for the primary zone
+        const QString& primaryZoneId = zoneIds.first();
+        auto uuidOpt = Utils::parseUuid(primaryZoneId);
+        if (!uuidOpt) {
+            return virtualScreenIds.first();
+        }
+
+        Zone* zone = layout->zoneById(*uuidOpt);
+        if (!zone) {
+            return virtualScreenIds.first();
+        }
+
+        // Get physical screen geometry to compute absolute zone position
+        QScreen* physScreen = Utils::findScreenByIdOrName(physicalScreenId);
+        if (!physScreen) {
+            return virtualScreenIds.first();
+        }
+
+        QRectF absGeo = zone->calculateAbsoluteGeometry(QRectF(physScreen->geometry()));
+        QPoint center = absGeo.center().toPoint();
+        QString vsId = mgr->virtualScreenAt(center, physicalScreenId);
+        if (!vsId.isEmpty()) {
+            return vsId;
+        }
+
+        return virtualScreenIds.first();
+    };
+
+    int migrated = 0;
+    for (auto it = m_windowScreenAssignments.begin(); it != m_windowScreenAssignments.end(); ++it) {
+        if (it.value() != physicalScreenId) {
+            continue;
+        }
+
+        QStringList zoneIds = m_windowZoneAssignments.value(it.key());
+        QString targetVs = resolveVirtualScreen(zoneIds);
+        it.value() = targetVs;
+        migrated++;
+    }
+
+    // Also migrate pre-float screen assignments
+    for (auto it = m_preFloatScreenAssignments.begin(); it != m_preFloatScreenAssignments.end(); ++it) {
+        if (it.value() != physicalScreenId) {
+            continue;
+        }
+
+        // Pre-float entries may have zone info too; try to resolve
+        QStringList zoneIds = m_preFloatZoneAssignments.value(it.key());
+        it.value() = resolveVirtualScreen(zoneIds);
+    }
+
+    // Also migrate pending restore queues — these have screenId per entry
+    for (auto queueIt = m_pendingRestoreQueues.begin(); queueIt != m_pendingRestoreQueues.end(); ++queueIt) {
+        for (PendingRestore& entry : queueIt.value()) {
+            if (entry.screenId != physicalScreenId) {
+                continue;
+            }
+            entry.screenId = resolveVirtualScreen(entry.zoneIds);
+        }
+    }
+
+    if (migrated > 0) {
+        qCInfo(lcCore) << "Migrated" << migrated << "window screen assignments from" << physicalScreenId
+                       << "to virtual screens";
+        scheduleSaveState();
+    }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Window Lifecycle

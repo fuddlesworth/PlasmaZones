@@ -18,6 +18,7 @@ namespace PlasmaZones {
 class LayoutManager;
 class IZoneDetector;
 class ISettings;
+class ScreenManager;
 class VirtualDesktopManager;
 class Layout;
 class Zone;
@@ -538,6 +539,31 @@ public:
      * @return Window IDs sorted by zone number ascending
      */
     QStringList buildZoneOrderedWindowList(const QString& screenId) const;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Virtual Screen Migration
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Migrate window screen assignments from physical to virtual screen IDs
+     *
+     * Windows snapped before virtual screens were configured have physical screen IDs
+     * in m_windowScreenAssignments. When virtual screens are active, all per-screen
+     * lookups use virtual IDs, so these windows become invisible to zone occupancy
+     * checks, snap assist, float/unfloat, etc.
+     *
+     * This method iterates all screen assignments and, for any window whose screen
+     * matches the given physical screen, determines which virtual screen the window's
+     * zone falls within and updates the assignment accordingly.
+     *
+     * Also migrates m_preFloatScreenAssignments.
+     *
+     * @param physicalScreenId The physical screen being subdivided
+     * @param virtualScreenIds Virtual screen IDs for the physical screen
+     * @param mgr ScreenManager for geometry lookups
+     */
+    void migrateScreenAssignmentsToVirtual(const QString& physicalScreenId, const QStringList& virtualScreenIds,
+                                           ScreenManager* mgr);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Resolution Change Handling
