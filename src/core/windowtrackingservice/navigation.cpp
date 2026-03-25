@@ -293,7 +293,7 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise, 
             if (vsGeom.isValid()) {
                 QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
                 geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, vsGeom, availGeom, zonePadding, outerGaps,
-                                                              useAvail);
+                                                              useAvail, screenId);
             } else {
                 geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
             }

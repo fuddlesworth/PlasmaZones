@@ -107,6 +107,14 @@ OverlayService::OverlayService(QObject* parent)
                 destroyNavigationOsdWindow(id);
             }
 
+            // Clean up zone selector windows for this physical screen
+            const QStringList selectorIds = m_zoneSelectorWindows.keys();
+            for (const QString& id : selectorIds) {
+                if (id == physicalScreenId || id.startsWith(physicalScreenId + QStringLiteral("/vs:"))) {
+                    destroyZoneSelectorWindow(id);
+                }
+            }
+
             // Recreate with new virtual screen config if visible
             if (isVisible()) {
                 auto* mgr2 = ScreenManager::instance();

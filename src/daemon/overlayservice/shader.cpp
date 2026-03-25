@@ -335,15 +335,24 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     m_shaderPreviewScreen = screen;
     m_shaderPreviewShaderId = shaderId;
     m_shaderPreviewWindow->setScreen(screen);
-    m_shaderPreviewWindow->setGeometry(x, y, width, height);
+
+    // Use ScreenManager geometry (virtual screen aware) with physical fallback
+    auto* mgr = ScreenManager::instance();
+    QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
+    const QRect previewScreenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
+
+    // Only use setGeometry for physical screens; virtual screens are positioned
+    // by LayerShellQt margins and setGeometry would cause double-offset rendering.
+    if (previewScreenGeom == screen->geometry()) {
+        m_shaderPreviewWindow->setGeometry(x, y, width, height);
+    } else {
+        m_shaderPreviewWindow->setWidth(width);
+        m_shaderPreviewWindow->setHeight(height);
+    }
 
     if (auto* layerWindow = LayerShellQt::Window::get(m_shaderPreviewWindow)) {
-        // Use ScreenManager geometry (virtual screen aware) with physical fallback
-        auto* mgr = ScreenManager::instance();
-        QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
-        const QRect screenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
-        const int localX = x - screenGeom.x();
-        const int localY = y - screenGeom.y();
+        const int localX = x - previewScreenGeom.x();
+        const int localY = y - previewScreenGeom.y();
         layerWindow->setAnchors(
             LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft));
         layerWindow->setMargins(QMargins(localX, localY, 0, 0));
@@ -394,13 +403,22 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
     if (width > 0 && height > 0) {
         QScreen* screen = m_shaderPreviewWindow->screen();
         if (screen) {
-            m_shaderPreviewWindow->setGeometry(x, y, width, height);
+            // Use ScreenManager geometry (virtual screen aware) with physical fallback
+            auto* mgr = ScreenManager::instance();
+            const QString sid = Utils::screenIdentifier(screen);
+            QRect vsGeom = mgr ? mgr->screenGeometry(sid) : QRect();
+            const QRect screenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
+
+            // Only use setGeometry for physical screens; virtual screens are positioned
+            // by LayerShellQt margins and setGeometry would cause double-offset rendering.
+            if (screenGeom == screen->geometry()) {
+                m_shaderPreviewWindow->setGeometry(x, y, width, height);
+            } else {
+                m_shaderPreviewWindow->setWidth(width);
+                m_shaderPreviewWindow->setHeight(height);
+            }
+
             if (auto* layerWindow = LayerShellQt::Window::get(m_shaderPreviewWindow)) {
-                // Use ScreenManager geometry (virtual screen aware) with physical fallback
-                auto* mgr = ScreenManager::instance();
-                const QString sid = Utils::screenIdentifier(screen);
-                QRect vsGeom = mgr ? mgr->screenGeometry(sid) : QRect();
-                const QRect screenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
                 const int localX = x - screenGeom.x();
                 const int localY = y - screenGeom.y();
                 layerWindow->setMargins(QMargins(localX, localY, 0, 0));

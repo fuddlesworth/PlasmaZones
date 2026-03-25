@@ -452,10 +452,12 @@ QString buildEmptyZonesJson(Layout* layout, const QString& screenId, QScreen* ph
             obj[JsonKeys::BorderColor] = zone->borderColor().name(QColor::HexArgb);
             obj[JsonKeys::ActiveOpacity] = zone->activeOpacity();
             obj[JsonKeys::InactiveOpacity] = zone->inactiveOpacity();
-            obj[JsonKeys::BorderWidth] =
-                zone->useCustomColors() ? zone->borderWidth() : (settings ? settings->borderWidth() : 2);
-            obj[JsonKeys::BorderRadius] =
-                zone->useCustomColors() ? zone->borderRadius() : (settings ? settings->borderRadius() : 4);
+            obj[JsonKeys::BorderWidth] = zone->useCustomColors()
+                ? zone->borderWidth()
+                : (settings ? settings->borderWidth() : Defaults::BorderWidth);
+            obj[JsonKeys::BorderRadius] = zone->useCustomColors()
+                ? zone->borderRadius()
+                : (settings ? settings->borderRadius() : Defaults::BorderRadius);
             arr.append(obj);
         }
         return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));

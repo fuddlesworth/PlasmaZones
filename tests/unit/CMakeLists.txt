@@ -118,6 +118,15 @@ target_link_libraries(test_settings_perscreen PRIVATE Qt6::Test Qt6::Core plasma
 add_test(NAME test_settings_perscreen COMMAND test_settings_perscreen)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# config/ — Virtual Screen Settings Tests (save/load round-trip, staged flow)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_settings_virtualscreen config/test_settings_virtualscreen.cpp)
+target_link_libraries(test_settings_virtualscreen PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_settings_virtualscreen COMMAND test_settings_virtualscreen)
+
+pz_add_test(test_virtualscreen_staged config/test_virtualscreen_staged.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # config/ — ConfigDefaults Tests (standalone, no external dependency)
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_configdefaults config/test_configdefaults.cpp)
@@ -224,6 +233,7 @@ set(_all_tests
     test_geometry_utils_minsizes test_geometry_utils_overlaps test_geometry_utils_bsp
     test_geometry_utils_serialization test_wts_clearfloat test_snap_engine
     test_settings_core test_settings_validation test_settings_perscreen
+    test_settings_virtualscreen test_virtualscreen_staged
     test_configdefaults
     test_layout_core test_layout_zones
     test_layoutmanager_persistence test_layoutmanager_cycling test_layoutmanager_assignment

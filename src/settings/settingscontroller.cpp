@@ -193,6 +193,19 @@ void SettingsController::save()
         m_stagedTilingQuickSlots.clear();
     }
 
+    // Flush staged virtual screen configurations to daemon BEFORE notifyReload
+    // so that virtual screen IDs exist when assignments referencing them are processed.
+    if (!m_stagedVirtualScreenConfigs.isEmpty()) {
+        for (auto it = m_stagedVirtualScreenConfigs.constBegin(); it != m_stagedVirtualScreenConfigs.constEnd(); ++it) {
+            if (it.value().isEmpty()) {
+                removeVirtualScreenConfig(it.key());
+            } else {
+                applyVirtualScreenConfig(it.key(), it.value());
+            }
+        }
+        m_stagedVirtualScreenConfigs.clear();
+    }
+
     // Notify daemon to reload KConfig settings (before D-Bus assignment mutations)
     DaemonDBus::notifyReload();
 
@@ -211,18 +224,6 @@ void SettingsController::save()
         flushStagedAssignments();
         DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("applyAssignmentChanges"));
         DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setSaveBatchMode"), {false});
-    }
-
-    // Flush staged virtual screen configurations to daemon
-    if (!m_stagedVirtualScreenConfigs.isEmpty()) {
-        for (auto it = m_stagedVirtualScreenConfigs.constBegin(); it != m_stagedVirtualScreenConfigs.constEnd(); ++it) {
-            if (it.value().isEmpty()) {
-                removeVirtualScreenConfig(it.key());
-            } else {
-                applyVirtualScreenConfig(it.key(), it.value());
-            }
-        }
-        m_stagedVirtualScreenConfigs.clear();
     }
 
     // Safe to clear immediately: notifyReload() is synchronous, so the daemon

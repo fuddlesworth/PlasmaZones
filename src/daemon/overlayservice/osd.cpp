@@ -282,7 +282,7 @@ void OverlayService::warmUpLayoutOsd()
                 }
             } else {
                 if (!m_layoutOsdWindows.contains(physId)) {
-                    QRect geom = mgr2->screenGeometry(physId);
+                    QRect geom = mgr2 ? mgr2->screenGeometry(physId) : screen->geometry();
                     if (!geom.isValid()) {
                         geom = screen->geometry();
                     }

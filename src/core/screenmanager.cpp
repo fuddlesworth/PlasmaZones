@@ -423,6 +423,10 @@ void ScreenManager::onScreenRemoved(QScreen* screen)
         return;
     }
 
+    // Invalidate virtual geometry cache before the screen pointer becomes invalid
+    QString physId = Utils::screenIdentifier(screen);
+    invalidateVirtualGeometryCache(physId);
+
     destroyGeometrySensor(screen);
     disconnectScreenSignals(screen);
     m_trackedScreens.removeAll(screen);

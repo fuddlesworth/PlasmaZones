@@ -1719,7 +1719,9 @@ QString PlasmaZonesEffect::resolveEffectiveScreenId(const QPoint& pos, const KWi
         return physId; // No subdivisions, return physical ID
     }
 
-    // Find which virtual screen contains the point
+    // Find which virtual screen contains the point.
+    // Edge-consistent rounding in geometry calculation guarantees no gaps
+    // between abutting virtual screens, so QRect::contains is sufficient.
     for (const auto& vs : *it) {
         if (vs.geometry.contains(pos)) {
             return vs.id;
@@ -1777,9 +1779,13 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                     qreal ry = region.value(QStringLiteral("y")).toDouble();
                     qreal rw = region.value(QStringLiteral("width")).toDouble();
                     qreal rh = region.value(QStringLiteral("height")).toDouble();
-                    def.geometry = QRect(physGeom.x() + qRound(rx * physGeom.width()),
-                                         physGeom.y() + qRound(ry * physGeom.height()), qRound(rw * physGeom.width()),
-                                         qRound(rh * physGeom.height()));
+                    // Edge-consistent rounding: compute edges then derive width/height
+                    // to avoid 1px gaps between abutting virtual screens
+                    int left = physGeom.x() + qRound(rx * physGeom.width());
+                    int top = physGeom.y() + qRound(ry * physGeom.height());
+                    int right = physGeom.x() + qRound((rx + rw) * physGeom.width());
+                    int bottom = physGeom.y() + qRound((ry + rh) * physGeom.height());
+                    def.geometry = QRect(left, top, right - left, bottom - top);
                     break;
                 }
             }
