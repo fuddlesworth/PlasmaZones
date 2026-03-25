@@ -9,15 +9,18 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
-    readonly property int paddingMax: 50
+    readonly property int paddingMax: settingsController.gapMax
     // Zone selector constants (consumed by ZoneSelectorSection via constants property)
     readonly property int sliderValueLabelWidth: Kirigami.Units.gridUnit * 3
-    readonly property int zoneSelectorTriggerMax: 200
-    readonly property int zoneSelectorPreviewWidthMin: 80
-    readonly property int zoneSelectorPreviewWidthMax: 400
-    readonly property int zoneSelectorPreviewHeightMin: 60
-    readonly property int zoneSelectorPreviewHeightMax: 300
-    readonly property int zoneSelectorGridColumnsMax: 10
+    readonly property int zoneSelectorTriggerMax: settingsController.zoneSelectorTriggerDistanceMax
+    readonly property int zoneSelectorPreviewWidthMin: settingsController.zoneSelectorPreviewWidthMin
+    readonly property int zoneSelectorPreviewWidthMax: settingsController.zoneSelectorPreviewWidthMax
+    readonly property int zoneSelectorPreviewHeightMin: settingsController.zoneSelectorPreviewHeightMin
+    readonly property int zoneSelectorPreviewHeightMax: settingsController.zoneSelectorPreviewHeightMax
+    readonly property int zoneSelectorGridColumnsMax: settingsController.zoneSelectorGridColumnsMax
+    readonly property int zoneSelectorTriggerMin: settingsController.zoneSelectorTriggerDistanceMin
+    readonly property int zoneSelectorGridColumnsMin: settingsController.zoneSelectorGridColumnsMin
+    readonly property int zoneSelectorMaxRowsMin: settingsController.zoneSelectorMaxRowsMin
     readonly property real screenAspectRatio: Screen.width > 0 && Screen.height > 0 ? (Screen.width / Screen.height) : (16 / 9)
     // Per-screen snapping gap/padding helper
     property alias selectedSnappingScreenName: snappingHelper.selectedScreenName
@@ -91,7 +94,7 @@ Flickable {
                 contentItem: Kirigami.FormLayout {
                     SettingsSpinBox {
                         formLabel: i18n("Zone padding:")
-                        from: 0
+                        from: settingsController.gapMin
                         to: root.paddingMax
                         value: root.snappingSettingValue("ZonePadding", appSettings.zonePadding)
                         onValueModified: (value) => {

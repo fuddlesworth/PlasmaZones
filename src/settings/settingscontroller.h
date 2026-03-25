@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include "../config/configdefaults.h"
 #include "../config/settings.h"
 #include "../config/updatechecker.h"
 #include "../common/daemoncontroller.h"
@@ -82,6 +83,44 @@ class SettingsController : public QObject
 
     // Cava detection
     Q_PROPERTY(bool cavaAvailable READ cavaAvailable CONSTANT)
+
+    // Settings bounds (single source of truth from ConfigDefaults)
+    Q_PROPERTY(int borderWidthMax READ borderWidthMax CONSTANT)
+    Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
+    Q_PROPERTY(int gapMax READ gapMax CONSTANT)
+    Q_PROPERTY(int adjacentThresholdMax READ adjacentThresholdMax CONSTANT)
+    Q_PROPERTY(int zoneSelectorTriggerDistanceMin READ zoneSelectorTriggerDistanceMin CONSTANT)
+    Q_PROPERTY(int zoneSelectorTriggerDistanceMax READ zoneSelectorTriggerDistanceMax CONSTANT)
+    Q_PROPERTY(int zoneSelectorPreviewWidthMin READ zoneSelectorPreviewWidthMin CONSTANT)
+    Q_PROPERTY(int zoneSelectorPreviewWidthMax READ zoneSelectorPreviewWidthMax CONSTANT)
+    Q_PROPERTY(int zoneSelectorPreviewHeightMin READ zoneSelectorPreviewHeightMin CONSTANT)
+    Q_PROPERTY(int zoneSelectorPreviewHeightMax READ zoneSelectorPreviewHeightMax CONSTANT)
+    Q_PROPERTY(int zoneSelectorGridColumnsMax READ zoneSelectorGridColumnsMax CONSTANT)
+    Q_PROPERTY(int shaderFrameRateMin READ shaderFrameRateMin CONSTANT)
+    Q_PROPERTY(int shaderFrameRateMax READ shaderFrameRateMax CONSTANT)
+    Q_PROPERTY(int audioSpectrumBarCountMin READ audioSpectrumBarCountMin CONSTANT)
+    Q_PROPERTY(int audioSpectrumBarCountMax READ audioSpectrumBarCountMax CONSTANT)
+    Q_PROPERTY(int autotileGapMax READ autotileGapMax CONSTANT)
+    Q_PROPERTY(int autotileBorderWidthMax READ autotileBorderWidthMax CONSTANT)
+    Q_PROPERTY(int autotileBorderRadiusMax READ autotileBorderRadiusMax CONSTANT)
+    Q_PROPERTY(int animationDurationMin READ animationDurationMin CONSTANT)
+    Q_PROPERTY(int animationDurationMax READ animationDurationMax CONSTANT)
+    Q_PROPERTY(int animationMinDistanceMax READ animationMinDistanceMax CONSTANT)
+    Q_PROPERTY(int animationStaggerIntervalMin READ animationStaggerIntervalMin CONSTANT)
+    Q_PROPERTY(int animationStaggerIntervalMax READ animationStaggerIntervalMax CONSTANT)
+    Q_PROPERTY(int borderWidthMin READ borderWidthMin CONSTANT)
+    Q_PROPERTY(int borderRadiusMin READ borderRadiusMin CONSTANT)
+    Q_PROPERTY(int gapMin READ gapMin CONSTANT)
+    Q_PROPERTY(int adjacentThresholdMin READ adjacentThresholdMin CONSTANT)
+    Q_PROPERTY(int autotileGapMin READ autotileGapMin CONSTANT)
+    Q_PROPERTY(int autotileBorderWidthMin READ autotileBorderWidthMin CONSTANT)
+    Q_PROPERTY(int autotileBorderRadiusMin READ autotileBorderRadiusMin CONSTANT)
+    Q_PROPERTY(int autotileMaxWindowsMin READ autotileMaxWindowsMin CONSTANT)
+    Q_PROPERTY(int autotileMasterCountMin READ autotileMasterCountMin CONSTANT)
+    Q_PROPERTY(qreal autotileSplitRatioMin READ autotileSplitRatioMin CONSTANT)
+    Q_PROPERTY(int animationMinDistanceMin READ animationMinDistanceMin CONSTANT)
+    Q_PROPERTY(int zoneSelectorGridColumnsMin READ zoneSelectorGridColumnsMin CONSTANT)
+    Q_PROPERTY(int zoneSelectorMaxRowsMin READ zoneSelectorMaxRowsMin CONSTANT)
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
@@ -293,6 +332,152 @@ public:
 
     // ── Cava detection ───────────────────────────────────────────────────────
     bool cavaAvailable() const;
+
+    // ── Settings bounds accessors (ConfigDefaults single source of truth) ────
+    int borderWidthMax() const
+    {
+        return ConfigDefaults::borderWidthMax();
+    }
+    int borderRadiusMax() const
+    {
+        return ConfigDefaults::borderRadiusMax();
+    }
+    int gapMax() const
+    {
+        return ConfigDefaults::outerGapMax();
+    } // Shared max for padding + outer gaps
+    int adjacentThresholdMax() const
+    {
+        return ConfigDefaults::adjacentThresholdMax();
+    }
+    int zoneSelectorTriggerDistanceMin() const
+    {
+        return ConfigDefaults::triggerDistanceMin();
+    }
+    int zoneSelectorTriggerDistanceMax() const
+    {
+        return ConfigDefaults::triggerDistanceMax();
+    }
+    int zoneSelectorPreviewWidthMin() const
+    {
+        return ConfigDefaults::previewWidthMin();
+    }
+    int zoneSelectorPreviewWidthMax() const
+    {
+        return ConfigDefaults::previewWidthMax();
+    }
+    int zoneSelectorPreviewHeightMin() const
+    {
+        return ConfigDefaults::previewHeightMin();
+    }
+    int zoneSelectorPreviewHeightMax() const
+    {
+        return ConfigDefaults::previewHeightMax();
+    }
+    int zoneSelectorGridColumnsMax() const
+    {
+        return ConfigDefaults::gridColumnsMax();
+    }
+    int shaderFrameRateMin() const
+    {
+        return ConfigDefaults::shaderFrameRateMin();
+    }
+    int shaderFrameRateMax() const
+    {
+        return ConfigDefaults::shaderFrameRateMax();
+    }
+    int audioSpectrumBarCountMin() const
+    {
+        return ConfigDefaults::audioSpectrumBarCountMin();
+    }
+    int audioSpectrumBarCountMax() const
+    {
+        return ConfigDefaults::audioSpectrumBarCountMax();
+    }
+    int autotileGapMax() const
+    {
+        return ConfigDefaults::autotileOuterGapMax();
+    } // Shared max for inner + outer gaps
+    int autotileBorderWidthMax() const
+    {
+        return ConfigDefaults::autotileBorderWidthMax();
+    }
+    int autotileBorderRadiusMax() const
+    {
+        return ConfigDefaults::autotileBorderRadiusMax();
+    }
+    int animationDurationMin() const
+    {
+        return ConfigDefaults::animationDurationMin();
+    }
+    int animationDurationMax() const
+    {
+        return ConfigDefaults::animationDurationMax();
+    }
+    int animationMinDistanceMax() const
+    {
+        return ConfigDefaults::animationMinDistanceMax();
+    }
+    int animationStaggerIntervalMin() const
+    {
+        return ConfigDefaults::animationStaggerIntervalMin();
+    }
+    int animationStaggerIntervalMax() const
+    {
+        return ConfigDefaults::animationStaggerIntervalMax();
+    }
+    int borderWidthMin() const
+    {
+        return ConfigDefaults::borderWidthMin();
+    }
+    int borderRadiusMin() const
+    {
+        return ConfigDefaults::borderRadiusMin();
+    }
+    int gapMin() const
+    {
+        return ConfigDefaults::outerGapMin();
+    }
+    int adjacentThresholdMin() const
+    {
+        return ConfigDefaults::adjacentThresholdMin();
+    }
+    int autotileGapMin() const
+    {
+        return ConfigDefaults::autotileOuterGapMin();
+    }
+    int autotileBorderWidthMin() const
+    {
+        return ConfigDefaults::autotileBorderWidthMin();
+    }
+    int autotileBorderRadiusMin() const
+    {
+        return ConfigDefaults::autotileBorderRadiusMin();
+    }
+    int autotileMaxWindowsMin() const
+    {
+        return ConfigDefaults::autotileMaxWindowsMin();
+    }
+    int autotileMasterCountMin() const
+    {
+        return ConfigDefaults::autotileMasterCountMin();
+    }
+    qreal autotileSplitRatioMin() const
+    {
+        return ConfigDefaults::autotileSplitRatioMin();
+    }
+    int animationMinDistanceMin() const
+    {
+        return ConfigDefaults::animationMinDistanceMin();
+    }
+    int zoneSelectorGridColumnsMin() const
+    {
+        return ConfigDefaults::gridColumnsMin();
+    }
+    int zoneSelectorMaxRowsMin() const
+    {
+        return ConfigDefaults::maxRowsMin();
+    }
 
     // ── Color import ─────────────────────────────────────────────────────────
     Q_INVOKABLE void loadColorsFromPywal();

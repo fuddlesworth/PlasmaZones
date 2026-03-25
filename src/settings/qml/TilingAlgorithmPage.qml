@@ -9,7 +9,7 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
-    readonly property int gapMax: 50
+    readonly property int gapMax: settingsController.autotileGapMax
     readonly property int algorithmPreviewWidth: Kirigami.Units.gridUnit * 18
     readonly property int algorithmPreviewHeight: Kirigami.Units.gridUnit * 10
     // Per-screen override helper
@@ -67,7 +67,7 @@ Flickable {
             contentItem: Kirigami.FormLayout {
                 SettingsSpinBox {
                     formLabel: i18n("Inner gap:")
-                    from: 0
+                    from: settingsController.autotileGapMin
                     to: root.gapMax
                     value: root.settingValue("InnerGap", appSettings.autotileInnerGap)
                     tooltipText: i18n("Gap between tiled windows")
@@ -339,7 +339,7 @@ Flickable {
                         id: previewWindowSlider
 
                         Layout.fillWidth: true
-                        from: 1
+                        from: settingsController.autotileMaxWindowsMin
                         to: 12
                         stepSize: 1
                         formatValue: function(v) {
@@ -386,7 +386,7 @@ Flickable {
                         id: splitRatioSlider
 
                         Layout.fillWidth: true
-                        from: 0.1
+                        from: settingsController.autotileSplitRatioMin
                         to: 0.9
                         stepSize: 0.05
                         formatValue: function(v) {
@@ -425,7 +425,7 @@ Flickable {
                         SpinBox {
                             id: masterCountSpinBox
 
-                            from: 1
+                            from: settingsController.autotileMasterCountMin
                             to: 5
                             onValueModified: {
                                 if (root.effectiveAlgorithm === "centered-master")

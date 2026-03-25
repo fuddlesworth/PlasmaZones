@@ -180,12 +180,15 @@ void Settings::load()
         m_enableShaderEffects =
             shaders->readBool(QStringLiteral("EnableShaderEffects"), ConfigDefaults::enableShaderEffects());
         m_shaderFrameRate =
-            qBound(30, shaders->readInt(QStringLiteral("ShaderFrameRate"), ConfigDefaults::shaderFrameRate()), 144);
+            qBound(ConfigDefaults::shaderFrameRateMin(),
+                   shaders->readInt(QStringLiteral("ShaderFrameRate"), ConfigDefaults::shaderFrameRate()),
+                   ConfigDefaults::shaderFrameRateMax());
         m_enableAudioVisualizer =
             shaders->readBool(QStringLiteral("EnableAudioVisualizer"), ConfigDefaults::enableAudioVisualizer());
-        m_audioSpectrumBarCount = qBound(
-            16, shaders->readInt(QStringLiteral("AudioSpectrumBarCount"), ConfigDefaults::audioSpectrumBarCount()),
-            256);
+        m_audioSpectrumBarCount =
+            qBound(ConfigDefaults::audioSpectrumBarCountMin(),
+                   shaders->readInt(QStringLiteral("AudioSpectrumBarCount"), ConfigDefaults::audioSpectrumBarCount()),
+                   ConfigDefaults::audioSpectrumBarCountMax());
     }
 
     {

@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# KGlobalAccel component desktop file — provides the display name and icon
+# shown in System Settings > Shortcuts for the PlasmaZones daemon.
+# The filename must match QCoreApplication::applicationName() ("plasmazonesd").
+
+[Desktop Entry]
+Type=Application
+Name=PlasmaZones
+Icon=plasmazones

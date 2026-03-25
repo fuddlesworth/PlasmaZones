@@ -190,7 +190,7 @@ ColumnLayout {
                                 id: triggerSlider
 
                                 Layout.fillWidth: true
-                                from: 10
+                                from: root.constants.zoneSelectorTriggerMin
                                 to: root.constants.zoneSelectorTriggerMax
                                 stepSize: 10
                                 Accessible.name: i18n("Trigger distance")
@@ -263,7 +263,7 @@ ColumnLayout {
 
                 SettingsSpinBox {
                     formLabel: i18n("Grid columns:")
-                    from: 1
+                    from: root.constants.zoneSelectorGridColumnsMin
                     to: root.constants.zoneSelectorGridColumnsMax
                     value: root.effectiveGridColumns
                     visible: root.effectiveLayoutMode === 0
@@ -277,7 +277,7 @@ ColumnLayout {
 
                 SettingsSpinBox {
                     formLabel: i18n("Max visible rows:")
-                    from: 1
+                    from: root.constants.zoneSelectorMaxRowsMin
                     to: 10
                     value: root.effectiveMaxRows
                     visible: root.effectiveLayoutMode === 0

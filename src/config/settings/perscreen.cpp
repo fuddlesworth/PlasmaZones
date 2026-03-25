@@ -3,6 +3,7 @@
 
 #include "../settings.h"
 #include "../configbackend_qsettings.h"
+#include "../configdefaults.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 
@@ -93,18 +94,23 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
 
     if (k == QLatin1String("SplitRatio")) {
         double v = value.toDouble();
-        return QVariant(qBound(AutotileDefaults::MinSplitRatio, v, AutotileDefaults::MaxSplitRatio));
+        return QVariant(qBound(ConfigDefaults::autotileSplitRatioMin(), v, ConfigDefaults::autotileSplitRatioMax()));
     }
     if (k == QLatin1String("MasterCount"))
-        return QVariant(qBound(AutotileDefaults::MinMasterCount, value.toInt(), AutotileDefaults::MaxMasterCount));
-    if (k == QLatin1String("InnerGap") || k == QLatin1String("OuterGap"))
-        return QVariant(qBound(AutotileDefaults::MinGap, value.toInt(), AutotileDefaults::MaxGap));
-    if (k.startsWith(QLatin1String("OuterGap")))
-        return QVariant(qBound(AutotileDefaults::MinGap, value.toInt(), AutotileDefaults::MaxGap));
+        return QVariant(
+            qBound(ConfigDefaults::autotileMasterCountMin(), value.toInt(), ConfigDefaults::autotileMasterCountMax()));
+    if (k == QLatin1String("InnerGap"))
+        return QVariant(
+            qBound(ConfigDefaults::autotileInnerGapMin(), value.toInt(), ConfigDefaults::autotileInnerGapMax()));
+    if (k == QLatin1String("OuterGap") || k.startsWith(QLatin1String("OuterGap")))
+        return QVariant(
+            qBound(ConfigDefaults::autotileOuterGapMin(), value.toInt(), ConfigDefaults::autotileOuterGapMax()));
     if (k == QLatin1String("MaxWindows"))
-        return QVariant(qBound(AutotileDefaults::MinMaxWindows, value.toInt(), AutotileDefaults::MaxMaxWindows));
+        return QVariant(
+            qBound(ConfigDefaults::autotileMaxWindowsMin(), value.toInt(), ConfigDefaults::autotileMaxWindowsMax()));
     if (k == QLatin1String("InsertPosition"))
-        return QVariant(qBound(0, value.toInt(), 2));
+        return QVariant(qBound(ConfigDefaults::autotileInsertPositionMin(), value.toInt(),
+                               ConfigDefaults::autotileInsertPositionMax()));
     if (k == QLatin1String("Algorithm") || key == QLatin1String("AnimationEasingCurve"))
         return value;
     if (k == QLatin1String("UsePerSideOuterGap") || k == QLatin1String("FocusNewWindows")
@@ -113,14 +119,15 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
         || key == QLatin1String("AnimationsEnabled"))
         return QVariant(value.toBool());
     if (key == QLatin1String("AnimationDuration"))
-        return QVariant(qBound(50, value.toInt(), 500));
+        return QVariant(
+            qBound(ConfigDefaults::animationDurationMin(), value.toInt(), ConfigDefaults::animationDurationMax()));
     return QVariant();
 }
 
 QVariant readPerScreenAutotileEntry(QSettingsConfigGroup& group, const QString& key)
 {
     if (key == QLatin1String("AutotileSplitRatio"))
-        return QVariant(group.readDouble(key, AutotileDefaults::DefaultSplitRatio));
+        return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatio()));
     if (key == QLatin1String("AutotileAlgorithm") || key == QLatin1String("AnimationEasingCurve"))
         return QVariant(group.readString(key));
     if (key == QLatin1String("AutotileUsePerSideOuterGap") || key == QLatin1String("AutotileFocusNewWindows")

@@ -10,7 +10,7 @@ Flickable {
     id: root
 
     readonly property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
-    readonly property int thresholdMax: 500
+    readonly property int thresholdMax: settingsController.adjacentThresholdMax
 
     contentHeight: content.implicitHeight
     clip: true
@@ -122,7 +122,7 @@ Flickable {
                         formLabel: i18n("Edge threshold:")
                         enabled: zoneSpanEnabledCheck.checked
                         opacity: enabled ? 1 : 0.4
-                        from: 5
+                        from: settingsController.adjacentThresholdMin
                         to: root.thresholdMax
                         value: appSettings.adjacentThreshold
                         tooltipText: i18n("Distance from zone edge for multi-zone selection")

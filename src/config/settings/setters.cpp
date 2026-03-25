@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../settings.h"
+#include "../configdefaults.h"
 #include "macros.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
@@ -224,36 +225,52 @@ SETTINGS_SETTER(const QColor&, InactiveColor, m_inactiveColor, inactiveColorChan
 SETTINGS_SETTER(const QColor&, BorderColor, m_borderColor, borderColorChanged)
 SETTINGS_SETTER(const QColor&, LabelFontColor, m_labelFontColor, labelFontColorChanged)
 
-SETTINGS_SETTER_CLAMPED_QREAL(ActiveOpacity, m_activeOpacity, activeOpacityChanged, 0.0, 1.0)
-SETTINGS_SETTER_CLAMPED_QREAL(InactiveOpacity, m_inactiveOpacity, inactiveOpacityChanged, 0.0, 1.0)
+SETTINGS_SETTER_CLAMPED_QREAL(ActiveOpacity, m_activeOpacity, activeOpacityChanged, ConfigDefaults::activeOpacityMin(),
+                              ConfigDefaults::activeOpacityMax())
+SETTINGS_SETTER_CLAMPED_QREAL(InactiveOpacity, m_inactiveOpacity, inactiveOpacityChanged,
+                              ConfigDefaults::inactiveOpacityMin(), ConfigDefaults::inactiveOpacityMax())
 
-SETTINGS_SETTER_CLAMPED(BorderWidth, m_borderWidth, borderWidthChanged, 0, 10)
-SETTINGS_SETTER_CLAMPED(BorderRadius, m_borderRadius, borderRadiusChanged, 0, 50)
+SETTINGS_SETTER_CLAMPED(BorderWidth, m_borderWidth, borderWidthChanged, ConfigDefaults::borderWidthMin(),
+                        ConfigDefaults::borderWidthMax())
+SETTINGS_SETTER_CLAMPED(BorderRadius, m_borderRadius, borderRadiusChanged, ConfigDefaults::borderRadiusMin(),
+                        ConfigDefaults::borderRadiusMax())
 
 SETTINGS_SETTER(bool, EnableBlur, m_enableBlur, enableBlurChanged)
 SETTINGS_SETTER(const QString&, LabelFontFamily, m_labelFontFamily, labelFontFamilyChanged)
-SETTINGS_SETTER_CLAMPED(LabelFontWeight, m_labelFontWeight, labelFontWeightChanged, 100, 900)
+SETTINGS_SETTER_CLAMPED(LabelFontWeight, m_labelFontWeight, labelFontWeightChanged,
+                        ConfigDefaults::labelFontWeightMin(), ConfigDefaults::labelFontWeightMax())
 SETTINGS_SETTER(bool, LabelFontItalic, m_labelFontItalic, labelFontItalicChanged)
 SETTINGS_SETTER(bool, LabelFontUnderline, m_labelFontUnderline, labelFontUnderlineChanged)
 SETTINGS_SETTER(bool, LabelFontStrikeout, m_labelFontStrikeout, labelFontStrikeoutChanged)
 
-SETTINGS_SETTER_CLAMPED_QREAL(LabelFontSizeScale, m_labelFontSizeScale, labelFontSizeScaleChanged, 0.25, 3.0)
+SETTINGS_SETTER_CLAMPED_QREAL(LabelFontSizeScale, m_labelFontSizeScale, labelFontSizeScaleChanged,
+                              ConfigDefaults::labelFontSizeScaleMin(), ConfigDefaults::labelFontSizeScaleMax())
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Zone geometry setters
 // ═══════════════════════════════════════════════════════════════════════════════
 
-SETTINGS_SETTER_CLAMPED(ZonePadding, m_zonePadding, zonePaddingChanged, 0, Defaults::MaxGap)
-SETTINGS_SETTER_CLAMPED(OuterGap, m_outerGap, outerGapChanged, 0, Defaults::MaxGap)
+SETTINGS_SETTER_CLAMPED(ZonePadding, m_zonePadding, zonePaddingChanged, ConfigDefaults::zonePaddingMin(),
+                        ConfigDefaults::zonePaddingMax())
+SETTINGS_SETTER_CLAMPED(OuterGap, m_outerGap, outerGapChanged, ConfigDefaults::outerGapMin(),
+                        ConfigDefaults::outerGapMax())
 SETTINGS_SETTER(bool, UsePerSideOuterGap, m_usePerSideOuterGap, usePerSideOuterGapChanged)
-SETTINGS_SETTER_CLAMPED(OuterGapTop, m_outerGapTop, outerGapTopChanged, 0, Defaults::MaxGap)
-SETTINGS_SETTER_CLAMPED(OuterGapBottom, m_outerGapBottom, outerGapBottomChanged, 0, Defaults::MaxGap)
-SETTINGS_SETTER_CLAMPED(OuterGapLeft, m_outerGapLeft, outerGapLeftChanged, 0, Defaults::MaxGap)
-SETTINGS_SETTER_CLAMPED(OuterGapRight, m_outerGapRight, outerGapRightChanged, 0, Defaults::MaxGap)
-SETTINGS_SETTER_CLAMPED(AdjacentThreshold, m_adjacentThreshold, adjacentThresholdChanged, 5, 100)
-SETTINGS_SETTER_CLAMPED(PollIntervalMs, m_pollIntervalMs, pollIntervalMsChanged, 10, 1000)
-SETTINGS_SETTER_CLAMPED(MinimumZoneSizePx, m_minimumZoneSizePx, minimumZoneSizePxChanged, 50, 500)
-SETTINGS_SETTER_CLAMPED(MinimumZoneDisplaySizePx, m_minimumZoneDisplaySizePx, minimumZoneDisplaySizePxChanged, 1, 50)
+SETTINGS_SETTER_CLAMPED(OuterGapTop, m_outerGapTop, outerGapTopChanged, ConfigDefaults::outerGapTopMin(),
+                        ConfigDefaults::outerGapTopMax())
+SETTINGS_SETTER_CLAMPED(OuterGapBottom, m_outerGapBottom, outerGapBottomChanged, ConfigDefaults::outerGapBottomMin(),
+                        ConfigDefaults::outerGapBottomMax())
+SETTINGS_SETTER_CLAMPED(OuterGapLeft, m_outerGapLeft, outerGapLeftChanged, ConfigDefaults::outerGapLeftMin(),
+                        ConfigDefaults::outerGapLeftMax())
+SETTINGS_SETTER_CLAMPED(OuterGapRight, m_outerGapRight, outerGapRightChanged, ConfigDefaults::outerGapRightMin(),
+                        ConfigDefaults::outerGapRightMax())
+SETTINGS_SETTER_CLAMPED(AdjacentThreshold, m_adjacentThreshold, adjacentThresholdChanged,
+                        ConfigDefaults::adjacentThresholdMin(), ConfigDefaults::adjacentThresholdMax())
+SETTINGS_SETTER_CLAMPED(PollIntervalMs, m_pollIntervalMs, pollIntervalMsChanged, ConfigDefaults::pollIntervalMsMin(),
+                        ConfigDefaults::pollIntervalMsMax())
+SETTINGS_SETTER_CLAMPED(MinimumZoneSizePx, m_minimumZoneSizePx, minimumZoneSizePxChanged,
+                        ConfigDefaults::minimumZoneSizePxMin(), ConfigDefaults::minimumZoneSizePxMax())
+SETTINGS_SETTER_CLAMPED(MinimumZoneDisplaySizePx, m_minimumZoneDisplaySizePx, minimumZoneDisplaySizePxChanged,
+                        ConfigDefaults::minimumZoneDisplaySizePxMin(), ConfigDefaults::minimumZoneDisplaySizePxMax())
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Behavior setters
@@ -305,8 +322,10 @@ void Settings::setFilterLayoutsByAspectRatio(bool filter)
 SETTINGS_SETTER(const QStringList&, ExcludedApplications, m_excludedApplications, excludedApplicationsChanged)
 SETTINGS_SETTER(const QStringList&, ExcludedWindowClasses, m_excludedWindowClasses, excludedWindowClassesChanged)
 SETTINGS_SETTER(bool, ExcludeTransientWindows, m_excludeTransientWindows, excludeTransientWindowsChanged)
-SETTINGS_SETTER_CLAMPED(MinimumWindowWidth, m_minimumWindowWidth, minimumWindowWidthChanged, 0, 2000)
-SETTINGS_SETTER_CLAMPED(MinimumWindowHeight, m_minimumWindowHeight, minimumWindowHeightChanged, 0, 2000)
+SETTINGS_SETTER_CLAMPED(MinimumWindowWidth, m_minimumWindowWidth, minimumWindowWidthChanged,
+                        ConfigDefaults::minimumWindowWidthMin(), ConfigDefaults::minimumWindowWidthMax())
+SETTINGS_SETTER_CLAMPED(MinimumWindowHeight, m_minimumWindowHeight, minimumWindowHeightChanged,
+                        ConfigDefaults::minimumWindowHeightMin(), ConfigDefaults::minimumWindowHeightMax())
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Zone Selector setters
@@ -314,7 +333,7 @@ SETTINGS_SETTER_CLAMPED(MinimumWindowHeight, m_minimumWindowHeight, minimumWindo
 
 SETTINGS_SETTER(bool, ZoneSelectorEnabled, m_zoneSelectorEnabled, zoneSelectorEnabledChanged)
 SETTINGS_SETTER_CLAMPED(ZoneSelectorTriggerDistance, m_zoneSelectorTriggerDistance, zoneSelectorTriggerDistanceChanged,
-                        10, 200)
+                        ConfigDefaults::triggerDistanceMin(), ConfigDefaults::triggerDistanceMax())
 SETTINGS_SETTER(ZoneSelectorPosition, ZoneSelectorPosition, m_zoneSelectorPosition, zoneSelectorPositionChanged)
 
 void Settings::setZoneSelectorPositionInt(int position)
@@ -330,17 +349,20 @@ SETTINGS_SETTER(ZoneSelectorLayoutMode, ZoneSelectorLayoutMode, m_zoneSelectorLa
 SETTINGS_SETTER_ENUM_INT(ZoneSelectorLayoutMode, ZoneSelectorLayoutMode, 0,
                          static_cast<int>(ZoneSelectorLayoutMode::Vertical))
 
-SETTINGS_SETTER_CLAMPED(ZoneSelectorPreviewWidth, m_zoneSelectorPreviewWidth, zoneSelectorPreviewWidthChanged, 80, 400)
-SETTINGS_SETTER_CLAMPED(ZoneSelectorPreviewHeight, m_zoneSelectorPreviewHeight, zoneSelectorPreviewHeightChanged, 60,
-                        300)
+SETTINGS_SETTER_CLAMPED(ZoneSelectorPreviewWidth, m_zoneSelectorPreviewWidth, zoneSelectorPreviewWidthChanged,
+                        ConfigDefaults::previewWidthMin(), ConfigDefaults::previewWidthMax())
+SETTINGS_SETTER_CLAMPED(ZoneSelectorPreviewHeight, m_zoneSelectorPreviewHeight, zoneSelectorPreviewHeightChanged,
+                        ConfigDefaults::previewHeightMin(), ConfigDefaults::previewHeightMax())
 SETTINGS_SETTER(bool, ZoneSelectorPreviewLockAspect, m_zoneSelectorPreviewLockAspect,
                 zoneSelectorPreviewLockAspectChanged)
-SETTINGS_SETTER_CLAMPED(ZoneSelectorGridColumns, m_zoneSelectorGridColumns, zoneSelectorGridColumnsChanged, 1, 10)
+SETTINGS_SETTER_CLAMPED(ZoneSelectorGridColumns, m_zoneSelectorGridColumns, zoneSelectorGridColumnsChanged,
+                        ConfigDefaults::gridColumnsMin(), ConfigDefaults::gridColumnsMax())
 SETTINGS_SETTER(ZoneSelectorSizeMode, ZoneSelectorSizeMode, m_zoneSelectorSizeMode, zoneSelectorSizeModeChanged)
 
 SETTINGS_SETTER_ENUM_INT(ZoneSelectorSizeMode, ZoneSelectorSizeMode, 0, static_cast<int>(ZoneSelectorSizeMode::Manual))
 
-SETTINGS_SETTER_CLAMPED(ZoneSelectorMaxRows, m_zoneSelectorMaxRows, zoneSelectorMaxRowsChanged, 1, 10)
+SETTINGS_SETTER_CLAMPED(ZoneSelectorMaxRows, m_zoneSelectorMaxRows, zoneSelectorMaxRowsChanged,
+                        ConfigDefaults::maxRowsMin(), ConfigDefaults::maxRowsMax())
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Autotiling setters
@@ -365,36 +387,39 @@ void Settings::setAutotileAlgorithm(const QString& algorithm)
 }
 
 SETTINGS_SETTER_CLAMPED_QREAL(AutotileSplitRatio, m_autotileSplitRatio, autotileSplitRatioChanged,
-                              AutotileDefaults::MinSplitRatio, AutotileDefaults::MaxSplitRatio)
+                              ConfigDefaults::autotileSplitRatioMin(), ConfigDefaults::autotileSplitRatioMax())
 SETTINGS_SETTER_CLAMPED(AutotileMasterCount, m_autotileMasterCount, autotileMasterCountChanged,
-                        AutotileDefaults::MinMasterCount, AutotileDefaults::MaxMasterCount)
+                        ConfigDefaults::autotileMasterCountMin(), ConfigDefaults::autotileMasterCountMax())
 SETTINGS_SETTER_CLAMPED_QREAL(AutotileCenteredMasterSplitRatio, m_autotileCenteredMasterSplitRatio,
-                              autotileCenteredMasterSplitRatioChanged, AutotileDefaults::MinSplitRatio,
-                              AutotileDefaults::MaxSplitRatio)
+                              autotileCenteredMasterSplitRatioChanged,
+                              ConfigDefaults::autotileCenteredMasterSplitRatioMin(),
+                              ConfigDefaults::autotileCenteredMasterSplitRatioMax())
 SETTINGS_SETTER_CLAMPED(AutotileCenteredMasterMasterCount, m_autotileCenteredMasterMasterCount,
-                        autotileCenteredMasterMasterCountChanged, AutotileDefaults::MinMasterCount,
-                        AutotileDefaults::MaxMasterCount)
-SETTINGS_SETTER_CLAMPED(AutotileInnerGap, m_autotileInnerGap, autotileInnerGapChanged, AutotileDefaults::MinGap,
-                        AutotileDefaults::MaxGap)
-SETTINGS_SETTER_CLAMPED(AutotileOuterGap, m_autotileOuterGap, autotileOuterGapChanged, AutotileDefaults::MinGap,
-                        AutotileDefaults::MaxGap)
+                        autotileCenteredMasterMasterCountChanged,
+                        ConfigDefaults::autotileCenteredMasterMasterCountMin(),
+                        ConfigDefaults::autotileCenteredMasterMasterCountMax())
+SETTINGS_SETTER_CLAMPED(AutotileInnerGap, m_autotileInnerGap, autotileInnerGapChanged,
+                        ConfigDefaults::autotileInnerGapMin(), ConfigDefaults::autotileInnerGapMax())
+SETTINGS_SETTER_CLAMPED(AutotileOuterGap, m_autotileOuterGap, autotileOuterGapChanged,
+                        ConfigDefaults::autotileOuterGapMin(), ConfigDefaults::autotileOuterGapMax())
 SETTINGS_SETTER(bool, AutotileUsePerSideOuterGap, m_autotileUsePerSideOuterGap, autotileUsePerSideOuterGapChanged)
 SETTINGS_SETTER_CLAMPED(AutotileOuterGapTop, m_autotileOuterGapTop, autotileOuterGapTopChanged,
-                        AutotileDefaults::MinGap, AutotileDefaults::MaxGap)
+                        ConfigDefaults::autotileOuterGapTopMin(), ConfigDefaults::autotileOuterGapTopMax())
 SETTINGS_SETTER_CLAMPED(AutotileOuterGapBottom, m_autotileOuterGapBottom, autotileOuterGapBottomChanged,
-                        AutotileDefaults::MinGap, AutotileDefaults::MaxGap)
+                        ConfigDefaults::autotileOuterGapBottomMin(), ConfigDefaults::autotileOuterGapBottomMax())
 SETTINGS_SETTER_CLAMPED(AutotileOuterGapLeft, m_autotileOuterGapLeft, autotileOuterGapLeftChanged,
-                        AutotileDefaults::MinGap, AutotileDefaults::MaxGap)
+                        ConfigDefaults::autotileOuterGapLeftMin(), ConfigDefaults::autotileOuterGapLeftMax())
 SETTINGS_SETTER_CLAMPED(AutotileOuterGapRight, m_autotileOuterGapRight, autotileOuterGapRightChanged,
-                        AutotileDefaults::MinGap, AutotileDefaults::MaxGap)
+                        ConfigDefaults::autotileOuterGapRightMin(), ConfigDefaults::autotileOuterGapRightMax())
 
 SETTINGS_SETTER(bool, AutotileFocusNewWindows, m_autotileFocusNewWindows, autotileFocusNewWindowsChanged)
 SETTINGS_SETTER(bool, AutotileSmartGaps, m_autotileSmartGaps, autotileSmartGapsChanged)
 SETTINGS_SETTER_CLAMPED(AutotileMaxWindows, m_autotileMaxWindows, autotileMaxWindowsChanged,
-                        AutotileDefaults::MinMaxWindows, AutotileDefaults::MaxMaxWindows)
+                        ConfigDefaults::autotileMaxWindowsMin(), ConfigDefaults::autotileMaxWindowsMax())
 SETTINGS_SETTER(AutotileInsertPosition, AutotileInsertPosition, m_autotileInsertPosition, autotileInsertPositionChanged)
 
-SETTINGS_SETTER_ENUM_INT(AutotileInsertPosition, AutotileInsertPosition, 0, 2)
+SETTINGS_SETTER_ENUM_INT(AutotileInsertPosition, AutotileInsertPosition, ConfigDefaults::autotileInsertPositionMin(),
+                         ConfigDefaults::autotileInsertPositionMax())
 
 SETTINGS_SETTER(const QString&, AutotileToggleShortcut, m_autotileToggleShortcut, autotileToggleShortcutChanged)
 SETTINGS_SETTER(const QString&, AutotileFocusMasterShortcut, m_autotileFocusMasterShortcut,
@@ -416,21 +441,25 @@ SETTINGS_SETTER(const QString&, AutotileRetileShortcut, m_autotileRetileShortcut
 // ═══════════════════════════════════════════════════════════════════════════════
 
 SETTINGS_SETTER(bool, AnimationsEnabled, m_animationsEnabled, animationsEnabledChanged)
-SETTINGS_SETTER_CLAMPED(AnimationDuration, m_animationDuration, animationDurationChanged, 50, 500)
+SETTINGS_SETTER_CLAMPED(AnimationDuration, m_animationDuration, animationDurationChanged,
+                        ConfigDefaults::animationDurationMin(), ConfigDefaults::animationDurationMax())
 SETTINGS_SETTER(const QString&, AnimationEasingCurve, m_animationEasingCurve, animationEasingCurveChanged)
 
-SETTINGS_SETTER_CLAMPED(AnimationMinDistance, m_animationMinDistance, animationMinDistanceChanged, 0, 200)
-SETTINGS_SETTER_CLAMPED(AnimationSequenceMode, m_animationSequenceMode, animationSequenceModeChanged, 0, 1)
+SETTINGS_SETTER_CLAMPED(AnimationMinDistance, m_animationMinDistance, animationMinDistanceChanged,
+                        ConfigDefaults::animationMinDistanceMin(), ConfigDefaults::animationMinDistanceMax())
+SETTINGS_SETTER_CLAMPED(AnimationSequenceMode, m_animationSequenceMode, animationSequenceModeChanged,
+                        ConfigDefaults::animationSequenceModeMin(), ConfigDefaults::animationSequenceModeMax())
 SETTINGS_SETTER_CLAMPED(AnimationStaggerInterval, m_animationStaggerInterval, animationStaggerIntervalChanged,
-                        AutotileDefaults::MinAnimationStaggerIntervalMs,
-                        AutotileDefaults::MaxAnimationStaggerIntervalMs)
+                        ConfigDefaults::animationStaggerIntervalMin(), ConfigDefaults::animationStaggerIntervalMax())
 SETTINGS_SETTER(bool, AutotileFocusFollowsMouse, m_autotileFocusFollowsMouse, autotileFocusFollowsMouseChanged)
 SETTINGS_SETTER(bool, AutotileRespectMinimumSize, m_autotileRespectMinimumSize, autotileRespectMinimumSizeChanged)
 SETTINGS_SETTER(bool, AutotileHideTitleBars, m_autotileHideTitleBars, autotileHideTitleBarsChanged)
 SETTINGS_SETTER(bool, AutotileShowBorder, m_autotileShowBorder, autotileShowBorderChanged)
 
-SETTINGS_SETTER_CLAMPED(AutotileBorderWidth, m_autotileBorderWidth, autotileBorderWidthChanged, 0, 10)
-SETTINGS_SETTER_CLAMPED(AutotileBorderRadius, m_autotileBorderRadius, autotileBorderRadiusChanged, 0, 20)
+SETTINGS_SETTER_CLAMPED(AutotileBorderWidth, m_autotileBorderWidth, autotileBorderWidthChanged,
+                        ConfigDefaults::autotileBorderWidthMin(), ConfigDefaults::autotileBorderWidthMax())
+SETTINGS_SETTER_CLAMPED(AutotileBorderRadius, m_autotileBorderRadius, autotileBorderRadiusChanged,
+                        ConfigDefaults::autotileBorderRadiusMin(), ConfigDefaults::autotileBorderRadiusMax())
 
 SETTINGS_SETTER(const QColor&, AutotileBorderColor, m_autotileBorderColor, autotileBorderColorChanged)
 SETTINGS_SETTER(const QColor&, AutotileInactiveBorderColor, m_autotileInactiveBorderColor,
@@ -459,9 +488,11 @@ void Settings::setLockedScreens(const QStringList& screens)
 
 // Shader Effects
 SETTINGS_SETTER(bool, EnableShaderEffects, m_enableShaderEffects, enableShaderEffectsChanged)
-SETTINGS_SETTER_CLAMPED(ShaderFrameRate, m_shaderFrameRate, shaderFrameRateChanged, 30, 144)
+SETTINGS_SETTER_CLAMPED(ShaderFrameRate, m_shaderFrameRate, shaderFrameRateChanged,
+                        ConfigDefaults::shaderFrameRateMin(), ConfigDefaults::shaderFrameRateMax())
 SETTINGS_SETTER(bool, EnableAudioVisualizer, m_enableAudioVisualizer, enableAudioVisualizerChanged)
-SETTINGS_SETTER_CLAMPED(AudioSpectrumBarCount, m_audioSpectrumBarCount, audioSpectrumBarCountChanged, 16, 256)
+SETTINGS_SETTER_CLAMPED(AudioSpectrumBarCount, m_audioSpectrumBarCount, audioSpectrumBarCountChanged,
+                        ConfigDefaults::audioSpectrumBarCountMin(), ConfigDefaults::audioSpectrumBarCountMax())
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shortcut setters

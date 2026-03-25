@@ -64,6 +64,9 @@ jobs:
             libkf6windowsystem-dev libkf6globalaccel-dev \
             libkf6notifications-dev \
             liblayershellqtinterface-dev plasma-activities-dev
+          # Kirigami dev package name varies across distros
+          apt-get install -y --no-install-recommends libkf6kirigami-dev 2>/dev/null \
+            || apt-get install -y --no-install-recommends kf6-kirigami-dev
 
       - name: Generate Debian changelog from CHANGELOG.md
         run: bash packaging/generate-changelog.sh debian
@@ -110,7 +113,7 @@ jobs:
             qt6-qtdeclarative-devel qt6-qttools-devel qt6-qtshadertools-devel \
             kwin-devel wayland-devel libepoxy-devel libdrm-devel \
             kf6-kconfig-devel kf6-kconfigwidgets-devel \
-            \
+            kf6-kirigami-devel \
             kf6-kcmutils-devel \
             kf6-kglobalaccel-devel \
             layer-shell-qt-devel plasma-activities-devel
@@ -158,7 +161,10 @@ jobs:
 
     steps:
       - name: Install prerequisites
-        run: zypper -n install git rpm-build rpmdevtools
+        run: |
+          zypper -n --gpg-auto-import-keys refresh --force
+          zypper -n dist-upgrade --no-confirm
+          zypper -n install git rpm-build rpmdevtools
 
       - name: Checkout
         uses: actions/checkout@v6
@@ -166,16 +172,17 @@ jobs:
       - name: Install build dependencies
         run: |
           zypper -n install \
-            cmake ninja extra-cmake-modules-tools gcc-c++ \
+            cmake ninja extra-cmake-modules gcc-c++ \
             qt6-core-private-devel qt6-gui-private-devel \
             'cmake(Qt6Core)' 'cmake(Qt6DBus)' 'cmake(Qt6Gui)' \
             'cmake(Qt6Qml)' 'cmake(Qt6Quick)' 'cmake(Qt6QuickControls2)' \
             'cmake(Qt6Widgets)' 'cmake(Qt6Concurrent)' \
-            'cmake(Qt6ShaderTools)' 'cmake(Qt6ShaderToolsPrivate)' \
+            'cmake(Qt6ShaderTools)' 'cmake(Qt6ShaderToolsPrivate)' 'cmake(Qt6LinguistTools)' \
             'cmake(KF6Config)' 'cmake(KF6ConfigWidgets)' \
-            \
+            'cmake(KF6Kirigami)' \
             'cmake(KF6KCMUtils)' \
             'cmake(KF6GlobalAccel)' \
+            'cmake(KF6WindowSystem)' \
             kwin6-devel 'cmake(LayerShellQt)' 'cmake(PlasmaActivities)' \
             'pkgconfig(systemd)'
 

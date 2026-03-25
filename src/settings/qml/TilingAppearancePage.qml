@@ -100,8 +100,8 @@ Flickable {
                 SettingsSpinBox {
                     formLabel: i18n("Width:")
                     visible: root.bordersActive
-                    from: 0
-                    to: 10
+                    from: settingsController.autotileBorderWidthMin
+                    to: settingsController.autotileBorderWidthMax
                     value: appSettings.autotileBorderWidth
                     tooltipText: i18n("Colored border drawn around tiled windows (0 to disable)")
                     onValueModified: (value) => {
@@ -112,8 +112,8 @@ Flickable {
                 SettingsSpinBox {
                     formLabel: i18n("Corner radius:")
                     visible: root.bordersActive
-                    from: 0
-                    to: 20
+                    from: settingsController.autotileBorderRadiusMin
+                    to: settingsController.autotileBorderRadiusMax
                     value: appSettings.autotileBorderRadius
                     tooltipText: i18n("Corner radius for the border (0 for square corners)")
                     onValueModified: (value) => {

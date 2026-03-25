@@ -98,8 +98,8 @@ Flickable {
                         formLabel: i18n("Frame rate:")
                         enabled: shaderEffectsCheck.checked
                         opacity: enabled ? 1 : 0.4
-                        from: 30
-                        to: 144
+                        from: settingsController.shaderFrameRateMin
+                        to: settingsController.shaderFrameRateMax
                         value: appSettings.shaderFrameRate
                         valueSuffix: " fps"
                         labelWidth: 55
@@ -136,8 +136,8 @@ Flickable {
                         formLabel: i18n("Spectrum bars:")
                         enabled: shaderEffectsCheck.checked && audioVizCheck.checked && settingsController.cavaAvailable
                         opacity: enabled ? 1 : 0.4
-                        from: 16
-                        to: 256
+                        from: settingsController.audioSpectrumBarCountMin
+                        to: settingsController.audioSpectrumBarCountMax
                         stepSize: 2
                         value: appSettings.audioSpectrumBarCount
                         valueSuffix: ""

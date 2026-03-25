@@ -397,8 +397,8 @@ Kirigami.FormLayout {
     SettingsSlider {
         formLabel: i18n("Duration:")
         enabled: easingRoot.animationsEnabled
-        from: 50
-        to: 500
+        from: settingsController.animationDurationMin
+        to: settingsController.animationDurationMax
         stepSize: 10
         value: easingRoot.appSettings.animationDuration
         valueSuffix: " ms"
@@ -426,8 +426,8 @@ Kirigami.FormLayout {
         formLabel: i18n("Delay between windows:")
         visible: easingRoot.appSettings.animationSequenceMode === 1
         enabled: easingRoot.animationsEnabled
-        from: 10
-        to: easingRoot.appSettings.animationStaggerIntervalMax !== undefined ? easingRoot.appSettings.animationStaggerIntervalMax : 200
+        from: settingsController.animationStaggerIntervalMin
+        to: settingsController.animationStaggerIntervalMax
         stepSize: 10
         value: easingRoot.appSettings.animationStaggerInterval
         valueSuffix: " ms"
@@ -441,8 +441,8 @@ Kirigami.FormLayout {
     SettingsSpinBox {
         formLabel: i18n("Minimum distance:")
         enabled: easingRoot.animationsEnabled
-        from: 0
-        to: 200
+        from: settingsController.animationMinDistanceMin
+        to: settingsController.animationMinDistanceMax
         stepSize: 5
         value: easingRoot.appSettings.animationMinDistance
         tooltipText: i18n("Skip animation when the geometry change is smaller than this many pixels. Prevents jittery micro-animations.")

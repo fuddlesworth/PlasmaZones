@@ -232,7 +232,7 @@
       <label>Threshold for detecting adjacent zones</label>
       <default>20</default>
       <min>5</min>
-      <max>100</max>
+      <max>500</max>
     </entry>
     <entry name="PollIntervalMs" type="Int">
       <label>Window move detection polling interval (milliseconds)</label>
@@ -278,6 +278,10 @@
     </entry>
     <entry name="RestoreWindowsToZonesOnLogin" type="Bool">
       <label>Restore windows to their previous zone when reopened</label>
+      <default>true</default>
+    </entry>
+    <entry name="FilterLayoutsByAspectRatio" type="Bool">
+      <label>Only show layouts matching the monitor aspect ratio</label>
       <default>true</default>
     </entry>
     <entry name="DefaultLayoutId" type="String">
@@ -535,7 +539,7 @@
     </entry>
     <entry name="RetileShortcut" type="String">
       <label>Shortcut to retile all windows</label>
-      <default>Meta+Shift+R</default>
+      <default>Meta+Ctrl+R</default>
     </entry>
     <entry name="FocusMasterShortcut" type="String">
       <label>Shortcut to focus master window</label>

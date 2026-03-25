@@ -11,8 +11,8 @@ Flickable {
     id: root
 
     readonly property int opacitySliderMax: 100
-    readonly property int borderWidthMax: 10
-    readonly property int borderRadiusMax: 50
+    readonly property int borderWidthMax: settingsController.borderWidthMax
+    readonly property int borderRadiusMax: settingsController.borderRadiusMax
 
     contentHeight: content.implicitHeight
     clip: true
@@ -149,7 +149,7 @@ Flickable {
 
                     SettingsSpinBox {
                         formLabel: i18n("Border width:")
-                        from: 0
+                        from: settingsController.borderWidthMin
                         to: root.borderWidthMax
                         value: appSettings.borderWidth
                         onValueModified: (value) => {
@@ -159,7 +159,7 @@ Flickable {
 
                     SettingsSpinBox {
                         formLabel: i18n("Border radius:")
-                        from: 0
+                        from: settingsController.borderRadiusMin
                         to: root.borderRadiusMax
                         value: appSettings.borderRadius
                         onValueModified: (value) => {
