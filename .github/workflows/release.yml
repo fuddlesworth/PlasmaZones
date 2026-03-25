@@ -174,7 +174,7 @@ jobs:
             'cmake(Qt6Core)' 'cmake(Qt6DBus)' 'cmake(Qt6Gui)' \
             'cmake(Qt6Qml)' 'cmake(Qt6Quick)' 'cmake(Qt6QuickControls2)' \
             'cmake(Qt6Widgets)' 'cmake(Qt6Concurrent)' \
-            'cmake(Qt6ShaderTools)' 'cmake(Qt6ShaderToolsPrivate)' \
+            'cmake(Qt6ShaderTools)' 'cmake(Qt6ShaderToolsPrivate)' 'cmake(Qt6LinguistTools)' \
             'cmake(KF6Config)' 'cmake(KF6ConfigWidgets)' \
             'cmake(KF6Kirigami)' \
             'cmake(KF6KCMUtils)' \
