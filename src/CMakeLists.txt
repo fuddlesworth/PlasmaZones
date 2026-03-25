@@ -649,6 +649,13 @@ install(FILES
     DESTINATION ${KDE_INSTALL_APPDIR}
 )
 
+# KGlobalAccel component desktop file — provides display name + icon in
+# System Settings > Shortcuts.  Filename must match applicationName ("plasmazonesd").
+install(FILES
+    daemon/plasmazonesd.desktop
+    DESTINATION ${KDE_INSTALL_DATADIR}/kglobalaccel
+)
+
 # Snap Assist thumbnails: daemon captures via KWin ScreenShot2. When desktop matching fails
 # (e.g. local install), set KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1 in environment.
 configure_file(
