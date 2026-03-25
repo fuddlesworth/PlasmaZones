@@ -5,6 +5,7 @@
 #include "constants.h"
 #include "interfaces.h"
 #include "layout.h"
+#include "screenmanager.h"
 #include "zone.h"
 #include "layoutmanager.h"
 #include "virtualdesktopmanager.h"
@@ -50,8 +51,8 @@ WindowTrackingService::~WindowTrackingService()
 // Zone Assignment Management
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingService::assignWindowToZone(const QString& windowId, const QString& zoneId,
-                                               const QString& screenId, int virtualDesktop)
+void WindowTrackingService::assignWindowToZone(const QString& windowId, const QString& zoneId, const QString& screenId,
+                                               int virtualDesktop)
 {
     assignWindowToZones(windowId, QStringList{zoneId}, screenId, virtualDesktop);
 }
@@ -466,8 +467,13 @@ UnfloatResult WindowTrackingService::resolveUnfloatGeometry(const QString& windo
 
     // Validate saved screen — fall back to caller's screen if monitor is gone
     QString restoreScreen = preFloatScreen(windowId);
-    if (!restoreScreen.isEmpty() && !Utils::findScreenByIdOrName(restoreScreen)) {
-        restoreScreen.clear();
+    if (!restoreScreen.isEmpty()) {
+        // For virtual screens, check if the physical screen still exists
+        auto* mgr = ScreenManager::instance();
+        QScreen* physScreen = mgr ? mgr->physicalQScreenFor(restoreScreen) : Utils::findScreenByIdOrName(restoreScreen);
+        if (!physScreen) {
+            restoreScreen.clear();
+        }
     }
     if (restoreScreen.isEmpty()) {
         restoreScreen = fallbackScreen;
