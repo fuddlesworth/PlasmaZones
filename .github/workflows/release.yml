@@ -179,6 +179,7 @@ jobs:
             'cmake(KF6Kirigami)' \
             'cmake(KF6KCMUtils)' \
             'cmake(KF6GlobalAccel)' \
+            'cmake(KF6WindowSystem)' \
             kwin6-devel 'cmake(LayerShellQt)' 'cmake(PlasmaActivities)' \
             'pkgconfig(systemd)'
 
