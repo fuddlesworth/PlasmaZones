@@ -336,6 +336,27 @@ void setZoneGeometry(QVariantMap& zone, const QRectF& rect)
     zone[QLatin1String("height")] = rect.height();
 }
 
+static QJsonObject zoneToEmptyZoneJson(Zone* zone, const QRectF& overlayGeom, ISettings* settings)
+{
+    QJsonObject obj;
+    obj[JsonKeys::ZoneId] = zone->id().toString();
+    obj[JsonKeys::X] = overlayGeom.x();
+    obj[JsonKeys::Y] = overlayGeom.y();
+    obj[JsonKeys::Width] = overlayGeom.width();
+    obj[JsonKeys::Height] = overlayGeom.height();
+    obj[JsonKeys::UseCustomColors] = zone->useCustomColors();
+    obj[JsonKeys::HighlightColor] = zone->highlightColor().name(QColor::HexArgb);
+    obj[JsonKeys::InactiveColor] = zone->inactiveColor().name(QColor::HexArgb);
+    obj[JsonKeys::BorderColor] = zone->borderColor().name(QColor::HexArgb);
+    obj[JsonKeys::ActiveOpacity] = zone->activeOpacity();
+    obj[JsonKeys::InactiveOpacity] = zone->inactiveOpacity();
+    obj[JsonKeys::BorderWidth] =
+        zone->useCustomColors() ? zone->borderWidth() : (settings ? settings->borderWidth() : Defaults::BorderWidth);
+    obj[JsonKeys::BorderRadius] =
+        zone->useCustomColors() ? zone->borderRadius() : (settings ? settings->borderRadius() : Defaults::BorderRadius);
+    return obj;
+}
+
 QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings,
                             const std::function<bool(const Zone*)>& isZoneEmpty)
 {
@@ -358,24 +379,7 @@ QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings
         QRectF geom = getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
         QRectF overlayGeom = availableAreaToOverlayCoordinates(geom, screen);
 
-        QJsonObject obj;
-        obj[JsonKeys::ZoneId] = zone->id().toString();
-        obj[JsonKeys::X] = overlayGeom.x();
-        obj[JsonKeys::Y] = overlayGeom.y();
-        obj[JsonKeys::Width] = overlayGeom.width();
-        obj[JsonKeys::Height] = overlayGeom.height();
-        obj[JsonKeys::UseCustomColors] = zone->useCustomColors();
-        obj[JsonKeys::HighlightColor] = zone->highlightColor().name(QColor::HexArgb);
-        obj[JsonKeys::InactiveColor] = zone->inactiveColor().name(QColor::HexArgb);
-        obj[JsonKeys::BorderColor] = zone->borderColor().name(QColor::HexArgb);
-        obj[JsonKeys::ActiveOpacity] = zone->activeOpacity();
-        obj[JsonKeys::InactiveOpacity] = zone->inactiveOpacity();
-        obj[JsonKeys::BorderWidth] = zone->useCustomColors()
-            ? zone->borderWidth()
-            : (settings ? settings->borderWidth() : Defaults::BorderWidth);
-        obj[JsonKeys::BorderRadius] = zone->useCustomColors()
-            ? zone->borderRadius()
-            : (settings ? settings->borderRadius() : Defaults::BorderRadius);
+        QJsonObject obj = zoneToEmptyZoneJson(zone, overlayGeom, settings);
         arr.append(obj);
     }
     return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
@@ -446,24 +450,7 @@ QString buildEmptyZonesJson(Layout* layout, const QString& screenId, QScreen* ph
             QRectF geom = getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding, outerGaps, useAvail, screenId);
             QRectF overlayGeom = availableAreaToOverlayCoordinates(geom, vsGeom);
 
-            QJsonObject obj;
-            obj[JsonKeys::ZoneId] = zone->id().toString();
-            obj[JsonKeys::X] = overlayGeom.x();
-            obj[JsonKeys::Y] = overlayGeom.y();
-            obj[JsonKeys::Width] = overlayGeom.width();
-            obj[JsonKeys::Height] = overlayGeom.height();
-            obj[JsonKeys::UseCustomColors] = zone->useCustomColors();
-            obj[JsonKeys::HighlightColor] = zone->highlightColor().name(QColor::HexArgb);
-            obj[JsonKeys::InactiveColor] = zone->inactiveColor().name(QColor::HexArgb);
-            obj[JsonKeys::BorderColor] = zone->borderColor().name(QColor::HexArgb);
-            obj[JsonKeys::ActiveOpacity] = zone->activeOpacity();
-            obj[JsonKeys::InactiveOpacity] = zone->inactiveOpacity();
-            obj[JsonKeys::BorderWidth] = zone->useCustomColors()
-                ? zone->borderWidth()
-                : (settings ? settings->borderWidth() : Defaults::BorderWidth);
-            obj[JsonKeys::BorderRadius] = zone->useCustomColors()
-                ? zone->borderRadius()
-                : (settings ? settings->borderRadius() : Defaults::BorderRadius);
+            QJsonObject obj = zoneToEmptyZoneJson(zone, overlayGeom, settings);
             arr.append(obj);
         }
         return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));

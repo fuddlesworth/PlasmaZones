@@ -318,14 +318,23 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
     }
 
     // Get reference geometry for normalizedGeometry() (needed for fixed-mode zones)
-    QScreen* refScreen = DbusHelpers::getScreenOrWarn(screenId, QStringLiteral("getFirstZoneInDirection"));
-    if (!refScreen) {
-        refScreen = Utils::primaryScreen();
+    // Use virtual-screen-aware resolution: prefer ScreenManager geometry, then fall back to QScreen.
+    QString resolvedId = screenId.isEmpty() ? screenId : Utils::screenIdForName(screenId);
+    auto* smgr = ScreenManager::instance();
+    QRect vsGeom = smgr ? smgr->screenGeometry(resolvedId) : QRect();
+    QRectF refGeom;
+    if (vsGeom.isValid()) {
+        refGeom = GeometryUtils::effectiveScreenGeometry(layout, resolvedId);
+    } else {
+        QScreen* refScreen = ScreenManager::resolvePhysicalScreen(resolvedId);
+        if (!refScreen) {
+            refScreen = Utils::primaryScreen();
+        }
+        if (!refScreen) {
+            return QString();
+        }
+        refGeom = GeometryUtils::effectiveScreenGeometry(layout, refScreen);
     }
-    if (!refScreen) {
-        return QString();
-    }
-    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, refScreen);
 
     Zone* bestZone = nullptr;
     qreal bestValue = 0;

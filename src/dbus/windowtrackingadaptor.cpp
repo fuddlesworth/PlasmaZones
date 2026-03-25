@@ -269,6 +269,7 @@ void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
     stateObj[QLatin1String("screenId")] = QString();
     stateObj[QLatin1String("isFloating")] = false;
     stateObj[QLatin1String("changeType")] = QStringLiteral("unsnapped");
+    stateObj[QLatin1String("zoneIds")] = QJsonArray();
     Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
@@ -339,6 +340,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     stateObj[QLatin1String("screenId")] = newScreenId;
     stateObj[QLatin1String("isFloating")] = false;
     stateObj[QLatin1String("changeType")] = QStringLiteral("screen_changed");
+    stateObj[QLatin1String("zoneIds")] = QJsonArray();
     Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 

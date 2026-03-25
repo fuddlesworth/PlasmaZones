@@ -1022,6 +1022,110 @@ private Q_SLOTS:
     // ID is also not a match (the physical screen was subdivided).
     // =====================================================================
 
+    // =====================================================================
+    // pruneStaleAssignments
+    // =====================================================================
+
+    void testPruneStaleAssignments_removesDeadWindows()
+    {
+        QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
+        QString win1 = QStringLiteral("app1|aaa");
+        QString win2 = QStringLiteral("app2|bbb");
+        QString win3 = QStringLiteral("app3|ccc");
+
+        m_service->assignWindowToZone(win1, m_zoneIds[0], vsId, 1);
+        m_service->assignWindowToZone(win2, m_zoneIds[1], vsId, 1);
+        m_service->assignWindowToZone(win3, m_zoneIds[2], vsId, 1);
+
+        // Only win1 and win2 are alive
+        QSet<QString> alive{win1, win2};
+        int pruned = m_service->pruneStaleAssignments(alive);
+
+        QCOMPARE(pruned, 1);
+        QVERIFY(m_service->isWindowSnapped(win1));
+        QVERIFY(m_service->isWindowSnapped(win2));
+        QVERIFY(!m_service->isWindowSnapped(win3));
+        // Screen and desktop assignments should also be gone
+        QVERIFY(!m_service->screenAssignments().contains(win3));
+        QVERIFY(!m_service->desktopAssignments().contains(win3));
+    }
+
+    void testPruneStaleAssignments_preservesAliveWindows()
+    {
+        QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
+        QString win1 = QStringLiteral("app1|aaa");
+        QString win2 = QStringLiteral("app2|bbb");
+
+        m_service->assignWindowToZone(win1, m_zoneIds[0], vsId, 1);
+        m_service->assignWindowToZone(win2, m_zoneIds[1], vsId, 1);
+
+        QSet<QString> alive{win1, win2};
+        int pruned = m_service->pruneStaleAssignments(alive);
+
+        QCOMPARE(pruned, 0);
+        QVERIFY(m_service->isWindowSnapped(win1));
+        QVERIFY(m_service->isWindowSnapped(win2));
+    }
+
+    void testPruneStaleAssignments_returnsCount()
+    {
+        QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
+        QString win1 = QStringLiteral("app1|aaa");
+        QString win2 = QStringLiteral("app2|bbb");
+        QString win3 = QStringLiteral("app3|ccc");
+
+        m_service->assignWindowToZone(win1, m_zoneIds[0], vsId, 1);
+        m_service->assignWindowToZone(win2, m_zoneIds[1], vsId, 1);
+        m_service->assignWindowToZone(win3, m_zoneIds[2], vsId, 1);
+
+        // Only win1 is alive — 2 should be pruned
+        QSet<QString> alive{win1};
+        int pruned = m_service->pruneStaleAssignments(alive);
+
+        QCOMPARE(pruned, 2);
+        QVERIFY(m_service->isWindowSnapped(win1));
+        QVERIFY(!m_service->isWindowSnapped(win2));
+        QVERIFY(!m_service->isWindowSnapped(win3));
+    }
+
+    void testPruneStaleAssignments_emptyAliveSet()
+    {
+        QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
+        QString win1 = QStringLiteral("app1|aaa");
+        QString win2 = QStringLiteral("app2|bbb");
+
+        m_service->assignWindowToZone(win1, m_zoneIds[0], vsId, 1);
+        m_service->assignWindowToZone(win2, m_zoneIds[1], vsId, 1);
+
+        // Empty alive set — all windows should be pruned
+        QSet<QString> alive;
+        int pruned = m_service->pruneStaleAssignments(alive);
+
+        QCOMPARE(pruned, 2);
+        QVERIFY(!m_service->isWindowSnapped(win1));
+        QVERIFY(!m_service->isWindowSnapped(win2));
+    }
+
+    void testPruneStaleAssignments_cleansFloatingAndAutotileFloated()
+    {
+        QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
+        QString win1 = QStringLiteral("app1|aaa");
+        QString win2 = QStringLiteral("app2|bbb");
+
+        m_service->assignWindowToZone(win1, m_zoneIds[0], vsId, 1);
+        m_service->assignWindowToZone(win2, m_zoneIds[1], vsId, 1);
+        m_service->setWindowFloating(win1, true);
+        m_service->markAutotileFloated(win1);
+
+        // Only win2 is alive — win1 should be fully cleaned
+        QSet<QString> alive{win2};
+        int pruned = m_service->pruneStaleAssignments(alive);
+
+        QCOMPARE(pruned, 1);
+        QVERIFY(!m_service->isWindowFloating(win1));
+        QVERIFY(!m_service->isAutotileFloated(win1));
+    }
+
     void testScreensMatch_virtualScreenIdsAreDistinct()
     {
         // Verify that virtual screen IDs with different indices are never

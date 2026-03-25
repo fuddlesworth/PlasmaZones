@@ -149,6 +149,8 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
             m_preTileGeometries.remove(wid);
             m_preFloatZoneAssignments.remove(wid);
             m_preFloatScreenAssignments.remove(wid);
+            m_floatingWindows.remove(wid);
+            m_autotileFloatedWindows.remove(wid);
             it = m_windowZoneAssignments.erase(it);
             ++pruned;
         } else {
