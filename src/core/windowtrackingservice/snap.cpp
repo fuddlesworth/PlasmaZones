@@ -56,10 +56,8 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
         // Validate that the target screen exists (may be connector name or screen ID)
         QScreen* screen = Utils::findScreenByIdOrName(effectiveScreen);
         if (!screen) {
-            if (!match.targetScreen.isEmpty()) {
-                qCInfo(lcCore) << "App rule: targetScreen" << match.targetScreen
-                               << "not found (disconnected?), skipping";
-            }
+            qCInfo(lcCore) << "App rule: screen" << effectiveScreen << "not found for" << windowClass
+                           << (match.targetScreen.isEmpty() ? "(current screen)" : "(target screen)") << ", skipping";
             return SnapResult::noSnap();
         }
 
@@ -101,7 +99,12 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
             if (result.isValid()) {
                 return result;
             }
+        } else {
+            qCDebug(lcCore) << "calculateSnapToAppRule:" << windowClass << "no match in layout" << currentLayout->name()
+                            << "(" << currentLayout->appRules().size() << "rules)";
         }
+    } else {
+        qCDebug(lcCore) << "calculateSnapToAppRule: no layout for screen" << windowScreenName;
     }
 
     // Phase 2: Scan other screens' layouts for cross-screen rules

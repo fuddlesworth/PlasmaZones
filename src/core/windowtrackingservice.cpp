@@ -417,6 +417,12 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
         }
         qCInfo(lcCore) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenId;
         unassignWindow(windowId);
+
+        // Consume one pending restore entry so this window doesn't get re-snapped
+        // to the old zone when closed and reopened. Uses consumePendingAssignment
+        // (not clearStalePendingAssignment) to preserve entries for other instances
+        // of the same app — e.g. unsnapping one Konsole shouldn't affect the other two.
+        consumePendingAssignment(windowId);
     }
     // Note: If window not in assignments, it's already unsnapped - no action needed
 }

@@ -245,23 +245,27 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             m_windowTracking->setWindowFloating(windowId, true);
         }
 
-        // On drag-to-unsnap: apply only pre-snap width/height; window keeps drop position.
+        // On drag-to-unsnap: restore pre-snap width/height; window keeps drop position.
         // Float-toggle shortcut uses calculateUnfloatRestore and restores full x/y/w/h.
-        if (m_settings && m_settings->restoreOriginalSizeOnUnsnap()) {
-            int origX, origY, origW, origH;
-            if (m_windowTracking
-                && m_windowTracking->getValidatedPreTileGeometry(windowId, origX, origY, origW, origH)) {
-                snapWidth = origW;
-                snapHeight = origH;
+        // Pass the release screen for proper cross-screen geometry validation (the float
+        // toggle path passes screenId to validatedPreTileGeometry; without it, coordinates
+        // captured on another screen may fail isGeometryOnScreen and not restore).
+        if (m_settings && m_settings->restoreOriginalSizeOnUnsnap() && m_windowTracking) {
+            auto geo = m_windowTracking->service()->validatedPreTileGeometry(windowId, releaseScreenId);
+            if (geo) {
+                snapWidth = geo->width();
+                snapHeight = geo->height();
                 shouldApplyGeometry = true;
                 restoreSizeOnlyOut = true;
+                // Only clear pre-tile geometry after successful restore.
+                // If not cleared, it remains available for a subsequent float
+                // toggle (applyGeometryForFloat) if the user re-floats later.
+                m_windowTracking->clearPreTileGeometry(windowId);
             }
         }
-
-        // Clear pre-tile geometry to prevent memory accumulation
-        if (m_windowTracking) {
-            m_windowTracking->clearPreTileGeometry(windowId);
-        }
+        // Note: if restore failed (no pre-tile geometry found), keep the entry
+        // so applyGeometryForFloat can still use it on a later float toggle.
+        // It will be cleaned up naturally when the window closes (windowClosed).
     }
 
     // Snap Assist: only when we actually SNAPPED to a zone (not when restoring size on unsnap).

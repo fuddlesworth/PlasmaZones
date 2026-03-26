@@ -329,7 +329,13 @@ AppRuleMatch Layout::matchAppRule(const QString& windowClass) const
         return {};
     }
     for (const auto& rule : m_appRules) {
-        if (windowClass.contains(rule.pattern, Qt::CaseInsensitive)) {
+        if (rule.pattern.isEmpty()) {
+            continue;
+        }
+        // Segment-aware match: "firefox" matches "org.mozilla.firefox" (dot-boundary),
+        // "org.mozilla.firefox" matches "firefox", exact match always works.
+        // Prevents "fire" from matching "firefox" (no dot boundary).
+        if (Utils::appIdMatches(windowClass, rule.pattern)) {
             return {rule.zoneNumber, rule.targetScreen};
         }
     }

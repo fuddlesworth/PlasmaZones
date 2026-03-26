@@ -5,6 +5,7 @@
 #include "core/geometryutils.h"
 #include "core/interfaces.h"
 #include "core/logging.h"
+#include "core/utils.h"
 #include "core/virtualdesktopmanager.h"
 #include "core/windowtrackingservice.h"
 
@@ -50,8 +51,7 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
     assignToZones(windowId, result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds, result.screenId);
 
     // Emit geometry for KWin effect to apply
-    Q_EMIT applyGeometryRequested(windowId, GeometryUtils::rectToJson(result.geometry), result.zoneId,
-                                  result.screenId);
+    Q_EMIT applyGeometryRequested(windowId, GeometryUtils::rectToJson(result.geometry), result.zoneId, result.screenId);
 
     qCInfo(lcCore) << "SnapEngine::windowOpened: snapped" << windowId << "to zone" << result.zoneId << "on"
                    << result.screenId;
@@ -83,6 +83,25 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         m_windowTracker->consumePendingAssignment(windowId);
         qCDebug(lcCore) << "resolveWindowRestore:" << windowId << "already has assignment, skipping";
         return SnapResult::noSnap();
+    }
+
+    // Exclusion check: skip auto-snap for excluded applications/window classes.
+    // This must run before any calculate method so excluded apps are never snapped
+    // by app rules, session restore, empty zone, or last zone features.
+    if (m_settings) {
+        const QString appId = Utils::extractAppId(windowId);
+        for (const QString& excluded : m_settings->excludedApplications()) {
+            if (Utils::appIdMatches(appId, excluded)) {
+                qCInfo(lcCore) << "resolveWindowRestore:" << windowId << "excluded by application rule:" << excluded;
+                return SnapResult::noSnap();
+            }
+        }
+        for (const QString& excluded : m_settings->excludedWindowClasses()) {
+            if (Utils::appIdMatches(appId, excluded)) {
+                qCInfo(lcCore) << "resolveWindowRestore:" << windowId << "excluded by window class rule:" << excluded;
+                return SnapResult::noSnap();
+            }
+        }
     }
 
     // 0. Floating windows should not be auto-snapped — emit OSD feedback
