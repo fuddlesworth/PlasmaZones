@@ -32,13 +32,13 @@ ApplicationWindow {
         "label": i18n("Virtual Screens"),
         "iconName": "virtual-desktops",
         "hasChildren": false,
-        "hasDividerAfter": true
+        "hasDividerAfter": false
     }, {
         "name": "layouts",
         "label": i18n("Layouts"),
         "iconName": "view-grid",
         "hasChildren": false,
-        "hasDividerAfter": false
+        "hasDividerAfter": true
     }, {
         "name": "snapping",
         "label": i18n("Snapping"),
@@ -50,19 +50,19 @@ ApplicationWindow {
         "label": i18n("Tiling"),
         "iconName": "window-duplicate",
         "hasChildren": true,
-        "hasDividerAfter": false
+        "hasDividerAfter": true
     }, {
         "name": "apprules",
         "label": i18n("App Rules"),
         "iconName": "application-x-executable",
         "hasChildren": false,
-        "hasDividerAfter": true
+        "hasDividerAfter": false
     }, {
         "name": "exclusions",
         "label": i18n("Exclusions"),
         "iconName": "dialog-cancel",
         "hasChildren": false,
-        "hasDividerAfter": false
+        "hasDividerAfter": true
     }, {
         "name": "editor",
         "label": i18n("Editor"),
