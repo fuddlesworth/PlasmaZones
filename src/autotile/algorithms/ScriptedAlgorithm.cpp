@@ -24,11 +24,16 @@ using namespace AutotileDefaults;
 ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
     : TilingAlgorithm(parent)
     , m_engine(new QJSEngine(this))
+    , m_engineAlive(std::make_shared<std::atomic<bool>>(true))
 {
     loadScript(filePath);
 }
 
-ScriptedAlgorithm::~ScriptedAlgorithm() = default;
+ScriptedAlgorithm::~ScriptedAlgorithm()
+{
+    // Signal any in-flight watchdog threads that this engine is dead.
+    m_engineAlive->store(false, std::memory_order_release);
+}
 
 bool ScriptedAlgorithm::isValid() const
 {
@@ -240,10 +245,11 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     jsArea.setProperty(QStringLiteral("height"), area.height());
     jsParams.setProperty(QStringLiteral("area"), jsArea);
 
-    // State-dependent parameters
+    // State-dependent parameters (clamp splitRatio to valid range for JS safety)
     if (params.state) {
         jsParams.setProperty(QStringLiteral("masterCount"), params.state->masterCount());
-        jsParams.setProperty(QStringLiteral("splitRatio"), params.state->splitRatio());
+        jsParams.setProperty(QStringLiteral("splitRatio"),
+                             std::clamp(params.state->splitRatio(), MinSplitRatio, MaxSplitRatio));
     } else {
         jsParams.setProperty(QStringLiteral("masterCount"), DefaultMasterCount);
         jsParams.setProperty(QStringLiteral("splitRatio"), DefaultSplitRatio);
@@ -267,13 +273,16 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     // Watchdog: interrupt JS engine after 100ms from a separate thread.
     // A QTimer cannot fire during synchronous JS execution because the event
     // loop is blocked, so we use a detached std::thread instead.
-    // Use shared_ptr so the flag's lifetime extends to cover both threads,
-    // avoiding a dangling-reference if the caller's stack unwinds early.
+    // Both the finished flag and the alive flag are shared_ptr so the watchdog
+    // thread can safely outlive the ScriptedAlgorithm if it is destroyed during
+    // the sleep window (e.g., hot-reload unregisters the algorithm).
     auto finished = std::make_shared<std::atomic<bool>>(false);
+    auto aliveFlag = m_engineAlive;
     auto* engine = m_engine;
-    std::thread([engine, finished]() {
+    std::thread([engine, finished, aliveFlag]() {
         QThread::msleep(100);
-        if (!finished->load(std::memory_order_acquire)) {
+        if (!finished->load(std::memory_order_acquire)
+            && aliveFlag->load(std::memory_order_acquire)) {
             engine->setInterrupted(true);
         }
     }).detach();

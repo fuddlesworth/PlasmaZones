@@ -82,7 +82,10 @@ void ScriptedAlgorithmLoader::scanAndRegister()
         newScriptIds.insert(it.key());
     }
 
-    // Remove stale scripts that no longer exist on disk
+    // Remove stale scripts that no longer exist on disk.
+    // AlgorithmRegistry::unregisterAlgorithm() uses deleteLater(), so any
+    // in-flight calculateZones() calls on the old algorithm object will
+    // finish before it is destroyed.
     for (auto it = oldScriptIdToPath.constBegin(); it != oldScriptIdToPath.constEnd(); ++it) {
         if (!newScriptIds.contains(it.key())) {
             registry->unregisterAlgorithm(it.key());

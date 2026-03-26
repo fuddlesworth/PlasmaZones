@@ -370,6 +370,16 @@ public:
      */
     void clearSplitTree();
 
+    /**
+     * @brief Rebuild the split tree from the current tiled window order
+     *
+     * Used after operations that reorder windows (move, promote, rotate)
+     * to preserve the tree's existence while matching the new order.
+     * Split ratios are reset to 0.5, but the tree structure is retained
+     * so DwindleMemoryAlgorithm doesn't fall back to stateless mode.
+     */
+    void rebuildSplitTree();
+
 Q_SIGNALS:
     /**
      * @brief Emitted when window count changes (add/remove)

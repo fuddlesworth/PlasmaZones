@@ -240,8 +240,17 @@ void SettingsBridge::connectToSettings(Settings* settings)
     QObject::connect(settings, &Settings::autotilePerAlgorithmSettingsChanged, m_engine, [this]() {
         if (!m_settings)
             return;
-        m_engine->config()->savedAlgorithmSettings =
-            AutotileConfig::perAlgoFromVariantMap(m_settings->autotilePerAlgorithmSettings());
+        auto newSaved = AutotileConfig::perAlgoFromVariantMap(m_settings->autotilePerAlgorithmSettings());
+        m_engine->config()->savedAlgorithmSettings = newSaved;
+        // If the active algorithm's settings changed, apply them and retile
+        auto it = newSaved.constFind(m_engine->m_algorithmId);
+        if (it != newSaved.constEnd()) {
+            m_engine->config()->splitRatio = it->first;
+            m_engine->config()->masterCount = it->second;
+            m_engine->propagateGlobalSplitRatio();
+            m_engine->propagateGlobalMasterCount();
+            scheduleSettingsRetile();
+        }
     });
 
     CONNECT_SETTING_RETILE(autotileInnerGapChanged, innerGap, autotileInnerGap);

@@ -6,6 +6,9 @@
 #include "../TilingAlgorithm.h"
 #include <QJSValue>
 
+#include <atomic>
+#include <memory>
+
 class QJSEngine;
 
 namespace PlasmaZones {
@@ -118,6 +121,7 @@ private:
     QJSValue splitNodeToJSValue(const SplitNode* node) const;
 
     mutable QJSEngine* m_engine = nullptr;
+    std::shared_ptr<std::atomic<bool>> m_engineAlive; ///< Watchdog thread checks this before touching m_engine
     mutable QJSValue m_calculateZonesFn;
     QString m_filePath;
     QString m_scriptId;

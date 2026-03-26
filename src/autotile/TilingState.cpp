@@ -135,9 +135,7 @@ bool TilingState::moveWindow(int fromIndex, int toIndex)
 
     m_windowOrder.move(fromIndex, toIndex);
 
-    if (m_splitTree) {
-        m_splitTree.reset();  // Move doesn't map to a tree operation; rebuild on next insert
-    }
+    rebuildSplitTree();
 
     Q_EMIT windowOrderChanged();
     notifyStateChanged();
@@ -289,9 +287,7 @@ bool TilingState::promoteToMaster(const QString& windowId)
     // Move to front
     m_windowOrder.move(index, 0);
 
-    if (m_splitTree) {
-        m_splitTree.reset();  // Move doesn't map to a tree operation; rebuild on next insert
-    }
+    rebuildSplitTree();
 
     Q_EMIT windowOrderChanged();
     notifyStateChanged();
@@ -409,9 +405,7 @@ bool TilingState::rotateWindows(bool clockwise)
         }
     }
 
-    if (m_splitTree) {
-        m_splitTree.reset(); // Rotation reorders leaves; tree will be recreated via lazy init
-    }
+    rebuildSplitTree();
 
     Q_EMIT windowOrderChanged();
     notifyStateChanged();
@@ -470,6 +464,18 @@ void TilingState::setFloating(const QString& windowId, bool floating)
         return;
     }
 
+    // Compute tiled index BEFORE modifying the floating set, so that
+    // tiledWindowIndex() sees the correct floating/tiled classification.
+    int tiledIdxBeforeChange = -1;
+    if (!floating) {
+        // Window is being unfloated — compute where it will land in tiled order
+        // after we remove it from the floating set. We temporarily remove it
+        // to get the correct index, then restore state.
+        m_floatingWindows.remove(windowId);
+        tiledIdxBeforeChange = tiledWindowIndex(windowId);
+        m_floatingWindows.insert(windowId); // restore — actual removal happens below
+    }
+
     if (floating) {
         m_floatingWindows.insert(windowId);
     } else {
@@ -480,10 +486,9 @@ void TilingState::setFloating(const QString& windowId, bool floating)
         if (floating) {
             m_splitTree->remove(windowId);
         } else {
-            // Re-insert at the window's position in the tiled order
-            int tiledIdx = tiledWindowIndex(windowId);
-            if (tiledIdx >= 0) {
-                m_splitTree->insertAtPosition(windowId, tiledIdx);
+            // Re-insert at the window's pre-computed tiled position
+            if (tiledIdxBeforeChange >= 0) {
+                m_splitTree->insertAtPosition(windowId, tiledIdxBeforeChange);
             } else {
                 m_splitTree->insertAtEnd(windowId);
             }
@@ -691,6 +696,25 @@ void TilingState::setSplitTree(std::unique_ptr<SplitTree> tree)
 void TilingState::clearSplitTree()
 {
     m_splitTree.reset();
+}
+
+void TilingState::rebuildSplitTree()
+{
+    if (!m_splitTree) {
+        return; // No tree to rebuild
+    }
+
+    const QStringList tiled = tiledWindows();
+    if (tiled.size() <= 1) {
+        m_splitTree.reset();
+        return;
+    }
+
+    auto newTree = std::make_unique<SplitTree>();
+    for (const QString& windowId : tiled) {
+        newTree->insertAtEnd(windowId);
+    }
+    m_splitTree = std::move(newTree);
 }
 
 } // namespace PlasmaZones
