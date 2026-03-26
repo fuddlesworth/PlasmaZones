@@ -113,7 +113,7 @@ void SplitTree::insertAtFocused(const QString& windowId, const QString& focusedW
         return;
     }
 
-    SplitNode* focused = findLeaf(m_root.get(), focusedWindowId);
+    SplitNode* focused = focusedWindowId.isEmpty() ? nullptr : findLeaf(m_root.get(), focusedWindowId);
     if (!focused) {
         qCDebug(lcAutotile) << "insertAtFocused: focused window not found, falling back to insertAtEnd"
                             << "windowId=" << focusedWindowId;

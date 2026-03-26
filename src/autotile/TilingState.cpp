@@ -623,10 +623,29 @@ TilingState* TilingState::fromJson(const QJsonObject& json, QObject* parent)
 
     if (json.contains(QStringLiteral("splitTree"))) {
         state->m_splitTree = SplitTree::fromJson(json[QStringLiteral("splitTree")].toObject());
-        // Validate leaf count matches window order
-        if (state->m_splitTree && state->m_splitTree->leafCount() != state->m_windowOrder.size()) {
-            qCWarning(lcAutotile) << "SplitTree leaf count mismatch, discarding tree";
-            state->m_splitTree.reset();
+        if (state->m_splitTree) {
+            // Validate leaf count matches window order
+            if (state->m_splitTree->leafCount() != state->m_windowOrder.size()) {
+                qCWarning(lcAutotile) << "SplitTree leaf count mismatch, discarding tree";
+                state->m_splitTree.reset();
+            } else {
+                // Validate all leaf IDs are present in window order (guards against
+                // stale IDs from a replaced window with the same count)
+                const QStringList leafIds = state->m_splitTree->leafOrder();
+                const QSet<QString> windowSet(state->m_windowOrder.constBegin(),
+                                               state->m_windowOrder.constEnd());
+                bool allMatch = true;
+                for (const QString& leafId : leafIds) {
+                    if (!windowSet.contains(leafId)) {
+                        allMatch = false;
+                        break;
+                    }
+                }
+                if (!allMatch) {
+                    qCWarning(lcAutotile) << "SplitTree leaf IDs don't match window order, discarding tree";
+                    state->m_splitTree.reset();
+                }
+            }
         }
     }
 
@@ -710,11 +729,54 @@ void TilingState::rebuildSplitTree()
         return;
     }
 
+    // Capture existing split ratios from the old tree (indexed by depth-first
+    // internal node position) so we can restore them after rebuilding.
+    // The new tree has the same binary structure (N-1 internal nodes for N leaves)
+    // so positional mapping preserves ratios for the common prefix of nodes.
+    QVector<qreal> oldRatios;
+    QVector<bool> oldDirections;
+    collectInternalNodeParams(m_splitTree->root(), oldRatios, oldDirections);
+
     auto newTree = std::make_unique<SplitTree>();
     for (const QString& windowId : tiled) {
         newTree->insertAtEnd(windowId);
     }
+
+    // Restore saved ratios to the new tree's internal nodes (same traversal order)
+    applyInternalNodeParams(newTree->root(), oldRatios, oldDirections, 0);
+
     m_splitTree = std::move(newTree);
+}
+
+void TilingState::collectInternalNodeParams(const SplitNode* node,
+                                             QVector<qreal>& ratios,
+                                             QVector<bool>& directions)
+{
+    if (!node || node->isLeaf()) {
+        return;
+    }
+    ratios.append(node->splitRatio);
+    directions.append(node->splitHorizontal);
+    collectInternalNodeParams(node->first.get(), ratios, directions);
+    collectInternalNodeParams(node->second.get(), ratios, directions);
+}
+
+int TilingState::applyInternalNodeParams(SplitNode* node,
+                                          const QVector<qreal>& ratios,
+                                          const QVector<bool>& directions,
+                                          int index)
+{
+    if (!node || node->isLeaf()) {
+        return index;
+    }
+    if (index < ratios.size()) {
+        node->splitRatio = ratios[index];
+        node->splitHorizontal = directions[index];
+    }
+    ++index;
+    index = applyInternalNodeParams(node->first.get(), ratios, directions, index);
+    index = applyInternalNodeParams(node->second.get(), ratios, directions, index);
+    return index;
 }
 
 } // namespace PlasmaZones

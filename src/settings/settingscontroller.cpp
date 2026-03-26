@@ -45,6 +45,10 @@ SettingsController::SettingsController(QObject* parent)
     auto* scriptLoader = new ScriptedAlgorithmLoader(this);
     scriptLoader->scanAndRegister();
 
+    // When scripted algorithms change (hot-reload), notify UI consumers
+    connect(scriptLoader, &ScriptedAlgorithmLoader::algorithmsChanged,
+            this, &SettingsController::availableAlgorithmsChanged);
+
     // Listen for external settings changes from the daemon
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::Settings), QStringLiteral("settingsChanged"), this,

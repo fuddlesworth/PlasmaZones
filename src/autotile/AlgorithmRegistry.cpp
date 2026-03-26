@@ -369,13 +369,13 @@ QVariantMap AlgorithmRegistry::algorithmToVariantMap(TilingAlgorithm* algorithm,
 
 AlgorithmRegistry::SectionInfo AlgorithmRegistry::sectionForAlgorithm(TilingAlgorithm* algorithm)
 {
-    if (algorithm && algorithm->isScripted()) {
-        if (algorithm->isUserScript()) {
-            return {QStringLiteral("custom"), PzI18n::tr("Custom"), 2};
-        }
-        return {QStringLiteral("extras"), PzI18n::tr("Extras"), 1};
+    // Group by memory support: persistent algorithms remember split positions,
+    // automatic algorithms recalculate layout from scratch each retile.
+    // System vs user distinction is shown via the lock icon (like snapping layouts).
+    if (algorithm && algorithm->supportsMemory()) {
+        return {QStringLiteral("persistent"), PzI18n::tr("Persistent"), 1};
     }
-    return {QStringLiteral("built-in"), PzI18n::tr("Built-in"), 0};
+    return {QStringLiteral("automatic"), PzI18n::tr("Automatic"), 0};
 }
 
 } // namespace PlasmaZones

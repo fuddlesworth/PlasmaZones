@@ -427,7 +427,7 @@ Flickable {
                         visible: root.algoSupportsMasterCount
 
                         Label {
-                            text: i18n("Master count:")
+                            text: root.selectedAlgorithm === "centered-master" ? i18n("Center count:") : i18n("Master count:")
                         }
 
                         SpinBox {
@@ -440,9 +440,9 @@ Flickable {
                                     appSettings.autotileMasterCount = v;
                                 });
                             }
-                            Accessible.name: i18n("Master count")
+                            Accessible.name: root.selectedAlgorithm === "centered-master" ? i18n("Center count") : i18n("Master count")
                             ToolTip.visible: hovered
-                            ToolTip.text: i18n("Number of windows in the master area")
+                            ToolTip.text: root.selectedAlgorithm === "centered-master" ? i18n("Number of windows in the center area") : i18n("Number of windows in the master area")
 
                             Binding on value {
                                 value: root.savedAlgoSetting("masterCount", 1)

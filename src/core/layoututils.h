@@ -63,6 +63,8 @@ struct PLASMAZONES_EXPORT UnifiedLayoutEntry
     bool recommended = true; ///< True if layout matches the current screen's aspect ratio
     QString zoneNumberDisplay; ///< How zone numbers are displayed in previews ("all", "last", etc.)
     bool memory = false; ///< True if algorithm maintains persistent state (SplitTree)
+    bool isScripted = false; ///< True if algorithm is loaded from a .js script file
+    bool isUserScript = false; ///< True if script is from the user's local directory
 
     // ── Generic section grouping (data-driven, consumed by LayoutsPage) ──
     QString sectionKey; ///< Grouping key (e.g. "any", "standard", "built-in", "custom")

@@ -730,16 +730,9 @@ void Settings::saveAutotilingConfig(QSettingsConfigBackend* backend)
         autotiling->writeInt(QStringLiteral("AutotileMasterCount"), m_autotileMasterCount);
         // Save per-algorithm settings map (reuse shared serialization helpers)
         if (!m_autotilePerAlgorithmSettings.isEmpty()) {
-            const auto internalHash = AutotileConfig::perAlgoFromVariantMap(m_autotilePerAlgorithmSettings);
-            QJsonObject perAlgo;
-            for (auto it = internalHash.constBegin(); it != internalHash.constEnd(); ++it) {
-                QJsonObject entryJson;
-                entryJson[QLatin1String("splitRatio")] = it.value().first;
-                entryJson[QLatin1String("masterCount")] = it.value().second;
-                perAlgo[it.key()] = entryJson;
-            }
             autotiling->writeString(QStringLiteral("AutotilePerAlgorithmSettings"),
-                                    QString::fromUtf8(QJsonDocument(perAlgo).toJson(QJsonDocument::Compact)));
+                                    QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(
+                                        m_autotilePerAlgorithmSettings)).toJson(QJsonDocument::Compact)));
         } else {
             autotiling->deleteKey(QStringLiteral("AutotilePerAlgorithmSettings"));
         }

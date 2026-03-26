@@ -176,7 +176,13 @@ Item {
                         color: Kirigami.Theme.disabledTextColor
                         ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.visible: systemIconMA.containsMouse && visible
-                        ToolTip.text: root.modelData.isSystem ? i18n("System layout (read-only)") : i18n("Modified system layout")
+                        ToolTip.text: {
+                            if (root.modelData.isAutotile && root.modelData.isSystem)
+                                return i18n("Bundled algorithm");
+                            if (root.modelData.isSystem)
+                                return i18n("System layout (read-only)");
+                            return i18n("Modified system layout");
+                        }
 
                         MouseArea {
                             id: systemIconMA

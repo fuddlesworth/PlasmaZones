@@ -60,9 +60,10 @@ public:
     /**
      * @brief Ensure the TilingState has a SplitTree, creating one lazily if needed
      *
-     * Called by the engine before calculateZones() so the algorithm itself
-     * does not need to const_cast the state. Only creates a tree when
-     * windowCount > 1 and no tree exists.
+     * Called by the engine before calculateZones(). This method is const on the
+     * algorithm (it doesn't mutate algorithm state) but mutates the TilingState
+     * argument — the engine owns that mutation, not the algorithm.
+     * Only creates a tree when windowCount > 1 and no tree exists.
      */
     void ensureSplitTree(TilingState* state) const;
 

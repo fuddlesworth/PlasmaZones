@@ -341,6 +341,7 @@ install(DIRECTORY data/shaders/
     PATTERN "*.vert"
     PATTERN "*.frag"
     PATTERN "*.png"
+    PATTERN "*.svg"
 )
 
 # Install bundled scripted tiling algorithms

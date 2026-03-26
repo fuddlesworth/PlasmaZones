@@ -10,11 +10,13 @@
 #include <QFileInfo>
 #include <QJSEngine>
 #include <QRegularExpression>
+#include <QStringView>
 #include <QTextStream>
 #include <QThread>
 #include <algorithm>
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <thread>
 
 namespace PlasmaZones {
@@ -25,13 +27,16 @@ ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
     : TilingAlgorithm(parent)
     , m_engine(new QJSEngine(this))
     , m_engineAlive(std::make_shared<std::atomic<bool>>(true))
+    , m_engineMutex(std::make_shared<std::mutex>())
 {
     loadScript(filePath);
 }
 
 ScriptedAlgorithm::~ScriptedAlgorithm()
 {
-    // Signal any in-flight watchdog threads that this engine is dead.
+    // Acquire the mutex so no watchdog thread is between the alive-check
+    // and the setInterrupted() call while we tear down.
+    std::lock_guard<std::mutex> lock(*m_engineMutex);
     m_engineAlive->store(false, std::memory_order_release);
 }
 
@@ -157,11 +162,12 @@ void ScriptedAlgorithm::parseMetadata(const QString& source)
     static const QRegularExpression metaRe(QStringLiteral(R"(^// @(\w+)\s+(.+)$)"));
 
     int lineCount = 0;
-    QTextStream stream(const_cast<QString*>(&source), QIODevice::ReadOnly);
-    QString line;
+    const auto lines = QStringView(source).split(QLatin1Char('\n'));
 
-    while (stream.readLineInto(&line) && lineCount < 50) {
+    for (const auto& lineView : lines) {
+        if (lineCount >= 50) break;
         ++lineCount;
+        const QString line = lineView.toString();
 
         // Stop at first non-comment, non-empty line
         const QString trimmed = line.trimmed();
@@ -278,9 +284,16 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     // the sleep window (e.g., hot-reload unregisters the algorithm).
     auto finished = std::make_shared<std::atomic<bool>>(false);
     auto aliveFlag = m_engineAlive;
+    auto engineMtx = m_engineMutex;
     auto* engine = m_engine;
-    std::thread([engine, finished, aliveFlag]() {
+    std::thread([engine, finished, aliveFlag, engineMtx]() {
         QThread::msleep(100);
+        if (finished->load(std::memory_order_acquire)) {
+            return; // Script completed within timeout
+        }
+        // Hold the mutex to prevent the destructor from invalidating the
+        // engine pointer between our alive-check and setInterrupted().
+        std::lock_guard<std::mutex> lock(*engineMtx);
         if (!finished->load(std::memory_order_acquire)
             && aliveFlag->load(std::memory_order_acquire)) {
             engine->setInterrupted(true);

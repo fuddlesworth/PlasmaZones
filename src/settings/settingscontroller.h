@@ -429,6 +429,7 @@ Q_SIGNALS:
     void daemonRunningChanged();
     void layoutsChanged();
     void layoutAdded(const QString& layoutId);
+    void availableAlgorithmsChanged();
     void screensChanged();
     void dismissedUpdateVersionChanged();
 

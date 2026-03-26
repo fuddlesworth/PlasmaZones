@@ -17,6 +17,7 @@
 namespace PlasmaZones {
 
 class SplitTree;
+struct SplitNode;
 
 /**
  * @brief Tracks tiling state for a single screen
@@ -430,6 +431,15 @@ private:
 
     // Helper to emit stateChanged after other signals
     void notifyStateChanged();
+
+    // Helpers for rebuildSplitTree() — preserve split ratios across rebuild
+    static void collectInternalNodeParams(const SplitNode* node,
+                                           QVector<qreal>& ratios,
+                                           QVector<bool>& directions);
+    static int applyInternalNodeParams(SplitNode* node,
+                                        const QVector<qreal>& ratios,
+                                        const QVector<bool>& directions,
+                                        int index);
 };
 
 } // namespace PlasmaZones

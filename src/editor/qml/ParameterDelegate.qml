@@ -168,8 +168,11 @@ Item {
                     return "#ffffff";
 
                 var fallback = (typeof paramDelegate.paramData.default === "string" && paramDelegate.paramData.default.length > 0) ? paramDelegate.paramData.default : "#ffffff";
+                if (paramDelegate.paramType !== "color")
+                    return fallback;
+
                 var colorStr = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, fallback);
-                if (typeof colorStr !== "string" || colorStr.length === 0)
+                if (typeof colorStr !== "string" || colorStr.length === 0 || colorStr.charAt(0) !== "#")
                     return fallback;
 
                 var parsed = Qt.color(colorStr);

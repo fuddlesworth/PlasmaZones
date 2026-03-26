@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 
 class QJSEngine;
 
@@ -122,6 +123,7 @@ private:
 
     mutable QJSEngine* m_engine = nullptr;
     std::shared_ptr<std::atomic<bool>> m_engineAlive; ///< Watchdog thread checks this before touching m_engine
+    std::shared_ptr<std::mutex> m_engineMutex; ///< Guards engine pointer access between watchdog and destructor
     mutable QJSValue m_calculateZonesFn;
     QString m_filePath;
     QString m_scriptId;
