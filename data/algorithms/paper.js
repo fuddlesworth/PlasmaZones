@@ -8,7 +8,7 @@
 // @supportsMasterCount false
 // @supportsSplitRatio true
 // @defaultSplitRatio 0.8
-// @defaultMaxWindows 4
+// @defaultMaxWindows 3
 // @minimumWindows 1
 
 /**

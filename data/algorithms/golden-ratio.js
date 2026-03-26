@@ -7,7 +7,7 @@
 // @producesOverlappingZones false
 // @supportsMasterCount false
 // @supportsSplitRatio false
-// @defaultMaxWindows 6
+// @defaultMaxWindows 4
 // @minimumWindows 1
 
 /**
