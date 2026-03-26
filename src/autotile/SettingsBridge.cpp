@@ -88,16 +88,7 @@ void SettingsBridge::syncFromSettings(Settings* settings)
     }
     // Sync per-algorithm settings map from Settings
     {
-        const QVariantMap perAlgoMap = settings->autotilePerAlgorithmSettings();
-        QHash<QString, QPair<qreal, int>> newSaved;
-        for (auto it = perAlgoMap.constBegin(); it != perAlgoMap.constEnd(); ++it) {
-            const QVariantMap entry = it.value().toMap();
-            qreal ratio = std::clamp(entry.value(QStringLiteral("splitRatio")).toDouble(),
-                                      AutotileDefaults::MinSplitRatio, AutotileDefaults::MaxSplitRatio);
-            int count = std::clamp(entry.value(QStringLiteral("masterCount")).toInt(),
-                                    AutotileDefaults::MinMasterCount, AutotileDefaults::MaxMasterCount);
-            newSaved[it.key()] = {ratio, count};
-        }
+        const auto newSaved = AutotileConfig::perAlgoFromVariantMap(settings->autotilePerAlgorithmSettings());
         if (cfg->savedAlgorithmSettings != newSaved) {
             cfg->savedAlgorithmSettings = newSaved;
             configChanged = true;
@@ -249,17 +240,8 @@ void SettingsBridge::connectToSettings(Settings* settings)
     QObject::connect(settings, &Settings::autotilePerAlgorithmSettingsChanged, m_engine, [this]() {
         if (!m_settings)
             return;
-        const QVariantMap perAlgoMap = m_settings->autotilePerAlgorithmSettings();
-        QHash<QString, QPair<qreal, int>> newSaved;
-        for (auto it = perAlgoMap.constBegin(); it != perAlgoMap.constEnd(); ++it) {
-            const QVariantMap entry = it.value().toMap();
-            qreal ratio = std::clamp(entry.value(QStringLiteral("splitRatio")).toDouble(),
-                                      AutotileDefaults::MinSplitRatio, AutotileDefaults::MaxSplitRatio);
-            int count = std::clamp(entry.value(QStringLiteral("masterCount")).toInt(),
-                                    AutotileDefaults::MinMasterCount, AutotileDefaults::MaxMasterCount);
-            newSaved[it.key()] = {ratio, count};
-        }
-        m_engine->config()->savedAlgorithmSettings = newSaved;
+        m_engine->config()->savedAlgorithmSettings =
+            AutotileConfig::perAlgoFromVariantMap(m_settings->autotilePerAlgorithmSettings());
     });
 
     CONNECT_SETTING_RETILE(autotileInnerGapChanged, innerGap, autotileInnerGap);
@@ -321,15 +303,8 @@ void SettingsBridge::syncAlgorithmToSettings(const QString& algoId, qreal splitR
     m_settings->setAutotileSplitRatio(splitRatio);
     m_settings->setAutotileMasterCount(m_engine->config()->masterCount);
     // Sync per-algorithm map so saved settings survive save/reload
-    QVariantMap perAlgoMap;
-    for (auto it = m_engine->config()->savedAlgorithmSettings.constBegin();
-         it != m_engine->config()->savedAlgorithmSettings.constEnd(); ++it) {
-        QVariantMap entry;
-        entry[QStringLiteral("splitRatio")] = it.value().first;
-        entry[QStringLiteral("masterCount")] = it.value().second;
-        perAlgoMap[it.key()] = entry;
-    }
-    m_settings->setAutotilePerAlgorithmSettings(perAlgoMap);
+    m_settings->setAutotilePerAlgorithmSettings(
+        AutotileConfig::perAlgoToVariantMap(m_engine->config()->savedAlgorithmSettings));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

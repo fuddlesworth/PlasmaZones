@@ -60,7 +60,7 @@ class PLASMAZONES_EXPORT TilingAlgorithm : public QObject
 
     Q_PROPERTY(QString name READ name CONSTANT)
     Q_PROPERTY(QString description READ description CONSTANT)
-Q_PROPERTY(bool supportsMasterCount READ supportsMasterCount CONSTANT)
+    Q_PROPERTY(bool supportsMasterCount READ supportsMasterCount CONSTANT)
     Q_PROPERTY(bool supportsSplitRatio READ supportsSplitRatio CONSTANT)
 
 public:

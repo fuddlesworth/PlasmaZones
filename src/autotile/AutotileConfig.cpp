@@ -38,6 +38,32 @@ AutotileConfig::InsertPosition stringToInsertPosition(const QString& str)
 }
 } // anonymous namespace
 
+QHash<QString, QPair<qreal, int>> AutotileConfig::perAlgoFromVariantMap(const QVariantMap& map)
+{
+    QHash<QString, QPair<qreal, int>> result;
+    for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+        const QVariantMap entry = it.value().toMap();
+        qreal ratio = std::clamp(entry.value(QStringLiteral("splitRatio")).toDouble(),
+                                  MinSplitRatio, MaxSplitRatio);
+        int count = std::clamp(entry.value(QStringLiteral("masterCount")).toInt(),
+                                MinMasterCount, MaxMasterCount);
+        result[it.key()] = {ratio, count};
+    }
+    return result;
+}
+
+QVariantMap AutotileConfig::perAlgoToVariantMap(const QHash<QString, QPair<qreal, int>>& hash)
+{
+    QVariantMap result;
+    for (auto it = hash.constBegin(); it != hash.constEnd(); ++it) {
+        QVariantMap entry;
+        entry[QStringLiteral("splitRatio")] = it.value().first;
+        entry[QStringLiteral("masterCount")] = it.value().second;
+        result[it.key()] = entry;
+    }
+    return result;
+}
+
 bool AutotileConfig::operator==(const AutotileConfig& other) const
 {
     // Use qFuzzyCompare properly (add 1.0 for values that could be near zero)

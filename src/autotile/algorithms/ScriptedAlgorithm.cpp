@@ -14,6 +14,7 @@
 #include <QThread>
 #include <algorithm>
 #include <atomic>
+#include <memory>
 #include <thread>
 
 namespace PlasmaZones {
@@ -171,6 +172,8 @@ void ScriptedAlgorithm::parseMetadata(const QString& source)
         const QString key = match.captured(1);
         const QString value = match.captured(2).trimmed();
 
+        // Note: @icon is intentionally not parsed — icon() was removed from
+        // the TilingAlgorithm interface. Unknown keys are silently ignored.
         if (key == QLatin1String("name")) {
             m_name = value;
         } else if (key == QLatin1String("description")) {
@@ -264,11 +267,13 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     // Watchdog: interrupt JS engine after 100ms from a separate thread.
     // A QTimer cannot fire during synchronous JS execution because the event
     // loop is blocked, so we use a detached std::thread instead.
-    std::atomic<bool> finished{false};
+    // Use shared_ptr so the flag's lifetime extends to cover both threads,
+    // avoiding a dangling-reference if the caller's stack unwinds early.
+    auto finished = std::make_shared<std::atomic<bool>>(false);
     auto* engine = m_engine;
-    auto watchdog = std::thread([engine, &finished]() {
+    auto watchdog = std::thread([engine, finished]() {
         QThread::msleep(100);
-        if (!finished.load(std::memory_order_acquire)) {
+        if (!finished->load(std::memory_order_acquire)) {
             engine->setInterrupted(true);
         }
     });
@@ -277,7 +282,7 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     const QJSValue result = m_calculateZonesFn.call({jsParams});
 
     // Signal the watchdog and reset interrupted state
-    finished.store(true, std::memory_order_release);
+    finished->store(true, std::memory_order_release);
     m_engine->setInterrupted(false);
     if (watchdog.joinable())
         watchdog.join();

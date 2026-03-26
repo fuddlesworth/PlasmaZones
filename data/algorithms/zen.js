@@ -25,11 +25,14 @@ function calculateZones(params) {
     var gap = params.innerGap || 0;
 
     if (count <= 0) return [];
-    if (count === 1) return [area];
 
     var splitRatio = params.splitRatio > 0 ? params.splitRatio : 0.6;
     var columnWidth = Math.round(area.width * splitRatio);
     var offsetX = area.x + Math.round((area.width - columnWidth) / 2);
+
+    if (count === 1) {
+        return [{ x: offsetX, y: area.y, width: columnWidth, height: area.height }];
+    }
 
     var totalGaps = (count - 1) * gap;
     var tileHeight = Math.round((area.height - totalGaps) / count);

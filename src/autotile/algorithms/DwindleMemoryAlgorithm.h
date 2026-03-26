@@ -4,6 +4,7 @@
 #pragma once
 
 #include "../TilingAlgorithm.h"
+#include "DwindleAlgorithm.h"
 
 namespace PlasmaZones {
 
@@ -56,7 +57,17 @@ public:
         return true;
     }
 
+    /**
+     * @brief Ensure the TilingState has a SplitTree, creating one lazily if needed
+     *
+     * Called by the engine before calculateZones() so the algorithm itself
+     * does not need to const_cast the state. Only creates a tree when
+     * windowCount > 1 and no tree exists.
+     */
+    void ensureSplitTree(TilingState* state) const;
+
 private:
+    DwindleAlgorithm m_fallback; ///< Stateless fallback (avoids static QObject)
     QVector<QRect> calculateStatelessFallback(const TilingParams& params, const QRect& area) const;
 };
 

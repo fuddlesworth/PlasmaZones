@@ -232,7 +232,8 @@ public:
     /**
      * @brief Get section grouping info for a tiling algorithm
      *
-     * User scripts → "custom" section, everything else → "built-in".
+     * User scripts → "custom", system-installed scripts → "extras",
+     * built-in C++ algorithms → "built-in".
      */
     static SectionInfo sectionForAlgorithm(TilingAlgorithm* algorithm);
 

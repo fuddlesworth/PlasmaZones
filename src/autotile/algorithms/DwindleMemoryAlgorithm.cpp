@@ -30,6 +30,24 @@ QString DwindleMemoryAlgorithm::description() const
     return PzI18n::tr("Remembers split positions — resize one split without affecting others");
 }
 
+void DwindleMemoryAlgorithm::ensureSplitTree(TilingState* state) const
+{
+    if (!state || state->splitTree()) {
+        return; // Already has a tree (or no state)
+    }
+
+    const QStringList tiledWindows = state->tiledWindows();
+    if (tiledWindows.size() <= 1) {
+        return; // No tree needed for 0-1 windows
+    }
+
+    auto newTree = std::make_unique<SplitTree>();
+    for (const QString& windowId : tiledWindows) {
+        newTree->insertAtEnd(windowId);
+    }
+    state->setSplitTree(std::move(newTree));
+}
+
 QVector<QRect> DwindleMemoryAlgorithm::calculateZones(const TilingParams& params) const
 {
     const int windowCount = params.windowCount;
@@ -53,20 +71,6 @@ QVector<QRect> DwindleMemoryAlgorithm::calculateZones(const TilingParams& params
     // Use persistent split tree if available and leaf count matches
     SplitTree* tree = params.state->splitTree();
 
-    // Lazy tree creation: build tree from current window order on first use.
-    // const_cast is acceptable here — the tree is lazy-initialized cache state,
-    // not a logical mutation. The algorithm is const but needs to seed the tree
-    // so that subsequent resize operations have a structure to work with.
-    if (!tree && windowCount > 1) {
-        auto newTree = std::make_unique<SplitTree>();
-        const QStringList tiledWindows = params.state->tiledWindows();
-        for (const QString& windowId : tiledWindows) {
-            newTree->insertAtEnd(windowId);
-        }
-        const_cast<TilingState*>(params.state)->setSplitTree(std::move(newTree));
-        tree = params.state->splitTree();
-    }
-
     if (tree && tree->leafCount() == windowCount) {
         return tree->applyGeometry(area, params.innerGap);
     }
@@ -79,8 +83,7 @@ QVector<QRect> DwindleMemoryAlgorithm::calculateStatelessFallback(const TilingPa
 {
     Q_UNUSED(area)
     // Delegate to stateless DwindleAlgorithm — avoids duplicating 77 lines
-    static DwindleAlgorithm s_fallback;
-    return s_fallback.calculateZones(params);
+    return m_fallback.calculateZones(params);
 }
 
 } // namespace PlasmaZones

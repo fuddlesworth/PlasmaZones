@@ -12,7 +12,10 @@
 // @zoneNumberDisplay all
 
 /**
- * Corner Master layout: first window takes the top-left corner. Remaining
+ * Corner Master layout (see also quadrant-priority.js for a similar L-shape
+ * variant with ceil/floor distribution instead of alternating).
+ *
+ * First window takes the top-left corner. Remaining
  * windows fill the L-shaped remainder — right column (full height) and
  * bottom row (master width).
  *
@@ -35,8 +38,8 @@ function calculateZones(params) {
     if (count === 1) return [area];
 
     var splitRatio = params.splitRatio > 0 ? params.splitRatio : 0.55;
-    var masterW = Math.round(area.width * splitRatio - gap / 2);
-    var masterH = Math.round(area.height * splitRatio - gap / 2);
+    var masterW = Math.max(1, Math.round(area.width * splitRatio - gap / 2));
+    var masterH = Math.max(1, Math.round(area.height * splitRatio - gap / 2));
 
     var zones = [];
 

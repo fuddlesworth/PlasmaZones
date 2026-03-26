@@ -9,6 +9,7 @@
 #include <QJsonObject>
 #include <QPair>
 #include <QString>
+#include <QVariantMap>
 
 namespace PlasmaZones {
 
@@ -63,6 +64,11 @@ struct PLASMAZONES_EXPORT AutotileConfig
     /// Saved when switching away from an algorithm, restored when switching back.
     /// Key: algorithm ID (e.g. "master-stack", "centered-master", "script:deck")
     QHash<QString, QPair<qreal, int>> savedAlgorithmSettings;
+
+    /// Convert per-algorithm settings from QVariantMap (Settings layer) to internal hash
+    static QHash<QString, QPair<qreal, int>> perAlgoFromVariantMap(const QVariantMap& map);
+    /// Convert internal hash to QVariantMap for the Settings layer
+    static QVariantMap perAlgoToVariantMap(const QHash<QString, QPair<qreal, int>>& hash);
 
     // ═══════════════════════════════════════════════════════════════════════
     // Gap Settings

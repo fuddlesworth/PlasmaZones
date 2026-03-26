@@ -60,7 +60,7 @@ function calculateZones(params) {
         zones.push({
             x: area.x,
             y: area.y,
-            width: marginX - gap,
+            width: Math.max(1, marginX - gap),
             height: area.height
         });
         // Window 3: right panel, full height
@@ -74,7 +74,7 @@ function calculateZones(params) {
     }
 
     // 4+ windows: left, right, then bottom row for the rest
-    var leftPanelW = marginX - gap;
+    var leftPanelW = Math.max(1, marginX - gap);
     var rightPanelX = area.x + marginX + centerW + gap;
     var rightPanelW = area.x + area.width - rightPanelX;
     var bottomPanelY = area.y + marginY + centerH + gap;

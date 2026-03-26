@@ -19,6 +19,7 @@
 #include "PerScreenConfigResolver.h"
 #include "SettingsBridge.h"
 #include "TilingAlgorithm.h"
+#include "algorithms/DwindleMemoryAlgorithm.h"
 #include "TilingState.h"
 #include "core/constants.h"
 #include "core/layout.h"
@@ -344,7 +345,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
             m_config->masterCount = savedIt->second;
         } else {
             m_config->splitRatio = newAlgo->defaultSplitRatio();
-            m_config->masterCount = 1; // Reset to default when no saved settings
+            m_config->masterCount = AutotileDefaults::DefaultMasterCount;
         }
         propagateGlobalSplitRatio();
         propagateGlobalMasterCount();
@@ -361,7 +362,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
             m_config->masterCount = savedIt->second;
         } else {
             m_config->splitRatio = newAlgo->defaultSplitRatio();
-            m_config->masterCount = 1; // Reset to default when no saved settings
+            m_config->masterCount = AutotileDefaults::DefaultMasterCount;
         }
         m_config->maxWindows = newAlgo->defaultMaxWindows();
         propagateGlobalSplitRatio();
@@ -1488,6 +1489,14 @@ void AutotileEngine::recalculateLayout(const QString& screenId)
         minSizes.resize(windowCount, QSize(0, 0));
         for (int i = 0; i < windowCount && i < windows.size(); ++i) {
             minSizes[i] = m_windowMinSizes.value(windows[i], QSize(0, 0));
+        }
+    }
+
+    // Ensure memory-based algorithms have their split tree before calculateZones().
+    // This avoids const_cast inside the algorithm — the engine owns the mutation.
+    if (algo->supportsMemory() && state) {
+        if (auto* memAlgo = qobject_cast<const DwindleMemoryAlgorithm*>(algo)) {
+            memAlgo->ensureSplitTree(state);
         }
     }
 

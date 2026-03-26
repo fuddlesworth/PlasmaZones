@@ -38,7 +38,10 @@ SettingsController::SettingsController(QObject* parent)
     : QObject(parent)
     , m_screenHelper(&m_settings, this)
 {
-    // Load scripted algorithms so they appear in the algorithm dropdown
+    // Load scripted algorithms so they appear in the algorithm dropdown.
+    // The daemon also creates its own ScriptedAlgorithmLoader — the KCM runs
+    // in a separate process, so both need an independent loader to populate
+    // the shared AlgorithmRegistry singleton within their respective processes.
     auto* scriptLoader = new ScriptedAlgorithmLoader(this);
     scriptLoader->scanAndRegister();
 

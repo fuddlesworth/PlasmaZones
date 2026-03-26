@@ -370,9 +370,14 @@ QJsonObject SplitTree::nodeToJson(const SplitNode* node)
     return json;
 }
 
-std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, SplitNode* parent)
+std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, SplitNode* parent, int depth)
 {
     if (json.isEmpty()) {
+        return nullptr;
+    }
+
+    if (depth > MaxDeserializationDepth) {
+        qCWarning(lcAutotile) << "SplitTree::fromJson: max depth exceeded, truncating";
         return nullptr;
     }
 
@@ -383,8 +388,8 @@ std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, Spli
 
     if (json.contains(QStringLiteral("first")) && json.contains(QStringLiteral("second"))) {
         // Internal node
-        node->first = nodeFromJson(json[QStringLiteral("first")].toObject(), node.get());
-        node->second = nodeFromJson(json[QStringLiteral("second")].toObject(), node.get());
+        node->first = nodeFromJson(json[QStringLiteral("first")].toObject(), node.get(), depth + 1);
+        node->second = nodeFromJson(json[QStringLiteral("second")].toObject(), node.get(), depth + 1);
         if (!node->first || !node->second) {
             qCWarning(lcAutotile) << "SplitTree::fromJson: invalid internal node (missing child)";
             return nullptr;

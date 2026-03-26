@@ -30,8 +30,8 @@ function calculateZones(params) {
     if (count === 1) return [area];
 
     var splitRatio = params.splitRatio > 0 ? params.splitRatio : 0.6;
-    var masterW = Math.round(area.width * splitRatio - gap / 2);
-    var masterH = Math.round(area.height * splitRatio - gap / 2);
+    var masterW = Math.max(1, Math.round(area.width * splitRatio - gap / 2));
+    var masterH = Math.max(1, Math.round(area.height * splitRatio - gap / 2));
 
     var zones = [];
 

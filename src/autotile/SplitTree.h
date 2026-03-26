@@ -197,8 +197,10 @@ private:
     int countLeaves(const SplitNode* node) const;
     void applyGeometryRecursive(const SplitNode* node, const QRect& rect, int innerGap, QVector<QRect>& zones) const;
 
+    static constexpr int MaxDeserializationDepth = 30;
+
     static QJsonObject nodeToJson(const SplitNode* node);
-    static std::unique_ptr<SplitNode> nodeFromJson(const QJsonObject& json, SplitNode* parent);
+    static std::unique_ptr<SplitNode> nodeFromJson(const QJsonObject& json, SplitNode* parent, int depth = 0);
 };
 
 } // namespace PlasmaZones
