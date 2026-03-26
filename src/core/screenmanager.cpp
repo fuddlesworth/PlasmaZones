@@ -587,10 +587,13 @@ QRect ScreenManager::screenGeometry(const QString& screenId) const
             QString physId = VirtualScreenId::extractPhysicalId(screenId);
             rebuildVirtualGeometryCache(physId);
         }
-        return m_virtualGeometryCache.value(screenId);
+        QRect cached = m_virtualGeometryCache.value(screenId);
+        if (cached.isValid()) {
+            return cached;
+        }
     }
 
-    // Physical screen — resolve to QScreen
+    // Physical screen — try tracked screens first, then fallback
     QScreen* screen = Utils::findScreenByIdOrName(screenId);
     return screen ? screen->geometry() : QRect();
 }
@@ -611,7 +614,13 @@ QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
         }
 
         QRect physAvail = actualAvailableGeometry(screen);
-        return vsGeom.intersected(physAvail);
+        QRect result = vsGeom.intersected(physAvail);
+        // If panel consumes most of the virtual screen, fall back to full virtual geometry
+        // to avoid zero/unusable available areas
+        if (!result.isValid() || result.width() < 100 || result.height() < 100) {
+            return vsGeom;
+        }
+        return result;
     }
 
     // Physical screen

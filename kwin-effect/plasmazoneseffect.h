@@ -499,6 +499,8 @@ private:
     bool m_daemonReadyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
     bool m_virtualScreensReady = false; ///< set after all fetchVirtualScreenConfig replies arrive
     int m_pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
+    int m_vsConfigGeneration = 0; ///< generation counter for fetchAllVirtualScreenConfigs
+    bool m_daemonReadyWindowStateProcessed = false; ///< re-entrancy guard for processDaemonReadyWindowState
 
     // Screen ID cache: connector name → EDID screen ID (manufacturer:model:serial).
     // Avoids repeated QScreen iteration and sysfs reads during drag (~30Hz).
@@ -516,24 +518,45 @@ private:
     QString m_lastEffectiveScreenId;
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // Virtual Screen Support
+    // Virtual Screen Support — public utilities
     // ═══════════════════════════════════════════════════════════════════════════════
+public:
+    /// Extract the physical screen ID from a virtual screen ID.
+    /// Returns the original ID if it doesn't contain the "/vs:" separator.
+    /// This duplicates VirtualScreenId::extractPhysicalId from the daemon
+    /// (which the effect cannot include). Keep in sync.
+    static QString extractPhysicalScreenId(const QString& screenId)
+    {
+        static const QString vsSep = QStringLiteral("/vs:");
+        int pos = screenId.indexOf(vsSep);
+        return (pos > 0) ? screenId.left(pos) : screenId;
+    }
 
+    /// Check if a screen ID is a virtual screen ID (contains "/vs:").
+    static bool isVirtualScreenId(const QString& screenId)
+    {
+        return screenId.indexOf(QStringLiteral("/vs:")) > 0;
+    }
+
+private:
     /**
      * @brief A single virtual screen subdivision within a physical monitor.
      *
      * Virtual screens divide a physical monitor into independent sub-screens,
      * each with its own zones, autotile state, etc. The daemon manages
      * definitions; the effect fetches them via D-Bus and resolves positions.
+     *
+     * Named EffectVirtualScreenDef to avoid collision with the daemon's
+     * VirtualScreenDef (which has many more fields).
      */
-    struct VirtualScreenDef
+    struct EffectVirtualScreenDef
     {
         QString id; ///< e.g., "Dell:U2722D:115107/vs:0"
         QRect geometry; ///< Absolute geometry in global compositor coords
     };
 
     /// Physical screen ID -> list of virtual screens (empty = no subdivisions)
-    QHash<QString, QVector<VirtualScreenDef>> m_virtualScreenDefs;
+    QHash<QString, QVector<EffectVirtualScreenDef>> m_virtualScreenDefs;
 
     /**
      * @brief Resolve a global point to the effective screen ID (virtual-aware).
@@ -549,7 +572,7 @@ private:
     QString resolveEffectiveScreenId(const QPoint& pos, const KWin::LogicalOutput* output) const;
 
     /// Fetch virtual screen config from daemon for a single physical screen
-    void fetchVirtualScreenConfig(const QString& physicalScreenId);
+    void fetchVirtualScreenConfig(const QString& physicalScreenId, int generation = -1);
 
     /// Fetch virtual screen configs for all connected physical screens
     void fetchAllVirtualScreenConfigs();

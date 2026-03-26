@@ -22,10 +22,7 @@ namespace {
 /// For virtual screens (containing "/vs:"), strip the suffix and compare physical IDs.
 bool samePhysicalScreen(const QString& idA, const QString& idB)
 {
-    static const QString vsSep = QStringLiteral("/vs:");
-    QString physA = idA.contains(vsSep) ? idA.left(idA.indexOf(vsSep)) : idA;
-    QString physB = idB.contains(vsSep) ? idB.left(idB.indexOf(vsSep)) : idB;
-    return physA == physB;
+    return PlasmaZonesEffect::extractPhysicalScreenId(idA) == PlasmaZonesEffect::extractPhysicalScreenId(idB);
 }
 } // anonymous namespace
 

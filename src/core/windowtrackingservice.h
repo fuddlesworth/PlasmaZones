@@ -580,6 +580,17 @@ public:
     void migrateScreenAssignmentsToVirtual(const QString& physicalScreenId, const QStringList& virtualScreenIds,
                                            ScreenManager* mgr);
 
+    /**
+     * @brief Reverse migration: virtual screen IDs → physical screen ID
+     *
+     * Called when virtual screen configuration is removed for a physical screen.
+     * Strips the "/vs:N" suffix from all tracked window screen assignments that
+     * belong to the given physical screen, reverting them to the physical ID.
+     *
+     * @param physicalScreenId The physical screen ID to migrate back to
+     */
+    void migrateScreenAssignmentsFromVirtual(const QString& physicalScreenId);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Resolution Change Handling
     // ═══════════════════════════════════════════════════════════════════════════

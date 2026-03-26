@@ -12,6 +12,7 @@
 #include "../screenmanager.h"
 #include "../virtualdesktopmanager.h"
 #include "../utils.h"
+#include "../virtualscreen.h"
 #include "../logging.h"
 #include <QScreen>
 #include <QUuid>
@@ -106,6 +107,41 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     if (migrated > 0) {
         qCInfo(lcCore) << "Migrated" << migrated << "window screen assignments from" << physicalScreenId
                        << "to virtual screens";
+        scheduleSaveState();
+    }
+}
+
+void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& physicalScreenId)
+{
+    const QString prefix = physicalScreenId + VirtualScreenId::Separator;
+    int migrated = 0;
+
+    for (auto it = m_windowScreenAssignments.begin(); it != m_windowScreenAssignments.end(); ++it) {
+        if (it.value().startsWith(prefix)) {
+            it.value() = physicalScreenId;
+            migrated++;
+        }
+    }
+
+    // Also migrate pre-float screen assignments
+    for (auto it = m_preFloatScreenAssignments.begin(); it != m_preFloatScreenAssignments.end(); ++it) {
+        if (it.value().startsWith(prefix)) {
+            it.value() = physicalScreenId;
+        }
+    }
+
+    // Also migrate pending restore queues
+    for (auto queueIt = m_pendingRestoreQueues.begin(); queueIt != m_pendingRestoreQueues.end(); ++queueIt) {
+        for (PendingRestore& entry : queueIt.value()) {
+            if (entry.screenId.startsWith(prefix)) {
+                entry.screenId = physicalScreenId;
+            }
+        }
+    }
+
+    if (migrated > 0) {
+        qCInfo(lcCore) << "Migrated" << migrated << "window screen assignments from virtual screens back to"
+                       << physicalScreenId;
         scheduleSaveState();
     }
 }

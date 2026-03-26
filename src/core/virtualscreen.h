@@ -39,13 +39,18 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
         int top = physicalGeometry.y() + qRound(region.y() * physicalGeometry.height());
         int right = physicalGeometry.x() + qRound((region.x() + region.width()) * physicalGeometry.width());
         int bottom = physicalGeometry.y() + qRound((region.y() + region.height()) * physicalGeometry.height());
+        // Clamp to physical screen bounds to prevent tolerance overshoot
+        right = qMin(right, physicalGeometry.x() + physicalGeometry.width());
+        bottom = qMin(bottom, physicalGeometry.y() + physicalGeometry.height());
+        left = qMax(left, physicalGeometry.x());
+        top = qMax(top, physicalGeometry.y());
         return QRect(left, top, right - left, bottom - top);
     }
 
     bool operator==(const VirtualScreenDef& other) const
     {
         auto fuzzyEqual = [](qreal a, qreal b) {
-            return qAbs(a - b) < 1e-6;
+            return qAbs(a - b) < Tolerance;
         };
         auto fuzzyRectEqual = [&fuzzyEqual](const QRectF& a, const QRectF& b) {
             return fuzzyEqual(a.x(), b.x()) && fuzzyEqual(a.y(), b.y()) && fuzzyEqual(a.width(), b.width())
@@ -128,7 +133,8 @@ inline const QString Separator = QStringLiteral("/vs:");
 /// Check if a screen ID is a virtual screen ID (contains "/vs:")
 inline bool isVirtual(const QString& screenId)
 {
-    return screenId.contains(Separator);
+    int pos = screenId.indexOf(Separator);
+    return pos > 0; // Must have non-empty physical ID before separator
 }
 
 /// Extract the physical screen ID from a virtual screen ID

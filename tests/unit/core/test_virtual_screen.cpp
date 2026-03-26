@@ -51,10 +51,11 @@ private Q_SLOTS:
 
     void testIsVirtual_bareVsSeparator_returnsTrue()
     {
-        // Edge case: "/vs:0" with no physical ID prefix
-        // Implementation uses contains(), so this returns true even though
-        // extractPhysicalId would return the original string (sep == 0, not > 0).
-        QVERIFY(VirtualScreenId::isVirtual(QStringLiteral("/vs:0")));
+        // Edge case: "/vs:0" with no physical ID prefix.
+        // This is a malformed ID — a valid virtual screen ID must have a non-empty
+        // physical screen ID before the "/vs:" separator. isVirtual() requires pos > 0
+        // to reject false positives from malformed IDs.
+        QVERIFY(!VirtualScreenId::isVirtual(QStringLiteral("/vs:0")));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

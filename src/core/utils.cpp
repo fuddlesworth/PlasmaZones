@@ -223,6 +223,9 @@ bool screensMatch(const QString& a, const QString& b)
     // physical parent (e.g. "A/vs:0" vs "A/vs:1" are distinct screens).
     // A physical ID vs a virtual ID is also not a match (the physical screen
     // was subdivided; the physical ID no longer represents a usable screen).
+    // Note: callers should pass normalized IDs. If a connector name is passed
+    // for one argument and a virtual screen ID for the other, this will return
+    // false — which is the correct behavior since they represent different things.
     if (VirtualScreenId::isVirtual(a) || VirtualScreenId::isVirtual(b)) {
         return false;
     }

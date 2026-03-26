@@ -180,6 +180,8 @@ inline void applyLayerShellScreenPosition(QWindow* window, QScreen* physScreen, 
             LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft));
         const QRect physGeom = physScreen->geometry();
         layerWindow->setMargins(QMargins(screenGeom.x() - physGeom.x(), screenGeom.y() - physGeom.y(), 0, 0));
+        // Explicit resize required — with only two anchors, LayerShellQt won't auto-size
+        window->resize(screenGeom.size());
     } else {
         layerWindow->setAnchors(
             LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom

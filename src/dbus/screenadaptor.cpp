@@ -37,7 +37,18 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
         }
 
         connect(screen, &QScreen::geometryChanged, this, [this, screen]() {
-            Q_EMIT screenGeometryChanged(Utils::screenIdentifier(screen));
+            const QString physId = Utils::screenIdentifier(screen);
+            Q_EMIT screenGeometryChanged(physId);
+            // Also emit for each virtual screen on this physical screen
+            auto* mgr = ScreenManager::instance();
+            if (mgr) {
+                QStringList vsIds = mgr->virtualScreenIdsFor(physId);
+                for (const QString& vsId : vsIds) {
+                    if (vsId != physId) {
+                        Q_EMIT screenGeometryChanged(vsId);
+                    }
+                }
+            }
         });
     });
 
@@ -65,7 +76,18 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
     // Connect existing screens
     for (auto* screen : Utils::allScreens()) {
         connect(screen, &QScreen::geometryChanged, this, [this, screen]() {
-            Q_EMIT screenGeometryChanged(Utils::screenIdentifier(screen));
+            const QString physId = Utils::screenIdentifier(screen);
+            Q_EMIT screenGeometryChanged(physId);
+            // Also emit for each virtual screen on this physical screen
+            auto* mgr = ScreenManager::instance();
+            if (mgr) {
+                QStringList vsIds = mgr->virtualScreenIdsFor(physId);
+                for (const QString& vsId : vsIds) {
+                    if (vsId != physId) {
+                        Q_EMIT screenGeometryChanged(vsId);
+                    }
+                }
+            }
         });
     }
 }
@@ -245,29 +267,10 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
         config.screens.append(def);
     }
 
-    // Validate regions before applying
-    for (const auto& def : config.screens) {
-        if (def.region.width() <= 0 || def.region.height() <= 0 || def.region.x() < -1e-3 || def.region.y() < -1e-3
-            || def.region.x() + def.region.width() > 1.0 + 1e-3 || def.region.y() + def.region.height() > 1.0 + 1e-3) {
-            qCWarning(lcDbus) << "setVirtualScreenConfig: invalid region for screen" << def.index;
-            return;
-        }
-    }
+    // Basic sanity: must have at least 2 screens (full validation in ScreenManager)
     if (config.screens.size() < 2) {
         qCWarning(lcDbus) << "setVirtualScreenConfig: need at least 2 screens for subdivision";
         return;
-    }
-
-    // Validate: no two regions overlap (pairwise intersection check)
-    for (int i = 0; i < config.screens.size(); ++i) {
-        for (int j = i + 1; j < config.screens.size(); ++j) {
-            QRectF intersection = config.screens[i].region.intersected(config.screens[j].region);
-            if (!intersection.isEmpty()) {
-                qCWarning(lcDbus) << "setVirtualScreenConfig: overlapping regions between screen"
-                                  << config.screens[i].index << "and" << config.screens[j].index;
-                return;
-            }
-        }
     }
 
     mgr->setVirtualScreenConfig(physicalScreenId, config);
