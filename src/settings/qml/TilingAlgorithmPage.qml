@@ -293,7 +293,7 @@ Flickable {
                         appSettings: settingsController
                         showPreview: true
                         layoutFilter: 1 // Autotile algorithms only
-                        noneText: i18n("Default")
+                        showNoneOption: false
                         currentLayoutId: "autotile:" + root.effectiveAlgorithm
                         onActivated: {
                             // Extract algorithm ID from autotile: prefixed value

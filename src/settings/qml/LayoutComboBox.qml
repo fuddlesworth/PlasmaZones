@@ -33,6 +33,8 @@ ComboBox {
     property string noneText: i18n("Default")
     property string currentLayoutId: ""
     property bool showPreview: false
+    // Whether to show the "Default"/"None" entry at the top of the list
+    property bool showNoneOption: true
     // Filter layouts by category: -1 = show all, 0 = manual/zone only, 1 = autotile only
     property int layoutFilter: -1
     // The layout ID that "Default" actually resolves to at runtime.
@@ -92,14 +94,17 @@ ComboBox {
     }
 
     function _buildItems() {
-        let defaultLayout = _resolveDefaultLayout();
-        let items = [{
-            "text": noneText,
-            "value": "",
-            "layout": defaultLayout,
-            "category": root.layoutFilter >= 0 ? root.layoutFilter : getCategory(defaultLayout, -1),
-            "isDefaultOption": true
-        }];
+        let items = [];
+        if (root.showNoneOption) {
+            let defaultLayout = _resolveDefaultLayout();
+            items.push({
+                "text": noneText,
+                "value": "",
+                "layout": defaultLayout,
+                "category": root.layoutFilter >= 0 ? root.layoutFilter : getCategory(defaultLayout, -1),
+                "isDefaultOption": true
+            });
+        }
         if (appSettings && appSettings.layouts) {
             let layouts = appSettings.layouts; // cache locally — avoid repeated QVariant→JS conversion
             let layoutItems = [];
