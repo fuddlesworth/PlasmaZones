@@ -86,6 +86,7 @@ include(FeatureSummary)
 find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
     Concurrent
     Core
+    Qml
     Quick
     QuickControls2
     Gui
