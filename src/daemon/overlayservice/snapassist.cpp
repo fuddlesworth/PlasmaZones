@@ -32,15 +32,8 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
         return;
     }
 
-    // Resolve physical screen (virtual IDs resolve to their backing physical screen)
-    auto* mgr = ScreenManager::instance();
-    QScreen* screen = mgr ? mgr->physicalQScreenFor(screenId) : nullptr;
-    if (!screen && !screenId.isEmpty()) {
-        screen = Utils::findScreenByIdOrName(screenId);
-    }
-    if (!screen) {
-        screen = Utils::primaryScreen();
-    }
+    // Resolve physical screen using shared helper (handles virtual IDs, fallback chain)
+    QScreen* screen = resolveTargetScreen(screenId);
     if (!screen) {
         qCWarning(lcOverlay) << "showSnapAssist: no screen available";
         Q_EMIT snapAssistDismissed();
@@ -48,8 +41,10 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     }
 
     // Use virtual screen geometry when available, otherwise physical
-    QRect screenGeom =
-        (mgr && mgr->screenGeometry(screenId).isValid()) ? mgr->screenGeometry(screenId) : screen->geometry();
+    QRect screenGeom = resolveScreenGeometry(screenId);
+    if (!screenGeom.isValid()) {
+        screenGeom = screen->geometry();
+    }
 
     // Always destroy and recreate to avoid stale QML state (zone sizes wrong after continuation)
     destroySnapAssistWindow();
@@ -306,15 +301,8 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         return;
     }
 
-    // Resolve target screen (virtual IDs resolve to backing physical screen)
-    auto* mgr = ScreenManager::instance();
-    QScreen* screen = mgr ? mgr->physicalQScreenFor(screenId) : nullptr;
-    if (!screen && !screenId.isEmpty()) {
-        screen = Utils::findScreenByIdOrName(screenId);
-    }
-    if (!screen) {
-        screen = Utils::primaryScreen();
-    }
+    // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
+    QScreen* screen = resolveTargetScreen(screenId);
     if (!screen) {
         qCWarning(lcOverlay) << "showLayoutPicker: no screen available";
         return;
@@ -322,8 +310,10 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
     // Use virtual screen geometry when available
     const QString resolvedId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
-    QRect screenGeom =
-        (mgr && mgr->screenGeometry(resolvedId).isValid()) ? mgr->screenGeometry(resolvedId) : screen->geometry();
+    QRect screenGeom = resolveScreenGeometry(resolvedId);
+    if (!screenGeom.isValid()) {
+        screenGeom = screen->geometry();
+    }
 
     // Always destroy and recreate for fresh state
     destroyLayoutPickerWindow();

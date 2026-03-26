@@ -19,6 +19,7 @@
 #include "../core/zoneselectorlayout.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
+#include "../core/virtualscreen.h"
 #include "../core/constants.h"
 #include "../config/settings.h"
 #include "../autotile/AutotileEngine.h"
@@ -265,7 +266,7 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
 
     // Resolve effective (virtual-aware) screen ID for disabled-monitor check
     QString selectorScreenId = effectiveScreenIdAt(cursorX, cursorY);
-    QScreen* screen = Utils::findScreenByIdOrName(Utils::physicalScreenId(selectorScreenId));
+    QScreen* screen = Utils::findScreenByIdOrName(VirtualScreenId::extractPhysicalId(selectorScreenId));
     if (!screen) {
         screen = screenAtPoint(cursorX, cursorY);
     }

@@ -497,6 +497,8 @@ private:
     // synchronous isServiceRegistered() calls that block the compositor thread.
     bool m_daemonServiceRegistered = false;
     bool m_daemonReadyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
+    bool m_virtualScreensReady = false; ///< set after all fetchVirtualScreenConfig replies arrive
+    int m_pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
 
     // Screen ID cache: connector name → EDID screen ID (manufacturer:model:serial).
     // Avoids repeated QScreen iteration and sysfs reads during drag (~30Hz).
@@ -551,6 +553,11 @@ private:
 
     /// Fetch virtual screen configs for all connected physical screens
     void fetchAllVirtualScreenConfigs();
+
+    /// Process window state that depends on virtual screen definitions being loaded.
+    /// Called from fetchAllVirtualScreenConfigs completion callback after all
+    /// async D-Bus replies have arrived.
+    void processDaemonReadyWindowState();
 
 private Q_SLOTS:
     /// Handle daemon signal when virtual screen definitions change

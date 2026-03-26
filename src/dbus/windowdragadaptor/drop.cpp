@@ -11,6 +11,7 @@
 #include "../../core/geometryutils.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include "../../core/virtualscreen.h"
 #include "../../autotile/AutotileEngine.h"
 #include <QScreen>
 
@@ -43,7 +44,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Resolve the effective (virtual-aware) screen ID so zones are calculated against
     // virtual screen bounds, not physical screen bounds.
     QString releaseScreenId = effectiveScreenIdAt(cursorX, cursorY);
-    QScreen* releaseScreen = Utils::findScreenByIdOrName(Utils::physicalScreenId(releaseScreenId));
+    QScreen* releaseScreen = Utils::findScreenByIdOrName(VirtualScreenId::extractPhysicalId(releaseScreenId));
     if (!releaseScreen) {
         releaseScreen = screenAtPoint(cursorX, cursorY);
     }
@@ -104,7 +105,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         QString selectedLayoutId = m_overlayService->selectedLayoutId();
         // Resolve virtual-aware screen ID for the zone selector position
         QString selectorScreenId = effectiveScreenIdAt(capturedLastCursorX, capturedLastCursorY);
-        QScreen* screen = Utils::findScreenByIdOrName(Utils::physicalScreenId(selectorScreenId));
+        QScreen* screen = Utils::findScreenByIdOrName(VirtualScreenId::extractPhysicalId(selectorScreenId));
         if (!screen)
             screen = screenAtPoint(capturedLastCursorX, capturedLastCursorY);
         if (selectorScreenId.isEmpty() && screen)

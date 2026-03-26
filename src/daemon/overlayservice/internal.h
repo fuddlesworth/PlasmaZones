@@ -262,20 +262,23 @@ inline QVariantList patchZonesWithHighlight(const QVariantList& zones, QQuickWin
     const QString hid = window->property("highlightedZoneId").toString();
     const QVariantList hids = window->property("highlightedZoneIds").toList();
 
+    // Build a QSet for O(1) lookups instead of linear scan per zone
+    QSet<QString> highlightSet;
+    if (!hid.isEmpty()) {
+        highlightSet.insert(hid);
+    }
+    for (const QVariant& v : hids) {
+        const QString s = v.toString();
+        if (!s.isEmpty()) {
+            highlightSet.insert(s);
+        }
+    }
+
     QVariantList out;
     for (const QVariant& z : zones) {
         QVariantMap m = z.toMap();
         const QString id = m.value(QLatin1String("id")).toString();
-        bool hi = (!id.isEmpty() && id == hid);
-        if (!hi) {
-            for (const QVariant& v : hids) {
-                if (v.toString() == id) {
-                    hi = true;
-                    break;
-                }
-            }
-        }
-        m[QLatin1String("isHighlighted")] = hi;
+        m[QLatin1String("isHighlighted")] = !id.isEmpty() && highlightSet.contains(id);
         out.append(m);
     }
     return out;

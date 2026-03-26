@@ -250,16 +250,6 @@ void warnDuplicateScreenIds()
     }
 }
 
-bool isVirtualScreenId(const QString& screenId)
-{
-    return VirtualScreenId::isVirtual(screenId);
-}
-
-QString physicalScreenId(const QString& screenId)
-{
-    return VirtualScreenId::extractPhysicalId(screenId);
-}
-
 qreal screenAspectRatio(const QString& screenNameOrId)
 {
     // For virtual screen IDs, use ScreenManager geometry

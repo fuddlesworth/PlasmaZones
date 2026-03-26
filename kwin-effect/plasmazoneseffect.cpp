@@ -1019,6 +1019,14 @@ void PlasmaZonesEffect::slotDaemonReady()
     // restarts. Calling it again would create duplicate connections, causing
     // handlers (e.g., toggleWindowFloat) to fire twice per signal.
 
+    // Window state processing (autotile init, snap restore, etc.) depends on
+    // virtual screen definitions being loaded for correct screen ID resolution.
+    // Deferred to processDaemonReadyWindowState(), called by fetchAllVirtualScreenConfigs
+    // once all async D-Bus replies have arrived.
+}
+
+void PlasmaZonesEffect::processDaemonReadyWindowState()
+{
     // Delegate autotile re-initialization to handler.
     // Snapshot the active window so the autotile raise loop can re-activate it
     // after putting all tiled windows on top (which would bury non-tiled windows
@@ -1813,11 +1821,22 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
         w->deleteLater();
         if (!self)
             return;
+        // Helper lambda: decrement pending counter and fire deferred processing when all done.
+        auto countdownVsGate = [&self]() {
+            if (self && self->m_pendingVsConfigReplies > 0 && --self->m_pendingVsConfigReplies == 0) {
+                self->m_virtualScreensReady = true;
+                if (self->m_daemonServiceRegistered) {
+                    self->processDaemonReadyWindowState();
+                }
+            }
+        };
+
         QDBusPendingReply<QString> reply = *w;
         if (reply.isError()) {
             qCDebug(lcEffect) << "fetchVirtualScreenConfig: no virtual screens for" << physicalScreenId
                               << reply.error().message();
             self->m_virtualScreenDefs.remove(physicalScreenId);
+            countdownVsGate();
             return;
         }
 
@@ -1825,6 +1844,7 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
         QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         if (!doc.isObject()) {
             self->m_virtualScreenDefs.remove(physicalScreenId);
+            countdownVsGate();
             return;
         }
 
@@ -1868,12 +1888,37 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
             qCInfo(lcEffect) << "Loaded" << defs.size() << "virtual screens for" << physicalScreenId;
             self->m_virtualScreenDefs.insert(physicalScreenId, defs);
         }
+
+        countdownVsGate();
     });
 }
 
 void PlasmaZonesEffect::fetchAllVirtualScreenConfigs()
 {
     const auto outputs = KWin::effects->screens();
+
+    // Count how many async D-Bus calls we'll fire. When all replies arrive,
+    // set m_virtualScreensReady and dispatch deferred window processing.
+    int count = 0;
+    for (const auto* output : outputs) {
+        if (!outputScreenId(output).isEmpty()) {
+            ++count;
+        }
+    }
+
+    if (count == 0) {
+        // No physical screens to query — gate opens immediately
+        m_virtualScreensReady = true;
+        m_pendingVsConfigReplies = 0;
+        if (m_daemonServiceRegistered) {
+            processDaemonReadyWindowState();
+        }
+        return;
+    }
+
+    m_pendingVsConfigReplies = count;
+    m_virtualScreensReady = false;
+
     for (const auto* output : outputs) {
         const QString physId = outputScreenId(output);
         if (!physId.isEmpty()) {

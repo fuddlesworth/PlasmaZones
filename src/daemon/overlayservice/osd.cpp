@@ -73,15 +73,8 @@ void sizeAndCenterOsd(QQuickWindow* window, QScreen* physScreen, const QRect& ta
 bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QScreen*& outPhysScreen, QRect& screenGeom,
                                             qreal& aspectRatio, const QString& screenId)
 {
-    // Resolve target screen via ScreenManager for virtual screen support
-    auto* mgr = ScreenManager::instance();
-    QScreen* physScreen = mgr ? mgr->physicalQScreenFor(screenId) : nullptr;
-    if (!physScreen && !screenId.isEmpty()) {
-        physScreen = Utils::findScreenByIdOrName(screenId);
-    }
-    if (!physScreen) {
-        physScreen = Utils::primaryScreen();
-    }
+    // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
+    QScreen* physScreen = resolveTargetScreen(screenId);
     if (!physScreen) {
         qCWarning(lcOverlay) << "No screen available for layout OSD";
         return false;
@@ -90,13 +83,15 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QScreen*& out
     outPhysScreen = physScreen;
 
     // Use virtual screen geometry if applicable, otherwise physical
-    QRect vsGeom = (mgr && !screenId.isEmpty()) ? mgr->screenGeometry(screenId) : QRect();
-    screenGeom = vsGeom.isValid() ? vsGeom : physScreen->geometry();
+    screenGeom = resolveScreenGeometry(screenId);
+    if (!screenGeom.isValid()) {
+        screenGeom = physScreen->geometry();
+    }
 
     QString effectiveId = screenId.isEmpty() ? Utils::screenIdentifier(physScreen) : screenId;
 
     if (!m_layoutOsdWindows.contains(effectiveId)) {
-        createLayoutOsdWindow(effectiveId, physScreen, screenGeom);
+        createLayoutOsdWindow(effectiveId, physScreen);
     }
 
     window = m_layoutOsdWindows.value(effectiveId);
@@ -256,7 +251,7 @@ void OverlayService::warmUpLayoutOsd()
                     if (!geom.isValid()) {
                         geom = physScreen->geometry();
                     }
-                    createLayoutOsdWindow(sid, physScreen, geom);
+                    createLayoutOsdWindow(sid, physScreen);
                 }
             }
         }
@@ -267,7 +262,7 @@ void OverlayService::warmUpLayoutOsd()
         for (QScreen* screen : screens) {
             QString sid = Utils::screenIdentifier(screen);
             if (!m_layoutOsdWindows.contains(sid)) {
-                createLayoutOsdWindow(sid, screen, screen->geometry());
+                createLayoutOsdWindow(sid, screen);
             }
         }
         qCInfo(lcOverlay) << "Pre-warmed Layout OSD windows for" << QGuiApplication::screens().size() << "screens";
@@ -283,7 +278,7 @@ void OverlayService::warmUpLayoutOsd()
                     if (!m_layoutOsdWindows.contains(vsId)) {
                         QRect vsGeom = mgr2->screenGeometry(vsId);
                         if (vsGeom.isValid()) {
-                            createLayoutOsdWindow(vsId, screen, vsGeom);
+                            createLayoutOsdWindow(vsId, screen);
                         }
                     }
                 }
@@ -293,7 +288,7 @@ void OverlayService::warmUpLayoutOsd()
                     if (!geom.isValid()) {
                         geom = screen->geometry();
                     }
-                    createLayoutOsdWindow(physId, screen, geom);
+                    createLayoutOsdWindow(physId, screen);
                 }
             }
         });
@@ -301,9 +296,8 @@ void OverlayService::warmUpLayoutOsd()
     }
 }
 
-void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* physScreen, const QRect& screenGeom)
+void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* physScreen)
 {
-    Q_UNUSED(screenGeom)
     if (m_layoutOsdWindows.contains(screenId)) {
         return;
     }
@@ -366,23 +360,18 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     m_lastNavigationReason = reason;
     m_lastNavigationTime.restart();
 
-    // Resolve target screen via ScreenManager for virtual screen support
-    auto* mgr = ScreenManager::instance();
-    QScreen* physScreen = mgr ? mgr->physicalQScreenFor(screenId) : nullptr;
-    if (!physScreen && !screenId.isEmpty()) {
-        physScreen = Utils::findScreenByIdOrName(screenId);
-    }
-    if (!physScreen) {
-        physScreen = Utils::primaryScreen();
-    }
+    // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
+    QScreen* physScreen = resolveTargetScreen(screenId);
     if (!physScreen) {
         qCWarning(lcOverlay) << "No screen available for navigation OSD";
         return;
     }
 
     // Use virtual screen geometry if applicable, otherwise physical
-    QRect vsGeom = (mgr && !screenId.isEmpty()) ? mgr->screenGeometry(screenId) : QRect();
-    const QRect navScreenGeom = vsGeom.isValid() ? vsGeom : physScreen->geometry();
+    QRect navScreenGeom = resolveScreenGeometry(screenId);
+    if (!navScreenGeom.isValid()) {
+        navScreenGeom = physScreen->geometry();
+    }
 
     QString effectiveId = screenId.isEmpty() ? Utils::screenIdentifier(physScreen) : screenId;
 
@@ -405,7 +394,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     if (!m_navigationOsdWindows.contains(effectiveId)) {
         // Only try to create if we haven't failed before (prevents log spam)
         if (!m_navigationOsdCreationFailed.value(effectiveId, false)) {
-            createNavigationOsdWindow(effectiveId, physScreen, navScreenGeom);
+            createNavigationOsdWindow(effectiveId, physScreen);
         }
     }
 
@@ -493,9 +482,8 @@ void OverlayService::hideNavigationOsd()
     }
 }
 
-void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen* physScreen, const QRect& screenGeom)
+void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen* physScreen)
 {
-    Q_UNUSED(screenGeom)
     if (m_navigationOsdWindows.contains(screenId)) {
         return;
     }

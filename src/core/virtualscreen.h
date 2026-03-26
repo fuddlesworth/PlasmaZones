@@ -27,6 +27,10 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
     QRectF region; ///< Relative geometry within physical screen (0-1)
     int index = 0; ///< Index within the physical screen's subdivision
 
+    /// Shared tolerance for floating-point region comparisons.
+    /// Used by isValid() and physicalEdges() to handle serialization precision loss.
+    static constexpr qreal Tolerance = 1e-3;
+
     /// Compute absolute geometry from the physical screen's geometry
     /// Uses edge-consistent rounding to avoid 1px gaps/overlaps between adjacent screens
     QRect absoluteGeometry(const QRect& physicalGeometry) const
@@ -40,18 +44,25 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
 
     bool operator==(const VirtualScreenDef& other) const
     {
+        auto fuzzyEqual = [](qreal a, qreal b) {
+            return qAbs(a - b) < 1e-6;
+        };
+        auto fuzzyRectEqual = [&fuzzyEqual](const QRectF& a, const QRectF& b) {
+            return fuzzyEqual(a.x(), b.x()) && fuzzyEqual(a.y(), b.y()) && fuzzyEqual(a.width(), b.width())
+                && fuzzyEqual(a.height(), b.height());
+        };
         return id == other.id && physicalScreenId == other.physicalScreenId && displayName == other.displayName
-            && region == other.region && index == other.index;
+            && fuzzyRectEqual(region, other.region) && index == other.index;
     }
 
     /// Check if the definition is valid: non-empty id, non-empty physicalScreenId,
     /// non-negative origin, non-zero size, region within [0,1] bounds.
-    /// Uses 1e-3 tolerance to handle float serialization precision loss.
+    /// Uses Tolerance to handle float serialization precision loss.
     bool isValid() const
     {
         return !id.isEmpty() && !physicalScreenId.isEmpty() && region.x() >= 0 && region.y() >= 0 && region.width() > 0
-            && region.height() > 0 && region.x() + region.width() <= 1.0 + 1e-3
-            && region.y() + region.height() <= 1.0 + 1e-3;
+            && region.height() > 0 && region.x() + region.width() <= 1.0 + Tolerance
+            && region.y() + region.height() <= 1.0 + Tolerance;
     }
 
     bool operator!=(const VirtualScreenDef& other) const
@@ -72,9 +83,8 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
     };
     PhysicalEdges physicalEdges() const
     {
-        constexpr qreal tolerance = 0.01;
-        return {region.left() < tolerance, region.top() < tolerance, region.right() > (1.0 - tolerance),
-                region.bottom() > (1.0 - tolerance)};
+        return {region.left() < Tolerance, region.top() < Tolerance, region.right() > (1.0 - Tolerance),
+                region.bottom() > (1.0 - Tolerance)};
     }
 };
 

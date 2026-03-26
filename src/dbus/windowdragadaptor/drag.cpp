@@ -15,6 +15,7 @@
 #include "../../core/zoneselectorlayout.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include "../../core/virtualscreen.h"
 #include "../../core/constants.h"
 #include "../../autotile/AutotileEngine.h"
 
@@ -130,7 +131,7 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
 {
     // Resolve effective (virtual-aware) screen ID
     QString screenId = effectiveScreenIdAt(x, y);
-    outScreen = Utils::findScreenByIdOrName(Utils::physicalScreenId(screenId));
+    outScreen = Utils::findScreenByIdOrName(VirtualScreenId::extractPhysicalId(screenId));
     if (!outScreen) {
         outScreen = screenAtPoint(x, y);
     }

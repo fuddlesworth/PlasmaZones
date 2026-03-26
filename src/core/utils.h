@@ -267,13 +267,5 @@ PLASMAZONES_EXPORT bool screensMatch(const QString& a, const QString& b);
  */
 PLASMAZONES_EXPORT void warnDuplicateScreenIds();
 
-/// @brief Convenience wrapper for VirtualScreenId::isVirtual
-/// @see VirtualScreenId::isVirtual in virtualscreen.h
-PLASMAZONES_EXPORT bool isVirtualScreenId(const QString& screenId);
-
-/// @brief Convenience wrapper for VirtualScreenId::extractPhysicalId
-/// @see VirtualScreenId::extractPhysicalId in virtualscreen.h
-PLASMAZONES_EXPORT QString physicalScreenId(const QString& screenId);
-
 } // namespace Utils
 } // namespace PlasmaZones
