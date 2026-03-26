@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Deck
-// @description Focused window fills most of the screen; remaining windows peek from the right edge like a hand of cards
+// @description Focused window takes the left portion; remaining windows peek from the right edge. Ratio controls focused window width
 // @producesOverlappingZones true
 // @supportsMasterCount false
 // @supportsSplitRatio true
-// @defaultSplitRatio 0.05
+// @defaultSplitRatio 0.75
 // @defaultMaxWindows 5
 // @minimumWindows 1
 
@@ -28,16 +28,13 @@ function calculateZones(params) {
     if (count <= 0) return [];
     if (count === 1) return [area];
 
-    var peekFraction = params.splitRatio > 0 ? params.splitRatio : 0.05;
-    var peekWidth = Math.max(Math.round(area.width * peekFraction), 1);
-
-    // Cap bgCount so the focused window keeps at least 20% of screen width
-    var maxPeeks = Math.floor(area.width * 0.8 / peekWidth);
-    var bgCount = Math.min(count - 1, maxPeeks > 0 ? maxPeeks : count - 1);
-
-    // Clamp: with many background windows, peek strips consume the screen.
-    // focusedWidth degrades gracefully to 1px (defaultMaxWindows=5 prevents this in practice).
-    var focusedWidth = Math.max(1, area.width - bgCount * peekWidth);
+    // splitRatio controls the focused window width as a fraction of the screen.
+    // Remaining space is divided equally among background window peek strips.
+    var focusedFraction = params.splitRatio > 0 ? params.splitRatio : 0.75;
+    var bgCount = count - 1;
+    var focusedWidth = Math.max(1, Math.round(area.width * focusedFraction));
+    var peekTotal = area.width - focusedWidth;
+    var peekWidth = bgCount > 0 ? Math.max(1, Math.round(peekTotal / bgCount)) : 0;
 
     var zones = [];
 
