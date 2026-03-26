@@ -694,12 +694,16 @@ public:
         return m_excludedApplications;
     }
     void setExcludedApplications(const QStringList& apps) override;
+    Q_INVOKABLE void addExcludedApplication(const QString& app);
+    Q_INVOKABLE void removeExcludedApplicationAt(int index);
 
     QStringList excludedWindowClasses() const override
     {
         return m_excludedWindowClasses;
     }
     void setExcludedWindowClasses(const QStringList& classes) override;
+    Q_INVOKABLE void addExcludedWindowClass(const QString& cls);
+    Q_INVOKABLE void removeExcludedWindowClassAt(int index);
 
     bool excludeTransientWindows() const override
     {
