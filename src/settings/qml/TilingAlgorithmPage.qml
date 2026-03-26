@@ -18,10 +18,20 @@ Flickable {
     readonly property alias hasOverrides: psHelper.hasOverrides
     readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettings.autotileAlgorithm)
 
+    // Derive algorithm ID from the combo's current selection (tracks UI immediately,
+    // not delayed by D-Bus round-trip to daemon)
+    readonly property string selectedAlgorithm: {
+        if (!algorithmCombo) return root.effectiveAlgorithm;
+        let val = algorithmCombo.currentValue;
+        if (!val || val === "") return root.effectiveAlgorithm;
+        if (val.startsWith("autotile:")) return val.substring(9);
+        return val;
+    }
+
     // Data-driven algorithm capabilities (lookup from availableAlgorithms by ID)
     readonly property var algoCapabilities: {
         const algos = settingsController.availableAlgorithms();
-        const algoId = root.effectiveAlgorithm;
+        const algoId = root.selectedAlgorithm;
         for (let i = 0; i < algos.length; i++) {
             if (algos[i].id === algoId)
                 return algos[i];
@@ -255,7 +265,7 @@ Flickable {
                                 anchors.margins: Kirigami.Units.smallSpacing
                                 appSettings: settingsController
                                 showLabel: false
-                                algorithmId: root.effectiveAlgorithm
+                                algorithmId: root.selectedAlgorithm
                                 windowCount: previewWindowSlider.slider.value
                                 splitRatio: root.settingValue("SplitRatio", appSettings.autotileSplitRatio) || 0.6
                                 masterCount: root.settingValue("MasterCount", appSettings.autotileMasterCount) || 1
@@ -367,7 +377,7 @@ Flickable {
                     // Master/Center ratio
                     Label {
                         Layout.alignment: Qt.AlignHCenter
-                        text: root.effectiveAlgorithm === "three-column" || root.effectiveAlgorithm === "centered-master" ? i18n("Center Ratio") : i18n("Master Ratio")
+                        text: root.selectedAlgorithm === "three-column" || root.selectedAlgorithm === "centered-master" ? i18n("Center Ratio") : i18n("Master Ratio")
                         font.weight: Font.DemiBold
                     }
 
