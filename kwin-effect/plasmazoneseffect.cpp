@@ -159,8 +159,9 @@ void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const
 
 QHash<QString, KWin::EffectWindow*> PlasmaZonesEffect::buildWindowMap(bool filterHandleable) const
 {
-    QHash<QString, KWin::EffectWindow*> windowMap;
     const auto windows = KWin::effects->stackingOrder();
+    QHash<QString, KWin::EffectWindow*> windowMap;
+    windowMap.reserve(windows.size());
     for (KWin::EffectWindow* w : windows) {
         if (w && (!filterHandleable || shouldHandleWindow(w))) {
             windowMap[getWindowId(w)] = w;
@@ -324,6 +325,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // Purge here to prevent SIGSEGV in animationBounds → expandedGeometry.
     connect(KWin::effects, &KWin::EffectsHandler::windowDeleted, this, [this](KWin::EffectWindow* w) {
         m_windowAnimator->removeAnimation(w);
+        const QString cachedId = m_windowIdCache.take(w);
+        if (!cachedId.isEmpty()) {
+            m_windowIdReverse.remove(cachedId);
+        }
+        m_trackedScreenPerWindow.remove(w);
     });
 
     connect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, &PlasmaZonesEffect::slotWindowActivated);
@@ -591,6 +597,11 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     const QString closedWindowId = getWindowId(w);
     const QString closedScreenId = getWindowScreenId(w);
 
+    // Clean up caches
+    m_windowIdCache.remove(w);
+    m_windowIdReverse.remove(closedWindowId);
+    m_trackedScreenPerWindow.remove(w);
+
     // Clean up snap-mode minimize tracking
     m_minimizeFloatedWindows.remove(closedWindowId);
 
@@ -662,14 +673,14 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         QPointer<KWin::EffectWindow> safeW = w;
         // Track the window's screen ID so we can detect cross-screen moves for snapping windows
         // (not tracked by the autotile handler's m_notifiedWindowScreens).
-        QString* trackedScreen = new QString(getWindowScreenId(w));
-        connect(kw, &KWin::Window::outputChanged, this, [this, safeW, trackedScreen]() {
+        m_trackedScreenPerWindow[w] = getWindowScreenId(w);
+        connect(kw, &KWin::Window::outputChanged, this, [this, safeW]() {
             if (!safeW || safeW->isDeleted()) {
                 return;
             }
             const QString newScreenId = getWindowScreenId(safeW);
-            const QString oldScreenId = *trackedScreen;
-            *trackedScreen = newScreenId;
+            const QString oldScreenId = m_trackedScreenPerWindow.value(safeW);
+            m_trackedScreenPerWindow[safeW] = newScreenId;
 
             // Delegate autotile handling (autotile→autotile, autotile→snapping, etc.)
             // This must run even during drag so the autotile engine removes the
@@ -713,12 +724,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // state as the outputChanged handler above.
         // (The autotile handler has its own detection in slotWindowFrameGeometryChanged;
         // this covers snapping-mode windows which autotile doesn't track.)
-        connect(safeW, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW, trackedScreen]() {
+        connect(safeW, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW]() {
             if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty()) {
                 return;
             }
             const QString newScreenId = getWindowScreenId(safeW);
-            const QString oldScreenId = *trackedScreen;
+            const QString oldScreenId = m_trackedScreenPerWindow.value(safeW);
             if (oldScreenId == newScreenId || newScreenId.isEmpty()) {
                 return;
             }
@@ -732,7 +743,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             if (physOld != physNew) {
                 return; // Different physical monitors — outputChanged will handle it
             }
-            *trackedScreen = newScreenId;
+            m_trackedScreenPerWindow[safeW] = newScreenId;
 
             // Skip during drag — the drag system owns state transitions.
             // Autotile drag handles VS transfers in dragStopped (line 262-285).
@@ -758,9 +769,9 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             }
         });
 
-        // Clean up the tracked screen string when the window is destroyed
-        connect(safeW, &QObject::destroyed, this, [trackedScreen]() {
-            delete trackedScreen;
+        // Clean up the tracked screen entry when the window is destroyed
+        connect(safeW, &QObject::destroyed, this, [this, safeW]() {
+            m_trackedScreenPerWindow.remove(safeW);
         });
     }
 
@@ -871,10 +882,11 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     // background processes.
     auto* output = KWin::effects->screenAt(pos.toPoint());
     QString connectorName;
+    QString effectiveScreenId;
     if (output) {
         connectorName = output->name();
         // Resolve to virtual screen ID if subdivisions exist
-        const QString effectiveScreenId = resolveEffectiveScreenId(pos.toPoint(), output);
+        effectiveScreenId = resolveEffectiveScreenId(pos.toPoint(), output);
         if (effectiveScreenId != m_lastEffectiveScreenId) {
             m_lastEffectiveScreenId = effectiveScreenId;
             m_lastCursorOutput = connectorName;
@@ -886,8 +898,9 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     }
 
     // Focus follows mouse: activate autotile window under cursor when not dragging.
+    // Reuse effectiveScreenId computed above to avoid redundant resolveEffectiveScreenId call.
     if (!m_dragTracker->isDragging() && output) {
-        m_autotileHandler->handleCursorMoved(pos, resolveEffectiveScreenId(pos.toPoint(), output));
+        m_autotileHandler->handleCursorMoved(pos, effectiveScreenId);
     }
 }
 
@@ -1205,6 +1218,12 @@ QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
         return QString();
     }
 
+    // Cache hit: window IDs never change during a window's lifetime
+    auto cacheIt = m_windowIdCache.constFind(w);
+    if (cacheIt != m_windowIdCache.constEnd()) {
+        return cacheIt.value();
+    }
+
     KWin::Window* window = w->window();
     if (!window) {
         return QString();
@@ -1225,7 +1244,10 @@ QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
     // Instance identity: KWin's internal UUID (unique within KWin session)
     QString instanceId = window->internalId().toString(QUuid::WithoutBraces);
 
-    return appId + QLatin1Char('|') + instanceId;
+    const QString result = appId + QLatin1Char('|') + instanceId;
+    m_windowIdCache.insert(w, result);
+    m_windowIdReverse.insert(result, w);
+    return result;
 }
 
 bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
@@ -3037,7 +3059,14 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
         return nullptr;
     }
 
-    // Single-pass lookup: exact ID match preferred, appId fallback only if unambiguous.
+    // O(1) exact match via reverse cache
+    auto it = m_windowIdReverse.constFind(windowId);
+    if (it != m_windowIdReverse.constEnd() && it.value() && !it.value()->isDeleted()) {
+        return it.value();
+    }
+
+    // Fallback: appId-based fuzzy match (for cross-session restore where
+    // the UUID portion changed but the appId is the same)
     const QString targetAppId = extractAppId(windowId);
     KWin::EffectWindow* appMatch = nullptr;
     int matchCount = 0;
@@ -3045,9 +3074,6 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
         const QString wId = getWindowId(w);
-        if (wId == windowId) {
-            return w; // Exact match — return immediately
-        }
         if (extractAppId(wId) == targetAppId) {
             appMatch = w;
             ++matchCount;

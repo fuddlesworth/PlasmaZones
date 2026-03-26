@@ -507,6 +507,17 @@ private:
     // Cleared on screen geometry changes (add/remove/reconfigure).
     mutable QHash<QString, QString> m_screenIdCache;
 
+    // Window ID cache: EffectWindow* → "appId|uuid" (populated on first getWindowId call,
+    // cleared in slotWindowClosed/windowDeleted). Eliminates 3-5 QString allocations per
+    // getWindowId call across all hot paths (~1000-3000 allocs/sec during drag).
+    mutable QHash<KWin::EffectWindow*, QString> m_windowIdCache;
+    // Reverse lookup: windowId → EffectWindow* (for O(1) findWindowById)
+    mutable QHash<QString, KWin::EffectWindow*> m_windowIdReverse;
+
+    // Per-window tracked screen ID for cross-screen move detection.
+    // Replaces the per-window `new QString` heap allocation that was leaked.
+    QHash<KWin::EffectWindow*, QString> m_trackedScreenPerWindow;
+
     // Cursor output tracking (for daemon shortcut screen detection on Wayland)
     // Stores the connector name of the last output the cursor was on.
     // Used for deduplication only — the actual D-Bus call sends the EDID screen ID.

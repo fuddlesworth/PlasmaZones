@@ -154,10 +154,21 @@ private:
     // Size tolerance is stricter - snapped windows should match zone size closely
     static constexpr int SizeTolerance = 20;
 
+    /// Pre-parsed trigger (avoids QVariantMap unboxing on every dragMoved tick)
+    struct ParsedTrigger
+    {
+        int modifier = 0;
+        int mouseButton = 0;
+    };
+
     // Check if modifier matches setting
     bool checkModifier(int modifierSetting, Qt::KeyboardModifiers mods) const;
     // Check if any trigger in a list matches current modifiers/mouse buttons
     bool anyTriggerHeld(const QVariantList& triggers, Qt::KeyboardModifiers mods, int mouseButtons) const;
+    // Overload using pre-parsed triggers (hot path during drag)
+    bool anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods, int mouseButtons) const;
+    // Parse QVariantList triggers into POD structs for repeated use
+    static QVector<ParsedTrigger> parseTriggers(const QVariantList& triggers);
 
     // Helper: Find screen containing a point (returns primary screen if not found)
     QScreen* screenAtPoint(int x, int y) const;
@@ -221,6 +232,10 @@ private:
 
     // Escape shortcut to cancel overlay during drag (registered on drag start, unregistered on drag end)
     QAction* m_cancelOverlayAction = nullptr;
+
+    // Pre-parsed trigger caches (populated on dragStarted, used on every dragMoved tick)
+    QVector<ParsedTrigger> m_cachedActivationTriggers;
+    QVector<ParsedTrigger> m_cachedZoneSpanTriggers;
 
     // Last emitted zone geometry (emit only when changed)
     QRect m_lastEmittedZoneGeometry;

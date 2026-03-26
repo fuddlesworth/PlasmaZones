@@ -340,6 +340,11 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
         return;
     }
 
+    // Fast bail: skip getWindowId entirely when neither VS detection nor centering needs it
+    if (m_effect->m_virtualScreenDefs.isEmpty() && m_autotileTargetZones.isEmpty()) {
+        return;
+    }
+
     const QString windowId = m_effect->getWindowId(w);
 
     // Virtual screen change detection: KWin's outputChanged only fires on

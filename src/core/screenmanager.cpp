@@ -687,6 +687,25 @@ QString ScreenManager::virtualScreenAt(const QPoint& globalPos, const QString& p
     return {};
 }
 
+QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const QString& physicalScreenId,
+                                                 QScreen* screen) const
+{
+    if (!m_virtualConfigs.contains(physicalScreenId) || !screen) {
+        return {};
+    }
+
+    const auto& config = m_virtualConfigs.value(physicalScreenId);
+    QRect physGeom = screen->geometry();
+    for (const auto& vs : config.screens) {
+        QRect absGeom = vs.absoluteGeometry(physGeom);
+        if (absGeom.contains(globalPos)) {
+            return vs.id;
+        }
+    }
+
+    return {};
+}
+
 QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
 {
     for (auto* screen : m_trackedScreens) {
@@ -696,7 +715,7 @@ QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
 
         QString physId = Utils::screenIdentifier(screen);
         if (hasVirtualScreens(physId)) {
-            QString vsId = virtualScreenAt(globalPos, physId);
+            QString vsId = virtualScreenAtWithScreen(globalPos, physId, screen);
             if (!vsId.isEmpty()) {
                 return vsId;
             }

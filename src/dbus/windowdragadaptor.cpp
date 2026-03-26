@@ -138,6 +138,32 @@ bool WindowDragAdaptor::anyTriggerHeld(const QVariantList& triggers, Qt::Keyboar
     return false;
 }
 
+QVector<WindowDragAdaptor::ParsedTrigger> WindowDragAdaptor::parseTriggers(const QVariantList& triggers)
+{
+    QVector<ParsedTrigger> result;
+    result.reserve(triggers.size());
+    for (const auto& t : triggers) {
+        const auto map = t.toMap();
+        ParsedTrigger pt;
+        pt.modifier = map.value(QStringLiteral("modifier"), 0).toInt();
+        pt.mouseButton = map.value(QStringLiteral("mouseButton"), 0).toInt();
+        result.append(pt);
+    }
+    return result;
+}
+
+bool WindowDragAdaptor::anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods,
+                                       int mouseButtons) const
+{
+    for (const auto& pt : triggers) {
+        const bool modMatch = (pt.modifier == 0) || checkModifier(pt.modifier, mods);
+        const bool btnMatch = (pt.mouseButton == 0) || (mouseButtons & pt.mouseButton) != 0;
+        if (modMatch && btnMatch && (pt.modifier != 0 || pt.mouseButton != 0))
+            return true;
+    }
+    return false;
+}
+
 QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<Zone*>& zones, QScreen* screen, Layout* layout,
                                                       const QString& screenId) const
 {

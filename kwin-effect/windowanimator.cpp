@@ -9,6 +9,7 @@
 #include <QLoggingCategory>
 #include <QStringList>
 #include <QLineF>
+#include <QVarLengthArray>
 
 namespace PlasmaZones {
 
@@ -344,17 +345,14 @@ QSizeF WindowAnimator::currentVisualSize(KWin::EffectWindow* window) const
 
 void WindowAnimator::advanceAnimations(std::chrono::milliseconds presentTime)
 {
-    // Iterate over a snapshot of keys — signal handlers triggered by repaint
-    // could indirectly modify m_animations.
-    const auto windows = m_animations.keys();
-    for (KWin::EffectWindow* window : windows) {
-        auto it = m_animations.find(window);
-        if (it == m_animations.end()) {
-            continue;
-        }
+    // Collect removals on the stack instead of heap-allocating QHash::keys() per frame
+    QVarLengthArray<KWin::EffectWindow*, 16> toRemove;
+
+    for (auto it = m_animations.begin(); it != m_animations.end(); ++it) {
+        KWin::EffectWindow* window = it.key();
 
         if (window->isDeleted()) {
-            m_animations.erase(it);
+            toRemove.append(window);
             continue;
         }
 
@@ -365,13 +363,17 @@ void WindowAnimator::advanceAnimations(std::chrono::milliseconds presentTime)
             // Animation done — window is already at its final position
             // (moveResize was called before the animation started).
             const QRectF bounds = animationBounds(window);
-            m_animations.erase(it);
+            toRemove.append(window);
             window->addRepaintFull();
             if (bounds.isValid()) {
                 KWin::effects->addRepaint(bounds.toAlignedRect());
             }
             qCDebug(lcEffect) << "Window snap animation complete";
         }
+    }
+
+    for (KWin::EffectWindow* w : toRemove) {
+        m_animations.remove(w);
     }
 }
 

@@ -30,6 +30,20 @@ static QHash<QString, int>& edidMissCounter()
     return s_counter;
 }
 
+// Cache: QScreen* → EDID-based identifier (never changes while screen is connected)
+static QHash<const QScreen*, QString>& screenIdentifierCache()
+{
+    static QHash<const QScreen*, QString> s_cache;
+    return s_cache;
+}
+
+// Reverse cache: EDID identifier → QScreen* (for findScreenByIdOrName slow path)
+static QHash<QString, QScreen*>& screenByIdCache()
+{
+    static QHash<QString, QScreen*> s_cache;
+    return s_cache;
+}
+
 QString readEdidHeaderSerial(const QString& connectorName)
 {
     auto& cache = edidSerialCache();
@@ -100,9 +114,28 @@ void invalidateEdidCache(const QString& connectorName)
     if (connectorName.isEmpty()) {
         edidSerialCache().clear();
         edidMissCounter().clear();
+        screenIdentifierCache().clear();
+        screenByIdCache().clear();
     } else {
         edidSerialCache().remove(connectorName);
         edidMissCounter().remove(connectorName);
+        // Remove the cached identifier for this connector's QScreen
+        auto& idCache = screenIdentifierCache();
+        for (auto it = idCache.begin(); it != idCache.end(); ++it) {
+            if (it.key()->name() == connectorName) {
+                idCache.erase(it);
+                break;
+            }
+        }
+        // Remove reverse cache entries pointing to this connector's screen
+        auto& byIdCache = screenByIdCache();
+        for (auto it = byIdCache.begin(); it != byIdCache.end();) {
+            if (it.value()->name() == connectorName) {
+                it = byIdCache.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 }
 
@@ -110,6 +143,13 @@ QString screenIdentifier(const QScreen* screen)
 {
     if (!screen) {
         return QString();
+    }
+
+    // Cache: QScreen* → EDID identifier (never changes while screen is connected)
+    auto& cache = screenIdentifierCache();
+    auto cacheIt = cache.constFind(screen);
+    if (cacheIt != cache.constEnd()) {
+        return cacheIt.value();
     }
 
     const QString manufacturer = screen->manufacturer();
@@ -139,14 +179,17 @@ QString screenIdentifier(const QScreen* screen)
     // manufacturer fields (some cheap/generic monitors). This is intentional —
     // the identifier is still unique and stable, and isConnectorName() correctly
     // classifies it as a screen ID (contains ':').
+    QString result;
     if (!serial.isEmpty()) {
-        return manufacturer + QLatin1Char(':') + model + QLatin1Char(':') + serial;
+        result = manufacturer + QLatin1Char(':') + model + QLatin1Char(':') + serial;
+    } else if (!manufacturer.isEmpty() || !model.isEmpty()) {
+        result = manufacturer + QLatin1Char(':') + model;
+    } else {
+        // Fallback: connector name (virtual displays, some embedded panels)
+        result = screen->name();
     }
-    if (!manufacturer.isEmpty() || !model.isEmpty()) {
-        return manufacturer + QLatin1Char(':') + model;
-    }
-    // Fallback: connector name (virtual displays, some embedded panels)
-    return screen->name();
+    cache.insert(screen, result);
+    return result;
 }
 
 QString screenIdForName(const QString& connectorName)
@@ -198,10 +241,25 @@ QScreen* findScreenByIdOrName(const QString& identifier)
             return screen;
         }
     }
+
+    // Check reverse cache
+    auto& cache = screenByIdCache();
+    auto cacheIt = cache.constFind(physId);
+    if (cacheIt != cache.constEnd()) {
+        // Verify the cached screen is still valid
+        QScreen* cached = cacheIt.value();
+        if (QGuiApplication::screens().contains(cached)) {
+            return cached;
+        }
+        // Stale entry — remove and fall through to slow path
+        cache.remove(physId);
+    }
+
     // Slow path: try screen ID match (only if it looks like a screen ID)
     if (physId.contains(QLatin1Char(':'))) {
         for (QScreen* screen : QGuiApplication::screens()) {
             if (screenIdentifier(screen) == physId) {
+                cache.insert(physId, screen); // cache for next time
                 return screen;
             }
         }

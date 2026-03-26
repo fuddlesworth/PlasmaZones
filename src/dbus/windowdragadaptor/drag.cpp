@@ -25,6 +25,11 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
                                     int mouseButtons)
 {
     Q_UNUSED(mouseButtons); // Only used in dragMoved for dynamic activation
+
+    // Pre-parse triggers to avoid QVariantMap unboxing on every dragMoved tick
+    m_cachedActivationTriggers = parseTriggers(m_settings->dragActivationTriggers());
+    m_cachedZoneSpanTriggers = parseTriggers(m_settings->zoneSpanTriggers());
+
     // Check if snapping is enabled
     if (m_settings && !m_settings->snappingEnabled()) {
         qCInfo(lcDbusWindow) << "Snapping disabled in settings, ignoring drag";
@@ -397,10 +402,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         mods = QGuiApplication::queryKeyboardModifiers();
     }
 
-    // Read activation triggers once — used by both the retrigger check and normal processing.
-    // Previously read twice (once in the snapCancelled block, once after), which was wasteful.
-    const QVariantList triggers = m_settings->dragActivationTriggers();
-    const bool triggerHeld = anyTriggerHeld(triggers, mods, mouseButtons);
+    // Use pre-parsed triggers (cached on dragStarted) to avoid QVariantMap unboxing per tick.
+    const bool triggerHeld = anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons);
 
     if (m_snapCancelled) {
         // Allow retriggering the overlay after Escape: the user must release the
@@ -446,24 +449,19 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     }
 
     // Check all configured zone span triggers (multi-bind support)
-    const QVariantList zoneSpanTriggers = m_settings->zoneSpanTriggers();
-    const bool zoneSpanModifierHeld = anyTriggerHeld(zoneSpanTriggers, mods, mouseButtons);
+    const bool zoneSpanModifierHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons);
 
     // Conflict detection: warn once per drag when activation and zone span share a trigger
     if (!m_modifierConflictWarned) {
         m_modifierConflictWarned = true;
-        for (const auto& at : triggers) {
-            const auto aMap = at.toMap();
-            const int aMod = aMap.value(QStringLiteral("modifier"), 0).toInt();
-            const int aBtn = aMap.value(QStringLiteral("mouseButton"), 0).toInt();
-            if (aMod == 0 && aBtn == 0)
+        for (const auto& at : m_cachedActivationTriggers) {
+            if (at.modifier == 0 && at.mouseButton == 0)
                 continue;
-            for (const auto& st : zoneSpanTriggers) {
-                const auto sMap = st.toMap();
-                if ((aMod != 0 && sMap.value(QStringLiteral("modifier"), 0).toInt() == aMod)
-                    || (aBtn != 0 && sMap.value(QStringLiteral("mouseButton"), 0).toInt() == aBtn)) {
+            for (const auto& st : m_cachedZoneSpanTriggers) {
+                if ((at.modifier != 0 && st.modifier == at.modifier)
+                    || (at.mouseButton != 0 && st.mouseButton == at.mouseButton)) {
                     qCWarning(lcDbusWindow) << "Trigger overlap: activation and zone span share trigger"
-                                            << "(mod:" << aMod << "btn:" << aBtn << ");"
+                                            << "(mod:" << at.modifier << "btn:" << at.mouseButton << ");"
                                             << "zone span takes priority when both match";
                 }
             }

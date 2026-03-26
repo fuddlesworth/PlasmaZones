@@ -343,6 +343,14 @@ private:
 
     void invalidateVirtualGeometryCache(const QString& physicalScreenId = {});
     void rebuildVirtualGeometryCache(const QString& physicalScreenId) const;
+
+    /**
+     * @brief Find which virtual screen contains a global point (QScreen* pre-resolved)
+     *
+     * Same as virtualScreenAt() but avoids a redundant findScreenByIdOrName() call
+     * when the caller already has the QScreen*.
+     */
+    QString virtualScreenAtWithScreen(const QPoint& globalPos, const QString& physicalScreenId, QScreen* screen) const;
 };
 
 } // namespace PlasmaZones

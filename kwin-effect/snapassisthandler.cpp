@@ -103,6 +103,12 @@ QJsonArray SnapAssistHandler::buildCandidates(const QString& excludeWindowId, co
     QJsonArray candidates;
     const auto windows = KWin::effects->stackingOrder();
 
+    // Pre-build set of snapped app IDs to avoid O(n*m) inner loop
+    QSet<QString> snappedAppIds;
+    for (const QString& snappedId : snappedWindowIds) {
+        snappedAppIds.insert(PlasmaZonesEffect::extractAppId(snappedId));
+    }
+
     for (KWin::EffectWindow* w : windows) {
         if (!w || !m_effect->shouldHandleWindow(w) || w->isMinimized() || !w->isOnCurrentDesktop()
             || !w->isOnCurrentActivity()) {
@@ -117,13 +123,7 @@ QJsonArray SnapAssistHandler::buildCandidates(const QString& excludeWindowId, co
             continue;
         }
         QString appId = PlasmaZonesEffect::extractAppId(windowId);
-        bool snappedByAppId = false;
-        for (const QString& snappedId : snappedWindowIds) {
-            if (PlasmaZonesEffect::extractAppId(snappedId) == appId) {
-                snappedByAppId = true;
-                break;
-            }
-        }
+        bool snappedByAppId = snappedAppIds.contains(appId);
         if (snappedByAppId) {
             int sameAppCount = 0;
             for (KWin::EffectWindow* other : windows) {
