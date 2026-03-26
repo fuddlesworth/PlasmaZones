@@ -365,8 +365,11 @@ QVariantMap AlgorithmRegistry::algorithmToVariantMap(TilingAlgorithm* algorithm,
 
 AlgorithmRegistry::SectionInfo AlgorithmRegistry::sectionForAlgorithm(TilingAlgorithm* algorithm)
 {
-    if (algorithm && algorithm->isScripted() && algorithm->isUserScript()) {
-        return {QStringLiteral("custom"), PzI18n::tr("Custom"), 1};
+    if (algorithm && algorithm->isScripted()) {
+        if (algorithm->isUserScript()) {
+            return {QStringLiteral("custom"), PzI18n::tr("Custom"), 2};
+        }
+        return {QStringLiteral("extras"), PzI18n::tr("Extras"), 1};
     }
     return {QStringLiteral("built-in"), PzI18n::tr("Built-in"), 0};
 }
