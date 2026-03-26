@@ -1647,6 +1647,7 @@ QVariantList SettingsController::availableAlgorithms() const
             algoMap[QStringLiteral("defaultMaxWindows")] = algo->defaultMaxWindows();
             algoMap[QStringLiteral("supportsSplitRatio")] = algo->supportsSplitRatio();
             algoMap[QStringLiteral("supportsMasterCount")] = algo->supportsMasterCount();
+            algoMap[QStringLiteral("defaultSplitRatio")] = algo->defaultSplitRatio();
             if (algo->producesOverlappingZones()) {
                 algoMap[QStringLiteral("overlapping")] = true;
             }

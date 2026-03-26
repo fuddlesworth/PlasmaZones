@@ -297,11 +297,15 @@ Flickable {
                             root.writeSetting("Algorithm", currentValue, function(v) {
                                 appSettings.autotileAlgorithm = v;
                             });
-                            // Reset max windows to the new algorithm's default
+                            // Reset max windows and split ratio to the new algorithm's defaults
                             let algoData = model[currentIndex];
                             if (algoData && algoData.defaultMaxWindows !== undefined)
                                 root.writeSetting("MaxWindows", algoData.defaultMaxWindows, function(v) {
                                 appSettings.autotileMaxWindows = v;
+                            });
+                            if (algoData && algoData.defaultSplitRatio !== undefined && algoData.supportsSplitRatio)
+                                root.writeSetting("SplitRatio", algoData.defaultSplitRatio, function(v) {
+                                appSettings.autotileSplitRatio = v;
                             });
 
                         }
