@@ -268,8 +268,24 @@ Flickable {
                                 algorithmId: root.selectedAlgorithm
                                 algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
                                 windowCount: previewWindowSlider.slider.value
-                                splitRatio: root.settingValue("SplitRatio", appSettings.autotileSplitRatio) || 0.6
-                                masterCount: root.settingValue("MasterCount", appSettings.autotileMasterCount) || 1
+                                splitRatio: {
+                                    // When user is dragging the slider, use live value
+                                    if (splitRatioSlider.slider.pressed)
+                                        return splitRatioSlider.slider.value;
+                                    // Look up per-algorithm saved ratio, fall back to algorithm default
+                                    var perAlgo = appSettings.autotilePerAlgorithmSettings;
+                                    var algoId = root.selectedAlgorithm;
+                                    if (perAlgo && perAlgo[algoId] && perAlgo[algoId].splitRatio !== undefined)
+                                        return perAlgo[algoId].splitRatio;
+                                    return root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6;
+                                }
+                                masterCount: {
+                                    var perAlgo = appSettings.autotilePerAlgorithmSettings;
+                                    var algoId = root.selectedAlgorithm;
+                                    if (perAlgo && perAlgo[algoId] && perAlgo[algoId].masterCount !== undefined)
+                                        return perAlgo[algoId].masterCount;
+                                    return 1;
+                                }
                                 overlapping: root.algoCapabilities ? (root.algoCapabilities.overlapping === true) : false
                             }
 
@@ -402,7 +418,14 @@ Flickable {
                     Binding {
                         target: splitRatioSlider.slider
                         property: "value"
-                        value: root.settingValue("SplitRatio", appSettings.autotileSplitRatio)
+                        value: {
+                            // Per-algorithm saved ratio, falling back to algorithm default
+                            var perAlgo = appSettings.autotilePerAlgorithmSettings;
+                            var algoId = root.selectedAlgorithm;
+                            if (perAlgo && perAlgo[algoId] && perAlgo[algoId].splitRatio !== undefined)
+                                return perAlgo[algoId].splitRatio;
+                            return root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6;
+                        }
                         when: !splitRatioSlider.slider.pressed
                         restoreMode: Binding.RestoreNone
                     }
@@ -432,7 +455,13 @@ Flickable {
                             ToolTip.text: i18n("Number of windows in the master area")
 
                             Binding on value {
-                                value: root.settingValue("MasterCount", appSettings.autotileMasterCount)
+                                value: {
+                                    var perAlgo = appSettings.autotilePerAlgorithmSettings;
+                                    var algoId = root.selectedAlgorithm;
+                                    if (perAlgo && perAlgo[algoId] && perAlgo[algoId].masterCount !== undefined)
+                                        return perAlgo[algoId].masterCount;
+                                    return 1;
+                                }
                                 when: !masterCountSpinBox.activeFocus
                                 restoreMode: Binding.RestoreNone
                             }
