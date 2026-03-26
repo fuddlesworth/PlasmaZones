@@ -178,22 +178,25 @@ LogoHit evalLogo(vec2 p, vec2 displacement[12], vec3 palCyan, vec3 palTeal, vec3
     float cyanDist = sdPolygon11(p, cBody);
 
     // ── Teal facets (foreground layer) ──────────────────────────
+    // Each adjacent pair shares exactly one diagonal so they tile
+    // without overlap.  Previous code used two different diagonals
+    // per quad, causing SDF overlap and facet-color bleeding.
     float tealDist = 1e9;
     int tealFacet = -1;
 
-    d = sdTriangle(p, v0, v3, v2);
+    d = sdTriangle(p, v0, v3, v2);                     // top-right  (quad v0-v2-v3-v4, diagonal v0-v3)
     if (d < tealDist) { tealDist = d; tealFacet = 0; }
-    d = sdTriangle(p, v4, v2, v3);
+    d = sdTriangle(p, v0, v4, v3);                     // top-left   (quad v0-v2-v3-v4, diagonal v0-v3)
     if (d < tealDist) { tealDist = d; tealFacet = 1; }
-    d = sdTriangle(p, v4, v0, v5);
+    d = sdTriangle(p, v4, v0, v5);                     // mid-right  (quad v0-v4-v5-v6, diagonal v0-v5)
     if (d < tealDist) { tealDist = d; tealFacet = 2; }
-    d = sdTriangle(p, v6, v4, v5);
+    d = sdTriangle(p, v0, v5, v6);                     // mid-left   (quad v0-v4-v5-v6, diagonal v0-v5)
     if (d < tealDist) { tealDist = d; tealFacet = 3; }
-    d = sdTriangle(p, v7, v8, v5);
+    d = sdTriangle(p, v5, v8, v9);                     // lower-right (quad v5-v8-v9-v7, diagonal v5-v9)
     if (d < tealDist) { tealDist = d; tealFacet = 4; }
-    d = sdTriangle(p, v5, v7, v9);
+    d = sdTriangle(p, v5, v9, v7);                     // lower-left  (quad v5-v8-v9-v7, diagonal v5-v9)
     if (d < tealDist) { tealDist = d; tealFacet = 5; }
-    d = sdTriangle(p, v8, v9, v10);
+    d = sdTriangle(p, v8, v9, v10);                    // bottom
     if (d < tealDist) { tealDist = d; tealFacet = 6; }
 
     // ── Painter's order: teal always on top of cyan ─────────────
@@ -232,14 +235,16 @@ LogoHit evalLogo(vec2 p, vec2 displacement[12], vec3 palCyan, vec3 palTeal, vec3
     d = length(p - cp2) - CIRC_RAD_2;
     if (d < hit.dist) { hit.dist = d; hit.facetId = 11; hit.color = palCyan; }
 
-    // Shared edges
+    // Shared edges (internal diagonals + polygon edges between facets)
     hit.edgeDist = min(hit.edgeDist, sdSegment(p, v0, v3));
     hit.edgeDist = min(hit.edgeDist, sdSegment(p, v3, v2));
     hit.edgeDist = min(hit.edgeDist, sdSegment(p, v4, v3));
+    hit.edgeDist = min(hit.edgeDist, sdSegment(p, v0, v4));   // diagonal between Facet 1 & 2
     hit.edgeDist = min(hit.edgeDist, sdSegment(p, v0, v5));
     hit.edgeDist = min(hit.edgeDist, sdSegment(p, v4, v5));
     hit.edgeDist = min(hit.edgeDist, sdSegment(p, v6, v5));
     hit.edgeDist = min(hit.edgeDist, sdSegment(p, v5, v8));
+    hit.edgeDist = min(hit.edgeDist, sdSegment(p, v5, v9));   // diagonal between Facet 4 & 5
     hit.edgeDist = min(hit.edgeDist, sdSegment(p, v5, v7));
     hit.edgeDist = min(hit.edgeDist, sdSegment(p, v8, v9));
     hit.edgeDist = min(hit.edgeDist, sdSegment(p, v8, v11));
