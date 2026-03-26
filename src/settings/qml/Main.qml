@@ -30,7 +30,7 @@ ApplicationWindow {
     }, {
         "name": "virtualscreens",
         "label": i18n("Virtual Screens"),
-        "iconName": "view-split-left-right",
+        "iconName": "virtual-desktops",
         "hasChildren": false,
         "hasDividerAfter": true
     }, {
