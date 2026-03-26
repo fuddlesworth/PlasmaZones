@@ -18,6 +18,15 @@ Flickable {
     readonly property alias hasOverrides: psHelper.hasOverrides
     readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettings.autotileAlgorithm)
 
+    // Data-driven algorithm capabilities (from combo model)
+    readonly property var currentAlgoData: {
+        const model = algorithmCombo ? algorithmCombo.model : null;
+        const idx = algorithmCombo ? algorithmCombo.currentIndex : -1;
+        return (model && idx >= 0 && idx < model.length) ? model[idx] : null;
+    }
+    readonly property bool algoSupportsSplitRatio: currentAlgoData ? (currentAlgoData.supportsSplitRatio === true) : false
+    readonly property bool algoSupportsMasterCount: currentAlgoData ? (currentAlgoData.supportsMasterCount === true) : false
+
     function settingValue(key, globalValue) {
         return psHelper.settingValue(key, globalValue);
     }
@@ -373,7 +382,7 @@ Flickable {
                     Layout.fillWidth: true
                     Layout.maximumWidth: Math.min(Kirigami.Units.gridUnit * 20, parent.width)
                     spacing: Kirigami.Units.smallSpacing
-                    visible: root.effectiveAlgorithm === "master-stack" || root.effectiveAlgorithm === "three-column" || root.effectiveAlgorithm === "centered-master"
+                    visible: root.algoSupportsSplitRatio || root.algoSupportsMasterCount
 
                     Kirigami.Separator {
                         Layout.fillWidth: true
@@ -421,7 +430,7 @@ Flickable {
                     RowLayout {
                         Layout.alignment: Qt.AlignHCenter
                         spacing: Kirigami.Units.smallSpacing
-                        visible: root.effectiveAlgorithm === "master-stack" || root.effectiveAlgorithm === "centered-master"
+                        visible: root.algoSupportsMasterCount
 
                         Label {
                             text: root.effectiveAlgorithm === "centered-master" ? i18n("Center count:") : i18n("Master count:")
