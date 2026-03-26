@@ -173,6 +173,10 @@ set(plasmazones_core_SRCS
     autotile/algorithms/StairAlgorithm.h
     autotile/algorithms/SpreadAlgorithm.cpp
     autotile/algorithms/SpreadAlgorithm.h
+    autotile/algorithms/ScriptedAlgorithm.cpp
+    autotile/algorithms/ScriptedAlgorithm.h
+    autotile/algorithms/ScriptedAlgorithmLoader.cpp
+    autotile/algorithms/ScriptedAlgorithmLoader.h
     snap/SnapEngine.cpp
     snap/SnapEngine.h
     snap/snapengine/float.cpp

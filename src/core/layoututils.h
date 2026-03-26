@@ -62,6 +62,11 @@ struct PLASMAZONES_EXPORT UnifiedLayoutEntry
     qreal referenceAspectRatio = 0.0; ///< For fixed-geometry layouts: the screen AR zones were designed for
     bool recommended = true; ///< True if layout matches the current screen's aspect ratio
 
+    // ── Generic section grouping (data-driven, consumed by LayoutsPage) ──
+    QString sectionKey; ///< Grouping key (e.g. "any", "standard", "built-in", "custom")
+    QString sectionLabel; ///< Display label for the section header (i18n'd)
+    int sectionOrder = 0; ///< Sort priority (lower = first)
+
     /**
      * @brief Extract the algorithm ID from an autotile entry
      * @return Algorithm ID (e.g. "master-stack"), or empty string if not autotile

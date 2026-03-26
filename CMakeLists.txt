@@ -342,6 +342,13 @@ install(DIRECTORY data/shaders/
     PATTERN "*.png"
 )
 
+# Install bundled scripted tiling algorithms
+install(DIRECTORY data/algorithms/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/algorithms
+    FILES_MATCHING
+    PATTERN "*.js"
+)
+
 # Install icons (hicolor for dark themes, hicolor-light for light themes)
 install(FILES
     icons/hicolor/scalable/apps/plasmazones.svg

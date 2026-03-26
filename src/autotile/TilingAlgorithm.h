@@ -174,6 +174,27 @@ public:
      */
     virtual bool producesOverlappingZones() const noexcept;
 
+    /**
+     * @brief Whether this algorithm is a user-provided scripted algorithm
+     *
+     * Scripted algorithms are loaded from JavaScript files at runtime.
+     * Used by the UI to group algorithms into "Built-in" vs "Custom" sections.
+     *
+     * @return true if this is a ScriptedAlgorithm (default: false)
+     */
+    virtual bool isScripted() const noexcept;
+
+    /**
+     * @brief Whether this scripted algorithm was loaded from a user directory
+     *
+     * System-installed scripts (shipped with PlasmaZones) return false.
+     * User-created scripts in ~/.local/share/plasmazones/algorithms/ return true.
+     * Non-scripted algorithms always return false.
+     *
+     * @return true if loaded from user's writable data directory (default: false)
+     */
+    virtual bool isUserScript() const noexcept;
+
 protected:
     /**
      * @brief Distribute a total evenly among N parts with pixel-perfect remainder handling

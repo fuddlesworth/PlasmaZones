@@ -41,6 +41,7 @@
 #include "../dbus/autotileadaptor.h"
 #include "../dbus/snapadaptor.h"
 #include "../autotile/AutotileEngine.h"
+#include "../autotile/algorithms/ScriptedAlgorithmLoader.h"
 #include "../autotile/AlgorithmRegistry.h"
 #include "../snap/SnapEngine.h"
 
@@ -333,6 +334,17 @@ bool Daemon::init()
                                                         m_screenManager.get(), this);
     m_autotileEngine->syncFromSettings(m_settings.get());
     m_autotileEngine->connectToSettings(m_settings.get());
+
+    // Load scripted algorithms from system and user directories
+    m_scriptedAlgorithmLoader = new ScriptedAlgorithmLoader(this);
+    m_scriptedAlgorithmLoader->scanAndRegister();
+
+    // When scripted algorithms change (hot-reload), notify layout list consumers
+    connect(m_scriptedAlgorithmLoader, &ScriptedAlgorithmLoader::algorithmsChanged,
+            this, [this]() {
+        if (m_layoutAdaptor)
+            m_layoutAdaptor->notifyLayoutListChanged();
+    });
 
     // Give the window drag adaptor access to the autotile engine for per-screen
     // autotile checks (overlay suppression and snap rejection on autotile screens)

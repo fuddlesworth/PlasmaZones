@@ -216,6 +216,26 @@ public:
      */
     static QVariantMap algorithmToVariantMap(TilingAlgorithm* algorithm, const QString& algorithmId);
 
+    /**
+     * @brief Section grouping metadata for a tiling algorithm
+     *
+     * Used by both algorithmToVariantMap() and layoututils appendAutotileEntries()
+     * to avoid duplicating the isScripted/isUserScript → section mapping.
+     */
+    struct SectionInfo
+    {
+        QString key;
+        QString label;
+        int order = 0;
+    };
+
+    /**
+     * @brief Get section grouping info for a tiling algorithm
+     *
+     * User scripts → "custom" section, everything else → "built-in".
+     */
+    static SectionInfo sectionForAlgorithm(TilingAlgorithm* algorithm);
+
 Q_SIGNALS:
     /**
      * @brief Emitted when an algorithm is registered

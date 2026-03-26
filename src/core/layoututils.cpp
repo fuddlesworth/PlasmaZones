@@ -5,6 +5,7 @@
 #include "constants.h"
 #include "interfaces.h"
 #include "layout.h"
+#include "pz_i18n.h"
 #include "utils.h"
 #include "zone.h"
 #include "../autotile/AlgorithmRegistry.h"
@@ -152,6 +153,37 @@ QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields)
 // Unified layout list building
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * @brief Map aspect ratio class to section label and order for manual layouts
+ */
+static void setAspectRatioSection(UnifiedLayoutEntry& entry)
+{
+    const auto cls = static_cast<AspectRatioClass>(entry.aspectRatioClass);
+    entry.sectionKey = ScreenClassification::toString(cls);
+    switch (cls) {
+    case AspectRatioClass::Any:
+        entry.sectionLabel = PzI18n::tr("All Monitors");
+        entry.sectionOrder = 0;
+        break;
+    case AspectRatioClass::Standard:
+        entry.sectionLabel = PzI18n::tr("Standard (16:9)");
+        entry.sectionOrder = 1;
+        break;
+    case AspectRatioClass::Ultrawide:
+        entry.sectionLabel = PzI18n::tr("Ultrawide (21:9)");
+        entry.sectionOrder = 2;
+        break;
+    case AspectRatioClass::SuperUltrawide:
+        entry.sectionLabel = PzI18n::tr("Super-Ultrawide (32:9)");
+        entry.sectionOrder = 3;
+        break;
+    case AspectRatioClass::Portrait:
+        entry.sectionLabel = PzI18n::tr("Portrait (9:16)");
+        entry.sectionOrder = 4;
+        break;
+    }
+}
+
 static UnifiedLayoutEntry entryFromLayout(Layout* layout)
 {
     UnifiedLayoutEntry entry;
@@ -167,6 +199,7 @@ static UnifiedLayoutEntry entryFromLayout(Layout* layout)
         if (refGeo.height() > 0)
             entry.referenceAspectRatio = refGeo.width() / refGeo.height();
     }
+    setAspectRatioSection(entry);
     return entry;
 }
 
@@ -190,6 +223,13 @@ static void appendAutotileEntries(QVector<UnifiedLayoutEntry>& list)
         entry.previewZones = AlgorithmRegistry::generatePreviewZones(algo);
         entry.zones = entry.previewZones;
         entry.zoneCount = AlgorithmRegistry::effectiveMaxWindows(algo);
+
+        // Section grouping (shared helper avoids DRY violation with algorithmToVariantMap)
+        const auto section = AlgorithmRegistry::sectionForAlgorithm(algo);
+        entry.sectionKey = section.key;
+        entry.sectionLabel = section.label;
+        entry.sectionOrder = section.order;
+
         list.append(entry);
     }
 }
@@ -334,6 +374,13 @@ QVariantMap toVariantMap(const UnifiedLayoutEntry& entry)
         map[QLatin1String("referenceAspectRatio")] = entry.referenceAspectRatio;
     }
 
+    // Generic section grouping
+    if (!entry.sectionKey.isEmpty()) {
+        map[QLatin1String("sectionKey")] = entry.sectionKey;
+        map[QLatin1String("sectionLabel")] = entry.sectionLabel;
+        map[QLatin1String("sectionOrder")] = entry.sectionOrder;
+    }
+
     return map;
 }
 
@@ -368,6 +415,13 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
     if (entry.autoAssign) {
         json[AutoAssign] = true;
     }
+    // Generic section grouping
+    if (!entry.sectionKey.isEmpty()) {
+        json[QLatin1String("sectionKey")] = entry.sectionKey;
+        json[QLatin1String("sectionLabel")] = entry.sectionLabel;
+        json[QLatin1String("sectionOrder")] = entry.sectionOrder;
+    }
+
     // hiddenFromSelector is added by callers that have access to the Layout*
 
     // Convert zones to JSON array

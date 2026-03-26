@@ -95,42 +95,32 @@ ColumnLayout {
                         else if (root.viewMode === 1 && isAutotile)
                             filtered.push(allLayouts[i]);
                     }
-                    // Group by aspect ratio class
-                    let aspectOrder = ["any", "standard", "ultrawide", "super-ultrawide", "portrait"];
-                    let aspectLabels = root.aspectRatioLabels;
-                    let groups = {
-                    };
+                    // Group by sectionKey (data-driven: each item carries its own
+                    // sectionKey, sectionLabel, sectionOrder from the C++ side)
+                    let groups = {};
                     for (let i = 0; i < filtered.length; i++) {
-                        let cls = filtered[i].aspectRatioClass || "any";
-                        if (!groups[cls])
-                            groups[cls] = [];
-
-                        groups[cls].push(filtered[i]);
+                        let key = filtered[i].sectionKey || "default";
+                        if (!groups[key])
+                            groups[key] = {
+                                items: [],
+                                order: filtered[i].sectionOrder !== undefined ? filtered[i].sectionOrder : 0,
+                                label: filtered[i].sectionLabel || ""
+                            };
+                        groups[key].items.push(filtered[i]);
                     }
-                    // Sort each group alphabetically
-                    for (let cls in groups) {
-                        groups[cls].sort((a, b) => {
+                    // Sort items within each group alphabetically
+                    for (let key in groups) {
+                        groups[key].items.sort((a, b) => {
                             return (a.name || "").localeCompare(b.name || "");
                         });
                     }
-                    // Build section model: [{label, layouts}, ...]
-                    let sections = [];
-                    let groupCount = 0;
-                    for (let a = 0; a < aspectOrder.length; a++) {
-                        if (groups[aspectOrder[a]] && groups[aspectOrder[a]].length > 0)
-                            groupCount++;
-
-                    }
-                    for (let a = 0; a < aspectOrder.length; a++) {
-                        let cls = aspectOrder[a];
-                        if (groups[cls] && groups[cls].length > 0)
-                            sections.push({
-                            "label": groupCount > 1 ? aspectLabels[cls] : "",
-                            "layouts": groups[cls]
-                        });
-
-                    }
-                    model = sections;
+                    // Sort groups by sectionOrder, then build section model
+                    let sorted = Object.values(groups).sort((a, b) => a.order - b.order);
+                    let nonEmpty = sorted.filter(g => g.items.length > 0);
+                    model = nonEmpty.map(g => ({
+                        "label": nonEmpty.length > 1 ? g.label : "",
+                        "layouts": g.items
+                    }));
                 }
 
                 function selectDefaultLayout(mode) {

@@ -8,6 +8,7 @@
 #include "core/constants.h"
 #include "core/layout.h"
 #include "core/logging.h"
+#include "pz_i18n.h"
 
 #include <QDebug>
 #include <QRect>
@@ -353,7 +354,21 @@ QVariantMap AlgorithmRegistry::algorithmToVariantMap(TilingAlgorithm* algorithm,
     map[QLatin1String("zones")] = generatePreviewZones(algorithm);
     map[QLatin1String("category")] = static_cast<int>(LayoutCategory::Autotile);
 
+    // Section grouping for LayoutsPage
+    const auto section = sectionForAlgorithm(algorithm);
+    map[QLatin1String("sectionKey")] = section.key;
+    map[QLatin1String("sectionLabel")] = section.label;
+    map[QLatin1String("sectionOrder")] = section.order;
+
     return map;
+}
+
+AlgorithmRegistry::SectionInfo AlgorithmRegistry::sectionForAlgorithm(TilingAlgorithm* algorithm)
+{
+    if (algorithm && algorithm->isScripted() && algorithm->isUserScript()) {
+        return {QStringLiteral("custom"), PzI18n::tr("Custom"), 1};
+    }
+    return {QStringLiteral("built-in"), PzI18n::tr("Built-in"), 0};
 }
 
 } // namespace PlasmaZones
