@@ -45,6 +45,7 @@ BuildRequires:  cmake(Qt6Widgets)
 BuildRequires:  cmake(Qt6Concurrent)
 BuildRequires:  cmake(Qt6ShaderTools)
 BuildRequires:  cmake(Qt6ShaderToolsPrivate)
+BuildRequires:  cmake(Qt6Svg)
 BuildRequires:  qt6-core-private-devel
 BuildRequires:  qt6-gui-private-devel
 %else
@@ -53,6 +54,7 @@ BuildRequires:  qt6-qtbase-private-devel
 BuildRequires:  qt6-qtdeclarative-devel
 BuildRequires:  qt6-qttools-devel
 BuildRequires:  qt6-qtshadertools-devel
+BuildRequires:  qt6-qtsvg-devel
 %endif
 
 # KDE Frameworks 6 (6.6+ for Plasma 6.6 API)

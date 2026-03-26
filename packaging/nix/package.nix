@@ -78,6 +78,7 @@ stdenv.mkDerivation {
     qt6.qtbase           # Core Gui Widgets DBus Concurrent
     qt6.qtdeclarative    # Quick QuickControls2 (QML engine + runtime)
     qt6.qtshadertools    # ShaderTools ShaderToolsPrivate (zone overlay shaders)
+    qt6.qtsvg            # Svg (SVG icon rendering)
   ] ++ (with kdePackages; [
     # KDE Frameworks 6 (6.6+ for Plasma 6.6)
     kcmutils
