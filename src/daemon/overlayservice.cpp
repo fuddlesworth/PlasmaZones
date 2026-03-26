@@ -77,6 +77,10 @@ OverlayService::OverlayService(QObject* parent)
                 return;
             }
 
+            // Clear selected zone before destroying windows — the selection references
+            // zone geometry from the old virtual screen config and would be stale.
+            clearSelectedZone();
+
             // Remove existing overlays for this physical screen
             QStringList toRemove;
             for (auto it = m_overlayPhysScreens.constBegin(); it != m_overlayPhysScreens.constEnd(); ++it) {

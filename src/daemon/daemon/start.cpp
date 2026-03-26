@@ -53,6 +53,10 @@ void Daemon::connectScreenSignals()
     connect(m_screenManager.get(), &ScreenManager::virtualScreensChanged, this, [this](const QString& physId) {
         auto config = m_screenManager->virtualScreenConfig(physId);
         m_settings->setVirtualScreenConfig(physId, config);
+        // Clear stale resnap buffer — screen IDs have changed
+        if (m_windowTrackingAdaptor) {
+            m_windowTrackingAdaptor->service()->clearResnapBuffer();
+        }
         // Migrate window screen assignments when virtual screens change at runtime
         if (config.hasSubdivisions() && m_windowTrackingAdaptor) {
             QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
@@ -75,7 +79,7 @@ void Daemon::connectScreenSignals()
         for (const QString& sid : vsIds) {
             Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
             if (screenLayout) {
-                screenLayout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(screenLayout, screen));
+                screenLayout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(screenLayout, sid));
             }
         }
     });

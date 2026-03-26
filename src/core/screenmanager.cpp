@@ -99,9 +99,9 @@ void ScreenManager::stop()
     m_running = false;
     m_delayedPanelRequeryTimer.stop();
 
-    // Destroy all geometry sensors
-    for (auto* screen : m_geometrySensors.keys()) {
-        destroyGeometrySensor(screen);
+    // Destroy all geometry sensors (use while-loop to avoid modifying hash during iteration)
+    while (!m_geometrySensors.isEmpty()) {
+        destroyGeometrySensor(m_geometrySensors.begin().key());
     }
 
     // Disconnect from all screens
@@ -457,8 +457,13 @@ void ScreenManager::onScreenGeometryChanged(const QRect& geometry)
 {
     auto* screen = qobject_cast<QScreen*>(sender());
     if (screen) {
-        // Invalidate virtual geometry caches — physical geometry changed
-        invalidateVirtualGeometryCache();
+        // Invalidate virtual geometry caches only for the screen that changed
+        const QString physId = Utils::screenIdentifier(screen);
+        if (!physId.isEmpty()) {
+            invalidateVirtualGeometryCache(physId);
+        } else {
+            invalidateVirtualGeometryCache();
+        }
 
         // Screen geometry changed - the sensor window will be reconfigured by compositor
         // which will trigger onSensorGeometryChanged automatically
@@ -492,10 +497,47 @@ void ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
 {
     if (config.isEmpty()) {
         m_virtualConfigs.remove(physicalScreenId);
-    } else {
-        m_virtualConfigs.insert(physicalScreenId, config);
+        invalidateVirtualGeometryCache(physicalScreenId);
+        Q_EMIT virtualScreensChanged(physicalScreenId);
+        return;
     }
 
+    // Validate: physicalScreenId must match config
+    if (config.physicalScreenId != physicalScreenId) {
+        qCWarning(lcScreen) << "setVirtualScreenConfig: config physicalScreenId" << config.physicalScreenId
+                            << "does not match parameter" << physicalScreenId;
+        return;
+    }
+
+    // Validate: need at least 2 screens for a meaningful subdivision
+    if (config.screens.size() < 2) {
+        qCWarning(lcScreen) << "setVirtualScreenConfig: need at least 2 screens for subdivision, got"
+                            << config.screens.size();
+        return;
+    }
+
+    // Validate: all defs must pass isValid()
+    for (const auto& def : config.screens) {
+        if (!def.isValid()) {
+            qCWarning(lcScreen) << "setVirtualScreenConfig: invalid VirtualScreenDef" << def.id
+                                << "region:" << def.region;
+            return;
+        }
+    }
+
+    // Validate: no two regions overlap (pairwise intersection check)
+    for (int i = 0; i < config.screens.size(); ++i) {
+        for (int j = i + 1; j < config.screens.size(); ++j) {
+            QRectF intersection = config.screens[i].region.intersected(config.screens[j].region);
+            if (!intersection.isEmpty()) {
+                qCWarning(lcScreen) << "setVirtualScreenConfig: overlapping regions between" << config.screens[i].id
+                                    << "and" << config.screens[j].id;
+                return;
+            }
+        }
+    }
+
+    m_virtualConfigs.insert(physicalScreenId, config);
     invalidateVirtualGeometryCache(physicalScreenId);
     Q_EMIT virtualScreensChanged(physicalScreenId);
 }
@@ -511,9 +553,9 @@ QStringList ScreenManager::effectiveScreenIds() const
 
     for (auto* screen : m_trackedScreens) {
         QString physId = Utils::screenIdentifier(screen);
-        if (m_virtualConfigs.contains(physId) && m_virtualConfigs.value(physId).hasSubdivisions()) {
-            const auto& config = m_virtualConfigs.value(physId);
-            for (const auto& vs : config.screens) {
+        auto it = m_virtualConfigs.constFind(physId);
+        if (it != m_virtualConfigs.constEnd() && it->hasSubdivisions()) {
+            for (const auto& vs : it->screens) {
                 result.append(vs.id);
             }
         } else {
@@ -526,10 +568,10 @@ QStringList ScreenManager::effectiveScreenIds() const
 
 QStringList ScreenManager::virtualScreenIdsFor(const QString& physicalScreenId) const
 {
-    if (m_virtualConfigs.contains(physicalScreenId) && m_virtualConfigs.value(physicalScreenId).hasSubdivisions()) {
+    auto it = m_virtualConfigs.constFind(physicalScreenId);
+    if (it != m_virtualConfigs.constEnd() && it->hasSubdivisions()) {
         QStringList ids;
-        const auto& config = m_virtualConfigs.value(physicalScreenId);
-        for (const auto& vs : config.screens) {
+        for (const auto& vs : it->screens) {
             ids.append(vs.id);
         }
         return ids;
@@ -586,7 +628,8 @@ QScreen* ScreenManager::physicalQScreenFor(const QString& screenId) const
 
 bool ScreenManager::hasVirtualScreens(const QString& physicalScreenId) const
 {
-    return m_virtualConfigs.contains(physicalScreenId) && m_virtualConfigs.value(physicalScreenId).hasSubdivisions();
+    auto it = m_virtualConfigs.constFind(physicalScreenId);
+    return it != m_virtualConfigs.constEnd() && it->hasSubdivisions();
 }
 
 VirtualScreenDef::PhysicalEdges ScreenManager::physicalEdgesFor(const QString& screenId) const

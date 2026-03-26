@@ -505,6 +505,17 @@ public:
     void populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens = {});
 
     /**
+     * @brief Clear the resnap buffer
+     *
+     * Called when virtual screen configuration changes to prevent stale
+     * resnap data from referencing old screen IDs.
+     */
+    void clearResnapBuffer()
+    {
+        m_resnapBuffer.clear();
+    }
+
+    /**
      * @brief Calculate resnap data from current zone assignments
      *
      * Used when restoring windows after autotile toggle-off: the autotile engine

@@ -53,19 +53,27 @@ void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QV
 
 QVariantList OverlayService::buildZonesList(QScreen* screen) const
 {
-    // Try to find the virtual-aware screen ID from the overlay's screen map first,
-    // since the overlay windows are keyed by effective (possibly virtual) screen IDs.
-    // Falls back to physical screen ID if no mapping exists.
-    QString screenId;
+    // WARNING: One physical QScreen can back multiple virtual screens.
+    // This overload picks the FIRST matching virtual screen ID from m_overlayPhysScreens,
+    // which is non-deterministic for QHash iteration. It should only be called in
+    // single-overlay-per-physical-screen contexts (no virtual screens configured).
+    // Callers with virtual screen context should use buildZonesList(screenId, physScreen) directly.
+
+    // Aggregate zones for ALL virtual screens on this physical screen to avoid
+    // returning partial results when multiple virtual screens share one QScreen.
+    QVariantList allZones;
+    bool found = false;
     for (auto it = m_overlayPhysScreens.constBegin(); it != m_overlayPhysScreens.constEnd(); ++it) {
         if (it.value() == screen) {
-            screenId = it.key();
-            break;
+            allZones.append(buildZonesList(it.key(), screen));
+            found = true;
         }
     }
-    if (screenId.isEmpty()) {
-        screenId = Utils::screenIdentifier(screen);
+    if (found) {
+        return allZones;
     }
+    // Fallback: no mapping exists, use physical screen ID
+    QString screenId = Utils::screenIdentifier(screen);
     return buildZonesList(screenId, screen);
 }
 

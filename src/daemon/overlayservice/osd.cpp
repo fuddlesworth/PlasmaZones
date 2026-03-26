@@ -243,25 +243,24 @@ void OverlayService::warmUpLayoutOsd()
     const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
 
     if (!effectiveIds.isEmpty()) {
-        // Warm up one OSD per physical screen. For monitors with virtual screens,
-        // create the window keyed by the FIRST effective ID on that physical screen
-        // (so showLayoutOsd can find it). Skip subsequent virtual screens on the
-        // same physical monitor — the OSD is repositioned when shown.
-        QSet<QString> seenPhysical;
+        // Warm up one OSD per effective screen ID (including all virtual screens).
+        // Each virtual screen may receive its own showLayoutOsd call, so it needs
+        // a pre-warmed window keyed by its own ID. Without this, only the first
+        // VS ID per physical screen would have a warm window, and showLayoutOsd
+        // for subsequent VS IDs would hit cold QML compilation (~100-300ms).
         for (const QString& sid : effectiveIds) {
-            QString physId = VirtualScreenId::isVirtual(sid) ? VirtualScreenId::extractPhysicalId(sid) : sid;
-            if (seenPhysical.contains(physId)) {
-                continue;
-            }
-            seenPhysical.insert(physId);
             if (!m_layoutOsdWindows.contains(sid)) {
                 QScreen* physScreen = mgr->physicalQScreenFor(sid);
                 if (physScreen) {
-                    createLayoutOsdWindow(sid, physScreen, physScreen->geometry());
+                    QRect geom = mgr->screenGeometry(sid);
+                    if (!geom.isValid()) {
+                        geom = physScreen->geometry();
+                    }
+                    createLayoutOsdWindow(sid, physScreen, geom);
                 }
             }
         }
-        qCInfo(lcOverlay) << "Pre-warmed Layout OSD windows for" << seenPhysical.size() << "physical screens";
+        qCInfo(lcOverlay) << "Pre-warmed Layout OSD windows for" << effectiveIds.size() << "effective screens";
     } else {
         // Fallback: no ScreenManager or no effective IDs, warm up for physical screens
         const auto screens = QGuiApplication::screens();

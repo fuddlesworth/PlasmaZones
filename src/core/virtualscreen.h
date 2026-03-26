@@ -44,12 +44,19 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
             && region == other.region && index == other.index;
     }
 
-    /// Check if the definition is valid: non-empty id, non-negative origin, non-zero size,
-    /// region within [0,1] bounds. Uses 1e-3 tolerance to handle float serialization precision loss.
+    /// Check if the definition is valid: non-empty id, non-empty physicalScreenId,
+    /// non-negative origin, non-zero size, region within [0,1] bounds.
+    /// Uses 1e-3 tolerance to handle float serialization precision loss.
     bool isValid() const
     {
-        return !id.isEmpty() && region.x() >= 0 && region.y() >= 0 && region.width() > 0 && region.height() > 0
-            && region.x() + region.width() <= 1.0 + 1e-3 && region.y() + region.height() <= 1.0 + 1e-3;
+        return !id.isEmpty() && !physicalScreenId.isEmpty() && region.x() >= 0 && region.y() >= 0 && region.width() > 0
+            && region.height() > 0 && region.x() + region.width() <= 1.0 + 1e-3
+            && region.y() + region.height() <= 1.0 + 1e-3;
+    }
+
+    bool operator!=(const VirtualScreenDef& other) const
+    {
+        return !(*this == other);
     }
 
     /// Check which edges of this virtual screen are at the physical screen boundary
@@ -132,7 +139,7 @@ inline int extractIndex(const QString& screenId)
     }
     bool ok = false;
     int index = screenId.mid(sep + Separator.size()).toInt(&ok);
-    return ok ? index : -1;
+    return (ok && index >= 0) ? index : -1;
 }
 
 /// Construct a virtual screen ID from physical ID and index

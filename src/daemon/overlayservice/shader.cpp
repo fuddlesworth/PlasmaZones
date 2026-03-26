@@ -98,31 +98,11 @@ bool OverlayService::canUseShaders() const
 
 bool OverlayService::useShaderForScreen(QScreen* screen) const
 {
-    if (!canUseShaders()) {
+    if (!screen) {
         return false;
     }
-    if (m_settings && !m_settings->enableShaderEffects()) {
-        return false;
-    }
-    Layout* screenLayout = resolveScreenLayout(screen);
-    if (!screenLayout || ShaderRegistry::isNoneShader(screenLayout->shaderId())) {
-        return false;
-    }
-
-    // LayoutPreview mode requires standard QML overlay (ZonePreview can't be rendered in GLSL).
-    // If any zone resolves to LayoutPreview mode, fall back to standard overlay for this screen.
-    int globalMode = m_settings ? static_cast<int>(m_settings->overlayDisplayMode()) : 0;
-    int layoutMode = screenLayout->overlayDisplayMode();
-    for (const auto* zone : screenLayout->zones()) {
-        int resolved =
-            zone->overlayDisplayMode() >= 0 ? zone->overlayDisplayMode() : (layoutMode >= 0 ? layoutMode : globalMode);
-        if (resolved == 1) { // OverlayDisplayMode::LayoutPreview
-            return false;
-        }
-    }
-
-    auto* registry = ShaderRegistry::instance();
-    return registry && registry->shader(screenLayout->shaderId()).isValid();
+    QString screenId = Utils::screenIdentifier(screen);
+    return useShaderForScreen(screenId);
 }
 
 bool OverlayService::anyScreenUsesShader() const
@@ -334,6 +314,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
 
     m_shaderPreviewScreen = screen;
     m_shaderPreviewShaderId = shaderId;
+    m_shaderPreviewScreenId = screenId;
     m_shaderPreviewWindow->setScreen(screen);
 
     // Use ScreenManager geometry (virtual screen aware) with physical fallback
@@ -403,10 +384,11 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
     if (width > 0 && height > 0) {
         QScreen* screen = m_shaderPreviewWindow->screen();
         if (screen) {
-            // Use ScreenManager geometry (virtual screen aware) with physical fallback
+            // Use the VS ID saved from showShaderPreview to avoid re-resolving
+            // from QScreen* (which would give the physical screen ID, not the VS ID)
             auto* mgr = ScreenManager::instance();
-            const QString sid = Utils::screenIdentifier(screen);
-            QRect vsGeom = mgr ? mgr->screenGeometry(sid) : QRect();
+            const QString& sid = m_shaderPreviewScreenId;
+            QRect vsGeom = (!sid.isEmpty() && mgr) ? mgr->screenGeometry(sid) : QRect();
             const QRect screenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
 
             // Only use setGeometry for physical screens; virtual screens are positioned
@@ -493,6 +475,7 @@ void OverlayService::destroyShaderPreviewWindow()
     }
     m_shaderPreviewScreen = nullptr;
     m_shaderPreviewShaderId.clear();
+    m_shaderPreviewScreenId.clear();
     // Stop shader timer only if main overlay is also not visible
     if (!m_visible && m_shaderUpdateTimer && m_shaderUpdateTimer->isActive()) {
         stopShaderAnimation();

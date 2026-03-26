@@ -17,6 +17,18 @@ Q_LOGGING_CATEGORY(lcSnapAssist, "kwin.effect.plasmazones.snapassist", QtWarning
 
 namespace PlasmaZones {
 
+namespace {
+/// Check if two screen IDs share the same physical screen.
+/// For virtual screens (containing "/vs:"), strip the suffix and compare physical IDs.
+bool samePhysicalScreen(const QString& idA, const QString& idB)
+{
+    static const QString vsSep = QStringLiteral("/vs:");
+    QString physA = idA.contains(vsSep) ? idA.left(idA.indexOf(vsSep)) : idA;
+    QString physB = idB.contains(vsSep) ? idB.left(idB.indexOf(vsSep)) : idB;
+    return physA == physB;
+}
+} // anonymous namespace
+
 SnapAssistHandler::SnapAssistHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)
     , m_effect(effect)
@@ -133,19 +145,8 @@ QJsonArray SnapAssistHandler::buildCandidates(const QString& excludeWindowId, co
         // snap a window from the other half of their ultrawide).
         if (!screenId.isEmpty()) {
             QString winScreen = m_effect->getWindowScreenId(w);
-            if (winScreen != screenId) {
-                // Check if they share the same physical screen
-                QString physA = screenId;
-                QString physB = winScreen;
-                int vsA = physA.indexOf(QLatin1String("/vs:"));
-                int vsB = physB.indexOf(QLatin1String("/vs:"));
-                if (vsA >= 0)
-                    physA = physA.left(vsA);
-                if (vsB >= 0)
-                    physB = physB.left(vsB);
-                if (physA != physB) {
-                    continue;
-                }
+            if (winScreen != screenId && !samePhysicalScreen(screenId, winScreen)) {
+                continue;
             }
         }
 

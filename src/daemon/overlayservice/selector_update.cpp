@@ -338,6 +338,19 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
             // Already initialized to Top position
             break;
         }
+        // Clamp margins to prevent negative window dimensions
+        int totalHMargin = margins.left() + margins.right();
+        if (totalHMargin >= physGeom.width()) {
+            // Fall back to centering within the virtual screen
+            margins.setLeft(vsLeftOff);
+            margins.setRight(vsRightOff);
+        }
+        int totalVMargin = margins.top() + margins.bottom();
+        if (totalVMargin >= physGeom.height()) {
+            margins.setTop(vsTopOff);
+            margins.setBottom(vsBottomOff);
+        }
+
         layerWindow->setAnchors(anchors);
         layerWindow->setMargins(margins);
     }

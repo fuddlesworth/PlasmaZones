@@ -20,7 +20,21 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
 {
     // Connect to screen change signals
     connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
-        Q_EMIT screenAdded(Utils::screenIdentifier(screen));
+        const QString physId = Utils::screenIdentifier(screen);
+        Q_EMIT screenAdded(physId);
+
+        // Also emit screenAdded for each virtual screen on this physical screen
+        auto* mgr = ScreenManager::instance();
+        if (mgr) {
+            QStringList vsIds = mgr->virtualScreenIdsFor(physId);
+            // virtualScreenIdsFor returns [physId] when no subdivisions — skip duplicate emit
+            if (vsIds.size() > 1 || (vsIds.size() == 1 && vsIds.first() != physId)) {
+                for (const QString& vsId : vsIds) {
+                    Q_EMIT screenAdded(vsId);
+                }
+                Q_EMIT virtualScreensChanged(physId);
+            }
+        }
 
         connect(screen, &QScreen::geometryChanged, this, [this, screen]() {
             Q_EMIT screenGeometryChanged(Utils::screenIdentifier(screen));
@@ -28,7 +42,24 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
     });
 
     connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this](QScreen* screen) {
-        Q_EMIT screenRemoved(Utils::screenIdentifier(screen));
+        const QString physId = Utils::screenIdentifier(screen);
+
+        // Emit screenRemoved for virtual screen IDs first, then physical
+        auto* mgr = ScreenManager::instance();
+        if (mgr) {
+            QStringList vsIds = mgr->virtualScreenIdsFor(physId);
+            if (vsIds.size() > 1 || (vsIds.size() == 1 && vsIds.first() != physId)) {
+                for (const QString& vsId : vsIds) {
+                    Q_EMIT screenRemoved(vsId);
+                }
+            }
+            // Remove stale virtual screen config for the removed physical screen
+            VirtualScreenConfig emptyConfig;
+            emptyConfig.physicalScreenId = physId;
+            mgr->setVirtualScreenConfig(physId, emptyConfig);
+        }
+
+        Q_EMIT screenRemoved(physId);
     });
 
     // Connect existing screens
@@ -225,6 +256,18 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
     if (config.screens.size() < 2) {
         qCWarning(lcDbus) << "setVirtualScreenConfig: need at least 2 screens for subdivision";
         return;
+    }
+
+    // Validate: no two regions overlap (pairwise intersection check)
+    for (int i = 0; i < config.screens.size(); ++i) {
+        for (int j = i + 1; j < config.screens.size(); ++j) {
+            QRectF intersection = config.screens[i].region.intersected(config.screens[j].region);
+            if (!intersection.isEmpty()) {
+                qCWarning(lcDbus) << "setVirtualScreenConfig: overlapping regions between screen"
+                                  << config.screens[i].index << "and" << config.screens[j].index;
+                return;
+            }
+        }
     }
 
     mgr->setVirtualScreenConfig(physicalScreenId, config);

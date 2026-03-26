@@ -228,11 +228,22 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
 
     // Search per-screen layouts to find which screen's layout contains this zone.
     // This correctly handles multi-monitor setups where each screen has a different layout.
-    for (QScreen* screen : Utils::allScreens()) {
-        Layout* layout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), currentDesktop,
-                                                          m_layoutManager->currentActivity());
-        if (layout && layout->zoneById(*zoneUuid)) {
-            return Utils::screenIdentifier(screen);
+    // Use effective screen IDs (virtual + physical) so virtual screen layouts are searched too.
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        for (const QString& sid : mgr->effectiveScreenIds()) {
+            Layout* layout = m_layoutManager->layoutForScreen(sid, currentDesktop, m_layoutManager->currentActivity());
+            if (layout && layout->zoneById(*zoneUuid)) {
+                return sid;
+            }
+        }
+    } else {
+        for (QScreen* screen : Utils::allScreens()) {
+            Layout* layout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), currentDesktop,
+                                                              m_layoutManager->currentActivity());
+            if (layout && layout->zoneById(*zoneUuid)) {
+                return Utils::screenIdentifier(screen);
+            }
         }
     }
 
@@ -247,7 +258,10 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
         return QString();
     }
     // Use effective screen IDs for virtual screen support
-    auto* mgr = ScreenManager::instance();
+    // Reuse mgr from above (or re-acquire if it was null in a fallback-only path)
+    if (!mgr) {
+        mgr = ScreenManager::instance();
+    }
     if (mgr) {
         for (const QString& sid : mgr->effectiveScreenIds()) {
             QScreen* screen = mgr->physicalQScreenFor(sid);

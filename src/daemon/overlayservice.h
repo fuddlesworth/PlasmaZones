@@ -254,6 +254,7 @@ private:
     QQuickWindow* m_shaderPreviewWindow = nullptr;
     QScreen* m_shaderPreviewScreen = nullptr;
     QString m_shaderPreviewShaderId; // Shader ID for param translation in updateShaderPreview
+    QString m_shaderPreviewScreenId; // Virtual screen ID from showShaderPreview (avoids re-resolving from QScreen*)
 
     // Snap Assist overlay (window picker after snapping)
     QQuickWindow* m_snapAssistWindow = nullptr;

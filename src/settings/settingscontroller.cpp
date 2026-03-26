@@ -5,6 +5,7 @@
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
+#include "../core/virtualscreen.h"
 #include "dbusutils.h"
 
 #include "../autotile/AlgorithmRegistry.h"
@@ -189,20 +190,44 @@ void SettingsController::save()
 {
     m_saving = true;
 
-    // Save main settings (includes editor settings)
-    m_settings.save();
-
-    // Flush staged tiling quick layout slots to config BEFORE notifyReload
+    // Flush staged tiling quick layout slots to config BEFORE save
     // so the daemon sees them when it reparses
     if (!m_stagedTilingQuickSlots.isEmpty()) {
         for (auto it = m_stagedTilingQuickSlots.constBegin(); it != m_stagedTilingQuickSlots.constEnd(); ++it) {
             m_settings.writeTilingQuickLayoutSlot(it.key(), it.value());
         }
-        m_settings.syncConfig();
         m_stagedTilingQuickSlots.clear();
     }
 
-    // Flush staged virtual screen configurations to daemon BEFORE notifyReload
+    // Persist staged virtual screen configurations to m_settings BEFORE save
+    // so they are written to KConfig on disk, then flush to daemon via D-Bus.
+    if (!m_stagedVirtualScreenConfigs.isEmpty()) {
+        for (auto it = m_stagedVirtualScreenConfigs.constBegin(); it != m_stagedVirtualScreenConfigs.constEnd(); ++it) {
+            VirtualScreenConfig vsConfig;
+            vsConfig.physicalScreenId = it.key();
+            if (!it.value().isEmpty()) {
+                for (int i = 0; i < it.value().size(); ++i) {
+                    const QVariantMap screenData = it.value()[i].toMap();
+                    VirtualScreenDef def;
+                    def.physicalScreenId = it.key();
+                    def.index = i;
+                    def.displayName = screenData.value(QStringLiteral("displayName")).toString();
+                    def.region = QRectF(screenData.value(QStringLiteral("x")).toDouble(),
+                                        screenData.value(QStringLiteral("y")).toDouble(),
+                                        screenData.value(QStringLiteral("width")).toDouble(),
+                                        screenData.value(QStringLiteral("height")).toDouble());
+                    def.id = it.key() + VirtualScreenId::Separator + QString::number(i);
+                    vsConfig.screens.append(def);
+                }
+            }
+            m_settings.setVirtualScreenConfig(it.key(), vsConfig);
+        }
+    }
+
+    // Save main settings (includes editor settings + VS configs persisted above)
+    m_settings.save();
+
+    // Flush staged virtual screen configurations to daemon via D-Bus BEFORE notifyReload
     // so that virtual screen IDs exist when assignments referencing them are processed.
     if (!m_stagedVirtualScreenConfigs.isEmpty()) {
         for (auto it = m_stagedVirtualScreenConfigs.constBegin(); it != m_stagedVirtualScreenConfigs.constEnd(); ++it) {
@@ -2181,6 +2206,7 @@ void SettingsController::applyVirtualScreenPreset(const QString& physicalScreenI
                                {QStringLiteral("y"), 0.0},
                                {QStringLiteral("width"), 0.333},
                                {QStringLiteral("height"), 1.0}}};
+        // NOTE: center-gets-extra pattern: [0.333, 0.334, 0.333] — aligned with QML [33.3, 33.4, 33.3]
     } else if (preset == QLatin1String("40-20-40")) {
         screens = {QVariantMap{{QStringLiteral("displayName"), QStringLiteral("Left")},
                                {QStringLiteral("x"), 0.0},

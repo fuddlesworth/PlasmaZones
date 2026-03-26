@@ -126,7 +126,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
         applyLayerShellScreenPosition(m_snapAssistWindow, screen, screenGeom);
         layerWindow->setExclusiveZone(-1);
-        layerWindow->setScope(QStringLiteral("plasmazones-snap-assist"));
+        layerWindow->setScope(QStringLiteral("plasmazones-snap-assist-%1").arg(screenId));
     }
 
     assertWindowOnScreen(m_snapAssistWindow, screen, screenGeom);
@@ -388,7 +388,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
         applyLayerShellScreenPosition(m_layoutPickerWindow, screen, screenGeom);
         layerWindow->setExclusiveZone(-1);
-        layerWindow->setScope(QStringLiteral("plasmazones-layout-picker"));
+        layerWindow->setScope(QStringLiteral("plasmazones-layout-picker-%1").arg(resolvedId));
     }
 
     assertWindowOnScreen(m_layoutPickerWindow, screen, screenGeom);

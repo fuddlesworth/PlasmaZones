@@ -125,7 +125,12 @@ Flickable {
         for (var k = 0; k < screens.length - 1; k++) {
             total += screens[k].width;
         }
-        screens[screens.length - 1].width = 1 - total;
+        var lastWidth = 1 - total;
+        if (lastWidth < minW)
+            // Clamp: don't allow the move — last screen would get negative/tiny width
+            return ;
+
+        screens[screens.length - 1].width = lastWidth;
         // Also fix the x position of the last screen
         screens[screens.length - 1].x = total;
         _pendingScreens = screens;
@@ -465,8 +470,8 @@ Flickable {
                         Layout.fillWidth: true
                         text: i18n("33 / 33 / 33")
                         enabled: root._selectedScreen !== ""
-                        highlighted: root._matchesPreset([33.34, 33.33, 33.33])
-                        onClicked: root._loadPreset([33.34, 33.33, 33.33], [i18n("Left"), i18n("Center"), i18n("Right")])
+                        highlighted: root._matchesPreset([33.3, 33.4, 33.3])
+                        onClicked: root._loadPreset([33.3, 33.4, 33.3], [i18n("Left"), i18n("Center"), i18n("Right")])
                     }
 
                     Button {

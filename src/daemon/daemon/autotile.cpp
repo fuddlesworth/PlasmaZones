@@ -407,13 +407,16 @@ void Daemon::processPendingGeometryUpdates()
         return;
     }
 
-    // Recalculate zone geometries for ALL layouts so fixed-mode zones stay
-    // normalized correctly.  Uses primary screen as the reference geometry
-    // (per-layout useFullScreenGeometry is respected by effectiveScreenGeometry).
-    QScreen* primaryScreen = Utils::primaryScreen();
-    if (primaryScreen) {
-        for (Layout* layout : m_layoutManager->layouts()) {
-            layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, primaryScreen));
+    // Recalculate zone geometries for each effective screen (virtual or physical)
+    // so fixed-mode zones stay normalized correctly against the correct screen geometry.
+    const int desktop = m_virtualDesktopManager->currentDesktop();
+    const QString activity =
+        m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
+    const QStringList screenIds = m_screenManager->effectiveScreenIds();
+    for (const QString& screenId : screenIds) {
+        Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
+        if (layout) {
+            layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screenId));
         }
     }
 

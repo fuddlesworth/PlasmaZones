@@ -10,6 +10,7 @@
 #include "../core/screenmanager.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
+#include "../core/virtualscreen.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <limits>
@@ -236,7 +237,10 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
     // Get reference geometry for normalizedGeometry() (needed for fixed-mode zones)
     // Use virtual-screen-aware resolution: prefer caller-supplied screenId,
     // then ScreenManager geometry, then fall back to QScreen.
-    QString resolvedId = screenId.isEmpty() ? screenId : Utils::screenIdForName(screenId);
+    // If the screenId is already a virtual screen ID, pass it through directly.
+    QString resolvedId = screenId.isEmpty()
+        ? screenId
+        : (VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId));
     auto* smgr = ScreenManager::instance();
     QRect vsGeom = smgr ? smgr->screenGeometry(resolvedId) : QRect();
     QRectF refGeom;
@@ -312,14 +316,17 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
     }
 
     // Use per-screen layout (falls back to activeLayout via resolveLayoutForScreen)
-    Layout* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdForName(screenId));
+    // If the screenId is already a virtual screen ID, pass it through directly.
+    QString resolvedId = screenId.isEmpty()
+        ? screenId
+        : (VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId));
+    Layout* layout = m_layoutManager->resolveLayoutForScreen(resolvedId);
     if (!layout || layout->zones().isEmpty()) {
         return QString();
     }
 
     // Get reference geometry for normalizedGeometry() (needed for fixed-mode zones)
     // Use virtual-screen-aware resolution: prefer ScreenManager geometry, then fall back to QScreen.
-    QString resolvedId = screenId.isEmpty() ? screenId : Utils::screenIdForName(screenId);
     auto* smgr = ScreenManager::instance();
     QRect vsGeom = smgr ? smgr->screenGeometry(resolvedId) : QRect();
     QRectF refGeom;

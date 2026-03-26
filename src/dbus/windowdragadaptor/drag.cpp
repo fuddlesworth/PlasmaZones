@@ -523,7 +523,9 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
 
 void WindowDragAdaptor::selectorScrollWheel(int angleDeltaY)
 {
-    m_overlayService->scrollZoneSelector(angleDeltaY);
+    if (m_overlayService) {
+        m_overlayService->scrollZoneSelector(angleDeltaY);
+    }
 }
 
 } // namespace PlasmaZones

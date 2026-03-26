@@ -803,6 +803,7 @@ void Settings::loadVirtualScreenConfigs(QSettingsConfigBackend* backend)
 
         auto group = backend->group(groupName);
         int count = group->readInt(QStringLiteral("count"), 0);
+        count = qBound(0, count, 10); // Maximum 10 virtual screens per physical screen
         if (count <= 0) {
             qCWarning(lcConfig) << "VirtualScreen config for" << physId << "has invalid count:" << count;
             continue;
