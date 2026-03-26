@@ -31,6 +31,8 @@ Item {
     // Throttled zone calculation (~60fps cap) to avoid redundant recalcs
     // when multiple properties change in the same frame
     property var zones: []
+    // Whether the algorithm produces overlapping zones (only show last zone number)
+    property bool overlapping: false
     // Algorithm name label (hidden when used inside the Tiling tab's algorithm section
     // where the name is already shown alongside the combo box)
     property bool showLabel: true
@@ -60,7 +62,7 @@ Item {
         zones: root.zones
         isHovered: true
         showZoneNumbers: true
-        onlyShowLastZoneNumber: root.algorithmId === "cascade"
+        onlyShowLastZoneNumber: root.overlapping
         highlightColor: Qt.rgba(root.windowColor.r, root.windowColor.g, root.windowColor.b, 0.7)
         borderColor: Qt.rgba(root.windowBorder.r, root.windowBorder.g, root.windowBorder.b, 0.9)
         zonePadding: 1

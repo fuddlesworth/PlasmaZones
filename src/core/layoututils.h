@@ -61,6 +61,7 @@ struct PLASMAZONES_EXPORT UnifiedLayoutEntry
     int aspectRatioClass = 0; ///< AspectRatioClass enum value (0=Any, 1=Standard, etc.)
     qreal referenceAspectRatio = 0.0; ///< For fixed-geometry layouts: the screen AR zones were designed for
     bool recommended = true; ///< True if layout matches the current screen's aspect ratio
+    bool overlapping = false; ///< True if algorithm produces intentionally overlapping zones
 
     // ── Generic section grouping (data-driven, consumed by LayoutsPage) ──
     QString sectionKey; ///< Grouping key (e.g. "any", "standard", "built-in", "custom")

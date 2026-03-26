@@ -223,6 +223,7 @@ static void appendAutotileEntries(QVector<UnifiedLayoutEntry>& list)
         entry.previewZones = AlgorithmRegistry::generatePreviewZones(algo);
         entry.zones = entry.previewZones;
         entry.zoneCount = AlgorithmRegistry::effectiveMaxWindows(algo);
+        entry.overlapping = algo->producesOverlappingZones();
 
         // Section grouping (shared helper avoids DRY violation with algorithmToVariantMap)
         const auto section = AlgorithmRegistry::sectionForAlgorithm(algo);
@@ -370,6 +371,9 @@ QVariantMap toVariantMap(const UnifiedLayoutEntry& entry)
     map[IsSystem] = false;
     map[AspectRatioClassKey] = ScreenClassification::toString(static_cast<AspectRatioClass>(entry.aspectRatioClass));
     map[QLatin1String("recommended")] = entry.recommended;
+    if (entry.overlapping) {
+        map[QLatin1String("overlapping")] = true;
+    }
     if (entry.referenceAspectRatio > 0.0) {
         map[QLatin1String("referenceAspectRatio")] = entry.referenceAspectRatio;
     }

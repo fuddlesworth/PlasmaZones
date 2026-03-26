@@ -87,6 +87,7 @@ Rectangle {
         edgeGap: 1 // Minimal edge gap for thumbnail
         minZoneSize: 8
         showZoneNumbers: true
+        onlyShowLastZoneNumber: root.layout ? (root.layout.overlapping === true) : false
         fontFamily: root.fontFamily
         fontSizeScale: root.fontSizeScale
         fontWeight: root.fontWeight

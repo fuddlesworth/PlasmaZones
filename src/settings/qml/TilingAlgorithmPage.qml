@@ -246,6 +246,11 @@ Flickable {
                                 windowCount: previewWindowSlider.slider.value
                                 splitRatio: root.effectiveAlgorithm === "centered-master" ? (root.settingValue("SplitRatio", appSettings.autotileCenteredMasterSplitRatio) || 0.5) : (root.settingValue("SplitRatio", appSettings.autotileSplitRatio) || 0.6)
                                 masterCount: root.effectiveAlgorithm === "centered-master" ? (root.settingValue("MasterCount", appSettings.autotileCenteredMasterMasterCount) || 1) : (root.settingValue("MasterCount", appSettings.autotileMasterCount) || 1)
+                                overlapping: {
+                                    const model = algorithmCombo.model;
+                                    const idx = algorithmCombo.currentIndex;
+                                    return (model && idx >= 0 && idx < model.length) ? (model[idx].overlapping === true) : false;
+                                }
                             }
 
                         }
