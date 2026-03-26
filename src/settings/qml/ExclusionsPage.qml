@@ -17,19 +17,10 @@ Flickable {
 
         appSettings: settingsController
         onPicked: (value) => {
-            if (forApps) {
-                let apps = appSettings.excludedApplications.slice();
-                if (value.length > 0 && apps.indexOf(value) === -1) {
-                    apps.push(value);
-                    appSettings.excludedApplications = apps;
-                }
-            } else {
-                let classes = appSettings.excludedWindowClasses.slice();
-                if (value.length > 0 && classes.indexOf(value) === -1) {
-                    classes.push(value);
-                    appSettings.excludedWindowClasses = classes;
-                }
-            }
+            if (forApps)
+                appSettings.addExcludedApplication(value);
+            else
+                appSettings.addExcludedWindowClass(value);
         }
     }
 
@@ -148,17 +139,10 @@ Flickable {
                 useMonospaceFont: false
                 showPickButton: true
                 onAddRequested: (text) => {
-                    let apps = appSettings.excludedApplications.slice();
-                    let entry = text.trim();
-                    if (entry.length > 0 && apps.indexOf(entry) === -1) {
-                        apps.push(entry);
-                        appSettings.excludedApplications = apps;
-                    }
+                    return appSettings.addExcludedApplication(text);
                 }
                 onRemoveRequested: (index) => {
-                    let apps = appSettings.excludedApplications.slice();
-                    apps.splice(index, 1);
-                    appSettings.excludedApplications = apps;
+                    return appSettings.removeExcludedApplicationAt(index);
                 }
                 onPickRequested: windowPickerDialog.openForApps()
             }
@@ -183,17 +167,10 @@ Flickable {
                 useMonospaceFont: true
                 showPickButton: true
                 onAddRequested: (text) => {
-                    let classes = appSettings.excludedWindowClasses.slice();
-                    let entry = text.trim();
-                    if (entry.length > 0 && classes.indexOf(entry) === -1) {
-                        classes.push(entry);
-                        appSettings.excludedWindowClasses = classes;
-                    }
+                    return appSettings.addExcludedWindowClass(text);
                 }
                 onRemoveRequested: (index) => {
-                    let classes = appSettings.excludedWindowClasses.slice();
-                    classes.splice(index, 1);
-                    appSettings.excludedWindowClasses = classes;
+                    return appSettings.removeExcludedWindowClassAt(index);
                 }
                 onPickRequested: windowPickerDialog.openForClasses()
             }

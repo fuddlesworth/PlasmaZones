@@ -42,18 +42,18 @@ float getLabelGlowSpread() { return customParams[3].z >= 0.0 ? customParams[3].z
 
 vec3 phantomColor(float energy, float heat, float hexProx,
                   vec3 cyanCol, vec3 pinkCol, vec3 purpleCol, float midsShift) {
-    float t = smoothstep(0.01, 0.35, energy);
+    float t = smoothstep(0.02, 0.7, energy);
 
     // Base: visible purple even at low energy
     vec3 col = purpleCol * 0.35;
-    col = mix(col, purpleCol * 0.8, smoothstep(0.0, 0.1, t));
-    col = mix(col, pinkCol,         smoothstep(0.1, 0.3, t));
-    col = mix(col, cyanCol * 1.2,   smoothstep(0.3, 0.6, t));
-    col = mix(col, vec3(0.9, 1.0, 1.0), smoothstep(0.6, 1.0, t)); // white-hot neon core
+    col = mix(col, purpleCol * 0.8, smoothstep(0.0, 0.15, t));
+    col = mix(col, pinkCol,         smoothstep(0.15, 0.4, t));
+    col = mix(col, cyanCol * 1.1,   smoothstep(0.4, 0.7, t));
+    col = mix(col, mix(cyanCol, vec3(0.85, 0.95, 1.0), 0.5), smoothstep(0.7, 1.0, t)); // neon core (tinted, not pure white)
 
     // Hex lattice structure: bright cyan highlights along hex edges
     float hexGlow = hexProx * smoothstep(0.03, 0.2, energy);
-    col += cyanCol * hexGlow * 0.8;
+    col += cyanCol * hexGlow * 0.5;
 
     // Freshness iridescence (thin-film interference, cyberpunk shimmer)
     float phase = heat * 10.0 + midsShift;
@@ -62,8 +62,8 @@ vec3 phantomColor(float energy, float heat, float hexProx,
         0.5 + 0.5 * cos(phase + 2.094),
         0.5 + 0.5 * cos(phase + 4.189)
     );
-    float frontGlow = smoothstep(0.05, 0.35, heat);
-    col += mix(cyanCol, irid, 0.35) * frontGlow * 2.2;
+    float frontGlow = smoothstep(0.05, 0.45, heat);
+    col += mix(cyanCol, irid, 0.35) * frontGlow * 1.2;
 
     return col;
 }
@@ -165,7 +165,7 @@ vec4 renderPhantomZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCol
         col = mix(col, col * fillColor.rgb, zoneTint);
 
         col = vitalityDesaturate(col, vitality);
-        col *= vitalityScale(0.5, 1.3, vitality);
+        col *= vitalityScale(0.5, 1.05, vitality);
 
         // ── Inner phantom glow ──────────────────────────────────────────
         float innerDist = -d;
@@ -175,7 +175,7 @@ vec4 renderPhantomZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCol
 
         float pulseSpeed = vitalityScale(0.4, 2.5, vitality);
         float pulse = 0.5 + 0.5 * sin(iTime * pulseSpeed);
-        float innerGlow = combinedGlow * pulse * vitalityScale(0.03, 0.18, vitality);
+        float innerGlow = combinedGlow * pulse * vitalityScale(0.03, 0.12, vitality);
         innerGlow *= 1.0 + resonance * 2.5;
 
         // ── Mids color cycling (neon palette rotation) ──────────────────

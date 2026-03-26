@@ -263,6 +263,8 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& sc
             if (Utils::appIdMatches(appId, excluded)) {
                 qCInfo(lcDbusWindow) << "snapToZoneByNumber:" << m_lastActiveWindowId
                                      << "excluded by app rule:" << excluded;
+                Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("excluded"), appId, QString(),
+                                          screenId.isEmpty() ? m_lastActiveScreenId : screenId);
                 return;
             }
         }
@@ -270,6 +272,8 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& sc
             if (Utils::appIdMatches(appId, excluded)) {
                 qCInfo(lcDbusWindow) << "snapToZoneByNumber:" << m_lastActiveWindowId
                                      << "excluded by class rule:" << excluded;
+                Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("excluded"), appId, QString(),
+                                          screenId.isEmpty() ? m_lastActiveScreenId : screenId);
                 return;
             }
         }

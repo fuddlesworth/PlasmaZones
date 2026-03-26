@@ -320,7 +320,51 @@ void Settings::setFilterLayoutsByAspectRatio(bool filter)
 }
 
 SETTINGS_SETTER(const QStringList&, ExcludedApplications, m_excludedApplications, excludedApplicationsChanged)
+
+void Settings::addExcludedApplication(const QString& app)
+{
+    const QString trimmed = app.trimmed();
+    if (trimmed.isEmpty() || m_excludedApplications.contains(trimmed)) {
+        return;
+    }
+    m_excludedApplications.append(trimmed);
+    Q_EMIT excludedApplicationsChanged();
+    Q_EMIT settingsChanged();
+}
+
+void Settings::removeExcludedApplicationAt(int index)
+{
+    if (index < 0 || index >= m_excludedApplications.size()) {
+        return;
+    }
+    m_excludedApplications.removeAt(index);
+    Q_EMIT excludedApplicationsChanged();
+    Q_EMIT settingsChanged();
+}
+
 SETTINGS_SETTER(const QStringList&, ExcludedWindowClasses, m_excludedWindowClasses, excludedWindowClassesChanged)
+
+void Settings::addExcludedWindowClass(const QString& cls)
+{
+    const QString trimmed = cls.trimmed();
+    if (trimmed.isEmpty() || m_excludedWindowClasses.contains(trimmed)) {
+        return;
+    }
+    m_excludedWindowClasses.append(trimmed);
+    Q_EMIT excludedWindowClassesChanged();
+    Q_EMIT settingsChanged();
+}
+
+void Settings::removeExcludedWindowClassAt(int index)
+{
+    if (index < 0 || index >= m_excludedWindowClasses.size()) {
+        return;
+    }
+    m_excludedWindowClasses.removeAt(index);
+    Q_EMIT excludedWindowClassesChanged();
+    Q_EMIT settingsChanged();
+}
+
 SETTINGS_SETTER(bool, ExcludeTransientWindows, m_excludeTransientWindows, excludeTransientWindowsChanged)
 SETTINGS_SETTER_CLAMPED(MinimumWindowWidth, m_minimumWindowWidth, minimumWindowWidthChanged,
                         ConfigDefaults::minimumWindowWidthMin(), ConfigDefaults::minimumWindowWidthMax())
