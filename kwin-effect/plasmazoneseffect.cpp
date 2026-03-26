@@ -1643,14 +1643,80 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) con
         }
     }
 
-    QString result;
+    QString baseId;
     if (!serial.isEmpty()) {
-        result = manufacturer + QLatin1Char(':') + model + QLatin1Char(':') + serial;
+        baseId = manufacturer + QLatin1Char(':') + model + QLatin1Char(':') + serial;
     } else if (!manufacturer.isEmpty() || !model.isEmpty()) {
-        result = manufacturer + QLatin1Char(':') + model;
+        baseId = manufacturer + QLatin1Char(':') + model;
     } else {
-        result = connectorName;
+        baseId = connectorName;
     }
+
+    // Disambiguate identical monitors: if another screen produces the same base ID,
+    // append "/ConnectorName" to make each unique. Mirrors daemon's screenIdentifier().
+    // Build base IDs for other screens using the full logic (including sysfs EDID fallback)
+    // to ensure parity with the daemon's screenBaseIdentifier().
+    auto buildBaseId = [](QScreen* s) -> QString {
+        const QString mfr = s->manufacturer();
+        const QString mdl = s->model();
+        QString ser = s->serialNumber();
+        if (!ser.isEmpty() && ser.startsWith(QLatin1String("0x"), Qt::CaseInsensitive)) {
+            bool ok = false;
+            uint32_t num = ser.toUInt(&ok, 16);
+            if (ok && num != 0) {
+                ser = QString::number(num);
+            }
+        }
+        // sysfs EDID header serial fallback (same as daemon's readEdidHeaderSerial)
+        if (ser.isEmpty()) {
+            QDir drmDir(QStringLiteral("/sys/class/drm"));
+            if (drmDir.exists()) {
+                const QString cName = s->name();
+                for (const QString& entry : drmDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+                    int dashPos = entry.indexOf(QLatin1Char('-'));
+                    if (dashPos < 0 || entry.mid(dashPos + 1) != cName) {
+                        continue;
+                    }
+                    QFile edidFile(drmDir.filePath(entry) + QStringLiteral("/edid"));
+                    if (!edidFile.open(QIODevice::ReadOnly)) {
+                        continue;
+                    }
+                    QByteArray hdr = edidFile.read(16);
+                    if (hdr.size() < 16) {
+                        continue;
+                    }
+                    const auto* d = reinterpret_cast<const uint8_t*>(hdr.constData());
+                    if (d[0] != 0x00 || d[1] != 0xFF || d[2] != 0xFF || d[3] != 0xFF
+                        || d[4] != 0xFF || d[5] != 0xFF || d[6] != 0xFF || d[7] != 0x00) {
+                        continue;
+                    }
+                    uint32_t headerSerial = d[12] | (uint32_t(d[13]) << 8)
+                        | (uint32_t(d[14]) << 16) | (uint32_t(d[15]) << 24);
+                    if (headerSerial != 0) {
+                        ser = QString::number(headerSerial);
+                        break;
+                    }
+                }
+            }
+        }
+        if (!ser.isEmpty()) {
+            return mfr + QLatin1Char(':') + mdl + QLatin1Char(':') + ser;
+        }
+        if (!mfr.isEmpty() || !mdl.isEmpty()) {
+            return mfr + QLatin1Char(':') + mdl;
+        }
+        return s->name();
+    };
+
+    bool hasDuplicate = false;
+    for (QScreen* screen : QGuiApplication::screens()) {
+        if (screen->name() != connectorName && buildBaseId(screen) == baseId) {
+            hasDuplicate = true;
+            break;
+        }
+    }
+
+    QString result = hasDuplicate ? baseId + QLatin1Char('/') + connectorName : baseId;
     m_screenIdCache.insert(connectorName, result);
     return result;
 }
