@@ -53,7 +53,8 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
     if (m_width <= 0 || m_height <= 0) {
         return true;
     }
-    QRhi* rhi = m_item ? m_item->window() ? m_item->window()->rhi() : nullptr : nullptr;
+    QRhi* rhi =
+        (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window()) ? m_item->window()->rhi() : nullptr;
     if (!rhi) {
         return false;
     }
@@ -189,7 +190,9 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
         if (!m_multiBufferShadersReady || !m_multiBufferTextures[0] || !m_multiBufferRenderTargets[0]) {
             return false;
         }
-        QRhi* rhi = m_item ? m_item->window() ? m_item->window()->rhi() : nullptr : nullptr;
+        QRhi* rhi = (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window())
+            ? m_item->window()->rhi()
+            : nullptr;
         if (!rhi || !m_bufferSampler) {
             return false;
         }
@@ -253,7 +256,8 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
     if (m_bufferFeedback && (!m_bufferTextureB || !m_bufferRenderTargetB)) {
         return false;
     }
-    QRhi* rhi = m_item ? m_item->window() ? m_item->window()->rhi() : nullptr : nullptr;
+    QRhi* rhi =
+        (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window()) ? m_item->window()->rhi() : nullptr;
     if (!rhi) {
         return false;
     }
@@ -328,7 +332,8 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
 
 bool ZoneShaderNodeRhi::ensurePipeline()
 {
-    QRhi* rhi = m_item ? m_item->window() ? m_item->window()->rhi() : nullptr : nullptr;
+    QRhi* rhi =
+        (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window()) ? m_item->window()->rhi() : nullptr;
     QRhiRenderTarget* rt = renderTarget();
     if (!rhi || !rt || !m_shaderReady) {
         return false;

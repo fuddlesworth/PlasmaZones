@@ -139,7 +139,9 @@ void invalidateEdidCache(const QString& connectorName)
     }
 }
 
-QString screenIdentifier(const QScreen* screen)
+// EDID-based identifier without duplicate disambiguation.
+// Returns "manufacturer:model:serial" or fallback to connector name.
+static QString screenBaseIdentifier(const QScreen* screen)
 {
     if (!screen) {
         return QString();
@@ -192,6 +194,26 @@ QString screenIdentifier(const QScreen* screen)
     return result;
 }
 
+QString screenIdentifier(const QScreen* screen)
+{
+    if (!screen) {
+        return QString();
+    }
+
+    const QString baseId = screenBaseIdentifier(screen);
+
+    // Check if another connected screen produces the same base ID (identical monitors).
+    // When duplicates exist, append "/ConnectorName" to disambiguate.
+    // This mirrors KWin's OutputConfigurationStore strategy: EDID primary, connector fallback.
+    for (const QScreen* other : QGuiApplication::screens()) {
+        if (other != screen && screenBaseIdentifier(other) == baseId) {
+            return baseId + QLatin1Char('/') + screen->name();
+        }
+    }
+
+    return baseId;
+}
+
 QString screenIdForName(const QString& connectorName)
 {
     if (connectorName.isEmpty()) {
@@ -213,6 +235,17 @@ QString screenNameForId(const QString& screenId)
     for (QScreen* screen : QGuiApplication::screens()) {
         if (screenIdentifier(screen) == screenId) {
             return screen->name();
+        }
+    }
+    // Fallback: if the ID has a "/connector" suffix, return the connector name
+    // only if a screen with that name actually exists
+    int slashPos = screenId.lastIndexOf(QLatin1Char('/'));
+    if (slashPos > 0) {
+        const QString connector = screenId.mid(slashPos + 1);
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (screen->name() == connector) {
+                return connector;
+            }
         }
     }
     return QString();
@@ -255,12 +288,46 @@ QScreen* findScreenByIdOrName(const QString& identifier)
         cache.remove(physId);
     }
 
-    // Slow path: try screen ID match (only if it looks like a screen ID)
+    // Try exact screen ID match (only if it looks like a screen ID)
     if (physId.contains(QLatin1Char(':'))) {
         for (QScreen* screen : QGuiApplication::screens()) {
             if (screenIdentifier(screen) == physId) {
                 cache.insert(physId, screen); // cache for next time
                 return screen;
+            }
+        }
+    }
+    // Fallback for connector-disambiguated IDs ("Manufacturer:Model:Serial/DP-3"):
+    // if the identifier contains '/', try matching the connector suffix directly,
+    // then fall back to the base ID (for when a previously-duplicate monitor is
+    // now the only one connected, so its ID no longer has the suffix).
+    int slashPos = identifier.lastIndexOf(QLatin1Char('/'));
+    if (slashPos > 0) {
+        const QString connectorPart = identifier.mid(slashPos + 1);
+        const QString basePart = identifier.left(slashPos);
+        // Try connector name from the suffix, but verify the EDID base matches
+        // (prevents returning a different monitor that was plugged into the same port)
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (screen->name() == connectorPart && screenBaseIdentifier(screen) == basePart) {
+                cache.insert(identifier, screen);
+                return screen;
+            }
+        }
+        // Try base ID match (monitor is now unique, no suffix needed)
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (screenIdentifier(screen) == basePart) {
+                cache.insert(identifier, screen);
+                return screen;
+            }
+        }
+    }
+    // Reverse fallback: saved config has base ID without suffix, but currently
+    // connected monitors are duplicates (so screenIdentifier adds suffix).
+    // Match by base part of the current screen IDs.
+    if (identifier.contains(QLatin1Char(':')) && !identifier.contains(QLatin1Char('/'))) {
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (screenBaseIdentifier(screen) == identifier) {
+                return screen; // returns first match — acceptable for legacy config
             }
         }
     }
@@ -298,14 +365,14 @@ void warnDuplicateScreenIds()
 {
     QHash<QString, QStringList> idToConnectors;
     for (QScreen* screen : QGuiApplication::screens()) {
-        QString id = screenIdentifier(screen);
+        QString id = screenBaseIdentifier(screen);
         idToConnectors[id].append(screen->name());
     }
     for (auto it = idToConnectors.constBegin(); it != idToConnectors.constEnd(); ++it) {
         if (it.value().size() > 1) {
-            qWarning(
-                "PlasmaZones: duplicate screen ID \"%s\" for connectors: %s. "
-                "Layout assignments may be shared between these monitors.",
+            qInfo(
+                "PlasmaZones: identical monitors detected for EDID ID \"%s\" (connectors: %s). "
+                "Using connector-disambiguated IDs for independent layout assignments.",
                 qPrintable(it.key()), qPrintable(it.value().join(QStringLiteral(", "))));
         }
     }

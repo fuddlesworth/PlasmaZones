@@ -11,6 +11,7 @@
 #include <QStringList>
 #include <QVector>
 #include <array>
+#include <atomic>
 #include <memory>
 
 #include <plasmazones_rendering_export.h>
@@ -29,6 +30,15 @@ class ZoneShaderNodeRhi : public ZoneShaderNodeBase
 public:
     explicit ZoneShaderNodeRhi(QQuickItem* item);
     ~ZoneShaderNodeRhi() override;
+
+    /**
+     * @brief Notify the render node that its owning item is being destroyed.
+     *
+     * Called from ZoneShaderItem::~ZoneShaderItem() on the GUI thread.
+     * After this call, the render node will no longer dereference m_item.
+     * Thread-safe: uses an atomic flag checked by prepare()/render().
+     */
+    void invalidateItem();
 
     // QSGRenderNode
     QSGRenderNode::StateFlags changedStates() const override;
@@ -106,6 +116,7 @@ private:
     void bakeBufferShaders();
 
     QQuickItem* m_item = nullptr;
+    std::atomic<bool> m_itemValid{true}; // Set to false by invalidateItem(); checked before dereferencing m_item
 
     std::unique_ptr<QRhiBuffer> m_vbo;
     std::unique_ptr<QRhiBuffer> m_ubo;
