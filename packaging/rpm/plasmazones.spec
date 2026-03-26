@@ -45,7 +45,7 @@ BuildRequires:  cmake(Qt6Widgets)
 BuildRequires:  cmake(Qt6Concurrent)
 BuildRequires:  cmake(Qt6ShaderTools)
 BuildRequires:  cmake(Qt6ShaderToolsPrivate)
-BuildRequires:  cmake(Qt6Svg)
+BuildRequires:  qt6-svg-devel
 BuildRequires:  qt6-core-private-devel
 BuildRequires:  qt6-gui-private-devel
 %else
