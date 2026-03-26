@@ -318,6 +318,7 @@ target_link_libraries(plasmazones_rendering
     PRIVATE
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
+        Qt6::Svg
 )
 
 target_include_directories(plasmazones_rendering

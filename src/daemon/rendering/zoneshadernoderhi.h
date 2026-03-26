@@ -117,6 +117,7 @@ private:
 
     QQuickItem* m_item = nullptr;
     std::atomic<bool> m_itemValid{true}; // Set to false by invalidateItem(); checked before dereferencing m_item
+    bool m_rhiResourcesReleased = false; // Set by releaseResources(); prevents destructor double-free
 
     std::unique_ptr<QRhiBuffer> m_vbo;
     std::unique_ptr<QRhiBuffer> m_ubo;

@@ -7,6 +7,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.4.3] - 2026-03-26
+
+### Fixed
+- **Identical monitors showing as duplicates in settings** ([#252]): Two monitors with the same EDID (manufacturer/model/serial) got the same screen ID, causing the settings UI to show the primary monitor twice and tiling/snapping to only work on one monitor. Screen IDs now append `/ConnectorName` when duplicates are detected, with backward-compatible fallback matching for saved configs.
+- **App-to-Zone rules not working** ([#254]): Rule matching used raw substring comparison that failed when appId format differed from user input (e.g. "firefox" vs "org.mozilla.firefox"). Replaced with `appIdMatches()` — segment-aware dot-boundary matching that handles both directions and partial last-segment prefixes.
+- **Exclusions ignored by auto-snap and keyboard shortcuts** ([#254]): The exclusion settings interface existed but was never checked. Added exclusion gates in both the auto-snap chain (`resolveWindowRestore`) and keyboard shortcut path (`snapToZoneByNumber`).
+- **Unsnapped windows re-snap on reopen** ([#254]): Manually unsnapping a window didn't clear its pending restore entry, so closing and reopening it snapped it back. Now consumes the pending entry on unsnap (multi-instance safe).
+- **Drag-out unsnap doesn't restore window size** ([#254]): The geometry validation path didn't pass the release screen ID, causing cross-screen coordinate validation to fail silently. Also fixed premature pre-tile geometry cleanup that prevented later float-toggle restore.
+- **Render node use-after-free during hot-reload**: The scene graph render thread could dereference a dangling `QQuickItem` pointer after shader hot-reload when `bufferFeedback` (ping-pong) was active. Added atomic invalidation flag with acquire/release ordering.
+
+### Added
+- **Ember Trace shader**: Fractal fire patterns via ping-pong feedback buffer — the first shader to use the `bufferFeedback` feature. Zone borders emit flames that spiral inward via feedback zoom, with 7 layered visual systems including reaction-diffusion-like dynamics, curl-noise advection, and per-band audio (bass eruption shockwaves, mids feedback phase shift, treble turbulent mixing).
+- **Neon Phantom shader**: Neon-lit cyberpunk zone overlay.
+
 ## [2.4.2] - 2026-03-25
 
 ### Fixed
@@ -970,8 +984,11 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.2...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.3...HEAD
+[2.4.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.1...v2.4.2
+[#252]: https://github.com/fuddlesworth/PlasmaZones/issues/252
+[#254]: https://github.com/fuddlesworth/PlasmaZones/issues/254
 [2.4.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.16...v2.4.0
 [2.3.16]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.15...v2.3.16

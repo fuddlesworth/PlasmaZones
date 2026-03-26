@@ -305,6 +305,12 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
                 result[uniformName] = QString();
             }
             result[uniformName + QStringLiteral("_wrap")] = param.wrap.isEmpty() ? QStringLiteral("clamp") : param.wrap;
+
+            // Pass through SVG render size if present in stored params
+            const QString svgSizeKey = param.id + QStringLiteral("_svgSize");
+            if (storedParams.contains(svgSizeKey)) {
+                result[uniformName + QStringLiteral("_svgSize")] = storedParams.value(svgSizeKey);
+            }
         }
     }
 

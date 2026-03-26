@@ -609,6 +609,7 @@ private:
     std::array<QString, 4> m_userTexturePaths;
     std::array<QImage, 4> m_userTextureImages;
     std::array<QString, 4> m_userTextureWraps;
+    std::array<int, 4> m_userTextureSvgSizes = {1024, 1024, 1024, 1024};
 
     // Thread-safe zone data storage
     // Protected by m_zoneDataMutex for render thread access

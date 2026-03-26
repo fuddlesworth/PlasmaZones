@@ -41,6 +41,10 @@ Item {
     readonly property var _pendingRef: resolvedDialogRoot ? resolvedDialogRoot.pendingParams : null
     // Computed type for visibility switching
     readonly property string paramType: paramData ? (paramData.type || "") : ""
+    // Whether the currently selected image is an SVG (for showing resolution controls)
+    readonly property bool isSvgImage: paramType === "image" && imagePickerButton.currentPath.length > 0
+                                       && (imagePickerButton.currentPath.toLowerCase().endsWith(".svg")
+                                           || imagePickerButton.currentPath.toLowerCase().endsWith(".svgz"))
 
     implicitHeight: contentLayout.implicitHeight
     implicitWidth: contentLayout.implicitWidth
@@ -251,6 +255,38 @@ Item {
             }
         }
 
+        // SVG render resolution (only visible when an SVG is selected)
+        Label {
+            visible: paramDelegate.isSvgImage
+            text: i18nc("@label:spinbox", "Size:")
+            opacity: 0.7
+        }
+
+        SpinBox {
+            id: svgSizeSpinBox
+
+            visible: paramDelegate.isSvgImage
+            from: 64
+            to: 4096
+            stepSize: 128
+            value: {
+                void (paramDelegate._pendingRef);
+                if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
+                    return 1024;
+                var v = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id + "_svgSize", 1024);
+                return Number(v) || 1024;
+            }
+            editable: true
+            Layout.preferredWidth: 120
+            ToolTip.text: i18nc("@info:tooltip", "SVG render resolution (longest side in pixels)")
+            ToolTip.visible: hovered
+            ToolTip.delay: Kirigami.Units.toolTipDelay
+            onValueModified: {
+                if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot)
+                    paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id + "_svgSize", value);
+            }
+        }
+
         Item {
             visible: paramDelegate.paramType === "image"
             Layout.fillWidth: true
@@ -288,7 +324,7 @@ Item {
         id: imageFileDialog
 
         title: i18nc("@title:window", "Choose Image")
-        nameFilters: [i18nc("@item:inlistbox", "Image files (*.png *.jpg *.jpeg *.bmp *.webp)"), i18nc("@item:inlistbox", "All files (*)")]
+        nameFilters: [i18nc("@item:inlistbox", "Image files (*.png *.jpg *.jpeg *.bmp *.webp *.svg *.svgz)"), i18nc("@item:inlistbox", "All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
             if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot) {

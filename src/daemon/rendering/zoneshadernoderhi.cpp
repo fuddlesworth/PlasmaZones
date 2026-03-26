@@ -151,7 +151,12 @@ ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
 
 ZoneShaderNodeRhi::~ZoneShaderNodeRhi()
 {
-    releaseRhiResources();
+    // releaseResources() frees GPU objects on the render thread while QRhi is alive.
+    // If it already ran, skip — calling QRhi destructors after QRhi teardown corrupts
+    // the heap (extra ping-pong resources in bufferFeedback shaders make this likely).
+    if (!m_rhiResourcesReleased) {
+        releaseRhiResources();
+    }
 }
 
 void ZoneShaderNodeRhi::invalidateItem()
@@ -497,11 +502,18 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
     QRhiCommandBuffer::VertexInput vbufBinding(m_vbo.get(), 0);
     cb->setVertexInput(0, 1, &vbufBinding);
     cb->draw(4);
+
+    // Close the render pass we opened for multipass shaders (line 426).
+    // With NoExternalRendering the scene graph does not manage our passes.
+    if (multipassActive) {
+        cb->endPass();
+    }
 }
 
 void ZoneShaderNodeRhi::releaseResources()
 {
     releaseRhiResources();
+    m_rhiResourcesReleased = true;
 }
 
 WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPath)

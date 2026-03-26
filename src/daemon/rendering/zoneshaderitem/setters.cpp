@@ -9,6 +9,8 @@
 
 #include <QFile>
 #include <QMutexLocker>
+#include <QPainter>
+#include <QSvgRenderer>
 
 namespace PlasmaZones {
 
@@ -317,20 +319,56 @@ void ZoneShaderItem::setShaderParams(const QVariantMap& params)
         setCustomColorByIndex(i + 1, extractColor(QString::fromLatin1(colorKeys[i]), customColorByIndex(i + 1)));
     }
 
-    // User texture params: uTexture0-3 paths and uTexture%1_wrap values
+    // User texture params: uTexture0-3 paths, wrap modes, and SVG render sizes
     for (int i = 0; i < 4; ++i) {
+        // SVG render size (must be parsed before path, since path loading uses it)
+        const QString sizeKey = QStringLiteral("uTexture%1_svgSize").arg(i);
+        const bool svgSizeChanged = params.contains(sizeKey);
+        if (svgSizeChanged) {
+            m_userTextureSvgSizes[i] = qBound(64, params.value(sizeKey).toInt(), 4096);
+        }
+
         const QString texKey = QStringLiteral("uTexture%1").arg(i);
-        if (params.contains(texKey)) {
-            const QString path = params.value(texKey).toString();
-            if (m_userTexturePaths[i] != path) {
-                m_userTexturePaths[i] = path;
-                if (!path.isEmpty() && QFile::exists(path)) {
-                    m_userTextureImages[i] = QImage(path).convertToFormat(QImage::Format_RGBA8888);
+        const bool hasTexKey = params.contains(texKey);
+        const QString path = hasTexKey ? params.value(texKey).toString() : m_userTexturePaths[i];
+        const bool pathChanged = hasTexKey && (m_userTexturePaths[i] != path);
+        const bool needsReload = pathChanged || (svgSizeChanged && !m_userTexturePaths[i].isEmpty());
+
+        if (hasTexKey) {
+            m_userTexturePaths[i] = path;
+        }
+
+        if (needsReload) {
+            if (!path.isEmpty() && QFile::exists(path)) {
+                const bool isSvg = path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)
+                                || path.endsWith(QLatin1String(".svgz"), Qt::CaseInsensitive);
+                if (isSvg) {
+                    QSvgRenderer renderer(path);
+                    if (renderer.isValid()) {
+                        QSize size = renderer.defaultSize();
+                        const int maxDim = m_userTextureSvgSizes[i];
+                        if (!size.isEmpty()) {
+                            size.scale(maxDim, maxDim, Qt::KeepAspectRatio);
+                        } else {
+                            size = QSize(maxDim, maxDim);
+                        }
+                        QImage img(size, QImage::Format_RGBA8888);
+                        img.fill(Qt::transparent);
+                        QPainter painter(&img);
+                        renderer.render(&painter);
+                        painter.end();
+                        m_userTextureImages[i] = img;
+                    } else {
+                        m_userTextureImages[i] = QImage();
+                    }
                 } else {
-                    m_userTextureImages[i] = QImage();
+                    m_userTextureImages[i] = QImage(path).convertToFormat(QImage::Format_RGBA8888);
                 }
+            } else {
+                m_userTextureImages[i] = QImage();
             }
         }
+
         const QString wrapKey = QStringLiteral("uTexture%1_wrap").arg(i);
         if (params.contains(wrapKey)) {
             m_userTextureWraps[i] = params.value(wrapKey).toString();
