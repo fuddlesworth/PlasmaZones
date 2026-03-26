@@ -232,8 +232,8 @@ public:
     /**
      * @brief Get section grouping info for a tiling algorithm
      *
-     * User scripts → "custom", system-installed scripts → "extras",
-     * built-in C++ algorithms → "built-in".
+     * Memory-capable algorithms → "persistent" section,
+     * all other algorithms → "automatic" section.
      */
     static SectionInfo sectionForAlgorithm(TilingAlgorithm* algorithm);
 

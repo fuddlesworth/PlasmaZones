@@ -350,9 +350,9 @@ QVector<QRect> ScriptedAlgorithm::jsArrayToRects(const QJSValue& result) const
     return rects;
 }
 
-QJSValue ScriptedAlgorithm::splitNodeToJSValue(const SplitNode* node) const
+QJSValue ScriptedAlgorithm::splitNodeToJSValue(const SplitNode* node, int depth) const
 {
-    if (!node || !m_engine) {
+    if (!node || !m_engine || depth > MaxTreeConversionDepth) {
         return QJSValue(QJSValue::UndefinedValue);
     }
 
@@ -363,8 +363,8 @@ QJSValue ScriptedAlgorithm::splitNodeToJSValue(const SplitNode* node) const
     } else {
         jsNode.setProperty(QStringLiteral("ratio"), node->splitRatio);
         jsNode.setProperty(QStringLiteral("horizontal"), node->splitHorizontal);
-        jsNode.setProperty(QStringLiteral("first"), splitNodeToJSValue(node->first.get()));
-        jsNode.setProperty(QStringLiteral("second"), splitNodeToJSValue(node->second.get()));
+        jsNode.setProperty(QStringLiteral("first"), splitNodeToJSValue(node->first.get(), depth + 1));
+        jsNode.setProperty(QStringLiteral("second"), splitNodeToJSValue(node->second.get(), depth + 1));
     }
 
     return jsNode;

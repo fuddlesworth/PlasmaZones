@@ -16,6 +16,11 @@
  * distributed as panels around all four edges (left, right, bottom, top).
  * splitRatio controls the main window size as a fraction of width and height.
  *
+ * The layout uses a cross-shaped arrangement:
+ * - Side panels (left/right) span only the center band height
+ * - Top/bottom panels span the full width of the area
+ * This avoids cramped panels and ugly side-panel overflow.
+ *
  * Distribution (N = remaining windows after center):
  * - 1: right panel
  * - 2: left + right panels
@@ -45,7 +50,7 @@ function calculateZones(params) {
     var remaining = count - 1;
 
     // Determine how many windows go on each side.
-    // Assignment order: left, right, bottom, top — then extras cycle bottom, top.
+    // Assignment order: right, left, bottom, top — then extras cycle bottom, top.
     var leftCount = 0, rightCount = 0, bottomCount = 0, topCount = 0;
 
     if (remaining >= 1) rightCount = 1;
@@ -59,23 +64,22 @@ function calculateZones(params) {
     topCount += Math.floor(extras / 2);
 
     // Geometry boundaries
-    var hasLeft = leftCount > 0;
-    var hasRight = rightCount > 0;
     var hasTop = topCount > 0;
     var hasBottom = bottomCount > 0;
 
-    var leftW = Math.max(1, marginX - gap);
-    var rightX = area.x + marginX + centerW + gap;
-    var rightW = Math.max(1, area.x + area.width - rightX);
+    // Top/bottom panels span the full area width
     var topH = Math.max(1, marginY - gap);
     var bottomY = area.y + marginY + centerH + gap;
     var bottomH = Math.max(1, area.y + area.height - bottomY);
 
-    // Side panels span the full height if no top/bottom panels exist on that edge,
-    // otherwise they span only the center band (between top and bottom panels).
-    var sideTop = hasTop ? (area.y + topH + gap) : area.y;
-    var sideBottom = hasBottom ? (bottomY - gap) : (area.y + area.height);
-    var sideH = Math.max(1, sideBottom - sideTop);
+    // Side panels: constrained to the center band height (between top/bottom rows)
+    var sideTop = area.y + marginY;
+    var sideH = centerH;
+
+    // Side panel widths
+    var leftW = Math.max(1, marginX - gap);
+    var rightX = area.x + marginX + centerW + gap;
+    var rightW = Math.max(1, area.x + area.width - rightX);
 
     // Window 1: centered main window
     zones.push({
@@ -85,8 +89,8 @@ function calculateZones(params) {
         height: centerH
     });
 
-    // Left panel(s)
-    if (hasLeft) {
+    // Left panel(s) — center band height only
+    if (leftCount > 0) {
         var leftTileGaps = (leftCount - 1) * gap;
         var leftTileH = Math.round((sideH - leftTileGaps) / leftCount);
         for (var li = 0; li < leftCount; li++) {
@@ -96,8 +100,8 @@ function calculateZones(params) {
         }
     }
 
-    // Right panel(s)
-    if (hasRight) {
+    // Right panel(s) — center band height only
+    if (rightCount > 0) {
         var rightTileGaps = (rightCount - 1) * gap;
         var rightTileH = Math.round((sideH - rightTileGaps) / rightCount);
         for (var ri = 0; ri < rightCount; ri++) {
@@ -107,27 +111,27 @@ function calculateZones(params) {
         }
     }
 
-    // Bottom panel(s) — span the center width
+    // Bottom panel(s) — span the full area width
     if (hasBottom) {
         var btmTotalGaps = (bottomCount - 1) * gap;
-        var btmTileW = Math.round((centerW - btmTotalGaps) / bottomCount);
+        var btmTileW = Math.round((area.width - btmTotalGaps) / bottomCount);
         for (var bi = 0; bi < bottomCount; bi++) {
-            var bx = area.x + marginX + bi * (btmTileW + gap);
+            var bx = area.x + bi * (btmTileW + gap);
             var bw = (bi === bottomCount - 1)
-                ? (area.x + marginX + centerW - bx)
+                ? (area.x + area.width - bx)
                 : btmTileW;
             zones.push({ x: bx, y: bottomY, width: bw, height: bottomH });
         }
     }
 
-    // Top panel(s) — span the center width
+    // Top panel(s) — span the full area width
     if (hasTop) {
         var topTotalGaps = (topCount - 1) * gap;
-        var topTileW = Math.round((centerW - topTotalGaps) / topCount);
+        var topTileW = Math.round((area.width - topTotalGaps) / topCount);
         for (var ti = 0; ti < topCount; ti++) {
-            var tx = area.x + marginX + ti * (topTileW + gap);
+            var tx = area.x + ti * (topTileW + gap);
             var tw = (ti === topCount - 1)
-                ? (area.x + marginX + centerW - tx)
+                ? (area.x + area.width - tx)
                 : topTileW;
             zones.push({ x: tx, y: area.y, width: tw, height: topH });
         }

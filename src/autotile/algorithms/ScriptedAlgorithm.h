@@ -117,9 +117,12 @@ private:
     /**
      * @brief Convert a SplitNode tree to a QJSValue object for script consumption
      * @param node Root of the subtree to convert (may be nullptr)
+     * @param depth Current recursion depth (guarded by MaxTreeConversionDepth)
      * @return Read-only JS object representing the tree
      */
-    QJSValue splitNodeToJSValue(const SplitNode* node) const;
+    QJSValue splitNodeToJSValue(const SplitNode* node, int depth = 0) const;
+
+    static constexpr int MaxTreeConversionDepth = 30;
 
     mutable QJSEngine* m_engine = nullptr;
     std::shared_ptr<std::atomic<bool>> m_engineAlive; ///< Watchdog thread checks this before touching m_engine
