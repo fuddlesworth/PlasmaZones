@@ -266,6 +266,7 @@ Flickable {
                                 appSettings: settingsController
                                 showLabel: false
                                 algorithmId: root.selectedAlgorithm
+                                algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
                                 windowCount: previewWindowSlider.slider.value
                                 splitRatio: root.settingValue("SplitRatio", appSettings.autotileSplitRatio) || 0.6
                                 masterCount: root.settingValue("MasterCount", appSettings.autotileMasterCount) || 1

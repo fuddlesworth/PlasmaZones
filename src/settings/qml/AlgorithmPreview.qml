@@ -33,6 +33,8 @@ Item {
     property var zones: []
     // Whether the algorithm produces overlapping zones (only show last zone number)
     property bool overlapping: false
+    // Algorithm display name (avoids hardcoded switch statement)
+    property string algorithmName: ""
     // Algorithm name label (hidden when used inside the Tiling tab's algorithm section
     // where the name is already shown alongside the combo box)
     property bool showLabel: true
@@ -95,34 +97,7 @@ Item {
         anchors.bottom: parent.bottom
         anchors.right: parent.right
         anchors.margins: 2
-        text: {
-            switch (root.algorithmId) {
-            case "master-stack":
-                return i18n("Master + Stack");
-            case "bsp":
-                return i18n("BSP");
-            case "columns":
-                return i18n("Columns");
-            case "rows":
-                return i18n("Rows");
-            case "dwindle":
-                return i18n("Dwindle");
-            case "spiral":
-                return i18n("Spiral");
-            case "monocle":
-                return i18n("Monocle");
-            case "three-column":
-                return i18n("Three Column");
-            case "grid":
-                return i18n("Grid");
-            case "wide":
-                return i18n("Wide");
-            case "centered-master":
-                return i18n("Centered Master");
-            default:
-                return root.algorithmId;
-            }
-        }
+        text: root.algorithmName || root.algorithmId
         font: Kirigami.Theme.smallFont
         opacity: 0.5
     }
