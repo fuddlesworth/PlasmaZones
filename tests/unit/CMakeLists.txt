@@ -67,7 +67,7 @@ pz_add_test(test_tiling_algo_wide_centered autotile/test_tiling_algo_wide_center
 pz_add_test(test_algorithm_registry autotile/test_algorithm_registry.cpp)
 pz_add_test(test_algorithm_registry_custom autotile/test_algorithm_registry_custom.cpp)
 pz_add_test(test_scripted_algorithm autotile/test_scripted_algorithm.cpp)
-target_compile_definitions(test_scripted_algorithm PRIVATE "PZ_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
+target_compile_definitions(test_scripted_algorithm PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_split_tree autotile/test_split_tree.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════

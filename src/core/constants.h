@@ -384,6 +384,7 @@ inline constexpr QLatin1String CenteredMasterMasterCount{"centeredMasterMasterCo
 inline constexpr QLatin1String InsertEnd{"end"};
 inline constexpr QLatin1String InsertAfterFocused{"afterFocused"};
 inline constexpr QLatin1String InsertAsMaster{"asMaster"};
+inline constexpr QLatin1String SplitTreeKey{"splitTree"};
 }
 
 /**

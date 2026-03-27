@@ -38,7 +38,7 @@ function calculateZones(params) {
     // Clamp step so the last page doesn't overflow the area
     let step;
     if (count > 1) {
-        step = Math.max(0, Math.floor(leftover / (count - 1)));
+        step = (leftover > 0) ? Math.max(1, Math.floor(leftover / (count - 1))) : 0;
     } else {
         step = 0;
     }

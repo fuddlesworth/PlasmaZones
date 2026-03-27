@@ -21,8 +21,6 @@ constexpr int PreviewSize = 1000;
 
 namespace PlasmaZones {
 
-AlgorithmRegistry::PreviewParams AlgorithmRegistry::s_previewParams;
-
 bool AlgorithmRegistry::PreviewParams::operator==(const PreviewParams& other) const
 {
     return algorithmId == other.algorithmId && maxWindows == other.maxWindows && masterCount == other.masterCount
@@ -85,6 +83,8 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
     }
 
     // Remove existing algorithm with same ID (replacement case)
+    // Preserve registration order position so replacements don't shift to the end
+    int oldIndex = m_registrationOrder.indexOf(id);
     auto* old = removeAlgorithmInternal(id);
     if (old && old != algorithm) {
         old->deleteLater();
@@ -93,7 +93,11 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
     // Take ownership
     algorithm->setParent(this);
     m_algorithms.insert(id, algorithm);
-    m_registrationOrder.append(id);
+    if (oldIndex >= 0) {
+        m_registrationOrder.insert(oldIndex, id);
+    } else {
+        m_registrationOrder.append(id);
+    }
 
     Q_EMIT algorithmRegistered(id);
 }
@@ -251,30 +255,30 @@ QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect>& zo
 
 void AlgorithmRegistry::setConfiguredPreviewParams(const PreviewParams& params)
 {
-    s_previewParams = params;
+    instance()->m_previewParams = params;
 }
 
 const AlgorithmRegistry::PreviewParams& AlgorithmRegistry::configuredPreviewParams()
 {
-    return s_previewParams;
+    return instance()->m_previewParams;
 }
 
 int AlgorithmRegistry::configuredMaxWindows()
 {
-    return s_previewParams.maxWindows;
+    return instance()->m_previewParams.maxWindows;
 }
 
 int AlgorithmRegistry::effectiveMaxWindows(TilingAlgorithm* algorithm)
 {
     if (!algorithm) {
-        return s_previewParams.maxWindows;
+        return instance()->m_previewParams.maxWindows;
     }
     // Use the user-configured maxWindows only for the active algorithm.
     // Other algorithms use their own default so each preview is representative.
-    if (s_previewParams.maxWindows > 0 && !s_previewParams.algorithmId.isEmpty()) {
+    if (instance()->m_previewParams.maxWindows > 0 && !instance()->m_previewParams.algorithmId.isEmpty()) {
         auto* inst = instance();
-        if (inst && inst->algorithm(s_previewParams.algorithmId) == algorithm) {
-            return s_previewParams.maxWindows;
+        if (inst && inst->algorithm(instance()->m_previewParams.algorithmId) == algorithm) {
+            return instance()->m_previewParams.maxWindows;
         }
     }
     return algorithm->defaultMaxWindows();
@@ -296,21 +300,21 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm,
     // other algorithms check savedAlgorithmSettings for per-algorithm overrides,
     // and fall back to their own defaults.
     auto* inst = instance();
-    const bool isActive =
-        inst && !s_previewParams.algorithmId.isEmpty() && inst->algorithm(s_previewParams.algorithmId) == algorithm;
+    const bool isActive = inst && !instance()->m_previewParams.algorithmId.isEmpty()
+        && inst->algorithm(instance()->m_previewParams.algorithmId) == algorithm;
 
     int masterCount = 1;
     qreal splitRatio = algorithm->defaultSplitRatio();
     if (isActive) {
-        if (s_previewParams.masterCount > 0)
-            masterCount = s_previewParams.masterCount;
-        if (s_previewParams.splitRatio > 0)
-            splitRatio = s_previewParams.splitRatio;
+        if (instance()->m_previewParams.masterCount > 0)
+            masterCount = instance()->m_previewParams.masterCount;
+        if (instance()->m_previewParams.splitRatio > 0)
+            splitRatio = instance()->m_previewParams.splitRatio;
     } else if (inst) {
         // Look up per-algorithm saved settings from the generalized map
         const QString algoId = inst->findAlgorithmId(algorithm);
-        const auto it = s_previewParams.savedAlgorithmSettings.constFind(algoId);
-        if (it != s_previewParams.savedAlgorithmSettings.constEnd()) {
+        const auto it = instance()->m_previewParams.savedAlgorithmSettings.constFind(algoId);
+        if (it != instance()->m_previewParams.savedAlgorithmSettings.constEnd()) {
             const QVariantMap& saved = it.value();
             const int savedMasterCount = saved.value(PerAlgoKeys::MasterCount, -1).toInt();
             const qreal savedSplitRatio = saved.value(PerAlgoKeys::SplitRatio, -1.0).toDouble();

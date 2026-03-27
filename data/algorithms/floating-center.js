@@ -34,6 +34,7 @@
  */
 function calculateZones(params) {
     const count = params.windowCount;
+    if (count <= 0) return [];
     const area = params.area;
     const gap = params.innerGap || 0;
 
@@ -101,23 +102,6 @@ function calculateZones(params) {
         height: centerH
     });
 
-    // Left panel(s) — center band height only
-    // Note: leftCount is currently always 0 or 1, but the loop is kept for future-proofing.
-    if (leftCount > 0) {
-        if (leftW >= 1) {
-            const leftTileGaps = (leftCount - 1) * gap;
-            const leftTileH = Math.round((sideH - leftTileGaps) / leftCount);
-            for (let li = 0; li < leftCount; li++) {
-                const ly = sideTop + li * (leftTileH + gap);
-                const lh = (li === leftCount - 1) ? (sideTop + sideH - ly) : leftTileH;
-                zones.push({ x: area.x, y: ly, width: leftW, height: lh });
-            }
-        } else {
-            // Skip degenerate left panel — reassign this window to the center
-            zones.push({ x: centerX, y: centerY, width: centerW, height: centerH });
-        }
-    }
-
     // Right panel(s) — center band height only
     // Note: rightCount is currently always 0 or 1, but the loop is kept for future-proofing.
     if (rightCount > 0) {
@@ -131,6 +115,23 @@ function calculateZones(params) {
             }
         } else {
             // Skip degenerate right panel — reassign this window to the center
+            zones.push({ x: centerX, y: centerY, width: centerW, height: centerH });
+        }
+    }
+
+    // Left panel(s) — center band height only
+    // Note: leftCount is currently always 0 or 1, but the loop is kept for future-proofing.
+    if (leftCount > 0) {
+        if (leftW >= 1) {
+            const leftTileGaps = (leftCount - 1) * gap;
+            const leftTileH = Math.round((sideH - leftTileGaps) / leftCount);
+            for (let li = 0; li < leftCount; li++) {
+                const ly = sideTop + li * (leftTileH + gap);
+                const lh = (li === leftCount - 1) ? (sideTop + sideH - ly) : leftTileH;
+                zones.push({ x: area.x, y: ly, width: leftW, height: lh });
+            }
+        } else {
+            // Skip degenerate left panel — reassign this window to the center
             zones.push({ x: centerX, y: centerY, width: centerW, height: centerH });
         }
     }

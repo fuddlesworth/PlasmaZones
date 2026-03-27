@@ -41,9 +41,12 @@ T ScriptedAlgorithm::resolveJsOverride(const QJSValue& jsFn, T cachedValue, T me
     if (m_cachedValuesLoaded && jsFn.isCallable()) {
         return cachedValue;
     }
-    // B3: Guard against invalid script state in uncached fallback path
+    // C1: Runtime thread guard — JS engine is not thread-safe
     if (!m_cachedValuesLoaded && m_valid) {
-        Q_ASSERT(QThread::currentThread() == thread());
+        if (QThread::currentThread() != thread()) {
+            qCWarning(lcAutotile) << "ScriptedAlgorithm::resolveJsOverride called from wrong thread";
+            return metadataFallback;
+        }
     }
     if (m_valid && jsFn.isCallable()) {
         const QJSValue result = jsFn.call();
@@ -115,6 +118,28 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // L10: Include "script:" prefix for consistency with ScriptedAlgorithmLoader's registry key
     m_scriptId = QStringLiteral("script:") + QFileInfo(filePath).completeBaseName();
     m_valid = false;
+
+    // M2: Reset all stale state from any previous load
+    m_cachedValuesLoaded = false;
+    m_cachedMasterZoneIndex = -1;
+    m_cachedDefaultMaxWindows = 0;
+    m_cachedDefaultSplitRatio = AutotileDefaults::DefaultSplitRatio;
+    m_cachedMinimumWindows = -1;
+    m_cachedSupportsMasterCount = false;
+    m_cachedSupportsSplitRatio = false;
+    m_cachedProducesOverlappingZones = false;
+    m_name.clear();
+    m_description.clear();
+    m_zoneNumberDisplay.clear();
+    m_producesOverlappingZones = false;
+    m_supportsMasterCount = false;
+    m_supportsSplitRatio = false;
+    m_supportsMemory = false;
+    m_centerLayout = false;
+    m_defaultSplitRatio = 0.0;
+    m_defaultMaxWindows = 0;
+    m_minimumWindows = 0;
+    m_masterZoneIndex = -1;
 
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -233,7 +258,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         "  if (bottomCount > 0) {"
         "    var bottomY = area.y + masterH + gap;"
         "    var bottomH = Math.max(1, area.y + area.height - bottomY);"
-        "    var btmW = (bottomWidth === 'full') ? area.width : ((bottomWidth === 'master') ? masterW : masterW);"
+        "    var btmW = (bottomWidth === 'full') ? area.width : masterW;"
         "    if (typeof bottomWidth === 'number') btmW = bottomWidth;"
         "    var bottomTotalGaps = (bottomCount - 1) * gap;"
         "    var bottomTileW = Math.max(1, Math.round((btmW - bottomTotalGaps) / bottomCount));"
@@ -290,6 +315,14 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_engine->evaluate(
         QStringLiteral("Object.defineProperty(this, 'deckLayout', "
                        "{writable: false, configurable: false});"));
+
+    // H2: Disable eval() and Function constructor to prevent dynamic code generation
+    m_engine->globalObject().deleteProperty(QStringLiteral("eval"));
+    m_engine->evaluate(QStringLiteral(
+        "Object.defineProperty(this, 'eval', {value: undefined, writable: false, configurable: false});"));
+    m_engine->evaluate(
+        QStringLiteral("Object.defineProperty(Function.prototype, 'constructor', "
+                       "{value: undefined, writable: false, configurable: false});"));
 
     // Evaluate the user script
     const QJSValue result = m_engine->evaluate(source, filePath);
@@ -402,21 +435,28 @@ void ScriptedAlgorithm::parseMetadata(const QString& source)
             bool ok = false;
             const int v = value.toInt(&ok);
             if (ok) {
-                m_masterZoneIndex = qMax(-1, v);
+                m_masterZoneIndex = std::clamp(v, -1, MaxZones - 1);
             }
         } else if (key == QLatin1String("zoneNumberDisplay")) {
             if (value == QLatin1String("all") || value == QLatin1String("last") || value == QLatin1String("first")
                 || value == QLatin1String("firstAndLast") || value == QLatin1String("none")) {
                 m_zoneNumberDisplay = value;
             }
+        } else if (key != QLatin1String("icon")) {
+            // M1: Log unknown metadata keys (icon is silently accepted but not stored)
+            qCDebug(lcAutotile) << "ScriptedAlgorithm::parseMetadata: unknown metadata key" << key << "in"
+                                << m_filePath;
         }
     }
 }
 
 QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) const
 {
-    // C2: Assert we are on the owning thread — QJSEngine is not thread-safe
-    Q_ASSERT(QThread::currentThread() == thread());
+    // C1: Runtime thread guard — QJSEngine is not thread-safe
+    if (QThread::currentThread() != thread()) {
+        qCWarning(lcAutotile) << "ScriptedAlgorithm::calculateZones called from wrong thread";
+        return {};
+    }
 
     if (!m_valid || params.windowCount <= 0 || !params.screenGeometry.isValid()) {
         return {};
@@ -424,6 +464,11 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
 
     // Compute the usable area after outer gaps
     const QRect area = innerRect(params.screenGeometry, params.outerGaps);
+
+    // L2: Early return for empty area (e.g., gaps exceed screen geometry)
+    if (area.isEmpty()) {
+        return {};
+    }
 
     // DRY-3: Single-window shortcut — skip JS entirely
     if (params.windowCount == 1) {
@@ -474,48 +519,29 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     // A QTimer cannot fire during synchronous JS execution because the event
     // loop is blocked, so we use a detached std::thread instead.
     //
-    // H1: We use a generation counter to prevent stale watchdog threads from
-    // interrupting a newer calculateZones() call. Each call increments the
-    // generation and the watchdog only interrupts if the generation still matches.
-    const uint64_t myGen = ++(m_watchdog->generation);
-
-    // C1: Only spawn watchdog if none is already sleeping (prevents ~60 threads/sec during resize).
-    // If a stale watchdog is still sleeping, the generation counter ensures it becomes a no-op
-    // when it wakes — so it's safe to skip spawning a new one.
+    // C2: Generation-aware spawn — each call increments the generation counter.
+    // Stale watchdog threads compare their captured generation against the current
+    // value and become no-ops if they don't match.
+    const uint64_t currentGen = ++(m_watchdog->generation);
     auto ctx = m_watchdog; // shared_ptr copy — prevents use-after-free
-    bool expected = false;
-    const bool spawnWatchdog = ctx->active.compare_exchange_strong(expected, true);
-    if (spawnWatchdog) {
-        std::thread([ctx, myGen]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(ScriptWatchdogTimeoutMs));
-            // Only interrupt if this is still the active generation
-            if (ctx->generation.load(std::memory_order_acquire) != myGen) {
-                ctx->active.store(false);
-                return; // A newer call has started or the call completed
-            }
-            // Hold the mutex to prevent the destructor from invalidating the
-            // engine pointer between our alive-check and setInterrupted().
-            std::lock_guard<std::mutex> lock(ctx->mutex);
-            if (ctx->generation.load(std::memory_order_acquire) == myGen
-                && ctx->alive.load(std::memory_order_acquire)) {
-                if (ctx->engine) {
-                    ctx->engine->setInterrupted(true);
-                }
-            }
-            ctx->active.store(false);
-        }).detach();
-    }
+    std::thread([ctx, gen = currentGen]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(ScriptWatchdogTimeoutMs));
+        std::lock_guard<std::mutex> lock(ctx->mutex);
+        if (ctx->generation.load(std::memory_order_acquire) == gen && ctx->engine) {
+            ctx->engine->setInterrupted(true);
+        }
+    }).detach();
 
     // Call the JS calculateZones function
     const QJSValue result = m_calculateZonesFn.call({jsParams});
 
-    // Advance generation so any in-flight watchdog becomes a no-op, and reset interrupted state
+    // C2: Invalidate any in-flight watchdog by advancing generation
     ++(m_watchdog->generation);
     if (m_engine->isInterrupted()) {
         m_engine->setInterrupted(false);
         m_engine->collectGarbage();
-    } else {
-        m_engine->setInterrupted(false);
+        qCWarning(lcAutotile) << "ScriptedAlgorithm: script timed out, script=" << m_scriptId;
+        return {};
     }
 
     if (result.isError()) {

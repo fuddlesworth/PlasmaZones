@@ -304,7 +304,7 @@ private:
     QHash<QString, TilingAlgorithm*> m_algorithms;
     QStringList m_registrationOrder; ///< Preserve order for UI
 
-    static PreviewParams s_previewParams; ///< User-configured tiling parameters for previews
+    PreviewParams m_previewParams; ///< User-configured tiling parameters for previews
 };
 
 /**

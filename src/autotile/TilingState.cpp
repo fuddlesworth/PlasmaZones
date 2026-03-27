@@ -320,7 +320,8 @@ bool TilingState::moveToPosition(const QString& windowId, int position)
         return false;
     }
 
-    return moveWindow(fromIndex, position);
+    const int clampedPos = std::clamp(position, 0, static_cast<int>(m_windowOrder.size()) - 1);
+    return moveWindow(fromIndex, clampedPos);
 }
 
 int TilingState::windowPosition(const QString& windowId) const
@@ -570,7 +571,7 @@ QJsonObject TilingState::toJson() const
     json[SplitRatio] = m_splitRatio;
 
     if (m_splitTree && !m_splitTree->isEmpty()) {
-        json[QLatin1String("splitTree")] = m_splitTree->toJson();
+        json[AutotileJsonKeys::SplitTreeKey] = m_splitTree->toJson();
     }
 
     return json;
@@ -620,8 +621,8 @@ TilingState* TilingState::fromJson(const QJsonObject& json, QObject* parent)
     // Split ratio with clamping
     state->m_splitRatio = std::clamp(json[SplitRatio].toDouble(DefaultSplitRatio), MinSplitRatio, MaxSplitRatio);
 
-    if (json.contains(QLatin1String("splitTree"))) {
-        state->m_splitTree = SplitTree::fromJson(json[QLatin1String("splitTree")].toObject());
+    if (json.contains(AutotileJsonKeys::SplitTreeKey)) {
+        state->m_splitTree = SplitTree::fromJson(json[AutotileJsonKeys::SplitTreeKey].toObject());
         if (state->m_splitTree) {
             // Validate leaf count matches tiled (non-floating) window count.
             // The split tree only contains tiled windows — floating windows are
@@ -691,6 +692,7 @@ void TilingState::clear()
 
     // Emit a single batch of signals
     Q_EMIT windowCountChanged();
+    Q_EMIT windowOrderChanged();
     Q_EMIT focusedWindowChanged();
     Q_EMIT masterCountChanged();
     Q_EMIT splitRatioChanged();

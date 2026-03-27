@@ -44,7 +44,7 @@ function calculateZones(params) {
 
     for (let row = 0; row < rows; row++) {
         const y = area.y + row * (rowHeight + gap);
-        const h = Math.max(1, (row === rows - 1) ? (area.y + area.height - y) : rowHeight);
+        const h = (row === rows - 1) ? Math.max(1, area.y + area.height - y) : rowHeight;
         const windowsInRow = (row === rows - 1 && count % 2 !== 0) ? 1 : 2;
 
         if (windowsInRow === 1) {
@@ -54,8 +54,8 @@ function calculateZones(params) {
             // Offset the split point to prevent four-corner intersections.
             // Even rows split at 55%, odd rows split at 45%.
             const ratio = (row % 2 === 0) ? 0.55 : 0.45;
-            const leftW = Math.round((area.width - gap) * ratio);
-            const rightW = area.width - gap - leftW;
+            const leftW = Math.max(1, Math.round((area.width - gap) * ratio));
+            const rightW = Math.max(1, area.width - gap - leftW);
 
             zones.push({ x: area.x, y: y, width: leftW, height: h });
             zones.push({ x: area.x + leftW + gap, y: y, width: rightW, height: h });

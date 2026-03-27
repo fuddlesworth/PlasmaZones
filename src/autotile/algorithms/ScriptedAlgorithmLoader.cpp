@@ -59,7 +59,7 @@ void ScriptedAlgorithmLoader::watchDirectory(const QString& dirPath)
     // Watch individual .js files so in-place content modifications trigger fileChanged.
     // Directory-level inotify only fires for create/delete/rename, not in-place writes.
     QDir dirObj(dirPath);
-    const QStringList jsFiles = dirObj.entryList({QStringLiteral("*.js")}, QDir::Files);
+    const QStringList jsFiles = dirObj.entryList({QStringLiteral("*.js")}, QDir::Files | QDir::NoSymLinks);
     for (const QString& file : jsFiles) {
         m_watcher->addPath(dirObj.filePath(file));
     }
@@ -149,9 +149,10 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         }
         const QString scriptId = QStringLiteral("script:") + baseName;
 
-        // B4: Pass `this` as initial parent so the QObject is never unowned.
-        // AlgorithmRegistry::registerAlgorithm() will reparent to the registry.
-        auto* algo = new ScriptedAlgorithm(fullPath, this);
+        // H3: Create with nullptr parent so the registry takes full ownership
+        // via setParent(this) in registerAlgorithm(). If the algo is invalid,
+        // we delete it explicitly below.
+        auto* algo = new ScriptedAlgorithm(fullPath, nullptr);
         if (!algo->isValid()) {
             qCWarning(lcAutotile) << "Invalid scripted algorithm, skipping:" << fullPath;
             delete algo;

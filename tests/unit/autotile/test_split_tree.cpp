@@ -565,10 +565,8 @@ private Q_SLOTS:
         auto tree = SplitTree::fromJson(wrapper);
         // nodeFromJson returns nullptr for children beyond depth 30,
         // which causes parent internal nodes to also return nullptr.
-        // The tree should either be truncated or nullptr — must not stack overflow.
-        if (tree) {
-            QVERIFY(tree->leafCount() <= 36);
-        }
+        // The tree should be rejected (nullptr) — must not stack overflow.
+        QVERIFY(tree == nullptr);
     }
 
     // =========================================================================

@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLatin1String>
+#include <QSet>
 
 #include <algorithm>
 
@@ -306,56 +307,53 @@ void SplitTree::applyGeometryRecursive(const SplitNode* node, const QRect& rect,
 
     const qreal ratio = std::clamp(node->splitRatio, MinSplitRatio, MaxSplitRatio);
 
+    // DRY helper: split along one dimension, building child rects via callbacks
+    auto splitDimension = [&](int totalSize, auto makeFirstRect, auto makeSecondRect) {
+        const int contentSize = totalSize - innerGap;
+        if (contentSize <= 0) {
+            // Gap exceeds space — give all leaves the parent rect (preserves zone count)
+            applyGeometryRecursive(node->first.get(), rect, 0, zones);
+            applyGeometryRecursive(node->second.get(), rect, 0, zones);
+            return;
+        }
+
+        const int firstSize = std::max(1, static_cast<int>(contentSize * ratio));
+        const int secondSize = std::max(1, contentSize - firstSize);
+        const QRect firstRect = makeFirstRect(firstSize);
+        const QRect secondRect = makeSecondRect(firstSize, secondSize);
+
+        if (!firstRect.isValid() || !secondRect.isValid()) {
+            applyGeometryRecursive(node->first.get(), rect, 0, zones);
+            applyGeometryRecursive(node->second.get(), rect, 0, zones);
+            return;
+        }
+
+        applyGeometryRecursive(node->first.get(), firstRect, innerGap, zones);
+        applyGeometryRecursive(node->second.get(), secondRect, innerGap, zones);
+    };
+
     if (node->splitHorizontal) {
-        // Split top/bottom with innerGap between children
-        const int contentHeight = rect.height() - innerGap;
-        if (contentHeight <= 0) {
-            // Gap exceeds space — give all leaves the parent rect (preserves zone count)
-            applyGeometryRecursive(node->first.get(), rect, 0, zones);
-            applyGeometryRecursive(node->second.get(), rect, 0, zones);
-            return;
-        }
-
-        const int firstHeight = std::max(1, static_cast<int>(contentHeight * ratio));
-        const int secondHeight = std::max(1, contentHeight - firstHeight);
-        const int secondY = rect.y() + firstHeight + innerGap;
-        const int clampedSecondHeight = std::max(1, std::min(secondHeight, rect.y() + rect.height() - secondY));
-        const QRect firstRect(rect.x(), rect.y(), rect.width(), firstHeight);
-        const QRect secondRect(rect.x(), secondY, rect.width(), clampedSecondHeight);
-
-        if (!firstRect.isValid() || !secondRect.isValid()) {
-            applyGeometryRecursive(node->first.get(), rect, 0, zones);
-            applyGeometryRecursive(node->second.get(), rect, 0, zones);
-            return;
-        }
-
-        applyGeometryRecursive(node->first.get(), firstRect, innerGap, zones);
-        applyGeometryRecursive(node->second.get(), secondRect, innerGap, zones);
+        splitDimension(
+            rect.height(),
+            [&](int firstH) {
+                return QRect(rect.x(), rect.y(), rect.width(), firstH);
+            },
+            [&](int firstH, int secondH) {
+                const int secondY = rect.y() + firstH + innerGap;
+                const int clampedH = std::max(1, std::min(secondH, rect.y() + rect.height() - secondY));
+                return QRect(rect.x(), secondY, rect.width(), clampedH);
+            });
     } else {
-        // Split left/right with innerGap between children
-        const int contentWidth = rect.width() - innerGap;
-        if (contentWidth <= 0) {
-            // Gap exceeds space — give all leaves the parent rect (preserves zone count)
-            applyGeometryRecursive(node->first.get(), rect, 0, zones);
-            applyGeometryRecursive(node->second.get(), rect, 0, zones);
-            return;
-        }
-
-        const int firstWidth = std::max(1, static_cast<int>(contentWidth * ratio));
-        const int secondWidth = std::max(1, contentWidth - firstWidth);
-        const int secondX = rect.x() + firstWidth + innerGap;
-        const int clampedSecondWidth = std::max(1, std::min(secondWidth, rect.x() + rect.width() - secondX));
-        const QRect firstRect(rect.x(), rect.y(), firstWidth, rect.height());
-        const QRect secondRect(secondX, rect.y(), clampedSecondWidth, rect.height());
-
-        if (!firstRect.isValid() || !secondRect.isValid()) {
-            applyGeometryRecursive(node->first.get(), rect, 0, zones);
-            applyGeometryRecursive(node->second.get(), rect, 0, zones);
-            return;
-        }
-
-        applyGeometryRecursive(node->first.get(), firstRect, innerGap, zones);
-        applyGeometryRecursive(node->second.get(), secondRect, innerGap, zones);
+        splitDimension(
+            rect.width(),
+            [&](int firstW) {
+                return QRect(rect.x(), rect.y(), firstW, rect.height());
+            },
+            [&](int firstW, int secondW) {
+                const int secondX = rect.x() + firstW + innerGap;
+                const int clampedW = std::max(1, std::min(secondW, rect.x() + rect.width() - secondX));
+                return QRect(secondX, rect.y(), clampedW, rect.height());
+            });
     }
 }
 
@@ -369,9 +367,23 @@ void SplitTree::rebuildFromOrder(const QStringList& tiledWindows, qreal defaultS
         m_root.reset();
         return;
     }
-    if (tiledWindows.size() == 1) {
+    // Deduplicate input while preserving order, skipping empty IDs
+    QStringList uniqueWindows;
+    QSet<QString> seen;
+    for (const auto& wid : tiledWindows) {
+        if (!wid.isEmpty() && !seen.contains(wid)) {
+            seen.insert(wid);
+            uniqueWindows.append(wid);
+        }
+    }
+
+    if (uniqueWindows.isEmpty()) {
+        m_root.reset();
+        return;
+    }
+    if (uniqueWindows.size() == 1) {
         auto singleTree = std::make_unique<SplitNode>();
-        singleTree->windowId = tiledWindows.first();
+        singleTree->windowId = uniqueWindows.first();
         m_root = std::move(singleTree);
         return;
     }
@@ -382,20 +394,16 @@ void SplitTree::rebuildFromOrder(const QStringList& tiledWindows, qreal defaultS
     QVector<bool> oldDirections;
     collectInternalNodeParams(m_root.get(), oldRatios, oldDirections);
 
-    // Build a fresh tree, skipping empty window IDs (guards against corrupt input)
+    // Build a fresh tree from deduplicated input
     m_root.reset();
-    for (const QString& windowId : tiledWindows) {
-        if (Q_UNLIKELY(windowId.isEmpty())) {
-            qCWarning(lcAutotile) << "rebuildFromOrder: skipping empty windowId";
-            continue;
-        }
+    for (const QString& windowId : uniqueWindows) {
         insertAtEnd(windowId, defaultSplitRatio);
     }
 
     // Restore ratios if leaf count matches
-    if (oldLeafCount != tiledWindows.size()) {
-        qCDebug(lcAutotile) << "rebuildFromOrder: leaf count changed from" << oldLeafCount << "to"
-                            << tiledWindows.size() << "-- skipping ratio restoration";
+    if (oldLeafCount != leafCount()) {
+        qCDebug(lcAutotile) << "rebuildFromOrder: leaf count changed from" << oldLeafCount << "to" << leafCount()
+                            << "-- skipping ratio restoration";
     } else {
         applyInternalNodeParams(m_root.get(), oldRatios, oldDirections, 0);
     }
@@ -451,6 +459,9 @@ std::unique_ptr<SplitTree> SplitTree::fromJson(const QJsonObject& json)
     const QJsonObject rootObj = json[QLatin1String("root")].toObject();
     int nodeCount = 0;
     tree->m_root = nodeFromJson(rootObj, nullptr, 0, nodeCount);
+    if (!tree->m_root) {
+        return nullptr;
+    }
     return tree;
 }
 

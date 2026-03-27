@@ -406,6 +406,9 @@ Q_SIGNALS:
      * @brief Emitted when a window's floating state changes
      * @param windowId Affected window
      * @param floating New floating state
+     *
+     * @note Also emitted with floating=false when a floating window is removed via removeWindow(),
+     * to ensure listeners clean up any floating-specific state. Check containsWindow() if needed.
      */
     void floatingChanged(const QString& windowId, bool floating);
 

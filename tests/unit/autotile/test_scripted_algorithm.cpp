@@ -23,8 +23,8 @@ static QString writeTempScript(QTemporaryDir& dir, const QString& filename, cons
 {
     QString path = dir.path() + QStringLiteral("/") + filename;
     QFile f(path);
-    if (!f.open(QIODevice::WriteOnly))
-        return path;
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text))
+        return QString();
     f.write(content.toUtf8());
     f.close();
     return path;

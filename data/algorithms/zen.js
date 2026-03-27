@@ -37,7 +37,7 @@ function calculateZones(params) {
     for (let i = 0; i < count; i++) {
         const y = area.y + i * (tileHeight + gap);
         const h = (i === count - 1)
-            ? (area.y + area.height - y)
+            ? Math.max(1, area.y + area.height - y)
             : tileHeight;
 
         zones.push({

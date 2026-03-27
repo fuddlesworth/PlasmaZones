@@ -5,6 +5,8 @@
 
 #include "plasmazones_export.h"
 
+#include "core/constants.h"
+
 #include <QJsonObject>
 #include <QRect>
 #include <QString>
@@ -180,6 +182,10 @@ public:
      * @param area Available screen area
      * @param innerGap Gap between adjacent zones in pixels
      * @return Vector of zone geometries in depth-first left-to-right order
+     *
+     * @note When gap exceeds available space in a split, both children receive the full
+     * parent rect (zones will overlap). Callers should be aware of possible overlap in
+     * degenerate gap configurations.
      */
     QVector<QRect> applyGeometry(const QRect& area, int innerGap) const;
 
@@ -188,7 +194,8 @@ public:
      * @param tiledWindows Ordered list of tiled window IDs
      * @param defaultSplitRatio Default split ratio for new internal nodes
      */
-    void rebuildFromOrder(const QStringList& tiledWindows, qreal defaultSplitRatio = 0.55);
+    void rebuildFromOrder(const QStringList& tiledWindows,
+                          qreal defaultSplitRatio = PlasmaZones::AutotileDefaults::DefaultSplitRatio);
 
     // ═══════════════════════════════════════════════════════════════════════
     // Serialization

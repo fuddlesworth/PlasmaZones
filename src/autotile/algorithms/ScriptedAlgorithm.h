@@ -30,7 +30,6 @@ struct SplitNode;
 struct WatchdogContext
 {
     std::atomic<bool> alive{true}; ///< Set to false in destructor to prevent use-after-free
-    std::atomic<bool> active{false}; ///< C1: True while a watchdog thread is sleeping; prevents unbounded spawning
     std::mutex mutex; ///< Guards engine pointer access between watchdog and destructor
     std::atomic<uint64_t> generation{0}; ///< Generation counter to prevent stale watchdog interrupts
     QJSEngine* engine = nullptr; ///< Stable engine pointer shared with watchdog threads

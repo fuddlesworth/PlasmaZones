@@ -84,6 +84,8 @@ private Q_SLOTS:
         int countBefore = registry->availableAlgorithms().size();
 
         QSignalSpy spy(registry, &AlgorithmRegistry::algorithmRegistered);
+        // Registry::registerAlgorithm takes ownership even on rejection
+        // (deletes the pointer when id is empty), so no manual delete needed.
         registry->registerAlgorithm(QString(), new CustomTestAlgorithm());
 
         QCOMPARE(registry->availableAlgorithms().size(), countBefore);

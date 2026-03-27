@@ -5,6 +5,7 @@
 
 #include <QTest>
 #include <QTemporaryDir>
+#include <QStandardPaths>
 #include <QUuid>
 
 namespace PlasmaZones {

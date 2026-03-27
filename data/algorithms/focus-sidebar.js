@@ -52,7 +52,7 @@ function calculateZones(params) {
     for (let i = 0; i < sidebarCount; i++) {
         const y = area.y + i * (windowHeight + gap);
         const h = (i === sidebarCount - 1)
-            ? (area.y + area.height - y)
+            ? Math.max(1, area.y + area.height - y)
             : windowHeight;
 
         zones.push({
