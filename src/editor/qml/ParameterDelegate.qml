@@ -41,9 +41,7 @@ Item {
     // Computed type for visibility switching
     readonly property string paramType: paramData ? (paramData.type || "") : ""
     // Whether the currently selected image is an SVG (for showing resolution controls)
-    readonly property bool isSvgImage: paramType === "image" && imagePickerButton.currentPath.length > 0
-                                       && (imagePickerButton.currentPath.toLowerCase().endsWith(".svg")
-                                           || imagePickerButton.currentPath.toLowerCase().endsWith(".svgz"))
+    readonly property bool isSvgImage: paramType === "image" && imagePickerButton.currentPath.length > 0 && (imagePickerButton.currentPath.toLowerCase().endsWith(".svg") || imagePickerButton.currentPath.toLowerCase().endsWith(".svgz"))
 
     implicitHeight: contentLayout.implicitHeight
     implicitWidth: contentLayout.implicitWidth
@@ -62,6 +60,7 @@ Item {
 
             visible: paramDelegate.paramType === "float"
             Layout.fillWidth: true
+            Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
             from: paramDelegate.paramData && paramDelegate.paramData.min !== undefined ? paramDelegate.paramData.min : 0
             to: paramDelegate.paramData && paramDelegate.paramData.max !== undefined ? paramDelegate.paramData.max : 1
             stepSize: paramDelegate.paramData && paramDelegate.paramData.step !== undefined ? paramDelegate.paramData.step : 0.01
@@ -100,6 +99,7 @@ Item {
             id: intSpinBox
 
             visible: paramDelegate.paramType === "int"
+            Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
             from: paramDelegate.paramData && paramDelegate.paramData.min !== undefined ? paramDelegate.paramData.min : 0
             to: paramDelegate.paramData && paramDelegate.paramData.max !== undefined ? paramDelegate.paramData.max : 100
             value: {
@@ -134,6 +134,7 @@ Item {
             id: boolCheckBox
 
             visible: paramDelegate.paramType === "bool"
+            Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
             text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
             checked: {
                 void (paramDelegate._pendingRef);
@@ -241,6 +242,7 @@ Item {
             onClicked: {
                 if (paramDelegate.resolvedDialogRoot && paramDelegate.paramData)
                     paramDelegate.resolvedDialogRoot.openImageDialog(paramDelegate.paramData.id);
+
             }
         }
 
@@ -266,6 +268,7 @@ Item {
             id: svgSizeSpinBox
 
             visible: paramDelegate.isSvgImage
+            Accessible.name: i18n("SVG size")
             from: 64
             to: 4096
             stepSize: 128
@@ -273,6 +276,7 @@ Item {
                 void (paramDelegate._pendingRef);
                 if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
                     return 1024;
+
                 var v = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id + "_svgSize", 1024);
                 return Number(v) || 1024;
             }
@@ -284,6 +288,7 @@ Item {
             onValueModified: {
                 if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot)
                     paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id + "_svgSize", value);
+
             }
         }
 

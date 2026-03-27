@@ -201,7 +201,6 @@ QVector<QRect> clampZonesToArea(const QVector<QRect>& zones, const QRect& area, 
 ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
 {
     using namespace AutotileDefaults;
-    static constexpr int MaxZones = 256;
     static const QRegularExpression metaRe(QStringLiteral(R"(^\s*// @(\w+)\s+(.+)$)"));
 
     ScriptMetadata meta;

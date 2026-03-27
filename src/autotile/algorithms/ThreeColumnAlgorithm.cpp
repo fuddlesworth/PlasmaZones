@@ -78,21 +78,7 @@ QVector<QRect> ThreeColumnAlgorithm::calculateZones(const TilingParams& params) 
         if (!minSizes.isEmpty()) {
             const int minMW = minWidthAt(minSizes, 0);
             const int minSW = minWidthAt(minSizes, 1);
-            const int totalMin2 = minMW + minSW;
-            if (totalMin2 > contentWidth && totalMin2 > 0) {
-                // Unsatisfiable: distribute proportionally
-                masterWidth = static_cast<int>(static_cast<qint64>(contentWidth) * std::max(minMW, 1) / totalMin2);
-                stackWidth = contentWidth - masterWidth;
-            } else {
-                if (minMW > 0 && masterWidth < minMW) {
-                    masterWidth = minMW;
-                    stackWidth = contentWidth - masterWidth;
-                }
-                if (minSW > 0 && stackWidth < minSW) {
-                    stackWidth = minSW;
-                    masterWidth = contentWidth - stackWidth;
-                }
-            }
+            solveTwoPartMinSizes(contentWidth, masterWidth, stackWidth, minMW, minSW);
         }
 
         zones.append(QRect(area.x(), area.y(), masterWidth, area.height()));

@@ -12,6 +12,17 @@
 using namespace PlasmaZones;
 using namespace PlasmaZones::AutotileDefaults;
 
+namespace {
+bool hasValidChildren(const SplitNode* node)
+{
+    if (!node->first || !node->second) {
+        qCWarning(lcAutotile) << "Corrupt internal node: missing child";
+        return false;
+    }
+    return true;
+}
+} // anonymous namespace
+
 // =============================================================================
 // Construction / Move
 // =============================================================================
@@ -37,7 +48,12 @@ SplitTree::~SplitTree() = default;
 // Queries
 // =============================================================================
 
-SplitNode* SplitTree::root() const noexcept
+const SplitNode* SplitTree::root() const noexcept
+{
+    return m_root.get();
+}
+
+SplitNode* SplitTree::root() noexcept
 {
     return m_root.get();
 }
@@ -64,9 +80,14 @@ int SplitTree::treeHeight() const
     return subtreeHeight(m_root.get());
 }
 
-SplitNode* SplitTree::leafForWindow(const QString& windowId) const
+const SplitNode* SplitTree::leafForWindow(const QString& windowId) const
 {
     return findLeaf(m_root.get(), windowId);
+}
+
+SplitNode* SplitTree::leafForWindow(const QString& windowId)
+{
+    return const_cast<SplitNode*>(std::as_const(*this).leafForWindow(windowId));
 }
 
 QStringList SplitTree::leafOrder() const
@@ -164,6 +185,23 @@ void SplitTree::insertAtEnd(const QString& windowId, qreal initialRatio)
     SplitNode* rm = rightmostLeaf(m_root.get());
     if (!rm) {
         qCWarning(lcAutotile) << "insertAtEnd: no rightmost leaf found (corrupt tree?)";
+        return;
+    }
+
+    splitLeaf(rm, windowId, initialRatio);
+}
+
+void SplitTree::insertAtEndRaw(const QString& windowId, qreal initialRatio)
+{
+    if (!m_root) {
+        m_root = std::make_unique<SplitNode>();
+        m_root->windowId = windowId;
+        return;
+    }
+
+    SplitNode* rm = rightmostLeaf(m_root.get());
+    if (!rm) {
+        qCWarning(lcAutotile) << "insertAtEndRaw: no rightmost leaf found (corrupt tree?)";
         return;
     }
 
@@ -299,8 +337,7 @@ void SplitTree::applyGeometryRecursive(const SplitNode* node, const QRect& rect,
         return;
     }
 
-    if (!node->first || !node->second) {
-        qCWarning(lcAutotile) << "applyGeometryRecursive: corrupt internal node (missing child)";
+    if (!hasValidChildren(node)) {
         return;
     }
 
@@ -393,10 +430,10 @@ void SplitTree::rebuildFromOrder(const QStringList& tiledWindows, qreal defaultS
     QVector<bool> oldDirections;
     collectInternalNodeParams(m_root.get(), oldRatios, oldDirections);
 
-    // Build a fresh tree from deduplicated input
+    // Build a fresh tree from deduplicated input (skip duplicate checks — already deduplicated)
     m_root.reset();
     for (const QString& windowId : uniqueWindows) {
-        insertAtEnd(windowId, defaultSplitRatio);
+        insertAtEndRaw(windowId, defaultSplitRatio);
     }
 
     // Restore ratios if leaf count matches
@@ -436,10 +473,10 @@ int SplitTree::applyInternalNodeParams(SplitNode* node, const QVector<qreal>& ra
 }
 
 // =============================================================================
-// Private helpers
+// Private helpers (const versions do real work; non-const delegates safely)
 // =============================================================================
 
-SplitNode* SplitTree::findLeaf(SplitNode* node, const QString& windowId) const
+const SplitNode* SplitTree::findLeaf(const SplitNode* node, const QString& windowId) const
 {
     if (!node) {
         return nullptr;
@@ -449,18 +486,22 @@ SplitNode* SplitTree::findLeaf(SplitNode* node, const QString& windowId) const
         return (node->windowId == windowId) ? node : nullptr;
     }
 
-    if (!node->first || !node->second) {
-        qCWarning(lcAutotile) << "Corrupt internal node: missing child";
+    if (!hasValidChildren(node)) {
         return nullptr;
     }
 
-    if (SplitNode* found = findLeaf(node->first.get(), windowId)) {
+    if (const SplitNode* found = findLeaf(node->first.get(), windowId)) {
         return found;
     }
     return findLeaf(node->second.get(), windowId);
 }
 
-SplitNode* SplitTree::leafAtIndex(SplitNode* node, int targetIndex, int& currentIndex) const
+SplitNode* SplitTree::findLeaf(SplitNode* node, const QString& windowId) const
+{
+    return const_cast<SplitNode*>(findLeaf(static_cast<const SplitNode*>(node), windowId));
+}
+
+const SplitNode* SplitTree::leafAtIndex(const SplitNode* node, int targetIndex, int& currentIndex) const
 {
     if (!node) {
         return nullptr;
@@ -474,26 +515,36 @@ SplitNode* SplitTree::leafAtIndex(SplitNode* node, int targetIndex, int& current
         return nullptr;
     }
 
-    if (!node->first || !node->second) {
-        qCWarning(lcAutotile) << "Corrupt internal node: missing child";
+    if (!hasValidChildren(node)) {
         return nullptr;
     }
 
-    if (SplitNode* found = leafAtIndex(node->first.get(), targetIndex, currentIndex)) {
+    if (const SplitNode* found = leafAtIndex(node->first.get(), targetIndex, currentIndex)) {
         return found;
     }
     return leafAtIndex(node->second.get(), targetIndex, currentIndex);
 }
 
-SplitNode* SplitTree::rightmostLeaf(SplitNode* node) const
+SplitNode* SplitTree::leafAtIndex(SplitNode* node, int targetIndex, int& currentIndex) const
+{
+    return const_cast<SplitNode*>(leafAtIndex(static_cast<const SplitNode*>(node), targetIndex, currentIndex));
+}
+
+const SplitNode* SplitTree::rightmostLeaf(const SplitNode* node) const
 {
     if (!node) {
         return nullptr;
     }
-    while (!node->isLeaf()) {
-        node = node->second ? node->second.get() : node->first.get();
+    const SplitNode* current = node;
+    while (!current->isLeaf()) {
+        current = current->second ? current->second.get() : current->first.get();
     }
-    return node;
+    return current;
+}
+
+SplitNode* SplitTree::rightmostLeaf(SplitNode* node) const
+{
+    return const_cast<SplitNode*>(rightmostLeaf(static_cast<const SplitNode*>(node)));
 }
 
 void SplitTree::collectLeafOrder(const SplitNode* node, QStringList& order) const
@@ -507,8 +558,7 @@ void SplitTree::collectLeafOrder(const SplitNode* node, QStringList& order) cons
         return;
     }
 
-    if (!node->first || !node->second) {
-        qCWarning(lcAutotile) << "Corrupt internal node: missing child";
+    if (!hasValidChildren(node)) {
         return;
     }
 
@@ -526,29 +576,9 @@ int SplitTree::countLeaves(const SplitNode* node) const
         return 1;
     }
 
-    if (!node->first || !node->second) {
-        qCWarning(lcAutotile) << "countLeaves: corrupt internal node (missing child)";
+    if (!hasValidChildren(node)) {
         return 0;
     }
 
     return countLeaves(node->first.get()) + countLeaves(node->second.get());
-}
-
-// =============================================================================
-// Const overloads (delegate to non-const versions via const_cast)
-// =============================================================================
-
-const SplitNode* SplitTree::findLeaf(const SplitNode* node, const QString& windowId) const
-{
-    return findLeaf(const_cast<SplitNode*>(node), windowId);
-}
-
-const SplitNode* SplitTree::leafAtIndex(const SplitNode* node, int targetIndex, int& currentIndex) const
-{
-    return leafAtIndex(const_cast<SplitNode*>(node), targetIndex, currentIndex);
-}
-
-const SplitNode* SplitTree::rightmostLeaf(const SplitNode* node) const
-{
-    return rightmostLeaf(const_cast<SplitNode*>(node));
 }

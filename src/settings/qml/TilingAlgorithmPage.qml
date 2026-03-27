@@ -131,15 +131,24 @@ Flickable {
                     spacing: Kirigami.Units.smallSpacing
 
                     SpinBox {
+                        id: outerGapSpinBox
+
                         from: 0
                         to: root.gapMax
-                        value: root.settingValue("OuterGap", appSettings.autotileOuterGap)
                         enabled: !tilePerSideCheck.checked
                         onValueModified: root.writeSetting("OuterGap", value, function(v) {
                             appSettings.autotileOuterGap = v;
                         })
+                        Accessible.name: i18n("Outer gap")
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Gap from screen edges")
+
+                        Binding on value {
+                            value: root.settingValue("OuterGap", appSettings.autotileOuterGap)
+                            when: !outerGapSpinBox.activeFocus
+                            restoreMode: Binding.RestoreNone
+                        }
+
                     }
 
                     Label {
@@ -155,6 +164,7 @@ Flickable {
                         onToggled: root.writeSetting("UsePerSideOuterGap", checked, function(v) {
                             appSettings.autotileUsePerSideOuterGap = v;
                         })
+                        Accessible.name: i18n("Set gaps per side")
                     }
 
                 }
@@ -171,13 +181,21 @@ Flickable {
                     }
 
                     SpinBox {
+                        id: topGapSpinBox
+
                         from: 0
                         to: root.gapMax
-                        value: root.settingValue("OuterGapTop", appSettings.autotileOuterGapTop)
                         onValueModified: root.writeSetting("OuterGapTop", value, function(v) {
                             appSettings.autotileOuterGapTop = v;
                         })
-                        Accessible.name: i18nc("@label", "Top edge gap")
+                        Accessible.name: i18n("Top gap")
+
+                        Binding on value {
+                            value: root.settingValue("OuterGapTop", appSettings.autotileOuterGapTop)
+                            when: !topGapSpinBox.activeFocus
+                            restoreMode: Binding.RestoreNone
+                        }
+
                     }
 
                     Label {
@@ -189,13 +207,21 @@ Flickable {
                     }
 
                     SpinBox {
+                        id: bottomGapSpinBox
+
                         from: 0
                         to: root.gapMax
-                        value: root.settingValue("OuterGapBottom", appSettings.autotileOuterGapBottom)
                         onValueModified: root.writeSetting("OuterGapBottom", value, function(v) {
                             appSettings.autotileOuterGapBottom = v;
                         })
-                        Accessible.name: i18nc("@label", "Bottom edge gap")
+                        Accessible.name: i18n("Bottom gap")
+
+                        Binding on value {
+                            value: root.settingValue("OuterGapBottom", appSettings.autotileOuterGapBottom)
+                            when: !bottomGapSpinBox.activeFocus
+                            restoreMode: Binding.RestoreNone
+                        }
+
                     }
 
                     Label {
@@ -207,13 +233,21 @@ Flickable {
                     }
 
                     SpinBox {
+                        id: leftGapSpinBox
+
                         from: 0
                         to: root.gapMax
-                        value: root.settingValue("OuterGapLeft", appSettings.autotileOuterGapLeft)
                         onValueModified: root.writeSetting("OuterGapLeft", value, function(v) {
                             appSettings.autotileOuterGapLeft = v;
                         })
-                        Accessible.name: i18nc("@label", "Left edge gap")
+                        Accessible.name: i18n("Left gap")
+
+                        Binding on value {
+                            value: root.settingValue("OuterGapLeft", appSettings.autotileOuterGapLeft)
+                            when: !leftGapSpinBox.activeFocus
+                            restoreMode: Binding.RestoreNone
+                        }
+
                     }
 
                     Label {
@@ -225,13 +259,21 @@ Flickable {
                     }
 
                     SpinBox {
+                        id: rightGapSpinBox
+
                         from: 0
                         to: root.gapMax
-                        value: root.settingValue("OuterGapRight", appSettings.autotileOuterGapRight)
                         onValueModified: root.writeSetting("OuterGapRight", value, function(v) {
                             appSettings.autotileOuterGapRight = v;
                         })
-                        Accessible.name: i18nc("@label", "Right edge gap")
+                        Accessible.name: i18n("Right gap")
+
+                        Binding on value {
+                            value: root.settingValue("OuterGapRight", appSettings.autotileOuterGapRight)
+                            when: !rightGapSpinBox.activeFocus
+                            restoreMode: Binding.RestoreNone
+                        }
+
                     }
 
                     Label {
@@ -247,6 +289,7 @@ Flickable {
                     onToggled: root.writeSetting("SmartGaps", checked, function(v) {
                         appSettings.autotileSmartGaps = v;
                     })
+                    Accessible.name: i18n("Smart gaps")
                 }
 
             }

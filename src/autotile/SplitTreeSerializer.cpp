@@ -7,6 +7,7 @@
 
 #include <QJsonObject>
 #include <QLatin1String>
+#include <QSet>
 
 #include <algorithm>
 
@@ -35,7 +36,8 @@ std::unique_ptr<SplitTree> SplitTree::fromJson(const QJsonObject& json)
     auto tree = std::make_unique<SplitTree>();
     const QJsonObject rootObj = json[QLatin1String("root")].toObject();
     int nodeCount = 0;
-    tree->m_root = nodeFromJson(rootObj, nullptr, 0, nodeCount);
+    QSet<QString> seenIds;
+    tree->m_root = nodeFromJson(rootObj, nullptr, 0, nodeCount, seenIds);
     if (!tree->m_root) {
         return nullptr;
     }
@@ -62,7 +64,7 @@ QJsonObject SplitTree::nodeToJson(const SplitNode* node)
 }
 
 std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, SplitNode* parent, int depth,
-                                                   int& nodeCount)
+                                                   int& nodeCount, QSet<QString>& seenIds)
 {
     if (json.isEmpty()) {
         return nullptr;
@@ -85,8 +87,9 @@ std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, Spli
 
     if (json.contains(QLatin1String("first")) && json.contains(QLatin1String("second"))) {
         // Internal node
-        node->first = nodeFromJson(json[QLatin1String("first")].toObject(), node.get(), depth + 1, nodeCount);
-        node->second = nodeFromJson(json[QLatin1String("second")].toObject(), node.get(), depth + 1, nodeCount);
+        node->first = nodeFromJson(json[QLatin1String("first")].toObject(), node.get(), depth + 1, nodeCount, seenIds);
+        node->second =
+            nodeFromJson(json[QLatin1String("second")].toObject(), node.get(), depth + 1, nodeCount, seenIds);
         if (!node->first || !node->second) {
             qCWarning(lcAutotile) << "SplitTree::fromJson: invalid internal node (missing child)";
             return nullptr;
@@ -98,6 +101,12 @@ std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, Spli
             qCWarning(lcAutotile) << "SplitTree::fromJson: leaf with empty windowId, skipping";
             return nullptr;
         }
+        if (seenIds.contains(node->windowId)) {
+            qCWarning(lcAutotile) << "SplitTree::fromJson: duplicate windowId detected, rejecting tree"
+                                  << "windowId=" << node->windowId;
+            return nullptr;
+        }
+        seenIds.insert(node->windowId);
     }
 
     return node;

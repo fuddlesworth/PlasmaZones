@@ -88,22 +88,7 @@ QVector<QRect> WideAlgorithm::calculateZones(const TilingParams& params) const
         stackHeight = contentHeight - masterHeight;
 
         // Joint min-height solve for master and stack rows
-        const int totalMin = std::max(minMasterHeight, 0) + std::max(minStackHeight, 0);
-        if (totalMin > contentHeight && totalMin > 0) {
-            // Unsatisfiable: distribute proportionally by minimum weight
-            masterHeight =
-                static_cast<int>(static_cast<qint64>(contentHeight) * std::max(minMasterHeight, 1) / totalMin);
-            stackHeight = contentHeight - masterHeight;
-        } else {
-            if (minMasterHeight > 0 && masterHeight < minMasterHeight) {
-                masterHeight = minMasterHeight;
-                stackHeight = contentHeight - masterHeight;
-            }
-            if (minStackHeight > 0 && stackHeight < minStackHeight) {
-                stackHeight = minStackHeight;
-                masterHeight = contentHeight - stackHeight;
-            }
-        }
+        solveTwoPartMinSizes(contentHeight, masterHeight, stackHeight, minMasterHeight, minStackHeight);
     }
 
     // Extract per-window min widths for master and stack rows

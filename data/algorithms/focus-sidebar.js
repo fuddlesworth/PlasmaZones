@@ -25,7 +25,8 @@ function calculateZones(params) {
     const area = params.area;
     const gap = params.innerGap || 0;
 
-    if (count <= 1) {
+    if (count <= 0) return [];
+    if (count === 1) {
         return [{ x: area.x, y: area.y, width: area.width, height: area.height }];
     }
 

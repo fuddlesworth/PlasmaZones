@@ -244,6 +244,7 @@ Item {
                         icon.height: Kirigami.Units.iconSizes.small
                         icon.color: root.modelData.autoAssign === true ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
                         onClicked: settingsController.setLayoutAutoAssign(root.modelData.id, !(root.modelData.autoAssign === true))
+                        Accessible.name: i18n("Auto-assign layout")
                         ToolTip.visible: hovered
                         ToolTip.text: root.modelData.autoAssign === true ? i18n("Auto-assign enabled: new windows fill empty zones. Click to disable.") : i18n("Click to auto-assign new windows to empty zones")
                     }
@@ -259,6 +260,7 @@ Item {
                         icon.height: Kirigami.Units.iconSizes.small
                         icon.color: root.modelData.hiddenFromSelector ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.textColor
                         onClicked: settingsController.setLayoutHidden(root.modelData.id, !root.modelData.hiddenFromSelector)
+                        Accessible.name: i18n("Toggle layout visibility")
                         ToolTip.visible: hovered
                         ToolTip.text: root.modelData.hiddenFromSelector ? i18n("Hidden from zone selector. Click to show.") : i18n("Visible in zone selector. Click to hide.")
                     }

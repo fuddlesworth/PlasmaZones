@@ -11,6 +11,8 @@
 namespace PlasmaZones {
 
 namespace {
+constexpr qreal StairMinRatio = 0.3;
+constexpr qreal StairMaxRatio = 0.8;
 AlgorithmRegistrar<StairAlgorithm> s_stairRegistrar(DBus::AutotileAlgorithm::Stair, 130);
 }
 
@@ -37,9 +39,11 @@ QVector<QRect> StairAlgorithm::calculateZones(const TilingParams& params) const
 
     QVector<QRect> zones;
 
-    if (windowCount <= 0 || !screenGeometry.isValid()) {
+    if (windowCount <= 0 || !screenGeometry.isValid() || !params.state) {
         return zones;
     }
+
+    const auto& state = *params.state;
 
     const QRect area = innerRect(screenGeometry, outerGaps);
 
@@ -49,7 +53,7 @@ QVector<QRect> StairAlgorithm::calculateZones(const TilingParams& params) const
     }
 
     // splitRatio controls window size relative to screen (0.3 = 30% of screen per window)
-    const qreal sizeRatio = params.state ? qBound(0.3, params.state->splitRatio(), 0.8) : 0.5;
+    const qreal sizeRatio = qBound(StairMinRatio, state.splitRatio(), StairMaxRatio);
 
     // All windows are the same size
     const int winWidth = std::max(100, qRound(area.width() * sizeRatio));

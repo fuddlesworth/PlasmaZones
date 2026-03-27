@@ -43,6 +43,11 @@ function calculateZones(params) {
     let rowHeight = Math.round((area.height - gap * (rows - 1)) / rows);
     if (rowHeight < 1) rowHeight = 1;
 
+    // Degenerate case: gaps consume all available height
+    if (area.height - gap * (rows - 1) <= 0) {
+        return [{ x: area.x, y: area.y, width: area.width, height: area.height }];
+    }
+
     for (let row = 0; row < rows; row++) {
         const y = area.y + row * (rowHeight + gap);
         const h = (row === rows - 1) ? Math.max(1, area.y + area.height - y) : rowHeight;

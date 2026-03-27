@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <optional>
+
 #include <QTest>
 #include <QTemporaryDir>
 #include <QDir>
@@ -88,15 +90,16 @@ private Q_SLOTS:
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
-        ScriptedAlgorithmLoader loader;
-        loader.scanAndRegister();
+        std::optional<ScriptedAlgorithmLoader> loader;
+        loader.emplace();
+        loader->scanAndRegister();
 
         auto* registry = AlgorithmRegistry::instance();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:gamma")));
 
         // Cleanup
-        loader.~ScriptedAlgorithmLoader();
-        new (&loader) ScriptedAlgorithmLoader(); // reconstruct to avoid double-free
+        loader.reset();
+        loader.emplace();
 
         // Restore environment
         if (origDataDirs.isEmpty()) {
@@ -138,8 +141,9 @@ private Q_SLOTS:
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
-        ScriptedAlgorithmLoader loader;
-        loader.scanAndRegister();
+        std::optional<ScriptedAlgorithmLoader> loader;
+        loader.emplace();
+        loader->scanAndRegister();
 
         auto* registry = AlgorithmRegistry::instance();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:valid-name")));
@@ -148,8 +152,8 @@ private Q_SLOTS:
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:special!char")));
 
         // Cleanup: destroy loader to unregister
-        loader.~ScriptedAlgorithmLoader();
-        new (&loader) ScriptedAlgorithmLoader();
+        loader.reset();
+        loader.emplace();
 
         if (origDataDirs.isEmpty()) {
             qunsetenv("XDG_DATA_DIRS");
@@ -188,8 +192,9 @@ private Q_SLOTS:
         qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
         qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user")).toUtf8());
 
-        ScriptedAlgorithmLoader loader;
-        loader.scanAndRegister();
+        std::optional<ScriptedAlgorithmLoader> loader;
+        loader.emplace();
+        loader->scanAndRegister();
 
         auto* registry = AlgorithmRegistry::instance();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:shared")));
@@ -199,8 +204,8 @@ private Q_SLOTS:
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("UserVersion"));
 
-        loader.~ScriptedAlgorithmLoader();
-        new (&loader) ScriptedAlgorithmLoader();
+        loader.reset();
+        loader.emplace();
 
         if (origDataDirs.isEmpty()) {
             qunsetenv("XDG_DATA_DIRS");
@@ -234,8 +239,9 @@ private Q_SLOTS:
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
-        ScriptedAlgorithmLoader loader;
-        loader.scanAndRegister();
+        std::optional<ScriptedAlgorithmLoader> loader;
+        loader.emplace();
+        loader->scanAndRegister();
 
         auto* registry = AlgorithmRegistry::instance();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:ephemeral")));
@@ -244,11 +250,11 @@ private Q_SLOTS:
         QVERIFY(QFile::remove(scriptPath));
 
         // Rescan — the stale algorithm should be unregistered
-        loader.scanAndRegister();
+        loader->scanAndRegister();
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:ephemeral")));
 
-        loader.~ScriptedAlgorithmLoader();
-        new (&loader) ScriptedAlgorithmLoader();
+        loader.reset();
+        loader.emplace();
 
         if (origDataDirs.isEmpty()) {
             qunsetenv("XDG_DATA_DIRS");

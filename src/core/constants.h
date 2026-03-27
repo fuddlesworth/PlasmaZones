@@ -195,6 +195,7 @@ constexpr bool DefaultFocusNewWindows = true;
 constexpr int MinMaxWindows = 1;
 constexpr int MaxMaxWindows = 12;
 constexpr int DefaultMaxWindows = 6;
+constexpr int MaxZones = 256;
 constexpr int MinInsertPosition = 0;
 constexpr int MaxInsertPosition = 2;
 constexpr int MinAnimationDuration = 50;

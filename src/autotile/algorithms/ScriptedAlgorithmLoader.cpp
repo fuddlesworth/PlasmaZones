@@ -241,20 +241,23 @@ void ScriptedAlgorithmLoader::reWatchFiles()
     // After a refresh (which may follow delete+recreate), re-add any
     // .js files that lost their inotify watch due to inode replacement.
     // algorithmDirectories() already includes the writable user dir.
+    // M5: Build QSets once to avoid O(n^2) repeated contains() calls
+    const QSet<QString> watchedDirs(m_watcher->directories().cbegin(), m_watcher->directories().cend());
+    const QSet<QString> watchedFiles(m_watcher->files().cbegin(), m_watcher->files().cend());
     const QStringList allDirs = algorithmDirectories();
     for (const QString& dir : allDirs) {
         if (!QDir(dir).exists()) {
             continue;
         }
         // Re-watch the directory itself
-        if (!m_watcher->directories().contains(dir)) {
+        if (!watchedDirs.contains(dir)) {
             m_watcher->addPath(dir);
         }
         QDir dirObj(dir);
         const QStringList files = dirObj.entryList({QStringLiteral("*.js")}, QDir::Files | QDir::NoSymLinks);
         for (const QString& file : files) {
             const QString fullPath = dirObj.filePath(file);
-            if (!m_watcher->files().contains(fullPath)) {
+            if (!watchedFiles.contains(fullPath)) {
                 m_watcher->addPath(fullPath);
             }
         }

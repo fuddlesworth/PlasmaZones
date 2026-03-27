@@ -25,7 +25,8 @@ namespace PlasmaZones {
  */
 struct PLASMAZONES_EXPORT SplitNode
 {
-    qreal splitRatio = 0.5; ///< How to divide this node's space (first child fraction)
+    qreal splitRatio =
+        0.6; ///< How to divide this node's space (first child fraction) — Matches AutotileDefaults::DefaultSplitRatio
     bool splitHorizontal = false; ///< true = top/bottom, false = left/right
     std::unique_ptr<SplitNode> first; ///< First child (left or top)
     std::unique_ptr<SplitNode> second; ///< Second child (right or bottom)
@@ -78,7 +79,8 @@ public:
      * @brief Get the root node of the tree
      * @return Root node, or nullptr if tree is empty
      */
-    SplitNode* root() const noexcept;
+    const SplitNode* root() const noexcept;
+    SplitNode* root() noexcept;
 
     /**
      * @brief Check if the tree has no nodes
@@ -104,7 +106,8 @@ public:
      * @param windowId Window to search for
      * @return Leaf node, or nullptr if not found
      */
-    SplitNode* leafForWindow(const QString& windowId) const;
+    const SplitNode* leafForWindow(const QString& windowId) const;
+    SplitNode* leafForWindow(const QString& windowId);
 
     /**
      * @brief Get window IDs in depth-first left-to-right order
@@ -221,6 +224,9 @@ private:
     };
     InsertReady prepareInsert(const QString& windowId);
 
+    /// Insert at rightmost leaf without duplicate checking (for use by rebuildFromOrder)
+    void insertAtEndRaw(const QString& windowId, qreal initialRatio);
+
     std::unique_ptr<SplitNode> m_root;
 
     SplitNode* findLeaf(SplitNode* node, const QString& windowId) const;
@@ -245,7 +251,7 @@ private:
 
     static QJsonObject nodeToJson(const SplitNode* node);
     static std::unique_ptr<SplitNode> nodeFromJson(const QJsonObject& json, SplitNode* parent, int depth,
-                                                   int& nodeCount);
+                                                   int& nodeCount, QSet<QString>& seenIds);
 };
 
 } // namespace PlasmaZones

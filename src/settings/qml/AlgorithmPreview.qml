@@ -95,7 +95,7 @@ Item {
         visible: root.showLabel
         anchors.bottom: parent.bottom
         anchors.right: parent.right
-        anchors.margins: 2
+        anchors.margins: Math.round(Kirigami.Units.smallSpacing / 2)
         text: root.algorithmName || root.algorithmId
         font: Kirigami.Theme.smallFont
         opacity: 0.5

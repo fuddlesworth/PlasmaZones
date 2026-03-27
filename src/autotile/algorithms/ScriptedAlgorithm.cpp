@@ -15,28 +15,20 @@
 #include <QThread>
 #include <algorithm>
 #include <chrono>
-
-namespace {
-constexpr int MaxZones = 256;
-}
+#include <cmath>
 
 namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
-// L14: Named constant for watchdog timeout (was magic number 100)
 static constexpr int ScriptWatchdogTimeoutMs = 100;
-
-// H2: Template helpers for JS override resolution and caching
 
 template<typename T>
 T ScriptedAlgorithm::resolveJsOverride(const QJSValue& jsFn, T cachedValue, T metadataFallback) const
 {
-    // H5: Return cached value if available
     if (m_cachedValuesLoaded && jsFn.isCallable()) {
         return cachedValue;
     }
-    // m3: Thread guard fires unconditionally before ANY JS call
     if (m_valid && QThread::currentThread() != thread()) {
         qCWarning(lcAutotile) << "ScriptedAlgorithm::resolveJsOverride called from wrong thread";
         return metadataFallback;
@@ -73,8 +65,6 @@ ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
     , m_watchdog(std::make_shared<WatchdogContext>())
 {
     m_watchdog->engine = m_engine;
-
-    // M1: Start persistent watchdog thread instead of spawning per-call detached threads
     m_watchdog->watchdogThread = std::thread([ctx = m_watchdog]() {
         while (true) {
             std::unique_lock<std::mutex> lock(ctx->mutex);
@@ -105,7 +95,6 @@ ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
 
 ScriptedAlgorithm::~ScriptedAlgorithm()
 {
-    // M1: Signal the persistent watchdog thread to shut down and join it
     {
         std::lock_guard<std::mutex> lock(m_watchdog->mutex);
         m_watchdog->shutdown = true;
@@ -143,8 +132,6 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // L10: Include "script:" prefix for consistency with ScriptedAlgorithmLoader's registry key
     m_scriptId = QStringLiteral("script:") + QFileInfo(filePath).completeBaseName();
     m_valid = false;
-
-    // M2: Reset all stale state from any previous load
     m_cachedValuesLoaded = false;
     m_cachedMasterZoneIndex = -1;
     m_cachedDefaultMaxWindows = 0;
@@ -227,6 +214,17 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // M2: Harden JS sandbox — disable the Function global to prevent dynamic code generation
     m_engine->evaluate(QStringLiteral(
         "Object.defineProperty(this, 'Function', {value: undefined, writable: false, configurable: false});"));
+    // C1: Freeze GeneratorFunction and AsyncFunction constructors to prevent sandbox bypass
+    m_engine->evaluate(
+        QStringLiteral("(function(){"
+                       "try{var gf=Object.getPrototypeOf(function*(){}).constructor;"
+                       "Object.defineProperty(gf.prototype,'constructor',{value:undefined,writable:false,configurable:"
+                       "false});}catch(e){}"
+                       "try{var af=Object.getPrototypeOf(async function(){}).constructor;"
+                       "Object.defineProperty(af.prototype,'constructor',{value:undefined,writable:false,configurable:"
+                       "false});}catch(e){}"
+                       "})();"
+                       "Object.freeze(Object.prototype);Object.freeze(Array.prototype);"));
 
     // Evaluate the user script
     const QJSValue result = m_engine->evaluate(source, filePath);
@@ -254,9 +252,6 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_jsProducesOverlappingZones = m_engine->globalObject().property(QStringLiteral("producesOverlappingZones"));
 
     m_valid = true;
-
-    // H5: Cache JS virtual method overrides at load time to avoid repeated JS calls
-    // H2: Use cacheJsValue helper to eliminate duplication
     m_cachedMasterZoneIndex = cacheJsValue<int>(m_jsMasterZoneIndex, m_cachedMasterZoneIndex);
     m_cachedSupportsMasterCount = cacheJsValue<bool>(m_jsSupportsMasterCount, m_cachedSupportsMasterCount);
     m_cachedSupportsSplitRatio = cacheJsValue<bool>(m_jsSupportsSplitRatio, m_cachedSupportsSplitRatio);
@@ -386,7 +381,8 @@ QJSValue ScriptedAlgorithm::splitNodeToJSValue(const SplitNode* node, int depth)
     if (node->isLeaf()) {
         jsNode.setProperty(QStringLiteral("windowId"), node->windowId);
     } else {
-        jsNode.setProperty(QStringLiteral("ratio"), node->splitRatio);
+        const qreal ratio = std::isnan(node->splitRatio) ? 0.5 : std::clamp(node->splitRatio, 0.1, 0.9);
+        jsNode.setProperty(QStringLiteral("ratio"), ratio);
         jsNode.setProperty(QStringLiteral("horizontal"), node->splitHorizontal);
         jsNode.setProperty(QStringLiteral("first"), splitNodeToJSValue(node->first.get(), depth + 1));
         jsNode.setProperty(QStringLiteral("second"), splitNodeToJSValue(node->second.get(), depth + 1));

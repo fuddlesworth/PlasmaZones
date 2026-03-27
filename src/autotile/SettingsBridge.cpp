@@ -343,11 +343,11 @@ void SettingsBridge::saveState()
 
         const TilingStateKey& key = it.key();
         QJsonObject screenObj;
-        screenObj[QStringLiteral("screen")] = key.screenId;
-        screenObj[QStringLiteral("desktop")] = key.desktop;
-        screenObj[QStringLiteral("activity")] = key.activity;
-        screenObj[QStringLiteral("masterCount")] = state->masterCount();
-        screenObj[QStringLiteral("splitRatio")] = state->splitRatio();
+        screenObj[QLatin1String("screen")] = key.screenId;
+        screenObj[QLatin1String("desktop")] = key.desktop;
+        screenObj[QLatin1String("activity")] = key.activity;
+        screenObj[QLatin1String("masterCount")] = state->masterCount();
+        screenObj[QLatin1String("splitRatio")] = state->splitRatio();
 
         screensArray.append(screenObj);
     }
@@ -392,15 +392,15 @@ void SettingsBridge::loadState()
     const QJsonArray screensArray = doc.array();
     for (const QJsonValue& val : screensArray) {
         const QJsonObject screenObj = val.toObject();
-        const QString screenId = screenObj[QStringLiteral("screen")].toString();
+        const QString screenId = screenObj[QLatin1String("screen")].toString();
         if (screenId.isEmpty()) {
             continue;
         }
 
         // Restore desktop/activity context from saved state (defaults to 0/"" for
         // backward compatibility with pre-per-desktop save format).
-        const int desktop = screenObj[QStringLiteral("desktop")].toInt(0);
-        const QString activity = screenObj[QStringLiteral("activity")].toString();
+        const int desktop = screenObj[QLatin1String("desktop")].toInt(0);
+        const QString activity = screenObj[QLatin1String("activity")].toString();
 
         // Use stateForKey() to create the state under the exact saved key
         // without mutating the engine's current desktop/activity context.
@@ -417,8 +417,8 @@ void SettingsBridge::loadState()
 
         // Restore per-screen parameters (not window order — windows haven't been
         // announced yet and stableIds may not match across sessions)
-        state->setMasterCount(screenObj[QStringLiteral("masterCount")].toInt(m_engine->config()->masterCount));
-        state->setSplitRatio(screenObj[QStringLiteral("splitRatio")].toDouble(m_engine->config()->splitRatio));
+        state->setMasterCount(screenObj[QLatin1String("masterCount")].toInt(m_engine->config()->masterCount));
+        state->setSplitRatio(screenObj[QLatin1String("splitRatio")].toDouble(m_engine->config()->splitRatio));
     }
 
     // Note: autotile screens are NOT restored here. The authoritative source is

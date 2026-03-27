@@ -308,6 +308,20 @@ protected:
     static int minHeightAt(const QVector<QSize>& minSizes, int index);
 
     /**
+     * @brief Solve two-column/two-row dimension distribution with min-size constraints
+     *
+     * When both minimums fit, clamps each to its minimum.
+     * When they don't fit, distributes proportionally by minimum weight.
+     *
+     * @param contentDim Total available dimension (width or height minus gap)
+     * @param firstDim Initial first dimension (modified in place)
+     * @param secondDim Initial second dimension (modified in place)
+     * @param minFirst Minimum for first dimension (0 = unconstrained)
+     * @param minSecond Minimum for second dimension (0 = unconstrained)
+     */
+    static void solveTwoPartMinSizes(int contentDim, int& firstDim, int& secondDim, int minFirst, int minSecond);
+
+    /**
      * @brief Result of solving three-column width distribution
      */
     struct ThreeColumnWidths

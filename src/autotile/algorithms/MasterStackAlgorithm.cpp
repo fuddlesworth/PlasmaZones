@@ -32,31 +32,6 @@ QString MasterStackAlgorithm::description() const
     return PzI18n::tr("Large master area with stacked secondary windows");
 }
 
-int MasterStackAlgorithm::masterZoneIndex() const
-{
-    return 0; // First zone is always master
-}
-
-bool MasterStackAlgorithm::supportsMasterCount() const
-{
-    return true;
-}
-
-bool MasterStackAlgorithm::supportsSplitRatio() const
-{
-    return true;
-}
-
-qreal MasterStackAlgorithm::defaultSplitRatio() const
-{
-    return DefaultSplitRatio; // 0.6 (60% master)
-}
-
-int MasterStackAlgorithm::defaultMaxWindows() const
-{
-    return 4; // 1 master + 3 stack
-}
-
 QVector<QRect> MasterStackAlgorithm::calculateZones(const TilingParams& params) const
 {
     const int windowCount = params.windowCount;
@@ -113,21 +88,7 @@ QVector<QRect> MasterStackAlgorithm::calculateZones(const TilingParams& params) 
         stackWidth = contentWidth - masterWidth;
 
         // Joint min-width solve for master and stack columns
-        const int totalMin = std::max(minMasterWidth, 0) + std::max(minStackWidth, 0);
-        if (totalMin > contentWidth && totalMin > 0) {
-            // Unsatisfiable: distribute proportionally by minimum weight
-            masterWidth = static_cast<int>(static_cast<qint64>(contentWidth) * std::max(minMasterWidth, 1) / totalMin);
-            stackWidth = contentWidth - masterWidth;
-        } else {
-            if (minMasterWidth > 0 && masterWidth < minMasterWidth) {
-                masterWidth = minMasterWidth;
-                stackWidth = contentWidth - masterWidth;
-            }
-            if (minStackWidth > 0 && stackWidth < minStackWidth) {
-                stackWidth = minStackWidth;
-                masterWidth = contentWidth - stackWidth;
-            }
-        }
+        solveTwoPartMinSizes(contentWidth, masterWidth, stackWidth, minMasterWidth, minStackWidth);
     }
 
     // Extract per-window min heights for master and stack columns

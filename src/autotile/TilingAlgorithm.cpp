@@ -264,6 +264,24 @@ int TilingAlgorithm::minHeightAt(const QVector<QSize>& minSizes, int index)
     return (index >= 0 && index < minSizes.size()) ? std::max(0, minSizes[index].height()) : 0;
 }
 
+void TilingAlgorithm::solveTwoPartMinSizes(int contentDim, int& firstDim, int& secondDim, int minFirst, int minSecond)
+{
+    const int totalMin = std::max(minFirst, 0) + std::max(minSecond, 0);
+    if (totalMin > contentDim && totalMin > 0) {
+        firstDim = static_cast<int>(static_cast<qint64>(contentDim) * std::max(minFirst, 1) / totalMin);
+        secondDim = contentDim - firstDim;
+    } else {
+        if (minFirst > 0 && firstDim < minFirst) {
+            firstDim = minFirst;
+            secondDim = contentDim - firstDim;
+        }
+        if (minSecond > 0 && secondDim < minSecond) {
+            secondDim = minSecond;
+            firstDim = contentDim - secondDim;
+        }
+    }
+}
+
 TilingAlgorithm::ThreeColumnWidths TilingAlgorithm::solveThreeColumnWidths(int areaX, int contentWidth, int innerGap,
                                                                            qreal splitRatio, int minLeftWidth,
                                                                            int minCenterWidth, int minRightWidth)

@@ -51,10 +51,9 @@ function calculateZones(params) {
     // Degenerate case: gaps consume margin space on either axis — panels would
     // have negative or zero dimensions.  Fall back to stacking all windows on the center.
     if (marginX < gap || marginY < gap) {
-        const center = { x: area.x, y: area.y, width: area.width, height: area.height };
-        const zones = [center];
-        for (let i = 1; i < count; i++) {
-            zones.push(center);
+        const zones = [];
+        for (let i = 0; i < count; i++) {
+            zones.push({ x: area.x, y: area.y, width: area.width, height: area.height });
         }
         return zones;
     }
@@ -115,7 +114,9 @@ function calculateZones(params) {
             }
         } else {
             // Skip degenerate right panel — reassign this window to the center
-            zones.push({ x: centerX, y: centerY, width: centerW, height: centerH });
+            for (let ri = 0; ri < rightCount; ri++) {
+                zones.push({ x: centerX, y: centerY, width: centerW, height: centerH });
+            }
         }
     }
 
@@ -132,7 +133,9 @@ function calculateZones(params) {
             }
         } else {
             // Skip degenerate left panel — reassign this window to the center
-            zones.push({ x: centerX, y: centerY, width: centerW, height: centerH });
+            for (let li = 0; li < leftCount; li++) {
+                zones.push({ x: centerX, y: centerY, width: centerW, height: centerH });
+            }
         }
     }
 

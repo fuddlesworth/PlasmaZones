@@ -20,8 +20,6 @@ ColumnLayout {
     readonly property int layoutListMinHeight: Kirigami.Units.gridUnit * 20
     // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms
     property int viewMode: 0
-    // Aspect ratio labels come from Main.qml (window.aspectRatioLabels)
-    readonly property var aspectRatioLabels: window.aspectRatioLabels
 
     spacing: 0
 
@@ -97,15 +95,17 @@ ColumnLayout {
                     }
                     // Group by sectionKey (data-driven: each item carries its own
                     // sectionKey, sectionLabel, sectionOrder from the C++ side)
-                    let groups = {};
+                    let groups = {
+                    };
                     for (let i = 0; i < filtered.length; i++) {
                         let key = filtered[i].sectionKey || "default";
                         if (!groups[key])
                             groups[key] = {
-                                items: [],
-                                order: filtered[i].sectionOrder !== undefined ? filtered[i].sectionOrder : 0,
-                                label: filtered[i].sectionLabel || ""
-                            };
+                            "items": [],
+                            "order": filtered[i].sectionOrder !== undefined ? filtered[i].sectionOrder : 0,
+                            "label": filtered[i].sectionLabel || ""
+                        };
+
                         groups[key].items.push(filtered[i]);
                     }
                     // Sort items within each group alphabetically
@@ -115,12 +115,18 @@ ColumnLayout {
                         });
                     }
                     // Sort groups by sectionOrder, then build section model
-                    let sorted = Object.values(groups).sort((a, b) => a.order - b.order);
-                    let nonEmpty = sorted.filter(g => g.items.length > 0);
-                    model = nonEmpty.map(g => ({
-                        "label": nonEmpty.length > 1 ? g.label : "",
-                        "layouts": g.items
-                    }));
+                    let sorted = Object.values(groups).sort((a, b) => {
+                        return a.order - b.order;
+                    });
+                    let nonEmpty = sorted.filter((g) => {
+                        return g.items.length > 0;
+                    });
+                    model = nonEmpty.map((g) => {
+                        return ({
+                            "label": nonEmpty.length > 1 ? g.label : "",
+                            "layouts": g.items
+                        });
+                    });
                 }
 
                 function selectDefaultLayout(mode) {

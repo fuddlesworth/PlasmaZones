@@ -76,7 +76,7 @@ public:
         return true;
     }
 
-    // Need at least 3 windows for true three-column layout
+    // Degrades gracefully to 1-2 columns for fewer windows
     int minimumWindows() const override
     {
         return 1;

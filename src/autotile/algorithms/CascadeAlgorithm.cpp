@@ -11,6 +11,8 @@
 namespace PlasmaZones {
 
 namespace {
+constexpr qreal CascadeMinOffset = 0.02;
+constexpr qreal CascadeMaxOffset = 0.4;
 AlgorithmRegistrar<CascadeAlgorithm> s_cascadeRegistrar(DBus::AutotileAlgorithm::Cascade, 120);
 }
 
@@ -37,9 +39,11 @@ QVector<QRect> CascadeAlgorithm::calculateZones(const TilingParams& params) cons
 
     QVector<QRect> zones;
 
-    if (windowCount <= 0 || !screenGeometry.isValid()) {
+    if (windowCount <= 0 || !screenGeometry.isValid() || !params.state) {
         return zones;
     }
+
+    const auto& state = *params.state;
 
     const QRect area = innerRect(screenGeometry, outerGaps);
 
@@ -49,7 +53,7 @@ QVector<QRect> CascadeAlgorithm::calculateZones(const TilingParams& params) cons
     }
 
     // splitRatio controls the cascade offset as a fraction of area dimensions
-    const qreal offsetRatio = params.state ? qBound(0.02, params.state->splitRatio(), 0.4) : 0.15;
+    const qreal offsetRatio = qBound(CascadeMinOffset, state.splitRatio(), CascadeMaxOffset);
     const int offsetX = std::max(20, qRound(area.width() * offsetRatio / (windowCount - 1)));
     const int offsetY = std::max(20, qRound(area.height() * offsetRatio / (windowCount - 1)));
 

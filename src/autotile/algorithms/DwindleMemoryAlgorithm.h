@@ -44,6 +44,10 @@ public:
 
     QVector<QRect> calculateZones(const TilingParams& params) const override;
 
+    bool supportsMasterCount() const override
+    {
+        return false;
+    }
     bool supportsSplitRatio() const override
     {
         return true;

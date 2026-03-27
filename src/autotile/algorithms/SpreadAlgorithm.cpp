@@ -11,6 +11,8 @@
 namespace PlasmaZones {
 
 namespace {
+constexpr qreal SpreadMinRatio = 0.3;
+constexpr qreal SpreadMaxRatio = 1.0;
 AlgorithmRegistrar<SpreadAlgorithm> s_spreadRegistrar(DBus::AutotileAlgorithm::Spread, 140);
 }
 
@@ -39,9 +41,11 @@ QVector<QRect> SpreadAlgorithm::calculateZones(const TilingParams& params) const
 
     QVector<QRect> zones;
 
-    if (windowCount <= 0 || !screenGeometry.isValid()) {
+    if (windowCount <= 0 || !screenGeometry.isValid() || !params.state) {
         return zones;
     }
+
+    const auto& state = *params.state;
 
     const QRect area = innerRect(screenGeometry, outerGaps);
 
@@ -51,7 +55,7 @@ QVector<QRect> SpreadAlgorithm::calculateZones(const TilingParams& params) const
     }
 
     // splitRatio controls window size as a fraction of per-slot dimensions
-    const qreal widthFraction = params.state ? qBound(0.3, params.state->splitRatio(), 1.0) : 0.8;
+    const qreal widthFraction = qBound(SpreadMinRatio, state.splitRatio(), SpreadMaxRatio);
 
     // Extract per-window minimum sizes.
     // Slot minimums are scaled up by 1/widthFraction so the window minimum is

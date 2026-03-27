@@ -26,6 +26,7 @@ ComboBox {
     // the model imperatively and only swap it when visible content changes.
     // Match the active filter so the default item is semantically consistent
     // Defer until popup closes
+    // Defer until popup closes
 
     id: root
 
@@ -178,8 +179,6 @@ ComboBox {
     }
 
     function _doRebuild() {
-        // Defer until popup closes
-
         _rebuildScheduled = false;
         let items = _buildItems();
         if (_modelMatchesItems(items)) {
@@ -307,6 +306,7 @@ ComboBox {
         readonly property bool isDefaultOption: modelData.isDefaultOption === true
         readonly property bool isCurrentSelection: root.currentIndex === index
 
+        Accessible.name: modelData.text || ""
         width: root.popup.availableWidth
         implicitHeight: Kirigami.Units.gridUnit * 6
         // Only highlight the hovered/keyboard-navigated item (standard ComboBox UX).

@@ -51,8 +51,12 @@ QHash<QString, QPair<qreal, int>> AutotileConfig::perAlgoFromVariantMap(const QV
         if (!validAlgoId.match(it.key()).hasMatch())
             continue;
         const QVariantMap entry = it.value().toMap();
-        qreal ratio = std::clamp(entry.value(PerAlgoKeys::SplitRatio).toDouble(), MinSplitRatio, MaxSplitRatio);
-        int masterCount = std::clamp(entry.value(PerAlgoKeys::MasterCount).toInt(), MinMasterCount, MaxMasterCount);
+        const QVariant ratioVar = entry.value(PerAlgoKeys::SplitRatio);
+        const qreal ratio =
+            std::clamp(ratioVar.isValid() ? ratioVar.toDouble() : DefaultSplitRatio, MinSplitRatio, MaxSplitRatio);
+        const QVariant mcVar = entry.value(PerAlgoKeys::MasterCount);
+        const int masterCount =
+            std::clamp(mcVar.isValid() ? mcVar.toInt() : DefaultMasterCount, MinMasterCount, MaxMasterCount);
         result[it.key()] = {ratio, masterCount};
     }
     return result;
