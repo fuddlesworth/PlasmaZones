@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "config/configdefaults.h"
 #include <QColor>
 #include <QHash>
 #include <QJsonObject>
@@ -53,7 +54,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Common values: "master-stack", "bsp", "columns", "dwindle", "spiral", "monocle"
      * See AlgorithmRegistry for available algorithms.
      */
-    QString algorithmId = QStringLiteral("bsp");
+    QString algorithmId = ConfigDefaults::autotileAlgorithm();
 
     // ═══════════════════════════════════════════════════════════════════════
     // Master Area Settings

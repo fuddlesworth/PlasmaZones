@@ -54,7 +54,8 @@ Item {
     function recalcZones() {
         if (root.algorithmId !== "")
             root.zones = root.appSettings.generateAlgorithmPreview(root.algorithmId, root.windowCount, root.splitRatio, root.masterCount);
-
+        else
+            root.zones = [];
     }
 
     onAlgorithmIdChanged: recalcTimer.restart()

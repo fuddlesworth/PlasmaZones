@@ -188,6 +188,7 @@ private:
     mutable QJSValue m_jsMinimumWindows;
     mutable QJSValue m_jsDefaultMaxWindows;
     mutable QJSValue m_jsProducesOverlappingZones;
+    mutable QJSValue m_jsCenterLayout;
 
     // H5: Cached JS virtual method overrides (loaded once at script load time)
     int m_cachedMinimumWindows = 1;
@@ -197,6 +198,7 @@ private:
     bool m_cachedProducesOverlappingZones = false;
     bool m_cachedSupportsMasterCount = false;
     bool m_cachedSupportsSplitRatio = false;
+    bool m_cachedCenterLayout = false;
     bool m_cachedValuesLoaded = false;
 };
 

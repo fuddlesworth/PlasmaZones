@@ -56,11 +56,13 @@ void SplitTree::rebuildFromOrder(const QStringList& tiledWindows, qreal defaultS
         return;
     }
 
-    // Cap to prevent degenerate trees exceeding MaxRuntimeTreeDepth
-    if (uniqueWindows.size() > MaxRuntimeTreeDepth + 1) {
+    // Cap to prevent degenerate trees exceeding MaxRuntimeTreeDepth.
+    // insertAtEndRaw builds a right-leaning chain where N leaves = height N,
+    // so N must not exceed MaxRuntimeTreeDepth (recursive traversals bail at depth > MaxRuntimeTreeDepth).
+    if (uniqueWindows.size() > MaxRuntimeTreeDepth) {
         qCWarning(lcAutotile) << "rebuildFromOrder: truncating" << uniqueWindows.size() << "windows to"
-                              << (MaxRuntimeTreeDepth + 1);
-        uniqueWindows.resize(MaxRuntimeTreeDepth + 1);
+                              << MaxRuntimeTreeDepth;
+        uniqueWindows.resize(MaxRuntimeTreeDepth);
     }
 
     if (uniqueWindows.size() == 1) {

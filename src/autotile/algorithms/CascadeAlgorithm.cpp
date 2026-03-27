@@ -36,6 +36,7 @@ QVector<QRect> CascadeAlgorithm::calculateZones(const TilingParams& params) cons
     const int windowCount = params.windowCount;
     const auto& screenGeometry = params.screenGeometry;
     const auto& outerGaps = params.outerGaps;
+    const auto& minSizes = params.minSizes;
 
     QVector<QRect> zones;
 
@@ -68,7 +69,18 @@ QVector<QRect> CascadeAlgorithm::calculateZones(const TilingParams& params) cons
     for (int i = 0; i < windowCount; ++i) {
         const int x = area.x() + offsetX * i;
         const int y = area.y() + offsetY * i;
-        zones.append(QRect(x, y, winWidth, winHeight));
+        int w = winWidth;
+        int h = winHeight;
+        // Enforce per-window minimum sizes
+        if (i < minSizes.size()) {
+            if (minSizes[i].width() > 0) {
+                w = std::max(w, minSizes[i].width());
+            }
+            if (minSizes[i].height() > 0) {
+                h = std::max(h, minSizes[i].height());
+            }
+        }
+        zones.append(QRect(x, y, w, h));
     }
 
     return zones;

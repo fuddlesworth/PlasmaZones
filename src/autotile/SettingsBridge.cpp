@@ -394,6 +394,7 @@ void SettingsBridge::loadState()
     const QString savedAlgorithm = group->readString(QStringLiteral("algorithm"), m_engine->m_algorithmId);
     if (AlgorithmRegistry::instance()->hasAlgorithm(savedAlgorithm)) {
         m_engine->m_algorithmId = savedAlgorithm;
+        m_engine->m_config->algorithmId = savedAlgorithm;
     }
 
     // Parse per-screen state

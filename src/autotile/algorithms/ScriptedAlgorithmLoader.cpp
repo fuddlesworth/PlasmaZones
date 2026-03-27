@@ -14,6 +14,9 @@
 
 namespace PlasmaZones {
 
+// M2: Single file-scope constant shared by loadFromDirectory() and reWatchFiles()
+static constexpr int MaxWatchedFilesPerDir = 100;
+
 ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(QObject* parent)
     : QObject(parent)
 {
@@ -164,7 +167,6 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         return;
 
     // S-08: Cap file watcher count to prevent resource exhaustion
-    static constexpr int MaxWatchedFilesPerDir = 100;
     int filesProcessed = 0;
 
     for (const QString& file : files) {
@@ -303,7 +305,6 @@ void ScriptedAlgorithmLoader::reWatchFiles()
         QDir dirObj(dir);
         const QStringList files = dirObj.entryList({QStringLiteral("*.js")}, QDir::Files | QDir::NoSymLinks);
         // M6: Cap watched files per directory to match loadFromDirectory's limit
-        static constexpr int MaxWatchedFilesPerDir = 100;
         int filesWatched = 0;
         for (const QString& file : files) {
             if (filesWatched >= MaxWatchedFilesPerDir) {

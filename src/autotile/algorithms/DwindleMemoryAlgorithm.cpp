@@ -40,6 +40,10 @@ void DwindleMemoryAlgorithm::prepareTilingState(TilingState* state) const
         return; // Already has a tree (or no state)
     }
 
+    // Dwindle splits should be equal (0.5), not the master/stack ratio (0.6).
+    // Set this BEFORE any tree operations so rebuildSplitTree() also uses 0.5.
+    state->setSplitRatio(0.5);
+
     const QStringList tiledWindows = state->tiledWindows();
     if (tiledWindows.size() <= 1) {
         return; // No tree needed for 0-1 windows

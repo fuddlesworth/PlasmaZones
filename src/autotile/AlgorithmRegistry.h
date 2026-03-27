@@ -79,6 +79,16 @@ public:
     static AlgorithmRegistry* instance();
 
     /**
+     * @brief Early cleanup of all registered algorithms
+     *
+     * Connected to QCoreApplication::aboutToQuit() so that algorithm objects
+     * (especially ScriptedAlgorithm instances with QJSEngine internals) are
+     * destroyed while Qt is still fully alive, avoiding crashes during static
+     * destruction when the singleton outlives QCoreApplication.
+     */
+    void cleanup();
+
+    /**
      * @brief Register a tiling algorithm
      *
      * The registry takes ownership of the algorithm. If an algorithm with

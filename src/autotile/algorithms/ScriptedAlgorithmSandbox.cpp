@@ -87,17 +87,28 @@ bool hardenSandbox(QJSEngine* engine)
             QStringLiteral("GeneratorFunction constructor lockdown"))) {
         return false;
     }
-    // AsyncFunction lockdown uses safeEval because engines that lack async syntax (ES5/ES6)
-    // will produce a SyntaxError at parse time — that's safe since the constructor can't be
-    // reached either. On engines with async support, a failure here is logged but non-fatal
-    // because the Function constructor (already locked above) is the primary escape vector.
-    safeEval(
-        QStringLiteral("(function(){"
-                       "var af=Object.getPrototypeOf(async function(){}).constructor;"
-                       "Object.defineProperty(af.prototype,'constructor',{value:undefined,writable:false,configurable:"
-                       "false});"
-                       "})();"),
-        QStringLiteral("AsyncFunction constructor lockdown"));
+    // AsyncFunction lockdown elevated to critical: scripts can reach AsyncFunction via
+    // Object.getPrototypeOf(async function(){}).constructor and execute arbitrary code,
+    // bypassing the Function constructor lockdown above.
+    // A SyntaxError means the engine lacks async support (e.g. V4/ES5), so AsyncFunction
+    // is unreachable and no lockdown is needed. Any other error is a real failure.
+    {
+        QJSValue afResult = engine->evaluate(QStringLiteral(
+            "(function(){"
+            "var af=Object.getPrototypeOf(async function(){}).constructor;"
+            "Object.defineProperty(af.prototype,'constructor',{value:undefined,writable:false,configurable:"
+            "false});"
+            "})();"));
+        if (afResult.isError()) {
+            const QString errorName = afResult.property(QStringLiteral("name")).toString();
+            if (errorName != QLatin1String("SyntaxError")) {
+                qCWarning(lcAutotile) << "ScriptedAlgorithm: CRITICAL sandbox hardening failed for"
+                                      << "AsyncFunction constructor lockdown" << ":" << afResult.toString();
+                return false;
+            }
+            // SyntaxError: engine lacks async support, AsyncFunction is unreachable — safe.
+        }
+    }
 
     // S3: Freeze built-in prototypes to prevent prototype pollution.
     // H1: Includes String, Number, Boolean, RegExp, Date, Error, Map, Set

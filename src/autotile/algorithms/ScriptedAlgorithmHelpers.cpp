@@ -64,6 +64,7 @@ QString lShapeHelperJs()
 {
     return QStringLiteral(
         "function lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rightHeight) {"
+        "  splitRatio = Math.max(0.1, Math.min(0.9, splitRatio));"
         "  if (distribute === undefined) distribute = 'alternate';"
         "  if (bottomWidth === undefined) bottomWidth = area.width * splitRatio;"
         "  if (rightHeight === undefined) rightHeight = area.height;"

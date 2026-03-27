@@ -34,20 +34,13 @@
  */
 function renderPanel(zones, startX, startY, panelW, panelH, count, gap, horizontal) {
     if (count <= 0) return;
-    const totalGaps = (count - 1) * gap;
-    if (horizontal) {
-        const tileW = Math.max(1, Math.round((panelW - totalGaps) / count));
-        for (let i = 0; i < count; i++) {
-            const x = startX + i * (tileW + gap);
-            const w = (i === count - 1) ? Math.max(1, startX + panelW - x) : tileW;
-            zones.push({ x: x, y: startY, width: w, height: panelH });
-        }
-    } else {
-        const tileH = Math.max(1, Math.round((panelH - totalGaps) / count));
-        for (let i = 0; i < count; i++) {
-            const y = startY + i * (tileH + gap);
-            const h = (i === count - 1) ? Math.max(1, startY + panelH - y) : tileH;
-            zones.push({ x: startX, y: y, width: panelW, height: h });
+    const totalSize = horizontal ? panelW : panelH;
+    const slots = distributeEvenly(horizontal ? startX : startY, totalSize, count, gap);
+    for (let i = 0; i < slots.length; i++) {
+        if (horizontal) {
+            zones.push({ x: slots[i].pos, y: startY, width: slots[i].size, height: panelH });
+        } else {
+            zones.push({ x: startX, y: slots[i].pos, width: panelW, height: slots[i].size });
         }
     }
 }

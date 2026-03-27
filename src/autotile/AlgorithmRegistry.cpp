@@ -47,10 +47,19 @@ AlgorithmRegistry::AlgorithmRegistry(QObject* parent)
 
 AlgorithmRegistry::~AlgorithmRegistry()
 {
-    // Clear the hash first. The TilingAlgorithm objects are QObject children
-    // of this registry, so they will be deleted by ~QObject() after this
-    // destructor completes. We clear the hash to prevent any accidental
-    // access to stale pointers during destruction.
+    // Ensure algorithms are destroyed before ~QObject() runs.
+    // Normally cleanup() has already been called via aboutToQuit(),
+    // but guard against the case where it was not (e.g. no QCoreApplication).
+    cleanup();
+}
+
+void AlgorithmRegistry::cleanup()
+{
+    // Explicitly delete all algorithm children while Qt is still alive.
+    // This prevents crashes when the static singleton is destroyed after
+    // QCoreApplication during static destruction (ScriptedAlgorithm
+    // instances hold QJSEngine internals that require a live Qt runtime).
+    qDeleteAll(m_algorithms);
     m_algorithms.clear();
     m_registrationOrder.clear();
 }
@@ -60,6 +69,12 @@ AlgorithmRegistry* AlgorithmRegistry::instance()
     // Meyer's singleton: C++11 guarantees thread-safe initialization
     // of static local variables (§6.7 [stmt.dcl] p4)
     static AlgorithmRegistry s_instance;
+    static bool s_connected = false;
+    if (!s_connected && QCoreApplication::instance()) {
+        s_connected = true;
+        QObject::connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, &s_instance,
+                         &AlgorithmRegistry::cleanup);
+    }
     return &s_instance;
 }
 
@@ -283,8 +298,7 @@ int AlgorithmRegistry::effectiveMaxWindows(TilingAlgorithm* algorithm)
     // Use the user-configured maxWindows only for the active algorithm.
     // Other algorithms use their own default so each preview is representative.
     if (params.maxWindows > 0 && !params.algorithmId.isEmpty()) {
-        auto* inst = instance();
-        if (inst && inst->algorithm(params.algorithmId) == algorithm) {
+        if (instance()->algorithm(params.algorithmId) == algorithm) {
             return params.maxWindows;
         }
     }
@@ -308,7 +322,7 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm,
     // and fall back to their own defaults.
     auto* inst = instance();
     const auto& params = inst->m_previewParams;
-    const bool isActive = inst && !params.algorithmId.isEmpty() && inst->algorithm(params.algorithmId) == algorithm;
+    const bool isActive = !params.algorithmId.isEmpty() && inst->algorithm(params.algorithmId) == algorithm;
 
     int masterCount = 1;
     qreal splitRatio = algorithm->defaultSplitRatio();
@@ -317,7 +331,7 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm,
             masterCount = params.masterCount;
         if (params.splitRatio > 0)
             splitRatio = params.splitRatio;
-    } else if (inst) {
+    } else {
         // Look up per-algorithm saved settings from the generalized map
         const QString algoId = inst->findAlgorithmId(algorithm);
         const auto it = params.savedAlgorithmSettings.constFind(algoId);

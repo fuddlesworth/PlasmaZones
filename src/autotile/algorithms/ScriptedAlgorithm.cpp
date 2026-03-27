@@ -73,6 +73,7 @@ ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
     m_watchdog->watchdogThread = std::thread([ctx = m_watchdog]() {
         while (true) {
             std::unique_lock<std::mutex> lock(ctx->mutex);
+            // Wait for an arm signal (pending == true) or shutdown
             ctx->cv.wait(lock, [&ctx]() {
                 return ctx->pending || ctx->shutdown;
             });
@@ -81,15 +82,20 @@ ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
             }
             ctx->pending = false;
             const uint64_t gen = ctx->generation;
-            lock.unlock();
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(ScriptWatchdogTimeoutMs));
+            // M-03: Use cv.wait_for instead of sleep_for so that disarming
+            // (generation change) or shutdown wakes us immediately rather than
+            // sleeping the full timeout duration unconditionally.
+            const bool expired =
+                !ctx->cv.wait_for(lock, std::chrono::milliseconds(ScriptWatchdogTimeoutMs), [&ctx, gen]() {
+                    return ctx->generation != gen || ctx->shutdown;
+                });
 
-            std::lock_guard<std::mutex> guard(ctx->mutex);
             if (ctx->shutdown) {
                 return;
             }
-            if (ctx->generation == gen && ctx->engine) {
+            // Only interrupt if we actually timed out (generation unchanged)
+            if (expired && ctx->engine) {
                 ctx->engine->setInterrupted(true);
             }
         }
@@ -128,8 +134,8 @@ QJSValue ScriptedAlgorithm::guardedCall(const std::function<QJSValue()>& fn) con
     const QJSValue result = fn();
 
     // Disarm the watchdog by advancing generation and atomically check for timeout.
-    // C2: setInterrupted(false) and collectGarbage() MUST be inside the lock to prevent
-    // the watchdog thread from firing between unlock and the clear.
+    // C2: setInterrupted(false) MUST be inside the lock to prevent the watchdog
+    // thread from firing between unlock and the clear.
     bool wasInterrupted;
     {
         std::lock_guard<std::mutex> lock(m_watchdog->mutex);
@@ -137,9 +143,16 @@ QJSValue ScriptedAlgorithm::guardedCall(const std::function<QJSValue()>& fn) con
         wasInterrupted = m_engine->isInterrupted();
         if (wasInterrupted) {
             m_engine->setInterrupted(false);
-            m_engine->collectGarbage();
         }
     }
+    // M1: collectGarbage() moved outside the mutex — generation is already advanced
+    // and the interrupt flag is cleared, so the watchdog cannot fire on stale state.
+    if (wasInterrupted) {
+        m_engine->collectGarbage();
+    }
+    // M-03: Notify the watchdog so it wakes from wait_for immediately on disarm
+    // instead of sleeping until the full timeout expires.
+    m_watchdog->cv.notify_one();
 
     if (wasInterrupted) {
         // M2: Signal timeout via flag instead of evaluating JS on a just-interrupted engine
@@ -258,6 +271,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         "if (typeof defaultMaxWindows === 'function') __pz_g.defaultMaxWindows = defaultMaxWindows;"
         "if (typeof producesOverlappingZones === 'function') __pz_g.producesOverlappingZones = "
         "producesOverlappingZones;"
+        "if (typeof centerLayout === 'function') __pz_g.centerLayout = centerLayout;"
         "}).call(this, void 0, void 0);\n");
     const QString wrappedSource = wrapPrefix + source + wrapSuffix;
     const QJSValue result = guardedCall([this, &wrappedSource, &filePath]() {
@@ -291,6 +305,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_jsMinimumWindows = m_engine->globalObject().property(QStringLiteral("minimumWindows"));
     m_jsDefaultMaxWindows = m_engine->globalObject().property(QStringLiteral("defaultMaxWindows"));
     m_jsProducesOverlappingZones = m_engine->globalObject().property(QStringLiteral("producesOverlappingZones"));
+    m_jsCenterLayout = m_engine->globalObject().property(QStringLiteral("centerLayout"));
 
     m_valid = true;
     // C-1: Cache JS override values through guardedCall so that a malicious function
@@ -320,6 +335,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         std::clamp(guardedCacheJsValue(m_jsDefaultSplitRatio, m_cachedDefaultSplitRatio), MinSplitRatio, MaxSplitRatio);
     m_cachedProducesOverlappingZones =
         guardedCacheJsValue(m_jsProducesOverlappingZones, m_cachedProducesOverlappingZones);
+    m_cachedCenterLayout = guardedCacheJsValue(m_jsCenterLayout, m_cachedCenterLayout);
     m_cachedValuesLoaded = true;
 
     qCInfo(lcAutotile) << "ScriptedAlgorithm: loaded script=" << m_scriptId << "file=" << filePath;
@@ -560,7 +576,7 @@ QString ScriptedAlgorithm::zoneNumberDisplay() const noexcept
 
 bool ScriptedAlgorithm::centerLayout() const noexcept
 {
-    return m_metadata.centerLayout;
+    return resolveJsOverride<bool>(m_jsCenterLayout, m_cachedCenterLayout, m_metadata.centerLayout);
 }
 
 bool ScriptedAlgorithm::isScripted() const noexcept
