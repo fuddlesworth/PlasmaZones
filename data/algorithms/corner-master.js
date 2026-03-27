@@ -17,13 +17,13 @@
  * variant with ceil/floor distribution instead of alternating).
  *
  * First window takes the top-left corner. Remaining
- * windows fill the L-shaped remainder — right column (full height) and
+ * windows fill the L-shaped remainder — right column (master height) and
  * bottom row (master width).
  *
  * splitRatio controls the master window's width AND height fraction.
  *
  * Distribution for remaining windows:
- * - 2 windows: win2 fills entire right column (full height)
+ * - 2 windows: win2 fills right column (master height)
  * - 3 windows: win2 right column, win3 bottom row
  * - 4+: alternate between right column and bottom row
  *
@@ -45,6 +45,6 @@ function calculateZones(params) {
     }
 
     // Corner Master: alternate distribution, bottom row uses master width,
-    // right column uses full height
-    return lShapeLayout(area, count, gap, splitRatio, "alternate", "master", "full");
+    // right column uses master height (respects bottom row when present)
+    return lShapeLayout(area, count, gap, splitRatio, "alternate", "master", "master");
 }

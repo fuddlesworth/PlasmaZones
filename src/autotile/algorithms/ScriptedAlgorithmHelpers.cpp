@@ -15,7 +15,8 @@ namespace ScriptedHelpers {
 QString treeHelperJs()
 {
     return QStringLiteral(
-        "function applyTreeGeometry(node, rect, gap) {"
+        "function applyTreeGeometry(node, rect, gap, _depth) {"
+        "  if ((_depth || 0) > 30) return [];"
         "  if (!node) return [];"
         "  if (node.windowId !== undefined && node.windowId !== '') {"
         "    return [{x: rect.x, y: rect.y, width: rect.width, height: rect.height}];"
@@ -28,28 +29,28 @@ QString treeHelperJs()
         "  if (node.horizontal) {"
         "    var content = rect.height - gap;"
         "    if (content <= 0) {"
-        "      zones = zones.concat(applyTreeGeometry(node.first, rect, 0));"
-        "      zones = zones.concat(applyTreeGeometry(node.second, rect, 0));"
+        "      zones = zones.concat(applyTreeGeometry(node.first, rect, 0, (_depth||0)+1));"
+        "      zones = zones.concat(applyTreeGeometry(node.second, rect, 0, (_depth||0)+1));"
         "    } else {"
         "      var h1 = Math.round(content * ratio);"
         "      var h2 = content - h1;"
         "      zones = zones.concat(applyTreeGeometry(node.first,"
-        "        {x: rect.x, y: rect.y, width: rect.width, height: h1}, gap));"
+        "        {x: rect.x, y: rect.y, width: rect.width, height: h1}, gap, (_depth||0)+1));"
         "      zones = zones.concat(applyTreeGeometry(node.second,"
-        "        {x: rect.x, y: rect.y + h1 + gap, width: rect.width, height: h2}, gap));"
+        "        {x: rect.x, y: rect.y + h1 + gap, width: rect.width, height: h2}, gap, (_depth||0)+1));"
         "    }"
         "  } else {"
         "    var content = rect.width - gap;"
         "    if (content <= 0) {"
-        "      zones = zones.concat(applyTreeGeometry(node.first, rect, 0));"
-        "      zones = zones.concat(applyTreeGeometry(node.second, rect, 0));"
+        "      zones = zones.concat(applyTreeGeometry(node.first, rect, 0, (_depth||0)+1));"
+        "      zones = zones.concat(applyTreeGeometry(node.second, rect, 0, (_depth||0)+1));"
         "    } else {"
         "      var w1 = Math.round(content * ratio);"
         "      var w2 = content - w1;"
         "      zones = zones.concat(applyTreeGeometry(node.first,"
-        "        {x: rect.x, y: rect.y, width: w1, height: rect.height}, gap));"
+        "        {x: rect.x, y: rect.y, width: w1, height: rect.height}, gap, (_depth||0)+1));"
         "      zones = zones.concat(applyTreeGeometry(node.second,"
-        "        {x: rect.x + w1 + gap, y: rect.y, width: w2, height: rect.height}, gap));"
+        "        {x: rect.x + w1 + gap, y: rect.y, width: w2, height: rect.height}, gap, (_depth||0)+1));"
         "    }"
         "  }"
         "  return zones;"
@@ -147,19 +148,37 @@ QString deckHelperJs()
         "}");
 }
 
+QString distributeEvenlyHelperJs()
+{
+    return QStringLiteral(
+        "function distributeEvenly(start, total, count, gap) {"
+        "  if (count <= 0) return [];"
+        "  if (count === 1) return [{pos: start, size: total}];"
+        "  var totalGaps = (count - 1) * gap;"
+        "  var tileSize = Math.max(1, Math.round((total - totalGaps) / count));"
+        "  var result = [];"
+        "  for (var i = 0; i < count; i++) {"
+        "    var pos = start + i * (tileSize + gap);"
+        "    var size = (i === count - 1) ? Math.max(1, start + total - pos) : tileSize;"
+        "    result.push({pos: pos, size: size});"
+        "  }"
+        "  return result;"
+        "}");
+}
+
 QVector<QRect> jsArrayToRects(const QJSValue& result, const QString& scriptId, int maxZones)
 {
     QVector<QRect> rects;
     const int length = result.property(QStringLiteral("length")).toInt();
-    if (length <= 0 || length > maxZones) {
-        if (length > maxZones)
-            qCWarning(lcAutotile) << "ScriptedAlgorithm: zone count exceeds maximum" << maxZones
-                                  << "script=" << scriptId;
+    if (length <= 0)
         return rects;
-    }
-    rects.reserve(length);
+    const int effectiveLength = std::min(length, maxZones);
+    if (length > maxZones)
+        qCWarning(lcAutotile) << "ScriptedAlgorithm: script returned" << length << "zones, truncating to" << maxZones
+                              << "script=" << scriptId;
+    rects.reserve(effectiveLength);
 
-    for (int i = 0; i < length; ++i) {
+    for (int i = 0; i < effectiveLength; ++i) {
         const QJSValue elem = result.property(static_cast<quint32>(i));
         // m1: Validate that each element is an object before extracting properties
         if (!elem.isObject()) {
@@ -189,8 +208,10 @@ QVector<QRect> clampZonesToArea(const QVector<QRect>& zones, const QRect& area, 
     for (const QRect& zone : std::as_const(zones)) {
         const QRect bounded = zone.intersected(area);
         if (bounded.isEmpty()) {
-            qCWarning(lcAutotile) << "ScriptedAlgorithm: zone falls outside area, skipping"
+            qCWarning(lcAutotile) << "ScriptedAlgorithm: zone" << (&zone - &zones.first())
+                                  << "outside area, using full area as fallback"
                                   << "zone=" << zone << "area=" << area << "script=" << scriptId;
+            clamped.append(area);
             continue;
         }
         clamped.append(bounded);
@@ -214,7 +235,8 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
         const QString line = lineView.toString();
 
         const QString trimmed = line.trimmed();
-        if (!trimmed.isEmpty() && !trimmed.startsWith(QLatin1String("//"))) {
+        if (!trimmed.isEmpty() && !trimmed.startsWith(QLatin1String("//")) && !trimmed.startsWith(QLatin1String("/*"))
+            && !trimmed.startsWith(QLatin1String("*"))) {
             break;
         }
 
@@ -249,12 +271,12 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
             bool ok = false;
             const int v = value.toInt(&ok);
             if (ok)
-                meta.defaultMaxWindows = std::clamp(v, 1, 100);
+                meta.defaultMaxWindows = std::clamp(v, MinMetadataWindows, MaxMetadataWindows);
         } else if (key == QLatin1String("minimumWindows")) {
             bool ok = false;
             const int v = value.toInt(&ok);
             if (ok)
-                meta.minimumWindows = std::clamp(v, 1, 100);
+                meta.minimumWindows = std::clamp(v, MinMetadataWindows, MaxMetadataWindows);
         } else if (key == QLatin1String("masterZoneIndex")) {
             bool ok = false;
             const int v = value.toInt(&ok);

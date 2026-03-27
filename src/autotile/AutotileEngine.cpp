@@ -343,10 +343,10 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
 
     // Restore per-algorithm split ratio and master count from saved settings,
     // falling back to the algorithm's defaults when no saved entry exists.
-    auto restorePerAlgoSettings = [this](TilingAlgorithm* algo, QHash<QString, QPair<qreal, int>>::const_iterator it) {
+    auto restorePerAlgoSettings = [this](TilingAlgorithm* algo, QHash<QString, AlgorithmSettings>::const_iterator it) {
         if (it != m_config->savedAlgorithmSettings.constEnd()) {
-            m_config->splitRatio = it->first;
-            m_config->masterCount = it->second;
+            m_config->splitRatio = it->splitRatio;
+            m_config->masterCount = it->masterCount;
         } else {
             m_config->splitRatio = algo->defaultSplitRatio();
             m_config->masterCount = AutotileDefaults::DefaultMasterCount;

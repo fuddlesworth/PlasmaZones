@@ -32,6 +32,26 @@
  * @param {Object} params - Tiling parameters
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
+function renderPanel(zones, startX, startY, panelW, panelH, count, gap, horizontal) {
+    if (count <= 0) return;
+    var totalGaps = (count - 1) * gap;
+    if (horizontal) {
+        var tileW = Math.max(1, Math.round((panelW - totalGaps) / count));
+        for (var i = 0; i < count; i++) {
+            var x = startX + i * (tileW + gap);
+            var w = (i === count - 1) ? Math.max(1, startX + panelW - x) : tileW;
+            zones.push({ x: x, y: startY, width: w, height: panelH });
+        }
+    } else {
+        var tileH = Math.max(1, Math.round((panelH - totalGaps) / count));
+        for (var i = 0; i < count; i++) {
+            var y = startY + i * (tileH + gap);
+            var h = (i === count - 1) ? Math.max(1, startY + panelH - y) : tileH;
+            zones.push({ x: startX, y: y, width: panelW, height: h });
+        }
+    }
+}
+
 function calculateZones(params) {
     const count = params.windowCount;
     if (count <= 0) return [];
@@ -50,7 +70,7 @@ function calculateZones(params) {
 
     // Degenerate case: gaps consume margin space on either axis — panels would
     // have negative or zero dimensions.  Fall back to stacking all windows on the center.
-    if (marginX < gap || marginY < gap) {
+    if (marginX <= gap || marginY <= gap) {
         const zones = [];
         for (let i = 0; i < count; i++) {
             zones.push({ x: area.x, y: area.y, width: area.width, height: area.height });
@@ -102,18 +122,10 @@ function calculateZones(params) {
     });
 
     // Right panel(s) — center band height only
-    // Note: rightCount is currently always 0 or 1, but the loop is kept for future-proofing.
     if (rightCount > 0) {
         if (rightW >= 1) {
-            const rightTileGaps = (rightCount - 1) * gap;
-            const rightTileH = Math.round((sideH - rightTileGaps) / rightCount);
-            for (let ri = 0; ri < rightCount; ri++) {
-                const ry = sideTop + ri * (rightTileH + gap);
-                const rh = (ri === rightCount - 1) ? (sideTop + sideH - ry) : rightTileH;
-                zones.push({ x: rightX, y: ry, width: rightW, height: rh });
-            }
+            renderPanel(zones, rightX, sideTop, rightW, sideH, rightCount, gap, false);
         } else {
-            // Skip degenerate right panel — reassign this window to the center
             for (let ri = 0; ri < rightCount; ri++) {
                 zones.push({ x: centerX, y: centerY, width: centerW, height: centerH });
             }
@@ -121,18 +133,10 @@ function calculateZones(params) {
     }
 
     // Left panel(s) — center band height only
-    // Note: leftCount is currently always 0 or 1, but the loop is kept for future-proofing.
     if (leftCount > 0) {
         if (leftW >= 1) {
-            const leftTileGaps = (leftCount - 1) * gap;
-            const leftTileH = Math.round((sideH - leftTileGaps) / leftCount);
-            for (let li = 0; li < leftCount; li++) {
-                const ly = sideTop + li * (leftTileH + gap);
-                const lh = (li === leftCount - 1) ? (sideTop + sideH - ly) : leftTileH;
-                zones.push({ x: area.x, y: ly, width: leftW, height: lh });
-            }
+            renderPanel(zones, area.x, sideTop, leftW, sideH, leftCount, gap, false);
         } else {
-            // Skip degenerate left panel — reassign this window to the center
             for (let li = 0; li < leftCount; li++) {
                 zones.push({ x: centerX, y: centerY, width: centerW, height: centerH });
             }
@@ -142,15 +146,7 @@ function calculateZones(params) {
     // Bottom panel(s) — span the full area width
     if (hasBottom) {
         if (bottomH >= 1 && bottomY < area.y + area.height) {
-            const btmTotalGaps = (bottomCount - 1) * gap;
-            const btmTileW = Math.round((area.width - btmTotalGaps) / bottomCount);
-            for (let bi = 0; bi < bottomCount; bi++) {
-                const bx = area.x + bi * (btmTileW + gap);
-                const bw = (bi === bottomCount - 1)
-                    ? (area.x + area.width - bx)
-                    : btmTileW;
-                zones.push({ x: bx, y: bottomY, width: bw, height: bottomH });
-            }
+            renderPanel(zones, area.x, bottomY, area.width, bottomH, bottomCount, gap, true);
         } else {
             for (let bi = 0; bi < bottomCount; bi++) {
                 zones.push({ x: centerX, y: centerY, width: centerW, height: centerH });
@@ -161,17 +157,8 @@ function calculateZones(params) {
     // Top panel(s) — span the full area width
     if (hasTop) {
         if (topH >= 1) {
-            const topTotalGaps = (topCount - 1) * gap;
-            const topTileW = Math.round((area.width - topTotalGaps) / topCount);
-            for (let ti = 0; ti < topCount; ti++) {
-                const tx = area.x + ti * (topTileW + gap);
-                const tw = (ti === topCount - 1)
-                    ? (area.x + area.width - tx)
-                    : topTileW;
-                zones.push({ x: tx, y: area.y, width: tw, height: topH });
-            }
+            renderPanel(zones, area.x, area.y, area.width, topH, topCount, gap, true);
         } else {
-            // Skip degenerate top panel — reassign this window to the center
             for (let ti = 0; ti < topCount; ti++) {
                 zones.push({ x: centerX, y: centerY, width: centerW, height: centerH });
             }

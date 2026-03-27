@@ -118,8 +118,8 @@ void SettingsBridge::syncFromSettings(Settings* settings)
     // the generic SYNC_FIELD splitRatio doesn't clobber the per-algorithm value.
     auto savedIt = cfg->savedAlgorithmSettings.constFind(m_engine->m_algorithmId);
     if (savedIt != cfg->savedAlgorithmSettings.constEnd()) {
-        cfg->splitRatio = savedIt->first;
-        cfg->masterCount = savedIt->second;
+        cfg->splitRatio = savedIt->splitRatio;
+        cfg->masterCount = savedIt->masterCount;
     }
 
     // Propagate split ratio and master count to screens WITHOUT per-screen overrides.
@@ -144,8 +144,8 @@ void SettingsBridge::syncFromSettings(Settings* settings)
     previewParams.splitRatio = settings->autotileSplitRatio();
     for (auto it = cfg->savedAlgorithmSettings.constBegin(); it != cfg->savedAlgorithmSettings.constEnd(); ++it) {
         previewParams.savedAlgorithmSettings[it.key()] = QVariantMap{
-            {PerAlgoKeys::MasterCount, it.value().second},
-            {PerAlgoKeys::SplitRatio, it.value().first},
+            {PerAlgoKeys::MasterCount, it.value().masterCount},
+            {PerAlgoKeys::SplitRatio, it.value().splitRatio},
         };
     }
     AlgorithmRegistry::setConfiguredPreviewParams(previewParams);
@@ -248,8 +248,8 @@ void SettingsBridge::connectToSettings(Settings* settings)
         // If the active algorithm's settings changed, apply them and retile
         auto it = newSaved.constFind(m_engine->m_algorithmId);
         if (it != newSaved.constEnd()) {
-            m_engine->config()->splitRatio = it->first;
-            m_engine->config()->masterCount = it->second;
+            m_engine->config()->splitRatio = it->splitRatio;
+            m_engine->config()->masterCount = it->masterCount;
             m_engine->propagateGlobalSplitRatio();
             m_engine->propagateGlobalMasterCount();
             scheduleSettingsRetile();

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "../TilingAlgorithm.h"
+#include "ScriptedAlgorithmHelpers.h"
 #include <QJSValue>
 
 #include <atomic>
@@ -191,19 +192,8 @@ private:
     bool m_valid = false;
     bool m_isUserScript = false;
 
-    // Parsed metadata (from // @key value comments)
-    QString m_name;
-    QString m_description;
-    bool m_supportsMasterCount = false;
-    bool m_supportsSplitRatio = false;
-    bool m_supportsMemory = false;
-    bool m_producesOverlappingZones = false;
-    bool m_centerLayout = false;
-    QString m_zoneNumberDisplay;
-    qreal m_defaultSplitRatio = 0.0; // 0 = use base class default
-    int m_defaultMaxWindows = 0; // 0 = use base class default
-    int m_minimumWindows = 0; // 0 = use base class default
-    int m_masterZoneIndex = -1;
+    // D3: Consolidated parsed metadata (from // @key value comments)
+    ScriptedHelpers::ScriptMetadata m_metadata;
 
     // Optional JS function overrides (checked at call time)
     mutable QJSValue m_jsMasterZoneIndex;

@@ -107,193 +107,58 @@ Flickable {
         // =================================================================
         // Gaps Card (per-monitor)
         // =================================================================
-        SettingsCard {
+        GapsSettingsCard {
             Layout.fillWidth: true
-            headerText: i18n("Gaps")
-            collapsible: true
-
-            contentItem: Kirigami.FormLayout {
-                SettingsSpinBox {
-                    formLabel: i18n("Inner gap:")
-                    from: settingsController.autotileGapMin
-                    to: root.gapMax
-                    value: root.settingValue("InnerGap", appSettings.autotileInnerGap)
-                    tooltipText: i18n("Gap between tiled windows")
-                    onValueModified: (value) => {
-                        return root.writeSetting("InnerGap", value, function(v) {
-                            appSettings.autotileInnerGap = v;
-                        });
-                    }
-                }
-
-                RowLayout {
-                    Kirigami.FormData.label: i18n("Outer gap:")
-                    spacing: Kirigami.Units.smallSpacing
-
-                    SpinBox {
-                        id: outerGapSpinBox
-
-                        from: 0
-                        to: root.gapMax
-                        enabled: !tilePerSideCheck.checked
-                        onValueModified: root.writeSetting("OuterGap", value, function(v) {
-                            appSettings.autotileOuterGap = v;
-                        })
-                        Accessible.name: i18n("Outer gap")
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("Gap from screen edges")
-
-                        Binding on value {
-                            value: root.settingValue("OuterGap", appSettings.autotileOuterGap)
-                            when: !outerGapSpinBox.activeFocus
-                            restoreMode: Binding.RestoreNone
-                        }
-
-                    }
-
-                    Label {
-                        text: i18n("px")
-                        visible: !tilePerSideCheck.checked
-                    }
-
-                    CheckBox {
-                        id: tilePerSideCheck
-
-                        text: i18n("Set per side")
-                        checked: root.settingValue("UsePerSideOuterGap", appSettings.autotileUsePerSideOuterGap)
-                        onToggled: root.writeSetting("UsePerSideOuterGap", checked, function(v) {
-                            appSettings.autotileUsePerSideOuterGap = v;
-                        })
-                        Accessible.name: i18n("Set gaps per side")
-                    }
-
-                }
-
-                GridLayout {
-                    Kirigami.FormData.label: i18n("Per-side gaps:")
-                    visible: tilePerSideCheck.checked
-                    columns: 6
-                    columnSpacing: Kirigami.Units.smallSpacing
-                    rowSpacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: i18n("Top:")
-                    }
-
-                    SpinBox {
-                        id: topGapSpinBox
-
-                        from: 0
-                        to: root.gapMax
-                        onValueModified: root.writeSetting("OuterGapTop", value, function(v) {
-                            appSettings.autotileOuterGapTop = v;
-                        })
-                        Accessible.name: i18n("Top gap")
-
-                        Binding on value {
-                            value: root.settingValue("OuterGapTop", appSettings.autotileOuterGapTop)
-                            when: !topGapSpinBox.activeFocus
-                            restoreMode: Binding.RestoreNone
-                        }
-
-                    }
-
-                    Label {
-                        text: i18nc("@label", "px")
-                    }
-
-                    Label {
-                        text: i18n("Bottom:")
-                    }
-
-                    SpinBox {
-                        id: bottomGapSpinBox
-
-                        from: 0
-                        to: root.gapMax
-                        onValueModified: root.writeSetting("OuterGapBottom", value, function(v) {
-                            appSettings.autotileOuterGapBottom = v;
-                        })
-                        Accessible.name: i18n("Bottom gap")
-
-                        Binding on value {
-                            value: root.settingValue("OuterGapBottom", appSettings.autotileOuterGapBottom)
-                            when: !bottomGapSpinBox.activeFocus
-                            restoreMode: Binding.RestoreNone
-                        }
-
-                    }
-
-                    Label {
-                        text: i18nc("@label", "px")
-                    }
-
-                    Label {
-                        text: i18n("Left:")
-                    }
-
-                    SpinBox {
-                        id: leftGapSpinBox
-
-                        from: 0
-                        to: root.gapMax
-                        onValueModified: root.writeSetting("OuterGapLeft", value, function(v) {
-                            appSettings.autotileOuterGapLeft = v;
-                        })
-                        Accessible.name: i18n("Left gap")
-
-                        Binding on value {
-                            value: root.settingValue("OuterGapLeft", appSettings.autotileOuterGapLeft)
-                            when: !leftGapSpinBox.activeFocus
-                            restoreMode: Binding.RestoreNone
-                        }
-
-                    }
-
-                    Label {
-                        text: i18nc("@label", "px")
-                    }
-
-                    Label {
-                        text: i18n("Right:")
-                    }
-
-                    SpinBox {
-                        id: rightGapSpinBox
-
-                        from: 0
-                        to: root.gapMax
-                        onValueModified: root.writeSetting("OuterGapRight", value, function(v) {
-                            appSettings.autotileOuterGapRight = v;
-                        })
-                        Accessible.name: i18n("Right gap")
-
-                        Binding on value {
-                            value: root.settingValue("OuterGapRight", appSettings.autotileOuterGapRight)
-                            when: !rightGapSpinBox.activeFocus
-                            restoreMode: Binding.RestoreNone
-                        }
-
-                    }
-
-                    Label {
-                        text: i18nc("@label", "px")
-                    }
-
-                }
-
-                CheckBox {
-                    Kirigami.FormData.label: i18n("Smart gaps:")
-                    text: i18n("Hide gaps when only one window is tiled")
-                    checked: root.settingValue("SmartGaps", appSettings.autotileSmartGaps)
-                    onToggled: root.writeSetting("SmartGaps", checked, function(v) {
-                        appSettings.autotileSmartGaps = v;
-                    })
-                    Accessible.name: i18n("Smart gaps")
-                }
-
+            gapMax: root.gapMax
+            gapMin: settingsController.autotileGapMin
+            innerGapValue: root.settingValue("InnerGap", appSettings.autotileInnerGap)
+            outerGapValue: root.settingValue("OuterGap", appSettings.autotileOuterGap)
+            usePerSideOuterGap: root.settingValue("UsePerSideOuterGap", appSettings.autotileUsePerSideOuterGap)
+            smartGapsValue: root.settingValue("SmartGaps", appSettings.autotileSmartGaps)
+            outerGapTopValue: root.settingValue("OuterGapTop", appSettings.autotileOuterGapTop)
+            outerGapBottomValue: root.settingValue("OuterGapBottom", appSettings.autotileOuterGapBottom)
+            outerGapLeftValue: root.settingValue("OuterGapLeft", appSettings.autotileOuterGapLeft)
+            outerGapRightValue: root.settingValue("OuterGapRight", appSettings.autotileOuterGapRight)
+            onInnerGapModified: (value) => {
+                return root.writeSetting("InnerGap", value, function(v) {
+                    appSettings.autotileInnerGap = v;
+                });
             }
-
+            onOuterGapModified: (value) => {
+                return root.writeSetting("OuterGap", value, function(v) {
+                    appSettings.autotileOuterGap = v;
+                });
+            }
+            onUsePerSideOuterGapToggled: (checked) => {
+                return root.writeSetting("UsePerSideOuterGap", checked, function(v) {
+                    appSettings.autotileUsePerSideOuterGap = v;
+                });
+            }
+            onOuterGapTopModified: (value) => {
+                return root.writeSetting("OuterGapTop", value, function(v) {
+                    appSettings.autotileOuterGapTop = v;
+                });
+            }
+            onOuterGapBottomModified: (value) => {
+                return root.writeSetting("OuterGapBottom", value, function(v) {
+                    appSettings.autotileOuterGapBottom = v;
+                });
+            }
+            onOuterGapLeftModified: (value) => {
+                return root.writeSetting("OuterGapLeft", value, function(v) {
+                    appSettings.autotileOuterGapLeft = v;
+                });
+            }
+            onOuterGapRightModified: (value) => {
+                return root.writeSetting("OuterGapRight", value, function(v) {
+                    appSettings.autotileOuterGapRight = v;
+                });
+            }
+            onSmartGapsToggled: (checked) => {
+                return root.writeSetting("SmartGaps", checked, function(v) {
+                    appSettings.autotileSmartGaps = v;
+                });
+            }
         }
 
         // =================================================================

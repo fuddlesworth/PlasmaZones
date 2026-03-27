@@ -81,6 +81,7 @@ qt_add_qml_module(plasmazones-settings
         qml/EasingPreview.qml
         qml/EasingSettings.qml
         qml/SettingsCard.qml
+        qml/GapsSettingsCard.qml
         qml/OsdCard.qml
         qml/ShortcutCaptureField.qml
         qml/ModifierComboBox.qml

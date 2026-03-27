@@ -6,6 +6,7 @@
 #include "ScriptedAlgorithm.h"
 #include "core/logging.h"
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QSet>
@@ -78,6 +79,9 @@ void ScriptedAlgorithmLoader::ensureUserDirectoryExists()
     QDir dir(dirPath);
     if (!dir.exists()) {
         if (dir.mkpath(QStringLiteral("."))) {
+            // B6: Restrict user algorithm directory to owner-only access (0700)
+            QFile::setPermissions(dir.absolutePath(),
+                                  QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
             qCInfo(lcAutotile) << "Created user algorithm directory:" << dir.absolutePath();
         } else {
             qCWarning(lcAutotile) << "Failed to create user algorithm directory:" << dir.absolutePath();

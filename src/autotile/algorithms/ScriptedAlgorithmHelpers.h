@@ -54,6 +54,14 @@ QString lShapeHelperJs();
 QString deckHelperJs();
 
 /**
+ * @brief JS source for the distributeEvenly(start, total, count, gap) built-in helper
+ *
+ * Returns an array of {pos, size} objects distributing items evenly with
+ * the last item filling the remainder to avoid rounding gaps.
+ */
+QString distributeEvenlyHelperJs();
+
+/**
  * @brief Convert a JS array of {x, y, width, height} objects to QRects
  * @param result JS value (should be an array)
  * @param scriptId Script identifier for warning messages
@@ -63,7 +71,7 @@ QString deckHelperJs();
 QVector<QRect> jsArrayToRects(const QJSValue& result, const QString& scriptId, int maxZones);
 
 /**
- * @brief Clamp zones to the given area, discarding any that fall entirely outside
+ * @brief Clamp zones to the given area, using full area as fallback for zones entirely outside
  * @param zones Input zones from JS
  * @param area Bounding area to clamp to
  * @param scriptId Script identifier for warning messages

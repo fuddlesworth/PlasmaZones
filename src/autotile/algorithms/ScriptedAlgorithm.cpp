@@ -140,18 +140,8 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_cachedSupportsMasterCount = false;
     m_cachedSupportsSplitRatio = false;
     m_cachedProducesOverlappingZones = false;
-    m_name.clear();
-    m_description.clear();
-    m_zoneNumberDisplay.clear();
-    m_producesOverlappingZones = false;
-    m_supportsMasterCount = false;
-    m_supportsSplitRatio = false;
-    m_supportsMemory = false;
-    m_centerLayout = false;
-    m_defaultSplitRatio = 0.0;
-    m_defaultMaxWindows = 0;
-    m_minimumWindows = 0;
-    m_masterZoneIndex = -1;
+    // D3: Reset consolidated metadata struct
+    m_metadata = ScriptedHelpers::ScriptMetadata{};
 
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -175,25 +165,14 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         return false;
     }
 
-    // M3: Parse metadata via helper
-    const auto meta = ScriptedHelpers::parseMetadata(source, filePath);
-    m_name = meta.name;
-    m_description = meta.description;
-    m_zoneNumberDisplay = meta.zoneNumberDisplay;
-    m_defaultSplitRatio = meta.defaultSplitRatio;
-    m_defaultMaxWindows = meta.defaultMaxWindows;
-    m_minimumWindows = meta.minimumWindows;
-    m_masterZoneIndex = meta.masterZoneIndex;
-    m_supportsMasterCount = meta.supportsMasterCount;
-    m_supportsSplitRatio = meta.supportsSplitRatio;
-    m_supportsMemory = meta.supportsMemory;
-    m_producesOverlappingZones = meta.producesOverlappingZones;
-    m_centerLayout = meta.centerLayout;
+    // M3: Parse metadata via helper — D3: single struct assignment
+    m_metadata = ScriptedHelpers::parseMetadata(source, filePath);
 
     // M3: Inject built-in helpers from ScriptedAlgorithmHelpers
     m_engine->evaluate(ScriptedHelpers::treeHelperJs(), QStringLiteral("builtin:applyTreeGeometry"));
     m_engine->evaluate(ScriptedHelpers::lShapeHelperJs(), QStringLiteral("builtin:lShapeLayout"));
     m_engine->evaluate(ScriptedHelpers::deckHelperJs(), QStringLiteral("builtin:deckLayout"));
+    m_engine->evaluate(ScriptedHelpers::distributeEvenlyHelperJs(), QStringLiteral("builtin:distributeEvenly"));
 
     // m2: Extract Object.defineProperty freeze pattern into a lambda
     auto freezeGlobal = [this](const char* name) {
@@ -203,6 +182,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     freezeGlobal("applyTreeGeometry");
     freezeGlobal("lShapeLayout");
     freezeGlobal("deckLayout");
+    freezeGlobal("distributeEvenly");
 
     // H2: Disable eval() and Function constructor to prevent dynamic code generation
     m_engine->globalObject().deleteProperty(QStringLiteral("eval"));
@@ -226,8 +206,42 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
                        "})();"
                        "Object.freeze(Object.prototype);Object.freeze(Array.prototype);"));
 
+    // B4: Disable Proxy, Reflect, WeakRef, and FinalizationRegistry to prevent sandbox bypass
+    {
+        QJSValue global = m_engine->globalObject();
+        QJSValue freezeObj = m_engine->evaluate(QStringLiteral("Object.freeze"));
+        for (const auto& name : {QLatin1String("Proxy"), QLatin1String("Reflect"), QLatin1String("WeakRef"),
+                                 QLatin1String("FinalizationRegistry")}) {
+            QJSValue val = global.property(name);
+            if (!val.isUndefined()) {
+                freezeObj.call({val});
+            }
+            m_engine->evaluate(
+                QStringLiteral(
+                    "Object.defineProperty(this, '%1', {value: undefined, writable: false, configurable: false});")
+                    .arg(name));
+        }
+    }
+
+    // B3: Arm the watchdog before evaluating user script to prevent hangs at load time
+    ++(m_watchdog->generation);
+    {
+        std::lock_guard<std::mutex> lock(m_watchdog->mutex);
+        m_watchdog->pending = true;
+    }
+    m_watchdog->cv.notify_one();
+
     // Evaluate the user script
     const QJSValue result = m_engine->evaluate(source, filePath);
+
+    // B3: Cancel any in-flight watchdog after evaluate completes
+    ++(m_watchdog->generation);
+    if (m_engine->isInterrupted()) {
+        m_engine->setInterrupted(false);
+        m_engine->collectGarbage();
+        qCWarning(lcAutotile) << "ScriptedAlgorithm: script timed out during evaluate, file=" << filePath;
+        return false;
+    }
     if (result.isError()) {
         qCWarning(lcAutotile) << "ScriptedAlgorithm: evaluation error file=" << filePath
                               << "line=" << result.property(QStringLiteral("lineNumber")).toInt()
@@ -267,6 +281,9 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     return true;
 }
 
+// L1: calculateZones() is NOT reentrant — it mutates mutable QJSEngine state
+// (params object, watchdog generation, interrupt flag). All calls must be serialized
+// on the owning thread.
 QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) const
 {
     // C1: Runtime thread guard — QJSEngine is not thread-safe
@@ -367,7 +384,12 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
 
     // M3: Delegate to helpers for array conversion and bounds clamping
     const QVector<QRect> zones = ScriptedHelpers::jsArrayToRects(result, m_scriptId, MaxZones);
-    return ScriptedHelpers::clampZonesToArea(zones, area, m_scriptId);
+    const QVector<QRect> clamped = ScriptedHelpers::clampZonesToArea(zones, area, m_scriptId);
+
+    // B5: Collect garbage on the success path (already done on timeout path above)
+    m_engine->collectGarbage();
+
+    return clamped;
 }
 
 QJSValue ScriptedAlgorithm::splitNodeToJSValue(const SplitNode* node, int depth) const
@@ -397,8 +419,8 @@ QJSValue ScriptedAlgorithm::splitNodeToJSValue(const SplitNode* node, int depth)
 
 QString ScriptedAlgorithm::name() const
 {
-    if (!m_name.isEmpty()) {
-        return m_name;
+    if (!m_metadata.name.isEmpty()) {
+        return m_metadata.name;
     }
     // Fall back to basename (strip "script:" prefix) with first letter capitalized
     if (!m_scriptId.isEmpty()) {
@@ -416,8 +438,8 @@ QString ScriptedAlgorithm::name() const
 
 QString ScriptedAlgorithm::description() const
 {
-    if (!m_description.isEmpty()) {
-        return m_description;
+    if (!m_metadata.description.isEmpty()) {
+        return m_metadata.description;
     }
     return PzI18n::tr("User-provided scripted tiling algorithm");
 }
@@ -425,23 +447,25 @@ QString ScriptedAlgorithm::description() const
 int ScriptedAlgorithm::masterZoneIndex() const
 {
     // H2: Unified three-tier resolution via template helper
-    return resolveJsOverride<int>(m_jsMasterZoneIndex, m_cachedMasterZoneIndex, m_masterZoneIndex);
+    return resolveJsOverride<int>(m_jsMasterZoneIndex, m_cachedMasterZoneIndex, m_metadata.masterZoneIndex);
 }
 
 bool ScriptedAlgorithm::supportsMasterCount() const
 {
-    return resolveJsOverride<bool>(m_jsSupportsMasterCount, m_cachedSupportsMasterCount, m_supportsMasterCount);
+    return resolveJsOverride<bool>(m_jsSupportsMasterCount, m_cachedSupportsMasterCount,
+                                   m_metadata.supportsMasterCount);
 }
 
 bool ScriptedAlgorithm::supportsSplitRatio() const
 {
-    return resolveJsOverride<bool>(m_jsSupportsSplitRatio, m_cachedSupportsSplitRatio, m_supportsSplitRatio);
+    return resolveJsOverride<bool>(m_jsSupportsSplitRatio, m_cachedSupportsSplitRatio, m_metadata.supportsSplitRatio);
 }
 
 qreal ScriptedAlgorithm::defaultSplitRatio() const
 {
     // DRY-5: Use resolveJsOverrideClamped to unify clamped resolution
-    const qreal fallback = (m_defaultSplitRatio > 0.0) ? m_defaultSplitRatio : TilingAlgorithm::defaultSplitRatio();
+    const qreal fallback =
+        (m_metadata.defaultSplitRatio > 0.0) ? m_metadata.defaultSplitRatio : TilingAlgorithm::defaultSplitRatio();
     return resolveJsOverrideClamped<qreal>(m_jsDefaultSplitRatio, m_cachedDefaultSplitRatio, fallback, MinSplitRatio,
                                            MaxSplitRatio);
 }
@@ -449,39 +473,43 @@ qreal ScriptedAlgorithm::defaultSplitRatio() const
 int ScriptedAlgorithm::minimumWindows() const
 {
     // DRY-5: Use resolveJsOverrideClamped to unify clamped resolution
-    const int fallback = (m_minimumWindows > 0) ? m_minimumWindows : TilingAlgorithm::minimumWindows();
-    return resolveJsOverrideClamped<int>(m_jsMinimumWindows, m_cachedMinimumWindows, fallback, 1, 100);
+    const int fallback =
+        (m_metadata.minimumWindows > 0) ? m_metadata.minimumWindows : TilingAlgorithm::minimumWindows();
+    return resolveJsOverrideClamped<int>(m_jsMinimumWindows, m_cachedMinimumWindows, fallback, MinMetadataWindows,
+                                         MaxMetadataWindows);
 }
 
 int ScriptedAlgorithm::defaultMaxWindows() const
 {
     // DRY-5: Use resolveJsOverrideClamped to unify clamped resolution
-    const int fallback = (m_defaultMaxWindows > 0) ? m_defaultMaxWindows : TilingAlgorithm::defaultMaxWindows();
-    return resolveJsOverrideClamped<int>(m_jsDefaultMaxWindows, m_cachedDefaultMaxWindows, fallback, 1, 100);
+    const int fallback =
+        (m_metadata.defaultMaxWindows > 0) ? m_metadata.defaultMaxWindows : TilingAlgorithm::defaultMaxWindows();
+    return resolveJsOverrideClamped<int>(m_jsDefaultMaxWindows, m_cachedDefaultMaxWindows, fallback, MinMetadataWindows,
+                                         MaxMetadataWindows);
 }
 
 bool ScriptedAlgorithm::producesOverlappingZones() const
 {
     return resolveJsOverride<bool>(m_jsProducesOverlappingZones, m_cachedProducesOverlappingZones,
-                                   m_producesOverlappingZones);
+                                   m_metadata.producesOverlappingZones);
 }
 
 bool ScriptedAlgorithm::supportsMemory() const noexcept
 {
-    return m_supportsMemory;
+    return m_metadata.supportsMemory;
 }
 
 QString ScriptedAlgorithm::zoneNumberDisplay() const noexcept
 {
-    if (!m_zoneNumberDisplay.isEmpty()) {
-        return m_zoneNumberDisplay;
+    if (!m_metadata.zoneNumberDisplay.isEmpty()) {
+        return m_metadata.zoneNumberDisplay;
     }
     return TilingAlgorithm::zoneNumberDisplay();
 }
 
 bool ScriptedAlgorithm::centerLayout() const noexcept
 {
-    return m_centerLayout;
+    return m_metadata.centerLayout;
 }
 
 bool ScriptedAlgorithm::isScripted() const noexcept

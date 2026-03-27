@@ -40,12 +40,12 @@ AutotileConfig::InsertPosition stringToInsertPosition(const QString& str)
 }
 } // anonymous namespace
 
-QHash<QString, QPair<qreal, int>> AutotileConfig::perAlgoFromVariantMap(const QVariantMap& map)
+QHash<QString, AlgorithmSettings> AutotileConfig::perAlgoFromVariantMap(const QVariantMap& map)
 {
     static const QRegularExpression validAlgoId(QStringLiteral("^[a-zA-Z0-9_:/-]+$"));
     static constexpr int MaxEntries = 100;
 
-    QHash<QString, QPair<qreal, int>> result;
+    QHash<QString, AlgorithmSettings> result;
     int count = 0;
     for (auto it = map.constBegin(); it != map.constEnd() && count < MaxEntries; ++it, ++count) {
         if (!validAlgoId.match(it.key()).hasMatch())
@@ -62,13 +62,13 @@ QHash<QString, QPair<qreal, int>> AutotileConfig::perAlgoFromVariantMap(const QV
     return result;
 }
 
-QVariantMap AutotileConfig::perAlgoToVariantMap(const QHash<QString, QPair<qreal, int>>& hash)
+QVariantMap AutotileConfig::perAlgoToVariantMap(const QHash<QString, AlgorithmSettings>& hash)
 {
     QVariantMap result;
     for (auto it = hash.constBegin(); it != hash.constEnd(); ++it) {
         QVariantMap entry;
-        entry[PerAlgoKeys::SplitRatio] = it.value().first;
-        entry[PerAlgoKeys::MasterCount] = it.value().second;
+        entry[PerAlgoKeys::SplitRatio] = it.value().splitRatio;
+        entry[PerAlgoKeys::MasterCount] = it.value().masterCount;
         result[it.key()] = entry;
     }
     return result;

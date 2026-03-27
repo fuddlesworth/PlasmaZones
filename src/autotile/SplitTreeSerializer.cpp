@@ -11,8 +11,9 @@
 
 #include <algorithm>
 
-using namespace PlasmaZones;
-using namespace PlasmaZones::AutotileDefaults;
+namespace PlasmaZones {
+
+using namespace AutotileDefaults;
 
 // =============================================================================
 // Serialization (implementations of SplitTree member functions)
@@ -111,3 +112,5 @@ std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, Spli
 
     return node;
 }
+
+} // namespace PlasmaZones

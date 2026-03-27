@@ -7,11 +7,23 @@
 #include <QColor>
 #include <QHash>
 #include <QJsonObject>
-#include <QPair>
 #include <QString>
 #include <QVariantMap>
 
 namespace PlasmaZones {
+
+/**
+ * @brief Per-algorithm saved settings (split ratio + master count)
+ *
+ * Replaces AlgorithmSettings for clarity. Saved when switching away
+ * from an algorithm, restored when switching back.
+ */
+struct AlgorithmSettings
+{
+    qreal splitRatio = 0.5;
+    int masterCount = 1;
+    bool operator==(const AlgorithmSettings&) const = default;
+};
 
 /**
  * @brief Configuration for autotiling behavior
@@ -63,12 +75,12 @@ struct PLASMAZONES_EXPORT AutotileConfig
     /// Per-algorithm saved settings (split ratio + master count).
     /// Saved when switching away from an algorithm, restored when switching back.
     /// Key: algorithm ID (e.g. "master-stack", "centered-master", "script:deck")
-    QHash<QString, QPair<qreal, int>> savedAlgorithmSettings;
+    QHash<QString, AlgorithmSettings> savedAlgorithmSettings;
 
     /// Convert per-algorithm settings from QVariantMap (Settings layer) to internal hash
-    static QHash<QString, QPair<qreal, int>> perAlgoFromVariantMap(const QVariantMap& map);
+    static QHash<QString, AlgorithmSettings> perAlgoFromVariantMap(const QVariantMap& map);
     /// Convert internal hash to QVariantMap for the Settings layer
-    static QVariantMap perAlgoToVariantMap(const QHash<QString, QPair<qreal, int>>& hash);
+    static QVariantMap perAlgoToVariantMap(const QHash<QString, AlgorithmSettings>& hash);
 
     // ═══════════════════════════════════════════════════════════════════════
     // Gap Settings

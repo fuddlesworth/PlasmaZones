@@ -133,6 +133,7 @@ set(plasmazones_core_SRCS
     autotile/TilingStateSerialization.cpp
     autotile/TilingState.h
     autotile/SplitTree.cpp
+    autotile/SplitTreeRebuild.cpp
     autotile/SplitTreeSerializer.cpp
     autotile/SplitTree.h
     autotile/AlgorithmRegistry.cpp

@@ -45,8 +45,15 @@ function calculateZones(params) {
 
     // Degenerate case: gaps consume all available height
     if (area.height - gap * (rows - 1) <= 0) {
-        return [{ x: area.x, y: area.y, width: area.width, height: area.height }];
+        var fallback = [];
+        for (var i = 0; i < count; i++) {
+            fallback.push({ x: area.x, y: area.y, width: area.width, height: area.height });
+        }
+        return fallback;
     }
+
+    var EVEN_ROW_RATIO = 0.55; // Offset to prevent four-corner intersections
+    var ODD_ROW_RATIO = 0.45;
 
     for (let row = 0; row < rows; row++) {
         const y = area.y + row * (rowHeight + gap);
@@ -58,8 +65,8 @@ function calculateZones(params) {
             zones.push({ x: area.x, y: y, width: area.width, height: h });
         } else {
             // Offset the split point to prevent four-corner intersections.
-            // Even rows split at 55%, odd rows split at 45%.
-            const ratio = (row % 2 === 0) ? 0.55 : 0.45;
+            // Even rows split at EVEN_ROW_RATIO, odd rows split at ODD_ROW_RATIO.
+            const ratio = (row % 2 === 0) ? EVEN_ROW_RATIO : ODD_ROW_RATIO;
             const leftW = Math.max(1, Math.round((area.width - gap) * ratio));
             const rightW = Math.max(1, area.width - gap - leftW);
 
