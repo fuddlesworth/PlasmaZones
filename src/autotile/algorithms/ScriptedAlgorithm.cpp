@@ -127,18 +127,21 @@ QJSValue ScriptedAlgorithm::guardedCall(const std::function<QJSValue()>& fn) con
     // Execute the guarded operation
     const QJSValue result = fn();
 
-    // Disarm the watchdog by advancing generation and atomically check for timeout
-    // (reading isInterrupted inside the lock prevents a TOCTOU race with the watchdog thread)
+    // Disarm the watchdog by advancing generation and atomically check for timeout.
+    // C2: setInterrupted(false) and collectGarbage() MUST be inside the lock to prevent
+    // the watchdog thread from firing between unlock and the clear.
     bool wasInterrupted;
     {
         std::lock_guard<std::mutex> lock(m_watchdog->mutex);
         ++(m_watchdog->generation);
         wasInterrupted = m_engine->isInterrupted();
+        if (wasInterrupted) {
+            m_engine->setInterrupted(false);
+            m_engine->collectGarbage();
+        }
     }
 
     if (wasInterrupted) {
-        m_engine->setInterrupted(false);
-        m_engine->collectGarbage();
         // M2: Signal timeout via flag instead of evaluating JS on a just-interrupted engine
         m_lastCallTimedOut = true;
         return QJSValue(QStringLiteral("Script execution timed out"));
@@ -229,7 +232,8 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // M3: Freeze helper globals so user scripts cannot overwrite them.
     // This must happen after injection since hardenSandbox's freezeGlobal calls
     // ran before the helpers existed.
-    for (const char* helperName : {"applyTreeGeometry", "lShapeLayout", "deckLayout", "distributeEvenly"}) {
+    for (const auto& helperName : {QLatin1String("applyTreeGeometry"), QLatin1String("lShapeLayout"),
+                                   QLatin1String("deckLayout"), QLatin1String("distributeEvenly")}) {
         m_engine->evaluate(QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});")
                                .arg(QLatin1String(helperName)));
     }

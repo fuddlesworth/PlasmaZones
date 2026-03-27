@@ -265,16 +265,20 @@ Flickable {
                             root.writeSetting("Algorithm", selectedId, function(v) {
                                 appSettings.autotileAlgorithm = v;
                             });
-                            // Reset maxWindows to the new algorithm's default
-                            if (root.algoCapabilities) {
-                                var newDefault = root.algoCapabilities.defaultMaxWindows || 6;
-                                if (previewWindowSlider) {
-                                    previewWindowSlider.slider.value = newDefault;
-                                    root.writeSetting("MaxWindows", newDefault, function(v) {
-                                        appSettings.autotileMaxWindows = v;
-                                    });
+                            // Reset maxWindows to the new algorithm's default.
+                            // Use Qt.callLater so algoCapabilities binding has
+                            // re-evaluated with the newly selected algorithm.
+                            Qt.callLater(function() {
+                                if (root.algoCapabilities) {
+                                    var newDefault = root.algoCapabilities.defaultMaxWindows || 6;
+                                    if (previewWindowSlider) {
+                                        previewWindowSlider.slider.value = newDefault;
+                                        root.writeSetting("MaxWindows", newDefault, function(v) {
+                                            appSettings.autotileMaxWindows = v;
+                                        });
+                                    }
                                 }
-                            }
+                            });
                         }
                     }
 

@@ -34,12 +34,23 @@ function calculateZones(params) {
         return [{ x: area.x, y: area.y, width: area.width, height: area.height }];
     }
 
+    // Degenerate case: gap consumes all available width — fall back to stacking
+    if (gap >= area.width || gap >= area.height) {
+        const fallback = [];
+        for (let i = 0; i < count; i++) {
+            fallback.push({ x: area.x, y: area.y, width: area.width, height: area.height });
+        }
+        return fallback;
+    }
+
     // Two windows: simple vertical split at 50%
     if (count === 2) {
-        const halfW = Math.round((area.width - gap) / 2);
+        const halfW = Math.max(1, Math.round((area.width - gap) / 2));
+        const secondW = Math.max(1, area.width - halfW - gap);
+        const secondX = Math.min(area.x + halfW + gap, area.x + area.width - 1);
         return [
             { x: area.x, y: area.y, width: halfW, height: area.height },
-            { x: area.x + halfW + gap, y: area.y, width: area.width - halfW - gap, height: area.height }
+            { x: secondX, y: area.y, width: secondW, height: area.height }
         ];
     }
 

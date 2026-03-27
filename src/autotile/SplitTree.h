@@ -220,8 +220,10 @@ private:
         Done,
         Rejected
     };
-    /// Maximum runtime tree depth for insert operations and recursion guards
-    static constexpr int MaxRuntimeTreeDepth = 50;
+    /// Maximum runtime tree depth for insert operations and recursion guards.
+    /// IMPORTANT: Must stay in sync with MaxDeserializationDepth — a tree built at
+    /// runtime must always be serializable without silent truncation.
+    static constexpr int MaxRuntimeTreeDepth = 30;
 
     InsertReady prepareInsert(const QString& windowId);
 

@@ -476,11 +476,36 @@ private Q_SLOTS:
 
         TilingState state(QStringLiteral("test"));
 
-        for (int n = 1; n <= 4; ++n) {
+        // Test window counts 1..6 with no gap
+        for (int n = 1; n <= 6; ++n) {
             auto zones = algo.calculateZones({n, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
             QVERIFY2(zones.size() >= 1 && zones.size() <= n,
-                     qPrintable(
-                         QStringLiteral("Expected 1-%1 zones, got %2 for %3").arg(n).arg(zones.size()).arg(filename)));
+                     qPrintable(QStringLiteral("Expected 1-%1 zones, got %2 for %3 (gap=0)")
+                                    .arg(n)
+                                    .arg(zones.size())
+                                    .arg(filename)));
+            verifyAllZonesPositive(zones);
+        }
+
+        // Test window counts 1..6 with moderate gap (innerGap = 10)
+        for (int n = 1; n <= 6; ++n) {
+            auto zones = algo.calculateZones({n, m_screenGeometry, &state, 10, EdgeGaps::uniform(0)});
+            QVERIFY2(zones.size() >= 1 && zones.size() <= n,
+                     qPrintable(QStringLiteral("Expected 1-%1 zones, got %2 for %3 (gap=10)")
+                                    .arg(n)
+                                    .arg(zones.size())
+                                    .arg(filename)));
+            verifyAllZonesPositive(zones);
+        }
+
+        // Degenerate gap stress: gap larger than screen dimensions
+        for (int n = 1; n <= 4; ++n) {
+            auto zones = algo.calculateZones({n, m_screenGeometry, &state, 2000, EdgeGaps::uniform(0)});
+            QVERIFY2(zones.size() >= 1 && zones.size() <= n,
+                     qPrintable(QStringLiteral("Expected 1-%1 zones, got %2 for %3 (gap=2000)")
+                                    .arg(n)
+                                    .arg(zones.size())
+                                    .arg(filename)));
             verifyAllZonesPositive(zones);
         }
     }

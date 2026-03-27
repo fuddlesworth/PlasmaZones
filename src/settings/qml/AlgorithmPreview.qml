@@ -32,10 +32,12 @@ Item {
     // when multiple properties change in the same frame
     property var zones: []
     property string zoneNumberDisplay: "all"
+    // Cache availableAlgorithms() to avoid calling it on every binding evaluation
+    property var _cachedAlgos: root.appSettings ? root.appSettings.availableAlgorithms() : []
     // Computed once at the root level (not per-delegate) to avoid N redundant
     // C++ calls inside the Repeater delegate.
     readonly property bool _currentAlgoSupportsMasterCount: {
-        var algos = root.appSettings.availableAlgorithms();
+        var algos = root._cachedAlgos;
         for (var i = 0; i < algos.length; i++) {
             if (algos[i].id === root.algorithmId && algos[i].supportsMasterCount)
                 return true;
@@ -61,6 +63,14 @@ Item {
     onMasterCountChanged: recalcTimer.restart()
     Component.onCompleted: recalcTimer.start()
 
+    Connections {
+        function onAvailableAlgorithmsChanged() {
+            root._cachedAlgos = root.appSettings.availableAlgorithms();
+        }
+
+        target: root.appSettings
+    }
+
     Timer {
         id: recalcTimer
 
@@ -70,6 +80,8 @@ Item {
 
     // Render using shared ZonePreview (same component used in LayoutComboBox dropdowns)
     QFZCommon.ZonePreview {
+        id: zonePreview
+
         anchors.fill: parent
         zones: root.zones
         isHovered: true
@@ -90,10 +102,16 @@ Item {
         Rectangle {
             required property var modelData
             required property int index
+            // Position relative to ZonePreview, accounting for its internal zone padding/edgeGap offsets.
+            // Edge zones get edgeGap offset, non-edge zones get zonePadding/2.
+            readonly property real relX: (modelData.relativeGeometry && modelData.relativeGeometry.x) || 0
+            readonly property real relY: (modelData.relativeGeometry && modelData.relativeGeometry.y) || 0
+            readonly property real leftOffset: relX < 0.01 ? zonePreview.edgeGap : zonePreview.zonePadding / 2
+            readonly property real topOffset: relY < 0.01 ? zonePreview.edgeGap : zonePreview.zonePadding / 2
 
             visible: root.appSettings && root.appSettings.generateAlgorithmPreview && root.algorithmId !== "" && index < root.masterCount && root._currentAlgoSupportsMasterCount
-            x: ((modelData.relativeGeometry && modelData.relativeGeometry.x) || 0) * root.width + Kirigami.Units.smallSpacing
-            y: ((modelData.relativeGeometry && modelData.relativeGeometry.y) || 0) * root.height + Kirigami.Units.smallSpacing
+            x: zonePreview.x + relX * zonePreview.width + leftOffset + Kirigami.Units.smallSpacing
+            y: zonePreview.y + relY * zonePreview.height + topOffset + Kirigami.Units.smallSpacing
             width: Kirigami.Units.smallSpacing * 2
             height: Kirigami.Units.smallSpacing * 2
             radius: Kirigami.Units.smallSpacing

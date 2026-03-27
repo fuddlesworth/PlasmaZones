@@ -369,6 +369,8 @@ void SplitTree::applyGeometryRecursive(const SplitNode* node, const QRect& rect,
         }
 
         const int firstSize = std::max(1, static_cast<int>(contentSize * ratio));
+        // Derive secondSize from contentSize so firstSize + secondSize == contentSize exactly,
+        // avoiding pixel loss from independent truncation of both values.
         const int secondSize = std::max(1, contentSize - firstSize);
         const QRect firstRect = makeFirstRect(firstSize);
         const QRect secondRect = makeSecondRect(firstSize, secondSize);

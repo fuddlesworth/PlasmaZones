@@ -133,6 +133,16 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
         }
     }
 
+    // M5: Also detect newly added or updated scripts (not just removals)
+    if (!changed) {
+        for (const QString& id : std::as_const(newScriptIds)) {
+            if (!oldScriptIdToPath.contains(id) || oldScriptIdToPath.value(id) != m_scriptIdToPath.value(id)) {
+                changed = true;
+                break;
+            }
+        }
+    }
+
     qCInfo(lcAutotile) << "Scripted algorithms loaded:" << m_scriptIdToPath.size() << "changed=" << changed;
     // M-5: Always emit — the signal is cheap (listeners just refresh their model)
     // and content-only edits (same IDs/paths but different script body) would
@@ -292,7 +302,15 @@ void ScriptedAlgorithmLoader::reWatchFiles()
             continue;
         QDir dirObj(dir);
         const QStringList files = dirObj.entryList({QStringLiteral("*.js")}, QDir::Files | QDir::NoSymLinks);
+        // M6: Cap watched files per directory to match loadFromDirectory's limit
+        static constexpr int MaxWatchedFilesPerDir = 100;
+        int filesWatched = 0;
         for (const QString& file : files) {
+            if (filesWatched >= MaxWatchedFilesPerDir) {
+                qCWarning(lcAutotile) << "reWatchFiles: reached max file limit (" << MaxWatchedFilesPerDir
+                                      << ") for directory:" << dir << "— skipping remaining files";
+                break;
+            }
             const QString rawPath = dirObj.filePath(file);
             const QString fullPath = QFileInfo(rawPath).canonicalFilePath();
             if (fullPath.isEmpty())
@@ -304,6 +322,7 @@ void ScriptedAlgorithmLoader::reWatchFiles()
             if (!watchedFiles.contains(fullPath)) {
                 m_watcher->addPath(fullPath);
             }
+            ++filesWatched;
         }
     }
 }

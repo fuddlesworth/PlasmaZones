@@ -160,7 +160,8 @@ bool hardenSandbox(QJSEngine* engine)
 
     // S1: Strip dangerous QJSEngine-provided globals via defineProperty (not deleteProperty)
     // to prevent scripts from re-creating them (e.g., Qt.createQmlObject() escape)
-    // m-9: Also blocks import() as a forward-looking measure
+    // m-9: Also blocks the global `import` property. The `import()` syntax (dynamic import
+    // expression) is not supported by QJSEngine V4 and is thus not a concern.
     {
         for (const auto& name : {QLatin1String("Qt"), QLatin1String("qsTr"), QLatin1String("qsTrId"),
                                  QLatin1String("print"), QLatin1String("console"), QLatin1String("setTimeout"),

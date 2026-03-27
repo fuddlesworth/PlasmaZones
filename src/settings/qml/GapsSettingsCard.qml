@@ -51,7 +51,7 @@ SettingsCard {
             SpinBox {
                 id: outerGapSpinBox
 
-                from: 0
+                from: root.gapMin
                 to: root.gapMax
                 enabled: !tilePerSideCheck.checked
                 onValueModified: root.outerGapModified(value)
@@ -97,7 +97,7 @@ SettingsCard {
             SpinBox {
                 id: topGapSpinBox
 
-                from: 0
+                from: root.gapMin
                 to: root.gapMax
                 onValueModified: root.outerGapTopModified(value)
                 Accessible.name: i18n("Top gap")
@@ -121,7 +121,7 @@ SettingsCard {
             SpinBox {
                 id: bottomGapSpinBox
 
-                from: 0
+                from: root.gapMin
                 to: root.gapMax
                 onValueModified: root.outerGapBottomModified(value)
                 Accessible.name: i18n("Bottom gap")
@@ -145,7 +145,7 @@ SettingsCard {
             SpinBox {
                 id: leftGapSpinBox
 
-                from: 0
+                from: root.gapMin
                 to: root.gapMax
                 onValueModified: root.outerGapLeftModified(value)
                 Accessible.name: i18n("Left gap")
@@ -169,7 +169,7 @@ SettingsCard {
             SpinBox {
                 id: rightGapSpinBox
 
-                from: 0
+                from: root.gapMin
                 to: root.gapMax
                 onValueModified: root.outerGapRightModified(value)
                 Accessible.name: i18n("Right gap")

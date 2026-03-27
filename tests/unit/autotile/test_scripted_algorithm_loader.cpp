@@ -92,6 +92,21 @@ private Q_SLOTS:
                                    QStringLiteral("script:shared"), QStringLiteral("script:ephemeral")});
     }
 
+    /**
+     * @brief Per-test cleanup — prevent registry pollution between tests
+     *
+     * Qt Test calls cleanup() after each test function. We unregister all
+     * script:* algorithm IDs that any test might have registered so that
+     * one test's registrations never leak into the next.
+     */
+    void cleanup()
+    {
+        cleanupScriptedAlgorithms({QStringLiteral("script:gamma"), QStringLiteral("script:valid-name"),
+                                   QStringLiteral("script:shared"), QStringLiteral("script:ephemeral"),
+                                   QStringLiteral("script:has space"), QStringLiteral("script:has.dot"),
+                                   QStringLiteral("script:special!char")});
+    }
+
     // =========================================================================
     // scanAndRegister tests
     // =========================================================================

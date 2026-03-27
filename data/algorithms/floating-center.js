@@ -95,10 +95,6 @@ function calculateZones(params) {
     bottomCount += Math.ceil(extras / 2);
     topCount += Math.floor(extras / 2);
 
-    // Geometry boundaries
-    const hasTop = topCount > 0;
-    const hasBottom = bottomCount > 0;
-
     // Top/bottom panels span the full area width
     const topH = Math.max(1, marginY - gap);
     const bottomY = area.y + marginY + centerH + gap;
@@ -144,7 +140,7 @@ function calculateZones(params) {
     }
 
     // Bottom panel(s) — span the full area width
-    if (hasBottom) {
+    if (bottomCount > 0) {
         if (bottomH >= 1 && bottomY < area.y + area.height) {
             renderPanel(zones, area.x, bottomY, area.width, bottomH, bottomCount, gap, true);
         } else {
@@ -155,7 +151,7 @@ function calculateZones(params) {
     }
 
     // Top panel(s) — span the full area width
-    if (hasTop) {
+    if (topCount > 0) {
         if (topH >= 1) {
             renderPanel(zones, area.x, area.y, area.width, topH, topCount, gap, true);
         } else {

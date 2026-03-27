@@ -142,8 +142,8 @@ void SettingsBridge::syncFromSettings(Settings* settings)
     AlgorithmRegistry::PreviewParams previewParams;
     previewParams.algorithmId = m_engine->m_algorithmId;
     previewParams.maxWindows = cfg->maxWindows;
-    previewParams.masterCount = settings->autotileMasterCount();
-    previewParams.splitRatio = settings->autotileSplitRatio();
+    previewParams.masterCount = cfg->masterCount;
+    previewParams.splitRatio = cfg->splitRatio;
     for (auto it = cfg->savedAlgorithmSettings.constBegin(); it != cfg->savedAlgorithmSettings.constEnd(); ++it) {
         previewParams.savedAlgorithmSettings[it.key()] = QVariantMap{
             {PerAlgoKeys::MasterCount, it.value().masterCount},
@@ -257,6 +257,19 @@ void SettingsBridge::connectToSettings(Settings* settings)
             m_engine->propagateGlobalMasterCount();
             scheduleSettingsRetile();
         }
+        // Update AlgorithmRegistry preview params so previews reflect the new values
+        AlgorithmRegistry::PreviewParams previewParams;
+        previewParams.algorithmId = m_engine->m_algorithmId;
+        previewParams.maxWindows = m_engine->config()->maxWindows;
+        previewParams.masterCount = m_engine->config()->masterCount;
+        previewParams.splitRatio = m_engine->config()->splitRatio;
+        for (auto pIt = newSaved.constBegin(); pIt != newSaved.constEnd(); ++pIt) {
+            previewParams.savedAlgorithmSettings[pIt.key()] = QVariantMap{
+                {PerAlgoKeys::MasterCount, pIt.value().masterCount},
+                {PerAlgoKeys::SplitRatio, pIt.value().splitRatio},
+            };
+        }
+        AlgorithmRegistry::setConfiguredPreviewParams(previewParams);
     });
 
     CONNECT_SETTING_RETILE(autotileInnerGapChanged, innerGap, autotileInnerGap);
