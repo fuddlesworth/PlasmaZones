@@ -151,8 +151,8 @@ SplitTree::InsertReady SplitTree::prepareInsert(const QString& windowId)
         return InsertReady::Done;
     }
 
-    // E1: Only run O(n) depth traversal when the tree is large enough to matter
-    if (leafCount() > 15 && treeHeight() >= MaxRuntimeTreeDepth) {
+    // E1: Depth guard — always check, regardless of tree size
+    if (treeHeight() >= MaxRuntimeTreeDepth) {
         qCWarning(lcAutotile) << "SplitTree: max depth reached, rejecting insert";
         return InsertReady::Rejected;
     }
@@ -213,6 +213,11 @@ void SplitTree::insertAtEndRaw(const QString& windowId, qreal initialRatio)
         return;
     }
 
+    // Explicit depth guard — right-leaning chain can reach height == input count
+    if (m_root && treeHeight() >= MaxRuntimeTreeDepth) {
+        return;
+    }
+
     SplitNode* rm = rightmostLeaf(m_root.get());
     if (!rm) {
         qCWarning(lcAutotile) << "insertAtEndRaw: no rightmost leaf found (corrupt tree?)";
@@ -265,6 +270,17 @@ void SplitTree::remove(const QString& windowId)
         sibling = std::move(parent->second);
     } else {
         sibling = std::move(parent->first);
+    }
+
+    if (!sibling) {
+        // Half-constructed node (only one child) — remove the parent entirely
+        if (parent->parent) {
+            auto& parentRef = (parent->parent->first.get() == parent) ? parent->parent->first : parent->parent->second;
+            parentRef.reset();
+        } else {
+            m_root.reset();
+        }
+        return;
     }
 
     if (parent == m_root.get()) {

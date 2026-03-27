@@ -125,6 +125,10 @@ QJSValue ScriptedAlgorithm::guardedCall(const std::function<QJSValue()>& fn) con
     // Arm the watchdog
     {
         std::lock_guard<std::mutex> lock(m_watchdog->mutex);
+        // Clear any stale interrupt from a previous watchdog race where the main
+        // thread armed+evaluated+disarmed before the watchdog thread woke,
+        // causing a spurious timeout that poisoned the engine's interrupt flag.
+        m_engine->setInterrupted(false);
         ++(m_watchdog->generation);
         m_watchdog->pending = true;
     }
@@ -458,12 +462,19 @@ QJSValue ScriptedAlgorithm::splitNodeToJSValue(const SplitNode* node, int depth)
     if (!freezeFn.isCallable()) {
         qCWarning(lcAutotile) << "Object.freeze not callable — tree will be mutable to JS scripts";
     }
-    return splitNodeToJSValueImpl(node, freezeFn, depth);
+    int nodeCount = 0;
+    return splitNodeToJSValueImpl(node, freezeFn, depth, nodeCount);
 }
 
-QJSValue ScriptedAlgorithm::splitNodeToJSValueImpl(const SplitNode* node, const QJSValue& freezeFn, int depth) const
+QJSValue ScriptedAlgorithm::splitNodeToJSValueImpl(const SplitNode* node, const QJSValue& freezeFn, int depth,
+                                                   int& nodeCount) const
 {
     if (!node || !m_engine || depth > MaxTreeConversionDepth) {
+        return QJSValue();
+    }
+
+    static constexpr int MaxNodeConversionCount = 512;
+    if (++nodeCount > MaxNodeConversionCount) {
         return QJSValue();
     }
 
@@ -475,8 +486,10 @@ QJSValue ScriptedAlgorithm::splitNodeToJSValueImpl(const SplitNode* node, const 
         const qreal ratio = std::isnan(node->splitRatio) ? 0.5 : std::clamp(node->splitRatio, 0.1, 0.9);
         jsNode.setProperty(QStringLiteral("ratio"), ratio);
         jsNode.setProperty(QStringLiteral("horizontal"), node->splitHorizontal);
-        jsNode.setProperty(QStringLiteral("first"), splitNodeToJSValueImpl(node->first.get(), freezeFn, depth + 1));
-        jsNode.setProperty(QStringLiteral("second"), splitNodeToJSValueImpl(node->second.get(), freezeFn, depth + 1));
+        jsNode.setProperty(QStringLiteral("first"),
+                           splitNodeToJSValueImpl(node->first.get(), freezeFn, depth + 1, nodeCount));
+        jsNode.setProperty(QStringLiteral("second"),
+                           splitNodeToJSValueImpl(node->second.get(), freezeFn, depth + 1, nodeCount));
     }
 
     // L-1: Freeze the node so scripts cannot mutate the tree representation
@@ -581,7 +594,7 @@ QString ScriptedAlgorithm::zoneNumberDisplay() const noexcept
     return TilingAlgorithm::zoneNumberDisplay();
 }
 
-bool ScriptedAlgorithm::centerLayout() const noexcept
+bool ScriptedAlgorithm::centerLayout() const
 {
     return resolveJsOverride<bool>(m_jsCenterLayout, m_cachedCenterLayout, m_metadata.centerLayout);
 }

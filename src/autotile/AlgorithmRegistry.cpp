@@ -43,6 +43,13 @@ AlgorithmRegistry::AlgorithmRegistry(QObject* parent)
     : QObject(parent)
 {
     registerBuiltInAlgorithms();
+
+    // Connect cleanup to aboutToQuit — safe here because the constructor
+    // runs exactly once under the C++11 static-init guarantee.
+    if (QCoreApplication::instance()) {
+        QObject::connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this,
+                         &AlgorithmRegistry::cleanup);
+    }
 }
 
 AlgorithmRegistry::~AlgorithmRegistry()
@@ -59,7 +66,10 @@ void AlgorithmRegistry::cleanup()
     // This prevents crashes when the static singleton is destroyed after
     // QCoreApplication during static destruction (ScriptedAlgorithm
     // instances hold QJSEngine internals that require a live Qt runtime).
-    qDeleteAll(m_algorithms);
+    for (auto* algo : std::as_const(m_algorithms)) {
+        algo->setParent(nullptr);
+        algo->deleteLater();
+    }
     m_algorithms.clear();
     m_registrationOrder.clear();
 }
@@ -67,14 +77,9 @@ void AlgorithmRegistry::cleanup()
 AlgorithmRegistry* AlgorithmRegistry::instance()
 {
     // Meyer's singleton: C++11 guarantees thread-safe initialization
-    // of static local variables (§6.7 [stmt.dcl] p4)
+    // of static local variables (§6.7 [stmt.dcl] p4).
+    // The constructor connects cleanup() — no separate connection needed.
     static AlgorithmRegistry s_instance;
-    static bool s_connected = false;
-    if (!s_connected && QCoreApplication::instance()) {
-        s_connected = true;
-        QObject::connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, &s_instance,
-                         &AlgorithmRegistry::cleanup);
-    }
     return &s_instance;
 }
 

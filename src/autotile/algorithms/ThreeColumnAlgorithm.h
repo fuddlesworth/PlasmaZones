@@ -71,7 +71,7 @@ public:
     {
         return 0.5;
     } // Center gets 50%
-    bool centerLayout() const noexcept override
+    bool centerLayout() const override
     {
         return true;
     }

@@ -127,7 +127,7 @@ public:
     bool producesOverlappingZones() const override;
     bool supportsMemory() const noexcept override;
     QString zoneNumberDisplay() const noexcept override;
-    bool centerLayout() const noexcept override;
+    bool centerLayout() const override;
     bool isScripted() const noexcept override;
     bool isUserScript() const noexcept override;
 
@@ -148,7 +148,7 @@ private:
     QJSValue splitNodeToJSValue(const SplitNode* node, int depth = 0) const;
 
     /// m-7: Recursive helper that receives a cached Object.freeze function
-    QJSValue splitNodeToJSValueImpl(const SplitNode* node, const QJSValue& freezeFn, int depth) const;
+    QJSValue splitNodeToJSValueImpl(const SplitNode* node, const QJSValue& freezeFn, int depth, int& nodeCount) const;
 
     /**
      * @brief Resolve a JS override value: return cached if loaded, else call JS, else metadata fallback

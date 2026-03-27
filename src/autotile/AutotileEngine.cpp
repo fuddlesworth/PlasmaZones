@@ -475,16 +475,19 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     m_algorithmEverSet = true;
     m_algorithmId = newId;
     m_config->algorithmId = newId;
-    Q_EMIT algorithmChanged(m_algorithmId);
 
     // Clear stale split trees when switching away from a memory algorithm.
     // Without this, deserialized trees from a previous DwindleMemory session
     // persist after algorithm switch, wasting memory and risking confusion.
+    // Must happen BEFORE emitting algorithmChanged so that listeners see
+    // consistent state (no stale trees from the old algorithm).
     if (newAlgo && !newAlgo->supportsMemory()) {
         for (auto* state : m_screenStates) {
             state->clearSplitTree();
         }
     }
+
+    Q_EMIT algorithmChanged(m_algorithmId);
 
     // Backfill windows when the new algorithm's maxWindows is higher.
     // Guard with maxWindows-increased check to avoid wasted iteration when the

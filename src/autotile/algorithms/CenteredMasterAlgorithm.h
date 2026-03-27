@@ -68,7 +68,7 @@ public:
     {
         return 0.5;
     }
-    bool centerLayout() const noexcept override
+    bool centerLayout() const override
     {
         return true;
     }

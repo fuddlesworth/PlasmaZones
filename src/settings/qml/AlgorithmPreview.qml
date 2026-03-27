@@ -52,10 +52,16 @@ Item {
     property bool showLabel: true
 
     function recalcZones() {
-        if (root.algorithmId !== "")
+        if (root.algorithmId !== "") {
             root.zones = root.appSettings.generateAlgorithmPreview(root.algorithmId, root.windowCount, root.splitRatio, root.masterCount);
-        else
+            // Retry once if a stale watchdog interrupt caused empty results —
+            // the first call clears the interrupt flag, so the second succeeds.
+            if (root.zones.length === 0 && root.windowCount > 0)
+                root.zones = root.appSettings.generateAlgorithmPreview(root.algorithmId, root.windowCount, root.splitRatio, root.masterCount);
+
+        } else {
             root.zones = [];
+        }
     }
 
     onAlgorithmIdChanged: recalcTimer.restart()

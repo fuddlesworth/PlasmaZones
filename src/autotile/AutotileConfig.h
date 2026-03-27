@@ -66,7 +66,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 0.1 to 0.9
      * Default: 0.6 (60% master, 40% stack)
      */
-    qreal splitRatio = 0.6;
+    qreal splitRatio = AutotileDefaults::DefaultSplitRatio;
 
     /**
      * @brief Number of windows in master area
@@ -74,7 +74,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 1 to 5
      * Default: 1
      */
-    int masterCount = 1;
+    int masterCount = AutotileDefaults::DefaultMasterCount;
 
     /// Per-algorithm saved settings (split ratio + master count).
     /// Saved when switching away from an algorithm, restored when switching back.
@@ -96,7 +96,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 0 to 50
      * Default: 8
      */
-    int innerGap = 8;
+    int innerGap = AutotileDefaults::DefaultGap;
 
     /**
      * @brief Gap from screen edges in pixels (uniform)
@@ -104,7 +104,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 0 to 50
      * Default: 8
      */
-    int outerGap = 8;
+    int outerGap = AutotileDefaults::DefaultGap;
 
     /**
      * @brief Whether to use per-side outer gaps instead of uniform
@@ -183,7 +183,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 1 to 12
      * Default: 6
      */
-    int maxWindows = 6;
+    int maxWindows = AutotileDefaults::DefaultMaxWindows;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Comparison and Serialization

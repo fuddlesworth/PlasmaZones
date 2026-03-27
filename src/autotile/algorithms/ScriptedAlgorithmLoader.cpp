@@ -64,8 +64,13 @@ void ScriptedAlgorithmLoader::watchDirectory(const QString& dirPath)
     // Directory-level inotify only fires for create/delete/rename, not in-place writes.
     QDir dirObj(dirPath);
     const QStringList jsFiles = dirObj.entryList({QStringLiteral("*.js")}, QDir::Files | QDir::NoSymLinks);
+    int filesWatched = 0;
     for (const QString& file : jsFiles) {
+        if (filesWatched >= MaxWatchedFilesPerDir) {
+            break;
+        }
         m_watcher->addPath(dirObj.filePath(file));
+        ++filesWatched;
     }
 
     qCInfo(lcAutotile) << "Watching algorithm directory:" << dirPath

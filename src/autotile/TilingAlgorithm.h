@@ -188,7 +188,7 @@ public:
      *
      * @return true if this is a center layout algorithm (default: false)
      */
-    virtual bool centerLayout() const noexcept;
+    virtual bool centerLayout() const;
 
     /**
      * @brief Whether this algorithm is a user-provided scripted algorithm

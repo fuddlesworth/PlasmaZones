@@ -22,6 +22,7 @@ using namespace AutotileDefaults;
 QJsonObject SplitTree::toJson() const
 {
     QJsonObject json;
+    json[QLatin1String("version")] = 1;
     if (m_root) {
         json[QLatin1String("root")] = nodeToJson(m_root.get());
     }
@@ -76,7 +77,7 @@ std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, Spli
         return nullptr;
     }
 
-    if (depth > MaxDeserializationDepth) {
+    if (depth >= MaxDeserializationDepth) {
         qCWarning(lcAutotile) << "SplitTree::fromJson: max depth exceeded, truncating";
         return nullptr;
     }

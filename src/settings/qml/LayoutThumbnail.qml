@@ -32,8 +32,7 @@ Rectangle {
     readonly property int selectedBorderWidth: Math.round(Kirigami.Units.devicePixelRatio * 2.5) // Thicker when selected
     // Aspect ratio: use the layout's intended ratio so previews show correct proportions.
     // Falls back to primary screen ratio for user-created layouts (aspectRatioClass "any" or absent).
-    readonly property var primaryScreen: Screen.primaryScreen
-    readonly property real fallbackAspectRatio: primaryScreen ? (primaryScreen.width / primaryScreen.height) : (16 / 9)
+    readonly property real fallbackAspectRatio: (Screen.width > 0 && Screen.height > 0) ? (Screen.width / Screen.height) : (16 / 9)
     readonly property real layoutAspectRatio: {
         var cls = root.layout ? (root.layout.aspectRatioClass || "any") : "any";
         switch (cls) {

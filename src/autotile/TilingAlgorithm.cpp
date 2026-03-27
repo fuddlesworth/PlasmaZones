@@ -54,7 +54,7 @@ QString TilingAlgorithm::zoneNumberDisplay() const noexcept
     return QStringLiteral("all");
 }
 
-bool TilingAlgorithm::centerLayout() const noexcept
+bool TilingAlgorithm::centerLayout() const
 {
     return false;
 }

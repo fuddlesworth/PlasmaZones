@@ -253,19 +253,21 @@ void TilingState::syncTreeSwap(const QString& idA, const QString& idB)
     m_splitTree->swap(idA, idB);
 }
 
-// NOTE: This uses the current m_splitRatio for tree construction. For
-// DwindleMemoryAlgorithm, prepareTilingState() must run first to set
-// m_splitRatio to 0.5 before this lazy creation path is reached.
-// If called before prepareTilingState(), the tree will use the wrong ratio.
+// Lazy-create the split tree when a memory algorithm needs one but none exists
+// (e.g., first retile after switching to DwindleMemory).
+// Uses a hard-coded 0.5 (dwindle default) instead of m_splitRatio because
+// prepareTilingState() may not have run yet — m_splitRatio could still hold a
+// stale value from the previous algorithm (e.g., MasterStack's 0.65).
 void TilingState::syncTreeLazyCreate()
 {
     if (m_splitTree || tiledWindowCount() < 2) {
         return;
     }
+    constexpr qreal DefaultTreeRatio = 0.5;
     m_splitTree = std::make_unique<SplitTree>();
     const auto tiled = tiledWindows();
     for (const auto& id : tiled) {
-        m_splitTree->insertAtEnd(id, m_splitRatio);
+        m_splitTree->insertAtEnd(id, DefaultTreeRatio);
     }
 }
 

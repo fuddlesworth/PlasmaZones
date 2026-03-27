@@ -133,6 +133,12 @@ bool hardenSandbox(QJSEngine* engine)
         }
     }
 
+    // Freeze built-in constructors to prevent scripts from shadowing
+    // Object.freeze, Object.defineProperty, etc.
+    criticalEval(
+        QStringLiteral("Object.freeze(Object); Object.freeze(Array); Object.freeze(JSON); Object.freeze(Math);"),
+        QStringLiteral("built-in constructor freeze"));
+
     // H1: Close Object.constructor -> Function escape route on all major built-in objects
     safeEval(QStringLiteral("(function() {"
                             "  var undef = void 0;"
