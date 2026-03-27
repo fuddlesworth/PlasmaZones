@@ -15,6 +15,7 @@
 #include <QThread>
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -29,11 +30,9 @@ static constexpr int ScriptWatchdogTimeoutMs = 100;
 ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
     : TilingAlgorithm(parent)
     , m_engine(new QJSEngine(this))
-    , m_engineAlive(std::make_shared<std::atomic<bool>>(true))
-    , m_engineMutex(std::make_shared<std::mutex>())
-    , m_watchdogGeneration(std::make_shared<std::atomic<uint64_t>>(0))
-    , m_watchdogEnginePtr(std::make_shared<QJSEngine*>(m_engine))
+    , m_watchdog(std::make_shared<WatchdogContext>())
 {
+    m_watchdog->engine = m_engine;
     loadScript(filePath);
 }
 
@@ -41,9 +40,9 @@ ScriptedAlgorithm::~ScriptedAlgorithm()
 {
     // Acquire the mutex so no watchdog thread is between the alive-check
     // and the setInterrupted() call while we tear down.
-    std::lock_guard<std::mutex> lock(*m_engineMutex);
-    m_engineAlive->store(false, std::memory_order_release);
-    *m_watchdogEnginePtr = nullptr;
+    std::lock_guard<std::mutex> lock(m_watchdog->mutex);
+    m_watchdog->alive.store(false, std::memory_order_release);
+    m_watchdog->engine = nullptr;
 }
 
 bool ScriptedAlgorithm::isValid() const
@@ -292,6 +291,9 @@ void ScriptedAlgorithm::parseMetadata(const QString& source)
 
 QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) const
 {
+    // C2: Assert we are on the owning thread — QJSEngine is not thread-safe
+    Q_ASSERT(QThread::currentThread() == thread());
+
     if (!m_valid || params.windowCount <= 0 || !params.screenGeometry.isValid()) {
         return {};
     }
@@ -328,8 +330,11 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     }
 
     // minSizes array
-    QJSValue jsMinSizes = m_engine->newArray(static_cast<uint>(std::min<qsizetype>(params.minSizes.size(), 256)));
-    for (int i = 0; i < params.minSizes.size(); ++i) {
+    // B1: Cap the loop at MaxZones (256) to match the array allocation size
+    constexpr int MaxZones = 256;
+    const int minSizesCap = std::min<int>(params.minSizes.size(), MaxZones);
+    QJSValue jsMinSizes = m_engine->newArray(static_cast<uint>(minSizesCap));
+    for (int i = 0; i < minSizesCap; ++i) {
         QJSValue entry = m_engine->newObject();
         entry.setProperty(QStringLiteral("w"), params.minSizes[i].width());
         entry.setProperty(QStringLiteral("h"), params.minSizes[i].height());
@@ -344,35 +349,37 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     // H1: We use a generation counter to prevent stale watchdog threads from
     // interrupting a newer calculateZones() call. Each call increments the
     // generation and the watchdog only interrupts if the generation still matches.
-    const uint64_t myGen = ++(*m_watchdogGeneration);
+    const uint64_t myGen = ++(m_watchdog->generation);
 
-    auto aliveFlag = m_engineAlive;
-    auto engineMtx = m_engineMutex;
-    auto enginePtr = m_watchdogEnginePtr;
-    auto genPtr = m_watchdogGeneration; // shared_ptr copy — prevents use-after-free
-    std::thread([enginePtr, aliveFlag, engineMtx, genPtr, myGen]() {
-        QThread::msleep(ScriptWatchdogTimeoutMs);
-        // Only interrupt if this is still the active generation
-        if (genPtr->load(std::memory_order_acquire) != myGen) {
-            return; // A newer call has started or the call completed
-        }
-        // Hold the mutex to prevent the destructor from invalidating the
-        // engine pointer between our alive-check and setInterrupted().
-        std::lock_guard<std::mutex> lock(*engineMtx);
-        if (genPtr->load(std::memory_order_acquire) == myGen && aliveFlag->load(std::memory_order_acquire)) {
-            // C1: Check for null before calling setInterrupted
-            auto engine = *enginePtr;
-            if (engine) {
-                engine->setInterrupted(true);
+    // C1: Only spawn watchdog if none is already active (prevents ~60 threads/sec during resize)
+    auto ctx = m_watchdog; // shared_ptr copy — prevents use-after-free
+    bool expected = false;
+    if (ctx->active.compare_exchange_strong(expected, true)) {
+        std::thread([ctx, myGen]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(ScriptWatchdogTimeoutMs));
+            // Only interrupt if this is still the active generation
+            if (ctx->generation.load(std::memory_order_acquire) != myGen) {
+                ctx->active.store(false);
+                return; // A newer call has started or the call completed
             }
-        }
-    }).detach();
+            // Hold the mutex to prevent the destructor from invalidating the
+            // engine pointer between our alive-check and setInterrupted().
+            std::lock_guard<std::mutex> lock(ctx->mutex);
+            if (ctx->generation.load(std::memory_order_acquire) == myGen
+                && ctx->alive.load(std::memory_order_acquire)) {
+                if (ctx->engine) {
+                    ctx->engine->setInterrupted(true);
+                }
+            }
+            ctx->active.store(false);
+        }).detach();
+    }
 
     // Call the JS calculateZones function
     const QJSValue result = m_calculateZonesFn.call({jsParams});
 
     // Advance generation so any in-flight watchdog becomes a no-op, and reset interrupted state
-    ++(*m_watchdogGeneration);
+    ++(m_watchdog->generation);
     m_engine->setInterrupted(false);
 
     if (result.isError()) {
@@ -479,7 +486,8 @@ int ScriptedAlgorithm::masterZoneIndex() const noexcept
     }
     // QJSValue API is noexcept-safe (no C++ exceptions); the isError() check
     // guards against JS-level errors.  Build uses -fno-exceptions.
-    if (m_jsMasterZoneIndex.isCallable()) {
+    // B3: Guard against invalid script state in uncached fallback path
+    if (m_valid && m_jsMasterZoneIndex.isCallable()) {
         const QJSValue result = m_jsMasterZoneIndex.call();
         if (!result.isError() && result.isNumber())
             return result.toInt();
@@ -493,7 +501,8 @@ bool ScriptedAlgorithm::supportsMasterCount() const noexcept
     if (m_cachedValuesLoaded && m_jsSupportsMasterCount.isCallable()) {
         return m_cachedSupportsMasterCount;
     }
-    if (m_jsSupportsMasterCount.isCallable()) {
+    // B3: Guard against invalid script state in uncached fallback path
+    if (m_valid && m_jsSupportsMasterCount.isCallable()) {
         const QJSValue result = m_jsSupportsMasterCount.call();
         if (!result.isError() && result.isBool())
             return result.toBool();
@@ -507,7 +516,8 @@ bool ScriptedAlgorithm::supportsSplitRatio() const noexcept
     if (m_cachedValuesLoaded && m_jsSupportsSplitRatio.isCallable()) {
         return m_cachedSupportsSplitRatio;
     }
-    if (m_jsSupportsSplitRatio.isCallable()) {
+    // B3: Guard against invalid script state in uncached fallback path
+    if (m_valid && m_jsSupportsSplitRatio.isCallable()) {
         const QJSValue result = m_jsSupportsSplitRatio.call();
         if (!result.isError() && result.isBool())
             return result.toBool();
@@ -521,7 +531,8 @@ qreal ScriptedAlgorithm::defaultSplitRatio() const noexcept
     if (m_cachedValuesLoaded && m_jsDefaultSplitRatio.isCallable()) {
         return m_cachedDefaultSplitRatio;
     }
-    if (m_jsDefaultSplitRatio.isCallable()) {
+    // B3: Guard against invalid script state in uncached fallback path
+    if (m_valid && m_jsDefaultSplitRatio.isCallable()) {
         const QJSValue result = m_jsDefaultSplitRatio.call();
         if (!result.isError() && result.isNumber())
             return std::clamp(result.toNumber(), MinSplitRatio, MaxSplitRatio);
@@ -538,7 +549,8 @@ int ScriptedAlgorithm::minimumWindows() const noexcept
     if (m_cachedValuesLoaded && m_jsMinimumWindows.isCallable()) {
         return m_cachedMinimumWindows;
     }
-    if (m_jsMinimumWindows.isCallable()) {
+    // B3: Guard against invalid script state in uncached fallback path
+    if (m_valid && m_jsMinimumWindows.isCallable()) {
         const QJSValue result = m_jsMinimumWindows.call();
         if (!result.isError() && result.isNumber())
             // M11: Clamp JS override return values to same range as metadata parser
@@ -556,7 +568,8 @@ int ScriptedAlgorithm::defaultMaxWindows() const noexcept
     if (m_cachedValuesLoaded && m_jsDefaultMaxWindows.isCallable()) {
         return m_cachedDefaultMaxWindows;
     }
-    if (m_jsDefaultMaxWindows.isCallable()) {
+    // B3: Guard against invalid script state in uncached fallback path
+    if (m_valid && m_jsDefaultMaxWindows.isCallable()) {
         const QJSValue result = m_jsDefaultMaxWindows.call();
         if (!result.isError() && result.isNumber())
             // M11: Clamp JS override return values to same range as metadata parser
@@ -574,7 +587,8 @@ bool ScriptedAlgorithm::producesOverlappingZones() const noexcept
     if (m_cachedValuesLoaded && m_jsProducesOverlappingZones.isCallable()) {
         return m_cachedProducesOverlappingZones;
     }
-    if (m_jsProducesOverlappingZones.isCallable()) {
+    // B3: Guard against invalid script state in uncached fallback path
+    if (m_valid && m_jsProducesOverlappingZones.isCallable()) {
         const QJSValue result = m_jsProducesOverlappingZones.call();
         if (!result.isError() && result.isBool())
             return result.toBool();

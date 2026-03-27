@@ -129,7 +129,8 @@ void SplitTree::insertAtFocused(const QString& windowId, const QString& focusedW
         return;
     }
 
-    if (treeDepth() >= MaxRuntimeTreeDepth) {
+    // E1: Only run O(n) depth traversal when the tree is large enough to matter
+    if (leafCount() > 15 && treeDepth() >= MaxRuntimeTreeDepth) {
         qCWarning(lcAutotile) << "SplitTree: max depth reached, rejecting insert";
         return;
     }
@@ -158,7 +159,8 @@ void SplitTree::insertAtEnd(const QString& windowId, qreal initialRatio)
         return;
     }
 
-    if (treeDepth() >= MaxRuntimeTreeDepth) {
+    // E1: Only run O(n) depth traversal when the tree is large enough to matter
+    if (leafCount() > 15 && treeDepth() >= MaxRuntimeTreeDepth) {
         qCWarning(lcAutotile) << "SplitTree: max depth reached, rejecting insert";
         return;
     }
@@ -185,7 +187,8 @@ void SplitTree::insertAtPosition(const QString& windowId, int position, qreal in
         return;
     }
 
-    if (treeDepth() >= MaxRuntimeTreeDepth) {
+    // E1: Only run O(n) depth traversal when the tree is large enough to matter
+    if (leafCount() > 15 && treeDepth() >= MaxRuntimeTreeDepth) {
         qCWarning(lcAutotile) << "SplitTree: max depth reached, rejecting insert";
         return;
     }

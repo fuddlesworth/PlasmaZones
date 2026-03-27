@@ -54,14 +54,14 @@ function deckLayout(area, count, focusedFraction, horizontal) {
                 x: area.x,
                 y: Math.min(peekY, area.y + area.height - 1),
                 width: area.width,
-                height: area.y + area.height - peekY
+                height: Math.max(1, area.y + area.height - peekY)
             });
         } else {
             const peekX = area.x + peekOffset;
             zones.push({
                 x: Math.min(peekX, area.x + area.width - 1),
                 y: area.y,
-                width: area.x + area.width - peekX,
+                width: Math.max(1, area.x + area.width - peekX),
                 height: area.height
             });
         }
@@ -78,6 +78,7 @@ function calculateZones(params) {
     if (count <= 0) return [];
     if (count === 1) return [area];
 
-    const focusedFraction = params.splitRatio > 0 ? params.splitRatio : 0.75;
+    const focusedFraction = params.splitRatio > 0 ? Math.min(params.splitRatio, 0.9) : 0.75;
+    // KEEP IN SYNC with horizontal-deck.js
     return deckLayout(area, count, focusedFraction, false);
 }

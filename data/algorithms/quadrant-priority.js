@@ -30,6 +30,7 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 
+// KEEP IN SYNC with corner-master.js
 function lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rightHeight) {
     const masterW = Math.max(1, Math.round(area.width * splitRatio - gap / 2));
     const masterH = Math.max(1, Math.round(area.height * splitRatio - gap / 2));

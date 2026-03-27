@@ -76,7 +76,8 @@ void ScriptedAlgorithmLoader::scanAndRegister()
 
     const QString userDir = userAlgorithmDir();
     for (const QString& dir : std::as_const(dirs)) {
-        loadFromDirectory(dir, dir == userDir);
+        // E2: Use canonical paths to handle symlinks and relative path differences
+        loadFromDirectory(dir, QFileInfo(dir).canonicalFilePath() == QFileInfo(userDir).canonicalFilePath());
     }
 
     // Collect all newly registered script IDs
@@ -109,7 +110,9 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         const QString fullPath = dirObj.filePath(file);
         const QString scriptId = QStringLiteral("script:") + QFileInfo(file).completeBaseName();
 
-        auto* algo = new ScriptedAlgorithm(fullPath, nullptr);
+        // B4: Pass `this` as initial parent so the QObject is never unowned.
+        // AlgorithmRegistry::registerAlgorithm() will reparent to the registry.
+        auto* algo = new ScriptedAlgorithm(fullPath, this);
         if (!algo->isValid()) {
             qCWarning(lcAutotile) << "Invalid scripted algorithm, skipping:" << fullPath;
             delete algo;

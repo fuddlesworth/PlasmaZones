@@ -21,6 +21,21 @@ struct SplitNode;
 // All calls must occur on the main thread. QJSEngine is inherently single-threaded.
 
 /**
+ * @brief Consolidated watchdog thread state shared between the main thread and detached watchdog threads
+ *
+ * All members are atomic or mutex-protected so that the destructor can safely
+ * signal "engine is gone" to any in-flight watchdog thread.
+ */
+struct WatchdogContext
+{
+    std::atomic<bool> alive{true}; ///< Set to false in destructor to prevent use-after-free
+    std::atomic<bool> active{false}; ///< C1: True while a watchdog thread is sleeping; prevents unbounded spawning
+    std::mutex mutex; ///< Guards engine pointer access between watchdog and destructor
+    std::atomic<uint64_t> generation{0}; ///< Generation counter to prevent stale watchdog interrupts
+    QJSEngine* engine = nullptr; ///< Stable engine pointer shared with watchdog threads
+};
+
+/**
  * @brief Scripted tiling algorithm backed by a user-provided JavaScript file
  *
  * Wraps a QJSEngine to execute tiling algorithms written in JavaScript.
@@ -126,11 +141,7 @@ private:
     static constexpr int MaxTreeConversionDepth = 30;
 
     mutable QJSEngine* m_engine = nullptr;
-    std::shared_ptr<std::atomic<bool>> m_engineAlive; ///< Watchdog thread checks this before touching m_engine
-    std::shared_ptr<std::mutex> m_engineMutex; ///< Guards engine pointer access between watchdog and destructor
-    std::shared_ptr<std::atomic<uint64_t>>
-        m_watchdogGeneration; ///< Generation counter to prevent stale watchdog interrupts
-    std::shared_ptr<QJSEngine*> m_watchdogEnginePtr; ///< Stable engine pointer shared with watchdog threads
+    std::shared_ptr<WatchdogContext> m_watchdog; ///< D1: Consolidated watchdog shared state
     mutable QJSValue m_calculateZonesFn;
     QString m_filePath;
     QString m_scriptId;

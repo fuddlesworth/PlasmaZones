@@ -45,6 +45,7 @@
  * @param {string} bottomWidth - "master" (only master width) or "full" (full area width)
  * @param {string} rightHeight - "full" (full area height) or "master" (only master height)
  */
+// KEEP IN SYNC with quadrant-priority.js
 function lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rightHeight) {
     const masterW = Math.max(1, Math.round(area.width * splitRatio - gap / 2));
     const masterH = Math.max(1, Math.round(area.height * splitRatio - gap / 2));

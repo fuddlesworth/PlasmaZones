@@ -29,16 +29,18 @@ function calculateZones(params) {
 
     if (count <= 0) return [];
 
-    const splitRatio = params.splitRatio > 0 ? params.splitRatio : 0.6;
+    const splitRatio = params.splitRatio > 0 ? Math.min(params.splitRatio, 0.9) : 0.6;
     const columnWidth = Math.round(area.width * splitRatio);
     const offsetX = area.x + Math.round((area.width - columnWidth) / 2);
 
+    // Intentionally returns a centered column (not the full area) for single window —
+    // zen is about a focused, distraction-free experience with side margins.
     if (count === 1) {
         return [{ x: offsetX, y: area.y, width: columnWidth, height: area.height }];
     }
 
     const totalGaps = (count - 1) * gap;
-    const tileHeight = Math.round((area.height - totalGaps) / count);
+    const tileHeight = Math.max(1, Math.round((area.height - totalGaps) / count));
 
     const zones = [];
 

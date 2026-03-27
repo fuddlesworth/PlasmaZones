@@ -3,6 +3,7 @@
 
 #include <QTest>
 #include <QTemporaryDir>
+#include <QElapsedTimer>
 #include <QFile>
 
 #include "autotile/TilingAlgorithm.h"
@@ -533,6 +534,129 @@ private Q_SLOTS:
                 QVERIFY(zone.height() > 0);
             }
         }
+    }
+
+    // =========================================================================
+    // Watchdog / safety tests
+    // =========================================================================
+
+    void testCalculateZones_infiniteLoopWatchdog()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString path =
+            writeTempScript(dir, QStringLiteral("infinite-loop.js"),
+                            QStringLiteral("// @name InfiniteLoop\n"
+                                           "// @description Tests watchdog\n"
+                                           "function calculateZones(params) { while(true) {} return []; }\n"));
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(algo.isValid());
+
+        QElapsedTimer timer;
+        timer.start();
+
+        TilingState state(QStringLiteral("test"));
+        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+
+        QVERIFY(timer.elapsed() < 500); // Should complete within 500ms (100ms timeout + overhead)
+        QVERIFY(zones.isEmpty()); // Watchdog killed it — no zones returned
+    }
+
+    void testCalculateZones_runtimeThrow()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString path =
+            writeTempScript(dir, QStringLiteral("thrower.js"),
+                            QStringLiteral("// @name Thrower\n"
+                                           "// @description Throws at runtime\n"
+                                           "function calculateZones(params) { throw new Error('boom'); }\n"));
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(algo.isValid()); // Loads fine, error is at runtime
+
+        TilingState state(QStringLiteral("test"));
+        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QVERIFY(zones.isEmpty()); // Runtime error = empty result
+    }
+
+    void testCalculateZones_negativeCoordsClamped()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString path = writeTempScript(dir, QStringLiteral("neg-coords.js"),
+                                       QStringLiteral("// @name NegCoords\n"
+                                                      "// @description Returns negative coordinates\n"
+                                                      "function calculateZones(params) {\n"
+                                                      "    return [{x: -50, y: -100, width: -10, height: 0}];\n"
+                                                      "}\n"));
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(algo.isValid());
+
+        TilingState state(QStringLiteral("test"));
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 1);
+        QVERIFY(zones[0].x() >= 0);
+        QVERIFY(zones[0].y() >= 0);
+        QVERIFY(zones[0].width() >= 1);
+        QVERIFY(zones[0].height() >= 1);
+    }
+
+    void testCalculateZones_tooManyZones()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString path = writeTempScript(dir, QStringLiteral("too-many.js"),
+                                       QStringLiteral("// @name TooMany\n"
+                                                      "// @description Returns more than 256 zones\n"
+                                                      "function calculateZones(params) {\n"
+                                                      "    var zones = [];\n"
+                                                      "    for (var i = 0; i < 300; i++) {\n"
+                                                      "        zones.push({x: 0, y: 0, width: 100, height: 100});\n"
+                                                      "    }\n"
+                                                      "    return zones;\n"
+                                                      "}\n"));
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(algo.isValid());
+
+        TilingState state(QStringLiteral("test"));
+        auto zones = algo.calculateZones({300, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QVERIFY(zones.size() <= 256);
+    }
+
+    // =========================================================================
+    // Script loading edge cases
+    // =========================================================================
+
+    void testLoad_oversizedScript()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+
+        // Create script > 1MB
+        QString bigScript = QStringLiteral(
+            "// @name Big\n"
+            "// @description Oversized script\n"
+            "function calculateZones(params) { return []; }\n");
+        bigScript += QStringLiteral("// ") + QString(1024 * 1024, QLatin1Char('x')) + QStringLiteral("\n");
+
+        QString path = writeTempScript(dir, QStringLiteral("oversized.js"), bigScript);
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(!algo.isValid());
+    }
+
+    void testLoad_emptyScript()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString path = writeTempScript(dir, QStringLiteral("empty.js"), QString());
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(!algo.isValid());
     }
 };
 

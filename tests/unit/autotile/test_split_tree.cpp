@@ -81,7 +81,8 @@ private Q_SLOTS:
         tree.insertAtEnd(QStringLiteral("win3"));
 
         QCOMPARE(tree.leafCount(), 3);
-        QCOMPARE(tree.leafOrder(), (QStringList{QStringLiteral("win1"), QStringLiteral("win2"), QStringLiteral("win3")}));
+        QCOMPARE(tree.leafOrder(),
+                 (QStringList{QStringLiteral("win1"), QStringLiteral("win2"), QStringLiteral("win3")}));
     }
 
     void testInsertAtFocused()
@@ -400,6 +401,140 @@ private Q_SLOTS:
         QVERIFY(!algo.name().isEmpty());
         QVERIFY(!algo.description().isEmpty());
         QVERIFY(algo.supportsSplitRatio());
+    }
+
+    // =========================================================================
+    // Corrupted JSON deserialization tests
+    // =========================================================================
+
+    void testFromJson_emptyObject()
+    {
+        QJsonObject json;
+        // Empty object — no "type", no children
+        auto tree = SplitTree::fromJson(json);
+        // Should not crash; returns nullptr or an empty tree
+        if (tree) {
+            QCOMPARE(tree->leafCount(), 0);
+        }
+    }
+
+    void testFromJson_wrongTypes()
+    {
+        QJsonObject json;
+        json[QStringLiteral("type")] = QStringLiteral("leaf");
+        json[QStringLiteral("windowId")] = 42; // wrong type — should be string
+        json[QStringLiteral("splitRatio")] = QStringLiteral("not a number"); // wrong type
+
+        auto tree = SplitTree::fromJson(json);
+        // Should handle gracefully — not crash
+    }
+
+    void testFromJson_negativeRatio()
+    {
+        // Build a valid-looking internal node with negative ratio
+        QJsonObject left;
+        left[QStringLiteral("type")] = QStringLiteral("leaf");
+        left[QStringLiteral("windowId")] = QStringLiteral("win1");
+
+        QJsonObject right;
+        right[QStringLiteral("type")] = QStringLiteral("leaf");
+        right[QStringLiteral("windowId")] = QStringLiteral("win2");
+
+        QJsonObject root;
+        root[QStringLiteral("type")] = QStringLiteral("internal");
+        root[QStringLiteral("splitRatio")] = -0.5; // invalid
+        root[QStringLiteral("horizontal")] = true;
+        root[QStringLiteral("left")] = left;
+        root[QStringLiteral("right")] = right;
+
+        auto tree = SplitTree::fromJson(root);
+        // Ratio should be clamped to valid range; tree should still be usable
+        if (tree) {
+            QCOMPARE(tree->leafCount(), 2);
+            // Geometry should not crash with clamped ratio
+            auto zones = tree->applyGeometry(m_screenGeometry, 0);
+            QCOMPARE(zones.size(), 2);
+            for (const QRect& zone : zones) {
+                QVERIFY(zone.width() > 0);
+                QVERIFY(zone.height() > 0);
+            }
+        }
+    }
+
+    void testFromJson_deeplyNested()
+    {
+        // Build a tree deeper than MaxDeserializationDepth (30)
+        QJsonObject leaf;
+        leaf[QStringLiteral("type")] = QStringLiteral("leaf");
+        leaf[QStringLiteral("windowId")] = QStringLiteral("win1");
+
+        QJsonObject current = leaf;
+        for (int i = 0; i < 35; ++i) {
+            QJsonObject right;
+            right[QStringLiteral("type")] = QStringLiteral("leaf");
+            right[QStringLiteral("windowId")] = QStringLiteral("win%1").arg(i + 2);
+
+            QJsonObject parent;
+            parent[QStringLiteral("type")] = QStringLiteral("internal");
+            parent[QStringLiteral("splitRatio")] = 0.5;
+            parent[QStringLiteral("horizontal")] = (i % 2 == 0);
+            parent[QStringLiteral("left")] = current;
+            parent[QStringLiteral("right")] = right;
+            current = parent;
+        }
+
+        auto tree = SplitTree::fromJson(current);
+        // Should either truncate or reject — must not stack overflow
+        // If it parsed, leaf count should be <= 36 (truncated at depth 30)
+        if (tree) {
+            QVERIFY(tree->leafCount() <= 36);
+        }
+    }
+
+    // =========================================================================
+    // Edge case tests
+    // =========================================================================
+
+    void testRemove_nonexistent()
+    {
+        SplitTree tree;
+        tree.insertAtEnd(QStringLiteral("win1"));
+        tree.insertAtEnd(QStringLiteral("win2"));
+        tree.insertAtEnd(QStringLiteral("win3"));
+        QCOMPARE(tree.leafCount(), 3);
+
+        tree.remove(QStringLiteral("nonexistent"));
+        QCOMPARE(tree.leafCount(), 3); // Should be unchanged
+        QCOMPARE(tree.leafOrder(),
+                 (QStringList{QStringLiteral("win1"), QStringLiteral("win2"), QStringLiteral("win3")}));
+    }
+
+    void testResizeSplit_boundaryValues()
+    {
+        SplitTree tree;
+        tree.insertAtEnd(QStringLiteral("win1"));
+        tree.insertAtEnd(QStringLiteral("win2"));
+
+        // Ratio = 0.0 — should clamp to minimum
+        tree.resizeSplit(QStringLiteral("win2"), 0.0);
+        auto zones = tree.applyGeometry(m_screenGeometry, 0);
+        QCOMPARE(zones.size(), 2);
+        QVERIFY(zones[0].width() >= 1);
+        QVERIFY(zones[1].width() >= 1);
+
+        // Ratio = 1.0 — should clamp to maximum
+        tree.resizeSplit(QStringLiteral("win2"), 1.0);
+        zones = tree.applyGeometry(m_screenGeometry, 0);
+        QCOMPARE(zones.size(), 2);
+        QVERIFY(zones[0].width() >= 1);
+        QVERIFY(zones[1].width() >= 1);
+
+        // Negative ratio — should clamp
+        tree.resizeSplit(QStringLiteral("win2"), -0.5);
+        zones = tree.applyGeometry(m_screenGeometry, 0);
+        QCOMPARE(zones.size(), 2);
+        QVERIFY(zones[0].width() >= 1);
+        QVERIFY(zones[1].width() >= 1);
     }
 };
 

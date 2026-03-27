@@ -30,10 +30,10 @@ function calculateZones(params) {
     if (count <= 0) return [];
     if (count === 1) return [area];
 
-    const splitRatio = params.splitRatio > 0 ? params.splitRatio : 0.7;
-    const mainWidth = Math.round(area.width * splitRatio - gap / 2);
-    const sidebarX = area.x + mainWidth + gap;
-    const sidebarWidth = area.x + area.width - sidebarX;
+    const splitRatio = params.splitRatio > 0 ? Math.min(params.splitRatio, 0.9) : 0.7;
+    const mainWidth = Math.max(1, Math.round(area.width * splitRatio - gap / 2));
+    const sidebarX = Math.min(area.x + mainWidth + gap, area.x + area.width - 1);
+    const sidebarWidth = Math.max(1, area.x + area.width - sidebarX);
 
     const zones = [];
 
@@ -48,7 +48,7 @@ function calculateZones(params) {
     // Windows 2+: stack vertically in the right sidebar column
     const sidebarCount = count - 1;
     const totalGaps = (sidebarCount - 1) * gap;
-    const windowHeight = Math.round((area.height - totalGaps) / sidebarCount);
+    const windowHeight = Math.max(1, Math.round((area.height - totalGaps) / sidebarCount));
 
     for (let i = 0; i < sidebarCount; i++) {
         const y = area.y + i * (windowHeight + gap);

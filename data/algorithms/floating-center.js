@@ -42,7 +42,7 @@ function calculateZones(params) {
     if (count <= 0) return [];
     if (count === 1) return [area];
 
-    const splitRatio = params.splitRatio > 0 ? params.splitRatio : 0.65;
+    const splitRatio = params.splitRatio > 0 ? Math.min(params.splitRatio, 0.9) : 0.65;
 
     const centerW = Math.round(area.width * splitRatio);
     const centerH = Math.round(area.height * splitRatio);
@@ -96,6 +96,7 @@ function calculateZones(params) {
     });
 
     // Left panel(s) — center band height only
+    // Note: leftCount is currently always 0 or 1, but the loop is kept for future-proofing.
     if (leftCount > 0) {
         if (leftW >= 1) {
             const leftTileGaps = (leftCount - 1) * gap;
@@ -112,6 +113,7 @@ function calculateZones(params) {
     }
 
     // Right panel(s) — center band height only
+    // Note: rightCount is currently always 0 or 1, but the loop is kept for future-proofing.
     if (rightCount > 0) {
         if (rightW >= 1) {
             const rightTileGaps = (rightCount - 1) * gap;

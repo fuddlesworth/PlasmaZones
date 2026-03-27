@@ -136,7 +136,8 @@ private Q_SLOTS:
         // split ratio when the algorithm is master-stack.
         const qreal originalRatio = engine.config()->splitRatio;
 
-        // Verify that the active split ratio is unchanged by writing to the saved map
+        // TODO: This assertion is trivially true — needs a real mutation test.
+        // Should verify that switching to CenteredMaster applies savedAlgorithmSettings.
         QVERIFY(qFuzzyCompare(engine.config()->splitRatio, originalRatio));
     }
 

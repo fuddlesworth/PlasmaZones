@@ -212,6 +212,8 @@ private Q_SLOTS:
         auto* registry = AlgorithmRegistry::instance();
         auto available = registry->availableAlgorithms();
 
+        // 15 = built-in algorithms. Scripted algorithms may add more at runtime.
+        // A stricter check would verify both built-in count and that scripted loader ran.
         QVERIFY(available.size() >= 15);
         QCOMPARE(available[0], DBus::AutotileAlgorithm::BSP);
         QCOMPARE(available[1], DBus::AutotileAlgorithm::CenteredMaster);

@@ -334,16 +334,27 @@ Flickable {
                         showNoneOption: false
                         currentLayoutId: "autotile:" + root.effectiveAlgorithm
                         onActivated: {
+                            // "Default" selected — use default algorithm
+
                             // Extract algorithm ID from autotile: prefixed value
                             let selectedId = algorithmCombo.currentValue;
                             if (selectedId === "")
-                                // "Default" selected — use default algorithm
                                 selectedId = settingsController.autotileAlgorithm;
                             else if (selectedId.startsWith("autotile:"))
                                 selectedId = selectedId.substring(9);
                             root.writeSetting("Algorithm", selectedId, function(v) {
                                 appSettings.autotileAlgorithm = v;
                             });
+                            // Reset maxWindows to the new algorithm's default
+                            if (root.algoCapabilities) {
+                                var newDefault = root.algoCapabilities.defaultMaxWindows || 6;
+                                if (previewWindowSlider) {
+                                    previewWindowSlider.slider.value = newDefault;
+                                    root.writeSetting("MaxWindows", newDefault, function(v) {
+                                        appSettings.autotileMaxWindows = v;
+                                    });
+                                }
+                            }
                         }
                     }
 

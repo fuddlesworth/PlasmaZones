@@ -480,6 +480,8 @@ void TilingState::setFloating(const QString& windowId, bool floating)
         // Window is being unfloated — compute where it will land in tiled order
         // after we remove it from the floating set. We temporarily remove it
         // to get the correct index, then restore state.
+        // Safety: no signals emitted and no exceptions thrown between remove and re-insert,
+        // so the intermediate state is never observed externally.
         m_floatingWindows.remove(windowId);
         tiledIdxBeforeChange = tiledWindowIndex(windowId);
         m_floatingWindows.insert(windowId); // restore — actual removal happens below
@@ -764,13 +766,15 @@ void TilingState::rebuildSplitTree()
         newTree->insertAtEnd(windowId);
     }
 
+    // E3: Only restore ratios when the leaf count matches — mismatched sizes
+    // produce incorrect positional mapping and corrupt the split layout.
     if (oldLeafCount != tiled.size()) {
-        qCWarning(lcAutotile) << "rebuildSplitTree: leaf count changed from" << oldLeafCount << "to" << tiled.size()
-                              << "-- ratio mapping may be inaccurate";
+        qCDebug(lcAutotile) << "rebuildSplitTree: leaf count changed from" << oldLeafCount << "to" << tiled.size()
+                            << "-- skipping ratio restoration";
+    } else {
+        // Restore saved ratios to the new tree's internal nodes (same traversal order)
+        applyInternalNodeParams(newTree->root(), oldRatios, oldDirections, 0);
     }
-
-    // Restore saved ratios to the new tree's internal nodes (same traversal order)
-    applyInternalNodeParams(newTree->root(), oldRatios, oldDirections, 0);
 
     m_splitTree = std::move(newTree);
 }
