@@ -27,9 +27,6 @@ function calculateZones(params) {
     const count = params.windowCount;
     if (count <= 0) return [];
     const area = params.area;
-    if (count === 1) {
-        return [{ x: area.x, y: area.y, width: area.width, height: area.height }];
-    }
     const gap = params.innerGap || 0;
 
     // Two windows: simple vertical split at 50%

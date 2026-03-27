@@ -64,11 +64,11 @@ int SplitTree::leafCount() const noexcept
     return countLeaves(m_root.get());
 }
 
-int SplitTree::subtreeHeight(const SplitNode* node)
+int SplitTree::subtreeHeight(const SplitNode* node, int depth)
 {
-    if (!node)
+    if (!node || depth > MaxRuntimeTreeDepth)
         return 0;
-    return 1 + std::max(subtreeHeight(node->first.get()), subtreeHeight(node->second.get()));
+    return 1 + std::max(subtreeHeight(node->first.get(), depth + 1), subtreeHeight(node->second.get(), depth + 1));
 }
 
 int SplitTree::treeHeight() const
@@ -329,10 +329,10 @@ QVector<QRect> SplitTree::applyGeometry(const QRect& area, int innerGap) const
     return zones;
 }
 
-void SplitTree::applyGeometryRecursive(const SplitNode* node, const QRect& rect, int innerGap,
-                                       QVector<QRect>& zones) const
+void SplitTree::applyGeometryRecursive(const SplitNode* node, const QRect& rect, int innerGap, QVector<QRect>& zones,
+                                       int depth) const
 {
-    if (!node) {
+    if (!node || depth > MaxRuntimeTreeDepth) {
         return;
     }
 
@@ -352,8 +352,8 @@ void SplitTree::applyGeometryRecursive(const SplitNode* node, const QRect& rect,
         const int contentSize = totalSize - innerGap;
         if (contentSize <= 0) {
             // Gap exceeds space — give all leaves the parent rect (preserves zone count)
-            applyGeometryRecursive(node->first.get(), rect, 0, zones);
-            applyGeometryRecursive(node->second.get(), rect, 0, zones);
+            applyGeometryRecursive(node->first.get(), rect, 0, zones, depth + 1);
+            applyGeometryRecursive(node->second.get(), rect, 0, zones, depth + 1);
             return;
         }
 
@@ -363,13 +363,13 @@ void SplitTree::applyGeometryRecursive(const SplitNode* node, const QRect& rect,
         const QRect secondRect = makeSecondRect(firstSize, secondSize);
 
         if (!firstRect.isValid() || !secondRect.isValid()) {
-            applyGeometryRecursive(node->first.get(), rect, 0, zones);
-            applyGeometryRecursive(node->second.get(), rect, 0, zones);
+            applyGeometryRecursive(node->first.get(), rect, 0, zones, depth + 1);
+            applyGeometryRecursive(node->second.get(), rect, 0, zones, depth + 1);
             return;
         }
 
-        applyGeometryRecursive(node->first.get(), firstRect, innerGap, zones);
-        applyGeometryRecursive(node->second.get(), secondRect, innerGap, zones);
+        applyGeometryRecursive(node->first.get(), firstRect, innerGap, zones, depth + 1);
+        applyGeometryRecursive(node->second.get(), secondRect, innerGap, zones, depth + 1);
     };
 
     if (node->splitHorizontal) {

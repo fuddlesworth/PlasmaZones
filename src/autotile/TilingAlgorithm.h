@@ -167,6 +167,8 @@ public:
      */
     virtual bool producesOverlappingZones() const;
 
+    // noexcept virtuals below only read cached fields; non-noexcept ones may allocate or run JS.
+
     /**
      * @brief How zone numbers should be displayed in previews
      *

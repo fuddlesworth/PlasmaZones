@@ -186,6 +186,8 @@ set(plasmazones_core_SRCS
     autotile/algorithms/ScriptedAlgorithmHelpers.h
     autotile/algorithms/ScriptedAlgorithmLoader.cpp
     autotile/algorithms/ScriptedAlgorithmLoader.h
+    autotile/algorithms/ScriptedAlgorithmSandbox.cpp
+    autotile/algorithms/ScriptedAlgorithmSandbox.h
     snap/SnapEngine.cpp
     snap/SnapEngine.h
     snap/snapengine/float.cpp

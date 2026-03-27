@@ -40,10 +40,6 @@ function calculateZones(params) {
     const gap = params.innerGap || 0;
     const splitRatio = params.splitRatio;
 
-    if (count === 1) {
-        return [{ x: area.x, y: area.y, width: area.width, height: area.height }];
-    }
-
     // Corner Master: alternate distribution, bottom row uses master width,
     // right column uses master height (respects bottom row when present)
     return lShapeLayout(area, count, gap, splitRatio, "alternate", "master", "master");

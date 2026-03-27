@@ -3,43 +3,23 @@
 
 #pragma once
 
+#include "../SplitTree.h"
 #include "../TilingAlgorithm.h"
 #include "ScriptedAlgorithmHelpers.h"
 #include <QJSValue>
 
-#include <atomic>
-#include <condition_variable>
-#include <cstdint>
+#include <functional>
 #include <memory>
-#include <mutex>
-#include <thread>
 #include <type_traits>
 
 class QJSEngine;
 
 namespace PlasmaZones {
 
-struct SplitNode;
+struct WatchdogContext; // defined in ScriptedAlgorithm.cpp (internal implementation detail)
 
 // Note: ScriptedAlgorithm is NOT thread-safe despite the base class const contract.
 // All calls must occur on the main thread. QJSEngine is inherently single-threaded.
-
-/**
- * @brief Consolidated watchdog thread state shared between the main thread and the persistent watchdog thread
- *
- * All members are atomic or mutex-protected so that the destructor can safely
- * signal shutdown to the watchdog thread.
- */
-struct WatchdogContext
-{
-    std::mutex mutex; ///< Guards engine pointer access and condition variable
-    std::condition_variable cv; ///< Used to wake the persistent watchdog thread
-    std::atomic<uint64_t> generation{0}; ///< Generation counter to prevent stale watchdog interrupts
-    bool pending{false}; ///< True when a new watchdog check is requested
-    bool shutdown{false}; ///< True when the watchdog thread should exit
-    QJSEngine* engine = nullptr; ///< Stable engine pointer shared with watchdog thread
-    std::thread watchdogThread; ///< Persistent watchdog thread (joined on destruction)
-};
 
 namespace detail {
 
@@ -90,7 +70,7 @@ T jsValueTo(const QJSValue& v)
  * Scripts may also export optional JS functions (masterZoneIndex,
  * supportsMasterCount, supportsSplitRatio) for dynamic overrides.
  *
- * Script execution is guarded by a 100ms timeout to prevent runaway loops.
+ * Script execution is guarded by a 250ms timeout to prevent runaway loops.
  *
  * @note Registration is handled externally by ScriptedAlgorithmLoader,
  *       not by self-registration macros.
@@ -182,7 +162,11 @@ private:
     template<typename T>
     T cacheJsValue(const QJSValue& jsFn, T fallback);
 
-    static constexpr int MaxTreeConversionDepth = 30;
+    /// D-02: Arms watchdog, calls fn(), disarms, checks for timeout. Returns error on timeout.
+    QJSValue guardedCall(const std::function<QJSValue()>& fn) const;
+
+    /// B-09: Unified with SplitTree::MaxRuntimeTreeDepth to prevent silent truncation
+    static constexpr int MaxTreeConversionDepth = SplitTree::MaxRuntimeTreeDepth;
 
     mutable QJSEngine* m_engine = nullptr;
     std::shared_ptr<WatchdogContext> m_watchdog; ///< D1: Consolidated watchdog shared state
@@ -205,7 +189,6 @@ private:
     mutable QJSValue m_jsProducesOverlappingZones;
 
     // H5: Cached JS virtual method overrides (loaded once at script load time)
-    mutable int m_gcCounter = 0; ///< L4: GC throttle — only collect every 10th invocation
     int m_cachedMinimumWindows = 1;
     int m_cachedDefaultMaxWindows = 6;
     int m_cachedMasterZoneIndex = -1;

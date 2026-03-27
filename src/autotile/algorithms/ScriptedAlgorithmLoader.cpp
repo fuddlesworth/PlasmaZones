@@ -164,11 +164,32 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
     const QStringList files =
         dirObj.entryList({QStringLiteral("*.js")}, QDir::Files | QDir::NoSymLinks | QDir::Readable);
 
+    // S-07: Directory containment check — prevent symlink/traversal escapes
+    const QString canonicalDir = QFileInfo(dir).canonicalFilePath();
+    if (canonicalDir.isEmpty())
+        return;
+
+    // S-08: Cap file watcher count to prevent resource exhaustion
+    static constexpr int MaxWatchedFilesPerDir = 100;
+    int filesProcessed = 0;
+
     for (const QString& file : files) {
+        if (filesProcessed >= MaxWatchedFilesPerDir) {
+            qCWarning(lcAutotile) << "Reached max file limit (" << MaxWatchedFilesPerDir << ") for directory:" << dir
+                                  << "— skipping remaining files";
+            break;
+        }
+
         const QString rawPath = dirObj.filePath(file);
         const QString fullPath = QFileInfo(rawPath).canonicalFilePath();
         if (fullPath.isEmpty())
             continue; // file vanished between listing and stat
+
+        // S-07: Verify resolved path stays within the algorithm directory
+        if (!fullPath.startsWith(canonicalDir + QLatin1Char('/'))) {
+            qCWarning(lcAutotile) << "Script path escaped directory:" << fullPath;
+            continue;
+        }
 
         // Validate filename against whitelist to prevent injection via crafted filenames
         static const QRegularExpression validIdRe(QStringLiteral("^[a-zA-Z0-9_-]+$"));
@@ -189,17 +210,13 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             continue;
         }
 
-        // Unregister any existing algorithm with the same ID before re-registering.
-        // This handles the hot-reload case where a script was modified in-place —
-        // the old algorithm object is cleaned up via deleteLater().
+        // registerAlgorithm() handles replacement internally (removes old,
+        // takes ownership of new) — no need to unregister first.
         auto* registry = AlgorithmRegistry::instance();
-        if (registry->hasAlgorithm(scriptId)) {
-            registry->unregisterAlgorithm(scriptId);
-        }
-
         algo->setUserScript(isUserDir);
         registry->registerAlgorithm(scriptId, algo);
         m_scriptIdToPath[scriptId] = fullPath;
+        ++filesProcessed;
 
         qCInfo(lcAutotile) << "Registered scripted algorithm:" << scriptId << "from=" << fullPath
                            << "user=" << isUserDir;

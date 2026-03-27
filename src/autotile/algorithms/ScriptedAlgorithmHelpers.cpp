@@ -16,7 +16,7 @@ QString treeHelperJs()
 {
     return QStringLiteral(
         "function applyTreeGeometry(node, rect, gap, _depth) {"
-        "  if ((_depth || 0) > 30) return [];"
+        "  if ((_depth || 0) > 50) return [];"
         "  if (!node) return [];"
         "  if (node.windowId !== undefined && node.windowId !== '') {"
         "    return [{x: rect.x, y: rect.y, width: rect.width, height: rect.height}];"
@@ -249,9 +249,10 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
         const QString value = match.captured(2).trimmed();
 
         if (key == QLatin1String("name")) {
-            meta.name = value;
+            // S-10: Sanitize metadata — length cap + HTML escape
+            meta.name = value.left(100).toHtmlEscaped();
         } else if (key == QLatin1String("description")) {
-            meta.description = value;
+            meta.description = value.left(500).toHtmlEscaped();
         } else if (key == QLatin1String("supportsMasterCount")) {
             meta.supportsMasterCount = (value == QLatin1String("true"));
         } else if (key == QLatin1String("supportsSplitRatio")) {

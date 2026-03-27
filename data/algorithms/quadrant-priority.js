@@ -34,10 +34,6 @@ function calculateZones(params) {
     const gap = params.innerGap || 0;
     const splitRatio = params.splitRatio;
 
-    if (count === 1) {
-        return [{ x: area.x, y: area.y, width: area.width, height: area.height }];
-    }
-
     // Quadrant Priority: ceil/floor distribution, bottom row spans full width,
     // right column constrained to master height
     return lShapeLayout(area, count, gap, splitRatio, "ceil-floor", "full", "master");

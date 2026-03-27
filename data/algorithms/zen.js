@@ -32,7 +32,6 @@ function calculateZones(params) {
     const offsetX = area.x + Math.round((area.width - columnWidth) / 2);
 
     const totalGaps = (count - 1) * gap;
-    const tileHeight = Math.max(1, Math.round((area.height - totalGaps) / count));
 
     // Degenerate gap: stack all windows when gaps exceed available height
     if (totalGaps >= area.height) {
@@ -43,21 +42,11 @@ function calculateZones(params) {
         return stacked;
     }
 
+    // D-05: Use injected distributeEvenly helper for vertical stacking
+    var slots = distributeEvenly(area.y, area.height, count, gap);
     var zones = [];
-
-    for (let i = 0; i < count; i++) {
-        const y = area.y + i * (tileHeight + gap);
-        const h = (i === count - 1)
-            ? Math.max(1, area.y + area.height - y)
-            : tileHeight;
-
-        zones.push({
-            x: offsetX,
-            y: y,
-            width: columnWidth,
-            height: h
-        });
+    for (var i = 0; i < slots.length; i++) {
+        zones.push({ x: offsetX, y: slots[i].pos, width: columnWidth, height: slots[i].size });
     }
-
     return zones;
 }

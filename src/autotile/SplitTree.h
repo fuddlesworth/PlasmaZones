@@ -97,7 +97,7 @@ public:
      */
     int treeHeight() const;
 
-    /// Maximum runtime tree depth for insert operations
+    /// Maximum runtime tree depth for insert operations and recursion guards
     static constexpr int MaxRuntimeTreeDepth = 50;
 
     /**
@@ -239,9 +239,10 @@ private:
     const SplitNode* rightmostLeaf(const SplitNode* node) const;
     void collectLeafOrder(const SplitNode* node, QStringList& order) const;
     int countLeaves(const SplitNode* node) const;
-    void applyGeometryRecursive(const SplitNode* node, const QRect& rect, int innerGap, QVector<QRect>& zones) const;
+    void applyGeometryRecursive(const SplitNode* node, const QRect& rect, int innerGap, QVector<QRect>& zones,
+                                int depth = 0) const;
 
-    static int subtreeHeight(const SplitNode* node);
+    static int subtreeHeight(const SplitNode* node, int depth = 0);
     static void splitLeaf(SplitNode* leaf, const QString& newId, qreal ratio);
 
     static void collectInternalNodeParams(const SplitNode* node, QVector<qreal>& ratios, QVector<bool>& directions);

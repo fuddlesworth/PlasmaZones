@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "core/constants.h"
 #include <QHash>
 #include <QLatin1String>
 #include <QList>
@@ -22,10 +23,11 @@ namespace PlasmaZones {
  *
  * Used by AlgorithmRegistry, AutotileConfig, and Settings serialization
  * to avoid key drift between serialization and deserialization sites.
+ * References AutotileJsonKeys from core/constants.h as the single source of truth.
  */
 namespace PerAlgoKeys {
-inline const QLatin1String SplitRatio = QLatin1String("splitRatio");
-inline const QLatin1String MasterCount = QLatin1String("masterCount");
+inline constexpr auto SplitRatio = AutotileJsonKeys::SplitRatio;
+inline constexpr auto MasterCount = AutotileJsonKeys::MasterCount;
 } // namespace PerAlgoKeys
 
 class TilingAlgorithm;
