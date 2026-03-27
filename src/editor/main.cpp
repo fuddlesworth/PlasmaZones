@@ -151,5 +151,19 @@ int main(int argc, char* argv[])
         return -1;
     }
 
+    // Ensure QML objects are destroyed cleanly before the engine goes out of scope.
+    // Without this, the C++ destruction order (engine before controller) can race
+    // with deferred-delete processing of QML items that have KDE style helpers,
+    // causing a crash in QQmlData::destroyed() (QTBUG-style lifecycle issue).
+    QObject::connect(&app, &QGuiApplication::aboutToQuit, &engine, [&engine]() {
+        // Process any pending deferred deletes before tearing down the engine
+        QCoreApplication::processEvents(QEventLoop::AllEvents);
+        // Explicitly delete root QML objects while the engine is still alive
+        const auto roots = engine.rootObjects();
+        for (QObject* obj : roots) {
+            delete obj;
+        }
+    });
+
     return app.exec();
 }

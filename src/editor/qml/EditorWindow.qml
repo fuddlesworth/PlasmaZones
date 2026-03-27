@@ -16,6 +16,7 @@ Window {
     // ═══════════════════════════════════════════════════════════════════
     // CONNECTIONS
     // ═══════════════════════════════════════════════════════════════════
+    // Helper function to find zone by ID
 
     id: editorWindow
 
@@ -152,6 +153,12 @@ Window {
         return editorShortcuts.formatShortcut(shortcut);
     }
 
+    // Open the shared context menu for a specific zone
+    function openContextMenu(zoneId) {
+        sharedContextMenu.zoneId = zoneId;
+        sharedContextMenu.popup();
+    }
+
     // Window flags - fullscreen editor window on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowFullScreenButtonHint
     color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.7)
@@ -200,7 +207,70 @@ Window {
     ZoneOperations {
         id: zoneOps
     }
-    // Helper function to find zone by ID
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SHARED CONTEXT MENU — Single instance to avoid QQmlData crash
+    // When a QVariantList-backed Repeater destroys delegates, per-delegate
+    // Menu/MenuItem objects (with KDE desktop style helpers) can trigger
+    // a use-after-free in QQmlData::destroyed(). A shared Menu at the
+    // Window level is never destroyed during model updates.
+    // ═══════════════════════════════════════════════════════════════════
+    ZoneContextMenu {
+        id: sharedContextMenu
+
+        editorController: editorWindow._editorController
+        zoneId: ""
+        onSplitHorizontalRequested: {
+            if (editorWindow._editorController && zoneId)
+                editorWindow._editorController.splitZone(zoneId, true);
+
+        }
+        onSplitVerticalRequested: {
+            if (editorWindow._editorController && zoneId)
+                editorWindow._editorController.splitZone(zoneId, false);
+
+        }
+        onDuplicateRequested: {
+            if (editorWindow._editorController && zoneId)
+                editorWindow._editorController.duplicateZone(zoneId);
+
+        }
+        onDeleteRequested: {
+            if (editorWindow._editorController && zoneId)
+                editorWindow._editorController.deleteZone(zoneId);
+
+        }
+        onDeleteWithFillRequested: {
+            if (editorWindow._editorController && zoneId)
+                zoneOps.deleteWithFillAnimation(zoneId, editorWindow._editorController, editorWindow._zonesRepeater, drawingArea.width, drawingArea.height);
+
+        }
+        onFillRequested: {
+            if (editorWindow._editorController && zoneId)
+                editorWindow._editorController.expandToFillSpace(zoneId);
+
+        }
+        onBringToFrontRequested: {
+            if (editorWindow._editorController && zoneId)
+                editorWindow._editorController.bringToFront(zoneId);
+
+        }
+        onBringForwardRequested: {
+            if (editorWindow._editorController && zoneId)
+                editorWindow._editorController.bringForward(zoneId);
+
+        }
+        onSendBackwardRequested: {
+            if (editorWindow._editorController && zoneId)
+                editorWindow._editorController.sendBackward(zoneId);
+
+        }
+        onSendToBackRequested: {
+            if (editorWindow._editorController && zoneId)
+                editorWindow._editorController.sendToBack(zoneId);
+
+        }
+    }
 
     // ═══════════════════════════════════════════════════════════════════
     // SHORTCUTS - Extracted to EditorShortcuts.qml

@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 /**
@@ -20,6 +21,9 @@ Item {
     // Wait for C++ signal to update visuals
     // Minimum zone size in pixels - acceptable as hardcoded
     // Divider operation ended, sync from model
+    // Context menu is now a shared instance at the EditorWindow level
+    // to avoid QQmlData use-after-free when Repeater destroys delegates.
+    // See EditorWindow.qml sharedContextMenu.
 
     id: root
 
@@ -322,9 +326,13 @@ Item {
             operationState = EditorZone.State.Idle;
 
     }
-    // Handle context menu signal from drag handler
+    // Handle context menu signal from drag handler — use shared EditorWindow menu
     onContextMenuRequested: {
-        contextMenu.popup();
+        // Walk up to EditorWindow and use the shared context menu
+        var win = Window.window;
+        if (win && win.openContextMenu)
+            win.openContextMenu(root.zoneId);
+
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -613,27 +621,6 @@ Item {
         minSize: minSize
         zoneData: zoneData
         snapIndicator: root.snapIndicator
-    }
-
-    // ═══════════════════════════════════════════════════════════════════
-    // CONTEXT MENU - Extracted to ZoneContextMenu.qml
-    // ═══════════════════════════════════════════════════════════════════
-    ZoneContextMenu {
-        id: contextMenu
-
-        enabled: !root.previewMode
-        editorController: root.controller
-        zoneId: root.zoneId
-        onSplitHorizontalRequested: root.splitHorizontalRequested()
-        onSplitVerticalRequested: root.splitVerticalRequested()
-        onDuplicateRequested: root.duplicateRequested()
-        onDeleteRequested: root.deleteRequested()
-        onDeleteWithFillRequested: root.deleteWithFillRequested()
-        onFillRequested: root.animatedExpandToFill()
-        onBringToFrontRequested: root.bringToFrontRequested()
-        onBringForwardRequested: root.bringForwardRequested()
-        onSendBackwardRequested: root.sendBackwardRequested()
-        onSendToBackRequested: root.sendToBackRequested()
     }
 
     Behavior on visualX {
