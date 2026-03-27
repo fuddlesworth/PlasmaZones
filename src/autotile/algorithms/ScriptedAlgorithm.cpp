@@ -165,7 +165,8 @@ void ScriptedAlgorithm::parseMetadata(const QString& source)
     const auto lines = QStringView(source).split(QLatin1Char('\n'));
 
     for (const auto& lineView : lines) {
-        if (lineCount >= 50) break;
+        if (lineCount >= 50)
+            break;
         ++lineCount;
         const QString line = lineView.toString();
 
@@ -199,19 +200,19 @@ void ScriptedAlgorithm::parseMetadata(const QString& source)
             bool ok = false;
             const qreal v = value.toDouble(&ok);
             if (ok) {
-                m_defaultSplitRatio = qBound(0.01, v, 0.99);
+                m_defaultSplitRatio = std::clamp(v, MinSplitRatio, MaxSplitRatio);
             }
         } else if (key == QLatin1String("defaultMaxWindows")) {
             bool ok = false;
             const int v = value.toInt(&ok);
             if (ok) {
-                m_defaultMaxWindows = qBound(1, v, 100);
+                m_defaultMaxWindows = std::clamp(v, 1, 100);
             }
         } else if (key == QLatin1String("minimumWindows")) {
             bool ok = false;
             const int v = value.toInt(&ok);
             if (ok) {
-                m_minimumWindows = qBound(1, v, 100);
+                m_minimumWindows = std::clamp(v, 1, 100);
             }
         } else if (key == QLatin1String("masterZoneIndex")) {
             bool ok = false;
@@ -220,9 +221,8 @@ void ScriptedAlgorithm::parseMetadata(const QString& source)
                 m_masterZoneIndex = qMax(-1, v);
             }
         } else if (key == QLatin1String("zoneNumberDisplay")) {
-            if (value == QLatin1String("all") || value == QLatin1String("last")
-                || value == QLatin1String("first") || value == QLatin1String("firstAndLast")
-                || value == QLatin1String("none")) {
+            if (value == QLatin1String("all") || value == QLatin1String("last") || value == QLatin1String("first")
+                || value == QLatin1String("firstAndLast") || value == QLatin1String("none")) {
                 m_zoneNumberDisplay = value;
             }
         }
@@ -294,8 +294,7 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
         // Hold the mutex to prevent the destructor from invalidating the
         // engine pointer between our alive-check and setInterrupted().
         std::lock_guard<std::mutex> lock(*engineMtx);
-        if (!finished->load(std::memory_order_acquire)
-            && aliveFlag->load(std::memory_order_acquire)) {
+        if (!finished->load(std::memory_order_acquire) && aliveFlag->load(std::memory_order_acquire)) {
             engine->setInterrupted(true);
         }
     }).detach();
@@ -328,7 +327,8 @@ QVector<QRect> ScriptedAlgorithm::jsArrayToRects(const QJSValue& result) const
     constexpr int MaxZones = 256;
     if (length <= 0 || length > MaxZones) {
         if (length > MaxZones)
-            qCWarning(lcAutotile) << "ScriptedAlgorithm: zone count exceeds maximum" << MaxZones << "script=" << m_scriptId;
+            qCWarning(lcAutotile) << "ScriptedAlgorithm: zone count exceeds maximum" << MaxZones
+                                  << "script=" << m_scriptId;
         return rects;
     }
     rects.reserve(length);

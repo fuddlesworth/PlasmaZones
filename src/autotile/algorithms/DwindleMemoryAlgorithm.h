@@ -4,9 +4,11 @@
 #pragma once
 
 #include "../TilingAlgorithm.h"
-#include "DwindleAlgorithm.h"
+
+#include <memory>
 
 namespace PlasmaZones {
+class DwindleAlgorithm;
 
 /**
  * @brief Dwindle tiling algorithm with persistent split memory
@@ -36,7 +38,7 @@ class PLASMAZONES_EXPORT DwindleMemoryAlgorithm : public TilingAlgorithm
 
 public:
     explicit DwindleMemoryAlgorithm(QObject* parent = nullptr);
-    ~DwindleMemoryAlgorithm() override = default;
+    ~DwindleMemoryAlgorithm() override;
 
     // TilingAlgorithm interface
     QString name() const override;
@@ -58,18 +60,17 @@ public:
     }
 
     /**
-     * @brief Ensure the TilingState has a SplitTree, creating one lazily if needed
+     * @brief Prepare the TilingState, ensuring it has a SplitTree
      *
-     * Called by the engine before calculateZones(). This method is const on the
-     * algorithm (it doesn't mutate algorithm state) but mutates the TilingState
-     * argument — the engine owns that mutation, not the algorithm.
-     * Only creates a tree when windowCount > 1 and no tree exists.
+     * Override of TilingAlgorithm::prepareTilingState(). Called by the engine
+     * before calculateZones(). Only creates a tree when windowCount > 1 and
+     * no tree exists.
      */
-    void ensureSplitTree(TilingState* state) const;
+    void prepareTilingState(TilingState* state) const override;
 
 private:
-    DwindleAlgorithm m_fallback; ///< Stateless fallback (avoids static QObject)
-    QVector<QRect> calculateStatelessFallback(const TilingParams& params, const QRect& area) const;
+    std::unique_ptr<DwindleAlgorithm> m_fallback; ///< Stateless fallback (heap-allocated, proper QObject lifetime)
+    QVector<QRect> calculateStatelessFallback(const TilingParams& params) const;
 };
 
 } // namespace PlasmaZones

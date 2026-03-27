@@ -69,6 +69,11 @@ bool TilingAlgorithm::supportsMemory() const noexcept
     return false;
 }
 
+void TilingAlgorithm::prepareTilingState(TilingState* /*state*/) const
+{
+    // Default no-op. Memory-based algorithms override to ensure their SplitTree exists.
+}
+
 QVector<int> TilingAlgorithm::distributeEvenly(int total, int count)
 {
     QVector<int> sizes;

@@ -39,6 +39,7 @@ class UnifiedLayoutController;
 class AutotileAdaptor;
 class AutotileEngine;
 class IWindowEngine;
+class ScriptedAlgorithmLoader;
 class SnapAdaptor;
 class SnapEngine;
 
@@ -300,7 +301,7 @@ private:
     // Window engines
     std::unique_ptr<AutotileEngine> m_autotileEngine;
     std::unique_ptr<SnapEngine> m_snapEngine;
-    class ScriptedAlgorithmLoader* m_scriptedAlgorithmLoader = nullptr;
+    ScriptedAlgorithmLoader* m_scriptedAlgorithmLoader = nullptr;
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
 

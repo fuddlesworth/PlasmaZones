@@ -179,8 +179,10 @@ Item {
                         ToolTip.text: {
                             if (root.modelData.isAutotile && root.modelData.isSystem)
                                 return i18n("Bundled algorithm");
+
                             if (root.modelData.isSystem)
                                 return i18n("System layout (read-only)");
+
                             return i18n("Modified system layout");
                         }
 
@@ -284,12 +286,16 @@ Item {
                     implicitHeight: Kirigami.Units.iconSizes.small
                     color: Kirigami.Theme.positiveTextColor
                     opacity: 0.7
-                    ToolTip.visible: memoryHover.hovered
+                    ToolTip.delay: Kirigami.Units.toolTipDelay
+                    ToolTip.visible: memoryIconMA.containsMouse && visible
                     ToolTip.text: i18n("Remembers split positions across window changes")
-                    ToolTip.delay: 500
 
-                    HoverHandler {
-                        id: memoryHover
+                    MouseArea {
+                        id: memoryIconMA
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.NoButton
                     }
 
                 }

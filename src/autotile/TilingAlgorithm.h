@@ -198,6 +198,20 @@ public:
     virtual bool supportsMemory() const noexcept;
 
     /**
+     * @brief Prepare the TilingState before calculateZones() is called
+     *
+     * Memory-based algorithms override this to lazily create their SplitTree.
+     * The engine calls this unconditionally before calculateZones(), removing
+     * the need for concrete algorithm casts in the engine.
+     *
+     * The method is const on the algorithm (it doesn't mutate algorithm state)
+     * but mutates the TilingState argument — the engine owns that mutation.
+     *
+     * @param state TilingState to prepare (may be nullptr, implementations must check)
+     */
+    virtual void prepareTilingState(TilingState* state) const;
+
+    /**
      * @brief Whether this scripted algorithm was loaded from a user directory
      *
      * System-installed scripts (shipped with PlasmaZones) return false.

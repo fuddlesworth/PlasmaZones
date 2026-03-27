@@ -17,8 +17,11 @@ AlgorithmRegistrar<DwindleMemoryAlgorithm> s_dwindleMemoryRegistrar(DBus::Autoti
 
 DwindleMemoryAlgorithm::DwindleMemoryAlgorithm(QObject* parent)
     : TilingAlgorithm(parent)
+    , m_fallback(std::make_unique<DwindleAlgorithm>(nullptr))
 {
 }
+
+DwindleMemoryAlgorithm::~DwindleMemoryAlgorithm() = default;
 
 QString DwindleMemoryAlgorithm::name() const
 {
@@ -30,7 +33,7 @@ QString DwindleMemoryAlgorithm::description() const
     return PzI18n::tr("Remembers split positions — resize one split without affecting others");
 }
 
-void DwindleMemoryAlgorithm::ensureSplitTree(TilingState* state) const
+void DwindleMemoryAlgorithm::prepareTilingState(TilingState* state) const
 {
     if (!state || state->splitTree()) {
         return; // Already has a tree (or no state)
@@ -76,14 +79,13 @@ QVector<QRect> DwindleMemoryAlgorithm::calculateZones(const TilingParams& params
     }
 
     // Fallback: count mismatch — behave like stateless dwindle
-    return calculateStatelessFallback(params, area);
+    return calculateStatelessFallback(params);
 }
 
-QVector<QRect> DwindleMemoryAlgorithm::calculateStatelessFallback(const TilingParams& params, const QRect& area) const
+QVector<QRect> DwindleMemoryAlgorithm::calculateStatelessFallback(const TilingParams& params) const
 {
-    Q_UNUSED(area)
     // Delegate to stateless DwindleAlgorithm — avoids duplicating 77 lines
-    return m_fallback.calculateZones(params);
+    return m_fallback->calculateZones(params);
 }
 
 } // namespace PlasmaZones

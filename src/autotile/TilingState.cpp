@@ -574,7 +574,7 @@ QJsonObject TilingState::toJson() const
     json[SplitRatio] = m_splitRatio;
 
     if (m_splitTree && !m_splitTree->isEmpty()) {
-        json[QStringLiteral("splitTree")] = m_splitTree->toJson();
+        json[QLatin1String("splitTree")] = m_splitTree->toJson();
     }
 
     return json;
@@ -589,12 +589,15 @@ TilingState* TilingState::fromJson(const QJsonObject& json, QObject* parent)
 
     auto* state = new TilingState(screenId, parent);
 
-    // Window order
+    // Window order (deduplicate to guard against corrupt JSON)
     const QJsonArray orderArray = json[WindowOrder].toArray();
+    QSet<QString> seenIds;
+    seenIds.reserve(orderArray.size());
     for (const QJsonValue& val : orderArray) {
         const QString id = val.toString();
-        if (!id.isEmpty()) {
+        if (!id.isEmpty() && !seenIds.contains(id)) {
             state->m_windowOrder.append(id);
+            seenIds.insert(id);
         }
     }
 
@@ -621,19 +624,20 @@ TilingState* TilingState::fromJson(const QJsonObject& json, QObject* parent)
     // Split ratio with clamping
     state->m_splitRatio = std::clamp(json[SplitRatio].toDouble(DefaultSplitRatio), MinSplitRatio, MaxSplitRatio);
 
-    if (json.contains(QStringLiteral("splitTree"))) {
-        state->m_splitTree = SplitTree::fromJson(json[QStringLiteral("splitTree")].toObject());
+    if (json.contains(QLatin1String("splitTree"))) {
+        state->m_splitTree = SplitTree::fromJson(json[QLatin1String("splitTree")].toObject());
         if (state->m_splitTree) {
-            // Validate leaf count matches window order
-            if (state->m_splitTree->leafCount() != state->m_windowOrder.size()) {
+            // Validate leaf count matches tiled (non-floating) window count.
+            // The split tree only contains tiled windows — floating windows are
+            // removed from the tree — so we must compare against tiledWindowCount().
+            if (state->m_splitTree->leafCount() != state->tiledWindowCount()) {
                 qCWarning(lcAutotile) << "SplitTree leaf count mismatch, discarding tree";
                 state->m_splitTree.reset();
             } else {
                 // Validate all leaf IDs are present in window order (guards against
                 // stale IDs from a replaced window with the same count)
                 const QStringList leafIds = state->m_splitTree->leafOrder();
-                const QSet<QString> windowSet(state->m_windowOrder.constBegin(),
-                                               state->m_windowOrder.constEnd());
+                const QSet<QString> windowSet(state->m_windowOrder.constBegin(), state->m_windowOrder.constEnd());
                 bool allMatch = true;
                 for (const QString& leafId : leafIds) {
                     if (!windowSet.contains(leafId)) {
@@ -748,9 +752,7 @@ void TilingState::rebuildSplitTree()
     m_splitTree = std::move(newTree);
 }
 
-void TilingState::collectInternalNodeParams(const SplitNode* node,
-                                             QVector<qreal>& ratios,
-                                             QVector<bool>& directions)
+void TilingState::collectInternalNodeParams(const SplitNode* node, QVector<qreal>& ratios, QVector<bool>& directions)
 {
     if (!node || node->isLeaf()) {
         return;
@@ -761,10 +763,8 @@ void TilingState::collectInternalNodeParams(const SplitNode* node,
     collectInternalNodeParams(node->second.get(), ratios, directions);
 }
 
-int TilingState::applyInternalNodeParams(SplitNode* node,
-                                          const QVector<qreal>& ratios,
-                                          const QVector<bool>& directions,
-                                          int index)
+int TilingState::applyInternalNodeParams(SplitNode* node, const QVector<qreal>& ratios, const QVector<bool>& directions,
+                                         int index)
 {
     if (!node || node->isLeaf()) {
         return index;

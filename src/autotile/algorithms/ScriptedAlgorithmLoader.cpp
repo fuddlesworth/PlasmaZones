@@ -65,9 +65,7 @@ void ScriptedAlgorithmLoader::scanAndRegister()
 
     // Find ALL algorithm directories across XDG data paths
     QStringList dirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation,
-        QStringLiteral("plasmazones/algorithms"),
-        QStandardPaths::LocateDirectory);
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/algorithms"), QStandardPaths::LocateDirectory);
 
     // Reverse: system dirs first, user dirs last (user overrides system by same filename)
     std::reverse(dirs.begin(), dirs.end());
@@ -103,7 +101,7 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
 
     for (const QString& file : files) {
         const QString fullPath = dirObj.filePath(file);
-        const QString scriptId = QStringLiteral("script:") + QFileInfo(file).baseName();
+        const QString scriptId = QStringLiteral("script:") + QFileInfo(file).completeBaseName();
 
         auto* algo = new ScriptedAlgorithm(fullPath, nullptr);
         if (!algo->isValid()) {
@@ -116,8 +114,8 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         AlgorithmRegistry::instance()->registerAlgorithm(scriptId, algo);
         m_scriptIdToPath[scriptId] = fullPath;
 
-        qCInfo(lcAutotile) << "Registered scripted algorithm:" << scriptId
-                           << "from=" << fullPath << "user=" << isUserDir;
+        qCInfo(lcAutotile) << "Registered scripted algorithm:" << scriptId << "from=" << fullPath
+                           << "user=" << isUserDir;
     }
 }
 
@@ -146,9 +144,7 @@ void ScriptedAlgorithmLoader::setupFileWatcher()
     // Watch ALL algorithm directories (system + user). locateAll() returns them
     // in priority order (user first, system last).
     const QStringList allDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation,
-        QStringLiteral("plasmazones/algorithms"),
-        QStandardPaths::LocateDirectory);
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/algorithms"), QStandardPaths::LocateDirectory);
     for (const QString& dir : allDirs) {
         watchDir(dir);
     }
@@ -160,10 +156,8 @@ void ScriptedAlgorithmLoader::setupFileWatcher()
         watchDir(userDir);
     }
 
-    connect(m_watcher, &QFileSystemWatcher::directoryChanged,
-            this, &ScriptedAlgorithmLoader::onDirectoryChanged);
-    connect(m_watcher, &QFileSystemWatcher::fileChanged,
-            this, &ScriptedAlgorithmLoader::onFileChanged);
+    connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, &ScriptedAlgorithmLoader::onDirectoryChanged);
+    connect(m_watcher, &QFileSystemWatcher::fileChanged, this, &ScriptedAlgorithmLoader::onFileChanged);
 }
 
 void ScriptedAlgorithmLoader::onDirectoryChanged(const QString& path)
@@ -192,8 +186,7 @@ void ScriptedAlgorithmLoader::scheduleRefresh()
         m_refreshTimer = new QTimer(this);
         m_refreshTimer->setSingleShot(true);
         m_refreshTimer->setInterval(RefreshDebounceMs);
-        connect(m_refreshTimer, &QTimer::timeout,
-                this, &ScriptedAlgorithmLoader::performDebouncedRefresh);
+        connect(m_refreshTimer, &QTimer::timeout, this, &ScriptedAlgorithmLoader::performDebouncedRefresh);
     }
 
     m_refreshTimer->start();
@@ -234,9 +227,7 @@ void ScriptedAlgorithmLoader::reWatchFiles()
     };
 
     const QStringList allDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation,
-        QStringLiteral("plasmazones/algorithms"),
-        QStandardPaths::LocateDirectory);
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/algorithms"), QStandardPaths::LocateDirectory);
     for (const QString& dir : allDirs) {
         reWatch(dir);
     }

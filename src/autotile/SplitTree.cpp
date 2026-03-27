@@ -7,6 +7,7 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QLatin1String>
 
 #include <algorithm>
 
@@ -95,7 +96,7 @@ static void splitLeaf(SplitNode* leaf, const QString& newId)
     // Convert leaf to internal node
     leaf->windowId.clear();
     leaf->splitHorizontal = horizontal;
-    leaf->splitRatio = 0.5;
+    leaf->splitRatio = PlasmaZones::AutotileDefaults::DefaultSplitRatio;
     leaf->first = std::move(firstChild);
     leaf->second = std::move(secondChild);
 }
@@ -265,7 +266,7 @@ QVector<QRect> SplitTree::applyGeometry(const QRect& area, int innerGap) const
 }
 
 void SplitTree::applyGeometryRecursive(const SplitNode* node, const QRect& rect, int innerGap,
-                                        QVector<QRect>& zones) const
+                                       QVector<QRect>& zones) const
 {
     if (!node) {
         return;
@@ -335,7 +336,7 @@ QJsonObject SplitTree::toJson() const
 {
     QJsonObject json;
     if (m_root) {
-        json[QStringLiteral("root")] = nodeToJson(m_root.get());
+        json[QLatin1String("root")] = nodeToJson(m_root.get());
     }
     return json;
 }
@@ -343,8 +344,8 @@ QJsonObject SplitTree::toJson() const
 std::unique_ptr<SplitTree> SplitTree::fromJson(const QJsonObject& json)
 {
     auto tree = std::make_unique<SplitTree>();
-    if (json.contains(QStringLiteral("root"))) {
-        const QJsonObject rootObj = json[QStringLiteral("root")].toObject();
+    if (json.contains(QLatin1String("root"))) {
+        const QJsonObject rootObj = json[QLatin1String("root")].toObject();
         tree->m_root = nodeFromJson(rootObj, nullptr);
     }
     return tree;
@@ -357,14 +358,14 @@ QJsonObject SplitTree::nodeToJson(const SplitNode* node)
         return json;
     }
 
-    json[QStringLiteral("ratio")] = node->splitRatio;
-    json[QStringLiteral("horizontal")] = node->splitHorizontal;
+    json[QLatin1String("ratio")] = node->splitRatio;
+    json[QLatin1String("horizontal")] = node->splitHorizontal;
 
     if (node->isLeaf()) {
-        json[QStringLiteral("windowId")] = node->windowId;
+        json[QLatin1String("windowId")] = node->windowId;
     } else {
-        json[QStringLiteral("first")] = nodeToJson(node->first.get());
-        json[QStringLiteral("second")] = nodeToJson(node->second.get());
+        json[QLatin1String("first")] = nodeToJson(node->first.get());
+        json[QLatin1String("second")] = nodeToJson(node->second.get());
     }
 
     return json;
@@ -383,20 +384,20 @@ std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, Spli
 
     auto node = std::make_unique<SplitNode>();
     node->parent = parent;
-    node->splitRatio = std::clamp(json[QStringLiteral("ratio")].toDouble(0.5), MinSplitRatio, MaxSplitRatio);
-    node->splitHorizontal = json[QStringLiteral("horizontal")].toBool(false);
+    node->splitRatio = std::clamp(json[QLatin1String("ratio")].toDouble(0.5), MinSplitRatio, MaxSplitRatio);
+    node->splitHorizontal = json[QLatin1String("horizontal")].toBool(false);
 
-    if (json.contains(QStringLiteral("first")) && json.contains(QStringLiteral("second"))) {
+    if (json.contains(QLatin1String("first")) && json.contains(QLatin1String("second"))) {
         // Internal node
-        node->first = nodeFromJson(json[QStringLiteral("first")].toObject(), node.get(), depth + 1);
-        node->second = nodeFromJson(json[QStringLiteral("second")].toObject(), node.get(), depth + 1);
+        node->first = nodeFromJson(json[QLatin1String("first")].toObject(), node.get(), depth + 1);
+        node->second = nodeFromJson(json[QLatin1String("second")].toObject(), node.get(), depth + 1);
         if (!node->first || !node->second) {
             qCWarning(lcAutotile) << "SplitTree::fromJson: invalid internal node (missing child)";
             return nullptr;
         }
     } else {
         // Leaf node
-        node->windowId = json[QStringLiteral("windowId")].toString();
+        node->windowId = json[QLatin1String("windowId")].toString();
     }
 
     return node;

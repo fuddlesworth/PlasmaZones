@@ -376,8 +376,8 @@ public:
      *
      * Used after operations that reorder windows (move, promote, rotate)
      * to preserve the tree's existence while matching the new order.
-     * Split ratios are reset to 0.5, but the tree structure is retained
-     * so DwindleMemoryAlgorithm doesn't fall back to stateless mode.
+     * Split ratios are preserved positionally where possible, so
+     * DwindleMemoryAlgorithm doesn't fall back to stateless mode.
      */
     void rebuildSplitTree();
 
@@ -433,13 +433,9 @@ private:
     void notifyStateChanged();
 
     // Helpers for rebuildSplitTree() — preserve split ratios across rebuild
-    static void collectInternalNodeParams(const SplitNode* node,
-                                           QVector<qreal>& ratios,
-                                           QVector<bool>& directions);
-    static int applyInternalNodeParams(SplitNode* node,
-                                        const QVector<qreal>& ratios,
-                                        const QVector<bool>& directions,
-                                        int index);
+    static void collectInternalNodeParams(const SplitNode* node, QVector<qreal>& ratios, QVector<bool>& directions);
+    static int applyInternalNodeParams(SplitNode* node, const QVector<qreal>& ratios, const QVector<bool>& directions,
+                                       int index);
 };
 
 } // namespace PlasmaZones

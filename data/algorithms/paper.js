@@ -4,12 +4,12 @@
 // @name Paper
 // @description Equal-width overlapping pages like a document viewer; splitRatio controls page width
 // @producesOverlappingZones true
-// @zoneNumberDisplay last
 // @supportsMasterCount false
 // @supportsSplitRatio true
 // @defaultSplitRatio 0.8
 // @defaultMaxWindows 6
 // @minimumWindows 1
+// @zoneNumberDisplay last
 
 /**
  * Paper layout: each window is an equal-width "page" (default 80%

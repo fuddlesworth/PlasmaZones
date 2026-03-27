@@ -19,7 +19,7 @@
 #include "PerScreenConfigResolver.h"
 #include "SettingsBridge.h"
 #include "TilingAlgorithm.h"
-#include "algorithms/DwindleMemoryAlgorithm.h"
+// DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on TilingAlgorithm
 #include "TilingState.h"
 #include "core/constants.h"
 #include "core/layout.h"
@@ -1492,13 +1492,9 @@ void AutotileEngine::recalculateLayout(const QString& screenId)
         }
     }
 
-    // Ensure memory-based algorithms have their split tree before calculateZones().
-    // This avoids const_cast inside the algorithm — the engine owns the mutation.
-    if (algo->supportsMemory() && state) {
-        if (auto* memAlgo = qobject_cast<const DwindleMemoryAlgorithm*>(algo)) {
-            memAlgo->ensureSplitTree(state);
-        }
-    }
+    // Let memory-based algorithms prepare their state (e.g., lazily create a SplitTree)
+    // before calculateZones(). Virtual dispatch avoids concrete type casts here.
+    algo->prepareTilingState(state);
 
     // Pass minSizes to algorithm so it can incorporate them directly into zone
     // calculations using its topology knowledge (split tree, column structure, etc.)
