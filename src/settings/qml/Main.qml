@@ -17,6 +17,8 @@ ApplicationWindow {
     property int _previousIndex: 0
     // Shortcut overlay visibility
     property bool _showShortcuts: false
+    // Close-without-save guard
+    property bool _closeConfirmed: false
     // ── Drill-down sidebar state ─────────────────────────────────────
     // "main" = top-level list; otherwise the parent name (e.g. "snapping")
     property string _sidebarMode: "main"
@@ -323,8 +325,12 @@ ApplicationWindow {
     width: Kirigami.Units.gridUnit * 80
     height: Kirigami.Units.gridUnit * 48
     visible: true
-    onClosing: {
+    onClosing: function(close) {
         settingsController.saveWindowGeometry(window.x, window.y, window.width, window.height);
+        if (settingsController.needsSave && !window._closeConfirmed) {
+            close.accepted = false;
+            unsavedChangesDialog.open();
+        }
     }
     Component.onCompleted: {
         // Restore window geometry
@@ -1411,6 +1417,41 @@ ApplicationWindow {
 
         }
 
+    }
+
+    // ── Unsaved changes confirmation dialog ────────────────────────
+    Kirigami.PromptDialog {
+        id: unsavedChangesDialog
+
+        title: i18n("Unsaved Changes")
+        subtitle: i18n("You have unsaved changes. Do you want to apply them before closing?")
+        standardButtons: Kirigami.Dialog.NoButton
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Apply")
+                icon.name: "dialog-ok-apply"
+                onTriggered: {
+                    unsavedChangesDialog.close();
+                    settingsController.save();
+                    window._closeConfirmed = true;
+                    window.close();
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Discard")
+                icon.name: "edit-delete"
+                onTriggered: {
+                    unsavedChangesDialog.close();
+                    window._closeConfirmed = true;
+                    window.close();
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Cancel")
+                icon.name: "dialog-cancel"
+                onTriggered: unsavedChangesDialog.close()
+            }
+        ]
     }
 
     // ── Keyboard shortcut overlay ──────────────────────────────────
