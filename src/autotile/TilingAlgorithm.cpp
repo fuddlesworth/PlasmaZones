@@ -264,6 +264,18 @@ int TilingAlgorithm::minHeightAt(const QVector<QSize>& minSizes, int index)
     return (index >= 0 && index < minSizes.size()) ? std::max(0, minSizes[index].height()) : 0;
 }
 
+void TilingAlgorithm::applyPerWindowMinSize(int& width, int& height, const QVector<QSize>& minSizes, int index)
+{
+    if (index < minSizes.size()) {
+        if (minSizes[index].width() > 0) {
+            width = std::max(width, minSizes[index].width());
+        }
+        if (minSizes[index].height() > 0) {
+            height = std::max(height, minSizes[index].height());
+        }
+    }
+}
+
 void TilingAlgorithm::solveTwoPartMinSizes(int contentDim, int& firstDim, int& secondDim, int minFirst, int minSecond)
 {
     const int totalMin = std::max(minFirst, 0) + std::max(minSecond, 0);

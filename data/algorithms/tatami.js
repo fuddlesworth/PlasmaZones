@@ -56,17 +56,20 @@ function calculateZones(params) {
 
     const zones = [];
     const rows = Math.ceil(count / 2);
-    let rowHeight = Math.round((area.height - gap * (rows - 1)) / rows);
-    if (rowHeight < 1) rowHeight = 1;
 
-    // Degenerate case: gaps consume all available height
-    if (area.height - gap * (rows - 1) <= 0) {
+    // Degenerate case: gaps consume all available height — must check BEFORE
+    // computing rowHeight to avoid producing overlapping 1px rows.
+    const availableHeight = area.height - gap * (rows - 1);
+    if (availableHeight <= 0) {
         const fallback = [];
         for (let i = 0; i < count; i++) {
             fallback.push({ x: area.x, y: area.y, width: area.width, height: area.height });
         }
         return fallback;
     }
+
+    let rowHeight = Math.round(availableHeight / rows);
+    if (rowHeight < 1) rowHeight = 1;
 
     const EVEN_ROW_RATIO = 0.55; // Offset to prevent four-corner intersections
     const ODD_ROW_RATIO = 0.45;

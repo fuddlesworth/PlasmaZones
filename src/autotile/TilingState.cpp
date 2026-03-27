@@ -149,7 +149,14 @@ bool TilingState::swapWindows(int index1, int index2)
 
 bool TilingState::swapWindowsById(const QString& windowId1, const QString& windowId2)
 {
-    return swapWindows(m_windowOrder.indexOf(windowId1), m_windowOrder.indexOf(windowId2));
+    const int index1 = m_windowOrder.indexOf(windowId1);
+    const int index2 = m_windowOrder.indexOf(windowId2);
+
+    if (index1 < 0 || index2 < 0) {
+        return false; // One or both windows not tracked
+    }
+
+    return swapWindows(index1, index2);
 }
 
 int TilingState::windowIndex(const QString& windowId) const
@@ -429,6 +436,8 @@ bool TilingState::toggleFloating(const QString& windowId)
 QStringList TilingState::floatingWindows() const
 {
     QStringList list(m_floatingWindows.begin(), m_floatingWindows.end());
+    // Sort for deterministic serialization — QSet iteration order is unstable
+    // across Qt versions and hash seed randomization.
     list.sort();
     return list;
 }

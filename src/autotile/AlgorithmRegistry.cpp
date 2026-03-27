@@ -62,13 +62,20 @@ AlgorithmRegistry::~AlgorithmRegistry()
 
 void AlgorithmRegistry::cleanup()
 {
+    if (m_algorithms.isEmpty()) {
+        return; // Already cleaned up (e.g., aboutToQuit already ran)
+    }
+
     // Explicitly delete all algorithm children while Qt is still alive.
     // This prevents crashes when the static singleton is destroyed after
     // QCoreApplication during static destruction (ScriptedAlgorithm
     // instances hold QJSEngine internals that require a live Qt runtime).
+    // Use direct delete instead of deleteLater() — this runs during shutdown
+    // where the event loop may not drain the deferred-delete queue before
+    // ~QObject() tries to destroy remaining children (double-free risk).
     for (auto* algo : std::as_const(m_algorithms)) {
         algo->setParent(nullptr);
-        algo->deleteLater();
+        delete algo;
     }
     m_algorithms.clear();
     m_registrationOrder.clear();

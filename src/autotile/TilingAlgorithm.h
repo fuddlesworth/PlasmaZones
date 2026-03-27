@@ -25,7 +25,10 @@ struct TilingParams
 {
     int windowCount = 0; ///< Number of windows to tile
     QRect screenGeometry; ///< Available screen area in absolute pixels
-    const TilingState* state = nullptr; ///< Current tiling state (must be non-null)
+    /// Current tiling state. Must be non-null for all algorithm calls —
+    /// algorithms may dereference without checking. The engine guarantees
+    /// this by constructing TilingState before calling calculateZones().
+    const TilingState* state = nullptr;
     int innerGap = 0; ///< Gap between adjacent zones in pixels
     EdgeGaps outerGaps; ///< Gaps at screen edges in pixels (per-side)
     QVector<QSize> minSizes = {}; ///< Per-window minimum sizes (may be empty)
@@ -322,6 +325,19 @@ protected:
      * @param minSecond Minimum for second dimension (0 = unconstrained)
      */
     static void solveTwoPartMinSizes(int contentDim, int& firstDim, int& secondDim, int minFirst, int minSecond);
+
+    /**
+     * @brief Apply per-window minimum size constraints (used by overlapping algorithms)
+     *
+     * Clamps width and height upward to the minimum from minSizes[index].
+     * No-op if index is out of range or mins are zero.
+     *
+     * @param width Current width (modified in place)
+     * @param height Current height (modified in place)
+     * @param minSizes Per-window minimum sizes vector
+     * @param index Window index into minSizes
+     */
+    static void applyPerWindowMinSize(int& width, int& height, const QVector<QSize>& minSizes, int index);
 
     /**
      * @brief Result of solving three-column width distribution

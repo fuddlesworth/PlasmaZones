@@ -273,7 +273,10 @@ void SplitTree::remove(const QString& windowId)
     }
 
     if (!sibling) {
-        // Half-constructed node (only one child) — remove the parent entirely
+        // Half-constructed node (only one child) — tree is corrupt.
+        // Remove the parent entirely to recover gracefully.
+        qCWarning(lcAutotile) << "SplitTree::remove: half-constructed node detected (missing sibling),"
+                              << "recovering by removing parent node";
         if (parent->parent) {
             auto& parentRef = (parent->parent->first.get() == parent) ? parent->parent->first : parent->parent->second;
             parentRef.reset();

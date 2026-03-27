@@ -40,9 +40,15 @@ void DwindleMemoryAlgorithm::prepareTilingState(TilingState* state) const
         return; // Already has a tree (or no state)
     }
 
-    // Dwindle splits should be equal (0.5), not the master/stack ratio (0.6).
-    // Set this BEFORE any tree operations so rebuildSplitTree() also uses 0.5.
-    state->setSplitRatio(defaultSplitRatio());
+    // Only reset the split ratio to our default (0.5) if it still holds a
+    // value from a different algorithm (e.g., MasterStack's 0.6). If the
+    // user has already adjusted the ratio while using this algorithm, their
+    // customization is preserved.
+    const qreal currentRatio = state->splitRatio();
+    if (!qFuzzyCompare(1.0 + currentRatio, 1.0 + defaultSplitRatio())
+        && (currentRatio > defaultSplitRatio() + 0.05 || currentRatio < defaultSplitRatio() - 0.05)) {
+        state->setSplitRatio(defaultSplitRatio());
+    }
 
     const QStringList tiledWindows = state->tiledWindows();
     if (tiledWindows.size() <= 1) {
