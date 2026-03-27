@@ -63,6 +63,10 @@ void WindowTrackingAdaptor::moveWindowToAdjacentZone(const QString& direction)
         return;
     }
 
+    if (isWindowExcluded(m_lastActiveWindowId, QStringLiteral("move"))) {
+        return;
+    }
+
     QString screenId = resolveNavScreen(this, m_lastActiveWindowId, m_service);
     QString resultJson = getMoveTargetForWindow(m_lastActiveWindowId, direction, screenId);
 
@@ -123,6 +127,10 @@ void WindowTrackingAdaptor::pushToEmptyZone(const QString& screenId)
     if (m_lastActiveWindowId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("push"), QStringLiteral("no_window"), QString(), QString(),
                                   screenId.isEmpty() ? m_lastActiveScreenId : screenId);
+        return;
+    }
+
+    if (isWindowExcluded(m_lastActiveWindowId, QStringLiteral("push"))) {
         return;
     }
 
@@ -199,6 +207,10 @@ void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
         return;
     }
 
+    if (isWindowExcluded(m_lastActiveWindowId, QStringLiteral("swap"))) {
+        return;
+    }
+
     QString screenId = resolveNavScreen(this, m_lastActiveWindowId, m_service);
     QString resultJson = getSwapTargetForWindow(m_lastActiveWindowId, direction, screenId);
 
@@ -255,25 +267,8 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& sc
         return;
     }
 
-    // Exclusion check: excluded apps should not be snapped even via keyboard shortcuts
-    if (m_settings) {
-        const QString appId = Utils::extractAppId(m_lastActiveWindowId);
-        for (const QString& excluded : m_settings->excludedApplications()) {
-            if (Utils::appIdMatches(appId, excluded)) {
-                qCInfo(lcDbusWindow) << "snapToZoneByNumber:" << m_lastActiveWindowId << "excluded by app rule:" << excluded;
-                Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("excluded"), appId, QString(),
-                                          screenId.isEmpty() ? m_lastActiveScreenId : screenId);
-                return;
-            }
-        }
-        for (const QString& excluded : m_settings->excludedWindowClasses()) {
-            if (Utils::appIdMatches(appId, excluded)) {
-                qCInfo(lcDbusWindow) << "snapToZoneByNumber:" << m_lastActiveWindowId << "excluded by class rule:" << excluded;
-                Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("excluded"), appId, QString(),
-                                          screenId.isEmpty() ? m_lastActiveScreenId : screenId);
-                return;
-            }
-        }
+    if (isWindowExcluded(m_lastActiveWindowId, QStringLiteral("snap"))) {
+        return;
     }
 
     QString effectiveScreen = screenId.isEmpty() ? resolveNavScreen(this, m_lastActiveWindowId, m_service) : screenId;
@@ -527,6 +522,32 @@ bool WindowTrackingAdaptor::validateDirection(const QString& direction, const QS
         return false;
     }
     return true;
+}
+
+bool WindowTrackingAdaptor::isWindowExcluded(const QString& windowId, const QString& action)
+{
+    if (!m_settings) {
+        return false;
+    }
+
+    const QString appId = Utils::extractAppId(windowId);
+    for (const QString& excluded : m_settings->excludedApplications()) {
+        if (Utils::appIdMatches(appId, excluded)) {
+            qCInfo(lcDbusWindow) << action << ":" << windowId << "excluded by app rule:" << excluded;
+            Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(),
+                                      m_lastActiveScreenId);
+            return true;
+        }
+    }
+    for (const QString& excluded : m_settings->excludedWindowClasses()) {
+        if (Utils::appIdMatches(appId, excluded)) {
+            qCInfo(lcDbusWindow) << action << ":" << windowId << "excluded by class rule:" << excluded;
+            Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(),
+                                      m_lastActiveScreenId);
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace PlasmaZones

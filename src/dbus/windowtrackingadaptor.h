@@ -873,6 +873,14 @@ private:
     bool validateDirection(const QString& direction, const QString& action);
 
     /**
+     * @brief Check if a window is excluded from keyboard shortcut operations
+     * @param windowId Full window ID to check
+     * @param action Action name for feedback signal (e.g. "move", "swap")
+     * @return true if window is excluded (caller should abort), false to proceed
+     */
+    bool isWindowExcluded(const QString& windowId, const QString& action);
+
+    /**
      * @brief Detect which screen a zone is on by finding where its center falls
      * @param zoneId Zone UUID string
      * @return Screen name, or empty string if not determinable
