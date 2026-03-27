@@ -128,7 +128,8 @@ private:
     mutable QJSEngine* m_engine = nullptr;
     std::shared_ptr<std::atomic<bool>> m_engineAlive; ///< Watchdog thread checks this before touching m_engine
     std::shared_ptr<std::mutex> m_engineMutex; ///< Guards engine pointer access between watchdog and destructor
-    mutable std::atomic<uint64_t> m_watchdogGeneration{0}; ///< Generation counter to prevent stale watchdog interrupts
+    std::shared_ptr<std::atomic<uint64_t>>
+        m_watchdogGeneration; ///< Generation counter to prevent stale watchdog interrupts
     std::shared_ptr<QJSEngine*> m_watchdogEnginePtr; ///< Stable engine pointer shared with watchdog threads
     mutable QJSValue m_calculateZonesFn;
     QString m_filePath;
@@ -161,6 +162,7 @@ private:
     int m_cachedMinimumWindows = -1;
     int m_cachedDefaultMaxWindows = -1;
     int m_cachedMasterZoneIndex = -1;
+    qreal m_cachedDefaultSplitRatio = 0.0;
     bool m_cachedProducesOverlappingZones = false;
     bool m_cachedSupportsMasterCount = false;
     bool m_cachedSupportsSplitRatio = false;

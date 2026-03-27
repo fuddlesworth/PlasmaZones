@@ -31,6 +31,7 @@ ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
     , m_engine(new QJSEngine(this))
     , m_engineAlive(std::make_shared<std::atomic<bool>>(true))
     , m_engineMutex(std::make_shared<std::mutex>())
+    , m_watchdogGeneration(std::make_shared<std::atomic<uint64_t>>(0))
     , m_watchdogEnginePtr(std::make_shared<QJSEngine*>(m_engine))
 {
     loadScript(filePath);
@@ -199,6 +200,11 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         if (!r.isError() && r.isNumber())
             m_cachedDefaultMaxWindows = std::clamp(r.toInt(), 1, 100);
     }
+    if (m_jsDefaultSplitRatio.isCallable()) {
+        const QJSValue r = m_jsDefaultSplitRatio.call();
+        if (!r.isError() && r.isNumber())
+            m_cachedDefaultSplitRatio = std::clamp(r.toNumber(), MinSplitRatio, MaxSplitRatio);
+    }
     if (m_jsProducesOverlappingZones.isCallable()) {
         const QJSValue r = m_jsProducesOverlappingZones.call();
         if (!r.isError() && r.isBool())
@@ -338,12 +344,12 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     // H1: We use a generation counter to prevent stale watchdog threads from
     // interrupting a newer calculateZones() call. Each call increments the
     // generation and the watchdog only interrupts if the generation still matches.
-    const uint64_t myGen = ++m_watchdogGeneration;
+    const uint64_t myGen = ++(*m_watchdogGeneration);
 
     auto aliveFlag = m_engineAlive;
     auto engineMtx = m_engineMutex;
     auto enginePtr = m_watchdogEnginePtr;
-    auto* genPtr = &m_watchdogGeneration;
+    auto genPtr = m_watchdogGeneration; // shared_ptr copy — prevents use-after-free
     std::thread([enginePtr, aliveFlag, engineMtx, genPtr, myGen]() {
         QThread::msleep(ScriptWatchdogTimeoutMs);
         // Only interrupt if this is still the active generation
@@ -366,7 +372,7 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     const QJSValue result = m_calculateZonesFn.call({jsParams});
 
     // Advance generation so any in-flight watchdog becomes a no-op, and reset interrupted state
-    ++m_watchdogGeneration;
+    ++(*m_watchdogGeneration);
     m_engine->setInterrupted(false);
 
     if (result.isError()) {
@@ -443,10 +449,15 @@ QString ScriptedAlgorithm::name() const
     if (!m_name.isEmpty()) {
         return m_name;
     }
-    // Fall back to script ID with first letter capitalized
+    // Fall back to basename (strip "script:" prefix) with first letter capitalized
     if (!m_scriptId.isEmpty()) {
         QString fallback = m_scriptId;
-        fallback[0] = fallback[0].toUpper();
+        if (fallback.startsWith(QLatin1String("script:"))) {
+            fallback = fallback.mid(7);
+        }
+        if (!fallback.isEmpty()) {
+            fallback[0] = fallback[0].toUpper();
+        }
         return fallback;
     }
     return QStringLiteral("Scripted");
@@ -506,6 +517,10 @@ bool ScriptedAlgorithm::supportsSplitRatio() const noexcept
 
 qreal ScriptedAlgorithm::defaultSplitRatio() const noexcept
 {
+    // H5: Return cached value if available
+    if (m_cachedValuesLoaded && m_jsDefaultSplitRatio.isCallable()) {
+        return m_cachedDefaultSplitRatio;
+    }
     if (m_jsDefaultSplitRatio.isCallable()) {
         const QJSValue result = m_jsDefaultSplitRatio.call();
         if (!result.isError() && result.isNumber())
