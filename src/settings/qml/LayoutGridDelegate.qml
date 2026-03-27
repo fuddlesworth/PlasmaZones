@@ -319,14 +319,14 @@ Item {
 
         Behavior on color {
             ColorAnimation {
-                duration: 150
+                duration: Kirigami.Units.shortDuration
             }
 
         }
 
         Behavior on border.color {
             ColorAnimation {
-                duration: 150
+                duration: Kirigami.Units.shortDuration
             }
 
         }
@@ -339,7 +339,7 @@ Item {
 
             Behavior on xScale {
                 NumberAnimation {
-                    duration: 150
+                    duration: Kirigami.Units.shortDuration
                     easing.type: Easing.OutCubic
                 }
 
@@ -347,7 +347,7 @@ Item {
 
             Behavior on yScale {
                 NumberAnimation {
-                    duration: 150
+                    duration: Kirigami.Units.shortDuration
                     easing.type: Easing.OutCubic
                 }
 

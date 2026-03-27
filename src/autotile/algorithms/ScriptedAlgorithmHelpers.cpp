@@ -205,11 +205,11 @@ QVector<QRect> clampZonesToArea(const QVector<QRect>& zones, const QRect& area, 
 {
     QVector<QRect> clamped;
     clamped.reserve(zones.size());
-    for (const QRect& zone : std::as_const(zones)) {
+    for (int i = 0; i < zones.size(); ++i) {
+        const QRect& zone = zones[i];
         const QRect bounded = zone.intersected(area);
         if (bounded.isEmpty()) {
-            qCWarning(lcAutotile) << "ScriptedAlgorithm: zone" << (&zone - &zones.first())
-                                  << "outside area, using full area as fallback"
+            qCWarning(lcAutotile) << "ScriptedAlgorithm: zone" << i << "outside area, using full area as fallback"
                                   << "zone=" << zone << "area=" << area << "script=" << scriptId;
             clamped.append(area);
             continue;

@@ -205,8 +205,9 @@ private:
     mutable QJSValue m_jsProducesOverlappingZones;
 
     // H5: Cached JS virtual method overrides (loaded once at script load time)
-    int m_cachedMinimumWindows = -1;
-    int m_cachedDefaultMaxWindows = -1;
+    mutable int m_gcCounter = 0; ///< L4: GC throttle — only collect every 10th invocation
+    int m_cachedMinimumWindows = 1;
+    int m_cachedDefaultMaxWindows = 6;
     int m_cachedMasterZoneIndex = -1;
     qreal m_cachedDefaultSplitRatio = 0.0;
     bool m_cachedProducesOverlappingZones = false;

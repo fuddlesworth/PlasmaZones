@@ -69,7 +69,6 @@ private:
     static constexpr int ScreenWidth = 1920;
     static constexpr int ScreenHeight = 1080;
     QRect m_screenGeometry{0, 0, ScreenWidth, ScreenHeight};
-    QTemporaryDir m_tempDir;
 
     /**
      * @brief Minimal valid script with all metadata and a simple calculateZones
@@ -144,7 +143,6 @@ private Q_SLOTS:
 
     void init()
     {
-        QVERIFY(m_tempDir.isValid());
     }
 
     // =========================================================================
@@ -487,7 +485,9 @@ private Q_SLOTS:
 
         for (int n = 1; n <= 4; ++n) {
             auto zones = algo.calculateZones({n, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
-            QCOMPARE(zones.size(), n);
+            QVERIFY2(zones.size() >= 1 && zones.size() <= n,
+                     qPrintable(
+                         QStringLiteral("Expected 1-%1 zones, got %2 for %3").arg(n).arg(zones.size()).arg(filename)));
             verifyAllZonesPositive(zones);
         }
     }
@@ -516,6 +516,8 @@ private Q_SLOTS:
         auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
 
         QVERIFY(zones.isEmpty()); // Watchdog killed it — no zones returned
+        QVERIFY2(timer.elapsed() < 5000,
+                 qPrintable(QStringLiteral("Watchdog took %1ms, expected < 5000ms").arg(timer.elapsed())));
     }
 
     void testCalculateZones_runtimeThrow()

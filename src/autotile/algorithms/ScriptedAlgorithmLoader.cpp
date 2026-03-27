@@ -89,7 +89,7 @@ void ScriptedAlgorithmLoader::ensureUserDirectoryExists()
     }
 }
 
-void ScriptedAlgorithmLoader::scanAndRegister()
+bool ScriptedAlgorithmLoader::scanAndRegister()
 {
     // L11: Lazily create user directory on first scan
     ensureUserDirectoryExists();
@@ -124,14 +124,37 @@ void ScriptedAlgorithmLoader::scanAndRegister()
     // AlgorithmRegistry::unregisterAlgorithm() uses deleteLater(), so any
     // in-flight calculateZones() calls on the old algorithm object will
     // finish before it is destroyed.
+    bool changed = false;
     for (auto it = oldScriptIdToPath.constBegin(); it != oldScriptIdToPath.constEnd(); ++it) {
         if (!newScriptIds.contains(it.key())) {
             registry->unregisterAlgorithm(it.key());
             qCInfo(lcAutotile) << "Unregistered stale scripted algorithm:" << it.key();
+            changed = true;
         }
     }
 
-    qCInfo(lcAutotile) << "Scripted algorithms loaded:" << m_scriptIdToPath.size();
+    // Detect additions or path changes (modified/replaced scripts)
+    if (!changed) {
+        // Build old key set for comparison
+        QSet<QString> oldScriptIds;
+        for (auto it = oldScriptIdToPath.constBegin(); it != oldScriptIdToPath.constEnd(); ++it) {
+            oldScriptIds.insert(it.key());
+        }
+        if (newScriptIds != oldScriptIds) {
+            changed = true;
+        } else {
+            // Same IDs — check if any paths changed (script was replaced/modified)
+            for (auto it = m_scriptIdToPath.constBegin(); it != m_scriptIdToPath.constEnd(); ++it) {
+                if (oldScriptIdToPath.value(it.key()) != it.value()) {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    qCInfo(lcAutotile) << "Scripted algorithms loaded:" << m_scriptIdToPath.size() << "changed=" << changed;
+    return changed;
 }
 
 void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserDir)
@@ -142,7 +165,10 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         dirObj.entryList({QStringLiteral("*.js")}, QDir::Files | QDir::NoSymLinks | QDir::Readable);
 
     for (const QString& file : files) {
-        const QString fullPath = dirObj.filePath(file);
+        const QString rawPath = dirObj.filePath(file);
+        const QString fullPath = QFileInfo(rawPath).canonicalFilePath();
+        if (fullPath.isEmpty())
+            continue; // file vanished between listing and stat
 
         // Validate filename against whitelist to prevent injection via crafted filenames
         static const QRegularExpression validIdRe(QStringLiteral("^[a-zA-Z0-9_-]+$"));
@@ -231,9 +257,11 @@ void ScriptedAlgorithmLoader::scheduleRefresh()
 void ScriptedAlgorithmLoader::performDebouncedRefresh()
 {
     qCInfo(lcAutotile) << "Algorithm directory changed, refreshing...";
-    scanAndRegister();
+    const bool changed = scanAndRegister();
     reWatchFiles();
-    Q_EMIT algorithmsChanged();
+    if (changed) {
+        Q_EMIT algorithmsChanged();
+    }
 }
 
 void ScriptedAlgorithmLoader::reWatchFiles()

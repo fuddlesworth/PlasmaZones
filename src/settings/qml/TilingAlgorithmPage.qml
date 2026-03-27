@@ -289,7 +289,7 @@ Flickable {
 
                         Layout.fillWidth: true
                         from: settingsController.autotileMaxWindowsMin
-                        to: 12
+                        to: 12 // Intentional cap — most algorithms degrade beyond 12 windows; settingsController does not expose autotileMaxWindowsMax to QML
                         stepSize: 1
                         formatValue: function(v) {
                             return Math.round(v).toString();

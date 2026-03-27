@@ -16,6 +16,40 @@
 using namespace PlasmaZones;
 
 /**
+ * @brief RAII guard for XDG environment variables — restores on destruction even if test fails
+ */
+class XdgEnvGuard
+{
+public:
+    XdgEnvGuard()
+    {
+        m_savedDataDirs = qgetenv("XDG_DATA_DIRS");
+        m_savedDataHome = qgetenv("XDG_DATA_HOME");
+        m_hadDataDirs = qEnvironmentVariableIsSet("XDG_DATA_DIRS");
+        m_hadDataHome = qEnvironmentVariableIsSet("XDG_DATA_HOME");
+    }
+    ~XdgEnvGuard()
+    {
+        if (m_hadDataDirs)
+            qputenv("XDG_DATA_DIRS", m_savedDataDirs);
+        else
+            qunsetenv("XDG_DATA_DIRS");
+        if (m_hadDataHome)
+            qputenv("XDG_DATA_HOME", m_savedDataHome);
+        else
+            qunsetenv("XDG_DATA_HOME");
+    }
+    XdgEnvGuard(const XdgEnvGuard&) = delete;
+    XdgEnvGuard& operator=(const XdgEnvGuard&) = delete;
+
+private:
+    QByteArray m_savedDataDirs;
+    QByteArray m_savedDataHome;
+    bool m_hadDataDirs = false;
+    bool m_hadDataHome = false;
+};
+
+/**
  * @brief Helper to write a .js script file in a given directory
  */
 static QString writeScript(const QString& dirPath, const QString& filename, const QString& content)
@@ -69,14 +103,8 @@ private Q_SLOTS:
 
     void testScanAndRegister_registersValidScripts()
     {
-        QTemporaryDir systemDir;
-        QVERIFY(systemDir.isValid());
+        XdgEnvGuard envGuard;
 
-        writeScript(systemDir.path(), QStringLiteral("alpha.js"), validScript(QStringLiteral("Alpha")));
-        writeScript(systemDir.path(), QStringLiteral("beta.js"), validScript(QStringLiteral("Beta")));
-
-        // Set XDG_DATA_DIRS to our temp dir so the loader finds scripts there
-        // We use a subdirectory structure matching "plasmazones/algorithms/"
         QTemporaryDir xdgRoot;
         QVERIFY(xdgRoot.isValid());
         QString algoDir = xdgRoot.path() + QStringLiteral("/plasmazones/algorithms");
@@ -84,9 +112,6 @@ private Q_SLOTS:
 
         writeScript(algoDir, QStringLiteral("gamma.js"), validScript(QStringLiteral("Gamma")));
 
-        // Save and override XDG paths
-        QByteArray origDataDirs = qgetenv("XDG_DATA_DIRS");
-        QByteArray origDataHome = qgetenv("XDG_DATA_HOME");
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
@@ -97,21 +122,8 @@ private Q_SLOTS:
         auto* registry = AlgorithmRegistry::instance();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:gamma")));
 
-        // Cleanup
         loader.reset();
         loader.emplace();
-
-        // Restore environment
-        if (origDataDirs.isEmpty()) {
-            qunsetenv("XDG_DATA_DIRS");
-        } else {
-            qputenv("XDG_DATA_DIRS", origDataDirs);
-        }
-        if (origDataHome.isEmpty()) {
-            qunsetenv("XDG_DATA_HOME");
-        } else {
-            qputenv("XDG_DATA_HOME", origDataHome);
-        }
     }
 
     // =========================================================================
@@ -120,6 +132,8 @@ private Q_SLOTS:
 
     void testFilenameValidation_invalidCharsRejected()
     {
+        XdgEnvGuard envGuard;
+
         // The loader validates filenames against ^[a-zA-Z0-9_-]+$
         // Files with spaces, dots (in basename), or other special chars are rejected
         QTemporaryDir xdgRoot;
@@ -136,8 +150,6 @@ private Q_SLOTS:
         // Invalid: special chars
         writeScript(algoDir, QStringLiteral("special!char.js"), validScript(QStringLiteral("Special")));
 
-        QByteArray origDataDirs = qgetenv("XDG_DATA_DIRS");
-        QByteArray origDataHome = qgetenv("XDG_DATA_HOME");
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
@@ -151,20 +163,8 @@ private Q_SLOTS:
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:has.dot")));
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:special!char")));
 
-        // Cleanup: destroy loader to unregister
         loader.reset();
         loader.emplace();
-
-        if (origDataDirs.isEmpty()) {
-            qunsetenv("XDG_DATA_DIRS");
-        } else {
-            qputenv("XDG_DATA_DIRS", origDataDirs);
-        }
-        if (origDataHome.isEmpty()) {
-            qunsetenv("XDG_DATA_HOME");
-        } else {
-            qputenv("XDG_DATA_HOME", origDataHome);
-        }
     }
 
     // =========================================================================
@@ -173,6 +173,8 @@ private Q_SLOTS:
 
     void testUserOverridesSystem()
     {
+        XdgEnvGuard envGuard;
+
         QTemporaryDir xdgRoot;
         QVERIFY(xdgRoot.isValid());
 
@@ -186,9 +188,6 @@ private Q_SLOTS:
         QDir().mkpath(userAlgoDir);
         writeScript(userAlgoDir, QStringLiteral("shared.js"), validScript(QStringLiteral("UserVersion")));
 
-        // Point XDG_DATA_DIRS to system, XDG_DATA_HOME to user
-        QByteArray origDataDirs = qgetenv("XDG_DATA_DIRS");
-        QByteArray origDataHome = qgetenv("XDG_DATA_HOME");
         qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
         qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user")).toUtf8());
 
@@ -206,17 +205,6 @@ private Q_SLOTS:
 
         loader.reset();
         loader.emplace();
-
-        if (origDataDirs.isEmpty()) {
-            qunsetenv("XDG_DATA_DIRS");
-        } else {
-            qputenv("XDG_DATA_DIRS", origDataDirs);
-        }
-        if (origDataHome.isEmpty()) {
-            qunsetenv("XDG_DATA_HOME");
-        } else {
-            qputenv("XDG_DATA_HOME", origDataHome);
-        }
     }
 
     // =========================================================================
@@ -225,6 +213,8 @@ private Q_SLOTS:
 
     void testStaleScriptCleanup()
     {
+        XdgEnvGuard envGuard;
+
         QTemporaryDir xdgRoot;
         QVERIFY(xdgRoot.isValid());
         QString algoDir = xdgRoot.path() + QStringLiteral("/plasmazones/algorithms");
@@ -234,8 +224,6 @@ private Q_SLOTS:
             writeScript(algoDir, QStringLiteral("ephemeral.js"), validScript(QStringLiteral("Ephemeral")));
         QVERIFY(!scriptPath.isEmpty());
 
-        QByteArray origDataDirs = qgetenv("XDG_DATA_DIRS");
-        QByteArray origDataHome = qgetenv("XDG_DATA_HOME");
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
@@ -255,17 +243,6 @@ private Q_SLOTS:
 
         loader.reset();
         loader.emplace();
-
-        if (origDataDirs.isEmpty()) {
-            qunsetenv("XDG_DATA_DIRS");
-        } else {
-            qputenv("XDG_DATA_DIRS", origDataDirs);
-        }
-        if (origDataHome.isEmpty()) {
-            qunsetenv("XDG_DATA_HOME");
-        } else {
-            qputenv("XDG_DATA_HOME", origDataHome);
-        }
     }
 
     // =========================================================================
@@ -274,6 +251,8 @@ private Q_SLOTS:
 
     void testEnsureUserDirectoryExists()
     {
+        XdgEnvGuard envGuard;
+
         QTemporaryDir xdgRoot;
         QVERIFY(xdgRoot.isValid());
 
@@ -282,7 +261,6 @@ private Q_SLOTS:
         // Make sure it doesn't exist yet
         QVERIFY(!QDir(expectedDir).exists());
 
-        QByteArray origDataHome = qgetenv("XDG_DATA_HOME");
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
         ScriptedAlgorithmLoader loader;
@@ -290,12 +268,6 @@ private Q_SLOTS:
 
         // The directory should now exist
         QVERIFY(QDir(expectedDir).exists());
-
-        if (origDataHome.isEmpty()) {
-            qunsetenv("XDG_DATA_HOME");
-        } else {
-            qputenv("XDG_DATA_HOME", origDataHome);
-        }
     }
 };
 

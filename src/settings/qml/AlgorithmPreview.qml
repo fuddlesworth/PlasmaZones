@@ -79,8 +79,18 @@ Item {
         Rectangle {
             required property var modelData
             required property int index
+            // Data-driven capability check (avoids hardcoding algorithm IDs)
+            readonly property bool _algoSupportsMasterCount: {
+                const algos = root.appSettings.availableAlgorithms();
+                for (let i = 0; i < algos.length; i++) {
+                    if (algos[i].id === root.algorithmId)
+                        return algos[i].supportsMasterCount === true;
 
-            visible: (root.algorithmId === "master-stack" || root.algorithmId === "wide" || root.algorithmId === "centered-master") && index < root.masterCount
+                }
+                return false;
+            }
+
+            visible: root.appSettings && root.appSettings.generateAlgorithmPreview && root.algorithmId !== "" && index < root.masterCount && _algoSupportsMasterCount
             x: ((modelData.relativeGeometry && modelData.relativeGeometry.x) || 0) * root.width + Kirigami.Units.smallSpacing
             y: ((modelData.relativeGeometry && modelData.relativeGeometry.y) || 0) * root.height + Kirigami.Units.smallSpacing
             width: Kirigami.Units.smallSpacing * 2

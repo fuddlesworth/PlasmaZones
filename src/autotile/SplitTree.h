@@ -25,8 +25,7 @@ namespace PlasmaZones {
  */
 struct PLASMAZONES_EXPORT SplitNode
 {
-    qreal splitRatio =
-        0.6; ///< How to divide this node's space (first child fraction) — Matches AutotileDefaults::DefaultSplitRatio
+    qreal splitRatio = AutotileDefaults::DefaultSplitRatio; ///< How to divide this node's space (first child fraction)
     bool splitHorizontal = false; ///< true = top/bottom, false = left/right
     std::unique_ptr<SplitNode> first; ///< First child (left or top)
     std::unique_ptr<SplitNode> second; ///< Second child (right or bottom)
@@ -226,6 +225,9 @@ private:
 
     /// Insert at rightmost leaf without duplicate checking (for use by rebuildFromOrder)
     void insertAtEndRaw(const QString& windowId, qreal initialRatio);
+
+    /// Insert at rightmost leaf, skipping prepareInsert (caller already called it)
+    void insertAtEndImpl(const QString& windowId, qreal initialRatio);
 
     std::unique_ptr<SplitNode> m_root;
 

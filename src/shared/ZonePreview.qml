@@ -213,17 +213,28 @@ Item {
                 color: root.labelFontColor
                 opacity: (root.isActive || root.isHovered || zoneRect.isZoneSelected || zoneRect.isZoneHovered) ? 0.9 : 0.6
                 visible: {
-                    if (!root.showZoneNumbers) return false;
-                    if (parent.width < 16 || parent.height < 16) return false;
+                    if (!root.showZoneNumbers)
+                        return false;
+
+                    if (parent.width < 16 || parent.height < 16)
+                        return false;
+
                     var display = root.zoneNumberDisplay;
                     // Auto-detect stacked layouts (monocle-style) if no explicit override
-                    if (display === "all" && root.isStackedLayout) display = "last";
+                    if (display === "all" && root.isStackedLayout)
+                        display = "last";
+
                     switch (display) {
-                    case "none": return false;
-                    case "first": return index === 0;
-                    case "last": return index === root.zones.length - 1;
-                    case "firstAndLast": return index === 0 || index === root.zones.length - 1;
-                    default: return true; // "all"
+                    case "none":
+                        return false;
+                    case "first":
+                        return index === 0;
+                    case "last":
+                        return index === root.zones.length - 1;
+                    case "firstAndLast":
+                        return index === 0 || index === root.zones.length - 1;
+                    default:
+                        return true; // "all"
                     }
                 }
 
@@ -241,7 +252,7 @@ Item {
                 id: zoneMouseArea
 
                 anchors.fill: parent
-                anchors.margins: -2 // Slightly larger hit area
+                anchors.margins: -Math.round(Kirigami.Units.smallSpacing / 2) // Slightly larger hit area
                 hoverEnabled: root.interactive && root.visible
                 enabled: root.interactive
                 onEntered: root.zoneHovered(index)

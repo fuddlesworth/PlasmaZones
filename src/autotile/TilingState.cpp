@@ -298,19 +298,15 @@ int TilingState::tiledWindowIndex(const QString& windowId) const
 
 bool TilingState::moveToTiledPosition(const QString& windowId, int tiledPosition)
 {
-    // Translate tiledPosition to raw m_windowOrder index
+    // Translate tiledPosition to raw m_windowOrder index using forEachTiledWindow
     int rawTarget = -1;
-    int tiledIdx = 0;
-    for (int i = 0; i < m_windowOrder.size(); ++i) {
-        if (m_floatingWindows.contains(m_windowOrder[i])) {
-            continue;
-        }
+    forEachTiledWindow([&](const QString& id, int tiledIdx) {
         if (tiledIdx == tiledPosition) {
-            rawTarget = i;
-            break;
+            rawTarget = m_windowOrder.indexOf(id);
+            return false; // stop
         }
-        ++tiledIdx;
-    }
+        return true;
+    });
 
     // If tiledPosition is past the last tiled window, move to last position
     if (rawTarget < 0) {

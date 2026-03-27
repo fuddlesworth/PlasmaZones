@@ -27,13 +27,23 @@ function calculateZones(params) {
     const gap = params.innerGap || 0;
 
     const splitRatio = params.splitRatio;
-    const columnWidth = Math.round(area.width * splitRatio);
+    var columnWidth = Math.round(area.width * splitRatio);
+    columnWidth = Math.max(1, columnWidth);
     const offsetX = area.x + Math.round((area.width - columnWidth) / 2);
 
     const totalGaps = (count - 1) * gap;
     const tileHeight = Math.max(1, Math.round((area.height - totalGaps) / count));
 
-    const zones = [];
+    // Degenerate gap: stack all windows when gaps exceed available height
+    if (totalGaps >= area.height) {
+        var stacked = [];
+        for (var j = 0; j < count; j++) {
+            stacked.push({ x: offsetX, y: area.y, width: columnWidth, height: area.height });
+        }
+        return stacked;
+    }
+
+    var zones = [];
 
     for (let i = 0; i < count; i++) {
         const y = area.y + i * (tileHeight + gap);

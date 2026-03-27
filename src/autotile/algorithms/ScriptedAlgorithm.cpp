@@ -21,7 +21,8 @@ namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
-static constexpr int ScriptWatchdogTimeoutMs = 100;
+// Generous enough for ARM / slow systems where JS evaluation takes longer
+static constexpr int ScriptWatchdogTimeoutMs = 250;
 
 template<typename T>
 T ScriptedAlgorithm::resolveJsOverride(const QJSValue& jsFn, T cachedValue, T metadataFallback) const
@@ -134,9 +135,9 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_valid = false;
     m_cachedValuesLoaded = false;
     m_cachedMasterZoneIndex = -1;
-    m_cachedDefaultMaxWindows = 0;
+    m_cachedDefaultMaxWindows = 6;
     m_cachedDefaultSplitRatio = AutotileDefaults::DefaultSplitRatio;
-    m_cachedMinimumWindows = -1;
+    m_cachedMinimumWindows = 1;
     m_cachedSupportsMasterCount = false;
     m_cachedSupportsSplitRatio = false;
     m_cachedProducesOverlappingZones = false;
@@ -174,10 +175,23 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_engine->evaluate(ScriptedHelpers::deckHelperJs(), QStringLiteral("builtin:deckLayout"));
     m_engine->evaluate(ScriptedHelpers::distributeEvenlyHelperJs(), QStringLiteral("builtin:distributeEvenly"));
 
+    // H2: Safe evaluate wrapper — checks for errors on all sandbox-hardening calls
+    auto safeEval = [this](const QString& code, const QString& context) {
+        QJSValue result = m_engine->evaluate(code);
+        if (result.isError()) {
+            qWarning() << "ScriptedAlgorithm: sandbox hardening failed for" << context << ":" << result.toString();
+        }
+    };
+
     // m2: Extract Object.defineProperty freeze pattern into a lambda
     auto freezeGlobal = [this](const char* name) {
-        m_engine->evaluate(QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});")
-                               .arg(QLatin1String(name)));
+        QJSValue result = m_engine->evaluate(
+            QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});")
+                .arg(QLatin1String(name)));
+        if (result.isError()) {
+            qWarning() << "ScriptedAlgorithm: sandbox hardening failed for freezeGlobal" << QLatin1String(name) << ":"
+                       << result.toString();
+        }
     };
     freezeGlobal("applyTreeGeometry");
     freezeGlobal("lShapeLayout");
@@ -185,17 +199,19 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     freezeGlobal("distributeEvenly");
 
     // H2: Disable eval() and Function constructor to prevent dynamic code generation
-    m_engine->globalObject().deleteProperty(QStringLiteral("eval"));
-    m_engine->evaluate(QStringLiteral(
-        "Object.defineProperty(this, 'eval', {value: undefined, writable: false, configurable: false});"));
-    m_engine->evaluate(
-        QStringLiteral("Object.defineProperty(Function.prototype, 'constructor', "
-                       "{value: undefined, writable: false, configurable: false});"));
+    // H3: Removed dead deleteProperty("eval") — immediately overwritten by defineProperty below
+    safeEval(QStringLiteral(
+                 "Object.defineProperty(this, 'eval', {value: undefined, writable: false, configurable: false});"),
+             QStringLiteral("eval lockdown"));
+    safeEval(QStringLiteral("Object.defineProperty(Function.prototype, 'constructor', "
+                            "{value: undefined, writable: false, configurable: false});"),
+             QStringLiteral("Function.prototype.constructor lockdown"));
     // M2: Harden JS sandbox — disable the Function global to prevent dynamic code generation
-    m_engine->evaluate(QStringLiteral(
-        "Object.defineProperty(this, 'Function', {value: undefined, writable: false, configurable: false});"));
+    safeEval(QStringLiteral(
+                 "Object.defineProperty(this, 'Function', {value: undefined, writable: false, configurable: false});"),
+             QStringLiteral("Function global lockdown"));
     // C1: Freeze GeneratorFunction and AsyncFunction constructors to prevent sandbox bypass
-    m_engine->evaluate(
+    safeEval(
         QStringLiteral("(function(){"
                        "try{var gf=Object.getPrototypeOf(function*(){}).constructor;"
                        "Object.defineProperty(gf.prototype,'constructor',{value:undefined,writable:false,configurable:"
@@ -204,7 +220,23 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
                        "Object.defineProperty(af.prototype,'constructor',{value:undefined,writable:false,configurable:"
                        "false});}catch(e){}"
                        "})();"
-                       "Object.freeze(Object.prototype);Object.freeze(Array.prototype);"));
+                       "Object.freeze(Object.prototype);Object.freeze(Array.prototype);"),
+        QStringLiteral("generator/async constructor + prototype freeze"));
+
+    // H1: Close Object.constructor → Function escape route on all major built-in objects
+    safeEval(QStringLiteral("(function() {"
+                            "  var undef = void 0;"
+                            "  [Object, Array, String, Number, Boolean, RegExp, Date, Error,"
+                            "   TypeError, RangeError, SyntaxError, ReferenceError, URIError, EvalError,"
+                            "   Map, Set, WeakMap, WeakSet, Promise, JSON, Math"
+                            "  ].forEach(function(C) {"
+                            "    if (C && C.constructor) {"
+                            "      try { Object.defineProperty(C, 'constructor', {value: undef, writable: false, "
+                            "configurable: false}); } catch(e) {}"
+                            "    }"
+                            "  });"
+                            "})();"),
+             QStringLiteral("built-in constructor lockdown"));
 
     // B4: Disable Proxy, Reflect, WeakRef, and FinalizationRegistry to prevent sandbox bypass
     {
@@ -216,17 +248,27 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
             if (!val.isUndefined()) {
                 freezeObj.call({val});
             }
-            m_engine->evaluate(
-                QStringLiteral(
-                    "Object.defineProperty(this, '%1', {value: undefined, writable: false, configurable: false});")
-                    .arg(name));
+            safeEval(QStringLiteral(
+                         "Object.defineProperty(this, '%1', {value: undefined, writable: false, configurable: false});")
+                         .arg(name),
+                     QStringLiteral("disable %1").arg(name));
+        }
+    }
+
+    // C1: Strip dangerous QJSEngine-provided globals
+    static const char* const dangerousGlobals[] = {
+        "Qt", "qsTr", "qsTrId", "print", "console", "setTimeout", "setInterval", "clearTimeout", "clearInterval", "gc"};
+    {
+        QJSValue global = m_engine->globalObject();
+        for (const char* name : dangerousGlobals) {
+            global.deleteProperty(QLatin1String(name));
         }
     }
 
     // B3: Arm the watchdog before evaluating user script to prevent hangs at load time
-    ++(m_watchdog->generation);
     {
         std::lock_guard<std::mutex> lock(m_watchdog->mutex);
+        ++(m_watchdog->generation);
         m_watchdog->pending = true;
     }
     m_watchdog->cv.notify_one();
@@ -235,7 +277,10 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     const QJSValue result = m_engine->evaluate(source, filePath);
 
     // B3: Cancel any in-flight watchdog after evaluate completes
-    ++(m_watchdog->generation);
+    {
+        std::lock_guard<std::mutex> lock(m_watchdog->mutex);
+        ++(m_watchdog->generation);
+    }
     if (m_engine->isInterrupted()) {
         m_engine->setInterrupted(false);
         m_engine->collectGarbage();
@@ -352,9 +397,9 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
 
     // M1: Wake the persistent watchdog thread instead of spawning a detached thread.
     // Generation-aware — stale watchdog checks become no-ops if generation advances.
-    ++(m_watchdog->generation);
     {
         std::lock_guard<std::mutex> lock(m_watchdog->mutex);
+        ++(m_watchdog->generation);
         m_watchdog->pending = true;
     }
     m_watchdog->cv.notify_one();
@@ -363,7 +408,10 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     const QJSValue result = m_calculateZonesFn.call({jsParams});
 
     // C2: Invalidate any in-flight watchdog by advancing generation
-    ++(m_watchdog->generation);
+    {
+        std::lock_guard<std::mutex> lock(m_watchdog->mutex);
+        ++(m_watchdog->generation);
+    }
     if (m_engine->isInterrupted()) {
         m_engine->setInterrupted(false);
         m_engine->collectGarbage();
@@ -386,8 +434,10 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     const QVector<QRect> zones = ScriptedHelpers::jsArrayToRects(result, m_scriptId, MaxZones);
     const QVector<QRect> clamped = ScriptedHelpers::clampZonesToArea(zones, area, m_scriptId);
 
-    // B5: Collect garbage on the success path (already done on timeout path above)
-    m_engine->collectGarbage();
+    // B5: Collect garbage periodically (every 10th invocation) to reduce overhead
+    if (++m_gcCounter % 10 == 0) {
+        m_engine->collectGarbage();
+    }
 
     return clamped;
 }

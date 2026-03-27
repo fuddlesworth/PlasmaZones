@@ -165,7 +165,7 @@ void SplitTree::insertAtFocused(const QString& windowId, const QString& focusedW
     if (!focused) {
         qCDebug(lcAutotile) << "insertAtFocused: focused window not found, falling back to insertAtEnd"
                             << "windowId=" << focusedWindowId;
-        insertAtEnd(windowId, initialRatio);
+        insertAtEndImpl(windowId, initialRatio);
         return;
     }
 
@@ -178,9 +178,14 @@ void SplitTree::insertAtEnd(const QString& windowId, qreal initialRatio)
     if (ready != InsertReady::Proceed)
         return;
 
+    insertAtEndImpl(windowId, initialRatio);
+}
+
+void SplitTree::insertAtEndImpl(const QString& windowId, qreal initialRatio)
+{
     SplitNode* rm = rightmostLeaf(m_root.get());
     if (!rm) {
-        qCWarning(lcAutotile) << "insertAtEnd: no rightmost leaf found (corrupt tree?)";
+        qCWarning(lcAutotile) << "insertAtEndImpl: no rightmost leaf found (corrupt tree?)";
         return;
     }
 
@@ -213,7 +218,7 @@ void SplitTree::insertAtPosition(const QString& windowId, int position, qreal in
     int currentIndex = 0;
     SplitNode* target = leafAtIndex(m_root.get(), position, currentIndex);
     if (!target) {
-        insertAtEnd(windowId, initialRatio);
+        insertAtEndImpl(windowId, initialRatio);
         return;
     }
 
@@ -273,6 +278,9 @@ void SplitTree::remove(const QString& windowId)
 
 void SplitTree::swap(const QString& windowId1, const QString& windowId2)
 {
+    if (windowId1 == windowId2)
+        return;
+
     SplitNode* leaf1 = findLeaf(m_root.get(), windowId1);
     SplitNode* leaf2 = findLeaf(m_root.get(), windowId2);
 
@@ -371,7 +379,7 @@ void SplitTree::applyGeometryRecursive(const SplitNode* node, const QRect& rect,
                 return QRect(rect.x(), rect.y(), rect.width(), firstH);
             },
             [&](int firstH, int secondH) {
-                const int secondY = rect.y() + firstH + innerGap;
+                const int secondY = std::min(rect.y() + firstH + innerGap, rect.y() + rect.height() - 1);
                 const int clampedH = std::max(1, std::min(secondH, rect.y() + rect.height() - secondY));
                 return QRect(rect.x(), secondY, rect.width(), clampedH);
             });
@@ -382,7 +390,7 @@ void SplitTree::applyGeometryRecursive(const SplitNode* node, const QRect& rect,
                 return QRect(rect.x(), rect.y(), firstW, rect.height());
             },
             [&](int firstW, int secondW) {
-                const int secondX = rect.x() + firstW + innerGap;
+                const int secondX = std::min(rect.x() + firstW + innerGap, rect.x() + rect.width() - 1);
                 const int clampedW = std::max(1, std::min(secondW, rect.x() + rect.width() - secondX));
                 return QRect(secondX, rect.y(), clampedW, rect.height());
             });
@@ -454,7 +462,10 @@ const SplitNode* SplitTree::rightmostLeaf(const SplitNode* node) const
     }
     const SplitNode* current = node;
     while (!current->isLeaf()) {
-        current = current->second ? current->second.get() : current->first.get();
+        const SplitNode* next = current->second ? current->second.get() : current->first.get();
+        if (!next)
+            break; // corrupt internal node -- treat current as leaf
+        current = next;
     }
     return current;
 }

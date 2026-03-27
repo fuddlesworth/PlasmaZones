@@ -50,6 +50,14 @@ function calculateZones(params) {
     const totalGaps = (sidebarCount - 1) * gap;
     const windowHeight = Math.max(1, Math.round((area.height - totalGaps) / sidebarCount));
 
+    // Degenerate gap: stack sidebar windows when gaps exceed available height
+    if (totalGaps >= area.height) {
+        for (var i = 0; i < sidebarCount; i++) {
+            zones.push({ x: sidebarX, y: area.y, width: sidebarWidth, height: area.height });
+        }
+        return zones;
+    }
+
     for (let i = 0; i < sidebarCount; i++) {
         const y = area.y + i * (windowHeight + gap);
         const h = (i === sidebarCount - 1)

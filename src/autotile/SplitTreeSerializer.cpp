@@ -83,10 +83,11 @@ std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, Spli
 
     auto node = std::make_unique<SplitNode>();
     node->parent = parent;
-    node->splitRatio = std::clamp(json[QLatin1String("ratio")].toDouble(0.5), MinSplitRatio, MaxSplitRatio);
-    node->splitHorizontal = json[QLatin1String("horizontal")].toBool(false);
 
     if (json.contains(QLatin1String("first")) && json.contains(QLatin1String("second"))) {
+        // Only set split properties on internal nodes (meaningless on leaves)
+        node->splitRatio = std::clamp(json[QLatin1String("ratio")].toDouble(0.5), MinSplitRatio, MaxSplitRatio);
+        node->splitHorizontal = json[QLatin1String("horizontal")].toBool(false);
         // Internal node
         node->first = nodeFromJson(json[QLatin1String("first")].toObject(), node.get(), depth + 1, nodeCount, seenIds);
         node->second =

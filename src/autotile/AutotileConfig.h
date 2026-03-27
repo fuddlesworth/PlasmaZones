@@ -22,7 +22,10 @@ struct AlgorithmSettings
 {
     qreal splitRatio = 0.5;
     int masterCount = 1;
-    bool operator==(const AlgorithmSettings&) const = default;
+    bool operator==(const AlgorithmSettings& other) const
+    {
+        return masterCount == other.masterCount && qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio);
+    }
 };
 
 /**

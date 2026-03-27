@@ -39,7 +39,7 @@ public:
      * all algorithm directories. System directories are loaded first so that
      * user directories can override by filename.
      */
-    void scanAndRegister();
+    bool scanAndRegister();
 
     /**
      * @brief Create the user algorithm directory if it does not exist

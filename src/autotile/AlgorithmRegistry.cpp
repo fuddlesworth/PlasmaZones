@@ -10,8 +10,10 @@
 #include "core/logging.h"
 #include "pz_i18n.h"
 
+#include <QCoreApplication>
 #include <QDebug>
 #include <QRect>
+#include <QThread>
 #include <algorithm>
 
 namespace {
@@ -63,6 +65,8 @@ AlgorithmRegistry* AlgorithmRegistry::instance()
 
 void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* algorithm)
 {
+    Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
+
     // Validate inputs - take ownership and delete on failure to prevent leaks
     if (id.isEmpty()) {
         delete algorithm;
@@ -124,6 +128,8 @@ TilingAlgorithm* AlgorithmRegistry::removeAlgorithmInternal(const QString& id)
 
 bool AlgorithmRegistry::unregisterAlgorithm(const QString& id)
 {
+    Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
+
     auto* algorithm = removeAlgorithmInternal(id);
     if (!algorithm) {
         return false;

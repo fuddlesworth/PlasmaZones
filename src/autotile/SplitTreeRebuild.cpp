@@ -80,7 +80,7 @@ int SplitTree::applyInternalNodeParams(SplitNode* node, const QVector<qreal>& ra
     if (!node || node->isLeaf()) {
         return index;
     }
-    if (index < ratios.size()) {
+    if (index < ratios.size() && index < directions.size()) {
         node->splitRatio = ratios[index];
         node->splitHorizontal = directions[index];
     }

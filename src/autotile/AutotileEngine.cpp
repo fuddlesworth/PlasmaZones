@@ -149,7 +149,9 @@ void AutotileEngine::rotateWindows(bool clockwise, const QString& /*screenId*/)
 
 void AutotileEngine::moveToPosition(const QString& /*windowId*/, int position, const QString& /*screenId*/)
 {
-    // AutotileEngine uses focused window internally
+    // NOTE: Currently operates on the focused window regardless of windowId.
+    // The autotile engine tracks windows by focus, not by ID. This is a known
+    // limitation of the IWindowEngine interface contract for autotiling.
     moveFocusedToPosition(position);
 }
 
