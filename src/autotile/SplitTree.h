@@ -21,7 +21,8 @@ namespace PlasmaZones {
  * Internal nodes have two children and define a split direction + ratio.
  * Leaf nodes represent individual windows and have no children.
  */
-struct PLASMAZONES_EXPORT SplitNode {
+struct PLASMAZONES_EXPORT SplitNode
+{
     qreal splitRatio = 0.5; ///< How to divide this node's space (first child fraction)
     bool splitHorizontal = false; ///< true = top/bottom, false = left/right
     std::unique_ptr<SplitNode> first; ///< First child (left or top)
@@ -198,9 +199,11 @@ private:
     void applyGeometryRecursive(const SplitNode* node, const QRect& rect, int innerGap, QVector<QRect>& zones) const;
 
     static constexpr int MaxDeserializationDepth = 30;
+    static constexpr int MaxDeserializationNodes = 1024; ///< Limit total nodes to prevent memory exhaustion
 
     static QJsonObject nodeToJson(const SplitNode* node);
-    static std::unique_ptr<SplitNode> nodeFromJson(const QJsonObject& json, SplitNode* parent, int depth = 0);
+    static std::unique_ptr<SplitNode> nodeFromJson(const QJsonObject& json, SplitNode* parent, int depth,
+                                                   int& nodeCount);
 };
 
 } // namespace PlasmaZones

@@ -17,17 +17,21 @@ Flickable {
     readonly property alias isPerScreen: psHelper.isPerScreen
     readonly property alias hasOverrides: psHelper.hasOverrides
     readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettings.autotileAlgorithm)
-
     // Derive algorithm ID from the combo's current selection (tracks UI immediately,
     // not delayed by D-Bus round-trip to daemon)
     readonly property string selectedAlgorithm: {
-        if (!algorithmCombo) return root.effectiveAlgorithm;
+        if (!algorithmCombo)
+            return root.effectiveAlgorithm;
+
         let val = algorithmCombo.currentValue;
-        if (!val || val === "") return root.effectiveAlgorithm;
-        if (val.startsWith("autotile:")) return val.substring(9);
+        if (!val || val === "")
+            return root.effectiveAlgorithm;
+
+        if (val.startsWith("autotile:"))
+            return val.substring(9);
+
         return val;
     }
-
     // Data-driven algorithm capabilities (lookup from availableAlgorithms by ID)
     readonly property var algoCapabilities: {
         const algos = settingsController.availableAlgorithms();
@@ -35,6 +39,7 @@ Flickable {
         for (let i = 0; i < algos.length; i++) {
             if (algos[i].id === algoId)
                 return algos[i];
+
         }
         return null;
     }
@@ -42,6 +47,16 @@ Flickable {
     readonly property bool algoSupportsMasterCount: algoCapabilities ? (algoCapabilities.supportsMasterCount === true) : false
 
     function savedAlgoSetting(key, fallback) {
+        // For the active algorithm, prefer the live global setting over the
+        // per-algorithm map (which is only updated on algorithm switch).
+        if (root.selectedAlgorithm === root.effectiveAlgorithm) {
+            if (key === "splitRatio")
+                return root.settingValue("SplitRatio", appSettings.autotileSplitRatio);
+
+            if (key === "masterCount")
+                return root.settingValue("MasterCount", appSettings.autotileMasterCount);
+
+        }
         var perAlgo = appSettings.autotilePerAlgorithmSettings;
         var entry = perAlgo ? perAlgo[root.selectedAlgorithm] : null;
         return (entry && entry[key] !== undefined) ? entry[key] : fallback;
@@ -278,8 +293,8 @@ Flickable {
                                     // When user is dragging the slider, use live value
                                     if (splitRatioSlider.slider.pressed)
                                         return splitRatioSlider.slider.value;
-                                    return root.savedAlgoSetting("splitRatio",
-                                        root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6);
+
+                                    return root.savedAlgoSetting("splitRatio", root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6);
                                 }
                                 masterCount: root.savedAlgoSetting("masterCount", 1)
                                 zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"
@@ -321,12 +336,11 @@ Flickable {
                         onActivated: {
                             // Extract algorithm ID from autotile: prefixed value
                             let selectedId = algorithmCombo.currentValue;
-                            if (selectedId === "") {
+                            if (selectedId === "")
                                 // "Default" selected — use default algorithm
                                 selectedId = settingsController.autotileAlgorithm;
-                            } else if (selectedId.startsWith("autotile:")) {
+                            else if (selectedId.startsWith("autotile:"))
                                 selectedId = selectedId.substring(9);
-                            }
                             root.writeSetting("Algorithm", selectedId, function(v) {
                                 appSettings.autotileAlgorithm = v;
                             });
@@ -405,6 +419,9 @@ Flickable {
                             return Math.round(v * 100) + "%";
                         }
                         onMoved: (value) => {
+                            // Write to the global split ratio — the engine's
+                            // setAlgorithm() save/restore logic persists it
+                            // into the per-algorithm map on algorithm switch.
                             root.writeSetting("SplitRatio", value, function(v) {
                                 appSettings.autotileSplitRatio = v;
                             });
@@ -414,8 +431,7 @@ Flickable {
                     Binding {
                         target: splitRatioSlider.slider
                         property: "value"
-                        value: root.savedAlgoSetting("splitRatio",
-                            root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6)
+                        value: root.savedAlgoSetting("splitRatio", root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6)
                         when: !splitRatioSlider.slider.pressed
                         restoreMode: Binding.RestoreNone
                     }

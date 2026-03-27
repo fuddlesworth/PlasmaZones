@@ -371,13 +371,7 @@ QVariantMap toVariantMap(const UnifiedLayoutEntry& entry)
     map[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
     map[AutoAssign] = entry.autoAssign;
     map[QLatin1String("isAutotile")] = entry.isAutotile;
-    // For scripted algorithms: system-installed scripts are "system" (show lock icon),
-    // user-local scripts are not. Built-in C++ algorithms are always "system".
-    if (entry.isAutotile) {
-        map[IsSystem] = !entry.isScripted || !entry.isUserScript;
-    } else {
-        map[IsSystem] = false;
-    }
+    map[IsSystem] = entry.isSystemEntry();
     map[AspectRatioClassKey] = ScreenClassification::toString(static_cast<AspectRatioClass>(entry.aspectRatioClass));
     map[QLatin1String("recommended")] = entry.recommended;
     if (!entry.zoneNumberDisplay.isEmpty()) {
@@ -421,13 +415,7 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
     json[Name] = entry.name;
     json[Description] = entry.description;
     json[ZoneCount] = entry.zoneCount;
-    // For autotile: built-in C++ and system-installed scripts are "system" (lock icon).
-    // User-local scripts are not. Snapping layouts get isSystem from Layout::isSystemLayout().
-    if (entry.isAutotile) {
-        json[IsSystem] = !entry.isScripted || !entry.isUserScript;
-    } else {
-        json[IsSystem] = false;
-    }
+    json[IsSystem] = entry.isSystemEntry();
     json[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
     json[QLatin1String("isAutotile")] = entry.isAutotile;
     if (entry.aspectRatioClass != 0) {

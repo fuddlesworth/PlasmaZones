@@ -346,7 +346,8 @@ std::unique_ptr<SplitTree> SplitTree::fromJson(const QJsonObject& json)
     auto tree = std::make_unique<SplitTree>();
     if (json.contains(QLatin1String("root"))) {
         const QJsonObject rootObj = json[QLatin1String("root")].toObject();
-        tree->m_root = nodeFromJson(rootObj, nullptr);
+        int nodeCount = 0;
+        tree->m_root = nodeFromJson(rootObj, nullptr, 0, nodeCount);
     }
     return tree;
 }
@@ -371,7 +372,8 @@ QJsonObject SplitTree::nodeToJson(const SplitNode* node)
     return json;
 }
 
-std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, SplitNode* parent, int depth)
+std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, SplitNode* parent, int depth,
+                                                   int& nodeCount)
 {
     if (json.isEmpty()) {
         return nullptr;
@@ -382,6 +384,11 @@ std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, Spli
         return nullptr;
     }
 
+    if (++nodeCount > MaxDeserializationNodes) {
+        qCWarning(lcAutotile) << "SplitTree::fromJson: max node count exceeded, truncating";
+        return nullptr;
+    }
+
     auto node = std::make_unique<SplitNode>();
     node->parent = parent;
     node->splitRatio = std::clamp(json[QLatin1String("ratio")].toDouble(0.5), MinSplitRatio, MaxSplitRatio);
@@ -389,8 +396,8 @@ std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, Spli
 
     if (json.contains(QLatin1String("first")) && json.contains(QLatin1String("second"))) {
         // Internal node
-        node->first = nodeFromJson(json[QLatin1String("first")].toObject(), node.get(), depth + 1);
-        node->second = nodeFromJson(json[QLatin1String("second")].toObject(), node.get(), depth + 1);
+        node->first = nodeFromJson(json[QLatin1String("first")].toObject(), node.get(), depth + 1, nodeCount);
+        node->second = nodeFromJson(json[QLatin1String("second")].toObject(), node.get(), depth + 1, nodeCount);
         if (!node->first || !node->second) {
             qCWarning(lcAutotile) << "SplitTree::fromJson: invalid internal node (missing child)";
             return nullptr;

@@ -17,7 +17,7 @@ AlgorithmRegistrar<DwindleMemoryAlgorithm> s_dwindleMemoryRegistrar(DBus::Autoti
 
 DwindleMemoryAlgorithm::DwindleMemoryAlgorithm(QObject* parent)
     : TilingAlgorithm(parent)
-    , m_fallback(std::make_unique<DwindleAlgorithm>(nullptr))
+    , m_fallback(new DwindleAlgorithm(this))
 {
 }
 

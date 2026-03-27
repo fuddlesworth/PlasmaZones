@@ -279,14 +279,17 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     // Watchdog: interrupt JS engine after 100ms from a separate thread.
     // A QTimer cannot fire during synchronous JS execution because the event
     // loop is blocked, so we use a detached std::thread instead.
-    // Both the finished flag and the alive flag are shared_ptr so the watchdog
-    // thread can safely outlive the ScriptedAlgorithm if it is destroyed during
-    // the sleep window (e.g., hot-reload unregisters the algorithm).
+    // All shared state (finished, alive, mutex, engine ptr) is wrapped in
+    // shared_ptr so the watchdog thread can safely outlive the
+    // ScriptedAlgorithm if it is destroyed during the sleep window.
     auto finished = std::make_shared<std::atomic<bool>>(false);
     auto aliveFlag = m_engineAlive;
     auto engineMtx = m_engineMutex;
-    auto* engine = m_engine;
-    std::thread([engine, finished, aliveFlag, engineMtx]() {
+    // Wrap the engine pointer in a shared_ptr-guarded struct so the watchdog
+    // never dereferences a dangling raw pointer. The destructor sets alive=false
+    // under the mutex, so the watchdog will see it before using the pointer.
+    auto enginePtr = std::make_shared<QJSEngine*>(m_engine);
+    std::thread([enginePtr, finished, aliveFlag, engineMtx]() {
         QThread::msleep(100);
         if (finished->load(std::memory_order_acquire)) {
             return; // Script completed within timeout
@@ -295,7 +298,7 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
         // engine pointer between our alive-check and setInterrupted().
         std::lock_guard<std::mutex> lock(*engineMtx);
         if (!finished->load(std::memory_order_acquire) && aliveFlag->load(std::memory_order_acquire)) {
-            engine->setInterrupted(true);
+            (*enginePtr)->setInterrupted(true);
         }
     }).detach();
 

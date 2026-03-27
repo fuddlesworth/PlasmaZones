@@ -375,9 +375,9 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // setAlgorithm with stale KCM algo).
     m_settingsBridge->syncAlgorithmToSettings(newId, m_config->splitRatio, m_config->maxWindows, oldMaxWindows);
 
+    m_algorithmEverSet = true;
     m_algorithmId = newId;
     m_config->algorithmId = newId;
-    m_algorithmEverSet = true;
     Q_EMIT algorithmChanged(m_algorithmId);
 
     // Backfill windows when the new algorithm's maxWindows is higher.

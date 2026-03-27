@@ -728,8 +728,16 @@ void TilingState::rebuildSplitTree()
     }
 
     const QStringList tiled = tiledWindows();
-    if (tiled.size() <= 1) {
+    if (tiled.isEmpty()) {
         m_splitTree.reset();
+        return;
+    }
+    if (tiled.size() == 1) {
+        // Preserve the tree with a single root leaf so that custom split
+        // ratios survive window count transitions (e.g., 3→1→3 windows).
+        auto singleTree = std::make_unique<SplitTree>();
+        singleTree->insertAtEnd(tiled.first());
+        m_splitTree = std::move(singleTree);
         return;
     }
 

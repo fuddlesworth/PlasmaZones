@@ -45,9 +45,13 @@ SettingsController::SettingsController(QObject* parent)
     auto* scriptLoader = new ScriptedAlgorithmLoader(this);
     scriptLoader->scanAndRegister();
 
-    // When scripted algorithms change (hot-reload), notify UI consumers
-    connect(scriptLoader, &ScriptedAlgorithmLoader::algorithmsChanged,
-            this, &SettingsController::availableAlgorithmsChanged);
+    // When scripted algorithms change (hot-reload), notify UI consumers.
+    // Emit both signals: availableAlgorithmsChanged for algorithm-specific
+    // listeners, and layoutsChanged so LayoutComboBox rebuilds its model
+    // (the layouts list includes autotile entries from the registry).
+    connect(scriptLoader, &ScriptedAlgorithmLoader::algorithmsChanged, this,
+            &SettingsController::availableAlgorithmsChanged);
+    connect(scriptLoader, &ScriptedAlgorithmLoader::algorithmsChanged, this, &SettingsController::layoutsChanged);
 
     // Listen for external settings changes from the daemon
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),

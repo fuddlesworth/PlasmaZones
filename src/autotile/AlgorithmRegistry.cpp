@@ -369,13 +369,24 @@ QVariantMap AlgorithmRegistry::algorithmToVariantMap(TilingAlgorithm* algorithm,
 
 AlgorithmRegistry::SectionInfo AlgorithmRegistry::sectionForAlgorithm(TilingAlgorithm* algorithm)
 {
-    // Group by memory support: persistent algorithms remember split positions,
-    // automatic algorithms recalculate layout from scratch each retile.
-    // System vs user distinction is shown via the lock icon (like snapping layouts).
-    if (algorithm && algorithm->supportsMemory()) {
+    if (!algorithm) {
+        return {QStringLiteral("built-in"), PzI18n::tr("Built-in"), 0};
+    }
+
+    // User-created scripts get their own section so users can easily
+    // distinguish their custom algorithms from bundled ones.
+    if (algorithm->isScripted() && algorithm->isUserScript()) {
+        return {QStringLiteral("custom"), PzI18n::tr("Custom"), 2};
+    }
+
+    // Memory-enabled algorithms (DwindleMemory, or system scripts with memory)
+    // are grouped separately to highlight their persistent behavior.
+    if (algorithm->supportsMemory()) {
         return {QStringLiteral("persistent"), PzI18n::tr("Persistent"), 1};
     }
-    return {QStringLiteral("automatic"), PzI18n::tr("Automatic"), 0};
+
+    // Built-in C++ algorithms and system-installed scripts
+    return {QStringLiteral("built-in"), PzI18n::tr("Built-in"), 0};
 }
 
 } // namespace PlasmaZones

@@ -5,8 +5,6 @@
 
 #include "../TilingAlgorithm.h"
 
-#include <memory>
-
 namespace PlasmaZones {
 class DwindleAlgorithm;
 
@@ -69,7 +67,7 @@ public:
     void prepareTilingState(TilingState* state) const override;
 
 private:
-    std::unique_ptr<DwindleAlgorithm> m_fallback; ///< Stateless fallback (heap-allocated, proper QObject lifetime)
+    DwindleAlgorithm* m_fallback = nullptr; ///< Stateless fallback (owned via QObject parent)
     QVector<QRect> calculateStatelessFallback(const TilingParams& params) const;
 };
 

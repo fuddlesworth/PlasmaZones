@@ -71,6 +71,14 @@ struct PLASMAZONES_EXPORT UnifiedLayoutEntry
     QString sectionLabel; ///< Display label for the section header (i18n'd)
     int sectionOrder = 0; ///< Sort priority (lower = first)
 
+    /// Whether this autotile entry should show as a "system" (lock icon) item
+    bool isSystemEntry() const
+    {
+        if (!isAutotile)
+            return false;
+        return !isScripted || !isUserScript;
+    }
+
     /**
      * @brief Extract the algorithm ID from an autotile entry
      * @return Algorithm ID (e.g. "master-stack"), or empty string if not autotile
