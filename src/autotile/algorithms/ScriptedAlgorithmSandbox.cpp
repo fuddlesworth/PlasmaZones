@@ -37,12 +37,23 @@ bool hardenSandbox(QJSEngine* engine)
     // distributeEvenly) are frozen AFTER injection in ScriptedAlgorithm::loadScript(),
     // not here — freezing before injection would lock them to undefined.
 
+    // m-8: DRY helper for the repeated Object.defineProperty pattern used to disable globals.
+    // When critical=true, failure aborts the sandbox; otherwise logs a warning and continues.
+    auto disableGlobal = [&](const QLatin1String& name, bool critical = false) -> bool {
+        const QString js = QStringLiteral(
+                               "Object.defineProperty(this, '%1', "
+                               "{value: undefined, writable: false, configurable: false})")
+                               .arg(name);
+        if (critical) {
+            return criticalEval(js, QStringLiteral("disable %1").arg(name));
+        }
+        safeEval(js, QStringLiteral("disable %1").arg(name));
+        return true;
+    };
+
     // H2: Disable eval() and Function constructor to prevent dynamic code generation.
     // These are CRITICAL — if any fails, the sandbox cannot prevent arbitrary code execution.
-    if (!criticalEval(
-            QStringLiteral(
-                "Object.defineProperty(this, 'eval', {value: undefined, writable: false, configurable: false});"),
-            QStringLiteral("eval lockdown"))) {
+    if (!disableGlobal(QLatin1String("eval"), true)) {
         return false;
     }
     if (!criticalEval(QStringLiteral("Object.defineProperty(Function.prototype, 'constructor', "
@@ -51,23 +62,33 @@ bool hardenSandbox(QJSEngine* engine)
         return false;
     }
     // M2: Disable the Function global to prevent dynamic code generation
-    if (!criticalEval(QStringLiteral("Object.defineProperty(this, 'Function', "
-                                     "{value: undefined, writable: false, configurable: false});"),
-                      QStringLiteral("Function global lockdown"))) {
+    if (!disableGlobal(QLatin1String("Function"), true)) {
         return false;
     }
 
-    // C1: Freeze GeneratorFunction and AsyncFunction constructors to prevent sandbox bypass
+    // C1: Freeze GeneratorFunction and AsyncFunction constructors to prevent sandbox bypass.
+    // GeneratorFunction is CRITICAL — if it fails, generators can escape the sandbox.
+    if (!criticalEval(
+            QStringLiteral(
+                "(function(){"
+                "var gf=Object.getPrototypeOf(function*(){}).constructor;"
+                "Object.defineProperty(gf.prototype,'constructor',{value:undefined,writable:false,configurable:"
+                "false});"
+                "})();"),
+            QStringLiteral("GeneratorFunction constructor lockdown"))) {
+        return false;
+    }
+    // AsyncFunction lockdown uses safeEval because engines that lack async syntax (ES5/ES6)
+    // will produce a SyntaxError at parse time — that's safe since the constructor can't be
+    // reached either. On engines with async support, a failure here is logged but non-fatal
+    // because the Function constructor (already locked above) is the primary escape vector.
     safeEval(
         QStringLiteral("(function(){"
-                       "try{var gf=Object.getPrototypeOf(function*(){}).constructor;"
-                       "Object.defineProperty(gf.prototype,'constructor',{value:undefined,writable:false,configurable:"
-                       "false});}catch(e){}"
-                       "try{var af=Object.getPrototypeOf(async function(){}).constructor;"
+                       "var af=Object.getPrototypeOf(async function(){}).constructor;"
                        "Object.defineProperty(af.prototype,'constructor',{value:undefined,writable:false,configurable:"
-                       "false});}catch(e){}"
+                       "false});"
                        "})();"),
-        QStringLiteral("generator/async constructor lockdown"));
+        QStringLiteral("AsyncFunction constructor lockdown"));
 
     // S3: Freeze built-in prototypes to prevent prototype pollution.
     // H1: Includes String, Number, Boolean, RegExp, Date, Error, Map, Set
@@ -117,32 +138,24 @@ bool hardenSandbox(QJSEngine* engine)
             if (!val.isUndefined()) {
                 freezeObj.call({val});
             }
-            safeEval(QStringLiteral(
-                         "Object.defineProperty(this, '%1', {value: undefined, writable: false, configurable: false});")
-                         .arg(name),
-                     QStringLiteral("disable %1").arg(name));
+            disableGlobal(name);
         }
     }
 
     // C-2: Disable globalThis and Symbol to prevent sandbox bypass
     for (const auto& name : {QLatin1String("globalThis"), QLatin1String("Symbol")}) {
-        safeEval(QStringLiteral(
-                     "Object.defineProperty(this, '%1', {value: undefined, writable: false, configurable: false});")
-                     .arg(name),
-                 QStringLiteral("disable %1").arg(name));
+        disableGlobal(name);
     }
 
     // S1: Strip dangerous QJSEngine-provided globals via defineProperty (not deleteProperty)
     // to prevent scripts from re-creating them (e.g., Qt.createQmlObject() escape)
+    // m-9: Also blocks import() as a forward-looking measure
     {
-        static const char* const dangerousGlobals[] = {
-            "Qt",         "qsTr",        "qsTrId",       "print",         "console",
-            "setTimeout", "setInterval", "clearTimeout", "clearInterval", "gc"};
-        for (const char* name : dangerousGlobals) {
-            safeEval(QStringLiteral("Object.defineProperty(this, '%1', "
-                                    "{value: undefined, writable: false, configurable: false});")
-                         .arg(QLatin1String(name)),
-                     QStringLiteral("disable %1").arg(QLatin1String(name)));
+        for (const auto& name : {QLatin1String("Qt"), QLatin1String("qsTr"), QLatin1String("qsTrId"),
+                                 QLatin1String("print"), QLatin1String("console"), QLatin1String("setTimeout"),
+                                 QLatin1String("setInterval"), QLatin1String("clearTimeout"),
+                                 QLatin1String("clearInterval"), QLatin1String("gc"), QLatin1String("import")}) {
+            disableGlobal(name);
         }
     }
 

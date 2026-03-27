@@ -133,32 +133,11 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
         }
     }
 
-    // Detect additions or path changes (modified/replaced scripts)
-    if (!changed) {
-        // Build old key set for comparison
-        QSet<QString> oldScriptIds;
-        for (auto it = oldScriptIdToPath.constBegin(); it != oldScriptIdToPath.constEnd(); ++it) {
-            oldScriptIds.insert(it.key());
-        }
-        if (newScriptIds != oldScriptIds) {
-            changed = true;
-        } else {
-            // Same IDs — check if any paths changed (script was replaced/modified)
-            for (auto it = m_scriptIdToPath.constBegin(); it != m_scriptIdToPath.constEnd(); ++it) {
-                if (oldScriptIdToPath.value(it.key()) != it.value()) {
-                    changed = true;
-                    break;
-                }
-            }
-        }
-    }
-
     qCInfo(lcAutotile) << "Scripted algorithms loaded:" << m_scriptIdToPath.size() << "changed=" << changed;
-    // H-4: Emit here so external callers (daemon, settings) get notified.
-    // performDebouncedRefresh() does NOT re-emit to avoid double emission.
-    if (changed) {
-        Q_EMIT algorithmsChanged();
-    }
+    // M-5: Always emit — the signal is cheap (listeners just refresh their model)
+    // and content-only edits (same IDs/paths but different script body) would
+    // otherwise be missed by the old change-detection logic.
+    Q_EMIT algorithmsChanged();
     return changed;
 }
 

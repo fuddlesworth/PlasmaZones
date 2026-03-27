@@ -100,18 +100,18 @@ function calculateZones(params) {
     const hasBottom = bottomCount > 0;
 
     // Top/bottom panels span the full area width
-    const topH = Math.max(0, marginY - gap);
+    const topH = Math.max(1, marginY - gap);
     const bottomY = area.y + marginY + centerH + gap;
-    const bottomH = Math.max(0, area.y + area.height - bottomY);
+    const bottomH = Math.max(1, area.y + area.height - bottomY);
 
     // Side panels: constrained to the center band height (between top/bottom rows)
     const sideTop = area.y + marginY;
     const sideH = centerH;
 
-    // Side panel widths
-    const leftW = marginX - gap;
+    // Side panel widths — guard against negative dimensions (m-10)
+    const leftW = Math.max(1, marginX - gap);
     const rightX = area.x + marginX + centerW + gap;
-    const rightW = area.x + area.width - rightX;
+    const rightW = Math.max(1, area.x + area.width - rightX);
 
     // Window 1: centered main window
     zones.push({

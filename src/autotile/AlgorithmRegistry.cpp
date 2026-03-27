@@ -65,7 +65,7 @@ AlgorithmRegistry* AlgorithmRegistry::instance()
 
 void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* algorithm)
 {
-    Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
+    Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
 
     // Validate inputs - take ownership and delete on failure to prevent leaks
     if (id.isEmpty()) {
@@ -128,7 +128,7 @@ TilingAlgorithm* AlgorithmRegistry::removeAlgorithmInternal(const QString& id)
 
 bool AlgorithmRegistry::unregisterAlgorithm(const QString& id)
 {
-    Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
+    Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
 
     auto* algorithm = removeAlgorithmInternal(id);
     if (!algorithm) {
@@ -243,8 +243,8 @@ QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect>& zo
             const qreal offset = i * MonoclePreviewOffset;
             relGeo[QLatin1String("x")] = offset;
             relGeo[QLatin1String("y")] = offset;
-            relGeo[QLatin1String("width")] = 1.0 - offset * 2;
-            relGeo[QLatin1String("height")] = 1.0 - offset * 2;
+            relGeo[QLatin1String("width")] = qMax(0.01, 1.0 - offset * 2);
+            relGeo[QLatin1String("height")] = qMax(0.01, 1.0 - offset * 2);
         } else {
             relGeo[QLatin1String("x")] = static_cast<qreal>(zones[i].x()) / previewRect.width();
             relGeo[QLatin1String("y")] = static_cast<qreal>(zones[i].y()) / previewRect.height();

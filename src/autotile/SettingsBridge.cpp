@@ -116,10 +116,12 @@ void SettingsBridge::syncFromSettings(Settings* settings)
     // When the active algorithm is in the saved map and setAlgorithm() early-returned
     // (no algorithm change), restore the saved values for the active algorithm so
     // the generic SYNC_FIELD splitRatio doesn't clobber the per-algorithm value.
-    auto savedIt = cfg->savedAlgorithmSettings.constFind(m_engine->m_algorithmId);
-    if (savedIt != cfg->savedAlgorithmSettings.constEnd()) {
-        cfg->splitRatio = savedIt->splitRatio;
-        cfg->masterCount = savedIt->masterCount;
+    if (m_engine->m_algorithmId == oldAlgorithmId) {
+        auto savedIt = cfg->savedAlgorithmSettings.constFind(m_engine->m_algorithmId);
+        if (savedIt != cfg->savedAlgorithmSettings.constEnd()) {
+            cfg->splitRatio = savedIt->splitRatio;
+            cfg->masterCount = savedIt->masterCount;
+        }
     }
 
     // Propagate split ratio and master count to screens WITHOUT per-screen overrides.
@@ -175,6 +177,7 @@ void SettingsBridge::connectToSettings(Settings* settings)
     // Disconnect from previous settings if any (handles the case where
     // syncFromSettings was called first, which sets m_settings)
     if (m_settings) {
+        // SettingsBridge owns all m_settings → m_engine connections; disconnect all of them.
         QObject::disconnect(m_settings, nullptr, m_engine, nullptr);
         qCDebug(lcAutotile) << "Disconnected from previous settings";
     }

@@ -26,8 +26,8 @@ namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
-// Generous enough for ARM / slow systems where JS evaluation takes longer
-static constexpr int ScriptWatchdogTimeoutMs = 250;
+// 100ms watchdog — generous enough for ARM / slow systems where JS evaluation takes longer
+static constexpr int ScriptWatchdogTimeoutMs = 100;
 
 /**
  * @brief Consolidated watchdog thread state shared between the main thread and the persistent watchdog thread
@@ -69,17 +69,6 @@ T ScriptedAlgorithm::resolveJsOverrideClamped(const QJSValue& jsFn, T cachedValu
                                               T maxVal) const
 {
     return std::clamp(resolveJsOverride<T>(jsFn, cachedValue, metadataFallback), minVal, maxVal);
-}
-
-template<typename T>
-T ScriptedAlgorithm::cacheJsValue(const QJSValue& jsFn, T fallback)
-{
-    if (jsFn.isCallable()) {
-        const QJSValue r = jsFn.call();
-        if (!r.isError() && detail::jsValueHasType<T>(r))
-            return detail::jsValueTo<T>(r);
-    }
-    return fallback;
 }
 
 ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
@@ -419,6 +408,18 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
 
 QJSValue ScriptedAlgorithm::splitNodeToJSValue(const SplitNode* node, int depth) const
 {
+    if (!node || !m_engine) {
+        return QJSValue();
+    }
+
+    // m-7: Cache Object.freeze once at the top of the recursion instead of looking it up per node
+    const QJSValue freezeFn =
+        m_engine->globalObject().property(QStringLiteral("Object")).property(QStringLiteral("freeze"));
+    return splitNodeToJSValueImpl(node, freezeFn, depth);
+}
+
+QJSValue ScriptedAlgorithm::splitNodeToJSValueImpl(const SplitNode* node, const QJSValue& freezeFn, int depth) const
+{
     if (!node || !m_engine || depth > MaxTreeConversionDepth) {
         return QJSValue();
     }
@@ -431,13 +432,11 @@ QJSValue ScriptedAlgorithm::splitNodeToJSValue(const SplitNode* node, int depth)
         const qreal ratio = std::isnan(node->splitRatio) ? 0.5 : std::clamp(node->splitRatio, 0.1, 0.9);
         jsNode.setProperty(QStringLiteral("ratio"), ratio);
         jsNode.setProperty(QStringLiteral("horizontal"), node->splitHorizontal);
-        jsNode.setProperty(QStringLiteral("first"), splitNodeToJSValue(node->first.get(), depth + 1));
-        jsNode.setProperty(QStringLiteral("second"), splitNodeToJSValue(node->second.get(), depth + 1));
+        jsNode.setProperty(QStringLiteral("first"), splitNodeToJSValueImpl(node->first.get(), freezeFn, depth + 1));
+        jsNode.setProperty(QStringLiteral("second"), splitNodeToJSValueImpl(node->second.get(), freezeFn, depth + 1));
     }
 
     // L-1: Freeze the node so scripts cannot mutate the tree representation
-    const QJSValue freezeFn =
-        m_engine->globalObject().property(QStringLiteral("Object")).property(QStringLiteral("freeze"));
     if (freezeFn.isCallable()) {
         freezeFn.call({jsNode});
     }

@@ -70,7 +70,7 @@ T jsValueTo(const QJSValue& v)
  * Scripts may also export optional JS functions (masterZoneIndex,
  * supportsMasterCount, supportsSplitRatio) for dynamic overrides.
  *
- * Script execution is guarded by a 250ms timeout to prevent runaway loops.
+ * Script execution is guarded by a 100ms timeout to prevent runaway loops.
  *
  * @note Registration is handled externally by ScriptedAlgorithmLoader,
  *       not by self-registration macros.
@@ -147,6 +147,9 @@ private:
      */
     QJSValue splitNodeToJSValue(const SplitNode* node, int depth = 0) const;
 
+    /// m-7: Recursive helper that receives a cached Object.freeze function
+    QJSValue splitNodeToJSValueImpl(const SplitNode* node, const QJSValue& freezeFn, int depth) const;
+
     /**
      * @brief Resolve a JS override value: return cached if loaded, else call JS, else metadata fallback
      */
@@ -158,12 +161,6 @@ private:
      */
     template<typename T>
     T resolveJsOverrideClamped(const QJSValue& jsFn, T cachedValue, T metadataFallback, T minVal, T maxVal) const;
-
-    /**
-     * @brief Cache a JS function result at load time, returning fallback if the call fails
-     */
-    template<typename T>
-    T cacheJsValue(const QJSValue& jsFn, T fallback);
 
     /// D-02: Arms watchdog, calls fn(), disarms, checks for timeout. Returns error on timeout.
     QJSValue guardedCall(const std::function<QJSValue()>& fn) const;

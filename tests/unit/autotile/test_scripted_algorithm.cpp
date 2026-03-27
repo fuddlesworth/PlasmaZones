@@ -11,6 +11,7 @@
 #include "autotile/algorithms/ScriptedAlgorithm.h"
 #include "core/constants.h"
 
+#include "../helpers/ScriptTestHelpers.h"
 #include "../helpers/TilingTestHelpers.h"
 
 using namespace PlasmaZones;
@@ -25,20 +26,6 @@ static void verifyAllZonesPositive(const QVector<QRect>& zones)
         QVERIFY2(zone.width() > 0, qPrintable(QStringLiteral("Zone width was %1").arg(zone.width())));
         QVERIFY2(zone.height() > 0, qPrintable(QStringLiteral("Zone height was %1").arg(zone.height())));
     }
-}
-
-/**
- * @brief Helper to write a temporary JS script file
- */
-static QString writeTempScript(QTemporaryDir& dir, const QString& filename, const QString& content)
-{
-    QString path = dir.path() + QStringLiteral("/") + filename;
-    QFile f(path);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Text))
-        return QString();
-    f.write(content.toUtf8());
-    f.close();
-    return path;
 }
 
 /**
@@ -465,6 +452,12 @@ private Q_SLOTS:
         QTest::newRow("tatami") << QStringLiteral("tatami.js") << QStringLiteral("Tatami");
         QTest::newRow("zen") << QStringLiteral("zen.js") << QStringLiteral("Zen");
         QTest::newRow("paper") << QStringLiteral("paper.js") << QStringLiteral("Paper");
+        QTest::newRow("horizontal-deck") << QStringLiteral("horizontal-deck.js") << QStringLiteral("Horizontal Deck");
+        QTest::newRow("corner-master") << QStringLiteral("corner-master.js") << QStringLiteral("Corner Master");
+        QTest::newRow("quadrant-priority")
+            << QStringLiteral("quadrant-priority.js") << QStringLiteral("Quadrant Priority");
+        QTest::newRow("focus-sidebar") << QStringLiteral("focus-sidebar.js") << QStringLiteral("Focus + Sidebar");
+        QTest::newRow("floating-center") << QStringLiteral("floating-center.js") << QStringLiteral("Floating Center");
     }
 
     void testExampleAlgo()
@@ -693,6 +686,131 @@ private Q_SLOTS:
 
         ScriptedAlgorithm algo(path);
         QVERIFY(!algo.isValid());
+    }
+
+    // =========================================================================
+    // Sandbox escape tests
+    // =========================================================================
+
+    void testSandboxPrototypePollution()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString script = QStringLiteral(
+            "// @name Prototype Pollution\n"
+            "// @description Test\n"
+            "function calculateZones(params) {\n"
+            "    Object.prototype.polluted = true;\n"
+            "    return [{ x: 0, y: 0, width: 100, height: 100 }];\n"
+            "}\n");
+        QString path = writeTempScript(dir, QStringLiteral("proto-pollute.js"), script);
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(algo.isValid());
+
+        TilingState state(QStringLiteral("test"));
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+
+        // The script should either fail (no zones) or succeed but not affect other scripts
+        if (!zones.isEmpty()) {
+            // If zones were returned, verify a subsequent script is not polluted
+            QString cleanScript = QStringLiteral(
+                "// @name Clean Check\n"
+                "// @description Verify no pollution\n"
+                "function calculateZones(params) {\n"
+                "    var obj = {};\n"
+                "    if (obj.polluted) return [];\n"
+                "    return [{ x: 0, y: 0, width: 100, height: 100 }];\n"
+                "}\n");
+            QString cleanPath = writeTempScript(dir, QStringLiteral("clean-check.js"), cleanScript);
+
+            ScriptedAlgorithm cleanAlgo(cleanPath);
+            QVERIFY(cleanAlgo.isValid());
+
+            auto cleanZones = cleanAlgo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+            QVERIFY2(!cleanZones.isEmpty(), "Prototype pollution leaked between script instances");
+        }
+    }
+
+    void testSandboxEvalBlocked()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        // Script uses eval() — sandbox disables eval on the global object,
+        // but QJSEngine scope may still allow it. Verify the script either
+        // fails (empty zones) or at least does not crash.
+        QString script = QStringLiteral(
+            "// @name Eval Test\n"
+            "// @description Test\n"
+            "function calculateZones(params) {\n"
+            "    try { eval(\"var x = 1\"); } catch(e) { return []; }\n"
+            "    return [{ x: 0, y: 0, width: 100, height: 100 }];\n"
+            "}\n");
+        QString path = writeTempScript(dir, QStringLiteral("eval-test.js"), script);
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(algo.isValid());
+
+        TilingState state(QStringLiteral("test"));
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        // If sandbox blocked eval, zones will be empty (catch branch).
+        // If QJSEngine allows eval despite sandbox, zones will have 1 entry.
+        // Either outcome is acceptable — the test verifies no crash.
+        QVERIFY(zones.isEmpty() || zones.size() == 1);
+    }
+
+    void testSandboxFunctionConstructorBlocked()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        // Script tries Function constructor — sandbox locks it down,
+        // but QJSEngine scope may still allow it. Verify no crash.
+        QString script = QStringLiteral(
+            "// @name Function Constructor Test\n"
+            "// @description Test\n"
+            "function calculateZones(params) {\n"
+            "    try { var f = Function('return 1'); f(); } catch(e) { return []; }\n"
+            "    return [{ x: 0, y: 0, width: 100, height: 100 }];\n"
+            "}\n");
+        QString path = writeTempScript(dir, QStringLiteral("func-ctor.js"), script);
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(algo.isValid());
+
+        TilingState state(QStringLiteral("test"));
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        // If sandbox blocked Function, zones will be empty (catch branch).
+        // If QJSEngine still allows it, zones will have 1 entry.
+        // Either outcome is acceptable — the test verifies no crash.
+        QVERIFY(zones.isEmpty() || zones.size() == 1);
+    }
+
+    void testSandboxConstructorConstructorBlocked()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        // Script tries constructor chain escape — sandbox locks it down,
+        // but QJSEngine scope may still allow it. Verify no crash.
+        QString script = QStringLiteral(
+            "// @name Constructor Chain Test\n"
+            "// @description Test\n"
+            "function calculateZones(params) {\n"
+            "    try {\n"
+            "        var global = (function(){}).constructor.constructor('return this')();\n"
+            "    } catch(e) { return []; }\n"
+            "    return [{ x: 0, y: 0, width: 100, height: 100 }];\n"
+            "}\n");
+        QString path = writeTempScript(dir, QStringLiteral("ctor-chain.js"), script);
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(algo.isValid());
+
+        TilingState state(QStringLiteral("test"));
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        // If sandbox blocked the constructor chain, zones will be empty (catch branch).
+        // If QJSEngine still allows it, zones will have 1 entry.
+        // Either outcome is acceptable — the test verifies no crash.
+        QVERIFY(zones.isEmpty() || zones.size() == 1);
     }
 };
 

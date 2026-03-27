@@ -55,6 +55,14 @@ void SplitTree::rebuildFromOrder(const QStringList& tiledWindows, qreal defaultS
         m_root.reset();
         return;
     }
+
+    // Cap to prevent degenerate trees exceeding MaxRuntimeTreeDepth
+    if (uniqueWindows.size() > MaxRuntimeTreeDepth + 1) {
+        qCWarning(lcAutotile) << "rebuildFromOrder: truncating" << uniqueWindows.size() << "windows to"
+                              << (MaxRuntimeTreeDepth + 1);
+        uniqueWindows.resize(MaxRuntimeTreeDepth + 1);
+    }
+
     if (uniqueWindows.size() == 1) {
         auto singleTree = std::make_unique<SplitNode>();
         singleTree->windowId = uniqueWindows.first();

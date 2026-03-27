@@ -199,6 +199,10 @@ void SplitTree::insertAtEndImpl(const QString& windowId, qreal initialRatio)
 
 void SplitTree::insertAtEndRaw(const QString& windowId, qreal initialRatio)
 {
+    if (leafForWindow(windowId)) {
+        qCWarning(lcAutotile) << "insertAtEndRaw: duplicate windowId" << windowId << "- skipping";
+        return;
+    }
     Q_ASSERT(!leafForWindow(windowId));
 
     if (!m_root) {
@@ -491,7 +495,8 @@ void SplitTree::collectLeafOrder(const SplitNode* node, QStringList& order, int 
     }
 
     if (node->isLeaf()) {
-        order.append(node->windowId);
+        if (!node->windowId.isEmpty())
+            order.append(node->windowId);
         return;
     }
 

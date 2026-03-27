@@ -14,6 +14,20 @@ using namespace AutotileJsonKeys;
 using namespace AutotileDefaults;
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Clamping Helpers (DRY: shared by setters and fromJson)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+int TilingState::clampMasterCount(int value)
+{
+    return std::clamp(value, MinMasterCount, MaxMasterCount);
+}
+
+qreal TilingState::clampSplitRatio(qreal value)
+{
+    return std::clamp(value, MinSplitRatio, MaxSplitRatio);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Serialization
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -74,10 +88,10 @@ TilingState* TilingState::fromJson(const QJsonObject& json, QObject* parent)
 
     // Master count — clamp to absolute limits only (not against current window count).
     // Algorithms clamp operationally when they calculate zones.
-    state->m_masterCount = std::clamp(json[MasterCount].toInt(DefaultMasterCount), MinMasterCount, MaxMasterCount);
+    state->m_masterCount = clampMasterCount(json[MasterCount].toInt(DefaultMasterCount));
 
     // Split ratio with clamping
-    state->m_splitRatio = std::clamp(json[SplitRatio].toDouble(DefaultSplitRatio), MinSplitRatio, MaxSplitRatio);
+    state->m_splitRatio = clampSplitRatio(json[SplitRatio].toDouble(DefaultSplitRatio));
 
     if (json.contains(AutotileJsonKeys::SplitTreeKey)) {
         state->m_splitTree = SplitTree::fromJson(json[AutotileJsonKeys::SplitTreeKey].toObject());
@@ -115,12 +129,14 @@ TilingState* TilingState::fromJson(const QJsonObject& json, QObject* parent)
 
 void TilingState::clear()
 {
-    // Track if we need to emit signals
-    const bool hadData = !m_windowOrder.isEmpty() || !m_floatingWindows.isEmpty() || !m_focusedWindow.isEmpty()
-        || !m_calculatedZones.isEmpty() || m_masterCount != DefaultMasterCount
-        || !qFuzzyCompare(1.0 + m_splitRatio, 1.0 + DefaultSplitRatio) || m_splitTree;
+    // Track each field's old value before clearing so we only emit signals for actual changes
+    const bool hadWindows = !m_windowOrder.isEmpty() || !m_floatingWindows.isEmpty();
+    const bool hadFocused = !m_focusedWindow.isEmpty();
+    const int oldMasterCount = m_masterCount;
+    const qreal oldSplitRatio = m_splitRatio;
 
-    if (!hadData) {
+    if (!hadWindows && !hadFocused && m_calculatedZones.isEmpty() && oldMasterCount == DefaultMasterCount
+        && qFuzzyCompare(1.0 + oldSplitRatio, 1.0 + DefaultSplitRatio) && !m_splitTree) {
         return; // Already at defaults, nothing to do
     }
 
@@ -133,12 +149,20 @@ void TilingState::clear()
     m_splitRatio = DefaultSplitRatio;
     m_splitTree.reset();
 
-    // Emit a single batch of signals
-    Q_EMIT windowCountChanged();
-    Q_EMIT windowOrderChanged();
-    Q_EMIT focusedWindowChanged();
-    Q_EMIT masterCountChanged();
-    Q_EMIT splitRatioChanged();
+    // Only emit signals for fields that actually changed
+    if (hadWindows) {
+        Q_EMIT windowCountChanged();
+        Q_EMIT windowOrderChanged();
+    }
+    if (hadFocused) {
+        Q_EMIT focusedWindowChanged();
+    }
+    if (oldMasterCount != DefaultMasterCount) {
+        Q_EMIT masterCountChanged();
+    }
+    if (!qFuzzyCompare(1.0 + oldSplitRatio, 1.0 + DefaultSplitRatio)) {
+        Q_EMIT splitRatioChanged();
+    }
     notifyStateChanged();
 }
 

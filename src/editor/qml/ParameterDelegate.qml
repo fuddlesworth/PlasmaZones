@@ -64,16 +64,6 @@ Item {
             from: paramDelegate.paramData && paramDelegate.paramData.min !== undefined ? paramDelegate.paramData.min : 0
             to: paramDelegate.paramData && paramDelegate.paramData.max !== undefined ? paramDelegate.paramData.max : 1
             stepSize: paramDelegate.paramData && paramDelegate.paramData.step !== undefined ? paramDelegate.paramData.step : 0.01
-            value: {
-                void (paramDelegate._pendingRef);
-                if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
-                    return 0.5;
-
-                var val = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : 0.5);
-                // Ensure number type for Slider
-                var num = Number(val);
-                return isNaN(num) ? 0.5 : num;
-            }
             ToolTip.text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
             ToolTip.visible: hovered && paramDelegate.paramData && paramDelegate.paramData.description !== undefined && paramDelegate.paramData.description !== ""
             ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -82,6 +72,21 @@ Item {
                     paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, value);
 
             }
+
+            Binding on value {
+                value: {
+                    void (paramDelegate._pendingRef);
+                    if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
+                        return 0.5;
+
+                    var val = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : 0.5);
+                    var num = Number(val);
+                    return isNaN(num) ? 0.5 : num;
+                }
+                when: !floatSlider.pressed
+                restoreMode: Binding.RestoreNone
+            }
+
         }
 
         Label {
@@ -102,16 +107,6 @@ Item {
             Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
             from: paramDelegate.paramData && paramDelegate.paramData.min !== undefined ? paramDelegate.paramData.min : 0
             to: paramDelegate.paramData && paramDelegate.paramData.max !== undefined ? paramDelegate.paramData.max : 100
-            value: {
-                void (paramDelegate._pendingRef);
-                if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
-                    return 0;
-
-                var val = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : 0);
-                // Ensure integer type for SpinBox
-                var num = parseInt(val, 10);
-                return isNaN(num) ? 0 : num;
-            }
             ToolTip.text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
             ToolTip.visible: hovered && paramDelegate.paramData && paramDelegate.paramData.description !== undefined && paramDelegate.paramData.description !== ""
             ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -120,6 +115,21 @@ Item {
                     paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, value);
 
             }
+
+            Binding on value {
+                value: {
+                    void (paramDelegate._pendingRef);
+                    if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
+                        return 0;
+
+                    var val = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : 0);
+                    var num = parseInt(val, 10);
+                    return isNaN(num) ? 0 : num;
+                }
+                when: !intSpinBox.activeFocus
+                restoreMode: Binding.RestoreNone
+            }
+
         }
 
         Item {
@@ -136,20 +146,25 @@ Item {
             visible: paramDelegate.paramType === "bool"
             Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
             text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
-            checked: {
-                void (paramDelegate._pendingRef);
-                if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
-                    return false;
-
-                var val = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : false);
-                // Ensure boolean type for CheckBox
-                return Boolean(val);
-            }
             onToggled: {
                 if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot)
                     paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, checked);
 
             }
+
+            Binding on checked {
+                value: {
+                    void (paramDelegate._pendingRef);
+                    if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
+                        return false;
+
+                    var val = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : false);
+                    return Boolean(val);
+                }
+                when: !boolCheckBox.activeFocus
+                restoreMode: Binding.RestoreNone
+            }
+
         }
 
         Item {

@@ -21,6 +21,11 @@ ColumnLayout {
     // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms
     property int viewMode: 0
 
+    // m-15: Extract URL-to-path helper to avoid duplicating regex in FileDialogs
+    function filePathFromUrl(url) {
+        return url.toString().replace(/^file:\/\/+/, "/");
+    }
+
     spacing: 0
 
     // Reset to Snapping Layouts when autotiling is disabled
@@ -256,7 +261,7 @@ ColumnLayout {
         nameFilters: ["JSON files (*.json)", "All files (*)"]
         fileMode: FileDialog.OpenFile
         onAccepted: {
-            settingsController.importLayout(selectedFile.toString().replace(/^file:\/\/+/, "/"));
+            settingsController.importLayout(root.filePathFromUrl(selectedFile));
         }
     }
 
@@ -270,7 +275,7 @@ ColumnLayout {
         nameFilters: ["JSON files (*.json)"]
         fileMode: FileDialog.SaveFile
         onAccepted: {
-            settingsController.exportLayout(exportDialog.layoutId, selectedFile.toString().replace(/^file:\/\/+/, "/"));
+            settingsController.exportLayout(exportDialog.layoutId, root.filePathFromUrl(selectedFile));
         }
     }
 
@@ -282,7 +287,7 @@ ColumnLayout {
         nameFilters: ["JSON files (*.json)", "All files (*)"]
         fileMode: FileDialog.OpenFile
         onAccepted: {
-            settingsController.importFromKZonesFile(selectedFile.toString().replace(/^file:\/\/+/, "/"));
+            settingsController.importFromKZonesFile(root.filePathFromUrl(selectedFile));
         }
     }
 

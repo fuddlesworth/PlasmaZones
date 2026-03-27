@@ -445,6 +445,10 @@ private:
      */
     void forEachTiledWindow(const std::function<bool(const QString& windowId, int tiledIndex)>& func) const;
 
+    // ── Clamping helpers (DRY: shared by setters and fromJson) ──
+    static int clampMasterCount(int value);
+    static qreal clampSplitRatio(qreal value);
+
     // ── Tree synchronization helpers (SRP/DRY: single place for null-check + op) ──
     void syncTreeInsert(const QString& windowId, int position = -1);
     void syncTreeRemove(const QString& windowId);

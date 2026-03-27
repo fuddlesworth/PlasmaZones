@@ -141,17 +141,17 @@ public:
         return m_daemonController.isRunning();
     }
 
-    Settings* settings()
+    Settings* settings() const
     {
-        return &m_settings;
+        return const_cast<Settings*>(&m_settings);
     }
-    DaemonController* daemonController()
+    DaemonController* daemonController() const
     {
-        return &m_daemonController;
+        return const_cast<DaemonController*>(&m_daemonController);
     }
-    UpdateChecker* updateChecker()
+    UpdateChecker* updateChecker() const
     {
-        return &m_updateChecker;
+        return const_cast<UpdateChecker*>(&m_updateChecker);
     }
     QString dismissedUpdateVersion() const
     {
@@ -334,42 +334,150 @@ public:
     bool cavaAvailable() const;
 
     // ── Settings bounds accessors (ConfigDefaults single source of truth) ────
-    int borderWidthMax() const { return ConfigDefaults::borderWidthMax(); }
-    int borderRadiusMax() const { return ConfigDefaults::borderRadiusMax(); }
-    int gapMax() const { return ConfigDefaults::outerGapMax(); } // Shared max for padding + outer gaps
-    int adjacentThresholdMax() const { return ConfigDefaults::adjacentThresholdMax(); }
-    int zoneSelectorTriggerDistanceMin() const { return ConfigDefaults::triggerDistanceMin(); }
-    int zoneSelectorTriggerDistanceMax() const { return ConfigDefaults::triggerDistanceMax(); }
-    int zoneSelectorPreviewWidthMin() const { return ConfigDefaults::previewWidthMin(); }
-    int zoneSelectorPreviewWidthMax() const { return ConfigDefaults::previewWidthMax(); }
-    int zoneSelectorPreviewHeightMin() const { return ConfigDefaults::previewHeightMin(); }
-    int zoneSelectorPreviewHeightMax() const { return ConfigDefaults::previewHeightMax(); }
-    int zoneSelectorGridColumnsMax() const { return ConfigDefaults::gridColumnsMax(); }
-    int shaderFrameRateMin() const { return ConfigDefaults::shaderFrameRateMin(); }
-    int shaderFrameRateMax() const { return ConfigDefaults::shaderFrameRateMax(); }
-    int audioSpectrumBarCountMin() const { return ConfigDefaults::audioSpectrumBarCountMin(); }
-    int audioSpectrumBarCountMax() const { return ConfigDefaults::audioSpectrumBarCountMax(); }
-    int autotileGapMax() const { return ConfigDefaults::autotileOuterGapMax(); } // Shared max for inner + outer gaps
-    int autotileBorderWidthMax() const { return ConfigDefaults::autotileBorderWidthMax(); }
-    int autotileBorderRadiusMax() const { return ConfigDefaults::autotileBorderRadiusMax(); }
-    int animationDurationMin() const { return ConfigDefaults::animationDurationMin(); }
-    int animationDurationMax() const { return ConfigDefaults::animationDurationMax(); }
-    int animationMinDistanceMax() const { return ConfigDefaults::animationMinDistanceMax(); }
-    int animationStaggerIntervalMin() const { return ConfigDefaults::animationStaggerIntervalMin(); }
-    int animationStaggerIntervalMax() const { return ConfigDefaults::animationStaggerIntervalMax(); }
-    int borderWidthMin() const { return ConfigDefaults::borderWidthMin(); }
-    int borderRadiusMin() const { return ConfigDefaults::borderRadiusMin(); }
-    int gapMin() const { return ConfigDefaults::outerGapMin(); }
-    int adjacentThresholdMin() const { return ConfigDefaults::adjacentThresholdMin(); }
-    int autotileGapMin() const { return ConfigDefaults::autotileOuterGapMin(); }
-    int autotileBorderWidthMin() const { return ConfigDefaults::autotileBorderWidthMin(); }
-    int autotileBorderRadiusMin() const { return ConfigDefaults::autotileBorderRadiusMin(); }
-    int autotileMaxWindowsMin() const { return ConfigDefaults::autotileMaxWindowsMin(); }
-    int autotileMasterCountMin() const { return ConfigDefaults::autotileMasterCountMin(); }
-    qreal autotileSplitRatioMin() const { return ConfigDefaults::autotileSplitRatioMin(); }
-    int animationMinDistanceMin() const { return ConfigDefaults::animationMinDistanceMin(); }
-    int zoneSelectorGridColumnsMin() const { return ConfigDefaults::gridColumnsMin(); }
-    int zoneSelectorMaxRowsMin() const { return ConfigDefaults::maxRowsMin(); }
+    int borderWidthMax() const
+    {
+        return ConfigDefaults::borderWidthMax();
+    }
+    int borderRadiusMax() const
+    {
+        return ConfigDefaults::borderRadiusMax();
+    }
+    int gapMax() const
+    {
+        return ConfigDefaults::outerGapMax();
+    } // Shared max for padding + outer gaps
+    int adjacentThresholdMax() const
+    {
+        return ConfigDefaults::adjacentThresholdMax();
+    }
+    int zoneSelectorTriggerDistanceMin() const
+    {
+        return ConfigDefaults::triggerDistanceMin();
+    }
+    int zoneSelectorTriggerDistanceMax() const
+    {
+        return ConfigDefaults::triggerDistanceMax();
+    }
+    int zoneSelectorPreviewWidthMin() const
+    {
+        return ConfigDefaults::previewWidthMin();
+    }
+    int zoneSelectorPreviewWidthMax() const
+    {
+        return ConfigDefaults::previewWidthMax();
+    }
+    int zoneSelectorPreviewHeightMin() const
+    {
+        return ConfigDefaults::previewHeightMin();
+    }
+    int zoneSelectorPreviewHeightMax() const
+    {
+        return ConfigDefaults::previewHeightMax();
+    }
+    int zoneSelectorGridColumnsMax() const
+    {
+        return ConfigDefaults::gridColumnsMax();
+    }
+    int shaderFrameRateMin() const
+    {
+        return ConfigDefaults::shaderFrameRateMin();
+    }
+    int shaderFrameRateMax() const
+    {
+        return ConfigDefaults::shaderFrameRateMax();
+    }
+    int audioSpectrumBarCountMin() const
+    {
+        return ConfigDefaults::audioSpectrumBarCountMin();
+    }
+    int audioSpectrumBarCountMax() const
+    {
+        return ConfigDefaults::audioSpectrumBarCountMax();
+    }
+    int autotileGapMax() const
+    {
+        return ConfigDefaults::autotileOuterGapMax();
+    } // Shared max for inner + outer gaps
+    int autotileBorderWidthMax() const
+    {
+        return ConfigDefaults::autotileBorderWidthMax();
+    }
+    int autotileBorderRadiusMax() const
+    {
+        return ConfigDefaults::autotileBorderRadiusMax();
+    }
+    int animationDurationMin() const
+    {
+        return ConfigDefaults::animationDurationMin();
+    }
+    int animationDurationMax() const
+    {
+        return ConfigDefaults::animationDurationMax();
+    }
+    int animationMinDistanceMax() const
+    {
+        return ConfigDefaults::animationMinDistanceMax();
+    }
+    int animationStaggerIntervalMin() const
+    {
+        return ConfigDefaults::animationStaggerIntervalMin();
+    }
+    int animationStaggerIntervalMax() const
+    {
+        return ConfigDefaults::animationStaggerIntervalMax();
+    }
+    int borderWidthMin() const
+    {
+        return ConfigDefaults::borderWidthMin();
+    }
+    int borderRadiusMin() const
+    {
+        return ConfigDefaults::borderRadiusMin();
+    }
+    int gapMin() const
+    {
+        return ConfigDefaults::outerGapMin();
+    }
+    int adjacentThresholdMin() const
+    {
+        return ConfigDefaults::adjacentThresholdMin();
+    }
+    int autotileGapMin() const
+    {
+        return ConfigDefaults::autotileOuterGapMin();
+    }
+    int autotileBorderWidthMin() const
+    {
+        return ConfigDefaults::autotileBorderWidthMin();
+    }
+    int autotileBorderRadiusMin() const
+    {
+        return ConfigDefaults::autotileBorderRadiusMin();
+    }
+    int autotileMaxWindowsMin() const
+    {
+        return ConfigDefaults::autotileMaxWindowsMin();
+    }
+    int autotileMasterCountMin() const
+    {
+        return ConfigDefaults::autotileMasterCountMin();
+    }
+    qreal autotileSplitRatioMin() const
+    {
+        return ConfigDefaults::autotileSplitRatioMin();
+    }
+    int animationMinDistanceMin() const
+    {
+        return ConfigDefaults::animationMinDistanceMin();
+    }
+    int zoneSelectorGridColumnsMin() const
+    {
+        return ConfigDefaults::gridColumnsMin();
+    }
+    int zoneSelectorMaxRowsMin() const
+    {
+        return ConfigDefaults::maxRowsMin();
+    }
 
     // ── Color import ─────────────────────────────────────────────────────────
     Q_INVOKABLE void loadColorsFromPywal();

@@ -60,6 +60,10 @@ public:
     {
         return true;
     }
+    [[nodiscard]] qreal defaultSplitRatio() const override
+    {
+        return 0.5;
+    }
 
     /**
      * @brief Prepare the TilingState, ensuring it has a SplitTree

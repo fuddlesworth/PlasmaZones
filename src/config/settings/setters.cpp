@@ -419,7 +419,7 @@ void Settings::setAutotileAlgorithm(const QString& algorithm)
 {
     // Validate algorithm ID against the algorithm registry (single source of truth)
     QString validatedAlgorithm = algorithm;
-    if (!AlgorithmRegistry::instance()->algorithm(algorithm)) {
+    if (!algorithm.startsWith(QLatin1String("script:")) && !AlgorithmRegistry::instance()->algorithm(algorithm)) {
         qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm << "- using default";
         validatedAlgorithm = AlgorithmRegistry::defaultAlgorithmId();
     }

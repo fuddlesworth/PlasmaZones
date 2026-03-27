@@ -134,8 +134,8 @@ Item {
             }
             property real relX: Math.max(0, Math.min(relGeo.x || 0, 1))
             property real relY: Math.max(0, Math.min(relGeo.y || 0, 1))
-            property real relWidth: Math.min(relGeo.width || 0.25, 1 - relX)
-            property real relHeight: Math.min(relGeo.height || 1, 1 - relY)
+            property real relWidth: Math.max(0, Math.min(relGeo.width || 0.25, 1 - relX))
+            property real relHeight: Math.max(0, Math.min(relGeo.height || 1, 1 - relY))
             // Check if this zone is selected (by index, highlightAllZones, or by zone ID)
             property bool isZoneSelected: {
                 // Highlight all zones when any is selected (highlightAllZones mode)

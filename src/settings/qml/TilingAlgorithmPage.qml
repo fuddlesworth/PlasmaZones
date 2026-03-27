@@ -16,6 +16,8 @@ Flickable {
     property alias selectedScreenName: psHelper.selectedScreenName
     readonly property alias isPerScreen: psHelper.isPerScreen
     readonly property alias hasOverrides: psHelper.hasOverrides
+    // m-13: Cache availableAlgorithms() to avoid calling it on every binding re-evaluation
+    property var _cachedAlgos: settingsController.availableAlgorithms()
     readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettings.autotileAlgorithm)
     // Derive algorithm ID from the combo's current selection (tracks UI immediately,
     // not delayed by D-Bus round-trip to daemon)
@@ -32,9 +34,9 @@ Flickable {
 
         return val;
     }
-    // Data-driven algorithm capabilities (lookup from availableAlgorithms by ID)
+    // Data-driven algorithm capabilities (lookup from cached availableAlgorithms by ID)
     readonly property var algoCapabilities: {
-        const algos = settingsController.availableAlgorithms();
+        const algos = root._cachedAlgos;
         const algoId = root.selectedAlgorithm;
         for (let i = 0; i < algos.length; i++) {
             if (algos[i].id === algoId)
@@ -76,6 +78,14 @@ Flickable {
 
     contentHeight: content.implicitHeight
     clip: true
+
+    Connections {
+        function onAvailableAlgorithmsChanged() {
+            root._cachedAlgos = settingsController.availableAlgorithms();
+        }
+
+        target: settingsController
+    }
 
     PerScreenOverrideHelper {
         id: psHelper

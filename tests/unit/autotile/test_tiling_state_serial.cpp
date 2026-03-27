@@ -260,6 +260,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
+        state.setFocusedWindow(QStringLiteral("A"));
+        state.setMasterCount(3);
         state.setSplitRatio(0.8);
 
         QSignalSpy countSpy(&state, &TilingState::windowCountChanged);
@@ -271,10 +273,9 @@ private Q_SLOTS:
         state.clear();
 
         QCOMPARE(countSpy.count(), 1);
+        // Per-field signal emission: only signals for fields that actually
+        // changed from defaults are emitted.
         QCOMPARE(focusSpy.count(), 1);
-        // masterCount was already at the default value, but clear() emits all
-        // signals in a single batch whenever any field was non-default.
-        // Here hadData is true (window + non-default splitRatio), so all fire.
         QCOMPARE(masterSpy.count(), 1);
         QCOMPARE(ratioSpy.count(), 1);
         QCOMPARE(stateSpy.count(), 1);

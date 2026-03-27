@@ -304,6 +304,48 @@ private Q_SLOTS:
         QCOMPARE(zonesOriginal, zonesRestored);
     }
 
+    void testSerializationRoundTripDeep()
+    {
+        SplitTree tree;
+        // Build an 8-window tree
+        for (int i = 1; i <= 8; i++) {
+            tree.insertAtEnd(QStringLiteral("win%1").arg(i));
+        }
+        // Resize some splits to vary ratios
+        tree.resizeSplit(QStringLiteral("win2"), 0.3);
+        tree.resizeSplit(QStringLiteral("win5"), 0.7);
+        // Swap two windows
+        tree.swap(QStringLiteral("win3"), QStringLiteral("win6"));
+
+        // Serialize
+        QJsonObject json = tree.toJson();
+
+        // Deserialize
+        auto restored = SplitTree::fromJson(json);
+        QVERIFY(restored);
+
+        // Verify leaf count
+        QCOMPARE(restored->leafCount(), 8);
+
+        // Verify leaf order matches
+        QCOMPARE(restored->leafOrder(), tree.leafOrder());
+
+        // Verify round-trip produces identical JSON
+        QJsonObject json2 = restored->toJson();
+        QCOMPARE(json2, json);
+
+        // Verify geometry output matches (proves ratios are preserved)
+        auto zonesOriginal = tree.applyGeometry(m_screenGeometry, 0);
+        auto zonesRestored = restored->applyGeometry(m_screenGeometry, 0);
+        QCOMPARE(zonesOriginal.size(), zonesRestored.size());
+        QCOMPARE(zonesOriginal, zonesRestored);
+
+        // Verify geometry with gaps also matches
+        auto zonesGapOriginal = tree.applyGeometry(m_screenGeometry, 8);
+        auto zonesGapRestored = restored->applyGeometry(m_screenGeometry, 8);
+        QCOMPARE(zonesGapOriginal, zonesGapRestored);
+    }
+
     void testSerializationEmpty()
     {
         SplitTree tree;

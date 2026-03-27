@@ -52,7 +52,7 @@ QJsonObject SplitTree::nodeToJson(const SplitNode* node, int depth)
         return json;
     }
 
-    if (depth >= MaxRuntimeTreeDepth) {
+    if (depth >= MaxDeserializationDepth) {
         qCWarning(lcAutotile) << "SplitTree::nodeToJson: max depth exceeded, truncating";
         return json;
     }

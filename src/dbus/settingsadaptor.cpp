@@ -711,7 +711,7 @@ void SettingsAdaptor::setPerScreenSetting(const QString& screenId, const QString
         qCWarning(lcDbusSettings) << "setPerScreenSetting: unknown category" << category;
         return;
     }
-    concrete->save();
+    scheduleSave();
 }
 
 void SettingsAdaptor::clearPerScreenSettings(const QString& screenId, const QString& category)

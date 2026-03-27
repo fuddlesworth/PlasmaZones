@@ -13,7 +13,10 @@
 #include "autotile/TilingAlgorithm.h"
 #include "autotile/algorithms/ScriptedAlgorithmLoader.h"
 
+#include "../helpers/ScriptTestHelpers.h"
+
 using namespace PlasmaZones;
+using namespace PlasmaZones::TestHelpers;
 
 /**
  * @brief RAII guard for XDG environment variables — restores on destruction even if test fails
@@ -48,20 +51,6 @@ private:
     bool m_hadDataDirs = false;
     bool m_hadDataHome = false;
 };
-
-/**
- * @brief Helper to write a .js script file in a given directory
- */
-static QString writeScript(const QString& dirPath, const QString& filename, const QString& content)
-{
-    QString path = dirPath + QStringLiteral("/") + filename;
-    QFile f(path);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Text))
-        return QString();
-    f.write(content.toUtf8());
-    f.close();
-    return path;
-}
 
 /**
  * @brief Minimal valid script content with a given name
@@ -127,6 +116,10 @@ private Q_SLOTS:
 
         auto* registry = AlgorithmRegistry::instance();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:gamma")));
+
+        // Note: both XDG_DATA_DIRS and XDG_DATA_HOME point to the same directory in this
+        // test, so the loader treats it as a user script. The testUserOverridesSystem test
+        // below verifies isUserScript() with separate system/user directories.
 
         loader.reset();
         loader.emplace();
@@ -208,6 +201,7 @@ private Q_SLOTS:
         auto* algo = registry->algorithm(QStringLiteral("script:shared"));
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("UserVersion"));
+        QVERIFY(algo->isUserScript()); // user version should be marked as user script
 
         loader.reset();
         loader.emplace();

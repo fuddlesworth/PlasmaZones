@@ -172,7 +172,7 @@ int TilingState::masterCount() const
 void TilingState::setMasterCount(int count)
 {
     // Clamp to absolute limits only — algorithms clamp operationally against window count
-    count = std::clamp(count, MinMasterCount, MaxMasterCount);
+    count = clampMasterCount(count);
 
     if (m_masterCount != count) {
         m_masterCount = count;
@@ -358,7 +358,7 @@ qreal TilingState::splitRatio() const
 void TilingState::setSplitRatio(qreal ratio)
 {
     // Clamp to valid range using constants
-    ratio = std::clamp(ratio, MinSplitRatio, MaxSplitRatio);
+    ratio = clampSplitRatio(ratio);
 
     if (!qFuzzyCompare(1.0 + m_splitRatio, 1.0 + ratio)) {
         m_splitRatio = ratio;
@@ -395,22 +395,6 @@ void TilingState::setFloating(const QString& windowId, bool floating)
         return;
     }
 
-    // Compute tiled index BEFORE modifying the floating set
-    int tiledIdxBeforeChange = -1;
-    if (!floating) {
-        // Unfloating: count non-floating predecessors to find tiled position
-        const int orderIdx = m_windowOrder.indexOf(windowId);
-        if (orderIdx >= 0) {
-            int tiledPos = 0;
-            for (int i = 0; i < orderIdx; ++i) {
-                if (!m_floatingWindows.contains(m_windowOrder.at(i))) {
-                    ++tiledPos;
-                }
-            }
-            tiledIdxBeforeChange = tiledPos;
-        }
-    }
-
     if (floating) {
         m_floatingWindows.insert(windowId);
     } else {
@@ -420,7 +404,9 @@ void TilingState::setFloating(const QString& windowId, bool floating)
     if (floating) {
         syncTreeRemove(windowId);
     } else {
-        syncTreeInsert(windowId, tiledIdxBeforeChange);
+        // Rebuild the entire tree rather than incremental insert to avoid
+        // tree/list ordering divergence after multiple float/unfloat cycles.
+        rebuildSplitTree();
     }
 
     Q_EMIT floatingChanged(windowId, floating);
