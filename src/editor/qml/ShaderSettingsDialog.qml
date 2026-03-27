@@ -179,7 +179,8 @@ Kirigami.Dialog {
     function hideShaderPreview() {
         previewAnimationTimer.stop();
         previewShaderConfig = null;
-        shaderPreview.shaderSource = "";
+        // Setting previewShaderConfig = null deactivates the Loader, which
+        // destroys the ZoneShaderItem and releases all RHI resources cleanly.
         if (editorController)
             editorController.stopAudioCapture();
 
@@ -224,12 +225,10 @@ Kirigami.Dialog {
         var wallpaperImg = useWallpaper ? editorController.loadWallpaperTexture() : null;
         var bsPaths = info.bufferShaderPaths || [];
         var shaderUrl = info.shaderUrl || "";
-        // Set config WITHOUT shaderSource — shaderSource is set imperatively
-        // after all config bindings have evaluated (see Qt.callLater below).
-        // This mirrors the daemon's applyShaderInfoToWindow() which sets
-        // shaderSource LAST because setShaderSource() triggers compilation
-        // that references bufferShaderPaths, zones, and params.
+        // Include shaderUrl in the config so the Loader's sourceComponent
+        // bindings and onLoaded can apply it after all other props settle.
         previewShaderConfig = {
+            "shaderUrl": shaderUrl,
             "bufferShaderPaths": (bsPaths.length > 0) ? Array.from(bsPaths) : (info.bufferShaderPath ? [info.bufferShaderPath] : []),
             "bufferFeedback": info.bufferFeedback || false,
             "bufferScale": info.bufferScale !== undefined ? info.bufferScale : 1,
@@ -240,17 +239,6 @@ Kirigami.Dialog {
             "labelsTexture": labelsImg,
             "wallpaperTexture": wallpaperImg
         };
-        // Set shaderSource AFTER bindings settle — Qt.callLater defers to
-        // the next event loop iteration, guaranteeing all property bindings
-        // from the config assignment above have been evaluated first.
-        // Guard against stale URL from rapid shader switching: only apply if
-        // the pending shader ID still matches when the deferred call fires.
-        var capturedShaderId = root.pendingShaderId;
-        Qt.callLater(function() {
-            if (root.pendingShaderId === capturedShaderId)
-                shaderPreview.shaderSource = shaderUrl;
-
-        });
         if (!previewAnimationTimer.running) {
             previewLastTime = Date.now() / 1000;
             previewITime = 0;
@@ -775,8 +763,20 @@ Kirigami.Dialog {
 
                                         }
 
+                                        enter: Transition {
+                                        }
+
+                                        exit: Transition {
+                                        }
+
                                     }
 
+                                }
+
+                                enter: Transition {
+                                }
+
+                                exit: Transition {
                                 }
 
                             }
@@ -808,6 +808,17 @@ Kirigami.Dialog {
                                 onTriggered: root.pendingShaderId = modelData.id
                             }
 
+                        }
+
+                        // Disable exit transition to prevent use-after-free in
+                        // QQuickPopupPrivate::finalizeExitTransition (Qt 6.11).
+                        // Instantiator-created MenuItems are destroyed during the
+                        // binding cascade triggered by pendingShaderId change, but
+                        // the exit transition still walks the (now stale) child tree.
+                        enter: Transition {
+                        }
+
+                        exit: Transition {
                         }
 
                     }
@@ -1228,54 +1239,55 @@ Kirigami.Dialog {
                     }
                 }
 
-                // Local shader renderer — replaces daemon-side LayerShell overlay
-                // shaderSource is set imperatively via Qt.callLater in
-                // updateLocalShaderPreview() to guarantee it runs after all
-                // config bindings (bufferShaderPaths, zones, params) have settled.
-                ZoneShaderItem {
-                    id: shaderPreview
+                // Shader preview via Loader — destroy and recreate the ZoneShaderItem
+                // on each shader switch so all RHI resources (FBOs, pipelines, textures)
+                // are fully released before new ones are created. In-place resource
+                // swapping triggers heap corruption in NVIDIA's EGL driver (595.x).
+                Loader {
+                    id: shaderPreviewLoader
 
                     anchors.fill: parent
-                    visible: root.previewShaderConfig !== null
-                    // Render to a private layer FBO so multipass shaders' beginPass(rt)
-                    // clears only this layer — not the entire editor window surface.
-                    layer.enabled: true
-                    // Our render node already outputs correct top-down orientation;
-                    // disable default MirrorVertically to prevent double-flip.
-                    layer.textureMirroring: ShaderEffectSource.NoMirroring
-                    // All auxiliary props BEFORE shaderSource
-                    bufferShaderPaths: previewBackground.cfg.bufferShaderPaths || []
-                    bufferFeedback: previewBackground.cfg.bufferFeedback || false
-                    bufferScale: previewBackground.cfg.bufferScale !== undefined ? previewBackground.cfg.bufferScale : 1
-                    bufferWrap: previewBackground.cfg.bufferWrap || "clamp"
-                    zones: previewBackground.cfg.zones || []
-                    shaderParams: previewBackground.cfg.shaderParams || ({
-                    })
-                    useWallpaper: previewBackground.cfg.useWallpaper || false
-                    // Timing bound directly to root properties for per-frame updates
-                    iTime: root.previewITime
-                    iTimeDelta: root.previewTimeDelta
-                    iFrame: root.previewFrame
-                    iResolution: Qt.size(width, height)
-                    iMouse: previewBackground.previewMouse
-                    hoveredZoneIndex: previewBackground.previewHoveredZone
-                    audioSpectrum: editorController ? editorController.audioSpectrum : []
-                }
+                    active: root.previewShaderConfig !== null
+                    onLoaded: {
+                        // Apply QImage properties after item creation — can't use
+                        // bindings because there's no valid QML null-QImage literal.
+                        var cfg = previewBackground.cfg;
+                        if (item && cfg.labelsTexture !== undefined && cfg.labelsTexture !== null)
+                            item.labelsTexture = cfg.labelsTexture;
 
-                // QImage bindings use Binding with `when` guard to avoid passing
-                // undefined/null to C++ setters (can crash during teardown)
-                Binding {
-                    target: shaderPreview
-                    property: "labelsTexture"
-                    value: previewBackground.cfg.labelsTexture
-                    when: previewBackground.cfg.labelsTexture !== undefined && previewBackground.cfg.labelsTexture !== null
-                }
+                        if (item && cfg.wallpaperTexture !== undefined && cfg.wallpaperTexture !== null)
+                            item.wallpaperTexture = cfg.wallpaperTexture;
 
-                Binding {
-                    target: shaderPreview
-                    property: "wallpaperTexture"
-                    value: previewBackground.cfg.wallpaperTexture
-                    when: previewBackground.cfg.wallpaperTexture !== undefined && previewBackground.cfg.wallpaperTexture !== null
+                    }
+
+                    sourceComponent: ZoneShaderItem {
+                        // Render to a private layer FBO so multipass shaders' beginPass(rt)
+                        // clears only this layer — not the entire editor window surface.
+                        layer.enabled: shaderSource.toString() !== ""
+                        // Our render node already outputs correct top-down orientation;
+                        // disable default MirrorVertically to prevent double-flip.
+                        layer.textureMirroring: ShaderEffectSource.NoMirroring
+                        // shaderSource bound from config — applied reactively
+                        shaderSource: previewBackground.cfg.shaderUrl || ""
+                        // All auxiliary props
+                        bufferShaderPaths: previewBackground.cfg.bufferShaderPaths || []
+                        bufferFeedback: previewBackground.cfg.bufferFeedback || false
+                        bufferScale: previewBackground.cfg.bufferScale !== undefined ? previewBackground.cfg.bufferScale : 1
+                        bufferWrap: previewBackground.cfg.bufferWrap || "clamp"
+                        zones: previewBackground.cfg.zones || []
+                        shaderParams: previewBackground.cfg.shaderParams || ({
+                        })
+                        useWallpaper: previewBackground.cfg.useWallpaper || false
+                        // Timing bound directly to root properties for per-frame updates
+                        iTime: root.previewITime
+                        iTimeDelta: root.previewTimeDelta
+                        iFrame: root.previewFrame
+                        iResolution: Qt.size(width, height)
+                        iMouse: previewBackground.previewMouse
+                        hoveredZoneIndex: previewBackground.previewHoveredZone
+                        audioSpectrum: editorController ? editorController.audioSpectrum : []
+                    }
+
                 }
 
                 // Fallback message when no shader is rendering
