@@ -221,12 +221,10 @@ Kirigami.Dialog {
         var wallpaperImg = useWallpaper ? editorController.loadWallpaperTexture() : null;
         var bsPaths = info.bufferShaderPaths || [];
         var shaderUrl = info.shaderUrl || "";
-        // Destroy the old ZoneShaderItem (and all its RHI resources) by
-        // deactivating the Loader, then create a fresh one with the new config.
-        // This avoids in-place RHI resource swapping that triggers heap
-        // corruption in NVIDIA's EGL driver (595.x).
-        previewShaderConfig = null;
+        // Include shaderUrl in the config so the Loader's sourceComponent
+        // bindings and onLoaded can apply it after all other props settle.
         previewShaderConfig = {
+            "shaderUrl": shaderUrl,
             "bufferShaderPaths": (bsPaths.length > 0) ? Array.from(bsPaths) : (info.bufferShaderPath ? [info.bufferShaderPath] : []),
             "bufferFeedback": info.bufferFeedback || false,
             "bufferScale": info.bufferScale !== undefined ? info.bufferScale : 1,
@@ -237,19 +235,6 @@ Kirigami.Dialog {
             "labelsTexture": labelsImg,
             "wallpaperTexture": wallpaperImg
         };
-        // Set shaderSource AFTER bindings settle — Qt.callLater defers to
-        // the next event loop iteration, guaranteeing all property bindings
-        // from the config assignment above have been evaluated first.
-        var capturedShaderId = root.pendingShaderId;
-        Qt.callLater(function() {
-            if (root.pendingShaderId !== capturedShaderId)
-                return ;
-
-            var item = shaderPreviewLoader.item;
-            if (item)
-                item.shaderSource = shaderUrl;
-
-        });
         if (!previewAnimationTimer.running) {
             previewLastTime = Date.now() / 1000;
             previewITime = 0;
@@ -764,8 +749,20 @@ Kirigami.Dialog {
 
                                         }
 
+                                        enter: Transition {
+                                        }
+
+                                        exit: Transition {
+                                        }
+
                                     }
 
+                                }
+
+                                enter: Transition {
+                                }
+
+                                exit: Transition {
                                 }
 
                             }
@@ -1256,7 +1253,9 @@ Kirigami.Dialog {
                         // Our render node already outputs correct top-down orientation;
                         // disable default MirrorVertically to prevent double-flip.
                         layer.textureMirroring: ShaderEffectSource.NoMirroring
-                        // All auxiliary props BEFORE shaderSource
+                        // shaderSource bound from config — applied reactively
+                        shaderSource: previewBackground.cfg.shaderUrl || ""
+                        // All auxiliary props
                         bufferShaderPaths: previewBackground.cfg.bufferShaderPaths || []
                         bufferFeedback: previewBackground.cfg.bufferFeedback || false
                         bufferScale: previewBackground.cfg.bufferScale !== undefined ? previewBackground.cfg.bufferScale : 1
@@ -1265,9 +1264,6 @@ Kirigami.Dialog {
                         shaderParams: previewBackground.cfg.shaderParams || ({
                         })
                         useWallpaper: previewBackground.cfg.useWallpaper || false
-                        // QImage props — only bind when config provides a valid image.
-                        // Undefined/null values are left at the C++ default (null QImage).
-                        // Component.onCompleted applies the initial images after creation.
                         // Timing bound directly to root properties for per-frame updates
                         iTime: root.previewITime
                         iTimeDelta: root.previewTimeDelta
