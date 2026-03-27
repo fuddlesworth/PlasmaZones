@@ -187,6 +187,94 @@ void AutotileEngine::setCurrentActivity(const QString& activity)
     m_currentActivity = activity;
 }
 
+void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky)
+{
+    for (const QString& screenId : std::as_const(m_autotileScreens)) {
+        const auto key = currentKeyForScreen(screenId);
+        auto stateIt = m_screenStates.constFind(key);
+        if (stateIt == m_screenStates.constEnd()) {
+            continue;
+        }
+
+        const TilingState* state = stateIt.value();
+        const QStringList tiled = state->tiledWindows();
+        const QStringList floating = state->floatingWindows();
+
+        if (tiled.isEmpty() && floating.isEmpty()) {
+            continue;
+        }
+
+        bool allSticky = true;
+        for (const QString& wid : tiled) {
+            if (!isWindowSticky(wid)) {
+                allSticky = false;
+                break;
+            }
+        }
+        if (allSticky) {
+            for (const QString& wid : floating) {
+                if (!isWindowSticky(wid)) {
+                    allSticky = false;
+                    break;
+                }
+            }
+        }
+
+        if (allSticky) {
+            if (!m_screenDesktopOverride.contains(screenId)) {
+                // Pin to current effective desktop (which is the desktop where
+                // the TilingState actually lives).
+                m_screenDesktopOverride[screenId] = key.desktop;
+                qCInfo(lcAutotile) << "Pinning screen" << screenId << "to desktop" << key.desktop << "(all"
+                                   << (tiled.size() + floating.size()) << "windows sticky)";
+            }
+        } else {
+            if (m_screenDesktopOverride.contains(screenId)) {
+                int pinnedDesktop = m_screenDesktopOverride.take(screenId);
+                qCInfo(lcAutotile) << "Unpinning screen" << screenId << "from desktop" << pinnedDesktop;
+
+                // Migrate TilingState from pinned key to current desktop key
+                if (pinnedDesktop != m_currentDesktop) {
+                    TilingStateKey oldKey{screenId, pinnedDesktop, m_currentActivity};
+                    TilingStateKey newKey{screenId, m_currentDesktop, m_currentActivity};
+
+                    auto oldIt = m_screenStates.find(oldKey);
+                    if (oldIt != m_screenStates.end()) {
+                        // If a state already exists at the target key (e.g., created
+                        // by stateForScreen() during a transient lookup), delete it —
+                        // the pinned state has the actual windows.
+                        auto existingIt = m_screenStates.find(newKey);
+                        if (existingIt != m_screenStates.end()) {
+                            existingIt.value()->deleteLater();
+                            m_screenStates.erase(existingIt);
+                        }
+                        TilingState* migratedState = oldIt.value();
+                        m_screenStates.erase(oldIt);
+                        m_screenStates.insert(newKey, migratedState);
+
+                        // Update window-to-key mapping
+                        for (auto wit = m_windowToStateKey.begin(); wit != m_windowToStateKey.end(); ++wit) {
+                            if (wit.value() == oldKey) {
+                                wit.value() = newKey;
+                            }
+                        }
+
+                        // Migrate saved floating windows
+                        auto floatIt = m_savedFloatingWindows.find(oldKey);
+                        if (floatIt != m_savedFloatingWindows.end()) {
+                            m_savedFloatingWindows[newKey] = floatIt.value();
+                            m_savedFloatingWindows.erase(floatIt);
+                        }
+
+                        qCInfo(lcAutotile) << "Migrated screen" << screenId << "state from desktop" << pinnedDesktop
+                                           << "to" << m_currentDesktop;
+                    }
+                }
+            }
+        }
+    }
+}
+
 void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
 {
     if (m_autotileScreens == screens) {
@@ -279,6 +367,11 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
 
     // Clean up any remaining overflow entries for removed screens.
     m_overflow.clearForRemovedScreens(m_autotileScreens);
+
+    // Clear desktop overrides for removed screens
+    for (const QString& screenId : removed) {
+        m_screenDesktopOverride.remove(screenId);
+    }
 
     // Clear any pending deferred retiles for removed screens
     for (auto pit = m_pendingRetileScreens.begin(); pit != m_pendingRetileScreens.end();) {
@@ -522,6 +615,14 @@ void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
         wit.next();
         if (wit.value().desktop == removedDesktop) {
             wit.remove();
+        }
+    }
+    // Clear desktop overrides referencing the removed desktop
+    QMutableHashIterator<QString, int> oit(m_screenDesktopOverride);
+    while (oit.hasNext()) {
+        oit.next();
+        if (oit.value() == removedDesktop) {
+            oit.remove();
         }
     }
     if (pruned > 0) {

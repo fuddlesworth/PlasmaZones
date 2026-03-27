@@ -118,6 +118,16 @@ void Daemon::connectDesktopActivity()
         if (m_unifiedLayoutController) {
             m_unifiedLayoutController->setCurrentVirtualDesktop(desktop);
         }
+        // Pin screens where all autotiled windows are sticky (on all desktops)
+        // BEFORE changing the desktop context. This ensures currentKeyForScreen()
+        // continues to resolve existing TilingStates for screens managed by the
+        // KWin "virtualdesktopsonlyonprimary" script.
+        if (m_autotileEngine && m_windowTrackingAdaptor) {
+            auto* service = m_windowTrackingAdaptor->service();
+            m_autotileEngine->updateStickyScreenPins([service](const QString& windowId) {
+                return service->isWindowSticky(windowId);
+            });
+        }
         // Set engine's desktop context BEFORE updateAutotileScreens() so it
         // resolves TilingStates for the correct desktop. Without this, the
         // engine would look up/create states under the OLD desktop's key.
@@ -201,6 +211,13 @@ void Daemon::connectDesktopActivity()
                     m_layoutManager->setCurrentActivity(activityId);
                     if (m_unifiedLayoutController) {
                         m_unifiedLayoutController->setCurrentActivity(activityId);
+                    }
+                    // Pin sticky screens before changing activity context
+                    if (m_autotileEngine && m_windowTrackingAdaptor) {
+                        auto* service = m_windowTrackingAdaptor->service();
+                        m_autotileEngine->updateStickyScreenPins([service](const QString& windowId) {
+                            return service->isWindowSticky(windowId);
+                        });
                     }
                     // Set engine's activity context BEFORE updateAutotileScreens()
                     if (m_autotileEngine) {
