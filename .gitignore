@@ -323,3 +323,6 @@ local_settings.*
 *.log
 logs/
 *.log.*
+
+# RuVector (local development)
+ruvector/
