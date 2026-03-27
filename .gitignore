@@ -305,7 +305,7 @@ coordination/
 claude-flow
 claude.*
 hive-mind-prompt-*.txt
-CLAUDE.md
+
 
 # -----------------------------------------------------------------------------
 # Local Configuration Files
