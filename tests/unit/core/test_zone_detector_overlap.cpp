@@ -118,8 +118,7 @@ private Q_SLOTS:
         QVector<Zone*> painted = {subLeft, subRight};
         QVector<Zone*> expanded = m_detector->expandPaintedZonesToRect(painted);
 
-        QVERIFY2(!expanded.contains(bgZone),
-                 "expandPaintedZonesToRect should NOT pull in large background zone");
+        QVERIFY2(!expanded.contains(bgZone), "expandPaintedZonesToRect should NOT pull in large background zone");
         QCOMPARE(expanded.size(), 2);
     }
 
@@ -184,6 +183,154 @@ private Q_SLOTS:
         QVERIFY2(!expanded.contains(bgZone),
                  "Background zone at exactly 50% overlap ratio must be excluded (strict >)");
         QCOMPARE(expanded.size(), 2);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // P0: detectZone center-distance — cursor near center of background zone
+    // selects background instead of always picking smallest overlapping zone
+    // (regression test for discussion #258)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    void testDetectZone_cursorNearBackgroundCenter_selectsBackground()
+    {
+        // Layout: 4 quadrant sub-zones on top of a full-screen background.
+        // Cursor at center (500, 500) — equidistant from all quadrant centers
+        // but exactly at the background zone's center.
+        auto* bgZone = new Zone(m_layout);
+        bgZone->setRelativeGeometry(QRectF(0.0, 0.0, 1.0, 1.0));
+        m_layout->addZone(bgZone);
+
+        auto* topLeft = new Zone(m_layout);
+        topLeft->setRelativeGeometry(QRectF(0.0, 0.0, 0.5, 0.5));
+        m_layout->addZone(topLeft);
+
+        auto* topRight = new Zone(m_layout);
+        topRight->setRelativeGeometry(QRectF(0.5, 0.0, 0.5, 0.5));
+        m_layout->addZone(topRight);
+
+        auto* bottomLeft = new Zone(m_layout);
+        bottomLeft->setRelativeGeometry(QRectF(0.0, 0.5, 0.5, 0.5));
+        m_layout->addZone(bottomLeft);
+
+        auto* bottomRight = new Zone(m_layout);
+        bottomRight->setRelativeGeometry(QRectF(0.5, 0.5, 0.5, 0.5));
+        m_layout->addZone(bottomRight);
+
+        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        m_detector->setLayout(m_layout);
+
+        // Cursor at dead center of screen — background zone center
+        ZoneDetectionResult result = m_detector->detectZone(QPointF(500, 500));
+        QVERIFY2(result.primaryZone == bgZone,
+                 "Cursor at center of screen should select background zone, not a quadrant");
+    }
+
+    void testDetectZone_cursorInQuadrantCenter_selectsQuadrant()
+    {
+        // Same layout as above, but cursor at (250, 250) — center of topLeft.
+        // Should still select topLeft, not background.
+        auto* bgZone = new Zone(m_layout);
+        bgZone->setRelativeGeometry(QRectF(0.0, 0.0, 1.0, 1.0));
+        m_layout->addZone(bgZone);
+
+        auto* topLeft = new Zone(m_layout);
+        topLeft->setRelativeGeometry(QRectF(0.0, 0.0, 0.5, 0.5));
+        m_layout->addZone(topLeft);
+
+        auto* topRight = new Zone(m_layout);
+        topRight->setRelativeGeometry(QRectF(0.5, 0.0, 0.5, 0.5));
+        m_layout->addZone(topRight);
+
+        auto* bottomLeft = new Zone(m_layout);
+        bottomLeft->setRelativeGeometry(QRectF(0.0, 0.5, 0.5, 0.5));
+        m_layout->addZone(bottomLeft);
+
+        auto* bottomRight = new Zone(m_layout);
+        bottomRight->setRelativeGeometry(QRectF(0.5, 0.5, 0.5, 0.5));
+        m_layout->addZone(bottomRight);
+
+        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        m_detector->setLayout(m_layout);
+
+        // Cursor at center of top-left quadrant
+        ZoneDetectionResult result = m_detector->detectZone(QPointF(250, 250));
+        QVERIFY2(result.primaryZone == topLeft, "Cursor at center of top-left quadrant should select that quadrant");
+    }
+
+    void testDetectZone_halfZones_cursorNearHalfCenter_selectsHalf()
+    {
+        // Layout from discussion #258: quadrants + vertical halves + fullscreen.
+        // Cursor at (250, 500) — center of leftHalf zone.
+        auto* fullscreen = new Zone(m_layout);
+        fullscreen->setRelativeGeometry(QRectF(0.0, 0.0, 1.0, 1.0));
+        m_layout->addZone(fullscreen);
+
+        auto* leftHalf = new Zone(m_layout);
+        leftHalf->setRelativeGeometry(QRectF(0.0, 0.0, 0.5, 1.0));
+        m_layout->addZone(leftHalf);
+
+        auto* rightHalf = new Zone(m_layout);
+        rightHalf->setRelativeGeometry(QRectF(0.5, 0.0, 0.5, 1.0));
+        m_layout->addZone(rightHalf);
+
+        auto* topLeft = new Zone(m_layout);
+        topLeft->setRelativeGeometry(QRectF(0.0, 0.0, 0.5, 0.5));
+        m_layout->addZone(topLeft);
+
+        auto* bottomLeft = new Zone(m_layout);
+        bottomLeft->setRelativeGeometry(QRectF(0.0, 0.5, 0.5, 0.5));
+        m_layout->addZone(bottomLeft);
+
+        auto* topRight = new Zone(m_layout);
+        topRight->setRelativeGeometry(QRectF(0.5, 0.0, 0.5, 0.5));
+        m_layout->addZone(topRight);
+
+        auto* bottomRight = new Zone(m_layout);
+        bottomRight->setRelativeGeometry(QRectF(0.5, 0.5, 0.5, 0.5));
+        m_layout->addZone(bottomRight);
+
+        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        m_detector->setLayout(m_layout);
+
+        // Cursor at center of left-half zone (250, 500)
+        ZoneDetectionResult result = m_detector->detectZone(QPointF(250, 500));
+        QVERIFY2(result.primaryZone == leftHalf, "Cursor at center of left-half zone should select it, not a quadrant");
+
+        // Cursor at center of screen (500, 500) — fullscreen zone center
+        ZoneDetectionResult result2 = m_detector->detectZone(QPointF(500, 500));
+        QVERIFY2(result2.primaryZone == fullscreen, "Cursor at center of screen should select fullscreen zone");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // P0: detectMultiZone still excludes background zone when spanning
+    // sub-zones — verifies #211 fix survives the #258 change
+    // ═══════════════════════════════════════════════════════════════════════
+
+    void testDetectMultiZone_stillExcludesBackground_afterCenterDistanceChange()
+    {
+        // Same layout as testDetectMultiZone_subZonesOnBackground_excludesBackground
+        // but repeated here to ensure the #258 center-distance change in detectZone
+        // does not affect the multi-zone span path.
+        auto* bgZone = new Zone(m_layout);
+        bgZone->setRelativeGeometry(QRectF(0.0, 0.0, 1.0, 1.0));
+        m_layout->addZone(bgZone);
+
+        auto* subLeft = new Zone(m_layout);
+        subLeft->setRelativeGeometry(QRectF(0.0, 0.0, 0.49, 0.3));
+        m_layout->addZone(subLeft);
+
+        auto* subRight = new Zone(m_layout);
+        subRight->setRelativeGeometry(QRectF(0.51, 0.0, 0.49, 0.3));
+        m_layout->addZone(subRight);
+
+        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        m_detector->setLayout(m_layout);
+
+        QPointF cursorInGap(500, 150);
+        ZoneDetectionResult result = m_detector->detectMultiZone(cursorInGap);
+
+        QVERIFY2(result.isMultiZone, "Should detect multi-zone at sub-zone border");
+        QVERIFY2(!result.adjacentZones.contains(bgZone), "Background must still be excluded from span (#211 fix)");
     }
 
     // ═══════════════════════════════════════════════════════════════════════
