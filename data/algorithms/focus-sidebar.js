@@ -11,6 +11,9 @@
 // @minimumWindows 1
 // @zoneNumberDisplay all
 
+// Guard pattern and splitRatio clamping are intentionally duplicated across
+// algorithm scripts because each one runs in its own QJSEngine instance.
+
 /**
  * Focus + Sidebar layout: one large main window on the left with a narrow
  * sidebar column on the right containing vertically stacked small windows.
@@ -20,19 +23,19 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 function calculateZones(params) {
-    var count = params.windowCount;
-    var area = params.area;
-    var gap = params.innerGap || 0;
+    const count = params.windowCount;
+    const area = params.area;
+    const gap = params.innerGap || 0;
 
     if (count <= 0) return [];
     if (count === 1) return [area];
 
-    var splitRatio = params.splitRatio > 0 ? params.splitRatio : 0.7;
-    var mainWidth = Math.round(area.width * splitRatio - gap / 2);
-    var sidebarX = area.x + mainWidth + gap;
-    var sidebarWidth = area.x + area.width - sidebarX;
+    const splitRatio = params.splitRatio > 0 ? params.splitRatio : 0.7;
+    const mainWidth = Math.round(area.width * splitRatio - gap / 2);
+    const sidebarX = area.x + mainWidth + gap;
+    const sidebarWidth = area.x + area.width - sidebarX;
 
-    var zones = [];
+    const zones = [];
 
     // Window 1: main window on the left
     zones.push({
@@ -43,13 +46,13 @@ function calculateZones(params) {
     });
 
     // Windows 2+: stack vertically in the right sidebar column
-    var sidebarCount = count - 1;
-    var totalGaps = (sidebarCount - 1) * gap;
-    var windowHeight = Math.round((area.height - totalGaps) / sidebarCount);
+    const sidebarCount = count - 1;
+    const totalGaps = (sidebarCount - 1) * gap;
+    const windowHeight = Math.round((area.height - totalGaps) / sidebarCount);
 
-    for (var i = 0; i < sidebarCount; i++) {
-        var y = area.y + i * (windowHeight + gap);
-        var h = (i === sidebarCount - 1)
+    for (let i = 0; i < sidebarCount; i++) {
+        const y = area.y + i * (windowHeight + gap);
+        const h = (i === sidebarCount - 1)
             ? (area.y + area.height - y)
             : windowHeight;
 

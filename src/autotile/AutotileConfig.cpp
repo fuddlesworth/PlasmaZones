@@ -137,10 +137,9 @@ AutotileConfig AutotileConfig::fromJson(const QJsonObject& json)
         }
     } else {
         // Backwards compat: migrate centered-master fields
-        if (json.contains(QStringLiteral("centeredMasterSplitRatio"))
-            || json.contains(QStringLiteral("centeredMasterMasterCount"))) {
-            qreal cmRatio = json[QStringLiteral("centeredMasterSplitRatio")].toDouble(0.5);
-            int cmCount = json[QStringLiteral("centeredMasterMasterCount")].toInt(1);
+        if (json.contains(CenteredMasterSplitRatio) || json.contains(CenteredMasterMasterCount)) {
+            qreal cmRatio = json[CenteredMasterSplitRatio].toDouble(0.5);
+            int cmCount = json[CenteredMasterMasterCount].toInt(1);
             cmRatio = std::clamp(cmRatio, MinSplitRatio, MaxSplitRatio);
             cmCount = std::clamp(cmCount, MinMasterCount, MaxMasterCount);
             config.savedAlgorithmSettings[QStringLiteral("centered-master")] = {cmRatio, cmCount};

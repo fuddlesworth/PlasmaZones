@@ -369,6 +369,16 @@ void Settings::loadAutotilingConfig(QSettingsConfigBackend* backend)
     m_autotileAlgorithm =
         autotiling->readString(QStringLiteral("AutotileAlgorithm"), ConfigDefaults::autotileAlgorithm());
 
+    // Validate saved algorithm ID against registry. Scripted algorithms may not be
+    // registered yet at Settings::load() time (they load later in Daemon::init()),
+    // so this only catches clearly invalid built-in IDs. The engine's syncFromSettings
+    // performs a second check after scripted algorithms are registered.
+    if (!m_autotileAlgorithm.isEmpty() && !AlgorithmRegistry::instance()->algorithm(m_autotileAlgorithm)) {
+        qCWarning(lcConfig) << "Saved algorithm" << m_autotileAlgorithm
+                            << "not found in registry, falling back to default";
+        m_autotileAlgorithm = ConfigDefaults::autotileAlgorithm();
+    }
+
     qreal splitRatio =
         autotiling->readDouble(QStringLiteral("AutotileSplitRatio"), ConfigDefaults::autotileSplitRatio());
     if (splitRatio < ConfigDefaults::autotileSplitRatioMin() || splitRatio > ConfigDefaults::autotileSplitRatioMax()) {

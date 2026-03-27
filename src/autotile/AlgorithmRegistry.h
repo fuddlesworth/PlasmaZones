@@ -171,8 +171,15 @@ public:
         int maxWindows = -1; ///< -1 = use algorithm default
         int masterCount = -1; ///< -1 = use default (1)
         qreal splitRatio = -1.0; ///< -1 = use algorithm default
-        int centeredMasterMasterCount = -1; ///< centered-master override
-        qreal centeredMasterSplitRatio = -1.0; ///< centered-master override
+
+        /**
+         * @brief Per-algorithm saved settings (masterCount, splitRatio)
+         *
+         * Generalised replacement for hard-coded centered-master fields.
+         * Key = algorithm ID, value = QVariantMap with "masterCount" (int)
+         * and "splitRatio" (qreal).
+         */
+        QHash<QString, QVariantMap> savedAlgorithmSettings;
 
         bool operator==(const PreviewParams& other) const;
         bool operator!=(const PreviewParams& other) const

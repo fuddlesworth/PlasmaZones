@@ -298,10 +298,12 @@ private:
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
 
+    // Scripted algorithm loader (file watcher for user-defined JS algorithms)
+    std::unique_ptr<ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;
+
     // Window engines
     std::unique_ptr<AutotileEngine> m_autotileEngine;
     std::unique_ptr<SnapEngine> m_snapEngine;
-    ScriptedAlgorithmLoader* m_scriptedAlgorithmLoader = nullptr;
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
 

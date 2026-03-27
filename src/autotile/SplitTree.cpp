@@ -54,6 +54,18 @@ int SplitTree::leafCount() const
     return countLeaves(m_root.get());
 }
 
+static int nodeDepth(const SplitNode* node)
+{
+    if (!node)
+        return 0;
+    return 1 + std::max(nodeDepth(node->first.get()), nodeDepth(node->second.get()));
+}
+
+int SplitTree::treeDepth() const
+{
+    return nodeDepth(m_root.get());
+}
+
 SplitNode* SplitTree::leafForWindow(const QString& windowId) const
 {
     return findLeaf(m_root.get(), windowId);
@@ -77,7 +89,7 @@ QStringList SplitTree::leafOrder() const
  * The new window (newId) goes into the second child.
  * Split direction alternates from the parent's direction.
  */
-static void splitLeaf(SplitNode* leaf, const QString& newId)
+static void splitLeaf(SplitNode* leaf, const QString& newId, qreal ratio)
 {
     // Choose split direction: alternate from parent, default to vertical (left/right)
     bool horizontal = false;
@@ -96,12 +108,15 @@ static void splitLeaf(SplitNode* leaf, const QString& newId)
     // Convert leaf to internal node
     leaf->windowId.clear();
     leaf->splitHorizontal = horizontal;
-    leaf->splitRatio = PlasmaZones::AutotileDefaults::DefaultSplitRatio;
+    // Use provided ratio if valid, otherwise use default
+    leaf->splitRatio = (ratio > 0.0)
+        ? std::clamp(ratio, PlasmaZones::AutotileDefaults::MinSplitRatio, PlasmaZones::AutotileDefaults::MaxSplitRatio)
+        : PlasmaZones::AutotileDefaults::DefaultSplitRatio;
     leaf->first = std::move(firstChild);
     leaf->second = std::move(secondChild);
 }
 
-void SplitTree::insertAtFocused(const QString& windowId, const QString& focusedWindowId)
+void SplitTree::insertAtFocused(const QString& windowId, const QString& focusedWindowId, qreal initialRatio)
 {
     if (leafForWindow(windowId)) {
         qCWarning(lcAutotile) << "SplitTree: duplicate insert rejected" << windowId;
@@ -111,6 +126,11 @@ void SplitTree::insertAtFocused(const QString& windowId, const QString& focusedW
     if (!m_root) {
         m_root = std::make_unique<SplitNode>();
         m_root->windowId = windowId;
+        return;
+    }
+
+    if (treeDepth() >= MaxRuntimeTreeDepth) {
+        qCWarning(lcAutotile) << "SplitTree: max depth reached, rejecting insert";
         return;
     }
 
@@ -118,14 +138,14 @@ void SplitTree::insertAtFocused(const QString& windowId, const QString& focusedW
     if (!focused) {
         qCDebug(lcAutotile) << "insertAtFocused: focused window not found, falling back to insertAtEnd"
                             << "windowId=" << focusedWindowId;
-        insertAtEnd(windowId);
+        insertAtEnd(windowId, initialRatio);
         return;
     }
 
-    splitLeaf(focused, windowId);
+    splitLeaf(focused, windowId, initialRatio);
 }
 
-void SplitTree::insertAtEnd(const QString& windowId)
+void SplitTree::insertAtEnd(const QString& windowId, qreal initialRatio)
 {
     if (leafForWindow(windowId)) {
         qCWarning(lcAutotile) << "SplitTree: duplicate insert rejected" << windowId;
@@ -135,6 +155,11 @@ void SplitTree::insertAtEnd(const QString& windowId)
     if (!m_root) {
         m_root = std::make_unique<SplitNode>();
         m_root->windowId = windowId;
+        return;
+    }
+
+    if (treeDepth() >= MaxRuntimeTreeDepth) {
+        qCWarning(lcAutotile) << "SplitTree: max depth reached, rejecting insert";
         return;
     }
 
@@ -144,10 +169,10 @@ void SplitTree::insertAtEnd(const QString& windowId)
         return;
     }
 
-    splitLeaf(rm, windowId);
+    splitLeaf(rm, windowId, initialRatio);
 }
 
-void SplitTree::insertAtPosition(const QString& windowId, int position)
+void SplitTree::insertAtPosition(const QString& windowId, int position, qreal initialRatio)
 {
     if (leafForWindow(windowId)) {
         qCWarning(lcAutotile) << "SplitTree: duplicate insert rejected" << windowId;
@@ -160,14 +185,19 @@ void SplitTree::insertAtPosition(const QString& windowId, int position)
         return;
     }
 
-    int currentIndex = 0;
-    SplitNode* target = leafAtIndex(m_root.get(), position, currentIndex);
-    if (!target) {
-        insertAtEnd(windowId);
+    if (treeDepth() >= MaxRuntimeTreeDepth) {
+        qCWarning(lcAutotile) << "SplitTree: max depth reached, rejecting insert";
         return;
     }
 
-    splitLeaf(target, windowId);
+    int currentIndex = 0;
+    SplitNode* target = leafAtIndex(m_root.get(), position, currentIndex);
+    if (!target) {
+        insertAtEnd(windowId, initialRatio);
+        return;
+    }
+
+    splitLeaf(target, windowId, initialRatio);
 }
 
 // =============================================================================
@@ -277,6 +307,8 @@ void SplitTree::applyGeometryRecursive(const SplitNode* node, const QRect& rect,
         return;
     }
 
+    Q_ASSERT(node->first && node->second);
+
     const qreal ratio = std::clamp(node->splitRatio, MinSplitRatio, MaxSplitRatio);
 
     if (node->splitHorizontal) {
@@ -289,8 +321,8 @@ void SplitTree::applyGeometryRecursive(const SplitNode* node, const QRect& rect,
             return;
         }
 
-        const int firstHeight = static_cast<int>(contentHeight * ratio);
-        const int secondHeight = contentHeight - firstHeight;
+        const int firstHeight = std::max(1, static_cast<int>(contentHeight * ratio));
+        const int secondHeight = std::max(1, contentHeight - firstHeight);
         const QRect firstRect(rect.x(), rect.y(), rect.width(), firstHeight);
         const QRect secondRect(rect.x(), rect.y() + firstHeight + innerGap, rect.width(), secondHeight);
 
@@ -312,8 +344,8 @@ void SplitTree::applyGeometryRecursive(const SplitNode* node, const QRect& rect,
             return;
         }
 
-        const int firstWidth = static_cast<int>(contentWidth * ratio);
-        const int secondWidth = contentWidth - firstWidth;
+        const int firstWidth = std::max(1, static_cast<int>(contentWidth * ratio));
+        const int secondWidth = std::max(1, contentWidth - firstWidth);
         const QRect firstRect(rect.x(), rect.y(), firstWidth, rect.height());
         const QRect secondRect(rect.x() + firstWidth + innerGap, rect.y(), secondWidth, rect.height());
 
@@ -343,12 +375,14 @@ QJsonObject SplitTree::toJson() const
 
 std::unique_ptr<SplitTree> SplitTree::fromJson(const QJsonObject& json)
 {
-    auto tree = std::make_unique<SplitTree>();
-    if (json.contains(QLatin1String("root"))) {
-        const QJsonObject rootObj = json[QLatin1String("root")].toObject();
-        int nodeCount = 0;
-        tree->m_root = nodeFromJson(rootObj, nullptr, 0, nodeCount);
+    if (!json.contains(QLatin1String("root"))) {
+        return nullptr;
     }
+
+    auto tree = std::make_unique<SplitTree>();
+    const QJsonObject rootObj = json[QLatin1String("root")].toObject();
+    int nodeCount = 0;
+    tree->m_root = nodeFromJson(rootObj, nullptr, 0, nodeCount);
     return tree;
 }
 
@@ -359,12 +393,11 @@ QJsonObject SplitTree::nodeToJson(const SplitNode* node)
         return json;
     }
 
-    json[QLatin1String("ratio")] = node->splitRatio;
-    json[QLatin1String("horizontal")] = node->splitHorizontal;
-
     if (node->isLeaf()) {
         json[QLatin1String("windowId")] = node->windowId;
     } else {
+        json[QLatin1String("ratio")] = node->splitRatio;
+        json[QLatin1String("horizontal")] = node->splitHorizontal;
         json[QLatin1String("first")] = nodeToJson(node->first.get());
         json[QLatin1String("second")] = nodeToJson(node->second.get());
     }
@@ -405,6 +438,10 @@ std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, Spli
     } else {
         // Leaf node
         node->windowId = json[QLatin1String("windowId")].toString();
+        if (node->windowId.isEmpty()) {
+            qCWarning(lcAutotile) << "SplitTree::fromJson: leaf with empty windowId, skipping";
+            return nullptr;
+        }
     }
 
     return node;
@@ -455,16 +492,10 @@ SplitNode* SplitTree::rightmostLeaf(SplitNode* node) const
     if (!node) {
         return nullptr;
     }
-
-    if (node->isLeaf()) {
-        return node;
+    while (!node->isLeaf()) {
+        node = node->second ? node->second.get() : node->first.get();
     }
-
-    // Prefer the second (right/bottom) child for rightmost
-    if (SplitNode* rm = rightmostLeaf(node->second.get())) {
-        return rm;
-    }
-    return rightmostLeaf(node->first.get());
+    return node;
 }
 
 void SplitTree::collectLeafOrder(const SplitNode* node, QStringList& order) const
@@ -491,6 +522,8 @@ int SplitTree::countLeaves(const SplitNode* node) const
     if (node->isLeaf()) {
         return 1;
     }
+
+    Q_ASSERT(node->first && node->second);
 
     return countLeaves(node->first.get()) + countLeaves(node->second.get());
 }

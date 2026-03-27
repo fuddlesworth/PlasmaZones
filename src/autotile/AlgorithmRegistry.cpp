@@ -27,8 +27,7 @@ bool AlgorithmRegistry::PreviewParams::operator==(const PreviewParams& other) co
 {
     return algorithmId == other.algorithmId && maxWindows == other.maxWindows && masterCount == other.masterCount
         && qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio)
-        && centeredMasterMasterCount == other.centeredMasterMasterCount
-        && qFuzzyCompare(1.0 + centeredMasterSplitRatio, 1.0 + other.centeredMasterSplitRatio);
+        && savedAlgorithmSettings == other.savedAlgorithmSettings;
 }
 
 using namespace DBus::AutotileAlgorithm;
@@ -293,25 +292,33 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm,
         count = effectiveMaxWindows(algorithm);
     }
 
-    // Apply configured params only to the active algorithm (or centered-master's dedicated params).
-    // Non-active algorithms use their own defaults so each preview is representative.
+    // Apply configured params: active algorithm uses global masterCount/splitRatio,
+    // other algorithms check savedAlgorithmSettings for per-algorithm overrides,
+    // and fall back to their own defaults.
     auto* inst = instance();
     const bool isActive =
         inst && !s_previewParams.algorithmId.isEmpty() && inst->algorithm(s_previewParams.algorithmId) == algorithm;
-    const bool isCenteredMaster = inst && (algorithm == inst->algorithm(CenteredMaster));
 
     int masterCount = 1;
     qreal splitRatio = algorithm->defaultSplitRatio();
-    if (isCenteredMaster) {
-        if (s_previewParams.centeredMasterMasterCount > 0)
-            masterCount = s_previewParams.centeredMasterMasterCount;
-        if (s_previewParams.centeredMasterSplitRatio > 0)
-            splitRatio = s_previewParams.centeredMasterSplitRatio;
-    } else if (isActive) {
+    if (isActive) {
         if (s_previewParams.masterCount > 0)
             masterCount = s_previewParams.masterCount;
         if (s_previewParams.splitRatio > 0)
             splitRatio = s_previewParams.splitRatio;
+    } else if (inst) {
+        // Look up per-algorithm saved settings from the generalized map
+        const QString algoId = inst->findAlgorithmId(algorithm);
+        const auto it = s_previewParams.savedAlgorithmSettings.constFind(algoId);
+        if (it != s_previewParams.savedAlgorithmSettings.constEnd()) {
+            const QVariantMap& saved = it.value();
+            const int savedMasterCount = saved.value(QLatin1String("masterCount"), -1).toInt();
+            const qreal savedSplitRatio = saved.value(QLatin1String("splitRatio"), -1.0).toDouble();
+            if (savedMasterCount > 0)
+                masterCount = savedMasterCount;
+            if (savedSplitRatio > 0)
+                splitRatio = savedSplitRatio;
+        }
     }
 
     // Generate preview zones for a representative window count

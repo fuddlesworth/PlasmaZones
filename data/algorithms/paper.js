@@ -11,6 +11,9 @@
 // @minimumWindows 1
 // @zoneNumberDisplay last
 
+// Guard pattern and splitRatio clamping are intentionally duplicated across
+// algorithm scripts because each one runs in its own QJSEngine instance.
+
 /**
  * Paper layout: each window is an equal-width "page" (default 80%
  * of screen width) distributed evenly across the screen. Windows
@@ -23,29 +26,38 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 function calculateZones(params) {
-    var count = params.windowCount;
-    var area = params.area;
+    const count = params.windowCount;
+    const area = params.area;
 
     if (count <= 0) return [];
     if (count === 1) return [area];
 
-    var pageRatio = params.splitRatio > 0 ? params.splitRatio : 0.8;
-    var pageWidth = Math.round(area.width * pageRatio);
+    const pageRatio = params.splitRatio > 0 ? params.splitRatio : 0.8;
+    let pageWidth = Math.round(area.width * pageRatio);
     if (pageWidth < 1) pageWidth = 1;
     if (pageWidth > area.width) pageWidth = area.width;
 
     // Distribute pages evenly across the remaining space.
     // The leftover space is shared as offsets between pages.
-    var leftover = area.width - pageWidth;
-    // Ensure a minimum step of 1px so pages don't stack on top of each other
-    var step = (count > 1) ? Math.max(1, Math.round(leftover / (count - 1))) : 0;
+    const leftover = area.width - pageWidth;
+    // Clamp step so the last page doesn't overflow the area
+    let step;
+    if (count > 1) {
+        const rawStep = Math.round(leftover / (count - 1));
+        const maxStep = Math.floor(leftover / (count - 1));
+        step = Math.max(1, Math.min(rawStep, maxStep));
+    } else {
+        step = 0;
+    }
 
-    var zones = [];
-    for (var i = 0; i < count; i++) {
+    const zones = [];
+    for (let i = 0; i < count; i++) {
+        const zoneX = area.x + (i * step);
+        const zoneW = Math.min(pageWidth, area.x + area.width - zoneX);
         zones.push({
-            x: area.x + (i * step),
+            x: zoneX,
             y: area.y,
-            width: pageWidth,
+            width: zoneW,
             height: area.height
         });
     }

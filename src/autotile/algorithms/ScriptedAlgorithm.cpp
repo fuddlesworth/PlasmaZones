@@ -23,12 +23,14 @@ namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
+// L14: Named constant for watchdog timeout (was magic number 100)
+static constexpr int ScriptWatchdogTimeoutMs = 100;
+
 ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
     : TilingAlgorithm(parent)
     , m_engine(new QJSEngine(this))
     , m_engineAlive(std::make_shared<std::atomic<bool>>(true))
     , m_engineMutex(std::make_shared<std::mutex>())
-    , m_watchdogFinished(std::make_shared<std::atomic<bool>>(true))
     , m_watchdogEnginePtr(std::make_shared<QJSEngine*>(m_engine))
 {
     loadScript(filePath);
@@ -40,6 +42,7 @@ ScriptedAlgorithm::~ScriptedAlgorithm()
     // and the setInterrupted() call while we tear down.
     std::lock_guard<std::mutex> lock(*m_engineMutex);
     m_engineAlive->store(false, std::memory_order_release);
+    *m_watchdogEnginePtr = nullptr;
 }
 
 bool ScriptedAlgorithm::isValid() const
@@ -65,12 +68,21 @@ void ScriptedAlgorithm::setUserScript(bool isUser)
 bool ScriptedAlgorithm::loadScript(const QString& filePath)
 {
     m_filePath = filePath;
-    m_scriptId = QFileInfo(filePath).completeBaseName();
+    // L10: Include "script:" prefix for consistency with ScriptedAlgorithmLoader's registry key
+    m_scriptId = QStringLiteral("script:") + QFileInfo(filePath).completeBaseName();
     m_valid = false;
 
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         qCWarning(lcAutotile) << "ScriptedAlgorithm: failed to open file=" << filePath;
+        return false;
+    }
+
+    // M12: Reject scripts larger than 1 MB to prevent resource exhaustion
+    static constexpr qint64 MaxScriptSizeBytes = 1024 * 1024; // 1 MB
+    if (file.size() > MaxScriptSizeBytes) {
+        qCWarning(lcAutotile) << "Script file too large:" << filePath << file.size() << "bytes (max"
+                              << MaxScriptSizeBytes << ")";
         return false;
     }
 
@@ -129,6 +141,11 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         "}");
     m_engine->evaluate(treeHelper, QStringLiteral("builtin:applyTreeGeometry"));
 
+    // H3: Freeze the injected helper so user scripts cannot overwrite it
+    m_engine->evaluate(
+        QStringLiteral("Object.defineProperty(this, 'applyTreeGeometry', "
+                       "{writable: false, configurable: false});"));
+
     // Evaluate the user script
     const QJSValue result = m_engine->evaluate(source, filePath);
     if (result.isError()) {
@@ -155,13 +172,49 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_jsProducesOverlappingZones = m_engine->globalObject().property(QStringLiteral("producesOverlappingZones"));
 
     m_valid = true;
+
+    // H5: Cache JS virtual method overrides at load time to avoid repeated JS calls
+    if (m_jsMasterZoneIndex.isCallable()) {
+        const QJSValue r = m_jsMasterZoneIndex.call();
+        if (!r.isError() && r.isNumber())
+            m_cachedMasterZoneIndex = r.toInt();
+    }
+    if (m_jsSupportsMasterCount.isCallable()) {
+        const QJSValue r = m_jsSupportsMasterCount.call();
+        if (!r.isError() && r.isBool())
+            m_cachedSupportsMasterCount = r.toBool();
+    }
+    if (m_jsSupportsSplitRatio.isCallable()) {
+        const QJSValue r = m_jsSupportsSplitRatio.call();
+        if (!r.isError() && r.isBool())
+            m_cachedSupportsSplitRatio = r.toBool();
+    }
+    if (m_jsMinimumWindows.isCallable()) {
+        const QJSValue r = m_jsMinimumWindows.call();
+        if (!r.isError() && r.isNumber())
+            m_cachedMinimumWindows = std::clamp(r.toInt(), 1, 100);
+    }
+    if (m_jsDefaultMaxWindows.isCallable()) {
+        const QJSValue r = m_jsDefaultMaxWindows.call();
+        if (!r.isError() && r.isNumber())
+            m_cachedDefaultMaxWindows = std::clamp(r.toInt(), 1, 100);
+    }
+    if (m_jsProducesOverlappingZones.isCallable()) {
+        const QJSValue r = m_jsProducesOverlappingZones.call();
+        if (!r.isError() && r.isBool())
+            m_cachedProducesOverlappingZones = r.toBool();
+    }
+    m_cachedValuesLoaded = true;
+
     qCInfo(lcAutotile) << "ScriptedAlgorithm: loaded script=" << m_scriptId << "file=" << filePath;
     return true;
 }
 
 void ScriptedAlgorithm::parseMetadata(const QString& source)
 {
-    static const QRegularExpression metaRe(QStringLiteral(R"(^// @(\w+)\s+(.+)$)"));
+    // L19: Metadata must use // line comments, not /* */ block comments.
+    // The regex only matches single-line // @key value patterns.
+    static const QRegularExpression metaRe(QStringLiteral(R"(^\s*// @(\w+)\s+(.+)$)"));
 
     int lineCount = 0;
     const auto lines = QStringView(source).split(QLatin1Char('\n'));
@@ -269,7 +322,7 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     }
 
     // minSizes array
-    QJSValue jsMinSizes = m_engine->newArray(static_cast<uint>(params.minSizes.size()));
+    QJSValue jsMinSizes = m_engine->newArray(static_cast<uint>(std::min<qsizetype>(params.minSizes.size(), 256)));
     for (int i = 0; i < params.minSizes.size(); ++i) {
         QJSValue entry = m_engine->newObject();
         entry.setProperty(QStringLiteral("w"), params.minSizes[i].width());
@@ -278,37 +331,42 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     }
     jsParams.setProperty(QStringLiteral("minSizes"), jsMinSizes);
 
-    // Watchdog: interrupt JS engine after 100ms from a separate thread.
+    // Watchdog: interrupt JS engine after ScriptWatchdogTimeoutMs from a separate thread.
     // A QTimer cannot fire during synchronous JS execution because the event
     // loop is blocked, so we use a detached std::thread instead.
     //
-    // We reuse a single watchdog flag per ScriptedAlgorithm instance to avoid
-    // spawning a new thread on every calculateZones() call. The flag is set
-    // before each call and checked after the sleep.
-    m_watchdogFinished->store(false, std::memory_order_release);
+    // H1: We use a generation counter to prevent stale watchdog threads from
+    // interrupting a newer calculateZones() call. Each call increments the
+    // generation and the watchdog only interrupts if the generation still matches.
+    const uint64_t myGen = ++m_watchdogGeneration;
 
-    auto finished = m_watchdogFinished;
     auto aliveFlag = m_engineAlive;
     auto engineMtx = m_engineMutex;
     auto enginePtr = m_watchdogEnginePtr;
-    std::thread([enginePtr, finished, aliveFlag, engineMtx]() {
-        QThread::msleep(100);
-        if (finished->load(std::memory_order_acquire)) {
-            return; // Script completed within timeout
+    auto* genPtr = &m_watchdogGeneration;
+    std::thread([enginePtr, aliveFlag, engineMtx, genPtr, myGen]() {
+        QThread::msleep(ScriptWatchdogTimeoutMs);
+        // Only interrupt if this is still the active generation
+        if (genPtr->load(std::memory_order_acquire) != myGen) {
+            return; // A newer call has started or the call completed
         }
         // Hold the mutex to prevent the destructor from invalidating the
         // engine pointer between our alive-check and setInterrupted().
         std::lock_guard<std::mutex> lock(*engineMtx);
-        if (!finished->load(std::memory_order_acquire) && aliveFlag->load(std::memory_order_acquire)) {
-            (*enginePtr)->setInterrupted(true);
+        if (genPtr->load(std::memory_order_acquire) == myGen && aliveFlag->load(std::memory_order_acquire)) {
+            // C1: Check for null before calling setInterrupted
+            auto engine = *enginePtr;
+            if (engine) {
+                engine->setInterrupted(true);
+            }
         }
     }).detach();
 
     // Call the JS calculateZones function
     const QJSValue result = m_calculateZonesFn.call({jsParams});
 
-    // Signal the watchdog and reset interrupted state
-    m_watchdogFinished->store(true, std::memory_order_release);
+    // Advance generation so any in-flight watchdog becomes a no-op, and reset interrupted state
+    ++m_watchdogGeneration;
     m_engine->setInterrupted(false);
 
     if (result.isError()) {
@@ -340,8 +398,9 @@ QVector<QRect> ScriptedAlgorithm::jsArrayToRects(const QJSValue& result) const
 
     for (int i = 0; i < length; ++i) {
         const QJSValue elem = result.property(static_cast<quint32>(i));
-        const int x = elem.property(QStringLiteral("x")).toInt();
-        const int y = elem.property(QStringLiteral("y")).toInt();
+        // M10: Clamp x and y to non-negative to prevent off-screen zones
+        const int x = std::max(0, elem.property(QStringLiteral("x")).toInt());
+        const int y = std::max(0, elem.property(QStringLiteral("y")).toInt());
         int w = elem.property(QStringLiteral("width")).toInt();
         int h = elem.property(QStringLiteral("height")).toInt();
 
@@ -403,6 +462,10 @@ QString ScriptedAlgorithm::description() const
 
 int ScriptedAlgorithm::masterZoneIndex() const noexcept
 {
+    // H5: Return cached value if available
+    if (m_cachedValuesLoaded && m_jsMasterZoneIndex.isCallable()) {
+        return m_cachedMasterZoneIndex;
+    }
     // QJSValue API is noexcept-safe (no C++ exceptions); the isError() check
     // guards against JS-level errors.  Build uses -fno-exceptions.
     if (m_jsMasterZoneIndex.isCallable()) {
@@ -415,6 +478,10 @@ int ScriptedAlgorithm::masterZoneIndex() const noexcept
 
 bool ScriptedAlgorithm::supportsMasterCount() const noexcept
 {
+    // H5: Return cached value if available
+    if (m_cachedValuesLoaded && m_jsSupportsMasterCount.isCallable()) {
+        return m_cachedSupportsMasterCount;
+    }
     if (m_jsSupportsMasterCount.isCallable()) {
         const QJSValue result = m_jsSupportsMasterCount.call();
         if (!result.isError() && result.isBool())
@@ -425,6 +492,10 @@ bool ScriptedAlgorithm::supportsMasterCount() const noexcept
 
 bool ScriptedAlgorithm::supportsSplitRatio() const noexcept
 {
+    // H5: Return cached value if available
+    if (m_cachedValuesLoaded && m_jsSupportsSplitRatio.isCallable()) {
+        return m_cachedSupportsSplitRatio;
+    }
     if (m_jsSupportsSplitRatio.isCallable()) {
         const QJSValue result = m_jsSupportsSplitRatio.call();
         if (!result.isError() && result.isBool())
@@ -448,10 +519,15 @@ qreal ScriptedAlgorithm::defaultSplitRatio() const noexcept
 
 int ScriptedAlgorithm::minimumWindows() const noexcept
 {
+    // H5: Return cached value if available
+    if (m_cachedValuesLoaded && m_jsMinimumWindows.isCallable()) {
+        return m_cachedMinimumWindows;
+    }
     if (m_jsMinimumWindows.isCallable()) {
         const QJSValue result = m_jsMinimumWindows.call();
         if (!result.isError() && result.isNumber())
-            return result.toInt();
+            // M11: Clamp JS override return values to same range as metadata parser
+            return std::clamp(result.toInt(), 1, 100);
     }
     if (m_minimumWindows > 0) {
         return m_minimumWindows;
@@ -461,10 +537,15 @@ int ScriptedAlgorithm::minimumWindows() const noexcept
 
 int ScriptedAlgorithm::defaultMaxWindows() const noexcept
 {
+    // H5: Return cached value if available
+    if (m_cachedValuesLoaded && m_jsDefaultMaxWindows.isCallable()) {
+        return m_cachedDefaultMaxWindows;
+    }
     if (m_jsDefaultMaxWindows.isCallable()) {
         const QJSValue result = m_jsDefaultMaxWindows.call();
         if (!result.isError() && result.isNumber())
-            return result.toInt();
+            // M11: Clamp JS override return values to same range as metadata parser
+            return std::clamp(result.toInt(), 1, 100);
     }
     if (m_defaultMaxWindows > 0) {
         return m_defaultMaxWindows;
@@ -474,6 +555,10 @@ int ScriptedAlgorithm::defaultMaxWindows() const noexcept
 
 bool ScriptedAlgorithm::producesOverlappingZones() const noexcept
 {
+    // H5: Return cached value if available
+    if (m_cachedValuesLoaded && m_jsProducesOverlappingZones.isCallable()) {
+        return m_cachedProducesOverlappingZones;
+    }
     if (m_jsProducesOverlappingZones.isCallable()) {
         const QJSValue result = m_jsProducesOverlappingZones.call();
         if (!result.isError() && result.isBool())

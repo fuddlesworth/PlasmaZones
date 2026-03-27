@@ -44,9 +44,10 @@ void DwindleMemoryAlgorithm::prepareTilingState(TilingState* state) const
         return; // No tree needed for 0-1 windows
     }
 
+    const qreal ratio = state->splitRatio();
     auto newTree = std::make_unique<SplitTree>();
     for (const QString& windowId : tiledWindows) {
-        newTree->insertAtEnd(windowId);
+        newTree->insertAtEnd(windowId, ratio);
     }
     state->setSplitTree(std::move(newTree));
 }

@@ -10,6 +10,9 @@
 // @minimumWindows 1
 // @zoneNumberDisplay all
 
+// Guard pattern and splitRatio clamping are intentionally duplicated across
+// algorithm scripts because each one runs in its own QJSEngine instance.
+
 /**
  * Tatami layout: alternating horizontal and vertical rectangles
  * arranged so that no four corners ever meet at a single point.
@@ -23,31 +26,31 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 function calculateZones(params) {
-    var count = params.windowCount;
-    var area = params.area;
-    var gap = params.innerGap || 0;
+    const count = params.windowCount;
+    const area = params.area;
+    const gap = params.innerGap || 0;
 
     if (count <= 0) return [];
     if (count === 1) return [area];
 
     // Two windows: simple vertical split at 50%
     if (count === 2) {
-        var halfW = Math.round((area.width - gap) / 2);
+        const halfW = Math.round((area.width - gap) / 2);
         return [
             { x: area.x, y: area.y, width: halfW, height: area.height },
             { x: area.x + halfW + gap, y: area.y, width: area.width - halfW - gap, height: area.height }
         ];
     }
 
-    var zones = [];
-    var rows = Math.ceil(count / 2);
-    var rowHeight = Math.round((area.height - gap * (rows - 1)) / rows);
+    const zones = [];
+    const rows = Math.ceil(count / 2);
+    let rowHeight = Math.round((area.height - gap * (rows - 1)) / rows);
     if (rowHeight < 1) rowHeight = 1;
 
-    for (var row = 0; row < rows; row++) {
-        var y = area.y + row * (rowHeight + gap);
-        var h = (row === rows - 1) ? (area.y + area.height - y) : rowHeight;
-        var windowsInRow = (row === rows - 1 && count % 2 !== 0) ? 1 : 2;
+    for (let row = 0; row < rows; row++) {
+        const y = area.y + row * (rowHeight + gap);
+        const h = (row === rows - 1) ? (area.y + area.height - y) : rowHeight;
+        const windowsInRow = (row === rows - 1 && count % 2 !== 0) ? 1 : 2;
 
         if (windowsInRow === 1) {
             // Last row, odd window: take full width
@@ -55,9 +58,9 @@ function calculateZones(params) {
         } else {
             // Offset the split point to prevent four-corner intersections.
             // Even rows split at 55%, odd rows split at 45%.
-            var ratio = (row % 2 === 0) ? 0.55 : 0.45;
-            var leftW = Math.round((area.width - gap) * ratio);
-            var rightW = area.width - gap - leftW;
+            const ratio = (row % 2 === 0) ? 0.55 : 0.45;
+            const leftW = Math.round((area.width - gap) * ratio);
+            const rightW = area.width - gap - leftW;
 
             zones.push({ x: area.x, y: y, width: leftW, height: h });
             zones.push({ x: area.x + leftW + gap, y: y, width: rightW, height: h });

@@ -135,17 +135,20 @@ void SettingsBridge::syncFromSettings(Settings* settings)
     }
 
     // Update AlgorithmRegistry so preview generation uses the configured values.
-    // Look up centered-master's saved values for its dedicated preview params.
-    int cmMasterCount = -1;
-    qreal cmSplitRatio = -1.0;
-    auto cmIt = cfg->savedAlgorithmSettings.constFind(QStringLiteral("centered-master"));
-    if (cmIt != cfg->savedAlgorithmSettings.constEnd()) {
-        cmSplitRatio = cmIt->first;
-        cmMasterCount = cmIt->second;
+    // Per-algorithm settings are stored in the savedAlgorithmSettings map so
+    // generatePreviewZones() can look up any algorithm's saved params generically.
+    AlgorithmRegistry::PreviewParams previewParams;
+    previewParams.algorithmId = m_engine->m_algorithmId;
+    previewParams.maxWindows = cfg->maxWindows;
+    previewParams.masterCount = settings->autotileMasterCount();
+    previewParams.splitRatio = settings->autotileSplitRatio();
+    for (auto it = cfg->savedAlgorithmSettings.constBegin(); it != cfg->savedAlgorithmSettings.constEnd(); ++it) {
+        previewParams.savedAlgorithmSettings[it.key()] = QVariantMap{
+            {QLatin1String("masterCount"), it.value().second},
+            {QLatin1String("splitRatio"), it.value().first},
+        };
     }
-    AlgorithmRegistry::setConfiguredPreviewParams({m_engine->m_algorithmId, cfg->maxWindows,
-                                                   cfg->masterCount, cfg->splitRatio,
-                                                   cmMasterCount, cmSplitRatio});
+    AlgorithmRegistry::setConfiguredPreviewParams(previewParams);
 
     if (configChanged && m_engine->isEnabled()) {
         // Cancel any pending debounced retile — we are doing a full resync

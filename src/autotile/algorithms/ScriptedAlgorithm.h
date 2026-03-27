@@ -7,6 +7,7 @@
 #include <QJSValue>
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 
@@ -127,7 +128,7 @@ private:
     mutable QJSEngine* m_engine = nullptr;
     std::shared_ptr<std::atomic<bool>> m_engineAlive; ///< Watchdog thread checks this before touching m_engine
     std::shared_ptr<std::mutex> m_engineMutex; ///< Guards engine pointer access between watchdog and destructor
-    std::shared_ptr<std::atomic<bool>> m_watchdogFinished; ///< Reused across calls to avoid per-call thread allocations
+    mutable std::atomic<uint64_t> m_watchdogGeneration{0}; ///< Generation counter to prevent stale watchdog interrupts
     std::shared_ptr<QJSEngine*> m_watchdogEnginePtr; ///< Stable engine pointer shared with watchdog threads
     mutable QJSValue m_calculateZonesFn;
     QString m_filePath;
@@ -155,6 +156,15 @@ private:
     mutable QJSValue m_jsMinimumWindows;
     mutable QJSValue m_jsDefaultMaxWindows;
     mutable QJSValue m_jsProducesOverlappingZones;
+
+    // H5: Cached JS virtual method overrides (loaded once at script load time)
+    int m_cachedMinimumWindows = -1;
+    int m_cachedDefaultMaxWindows = -1;
+    int m_cachedMasterZoneIndex = -1;
+    bool m_cachedProducesOverlappingZones = false;
+    bool m_cachedSupportsMasterCount = false;
+    bool m_cachedSupportsSplitRatio = false;
+    bool m_cachedValuesLoaded = false;
 };
 
 } // namespace PlasmaZones

@@ -11,6 +11,9 @@
 // @minimumWindows 1
 // @zoneNumberDisplay all
 
+// Guard pattern and splitRatio clamping are intentionally duplicated across
+// algorithm scripts because each one runs in its own QJSEngine instance.
+
 /**
  * Corner Master layout (see also quadrant-priority.js for a similar L-shape
  * variant with ceil/floor distribution instead of alternating).
@@ -43,10 +46,10 @@
  * @param {string} rightHeight - "full" (full area height) or "master" (only master height)
  */
 function lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rightHeight) {
-    var masterW = Math.max(1, Math.round(area.width * splitRatio - gap / 2));
-    var masterH = Math.max(1, Math.round(area.height * splitRatio - gap / 2));
+    const masterW = Math.max(1, Math.round(area.width * splitRatio - gap / 2));
+    const masterH = Math.max(1, Math.round(area.height * splitRatio - gap / 2));
 
-    var zones = [];
+    const zones = [];
 
     // Window 1: top-left master corner
     zones.push({
@@ -68,31 +71,31 @@ function lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rig
     }
 
     // Distribute remaining windows between right column and bottom row
-    var rightCount, bottomCount;
+    let rightCount, bottomCount;
     if (distribute === "alternate") {
         rightCount = 0;
         bottomCount = 0;
-        for (var i = 1; i < count; i++) {
+        for (let i = 1; i < count; i++) {
             if ((i - 1) % 2 === 0) rightCount++;
             else bottomCount++;
         }
     } else {
         // ceil-floor
-        var remaining = count - 1;
+        const remaining = count - 1;
         rightCount = Math.ceil(remaining / 2);
         bottomCount = Math.floor(remaining / 2);
     }
 
     // Right column
-    var rightX = area.x + masterW + gap;
-    var rightW = Math.max(1, area.x + area.width - rightX);
-    var rightH = (rightHeight === "master" && bottomCount > 0) ? masterH : area.height;
-    var rightTotalGaps = (rightCount - 1) * gap;
-    var rightTileH = Math.round((rightH - rightTotalGaps) / rightCount);
+    const rightX = area.x + masterW + gap;
+    const rightW = Math.max(1, area.x + area.width - rightX);
+    const rightH = (rightHeight === "master" && bottomCount > 0) ? masterH : area.height;
+    const rightTotalGaps = (rightCount - 1) * gap;
+    const rightTileH = Math.max(1, Math.round((rightH - rightTotalGaps) / rightCount));
 
-    for (var r = 0; r < rightCount; r++) {
-        var ry = area.y + r * (rightTileH + gap);
-        var rh = (r === rightCount - 1)
+    for (let r = 0; r < rightCount; r++) {
+        const ry = area.y + r * (rightTileH + gap);
+        const rh = (r === rightCount - 1)
             ? (area.y + rightH - ry)
             : rightTileH;
 
@@ -106,15 +109,15 @@ function lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rig
 
     // Bottom row
     if (bottomCount > 0) {
-        var bottomY = area.y + masterH + gap;
-        var bottomH = Math.max(1, area.y + area.height - bottomY);
-        var btmWidth = (bottomWidth === "full") ? area.width : masterW;
-        var bottomTotalGaps = (bottomCount - 1) * gap;
-        var bottomTileW = Math.round((btmWidth - bottomTotalGaps) / bottomCount);
+        const bottomY = area.y + masterH + gap;
+        const bottomH = Math.max(1, area.y + area.height - bottomY);
+        const btmWidth = (bottomWidth === "full") ? area.width : masterW;
+        const bottomTotalGaps = (bottomCount - 1) * gap;
+        const bottomTileW = Math.max(1, Math.round((btmWidth - bottomTotalGaps) / bottomCount));
 
-        for (var b = 0; b < bottomCount; b++) {
-            var bx = area.x + b * (bottomTileW + gap);
-            var bw = (b === bottomCount - 1)
+        for (let b = 0; b < bottomCount; b++) {
+            const bx = area.x + b * (bottomTileW + gap);
+            const bw = (b === bottomCount - 1)
                 ? (area.x + btmWidth - bx)
                 : bottomTileW;
 
@@ -131,14 +134,14 @@ function lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rig
 }
 
 function calculateZones(params) {
-    var count = params.windowCount;
-    var area = params.area;
-    var gap = params.innerGap || 0;
+    const count = params.windowCount;
+    const area = params.area;
+    const gap = params.innerGap || 0;
 
     if (count <= 0) return [];
     if (count === 1) return [area];
 
-    var splitRatio = params.splitRatio > 0 ? Math.min(params.splitRatio, 0.9) : 0.55;
+    const splitRatio = params.splitRatio > 0 ? Math.min(params.splitRatio, 0.9) : 0.55;
     // Corner Master: alternate distribution, bottom row uses master width,
     // right column uses full height
     return lShapeLayout(area, count, gap, splitRatio, "alternate", "master", "full");

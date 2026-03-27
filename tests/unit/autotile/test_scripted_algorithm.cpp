@@ -258,7 +258,7 @@ private Q_SLOTS:
 
         ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
-        QCOMPARE(algo.scriptId(), QStringLiteral("my-layout"));
+        QCOMPARE(algo.scriptId(), QStringLiteral("script:my-layout"));
     }
 
     // =========================================================================

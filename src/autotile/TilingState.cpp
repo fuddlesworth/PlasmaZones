@@ -81,9 +81,16 @@ bool TilingState::addWindow(const QString& windowId, int position)
 
     if (m_splitTree) {
         if (appendToEnd) {
-            m_splitTree->insertAtEnd(windowId);
+            m_splitTree->insertAtEnd(windowId, m_splitRatio);
         } else {
-            m_splitTree->insertAtPosition(windowId, position);
+            m_splitTree->insertAtPosition(windowId, position, m_splitRatio);
+        }
+    } else if (tiledWindowCount() >= 2) {
+        // Lazily create tree when we reach 2 tiled windows
+        m_splitTree = std::make_unique<SplitTree>();
+        const auto tiled = tiledWindows();
+        for (const auto& id : tiled) {
+            m_splitTree->insertAtEnd(id, m_splitRatio);
         }
     }
 
@@ -99,11 +106,13 @@ bool TilingState::removeWindow(const QString& windowId)
         return false;
     }
 
+    // Remove from list first, then from tree, before emitting signals
+    m_windowOrder.removeAt(index);
+
     if (m_splitTree) {
         m_splitTree->remove(windowId);
     }
 
-    m_windowOrder.removeAt(index);
     // F7 fix: Emit floatingChanged when removing a floating window so listeners
     // (e.g., the daemon's windowFloatingChanged handler) can propagate the state change
     bool wasFloating = m_floatingWindows.remove(windowId);
@@ -488,9 +497,9 @@ void TilingState::setFloating(const QString& windowId, bool floating)
         } else {
             // Re-insert at the window's pre-computed tiled position
             if (tiledIdxBeforeChange >= 0) {
-                m_splitTree->insertAtPosition(windowId, tiledIdxBeforeChange);
+                m_splitTree->insertAtPosition(windowId, tiledIdxBeforeChange, m_splitRatio);
             } else {
-                m_splitTree->insertAtEnd(windowId);
+                m_splitTree->insertAtEnd(windowId, m_splitRatio);
             }
         }
     }
@@ -745,6 +754,7 @@ void TilingState::rebuildSplitTree()
     // internal node position) so we can restore them after rebuilding.
     // The new tree has the same binary structure (N-1 internal nodes for N leaves)
     // so positional mapping preserves ratios for the common prefix of nodes.
+    const int oldLeafCount = m_splitTree->leafCount();
     QVector<qreal> oldRatios;
     QVector<bool> oldDirections;
     collectInternalNodeParams(m_splitTree->root(), oldRatios, oldDirections);
@@ -752,6 +762,11 @@ void TilingState::rebuildSplitTree()
     auto newTree = std::make_unique<SplitTree>();
     for (const QString& windowId : tiled) {
         newTree->insertAtEnd(windowId);
+    }
+
+    if (oldLeafCount != tiled.size()) {
+        qCWarning(lcAutotile) << "rebuildSplitTree: leaf count changed from" << oldLeafCount << "to" << tiled.size()
+                              << "-- ratio mapping may be inaccurate";
     }
 
     // Restore saved ratios to the new tree's internal nodes (same traversal order)

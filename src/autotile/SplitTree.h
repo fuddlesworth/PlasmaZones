@@ -89,6 +89,15 @@ public:
     int leafCount() const;
 
     /**
+     * @brief Get the maximum depth of the tree
+     * @return Depth (0 for empty tree, 1 for single leaf)
+     */
+    int treeDepth() const;
+
+    /// Maximum runtime tree depth for insert operations
+    static constexpr int MaxRuntimeTreeDepth = 50;
+
+    /**
      * @brief Find the leaf node for a given window ID
      * @param windowId Window to search for
      * @return Leaf node, or nullptr if not found
@@ -114,7 +123,7 @@ public:
      * @param windowId New window to insert
      * @param focusedWindowId Currently focused window to split
      */
-    void insertAtFocused(const QString& windowId, const QString& focusedWindowId);
+    void insertAtFocused(const QString& windowId, const QString& focusedWindowId, qreal initialRatio = 0.0);
 
     /**
      * @brief Insert a window by splitting the rightmost leaf
@@ -122,8 +131,9 @@ public:
      * If the tree is empty, creates a root leaf.
      *
      * @param windowId New window to insert
+     * @param initialRatio Split ratio for the new split (0 = use DefaultSplitRatio)
      */
-    void insertAtEnd(const QString& windowId);
+    void insertAtEnd(const QString& windowId, qreal initialRatio = 0.0);
 
     /**
      * @brief Insert a window by splitting the leaf at a given position
@@ -133,8 +143,9 @@ public:
      *
      * @param windowId New window to insert
      * @param position Depth-first leaf index to split
+     * @param initialRatio Split ratio for the new split (0 = use DefaultSplitRatio)
      */
-    void insertAtPosition(const QString& windowId, int position);
+    void insertAtPosition(const QString& windowId, int position, qreal initialRatio = 0.0);
 
     /**
      * @brief Remove a window, collapsing its parent and promoting its sibling

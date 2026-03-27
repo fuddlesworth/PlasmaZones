@@ -11,6 +11,9 @@
 // @minimumWindows 1
 // @zoneNumberDisplay firstAndLast
 
+// Guard pattern and splitRatio clamping are intentionally duplicated across
+// algorithm scripts because each one runs in its own QJSEngine instance.
+
 /**
  * Horizontal Deck layout: vertical version of Deck. The focused window takes
  * the top portion, remaining windows peek from the bottom edge.
@@ -25,13 +28,13 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 function deckLayout(area, count, focusedFraction, horizontal) {
-    var axisSize = horizontal ? area.height : area.width;
-    var bgCount = count - 1;
-    var focusedSize = Math.max(1, Math.round(axisSize * focusedFraction));
-    var peekTotal = axisSize - focusedSize;
-    var peekSize = bgCount > 0 ? Math.max(1, Math.round(peekTotal / bgCount)) : 0;
+    const axisSize = horizontal ? area.height : area.width;
+    const bgCount = count - 1;
+    const focusedSize = Math.max(1, Math.round(axisSize * focusedFraction));
+    const peekTotal = axisSize - focusedSize;
+    const peekSize = bgCount > 0 ? Math.max(1, Math.round(peekTotal / bgCount)) : 0;
 
-    var zones = [];
+    const zones = [];
 
     zones.push({
         x: area.x,
@@ -40,20 +43,22 @@ function deckLayout(area, count, focusedFraction, horizontal) {
         height: horizontal ? focusedSize : area.height
     });
 
-    for (var i = 0; i < bgCount; i++) {
-        var peekOffset = focusedSize + (i * peekSize);
+    // Overlapping layout — innerGap intentionally ignored (zones overlap by design)
+
+    for (let i = 0; i < bgCount; i++) {
+        const peekOffset = Math.min(focusedSize + i * peekSize, axisSize - 1);
         if (horizontal) {
-            var peekY = area.y + peekOffset;
+            const peekY = area.y + peekOffset;
             zones.push({
                 x: area.x,
-                y: peekY,
+                y: Math.min(peekY, area.y + area.height - 1),
                 width: area.width,
                 height: area.y + area.height - peekY
             });
         } else {
-            var peekX = area.x + peekOffset;
+            const peekX = area.x + peekOffset;
             zones.push({
-                x: peekX,
+                x: Math.min(peekX, area.x + area.width - 1),
                 y: area.y,
                 width: area.x + area.width - peekX,
                 height: area.height
@@ -65,12 +70,13 @@ function deckLayout(area, count, focusedFraction, horizontal) {
 }
 
 function calculateZones(params) {
-    var count = params.windowCount;
-    var area = params.area;
+    // Overlapping layout — innerGap intentionally ignored (zones overlap by design)
+    const count = params.windowCount;
+    const area = params.area;
 
     if (count <= 0) return [];
     if (count === 1) return [area];
 
-    var focusedFraction = params.splitRatio > 0 ? params.splitRatio : 0.75;
+    const focusedFraction = params.splitRatio > 0 ? params.splitRatio : 0.75;
     return deckLayout(area, count, focusedFraction, true);
 }

@@ -15,7 +15,8 @@ namespace PlasmaZones {
 ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(QObject* parent)
     : QObject(parent)
 {
-    ensureUserDirectoryExists();
+    // L11: Lazy user directory creation — moved ensureUserDirectoryExists()
+    // to scanAndRegister() so it is only called when actually needed.
     setupFileWatcher();
 }
 
@@ -54,6 +55,9 @@ void ScriptedAlgorithmLoader::ensureUserDirectoryExists()
 
 void ScriptedAlgorithmLoader::scanAndRegister()
 {
+    // L11: Lazily create user directory on first scan
+    ensureUserDirectoryExists();
+
     auto* registry = AlgorithmRegistry::instance();
 
     // Track which script IDs we register in this scan
@@ -97,7 +101,9 @@ void ScriptedAlgorithmLoader::scanAndRegister()
 void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserDir)
 {
     QDir dirObj(dir);
-    const QStringList files = dirObj.entryList({QStringLiteral("*.js")}, QDir::Files);
+    // H4: Exclude symlinks to prevent path traversal attacks
+    const QStringList files =
+        dirObj.entryList({QStringLiteral("*.js")}, QDir::Files | QDir::NoSymLinks | QDir::Readable);
 
     for (const QString& file : files) {
         const QString fullPath = dirObj.filePath(file);
