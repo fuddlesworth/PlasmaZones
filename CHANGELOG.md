@@ -7,6 +7,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.4.6] - 2026-03-27
+
+### Added
+- **Plasma Sigil shader**: Animated energy sigil based on the PlasmaZones icon with glowing rune effects.
+
+### Fixed
+- **System Settings crash when opening PlasmaZones KCM**: The KCM linked the entire `plasmazones_core` library (with LayerShellQt, PlasmaActivities, 21 static initializers) just to read a version string. When the daemon was not running this caused heap corruption and SIGABRT during QML binding creation. Replaced with a compile-time version define — the KCM no longer loads the core library at all.
+- **Editor context menu crash on zone updates**: Use shared context menu to prevent QQmlData use-after-free crash when zones update while the menu is open.
+
 ## [2.4.5] - 2026-03-26
 
 ### Added
@@ -994,7 +1003,9 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.3...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.6...HEAD
+[2.4.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.5...v2.4.6
+[2.4.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.3...v2.4.5
 [2.4.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.1...v2.4.2
 [#252]: https://github.com/fuddlesworth/PlasmaZones/issues/252
