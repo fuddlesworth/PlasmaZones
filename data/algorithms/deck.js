@@ -12,30 +12,22 @@
 // @zoneNumberDisplay firstAndLast
 
 /**
- * Deck layout: one focused window with background windows peeking
- * from the right edge. splitRatio controls the peek width as a
- * fraction of screen width (default 0.05 = 5% per background window).
+ * Generic deck layout: one focused window with background windows peeking
+ * from the trailing edge. Orientation is controlled by the `horizontal`
+ * parameter (false = left-to-right, true = top-to-bottom).
  *
- * Each background window extends from its peek position all the way
- * to the right edge, so they overlap each other.
- *
- * @param {Object} params - Tiling parameters
+ * @param {Object} area - {x, y, width, height}
+ * @param {number} count - window count
+ * @param {number} focusedFraction - focused window size as fraction of axis
+ * @param {boolean} horizontal - true for top-to-bottom, false for left-to-right
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
-function calculateZones(params) {
-    var count = params.windowCount;
-    var area = params.area;
-
-    if (count <= 0) return [];
-    if (count === 1) return [area];
-
-    // splitRatio controls the focused window width as a fraction of the screen.
-    // Remaining space is divided equally among background window peek strips.
-    var focusedFraction = params.splitRatio > 0 ? params.splitRatio : 0.75;
+function deckLayout(area, count, focusedFraction, horizontal) {
+    var axisSize = horizontal ? area.height : area.width;
     var bgCount = count - 1;
-    var focusedWidth = Math.max(1, Math.round(area.width * focusedFraction));
-    var peekTotal = area.width - focusedWidth;
-    var peekWidth = bgCount > 0 ? Math.max(1, Math.round(peekTotal / bgCount)) : 0;
+    var focusedSize = Math.max(1, Math.round(axisSize * focusedFraction));
+    var peekTotal = axisSize - focusedSize;
+    var peekSize = bgCount > 0 ? Math.max(1, Math.round(peekTotal / bgCount)) : 0;
 
     var zones = [];
 
@@ -43,21 +35,43 @@ function calculateZones(params) {
     zones.push({
         x: area.x,
         y: area.y,
-        width: focusedWidth,
-        height: area.height
+        width: horizontal ? area.width : focusedSize,
+        height: horizontal ? focusedSize : area.height
     });
 
     // Background windows: each starts at its peek position and
-    // extends to the right edge of the area
+    // extends to the trailing edge of the area
     for (var i = 0; i < bgCount; i++) {
-        var peekX = area.x + focusedWidth + (i * peekWidth);
-        zones.push({
-            x: peekX,
-            y: area.y,
-            width: area.x + area.width - peekX,
-            height: area.height
-        });
+        var peekOffset = focusedSize + (i * peekSize);
+        if (horizontal) {
+            var peekY = area.y + peekOffset;
+            zones.push({
+                x: area.x,
+                y: peekY,
+                width: area.width,
+                height: area.y + area.height - peekY
+            });
+        } else {
+            var peekX = area.x + peekOffset;
+            zones.push({
+                x: peekX,
+                y: area.y,
+                width: area.x + area.width - peekX,
+                height: area.height
+            });
+        }
     }
 
     return zones;
+}
+
+function calculateZones(params) {
+    var count = params.windowCount;
+    var area = params.area;
+
+    if (count <= 0) return [];
+    if (count === 1) return [area];
+
+    var focusedFraction = params.splitRatio > 0 ? params.splitRatio : 0.75;
+    return deckLayout(area, count, focusedFraction, false);
 }

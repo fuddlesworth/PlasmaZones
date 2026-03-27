@@ -28,6 +28,8 @@ ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
     , m_engine(new QJSEngine(this))
     , m_engineAlive(std::make_shared<std::atomic<bool>>(true))
     , m_engineMutex(std::make_shared<std::mutex>())
+    , m_watchdogFinished(std::make_shared<std::atomic<bool>>(true))
+    , m_watchdogEnginePtr(std::make_shared<QJSEngine*>(m_engine))
 {
     loadScript(filePath);
 }
@@ -184,8 +186,8 @@ void ScriptedAlgorithm::parseMetadata(const QString& source)
         const QString key = match.captured(1);
         const QString value = match.captured(2).trimmed();
 
-        // Note: @icon is intentionally not parsed — icon() was removed from
-        // the TilingAlgorithm interface. Unknown keys are silently ignored.
+        // @icon is accepted but not stored — icon() was removed from the
+        // TilingAlgorithm interface. Scripts may include it for documentation.
         if (key == QLatin1String("name")) {
             m_name = value;
         } else if (key == QLatin1String("description")) {
@@ -279,16 +281,16 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     // Watchdog: interrupt JS engine after 100ms from a separate thread.
     // A QTimer cannot fire during synchronous JS execution because the event
     // loop is blocked, so we use a detached std::thread instead.
-    // All shared state (finished, alive, mutex, engine ptr) is wrapped in
-    // shared_ptr so the watchdog thread can safely outlive the
-    // ScriptedAlgorithm if it is destroyed during the sleep window.
-    auto finished = std::make_shared<std::atomic<bool>>(false);
+    //
+    // We reuse a single watchdog flag per ScriptedAlgorithm instance to avoid
+    // spawning a new thread on every calculateZones() call. The flag is set
+    // before each call and checked after the sleep.
+    m_watchdogFinished->store(false, std::memory_order_release);
+
+    auto finished = m_watchdogFinished;
     auto aliveFlag = m_engineAlive;
     auto engineMtx = m_engineMutex;
-    // Wrap the engine pointer in a shared_ptr-guarded struct so the watchdog
-    // never dereferences a dangling raw pointer. The destructor sets alive=false
-    // under the mutex, so the watchdog will see it before using the pointer.
-    auto enginePtr = std::make_shared<QJSEngine*>(m_engine);
+    auto enginePtr = m_watchdogEnginePtr;
     std::thread([enginePtr, finished, aliveFlag, engineMtx]() {
         QThread::msleep(100);
         if (finished->load(std::memory_order_acquire)) {
@@ -306,7 +308,7 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     const QJSValue result = m_calculateZonesFn.call({jsParams});
 
     // Signal the watchdog and reset interrupted state
-    finished->store(true, std::memory_order_release);
+    m_watchdogFinished->store(true, std::memory_order_release);
     m_engine->setInterrupted(false);
 
     if (result.isError()) {
@@ -436,7 +438,7 @@ qreal ScriptedAlgorithm::defaultSplitRatio() const noexcept
     if (m_jsDefaultSplitRatio.isCallable()) {
         const QJSValue result = m_jsDefaultSplitRatio.call();
         if (!result.isError() && result.isNumber())
-            return result.toNumber();
+            return std::clamp(result.toNumber(), MinSplitRatio, MaxSplitRatio);
     }
     if (m_defaultSplitRatio > 0.0) {
         return m_defaultSplitRatio;

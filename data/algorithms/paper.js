@@ -37,8 +37,8 @@ function calculateZones(params) {
     // Distribute pages evenly across the remaining space.
     // The leftover space is shared as offsets between pages.
     var leftover = area.width - pageWidth;
-    // When pageWidth >= area.width, all pages stack at the same position (degenerate case)
-    var step = (count > 1) ? Math.round(leftover / (count - 1)) : 0;
+    // Ensure a minimum step of 1px so pages don't stack on top of each other
+    var step = (count > 1) ? Math.max(1, Math.round(leftover / (count - 1))) : 0;
 
     var zones = [];
     for (var i = 0; i < count; i++) {

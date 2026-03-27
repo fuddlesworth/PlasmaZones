@@ -337,7 +337,8 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         m_config->savedAlgorithmSettings[m_algorithmId] = {m_config->splitRatio, m_config->masterCount};
     }
 
-    // Restore new algorithm's saved settings, or use defaults
+    // Look up saved settings AFTER the save above — insertion may rehash the
+    // QHash, invalidating any iterator obtained before the insert.
     auto savedIt = m_config->savedAlgorithmSettings.constFind(newId);
     if (oldAlgo && newAlgo) {
         if (savedIt != m_config->savedAlgorithmSettings.constEnd()) {

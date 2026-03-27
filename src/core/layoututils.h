@@ -71,12 +71,16 @@ struct PLASMAZONES_EXPORT UnifiedLayoutEntry
     QString sectionLabel; ///< Display label for the section header (i18n'd)
     int sectionOrder = 0; ///< Sort priority (lower = first)
 
-    /// Whether this autotile entry should show as a "system" (lock icon) item
+    /// Whether this autotile entry should show as a "system" (lock icon) item.
+    /// Built-in C++ algorithms are always system entries. Scripted algorithms
+    /// are system entries only if they are system-installed (not user scripts).
     bool isSystemEntry() const
     {
         if (!isAutotile)
             return false;
-        return !isScripted || !isUserScript;
+        if (!isScripted)
+            return true; // Built-in C++ algorithm
+        return !isUserScript; // System-installed script = system, user script = not system
     }
 
     /**

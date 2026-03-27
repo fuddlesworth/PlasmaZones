@@ -110,8 +110,16 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             continue;
         }
 
+        // Unregister any existing algorithm with the same ID before re-registering.
+        // This handles the hot-reload case where a script was modified in-place —
+        // the old algorithm object is cleaned up via deleteLater().
+        auto* registry = AlgorithmRegistry::instance();
+        if (registry->hasAlgorithm(scriptId)) {
+            registry->unregisterAlgorithm(scriptId);
+        }
+
         algo->setUserScript(isUserDir);
-        AlgorithmRegistry::instance()->registerAlgorithm(scriptId, algo);
+        registry->registerAlgorithm(scriptId, algo);
         m_scriptIdToPath[scriptId] = fullPath;
 
         qCInfo(lcAutotile) << "Registered scripted algorithm:" << scriptId << "from=" << fullPath

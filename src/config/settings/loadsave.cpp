@@ -87,12 +87,12 @@ void Settings::loadDisplayConfig(QSettingsConfigGroup& display)
     m_showOsdOnLayoutSwitch =
         display.readBool(QStringLiteral("ShowOsdOnLayoutSwitch"), ConfigDefaults::showOsdOnLayoutSwitch());
     m_showNavigationOsd = display.readBool(QStringLiteral("ShowNavigationOsd"), ConfigDefaults::showNavigationOsd());
-    m_osdStyle =
-        static_cast<OsdStyle>(readValidatedInt(display, "OsdStyle", ConfigDefaults::osdStyle(),
-                                               ConfigDefaults::osdStyleMin(), ConfigDefaults::osdStyleMax(), "OSD style"));
+    m_osdStyle = static_cast<OsdStyle>(readValidatedInt(display, "OsdStyle", ConfigDefaults::osdStyle(),
+                                                        ConfigDefaults::osdStyleMin(), ConfigDefaults::osdStyleMax(),
+                                                        "OSD style"));
     m_overlayDisplayMode = static_cast<OverlayDisplayMode>(readValidatedInt(
-        display, "OverlayDisplayMode", ConfigDefaults::overlayDisplayMode(),
-        ConfigDefaults::overlayDisplayModeMin(), ConfigDefaults::overlayDisplayModeMax(), "overlay display mode"));
+        display, "OverlayDisplayMode", ConfigDefaults::overlayDisplayMode(), ConfigDefaults::overlayDisplayModeMin(),
+        ConfigDefaults::overlayDisplayModeMax(), "overlay display mode"));
 }
 
 void Settings::loadAppearanceConfig(QSettingsConfigGroup& appearance)
@@ -111,21 +111,25 @@ void Settings::loadAppearanceConfig(QSettingsConfigGroup& appearance)
     m_activeOpacity = activeOpacity;
 
     qreal inactiveOpacity = appearance.readDouble(QStringLiteral("InactiveOpacity"), ConfigDefaults::inactiveOpacity());
-    if (inactiveOpacity < ConfigDefaults::inactiveOpacityMin() || inactiveOpacity > ConfigDefaults::inactiveOpacityMax()) {
+    if (inactiveOpacity < ConfigDefaults::inactiveOpacityMin()
+        || inactiveOpacity > ConfigDefaults::inactiveOpacityMax()) {
         qCWarning(lcConfig) << "Invalid inactive opacity:" << inactiveOpacity << "clamping to valid range";
-        inactiveOpacity = qBound(ConfigDefaults::inactiveOpacityMin(), inactiveOpacity, ConfigDefaults::inactiveOpacityMax());
+        inactiveOpacity =
+            qBound(ConfigDefaults::inactiveOpacityMin(), inactiveOpacity, ConfigDefaults::inactiveOpacityMax());
     }
     m_inactiveOpacity = inactiveOpacity;
 
-    m_borderWidth = readValidatedInt(appearance, "BorderWidth", ConfigDefaults::borderWidth(),
-                                     ConfigDefaults::borderWidthMin(), ConfigDefaults::borderWidthMax(), "border width");
+    m_borderWidth =
+        readValidatedInt(appearance, "BorderWidth", ConfigDefaults::borderWidth(), ConfigDefaults::borderWidthMin(),
+                         ConfigDefaults::borderWidthMax(), "border width");
     m_borderRadius =
-        readValidatedInt(appearance, "BorderRadius", ConfigDefaults::borderRadius(),
-                         ConfigDefaults::borderRadiusMin(), ConfigDefaults::borderRadiusMax(), "border radius");
+        readValidatedInt(appearance, "BorderRadius", ConfigDefaults::borderRadius(), ConfigDefaults::borderRadiusMin(),
+                         ConfigDefaults::borderRadiusMax(), "border radius");
     m_enableBlur = appearance.readBool(QStringLiteral("EnableBlur"), ConfigDefaults::enableBlur());
     m_labelFontFamily = appearance.readString(QStringLiteral("LabelFontFamily"), ConfigDefaults::labelFontFamily());
     qreal fontScale = appearance.readDouble(QStringLiteral("LabelFontSizeScale"), ConfigDefaults::labelFontSizeScale());
-    m_labelFontSizeScale = qBound(ConfigDefaults::labelFontSizeScaleMin(), fontScale, ConfigDefaults::labelFontSizeScaleMax());
+    m_labelFontSizeScale =
+        qBound(ConfigDefaults::labelFontSizeScaleMin(), fontScale, ConfigDefaults::labelFontSizeScaleMax());
     m_labelFontWeight = readValidatedInt(appearance, "LabelFontWeight", ConfigDefaults::labelFontWeight(),
                                          ConfigDefaults::labelFontWeightMin(), ConfigDefaults::labelFontWeightMax(),
                                          "label font weight");
@@ -138,33 +142,32 @@ void Settings::loadAppearanceConfig(QSettingsConfigGroup& appearance)
 
 void Settings::loadZoneGeometryConfig(QSettingsConfigGroup& zones)
 {
-    m_zonePadding =
-        readValidatedInt(zones, "Padding", ConfigDefaults::zonePadding(),
-                         ConfigDefaults::zonePaddingMin(), ConfigDefaults::zonePaddingMax(), "zone padding");
-    m_outerGap = readValidatedInt(zones, "OuterGap", ConfigDefaults::outerGap(),
-                                  ConfigDefaults::outerGapMin(), ConfigDefaults::outerGapMax(), "outer gap");
+    m_zonePadding = readValidatedInt(zones, "Padding", ConfigDefaults::zonePadding(), ConfigDefaults::zonePaddingMin(),
+                                     ConfigDefaults::zonePaddingMax(), "zone padding");
+    m_outerGap = readValidatedInt(zones, "OuterGap", ConfigDefaults::outerGap(), ConfigDefaults::outerGapMin(),
+                                  ConfigDefaults::outerGapMax(), "outer gap");
     m_usePerSideOuterGap = zones.readBool(QStringLiteral("UsePerSideOuterGap"), ConfigDefaults::usePerSideOuterGap());
     m_outerGapTop =
-        readValidatedInt(zones, "OuterGapTop", ConfigDefaults::outerGapTop(),
-                         ConfigDefaults::outerGapTopMin(), ConfigDefaults::outerGapTopMax(), "outer gap top");
-    m_outerGapBottom = readValidatedInt(zones, "OuterGapBottom", ConfigDefaults::outerGapBottom(),
-                                        ConfigDefaults::outerGapBottomMin(), ConfigDefaults::outerGapBottomMax(),
-                                        "outer gap bottom");
+        readValidatedInt(zones, "OuterGapTop", ConfigDefaults::outerGapTop(), ConfigDefaults::outerGapTopMin(),
+                         ConfigDefaults::outerGapTopMax(), "outer gap top");
+    m_outerGapBottom =
+        readValidatedInt(zones, "OuterGapBottom", ConfigDefaults::outerGapBottom(), ConfigDefaults::outerGapBottomMin(),
+                         ConfigDefaults::outerGapBottomMax(), "outer gap bottom");
     m_outerGapLeft =
-        readValidatedInt(zones, "OuterGapLeft", ConfigDefaults::outerGapLeft(),
-                         ConfigDefaults::outerGapLeftMin(), ConfigDefaults::outerGapLeftMax(), "outer gap left");
-    m_outerGapRight = readValidatedInt(zones, "OuterGapRight", ConfigDefaults::outerGapRight(),
-                                       ConfigDefaults::outerGapRightMin(), ConfigDefaults::outerGapRightMax(),
-                                       "outer gap right");
-    m_adjacentThreshold =
-        readValidatedInt(zones, "AdjacentThreshold", ConfigDefaults::adjacentThreshold(),
-                         ConfigDefaults::adjacentThresholdMin(), ConfigDefaults::adjacentThresholdMax(), "adjacent threshold");
+        readValidatedInt(zones, "OuterGapLeft", ConfigDefaults::outerGapLeft(), ConfigDefaults::outerGapLeftMin(),
+                         ConfigDefaults::outerGapLeftMax(), "outer gap left");
+    m_outerGapRight =
+        readValidatedInt(zones, "OuterGapRight", ConfigDefaults::outerGapRight(), ConfigDefaults::outerGapRightMin(),
+                         ConfigDefaults::outerGapRightMax(), "outer gap right");
+    m_adjacentThreshold = readValidatedInt(zones, "AdjacentThreshold", ConfigDefaults::adjacentThreshold(),
+                                           ConfigDefaults::adjacentThresholdMin(),
+                                           ConfigDefaults::adjacentThresholdMax(), "adjacent threshold");
     m_pollIntervalMs =
-        readValidatedInt(zones, "PollIntervalMs", ConfigDefaults::pollIntervalMs(),
-                         ConfigDefaults::pollIntervalMsMin(), ConfigDefaults::pollIntervalMsMax(), "poll interval");
-    m_minimumZoneSizePx =
-        readValidatedInt(zones, "MinimumZoneSizePx", ConfigDefaults::minimumZoneSizePx(),
-                         ConfigDefaults::minimumZoneSizePxMin(), ConfigDefaults::minimumZoneSizePxMax(), "minimum zone size");
+        readValidatedInt(zones, "PollIntervalMs", ConfigDefaults::pollIntervalMs(), ConfigDefaults::pollIntervalMsMin(),
+                         ConfigDefaults::pollIntervalMsMax(), "poll interval");
+    m_minimumZoneSizePx = readValidatedInt(zones, "MinimumZoneSizePx", ConfigDefaults::minimumZoneSizePx(),
+                                           ConfigDefaults::minimumZoneSizePxMin(),
+                                           ConfigDefaults::minimumZoneSizePxMax(), "minimum zone size");
     m_minimumZoneDisplaySizePx =
         readValidatedInt(zones, "MinimumZoneDisplaySizePx", ConfigDefaults::minimumZoneDisplaySizePx(),
                          ConfigDefaults::minimumZoneDisplaySizePxMin(), ConfigDefaults::minimumZoneDisplaySizePxMax(),
@@ -244,19 +247,21 @@ void Settings::loadBehaviorConfig(QSettingsConfigBackend* backend)
         m_excludeTransientWindows =
             exclusions->readBool(QStringLiteral("ExcludeTransientWindows"), ConfigDefaults::excludeTransientWindows());
         int minWidth = exclusions->readInt(QStringLiteral("MinimumWindowWidth"), ConfigDefaults::minimumWindowWidth());
-        m_minimumWindowWidth = qBound(ConfigDefaults::minimumWindowWidthMin(), minWidth, ConfigDefaults::minimumWindowWidthMax());
+        m_minimumWindowWidth =
+            qBound(ConfigDefaults::minimumWindowWidthMin(), minWidth, ConfigDefaults::minimumWindowWidthMax());
         int minHeight =
             exclusions->readInt(QStringLiteral("MinimumWindowHeight"), ConfigDefaults::minimumWindowHeight());
-        m_minimumWindowHeight = qBound(ConfigDefaults::minimumWindowHeightMin(), minHeight, ConfigDefaults::minimumWindowHeightMax());
+        m_minimumWindowHeight =
+            qBound(ConfigDefaults::minimumWindowHeightMin(), minHeight, ConfigDefaults::minimumWindowHeightMax());
     }
 }
 
 void Settings::loadZoneSelectorConfig(QSettingsConfigGroup& zoneSelector)
 {
     m_zoneSelectorEnabled = zoneSelector.readBool(QStringLiteral("Enabled"), ConfigDefaults::zoneSelectorEnabled());
-    m_zoneSelectorTriggerDistance = readValidatedInt(zoneSelector, "TriggerDistance", ConfigDefaults::triggerDistance(),
-                                                     ConfigDefaults::triggerDistanceMin(), ConfigDefaults::triggerDistanceMax(),
-                                                     "zone selector trigger distance");
+    m_zoneSelectorTriggerDistance = readValidatedInt(
+        zoneSelector, "TriggerDistance", ConfigDefaults::triggerDistance(), ConfigDefaults::triggerDistanceMin(),
+        ConfigDefaults::triggerDistanceMax(), "zone selector trigger distance");
     int selectorPos = zoneSelector.readInt(QStringLiteral("Position"), ConfigDefaults::position());
     if (selectorPos >= 0 && selectorPos <= 8) {
         m_zoneSelectorPosition = static_cast<ZoneSelectorPosition>(selectorPos);
@@ -270,19 +275,19 @@ void Settings::loadZoneSelectorConfig(QSettingsConfigGroup& zoneSelector)
                                                   ConfigDefaults::previewWidthMin(), ConfigDefaults::previewWidthMax(),
                                                   "zone selector preview width");
     m_zoneSelectorPreviewHeight = readValidatedInt(zoneSelector, "PreviewHeight", ConfigDefaults::previewHeight(),
-                                                   ConfigDefaults::previewHeightMin(), ConfigDefaults::previewHeightMax(),
-                                                   "zone selector preview height");
+                                                   ConfigDefaults::previewHeightMin(),
+                                                   ConfigDefaults::previewHeightMax(), "zone selector preview height");
     m_zoneSelectorPreviewLockAspect =
         zoneSelector.readBool(QStringLiteral("PreviewLockAspect"), ConfigDefaults::previewLockAspect());
-    m_zoneSelectorGridColumns = readValidatedInt(zoneSelector, "GridColumns", ConfigDefaults::gridColumns(),
-                                                 ConfigDefaults::gridColumnsMin(), ConfigDefaults::gridColumnsMax(),
-                                                 "zone selector grid columns");
+    m_zoneSelectorGridColumns =
+        readValidatedInt(zoneSelector, "GridColumns", ConfigDefaults::gridColumns(), ConfigDefaults::gridColumnsMin(),
+                         ConfigDefaults::gridColumnsMax(), "zone selector grid columns");
     int sizeMode = zoneSelector.readInt(QStringLiteral("SizeMode"), ConfigDefaults::sizeMode());
     m_zoneSelectorSizeMode =
         static_cast<ZoneSelectorSizeMode>(qBound(0, sizeMode, static_cast<int>(ZoneSelectorSizeMode::Manual)));
     m_zoneSelectorMaxRows =
-        readValidatedInt(zoneSelector, "MaxRows", ConfigDefaults::maxRows(),
-                         ConfigDefaults::maxRowsMin(), ConfigDefaults::maxRowsMax(), "zone selector max rows");
+        readValidatedInt(zoneSelector, "MaxRows", ConfigDefaults::maxRows(), ConfigDefaults::maxRowsMin(),
+                         ConfigDefaults::maxRowsMax(), "zone selector max rows");
 }
 
 void Settings::loadShortcutConfig(QSettingsConfigGroup& globalShortcuts)
@@ -368,24 +373,29 @@ void Settings::loadAutotilingConfig(QSettingsConfigBackend* backend)
         autotiling->readDouble(QStringLiteral("AutotileSplitRatio"), ConfigDefaults::autotileSplitRatio());
     if (splitRatio < ConfigDefaults::autotileSplitRatioMin() || splitRatio > ConfigDefaults::autotileSplitRatioMax()) {
         qCWarning(lcConfig) << "Invalid autotile split ratio:" << splitRatio << "clamping to valid range";
-        splitRatio = qBound(ConfigDefaults::autotileSplitRatioMin(), splitRatio, ConfigDefaults::autotileSplitRatioMax());
+        splitRatio =
+            qBound(ConfigDefaults::autotileSplitRatioMin(), splitRatio, ConfigDefaults::autotileSplitRatioMax());
     }
     m_autotileSplitRatio = splitRatio;
 
     int masterCount = autotiling->readInt(QStringLiteral("AutotileMasterCount"), ConfigDefaults::autotileMasterCount());
-    if (masterCount < ConfigDefaults::autotileMasterCountMin() || masterCount > ConfigDefaults::autotileMasterCountMax()) {
+    if (masterCount < ConfigDefaults::autotileMasterCountMin()
+        || masterCount > ConfigDefaults::autotileMasterCountMax()) {
         qCWarning(lcConfig) << "Invalid autotile master count:" << masterCount << "clamping to valid range";
-        masterCount = qBound(ConfigDefaults::autotileMasterCountMin(), masterCount, ConfigDefaults::autotileMasterCountMax());
+        masterCount =
+            qBound(ConfigDefaults::autotileMasterCountMin(), masterCount, ConfigDefaults::autotileMasterCountMax());
     }
     m_autotileMasterCount = masterCount;
 
     // Load per-algorithm settings map (with backwards compat for centered-master fields)
-    const QString perAlgoStr = autotiling->readString(QStringLiteral("AutotilePerAlgorithmSettings"), QStringLiteral(""));
+    const QString perAlgoStr =
+        autotiling->readString(QStringLiteral("AutotilePerAlgorithmSettings"), QStringLiteral(""));
     if (!perAlgoStr.isEmpty()) {
-        // Deserialize JSON → QVariantMap → internal hash via shared helper
+        // Deserialize JSON → QVariantMap → QHash → QVariantMap: the round-trip
+        // through perAlgoFromVariantMap sanitizes/clamps values before storing.
         const QJsonObject perAlgoJson = QJsonDocument::fromJson(perAlgoStr.toUtf8()).object();
-        m_autotilePerAlgorithmSettings = AutotileConfig::perAlgoToVariantMap(
-            AutotileConfig::perAlgoFromVariantMap(perAlgoJson.toVariantMap()));
+        m_autotilePerAlgorithmSettings =
+            AutotileConfig::perAlgoToVariantMap(AutotileConfig::perAlgoFromVariantMap(perAlgoJson.toVariantMap()));
     } else {
         // Backwards compat: always migrate centered-master fields when they exist,
         // even if their values match defaults (user may have explicitly set them).
@@ -403,30 +413,35 @@ void Settings::loadAutotilingConfig(QSettingsConfigBackend* backend)
     }
 
     m_autotileInnerGap = readValidatedInt(*autotiling, "AutotileInnerGap", ConfigDefaults::autotileInnerGap(),
-                                          ConfigDefaults::autotileInnerGapMin(), ConfigDefaults::autotileInnerGapMax(), "autotile inner gap");
+                                          ConfigDefaults::autotileInnerGapMin(), ConfigDefaults::autotileInnerGapMax(),
+                                          "autotile inner gap");
     m_autotileOuterGap = readValidatedInt(*autotiling, "AutotileOuterGap", ConfigDefaults::autotileOuterGap(),
-                                          ConfigDefaults::autotileOuterGapMin(), ConfigDefaults::autotileOuterGapMax(), "autotile outer gap");
+                                          ConfigDefaults::autotileOuterGapMin(), ConfigDefaults::autotileOuterGapMax(),
+                                          "autotile outer gap");
     m_autotileUsePerSideOuterGap = autotiling->readBool(QStringLiteral("AutotileUsePerSideOuterGap"),
                                                         ConfigDefaults::autotileUsePerSideOuterGap());
-    m_autotileOuterGapTop =
-        readValidatedInt(*autotiling, "AutotileOuterGapTop", ConfigDefaults::autotileOuterGapTop(),
-                         ConfigDefaults::autotileOuterGapTopMin(), ConfigDefaults::autotileOuterGapTopMax(), "autotile outer gap top");
+    m_autotileOuterGapTop = readValidatedInt(*autotiling, "AutotileOuterGapTop", ConfigDefaults::autotileOuterGapTop(),
+                                             ConfigDefaults::autotileOuterGapTopMin(),
+                                             ConfigDefaults::autotileOuterGapTopMax(), "autotile outer gap top");
     m_autotileOuterGapBottom =
         readValidatedInt(*autotiling, "AutotileOuterGapBottom", ConfigDefaults::autotileOuterGapBottom(),
-                         ConfigDefaults::autotileOuterGapBottomMin(), ConfigDefaults::autotileOuterGapBottomMax(), "autotile outer gap bottom");
+                         ConfigDefaults::autotileOuterGapBottomMin(), ConfigDefaults::autotileOuterGapBottomMax(),
+                         "autotile outer gap bottom");
     m_autotileOuterGapLeft =
         readValidatedInt(*autotiling, "AutotileOuterGapLeft", ConfigDefaults::autotileOuterGapLeft(),
-                         ConfigDefaults::autotileOuterGapLeftMin(), ConfigDefaults::autotileOuterGapLeftMax(), "autotile outer gap left");
+                         ConfigDefaults::autotileOuterGapLeftMin(), ConfigDefaults::autotileOuterGapLeftMax(),
+                         "autotile outer gap left");
     m_autotileOuterGapRight =
         readValidatedInt(*autotiling, "AutotileOuterGapRight", ConfigDefaults::autotileOuterGapRight(),
-                         ConfigDefaults::autotileOuterGapRightMin(), ConfigDefaults::autotileOuterGapRightMax(), "autotile outer gap right");
+                         ConfigDefaults::autotileOuterGapRightMin(), ConfigDefaults::autotileOuterGapRightMax(),
+                         "autotile outer gap right");
     m_autotileFocusNewWindows =
         autotiling->readBool(QStringLiteral("AutotileFocusNewWindows"), ConfigDefaults::autotileFocusNewWindows());
     m_autotileSmartGaps =
         autotiling->readBool(QStringLiteral("AutotileSmartGaps"), ConfigDefaults::autotileSmartGaps());
-    m_autotileMaxWindows =
-        readValidatedInt(*autotiling, "AutotileMaxWindows", ConfigDefaults::autotileMaxWindows(),
-                         ConfigDefaults::autotileMaxWindowsMin(), ConfigDefaults::autotileMaxWindowsMax(), "autotile max windows");
+    m_autotileMaxWindows = readValidatedInt(*autotiling, "AutotileMaxWindows", ConfigDefaults::autotileMaxWindows(),
+                                            ConfigDefaults::autotileMaxWindowsMin(),
+                                            ConfigDefaults::autotileMaxWindowsMax(), "autotile max windows");
     m_autotileInsertPosition = static_cast<AutotileInsertPosition>(
         readValidatedInt(*autotiling, "AutotileInsertPosition", ConfigDefaults::autotileInsertPosition(),
                          ConfigDefaults::autotileInsertPositionMin(), ConfigDefaults::autotileInsertPositionMax(),
@@ -441,7 +456,8 @@ void Settings::loadAutotilingConfig(QSettingsConfigBackend* backend)
         m_animationsEnabled =
             animations->readBool(QStringLiteral("AnimationsEnabled"), ConfigDefaults::animationsEnabled());
         m_animationDuration = readValidatedInt(*animations, "AnimationDuration", ConfigDefaults::animationDuration(),
-                                               ConfigDefaults::animationDurationMin(), ConfigDefaults::animationDurationMax(), "animation duration");
+                                               ConfigDefaults::animationDurationMin(),
+                                               ConfigDefaults::animationDurationMax(), "animation duration");
         m_animationEasingCurve =
             animations->readString(QStringLiteral("AnimationEasingCurve"), ConfigDefaults::animationEasingCurve());
         m_animationMinDistance =
@@ -469,10 +485,10 @@ void Settings::loadAutotilingConfig(QSettingsConfigBackend* backend)
             autotiling2->readBool(QStringLiteral("AutotileHideTitleBars"), ConfigDefaults::autotileHideTitleBars());
         m_autotileShowBorder =
             autotiling2->readBool(QStringLiteral("AutotileShowBorder"), ConfigDefaults::autotileShowBorder());
-        m_autotileBorderWidth = readValidatedInt(*autotiling2, "AutotileBorderWidth",
-                                                 ConfigDefaults::autotileBorderWidth(),
-                                                 ConfigDefaults::autotileBorderWidthMin(), ConfigDefaults::autotileBorderWidthMax(),
-                                                 "autotile border width");
+        m_autotileBorderWidth =
+            readValidatedInt(*autotiling2, "AutotileBorderWidth", ConfigDefaults::autotileBorderWidth(),
+                             ConfigDefaults::autotileBorderWidthMin(), ConfigDefaults::autotileBorderWidthMax(),
+                             "autotile border width");
         m_autotileBorderRadius =
             readValidatedInt(*autotiling2, "AutotileBorderRadius", ConfigDefaults::autotileBorderRadius(),
                              ConfigDefaults::autotileBorderRadiusMin(), ConfigDefaults::autotileBorderRadiusMax(),
@@ -518,14 +534,18 @@ void Settings::loadAutotilingConfig(QSettingsConfigBackend* backend)
 
 void Settings::loadEditorConfig(QSettingsConfigGroup& editor)
 {
-    m_editorDuplicateShortcut = editor.readString(QStringLiteral("EditorDuplicateShortcut"), ConfigDefaults::editorDuplicateShortcut());
-    m_editorSplitHorizontalShortcut =
-        editor.readString(QStringLiteral("EditorSplitHorizontalShortcut"), ConfigDefaults::editorSplitHorizontalShortcut());
+    m_editorDuplicateShortcut =
+        editor.readString(QStringLiteral("EditorDuplicateShortcut"), ConfigDefaults::editorDuplicateShortcut());
+    m_editorSplitHorizontalShortcut = editor.readString(QStringLiteral("EditorSplitHorizontalShortcut"),
+                                                        ConfigDefaults::editorSplitHorizontalShortcut());
     m_editorSplitVerticalShortcut =
         editor.readString(QStringLiteral("EditorSplitVerticalShortcut"), ConfigDefaults::editorSplitVerticalShortcut());
-    m_editorFillShortcut = editor.readString(QStringLiteral("EditorFillShortcut"), ConfigDefaults::editorFillShortcut());
-    m_editorGridSnappingEnabled = editor.readBool(QStringLiteral("GridSnappingEnabled"), ConfigDefaults::editorGridSnappingEnabled());
-    m_editorEdgeSnappingEnabled = editor.readBool(QStringLiteral("EdgeSnappingEnabled"), ConfigDefaults::editorEdgeSnappingEnabled());
+    m_editorFillShortcut =
+        editor.readString(QStringLiteral("EditorFillShortcut"), ConfigDefaults::editorFillShortcut());
+    m_editorGridSnappingEnabled =
+        editor.readBool(QStringLiteral("GridSnappingEnabled"), ConfigDefaults::editorGridSnappingEnabled());
+    m_editorEdgeSnappingEnabled =
+        editor.readBool(QStringLiteral("EdgeSnappingEnabled"), ConfigDefaults::editorEdgeSnappingEnabled());
 
     double intervalX = editor.readDouble(QStringLiteral("SnapIntervalX"), -1.0);
     if (intervalX < 0.0)
@@ -730,12 +750,16 @@ void Settings::saveAutotilingConfig(QSettingsConfigBackend* backend)
         autotiling->writeInt(QStringLiteral("AutotileMasterCount"), m_autotileMasterCount);
         // Save per-algorithm settings map (reuse shared serialization helpers)
         if (!m_autotilePerAlgorithmSettings.isEmpty()) {
-            autotiling->writeString(QStringLiteral("AutotilePerAlgorithmSettings"),
-                                    QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(
-                                        m_autotilePerAlgorithmSettings)).toJson(QJsonDocument::Compact)));
+            autotiling->writeString(
+                QStringLiteral("AutotilePerAlgorithmSettings"),
+                QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(m_autotilePerAlgorithmSettings))
+                                      .toJson(QJsonDocument::Compact)));
         } else {
             autotiling->deleteKey(QStringLiteral("AutotilePerAlgorithmSettings"));
         }
+        // Clean up legacy centered-master keys after migration to per-algorithm map
+        autotiling->deleteKey(QStringLiteral("AutotileCenteredMasterSplitRatio"));
+        autotiling->deleteKey(QStringLiteral("AutotileCenteredMasterMasterCount"));
         autotiling->writeInt(QStringLiteral("AutotileInnerGap"), m_autotileInnerGap);
         autotiling->writeInt(QStringLiteral("AutotileOuterGap"), m_autotileOuterGap);
         autotiling->writeBool(QStringLiteral("AutotileUsePerSideOuterGap"), m_autotileUsePerSideOuterGap);
