@@ -20,6 +20,7 @@ Build-Depends:
  libkf6kirigami-dev (>= 6.6.0) | kf6-kirigami-dev (>= 6.6.0),
  kwin-dev (>= 6.6.0),
  libxkbcommon-dev,
+ libwayland-dev,
  qt6-wayland-dev (>= 6.6.0),
  qt6-wayland-private-dev (>= 6.6.0),
  plasma-activities-dev,

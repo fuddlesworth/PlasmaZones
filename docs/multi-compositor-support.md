@@ -90,12 +90,12 @@ boundary would go.
 | Window | QML source | Layer | Keyboard | Anchors | ExclusiveZone | Scope |
 |---|---|---|---|---|---|---|
 | Zone overlay | `RenderNodeOverlay.qml` / `ZoneOverlay.qml` | Overlay | None | All 4 edges | -1 | `plasmazones-overlay-{screen}` |
-| Zone selector | `ZoneSelectorWindow.qml` | Top | None | Position-dependent | -1 | via `configureLayerShell` |
-| Layout OSD | `LayoutOsd.qml` | Top | OnDemand | All 4 + margins | -1 | via `configureLayerShell` |
-| Navigation OSD | `NavigationOsd.qml` | Top | OnDemand | All 4 + margins | -1 | via `configureLayerShell` |
+| Zone selector | `ZoneSelectorWindow.qml` | Top | None | Position-dependent | -1 | via `configureLayerSurface` |
+| Layout OSD | `LayoutOsd.qml` | Overlay | None | All 4 + margins | -1 | via `configureLayerSurface` |
+| Navigation OSD | `NavigationOsd.qml` | Overlay | None | All 4 + margins | -1 | via `configureLayerSurface` |
 | Snap assist | `SnapAssistOverlay.qml` | Top | Exclusive | All 4 edges | -1 | via direct call |
 | Layout picker | `LayoutPickerOverlay.qml` | Top | Exclusive | All 4 edges | -1 | via direct call |
-| Shader preview | `RenderNodeOverlay.qml` | Top | OnDemand | All 4 edges | -1 | via `configureLayerShell` |
+| Shader preview | `RenderNodeOverlay.qml` | Overlay | None | All 4 edges | -1 | via `configureLayerSurface` |
 | Geometry sensor | (plain QWindow) | Background | None | All 4 edges | 0 | `plasmazones-sensor-{screen}` |
 
 ## Proposed Replacement

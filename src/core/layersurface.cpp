@@ -57,6 +57,7 @@ LayerSurface* LayerSurface::get(QWindow* window)
                                    << "The platform window was created as xdg_toplevel, not a layer surface."
                                    << "Layer, scope, screen, and anchors will have NO effect."
                                    << "Caller must call LayerSurface::get() BEFORE QWindow::show().";
+        return nullptr;
     }
 
     auto* surface = new LayerSurface(window);

@@ -168,10 +168,13 @@ void LayerShellWindow::handleConfigure(void* data, struct zwlr_layer_surface_v1*
 
     zwlr_layer_surface_v1_ack_configure(surface, serial);
 
-    // Resize the Qt window to the compositor-assigned size
+    // Resize the Qt window to the compositor-assigned size.
+    // The compositor sends surface-local coordinates, but QWindow::resize() works
+    // in device-independent pixels. Divide by devicePixelRatio for fractional scaling.
     if (width > 0 && height > 0) {
         QWindow* qwindow = self->m_waylandWindow->window();
-        qwindow->resize(static_cast<int>(width), static_cast<int>(height));
+        const qreal dpr = qwindow->devicePixelRatio();
+        qwindow->resize(qRound(static_cast<qreal>(width) / dpr), qRound(static_cast<qreal>(height) / dpr));
     }
 
     // Re-apply current properties and commit so the compositor sees
