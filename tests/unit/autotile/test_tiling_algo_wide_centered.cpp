@@ -27,23 +27,23 @@ private:
 
     TilingAlgorithm* wide()
     {
-        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::Wide);
+        return AlgorithmRegistry::instance()->algorithm(QLatin1String("wide"));
     }
     TilingAlgorithm* masterStack()
     {
-        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::MasterStack);
+        return AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
     }
     TilingAlgorithm* dw()
     {
-        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::Dwindle);
+        return AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle"));
     }
     TilingAlgorithm* threeCol()
     {
-        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::ThreeColumn);
+        return AlgorithmRegistry::instance()->algorithm(QLatin1String("three-column"));
     }
     TilingAlgorithm* grid()
     {
-        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::Grid);
+        return AlgorithmRegistry::instance()->algorithm(QLatin1String("grid"));
     }
 
 private Q_SLOTS:
@@ -128,7 +128,7 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         auto zones = AlgorithmRegistry::instance()
-                         ->algorithm(DBus::AutotileAlgorithm::CenteredMaster)
+                         ->algorithm(QLatin1String("centered-master"))
                          ->calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
@@ -136,7 +136,7 @@ private Q_SLOTS:
 
     void testCenteredMaster_metadata()
     {
-        auto* cm = AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::CenteredMaster);
+        auto* cm = AlgorithmRegistry::instance()->algorithm(QLatin1String("centered-master"));
         QVERIFY(cm->supportsMasterCount());
         QVERIFY(cm->supportsSplitRatio());
         QCOMPARE(cm->defaultMaxWindows(), 7);
@@ -151,23 +151,23 @@ private Q_SLOTS:
         QVERIFY(grid()->calculateZones({-3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
         QVERIFY(wide()->calculateZones({-4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
         QVERIFY(AlgorithmRegistry::instance()
-                    ->algorithm(DBus::AutotileAlgorithm::Columns)
+                    ->algorithm(QLatin1String("columns"))
                     ->calculateZones({-5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
                     .isEmpty());
         QVERIFY(AlgorithmRegistry::instance()
-                    ->algorithm(DBus::AutotileAlgorithm::BSP)
+                    ->algorithm(QLatin1String("bsp"))
                     ->calculateZones({-10, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
                     .isEmpty());
         QVERIFY(AlgorithmRegistry::instance()
-                    ->algorithm(DBus::AutotileAlgorithm::Monocle)
+                    ->algorithm(QLatin1String("monocle"))
                     ->calculateZones({-1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
                     .isEmpty());
         QVERIFY(AlgorithmRegistry::instance()
-                    ->algorithm(DBus::AutotileAlgorithm::Rows)
+                    ->algorithm(QLatin1String("rows"))
                     ->calculateZones({-7, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
                     .isEmpty());
         QVERIFY(AlgorithmRegistry::instance()
-                    ->algorithm(DBus::AutotileAlgorithm::CenteredMaster)
+                    ->algorithm(QLatin1String("centered-master"))
                     ->calculateZones({-1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
                     .isEmpty());
     }
@@ -181,22 +181,22 @@ private Q_SLOTS:
         QCOMPARE(grid()->calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).size(), 50);
         QCOMPARE(wide()->calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).size(), 50);
         QCOMPARE(AlgorithmRegistry::instance()
-                     ->algorithm(DBus::AutotileAlgorithm::Columns)
+                     ->algorithm(QLatin1String("columns"))
                      ->calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
                      .size(),
                  50);
         QCOMPARE(AlgorithmRegistry::instance()
-                     ->algorithm(DBus::AutotileAlgorithm::BSP)
+                     ->algorithm(QLatin1String("bsp"))
                      ->calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
                      .size(),
                  50);
         QCOMPARE(AlgorithmRegistry::instance()
-                     ->algorithm(DBus::AutotileAlgorithm::Rows)
+                     ->algorithm(QLatin1String("rows"))
                      ->calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
                      .size(),
                  50);
         QCOMPARE(AlgorithmRegistry::instance()
-                     ->algorithm(DBus::AutotileAlgorithm::CenteredMaster)
+                     ->algorithm(QLatin1String("centered-master"))
                      ->calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
                      .size(),
                  50);
@@ -256,7 +256,7 @@ private Q_SLOTS:
         QRect screen(0, 0, 100, 100);
         TilingState state(QStringLiteral("test"));
         auto zones = AlgorithmRegistry::instance()
-                         ->algorithm(DBus::AutotileAlgorithm::Columns)
+                         ->algorithm(QLatin1String("columns"))
                          ->calculateZones({1, screen, &state, 0, EdgeGaps::uniform(500)});
         QCOMPARE(zones.size(), 1);
         QVERIFY(zones[0].width() >= 1);

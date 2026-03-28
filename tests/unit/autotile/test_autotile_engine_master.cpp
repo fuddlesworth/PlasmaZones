@@ -132,7 +132,7 @@ private Q_SLOTS:
 
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
-        engine.setAlgorithm(DBus::AutotileAlgorithm::Monocle);
+        engine.setAlgorithm(QLatin1String("monocle"));
 
         engine.windowOpened(QStringLiteral("win-mono-1"), screenName);
         QCoreApplication::processEvents();
@@ -161,7 +161,7 @@ private Q_SLOTS:
 
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
-        engine.setAlgorithm(DBus::AutotileAlgorithm::MasterStack);
+        engine.setAlgorithm(QLatin1String("master-stack"));
 
         engine.windowOpened(QStringLiteral("win-ms-1"), screenName);
         engine.windowOpened(QStringLiteral("win-ms-2"), screenName);

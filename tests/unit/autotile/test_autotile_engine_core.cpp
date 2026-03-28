@@ -106,7 +106,7 @@ private Q_SLOTS:
     void testAlgorithm_defaultIsBsp()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
-        QCOMPARE(engine.algorithm(), DBus::AutotileAlgorithm::BSP);
+        QCOMPARE(engine.algorithm(), QLatin1String("bsp"));
     }
 
     void testAlgorithm_setValid()
@@ -114,19 +114,19 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr);
         QSignalSpy spy(&engine, &AutotileEngine::algorithmChanged);
 
-        engine.setAlgorithm(DBus::AutotileAlgorithm::Columns);
+        engine.setAlgorithm(QLatin1String("columns"));
 
-        QCOMPARE(engine.algorithm(), DBus::AutotileAlgorithm::Columns);
+        QCOMPARE(engine.algorithm(), QLatin1String("columns"));
         QCOMPARE(spy.count(), 1);
-        QCOMPARE(spy.first().first().toString(), DBus::AutotileAlgorithm::Columns);
+        QCOMPARE(spy.first().first().toString(), QLatin1String("columns"));
     }
 
     void testAlgorithm_setInvalidFallsBackToDefault()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
-        engine.setAlgorithm(DBus::AutotileAlgorithm::MasterStack);
-        QCOMPARE(engine.algorithm(), DBus::AutotileAlgorithm::MasterStack);
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        QCOMPARE(engine.algorithm(), QLatin1String("master-stack"));
 
         QSignalSpy spy(&engine, &AutotileEngine::algorithmChanged);
         engine.setAlgorithm(QStringLiteral("nonexistent-algorithm"));

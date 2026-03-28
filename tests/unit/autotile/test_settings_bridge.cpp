@@ -129,7 +129,7 @@ private Q_SLOTS:
         engine.setAutotileScreens({screen});
 
         // Set algorithm to master-stack first
-        engine.setAlgorithm(DBus::AutotileAlgorithm::MasterStack);
+        engine.setAlgorithm(QLatin1String("master-stack"));
 
         // Store saved settings for centered-master in the per-algorithm map
         engine.config()->savedAlgorithmSettings[QStringLiteral("centered-master")] = {0.45, 2};
@@ -142,7 +142,7 @@ private Q_SLOTS:
         QVERIFY(qFuzzyCompare(engine.config()->splitRatio, masterStackRatio));
 
         // Now switch to centered-master — saved settings should be applied
-        engine.setAlgorithm(DBus::AutotileAlgorithm::CenteredMaster);
+        engine.setAlgorithm(QLatin1String("centered-master"));
         QVERIFY(qFuzzyCompare(engine.config()->splitRatio, 0.35));
         QCOMPARE(engine.config()->masterCount, 3);
     }
@@ -156,7 +156,7 @@ private Q_SLOTS:
         // Save state
         {
             AutotileEngine engine(nullptr, nullptr, nullptr);
-            engine.setAlgorithm(DBus::AutotileAlgorithm::BSP);
+            engine.setAlgorithm(QLatin1String("bsp"));
 
             TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
             state->addWindow(QStringLiteral("win1"));
@@ -177,7 +177,7 @@ private Q_SLOTS:
             engine.loadState();
 
             // Algorithm should be restored
-            QCOMPARE(engine.algorithm(), DBus::AutotileAlgorithm::BSP);
+            QCOMPARE(engine.algorithm(), QLatin1String("bsp"));
 
             // Per-screen state should be restored
             TilingState* state1 = engine.stateForScreen(QStringLiteral("eDP-1"));

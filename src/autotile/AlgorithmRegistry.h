@@ -61,7 +61,7 @@ class TilingAlgorithm;
  *       or from the main thread.
  *
  * @see TilingAlgorithm for the algorithm interface
- * @see DBus::AutotileAlgorithm in constants.h for algorithm ID constants
+ * @see AlgorithmRegistry::availableAlgorithms() for discovering algorithm IDs
  */
 class PLASMAZONES_EXPORT AlgorithmRegistry : public QObject
 {
@@ -94,7 +94,7 @@ public:
      * The registry takes ownership of the algorithm. If an algorithm with
      * the same ID already exists, the old one is deleted and replaced.
      *
-     * @param id Unique identifier for the algorithm (use DBus::AutotileAlgorithm constants)
+     * @param id Unique identifier for the algorithm (e.g. QLatin1String("bsp"))
      * @param algorithm Algorithm instance (ownership transferred)
      */
     void registerAlgorithm(const QString& id, TilingAlgorithm* algorithm);
@@ -348,7 +348,7 @@ PLASMAZONES_EXPORT QList<PendingAlgorithmRegistration>& pendingAlgorithmRegistra
  * @code
  * namespace {
  * PlasmaZones::AlgorithmRegistrar<MyAlgorithm> registrar(
- *     DBus::AutotileAlgorithm::MyAlgo, 10);  // priority 10
+ *     QLatin1String("my-algo"), 10);  // priority 10
  * }
  * @endcode
  *
@@ -361,7 +361,7 @@ public:
     /**
      * @brief Register an algorithm at static initialization time
      *
-     * @param id Algorithm identifier (use DBus::AutotileAlgorithm constants)
+     * @param id Algorithm identifier (e.g. QLatin1String("master-stack"))
      * @param priority Registration order (lower = registered first, default 100)
      */
     explicit AlgorithmRegistrar(const QString& id, int priority = 100)

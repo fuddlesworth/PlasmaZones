@@ -228,21 +228,21 @@ private Q_SLOTS:
         QVERIFY(available.size() >= 15);
 
         // Verify all core algorithms are registered (order depends on filesystem scan)
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::BSP));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::CenteredMaster));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Columns));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Dwindle));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::DwindleMemory));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Grid));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::MasterStack));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Monocle));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Rows));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Spiral));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::ThreeColumn));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Wide));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Cascade));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Stair));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Spread));
+        QVERIFY(available.contains(QLatin1String("bsp")));
+        QVERIFY(available.contains(QLatin1String("centered-master")));
+        QVERIFY(available.contains(QLatin1String("columns")));
+        QVERIFY(available.contains(QLatin1String("dwindle")));
+        QVERIFY(available.contains(QLatin1String("dwindle-memory")));
+        QVERIFY(available.contains(QLatin1String("grid")));
+        QVERIFY(available.contains(QLatin1String("master-stack")));
+        QVERIFY(available.contains(QLatin1String("monocle")));
+        QVERIFY(available.contains(QLatin1String("rows")));
+        QVERIFY(available.contains(QLatin1String("spiral")));
+        QVERIFY(available.contains(QLatin1String("three-column")));
+        QVERIFY(available.contains(QLatin1String("wide")));
+        QVERIFY(available.contains(QLatin1String("cascade")));
+        QVERIFY(available.contains(QLatin1String("stair")));
+        QVERIFY(available.contains(QLatin1String("spread")));
     }
 
     void testOrder_matchesAllAlgorithms()

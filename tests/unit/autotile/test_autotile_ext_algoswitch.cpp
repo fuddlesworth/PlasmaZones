@@ -36,15 +36,15 @@ private Q_SLOTS:
     void testAlgorithmSwitch_splitRatioResetToNewDefault()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
-        engine.setAlgorithm(DBus::AutotileAlgorithm::MasterStack);
+        engine.setAlgorithm(QLatin1String("master-stack"));
 
-        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::MasterStack);
-        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::BSP);
+        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
+        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
         QVERIFY(msAlgo && bspAlgo);
 
         QVERIFY(qFuzzyCompare(engine.config()->splitRatio, msAlgo->defaultSplitRatio()));
 
-        engine.setAlgorithm(DBus::AutotileAlgorithm::BSP);
+        engine.setAlgorithm(QLatin1String("bsp"));
 
         QVERIFY(qFuzzyCompare(engine.config()->splitRatio, bspAlgo->defaultSplitRatio()));
     }
@@ -52,15 +52,15 @@ private Q_SLOTS:
     void testAlgorithmSwitch_maxWindowsResetWhenUnchanged()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
-        engine.setAlgorithm(DBus::AutotileAlgorithm::MasterStack);
+        engine.setAlgorithm(QLatin1String("master-stack"));
 
-        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::MasterStack);
-        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::BSP);
+        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
+        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
         QVERIFY(msAlgo && bspAlgo);
 
         engine.config()->maxWindows = msAlgo->defaultMaxWindows();
 
-        engine.setAlgorithm(DBus::AutotileAlgorithm::BSP);
+        engine.setAlgorithm(QLatin1String("bsp"));
 
         QCOMPARE(engine.config()->maxWindows, bspAlgo->defaultMaxWindows());
     }
@@ -68,15 +68,15 @@ private Q_SLOTS:
     void testAlgorithmSwitch_maxWindowsPreservedWhenCustomized()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
-        engine.setAlgorithm(DBus::AutotileAlgorithm::MasterStack);
+        engine.setAlgorithm(QLatin1String("master-stack"));
 
-        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::MasterStack);
+        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
         QVERIFY(msAlgo);
 
         const int customMax = msAlgo->defaultMaxWindows() + 3;
         engine.config()->maxWindows = customMax;
 
-        engine.setAlgorithm(DBus::AutotileAlgorithm::BSP);
+        engine.setAlgorithm(QLatin1String("bsp"));
 
         QCOMPARE(engine.config()->maxWindows, customMax);
     }
@@ -88,7 +88,7 @@ private Q_SLOTS:
         // Pre-populate saved settings for centered-master
         engine.config()->savedAlgorithmSettings[QStringLiteral("centered-master")] = {0.45, 2};
 
-        engine.setAlgorithm(DBus::AutotileAlgorithm::MasterStack);
+        engine.setAlgorithm(QLatin1String("master-stack"));
 
         // Switch TO centered-master -- should use per-algorithm values
         const QString centeredMasterId = QStringLiteral("centered-master");
@@ -104,16 +104,16 @@ private Q_SLOTS:
     void testAlgorithmSwitch_propagatesRatioToAllScreens()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
-        engine.setAlgorithm(DBus::AutotileAlgorithm::MasterStack);
+        engine.setAlgorithm(QLatin1String("master-stack"));
 
         TilingState* state1 = engine.stateForScreen(QStringLiteral("eDP-1"));
         TilingState* state2 = engine.stateForScreen(QStringLiteral("HDMI-1"));
         state1->addWindow(QStringLiteral("win1"));
         state2->addWindow(QStringLiteral("win2"));
 
-        engine.setAlgorithm(DBus::AutotileAlgorithm::BSP);
+        engine.setAlgorithm(QLatin1String("bsp"));
 
-        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::BSP);
+        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
         QVERIFY(bspAlgo);
 
         QVERIFY(qFuzzyCompare(state1->splitRatio(), bspAlgo->defaultSplitRatio()));
@@ -126,7 +126,7 @@ private Q_SLOTS:
         const QString screen1 = QStringLiteral("eDP-1");
         const QString screen2 = QStringLiteral("HDMI-1");
         engine.setAutotileScreens({screen1, screen2});
-        engine.setAlgorithm(DBus::AutotileAlgorithm::MasterStack);
+        engine.setAlgorithm(QLatin1String("master-stack"));
 
         QVariantMap overrides;
         overrides[QStringLiteral("SplitRatio")] = 0.8;
@@ -137,9 +137,9 @@ private Q_SLOTS:
 
         QVERIFY(qFuzzyCompare(state2->splitRatio(), 0.8));
 
-        engine.setAlgorithm(DBus::AutotileAlgorithm::BSP);
+        engine.setAlgorithm(QLatin1String("bsp"));
 
-        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::BSP);
+        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
         QVERIFY(bspAlgo);
 
         QVERIFY(qFuzzyCompare(state1->splitRatio(), bspAlgo->defaultSplitRatio()));
@@ -153,9 +153,9 @@ private Q_SLOTS:
         engine.setAutotileScreens({screen});
 
         // Start from MasterStack (which has fewer default maxWindows than BSP)
-        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::MasterStack);
+        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
         QVERIFY(msAlgo);
-        engine.setAlgorithm(DBus::AutotileAlgorithm::MasterStack);
+        engine.setAlgorithm(QLatin1String("master-stack"));
 
         engine.config()->maxWindows = msAlgo->defaultMaxWindows();
 
@@ -167,9 +167,9 @@ private Q_SLOTS:
         TilingState* state = engine.stateForScreen(screen);
         QVERIFY(state);
 
-        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::BSP);
+        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
         if (bspAlgo && bspAlgo->defaultMaxWindows() > msAlgo->defaultMaxWindows()) {
-            engine.setAlgorithm(DBus::AutotileAlgorithm::BSP);
+            engine.setAlgorithm(QLatin1String("bsp"));
             QCoreApplication::processEvents();
 
             QCOMPARE(engine.config()->maxWindows, bspAlgo->defaultMaxWindows());

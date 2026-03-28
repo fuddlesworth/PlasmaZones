@@ -30,7 +30,7 @@ private:
 
     TilingAlgorithm* dwindleMemory()
     {
-        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::DwindleMemory);
+        return AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle-memory"));
     }
 
 private Q_SLOTS:

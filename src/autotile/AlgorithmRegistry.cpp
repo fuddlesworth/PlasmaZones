@@ -30,8 +30,6 @@ bool AlgorithmRegistry::PreviewParams::operator==(const PreviewParams& other) co
         && savedAlgorithmSettings == other.savedAlgorithmSettings;
 }
 
-using namespace DBus::AutotileAlgorithm;
-
 // Global pending registrations list - shared by all AlgorithmRegistrar instantiations
 QList<PendingAlgorithmRegistration>& pendingAlgorithmRegistrations()
 {

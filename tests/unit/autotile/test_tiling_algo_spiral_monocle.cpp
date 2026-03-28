@@ -31,19 +31,19 @@ private:
 
     TilingAlgorithm* spiral()
     {
-        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::Spiral);
+        return AlgorithmRegistry::instance()->algorithm(QLatin1String("spiral"));
     }
     TilingAlgorithm* dwindleAlgo()
     {
-        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::Dwindle);
+        return AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle"));
     }
     TilingAlgorithm* monocle()
     {
-        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::Monocle);
+        return AlgorithmRegistry::instance()->algorithm(QLatin1String("monocle"));
     }
     TilingAlgorithm* rows()
     {
-        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::Rows);
+        return AlgorithmRegistry::instance()->algorithm(QLatin1String("rows"));
     }
 
 private Q_SLOTS:

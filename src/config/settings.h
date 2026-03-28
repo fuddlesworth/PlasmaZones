@@ -1629,7 +1629,7 @@ private:
 
     // Autotiling Settings
     bool m_autotileEnabled = ConfigDefaults::autotileEnabled();
-    QString m_autotileAlgorithm = QString(DBus::AutotileAlgorithm::BSP);
+    QString m_autotileAlgorithm = ConfigDefaults::autotileAlgorithm();
     qreal m_autotileSplitRatio = ConfigDefaults::autotileSplitRatio();
     int m_autotileMasterCount = ConfigDefaults::autotileMasterCount();
     QVariantMap m_autotilePerAlgorithmSettings;
@@ -1685,12 +1685,11 @@ private:
     QString m_openSettingsShortcut = ConfigDefaults::openSettingsShortcut();
     QString m_previousLayoutShortcut = ConfigDefaults::previousLayoutShortcut();
     QString m_nextLayoutShortcut = ConfigDefaults::nextLayoutShortcut();
-    QString m_quickLayoutShortcuts[9] = {
-        ConfigDefaults::quickLayout1Shortcut(), ConfigDefaults::quickLayout2Shortcut(),
-        ConfigDefaults::quickLayout3Shortcut(), ConfigDefaults::quickLayout4Shortcut(),
-        ConfigDefaults::quickLayout5Shortcut(), ConfigDefaults::quickLayout6Shortcut(),
-        ConfigDefaults::quickLayout7Shortcut(), ConfigDefaults::quickLayout8Shortcut(),
-        ConfigDefaults::quickLayout9Shortcut()};
+    QString m_quickLayoutShortcuts[9] = {ConfigDefaults::quickLayout1Shortcut(), ConfigDefaults::quickLayout2Shortcut(),
+                                         ConfigDefaults::quickLayout3Shortcut(), ConfigDefaults::quickLayout4Shortcut(),
+                                         ConfigDefaults::quickLayout5Shortcut(), ConfigDefaults::quickLayout6Shortcut(),
+                                         ConfigDefaults::quickLayout7Shortcut(), ConfigDefaults::quickLayout8Shortcut(),
+                                         ConfigDefaults::quickLayout9Shortcut()};
 
     // Keyboard Navigation Shortcuts
     // Meta+Shift+Left/Right conflicts with KDE's "Window to Next/Previous Screen";
@@ -1719,12 +1718,11 @@ private:
 
     // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
     // Meta+1-9 conflicts with KDE's virtual desktop switching; we use Meta+Ctrl+1-9 instead.
-    QString m_snapToZoneShortcuts[9] = {
-        ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
-        ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
-        ConfigDefaults::snapToZone5Shortcut(), ConfigDefaults::snapToZone6Shortcut(),
-        ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
-        ConfigDefaults::snapToZone9Shortcut()};
+    QString m_snapToZoneShortcuts[9] = {ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
+                                        ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
+                                        ConfigDefaults::snapToZone5Shortcut(), ConfigDefaults::snapToZone6Shortcut(),
+                                        ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
+                                        ConfigDefaults::snapToZone9Shortcut()};
 
     // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
     // Rotates all windows in the current layout clockwise or counterclockwise

@@ -50,7 +50,7 @@ private Q_SLOTS:
     void testBuiltIn_masterStackRegistered()
     {
         auto* registry = AlgorithmRegistry::instance();
-        auto* algo = registry->algorithm(DBus::AutotileAlgorithm::MasterStack);
+        auto* algo = registry->algorithm(QLatin1String("master-stack"));
 
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("Master + Stack"));
@@ -61,7 +61,7 @@ private Q_SLOTS:
     void testBuiltIn_columnsRegistered()
     {
         auto* registry = AlgorithmRegistry::instance();
-        auto* algo = registry->algorithm(DBus::AutotileAlgorithm::Columns);
+        auto* algo = registry->algorithm(QLatin1String("columns"));
 
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("Columns"));
@@ -72,7 +72,7 @@ private Q_SLOTS:
     void testBuiltIn_bspRegistered()
     {
         auto* registry = AlgorithmRegistry::instance();
-        auto* algo = registry->algorithm(DBus::AutotileAlgorithm::BSP);
+        auto* algo = registry->algorithm(QLatin1String("bsp"));
 
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("Binary Split"));
@@ -83,7 +83,7 @@ private Q_SLOTS:
     void testBuiltIn_rowsRegistered()
     {
         auto* registry = AlgorithmRegistry::instance();
-        auto* algo = registry->algorithm(DBus::AutotileAlgorithm::Rows);
+        auto* algo = registry->algorithm(QLatin1String("rows"));
 
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("Rows"));
@@ -94,7 +94,7 @@ private Q_SLOTS:
     void testBuiltIn_dwindleRegistered()
     {
         auto* registry = AlgorithmRegistry::instance();
-        auto* algo = registry->algorithm(DBus::AutotileAlgorithm::Dwindle);
+        auto* algo = registry->algorithm(QLatin1String("dwindle"));
 
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("Dwindle"));
@@ -105,7 +105,7 @@ private Q_SLOTS:
     void testBuiltIn_spiralRegistered()
     {
         auto* registry = AlgorithmRegistry::instance();
-        auto* algo = registry->algorithm(DBus::AutotileAlgorithm::Spiral);
+        auto* algo = registry->algorithm(QLatin1String("spiral"));
 
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("Spiral"));
@@ -116,7 +116,7 @@ private Q_SLOTS:
     void testBuiltIn_monocleRegistered()
     {
         auto* registry = AlgorithmRegistry::instance();
-        auto* algo = registry->algorithm(DBus::AutotileAlgorithm::Monocle);
+        auto* algo = registry->algorithm(QLatin1String("monocle"));
 
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("Monocle"));
@@ -127,7 +127,7 @@ private Q_SLOTS:
     void testBuiltIn_threeColumnRegistered()
     {
         auto* registry = AlgorithmRegistry::instance();
-        auto* algo = registry->algorithm(DBus::AutotileAlgorithm::ThreeColumn);
+        auto* algo = registry->algorithm(QLatin1String("three-column"));
 
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("Three Column"));
@@ -138,7 +138,7 @@ private Q_SLOTS:
     void testBuiltIn_gridRegistered()
     {
         auto* registry = AlgorithmRegistry::instance();
-        auto* algo = registry->algorithm(DBus::AutotileAlgorithm::Grid);
+        auto* algo = registry->algorithm(QLatin1String("grid"));
 
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("Grid"));
@@ -149,7 +149,7 @@ private Q_SLOTS:
     void testBuiltIn_wideRegistered()
     {
         auto* registry = AlgorithmRegistry::instance();
-        auto* algo = registry->algorithm(DBus::AutotileAlgorithm::Wide);
+        auto* algo = registry->algorithm(QLatin1String("wide"));
 
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("Wide"));
@@ -160,7 +160,7 @@ private Q_SLOTS:
     void testBuiltIn_centeredMasterRegistered()
     {
         auto* registry = AlgorithmRegistry::instance();
-        auto* algo = registry->algorithm(DBus::AutotileAlgorithm::CenteredMaster);
+        auto* algo = registry->algorithm(QLatin1String("centered-master"));
 
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("Centered Master"));
@@ -173,21 +173,21 @@ private Q_SLOTS:
         auto* registry = AlgorithmRegistry::instance();
         auto available = registry->availableAlgorithms();
 
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::MasterStack));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Wide));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Columns));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::BSP));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Rows));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Dwindle));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Spiral));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Monocle));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::ThreeColumn));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Grid));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::CenteredMaster));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Cascade));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Stair));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::Spread));
-        QVERIFY(available.contains(DBus::AutotileAlgorithm::DwindleMemory));
+        QVERIFY(available.contains(QLatin1String("master-stack")));
+        QVERIFY(available.contains(QLatin1String("wide")));
+        QVERIFY(available.contains(QLatin1String("columns")));
+        QVERIFY(available.contains(QLatin1String("bsp")));
+        QVERIFY(available.contains(QLatin1String("rows")));
+        QVERIFY(available.contains(QLatin1String("dwindle")));
+        QVERIFY(available.contains(QLatin1String("spiral")));
+        QVERIFY(available.contains(QLatin1String("monocle")));
+        QVERIFY(available.contains(QLatin1String("three-column")));
+        QVERIFY(available.contains(QLatin1String("grid")));
+        QVERIFY(available.contains(QLatin1String("centered-master")));
+        QVERIFY(available.contains(QLatin1String("cascade")));
+        QVERIFY(available.contains(QLatin1String("stair")));
+        QVERIFY(available.contains(QLatin1String("spread")));
+        QVERIFY(available.contains(QLatin1String("dwindle-memory")));
         // At least 15 built-in algorithms are registered before any scripted loader runs
         QVERIFY(available.size() >= 15);
     }
@@ -198,14 +198,14 @@ private Q_SLOTS:
 
     void testDefault_algorithmId()
     {
-        QCOMPARE(AlgorithmRegistry::defaultAlgorithmId(), DBus::AutotileAlgorithm::BSP);
+        QCOMPARE(AlgorithmRegistry::defaultAlgorithmId(), QLatin1String("bsp"));
     }
 
     void testDefault_algorithmInstance()
     {
         auto* registry = AlgorithmRegistry::instance();
         auto* defaultAlgo = registry->defaultAlgorithm();
-        auto* bsp = registry->algorithm(DBus::AutotileAlgorithm::BSP);
+        auto* bsp = registry->algorithm(QLatin1String("bsp"));
 
         QVERIFY(defaultAlgo != nullptr);
         QCOMPARE(defaultAlgo, bsp);
@@ -235,17 +235,17 @@ private Q_SLOTS:
     {
         auto* registry = AlgorithmRegistry::instance();
 
-        QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::MasterStack));
-        QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::Columns));
-        QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::BSP));
-        QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::Rows));
-        QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::Dwindle));
-        QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::Spiral));
-        QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::Monocle));
-        QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::ThreeColumn));
-        QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::Grid));
-        QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::Wide));
-        QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::CenteredMaster));
+        QVERIFY(registry->hasAlgorithm(QLatin1String("master-stack")));
+        QVERIFY(registry->hasAlgorithm(QLatin1String("columns")));
+        QVERIFY(registry->hasAlgorithm(QLatin1String("bsp")));
+        QVERIFY(registry->hasAlgorithm(QLatin1String("rows")));
+        QVERIFY(registry->hasAlgorithm(QLatin1String("dwindle")));
+        QVERIFY(registry->hasAlgorithm(QLatin1String("spiral")));
+        QVERIFY(registry->hasAlgorithm(QLatin1String("monocle")));
+        QVERIFY(registry->hasAlgorithm(QLatin1String("three-column")));
+        QVERIFY(registry->hasAlgorithm(QLatin1String("grid")));
+        QVERIFY(registry->hasAlgorithm(QLatin1String("wide")));
+        QVERIFY(registry->hasAlgorithm(QLatin1String("centered-master")));
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("nonexistent")));
     }
 

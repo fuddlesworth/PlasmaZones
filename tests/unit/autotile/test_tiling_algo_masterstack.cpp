@@ -27,15 +27,15 @@ private:
 
     TilingAlgorithm* ms()
     {
-        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::MasterStack);
+        return AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
     }
     TilingAlgorithm* dw()
     {
-        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::Dwindle);
+        return AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle"));
     }
     TilingAlgorithm* bsp()
     {
-        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::BSP);
+        return AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
     }
 
 private Q_SLOTS:

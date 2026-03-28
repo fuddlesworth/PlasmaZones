@@ -417,26 +417,6 @@ inline constexpr QLatin1String ZoneDetection{"org.plasmazones.ZoneDetection"};
 inline constexpr QLatin1String Autotile{"org.plasmazones.Autotile"};
 }
 
-/**
- * @brief Autotile algorithm D-Bus identifiers
- */
-namespace AutotileAlgorithm {
-inline constexpr QLatin1String MasterStack{"master-stack"};
-inline constexpr QLatin1String BSP{"bsp"};
-inline constexpr QLatin1String Columns{"columns"};
-inline constexpr QLatin1String Rows{"rows"};
-inline constexpr QLatin1String Dwindle{"dwindle"};
-inline constexpr QLatin1String DwindleMemory{"dwindle-memory"};
-inline constexpr QLatin1String Spiral{"spiral"};
-inline constexpr QLatin1String Monocle{"monocle"};
-inline constexpr QLatin1String ThreeColumn{"three-column"};
-inline constexpr QLatin1String Grid{"grid"};
-inline constexpr QLatin1String Wide{"wide"};
-inline constexpr QLatin1String CenteredMaster{"centered-master"};
-inline constexpr QLatin1String Cascade{"cascade"};
-inline constexpr QLatin1String Stair{"stair"};
-inline constexpr QLatin1String Spread{"spread"};
-}
 }
 
 /**

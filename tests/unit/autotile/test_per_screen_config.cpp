@@ -52,17 +52,17 @@ private Q_SLOTS:
         engine.setAutotileScreens({screen});
 
         // Global algorithm is master-stack
-        engine.setAlgorithm(DBus::AutotileAlgorithm::MasterStack);
+        engine.setAlgorithm(QLatin1String("master-stack"));
 
         // Override screen to use BSP algorithm (which has a different default maxWindows)
         QVariantMap overrides;
-        overrides[QStringLiteral("Algorithm")] = DBus::AutotileAlgorithm::BSP;
+        overrides[QStringLiteral("Algorithm")] = QLatin1String("bsp");
         engine.applyPerScreenConfig(screen, overrides);
 
         // When the per-screen algo differs and global maxWindows is at the global
         // algo's default, effectiveMaxWindows should return the per-screen algo's default
-        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::BSP);
-        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::MasterStack);
+        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
+        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
         QVERIFY(bspAlgo);
         QVERIFY(msAlgo);
 
@@ -83,15 +83,15 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("HDMI-1");
         engine.setAutotileScreens({screen});
 
-        engine.setAlgorithm(DBus::AutotileAlgorithm::MasterStack);
+        engine.setAlgorithm(QLatin1String("master-stack"));
 
         // Override screen to use BSP
         QVariantMap overrides;
-        overrides[QStringLiteral("Algorithm")] = DBus::AutotileAlgorithm::BSP;
+        overrides[QStringLiteral("Algorithm")] = QLatin1String("bsp");
         engine.applyPerScreenConfig(screen, overrides);
 
         // User has explicitly customized global maxWindows away from algo default
-        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::MasterStack);
+        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
         QVERIFY(msAlgo);
         engine.config()->maxWindows = msAlgo->defaultMaxWindows() + 2;
 
@@ -154,10 +154,10 @@ private Q_SLOTS:
         // Override with a new algorithm but NO explicit SplitRatio override.
         // The algorithm override should reset the split ratio to the new algo's default.
         QVariantMap overrides;
-        overrides[QStringLiteral("Algorithm")] = DBus::AutotileAlgorithm::BSP;
+        overrides[QStringLiteral("Algorithm")] = QLatin1String("bsp");
         engine.applyPerScreenConfig(screen, overrides);
 
-        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::BSP);
+        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
         QVERIFY(bspAlgo);
         QVERIFY(qFuzzyCompare(state->splitRatio(), bspAlgo->defaultSplitRatio()));
     }
