@@ -12,175 +12,6 @@
 namespace PlasmaZones {
 namespace ScriptedHelpers {
 
-QString treeHelperJs()
-{
-    // Inject MaxRuntimeTreeDepth from C++ constant so JS and C++ stay in sync
-    return QStringLiteral(
-               "function applyTreeGeometry(node, rect, gap, _depth) {"
-               "  if ((_depth || 0) > %1) return [];")
-               .arg(AutotileDefaults::MaxRuntimeTreeDepth)
-        + QStringLiteral(
-               "  if (!node) return [];"
-               "  if (node.windowId !== undefined && node.windowId !== '') {"
-               "    return [{x: rect.x, y: rect.y, width: rect.width, height: rect.height}];"
-               "  }"
-               "  if (!node.first || !node.second) {"
-               "    return [{x: rect.x, y: rect.y, width: rect.width, height: rect.height}];"
-               "  }"
-               "  var ratio = Math.max(0.1, Math.min(0.9, node.ratio || 0.5));"
-               "  var zones = [];"
-               "  var content;"
-               "  if (node.horizontal) {"
-               "    content = rect.height - gap;"
-               "    if (content <= 0) {"
-               "      zones = zones.concat(applyTreeGeometry(node.first, rect, 0, (_depth||0)+1));"
-               "      zones = zones.concat(applyTreeGeometry(node.second, rect, 0, (_depth||0)+1));"
-               "    } else {"
-               "      var h1 = Math.round(content * ratio);"
-               "      var h2 = content - h1;"
-               "      zones = zones.concat(applyTreeGeometry(node.first,"
-               "        {x: rect.x, y: rect.y, width: rect.width, height: h1}, gap, (_depth||0)+1));"
-               "      zones = zones.concat(applyTreeGeometry(node.second,"
-               "        {x: rect.x, y: rect.y + h1 + gap, width: rect.width, height: h2}, gap, (_depth||0)+1));"
-               "    }"
-               "  } else {"
-               "    content = rect.width - gap;"
-               "    if (content <= 0) {"
-               "      zones = zones.concat(applyTreeGeometry(node.first, rect, 0, (_depth||0)+1));"
-               "      zones = zones.concat(applyTreeGeometry(node.second, rect, 0, (_depth||0)+1));"
-               "    } else {"
-               "      var w1 = Math.round(content * ratio);"
-               "      var w2 = content - w1;"
-               "      zones = zones.concat(applyTreeGeometry(node.first,"
-               "        {x: rect.x, y: rect.y, width: w1, height: rect.height}, gap, (_depth||0)+1));"
-               "      zones = zones.concat(applyTreeGeometry(node.second,"
-               "        {x: rect.x + w1 + gap, y: rect.y, width: w2, height: rect.height}, gap, (_depth||0)+1));"
-               "    }"
-               "  }"
-               "  return zones;"
-               "}");
-}
-
-QString lShapeHelperJs()
-{
-    return QStringLiteral(
-        "function lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rightHeight) {"
-        "  splitRatio = Math.max(0.1, Math.min(0.9, splitRatio));"
-        "  if (distribute === undefined) distribute = 'alternate';"
-        "  if (bottomWidth === undefined) bottomWidth = 'master';"
-        "  if (rightHeight === undefined) rightHeight = 'master';"
-        "  var masterW = Math.max(1, Math.round(area.width * splitRatio - gap / 2));"
-        "  var masterH = Math.max(1, Math.round(area.height * splitRatio - gap / 2));"
-        "  var zones = [{ x: area.x, y: area.y, width: masterW, height: masterH }];"
-        "  if (count <= 1) return zones;"
-        "  var rH = (rightHeight === 'master') ? masterH : area.height;"
-        "  if (typeof rightHeight === 'number') rH = rightHeight;"
-        "  if (count === 2) {"
-        "    zones.push({ x: area.x + masterW + gap, y: area.y,"
-        "      width: Math.max(1, area.x + area.width - (area.x + masterW + gap)),"
-        "      height: rH });"
-        "    return zones;"
-        "  }"
-        "  var rightCount, bottomCount;"
-        "  if (distribute === 'alternate') {"
-        "    rightCount = 0; bottomCount = 0;"
-        "    for (var i = 1; i < count; i++) {"
-        "      if ((i - 1) % 2 === 0) rightCount++; else bottomCount++;"
-        "    }"
-        "  } else {"
-        "    var remaining = count - 1;"
-        "    rightCount = Math.ceil(remaining / 2);"
-        "    bottomCount = Math.floor(remaining / 2);"
-        "  }"
-        "  var rightX = area.x + masterW + gap;"
-        "  var rightW = Math.max(1, area.x + area.width - rightX);"
-        "  if (rightHeight === 'master' && bottomCount > 0) rH = masterH;"
-        "  var btmW = (bottomWidth === 'full') ? area.width : masterW;"
-        "  if (typeof bottomWidth === 'number') btmW = bottomWidth;"
-        "  var rightTotalGaps = (rightCount - 1) * gap;"
-        "  var bottomTotalGaps = (bottomCount - 1) * gap;"
-        "  if ((rightCount > 0 && rightTotalGaps >= rH) || (bottomCount > 0 && bottomTotalGaps >= btmW)) {"
-        "    for (var i = 1; i < count; i++) {"
-        "      zones.push({ x: area.x, y: area.y, width: area.width, height: area.height });"
-        "    }"
-        "    return zones;"
-        "  }"
-        "  var rightTileH = Math.max(1, Math.round((rH - rightTotalGaps) / rightCount));"
-        "  for (var r = 0; r < rightCount; r++) {"
-        "    var ry = Math.min(area.y + r * (rightTileH + gap), area.y + rH - 1);"
-        "    var rh = Math.max(1, (r === rightCount - 1) ? (area.y + rH - ry) : rightTileH);"
-        "    zones.push({ x: rightX, y: ry, width: rightW, height: rh });"
-        "  }"
-        "  if (bottomCount > 0) {"
-        "    var bottomY = area.y + masterH + gap;"
-        "    var bottomH = Math.max(1, area.y + area.height - bottomY);"
-        "    var bottomTileW = Math.max(1, Math.round((btmW - bottomTotalGaps) / bottomCount));"
-        "    for (var b = 0; b < bottomCount; b++) {"
-        "      var bx = Math.min(area.x + b * (bottomTileW + gap), area.x + btmW - 1);"
-        "      var bw = Math.max(1, (b === bottomCount - 1) ? (area.x + btmW - bx) : bottomTileW);"
-        "      zones.push({ x: bx, y: bottomY, width: bw, height: bottomH });"
-        "    }"
-        "  }"
-        "  return zones;"
-        "}");
-}
-
-QString deckHelperJs()
-{
-    return QStringLiteral(
-        "function deckLayout(area, count, focusedFraction, horizontal) {"
-        "  if (horizontal === undefined) horizontal = false;"
-        "  var axisSize = horizontal ? area.height : area.width;"
-        "  var bgCount = count - 1;"
-        "  var focusedSize = Math.max(1, Math.round(axisSize * focusedFraction));"
-        "  var peekTotal = axisSize - focusedSize;"
-        "  var peekSize = bgCount > 0 ? Math.max(1, Math.round(Math.max(0, peekTotal) / bgCount)) : 0;"
-        "  var zones = [];"
-        "  zones.push({ x: area.x, y: area.y,"
-        "    width: horizontal ? area.width : focusedSize,"
-        "    height: horizontal ? focusedSize : area.height });"
-        "  for (var i = 0; i < bgCount; i++) {"
-        "    var peekOffset = Math.min(focusedSize + i * peekSize, axisSize - 1);"
-        "    if (horizontal) {"
-        "      var peekY = area.y + peekOffset;"
-        "      zones.push({ x: area.x,"
-        "        y: Math.min(peekY, area.y + area.height - 1),"
-        "        width: area.width,"
-        "        height: Math.max(1, area.y + area.height - peekY) });"
-        "    } else {"
-        "      var peekX = area.x + peekOffset;"
-        "      zones.push({"
-        "        x: Math.min(peekX, area.x + area.width - 1),"
-        "        y: area.y,"
-        "        width: Math.max(1, area.x + area.width - peekX),"
-        "        height: area.height });"
-        "    }"
-        "  }"
-        "  return zones;"
-        "}");
-}
-
-QString distributeEvenlyHelperJs()
-{
-    return QStringLiteral(
-        "function distributeEvenly(start, total, count, gap) {"
-        "  if (count <= 0) return [];"
-        "  if (total <= 0) { var r = []; for (var i = 0; i < count; i++) r.push({pos: start, size: 1}); return r; }"
-        "  if (count === 1) return [{pos: start, size: total}];"
-        "  var totalGaps = (count - 1) * gap;"
-        "  if (totalGaps >= total) { var r = []; for (var i = 0; i < count; i++) r.push({pos: start, size: total}); "
-        "return r; }"
-        "  var tileSize = Math.max(1, Math.round((total - totalGaps) / count));"
-        "  var result = [];"
-        "  for (var i = 0; i < count; i++) {"
-        "    var pos = start + i * (tileSize + gap);"
-        "    var size = (i === count - 1) ? Math.max(1, start + total - pos) : tileSize;"
-        "    result.push({pos: pos, size: size});"
-        "  }"
-        "  return result;"
-        "}");
-}
-
 QVector<QRect> jsArrayToRects(const QJSValue& result, const QString& scriptId, int maxZones)
 {
     QVector<QRect> rects;
@@ -286,6 +117,8 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
             meta.supportsMemory = (value == QLatin1String("true"));
         } else if (key == QLatin1String("centerLayout")) {
             meta.centerLayout = (value == QLatin1String("true"));
+        } else if (key == QLatin1String("supportsMinSizes")) {
+            meta.supportsMinSizes = (value == QLatin1String("true"));
         } else if (key == QLatin1String("defaultSplitRatio")) {
             bool ok = false;
             const qreal v = value.toDouble(&ok);
@@ -310,6 +143,17 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
             if (value == QLatin1String("all") || value == QLatin1String("last") || value == QLatin1String("first")
                 || value == QLatin1String("firstAndLast") || value == QLatin1String("none")) {
                 meta.zoneNumberDisplay = value;
+            }
+        } else if (key == QLatin1String("builtinId")) {
+            static const QRegularExpression builtinIdRe(QStringLiteral("^[a-z][a-z0-9-]*$"));
+            if (value.startsWith(QLatin1String("script:"))) {
+                qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: @builtinId must not start with 'script:'"
+                                      << "value=" << value << "in" << filePath;
+            } else if (!builtinIdRe.match(value).hasMatch()) {
+                qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: invalid @builtinId" << value << "in"
+                                      << filePath;
+            } else {
+                meta.builtinId = value.left(64);
             }
         } else if (key != QLatin1String("icon")) {
             qCDebug(lcAutotile) << "ScriptedAlgorithm::parseMetadata: unknown metadata key" << key << "in" << filePath;

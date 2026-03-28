@@ -209,6 +209,17 @@ public:
     virtual bool isScripted() const noexcept;
 
     /**
+     * @brief Whether this algorithm supports per-window minimum size constraints
+     *
+     * Most algorithms respect the minSizes parameter. Algorithms that ignore
+     * it (e.g., Floating Center, Tatami) return false so the settings UI can
+     * disable min-size controls for them.
+     *
+     * @return true if the algorithm honors minSizes (default: true)
+     */
+    virtual bool supportsMinSizes() const noexcept;
+
+    /**
      * @brief Whether this algorithm maintains persistent state across retiles
      *
      * Memory algorithms (like DwindleMemory) remember per-split ratios and

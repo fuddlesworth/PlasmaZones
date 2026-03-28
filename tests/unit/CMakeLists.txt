@@ -57,25 +57,44 @@ add_test(NAME test_snap_engine COMMAND test_snap_engine)
 # autotile/ — Tiling Algorithm Tests (split by algorithm family)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_tiling_algo_masterstack autotile/test_tiling_algo_masterstack.cpp)
+target_compile_definitions(test_tiling_algo_masterstack PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_tiling_algo_spiral_monocle autotile/test_tiling_algo_spiral_monocle.cpp)
+target_compile_definitions(test_tiling_algo_spiral_monocle PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_tiling_algo_grid_threecolumn autotile/test_tiling_algo_grid_threecolumn.cpp)
+target_compile_definitions(test_tiling_algo_grid_threecolumn PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_tiling_algo_wide_centered autotile/test_tiling_algo_wide_centered.cpp)
+target_compile_definitions(test_tiling_algo_wide_centered PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_tiling_algo_cascade_stair_spread autotile/test_tiling_algo_cascade_stair_spread.cpp)
+target_compile_definitions(test_tiling_algo_cascade_stair_spread PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_tiling_algo_lshape autotile/test_tiling_algo_lshape.cpp)
+target_compile_definitions(test_tiling_algo_lshape PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_tiling_algo_deck_zen autotile/test_tiling_algo_deck_zen.cpp)
+target_compile_definitions(test_tiling_algo_deck_zen PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_tiling_algo_edge_cases autotile/test_tiling_algo_edge_cases.cpp)
+target_compile_definitions(test_tiling_algo_edge_cases PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_tiling_algo_bsp autotile/test_tiling_algo_bsp.cpp)
+target_compile_definitions(test_tiling_algo_bsp PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Algorithm Registry Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_algorithm_registry autotile/test_algorithm_registry.cpp)
+target_compile_definitions(test_algorithm_registry PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_algorithm_registry_custom autotile/test_algorithm_registry_custom.cpp)
+target_compile_definitions(test_algorithm_registry_custom PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_scripted_algorithm autotile/test_scripted_algorithm.cpp)
 target_compile_definitions(test_scripted_algorithm PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_split_tree autotile/test_split_tree.cpp)
+target_compile_definitions(test_split_tree PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_scripted_algorithm_loader autotile/test_scripted_algorithm_loader.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Autotile Engine Tests (core, master, minsize, overflow)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_autotile_engine_core autotile/test_autotile_engine_core.cpp)
+target_compile_definitions(test_autotile_engine_core PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_autotile_engine_master autotile/test_autotile_engine_master.cpp)
+target_compile_definitions(test_autotile_engine_master PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_autotile_engine_minsize autotile/test_autotile_engine_minsize.cpp)
 pz_add_test(test_autotile_engine_overflow autotile/test_autotile_engine_overflow.cpp)
 
@@ -84,6 +103,7 @@ pz_add_test(test_autotile_engine_overflow autotile/test_autotile_engine_overflow
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_autotile_ext_startup_float autotile/test_autotile_ext_startup_float.cpp)
 pz_add_test(test_autotile_ext_algoswitch autotile/test_autotile_ext_algoswitch.cpp)
+target_compile_definitions(test_autotile_ext_algoswitch PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_autotile_ext_overflow autotile/test_autotile_ext_overflow.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -162,6 +182,7 @@ add_test(NAME test_zone_detection_service COMMAND test_zone_detection_service)
 # autotile/ — Per-Screen Config Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_per_screen_config autotile/test_per_screen_config.cpp)
+target_compile_definitions(test_per_screen_config PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Navigation Controller Tests
@@ -172,6 +193,7 @@ pz_add_test(test_navigation_controller autotile/test_navigation_controller.cpp)
 # autotile/ — Settings Bridge Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_settings_bridge autotile/test_settings_bridge.cpp)
+target_compile_definitions(test_settings_bridge PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ui/ — Zone Shader Item Tests — need Qt6::Quick + plasmazones_rendering
@@ -213,6 +235,9 @@ set(_all_tests
     test_wts_lifecycle test_wts_session test_wts_queries
     test_tiling_algo_masterstack test_tiling_algo_spiral_monocle
     test_tiling_algo_grid_threecolumn test_tiling_algo_wide_centered
+    test_tiling_algo_cascade_stair_spread
+    test_tiling_algo_lshape test_tiling_algo_deck_zen test_tiling_algo_edge_cases
+    test_tiling_algo_bsp
     test_algorithm_registry test_algorithm_registry_custom
     test_scripted_algorithm test_split_tree test_scripted_algorithm_loader
     test_autotile_engine_core test_autotile_engine_master

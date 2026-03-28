@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Deck
+// @builtinId deck
 // @description Focused window takes the left portion; remaining windows peek from the right edge. Ratio controls focused window width
 // @producesOverlappingZones true
 // @supportsMasterCount false
@@ -27,7 +28,7 @@ function calculateZones(params) {
     const count = params.windowCount;
     if (count <= 0) return [];
     const area = params.area;
-    const focusedFraction = params.splitRatio;
+    const splitRatio = clampSplitRatio(params.splitRatio);
 
-    return deckLayout(area, count, focusedFraction, false);
+    return deckLayout(area, count, splitRatio, false);
 }

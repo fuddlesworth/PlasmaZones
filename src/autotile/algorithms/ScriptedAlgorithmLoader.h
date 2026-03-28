@@ -70,6 +70,7 @@ private:
     void scheduleRefresh();
     QStringList algorithmDirectories() const;
     void watchDirectory(const QString& dirPath);
+    QStringList validatedJsFiles(const QString& dirPath, int maxFiles) const;
 
     QFileSystemWatcher* m_watcher = nullptr;
     QTimer* m_refreshTimer = nullptr;

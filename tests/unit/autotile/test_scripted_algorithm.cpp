@@ -448,16 +448,31 @@ private Q_SLOTS:
         QTest::addColumn<QString>("filename");
         QTest::addColumn<QString>("expectedName");
 
-        QTest::newRow("deck") << QStringLiteral("deck.js") << QStringLiteral("Deck");
-        QTest::newRow("tatami") << QStringLiteral("tatami.js") << QStringLiteral("Tatami");
-        QTest::newRow("zen") << QStringLiteral("zen.js") << QStringLiteral("Zen");
-        QTest::newRow("paper") << QStringLiteral("paper.js") << QStringLiteral("Paper");
-        QTest::newRow("horizontal-deck") << QStringLiteral("horizontal-deck.js") << QStringLiteral("Horizontal Deck");
+        QTest::newRow("bsp") << QStringLiteral("bsp.js") << QStringLiteral("Binary Split");
+        QTest::newRow("cascade") << QStringLiteral("cascade.js") << QStringLiteral("Cascade");
+        QTest::newRow("centered-master") << QStringLiteral("centered-master.js") << QStringLiteral("Centered Master");
+        QTest::newRow("columns") << QStringLiteral("columns.js") << QStringLiteral("Columns");
         QTest::newRow("corner-master") << QStringLiteral("corner-master.js") << QStringLiteral("Corner Master");
+        QTest::newRow("deck") << QStringLiteral("deck.js") << QStringLiteral("Deck");
+        QTest::newRow("dwindle") << QStringLiteral("dwindle.js") << QStringLiteral("Dwindle");
+        QTest::newRow("dwindle-memory") << QStringLiteral("dwindle-memory.js") << QStringLiteral("Dwindle (Memory)");
+        QTest::newRow("floating-center") << QStringLiteral("floating-center.js") << QStringLiteral("Floating Center");
+        QTest::newRow("focus-sidebar") << QStringLiteral("focus-sidebar.js") << QStringLiteral("Focus + Sidebar");
+        QTest::newRow("grid") << QStringLiteral("grid.js") << QStringLiteral("Grid");
+        QTest::newRow("horizontal-deck") << QStringLiteral("horizontal-deck.js") << QStringLiteral("Horizontal Deck");
+        QTest::newRow("master-stack") << QStringLiteral("master-stack.js") << QStringLiteral("Master + Stack");
+        QTest::newRow("monocle") << QStringLiteral("monocle.js") << QStringLiteral("Monocle");
+        QTest::newRow("paper") << QStringLiteral("paper.js") << QStringLiteral("Paper");
         QTest::newRow("quadrant-priority")
             << QStringLiteral("quadrant-priority.js") << QStringLiteral("Quadrant Priority");
-        QTest::newRow("focus-sidebar") << QStringLiteral("focus-sidebar.js") << QStringLiteral("Focus + Sidebar");
-        QTest::newRow("floating-center") << QStringLiteral("floating-center.js") << QStringLiteral("Floating Center");
+        QTest::newRow("rows") << QStringLiteral("rows.js") << QStringLiteral("Rows");
+        QTest::newRow("spiral") << QStringLiteral("spiral.js") << QStringLiteral("Spiral");
+        QTest::newRow("spread") << QStringLiteral("spread.js") << QStringLiteral("Spread");
+        QTest::newRow("stair") << QStringLiteral("stair.js") << QStringLiteral("Stair");
+        QTest::newRow("tatami") << QStringLiteral("tatami.js") << QStringLiteral("Tatami");
+        QTest::newRow("three-column") << QStringLiteral("three-column.js") << QStringLiteral("Three Column");
+        QTest::newRow("wide") << QStringLiteral("wide.js") << QStringLiteral("Wide");
+        QTest::newRow("zen") << QStringLiteral("zen.js") << QStringLiteral("Zen");
     }
 
     void testExampleAlgo()
@@ -895,6 +910,160 @@ private Q_SLOTS:
         if (!zones.isEmpty()) {
             QWARN("V4 limitation: constructor chain not blocked — watchdog is primary defense");
         }
+    }
+
+    // =========================================================================
+    // @builtinId validation edge cases
+    // =========================================================================
+
+    void testBuiltinId_scriptPrefixRejected()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString script = QStringLiteral(
+            "// @name Script Prefix Test\n"
+            "// @description builtinId with script: prefix should be rejected\n"
+            "// @builtinId script:bad\n"
+            "function calculateZones(params) { return []; }\n");
+        QString path = writeTempScript(dir, QStringLiteral("script-prefix.js"), script);
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(algo.isValid());
+        // script: prefix is rejected — builtinId should remain empty
+        QVERIFY2(
+            algo.builtinId().isEmpty(),
+            qPrintable(QStringLiteral("Expected empty builtinId for 'script:bad', got '%1'").arg(algo.builtinId())));
+    }
+
+    void testBuiltinId_uppercaseRejected()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString script = QStringLiteral(
+            "// @name Uppercase Test\n"
+            "// @description builtinId with uppercase should be rejected\n"
+            "// @builtinId UPPERCASE\n"
+            "function calculateZones(params) { return []; }\n");
+        QString path = writeTempScript(dir, QStringLiteral("uppercase-id.js"), script);
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(algo.isValid());
+        // Regex ^[a-z][a-z0-9-]*$ rejects uppercase
+        QVERIFY2(
+            algo.builtinId().isEmpty(),
+            qPrintable(QStringLiteral("Expected empty builtinId for 'UPPERCASE', got '%1'").arg(algo.builtinId())));
+    }
+
+    void testBuiltinId_startsWithDigitRejected()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString script = QStringLiteral(
+            "// @name Digit Start Test\n"
+            "// @description builtinId starting with digit should be rejected\n"
+            "// @builtinId 123startnum\n"
+            "function calculateZones(params) { return []; }\n");
+        QString path = writeTempScript(dir, QStringLiteral("digit-start.js"), script);
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(algo.isValid());
+        // Regex ^[a-z][a-z0-9-]*$ requires first char to be lowercase letter
+        QVERIFY2(
+            algo.builtinId().isEmpty(),
+            qPrintable(QStringLiteral("Expected empty builtinId for '123startnum', got '%1'").arg(algo.builtinId())));
+    }
+
+    void testBuiltinId_longValueTruncatedTo64()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        // Create a valid builtinId that is 65+ characters long
+        // Pattern: a-followed-by-64-more lowercase chars = 65 total
+        QString longId = QStringLiteral("a") + QString(64, QLatin1Char('b')); // 65 chars
+        QCOMPARE(longId.size(), 65);
+
+        QString script = QStringLiteral(
+                             "// @name Long ID Test\n"
+                             "// @description builtinId longer than 64 chars should be truncated\n"
+                             "// @builtinId ")
+            + longId
+            + QStringLiteral("\n"
+                             "function calculateZones(params) { return []; }\n");
+        QString path = writeTempScript(dir, QStringLiteral("long-id.js"), script);
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(algo.isValid());
+        // .left(64) truncation — builtinId should be exactly 64 chars
+        QVERIFY2(!algo.builtinId().isEmpty(), "Expected non-empty builtinId for a valid but long ID");
+        QCOMPARE(algo.builtinId().size(), 64);
+        QCOMPARE(algo.builtinId(), longId.left(64));
+    }
+
+    void testBuiltinId_validValueAccepted()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString script = QStringLiteral(
+            "// @name Valid ID Test\n"
+            "// @description Valid builtinId should be accepted\n"
+            "// @builtinId my-custom-algo\n"
+            "function calculateZones(params) { return []; }\n");
+        QString path = writeTempScript(dir, QStringLiteral("valid-id.js"), script);
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(algo.isValid());
+        QCOMPARE(algo.builtinId(), QStringLiteral("my-custom-algo"));
+    }
+
+    // =========================================================================
+    // Frozen globals integrity test (INFRA-3)
+    // =========================================================================
+
+    void testFrozenGlobals_builtinOverwriteFails()
+    {
+        // Verify that a user script cannot overwrite frozen builtin helpers.
+        // The sandbox freezes globals like fillArea, equalColumnsLayout, etc.
+        // A script that attempts to reassign them should either throw (strict
+        // mode) or silently fail, and the algorithm should still produce
+        // correct output using the original frozen builtins.
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+
+        // Script tries to overwrite fillArea and equalColumnsLayout, then
+        // delegates to equalColumnsLayout — if the overwrite succeeded,
+        // equalColumnsLayout would return [] and produce zero zones.
+        QString script = QStringLiteral(
+            "// @name Frozen Globals Test\n"
+            "// @description Verify frozen builtins survive overwrite attempts\n"
+            "function calculateZones(params) {\n"
+            "    // Attempt to overwrite frozen builtins\n"
+            "    try { fillArea = function() { return []; }; } catch(e) {}\n"
+            "    try { equalColumnsLayout = function() { return []; }; } catch(e) {}\n"
+            "    try { distributeWithGaps = function() { return []; }; } catch(e) {}\n"
+            "    try { masterStackLayout = function() { return []; }; } catch(e) {}\n"
+            "    // Use equalColumnsLayout — if frozen, it still works correctly\n"
+            "    return equalColumnsLayout(params.area, params.windowCount, params.innerGap || 0, params.minSizes || "
+            "[]);\n"
+            "}\n");
+        QString path = writeTempScript(dir, QStringLiteral("frozen-globals.js"), script);
+
+        ScriptedAlgorithm algo(path);
+        QVERIFY(algo.isValid());
+
+        TilingState state(QStringLiteral("test"));
+        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+
+        // The frozen equalColumnsLayout should still work — 3 columns expected
+        QVERIFY2(
+            zones.size() == 3,
+            qPrintable(QStringLiteral("Expected 3 zones from frozen equalColumnsLayout, got %1").arg(zones.size())));
+
+        // Verify structural validity
+        for (const QRect& zone : zones) {
+            QVERIFY(zone.width() > 0);
+            QVERIFY(zone.height() > 0);
+        }
+        QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
 };
 

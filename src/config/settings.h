@@ -1649,7 +1649,7 @@ private:
 
     // Autotiling Settings
     bool m_autotileEnabled = ConfigDefaults::autotileEnabled();
-    QString m_autotileAlgorithm = QString(DBus::AutotileAlgorithm::BSP);
+    QString m_autotileAlgorithm = ConfigDefaults::autotileAlgorithm();
     qreal m_autotileSplitRatio = ConfigDefaults::autotileSplitRatio();
     int m_autotileMasterCount = ConfigDefaults::autotileMasterCount();
     QVariantMap m_autotilePerAlgorithmSettings;
