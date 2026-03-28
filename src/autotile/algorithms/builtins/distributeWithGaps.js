@@ -20,5 +20,17 @@ function distributeWithGaps(total, count, gap) {
         if (remainder > 0) { s++; remainder--; }
         sizes.push(s);
     }
+    // Ensure total sizes + gaps don't exceed the original total
+    let usedSpace = totalGaps;
+    for (let i = 0; i < count; i++) usedSpace += sizes[i];
+    if (usedSpace > total) {
+        // Proportionally shrink sizes to fit
+        const shrinkRatio = Math.max(0, total - totalGaps) / Math.max(1, usedSpace - totalGaps);
+        let newSum = 0;
+        for (let i = 0; i < count; i++) {
+            sizes[i] = Math.max(1, Math.floor(sizes[i] * shrinkRatio));
+            newSum += sizes[i];
+        }
+    }
     return sizes;
 }

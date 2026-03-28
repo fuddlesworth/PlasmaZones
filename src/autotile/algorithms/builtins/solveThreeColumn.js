@@ -62,6 +62,19 @@ function solveThreeColumn(areaX, contentWidth, innerGap, splitRatio, minL, minC,
                 if (deficit > 0) leftWidth -= deficit;
             }
         }
+        // Reconciliation: if any constraint is still violated, use proportional fallback
+        if (leftWidth < minL || rightWidth < minR || centerWidth < minC) {
+            const totalMin = minL + minR + minC;
+            if (totalMin > 0) {
+                leftWidth = Math.max(1, Math.floor(contentWidth * minL / totalMin));
+                rightWidth = Math.max(1, Math.floor(contentWidth * minR / totalMin));
+                centerWidth = Math.max(1, contentWidth - leftWidth - rightWidth);
+            } else {
+                leftWidth = Math.max(1, Math.floor(contentWidth / 3));
+                rightWidth = Math.max(1, Math.floor(contentWidth / 3));
+                centerWidth = Math.max(1, contentWidth - leftWidth - rightWidth);
+            }
+        }
     }
     leftWidth = Math.max(1, leftWidth);
     centerWidth = Math.max(1, centerWidth);

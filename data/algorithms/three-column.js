@@ -53,7 +53,7 @@ function calculateZones(params) {
     }
 
     // Fall back to equal columns if screen is too narrow for three columns
-    if (count >= 3 && area.width < 3 * PZ_MIN_ZONE_SIZE) {
+    if (count >= 3 && area.width < 3 * PZ_MIN_ZONE_SIZE + 2 * gap) {
         const widths = distributeWithGaps(area.width, count, gap);
         const zones = [];
         let x = area.x;

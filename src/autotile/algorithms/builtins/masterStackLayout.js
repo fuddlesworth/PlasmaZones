@@ -19,6 +19,10 @@
 function masterStackLayout(area, count, gap, splitRatio, masterCount, minSizes, horizontal) {
     if (count <= 0) return [];
 
+    if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
+        return [{ x: area.x, y: area.y, width: area.width, height: area.height }];
+    }
+
     masterCount = Math.max(1, Math.min(masterCount, count));
     const stackCount = count - masterCount;
     splitRatio = Math.max(PZ_MIN_SPLIT, Math.min(splitRatio, PZ_MAX_SPLIT));

@@ -33,12 +33,12 @@ function calculateZones(params) {
     const sizeRatio = Math.max(0.3, Math.min(0.8, params.splitRatio));
 
     // All windows are the same size
-    const winWidth = Math.max(100, Math.round(area.width * sizeRatio));
-    const winHeight = Math.max(100, Math.round(area.height * sizeRatio));
+    const winWidth = Math.max(100, Math.floor(area.width * sizeRatio));
+    const winHeight = Math.max(100, Math.floor(area.height * sizeRatio));
 
     // Diagonal offset distributes the remaining space evenly across steps
-    const totalOffsetX = area.width - winWidth;
-    const totalOffsetY = area.height - winHeight;
+    const totalOffsetX = Math.max(0, area.width - winWidth);
+    const totalOffsetY = Math.max(0, area.height - winHeight);
     const stepX = (count > 1) ? Math.floor(totalOffsetX / (count - 1)) : 0;
     const stepY = (count > 1) ? Math.floor(totalOffsetY / (count - 1)) : 0;
 

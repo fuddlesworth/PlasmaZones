@@ -13,6 +13,7 @@
  * @returns {number} Maximum minimum dimension (0 if none)
  */
 function extractRegionMaxMin(minSizes, startIdx, endIdx, axis) {
+    startIdx = Math.max(0, startIdx);
     let maxVal = 0;
     if (!minSizes || minSizes.length === 0) return 0;
     for (let i = startIdx; i < endIdx && i < minSizes.length; i++) {

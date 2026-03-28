@@ -38,14 +38,20 @@ function calculateZones(params) {
     // but cascade needs tighter bounds)
     const offsetRatio = Math.max(0.02, Math.min(0.4, params.splitRatio));
 
-    const offsetX = Math.max(20, Math.round(area.width * offsetRatio / (count - 1)));
-    const offsetY = Math.max(20, Math.round(area.height * offsetRatio / (count - 1)));
+    let offsetX = Math.max(20, Math.floor(area.width * offsetRatio / (count - 1)));
+    let offsetY = Math.max(20, Math.floor(area.height * offsetRatio / (count - 1)));
 
     // Each window is sized to fill the area minus the total cascade offset
     const totalOffsetX = offsetX * (count - 1);
     const totalOffsetY = offsetY * (count - 1);
     const winWidth = Math.max(100, area.width - totalOffsetX);
     const winHeight = Math.max(100, area.height - totalOffsetY);
+
+    // Clamp offsets so last window stays within area
+    const maxOffsetX = Math.max(1, Math.floor((area.width - winWidth) / Math.max(1, count - 1)));
+    const maxOffsetY = Math.max(1, Math.floor((area.height - winHeight) / Math.max(1, count - 1)));
+    offsetX = Math.min(offsetX, maxOffsetX);
+    offsetY = Math.min(offsetY, maxOffsetY);
 
     const zones = [];
     for (let i = 0; i < count; i++) {

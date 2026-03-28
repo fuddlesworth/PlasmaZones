@@ -5,6 +5,8 @@
 #include <QRect>
 #include <QSignalSpy>
 #include <QStringList>
+#include <QVariantList>
+#include <QVariantMap>
 
 #include "autotile/AlgorithmRegistry.h"
 #include "autotile/TilingAlgorithm.h"
@@ -305,6 +307,63 @@ private Q_SLOTS:
             QVERIFY(algo != nullptr);
             QVERIFY(!algo->name().isEmpty());
         }
+    }
+    // =========================================================================
+    // Monocle preview offset tests
+    // =========================================================================
+
+    void testMonoclePreview_offsetStacking()
+    {
+        // Simulate monocle output: all zones are identical (full screen)
+        const QRect previewRect(0, 0, 1000, 1000);
+        QVector<QRect> identicalZones;
+        for (int i = 0; i < 4; ++i) {
+            identicalZones.append(previewRect);
+        }
+
+        auto result = AlgorithmRegistry::zonesToRelativeGeometry(identicalZones, previewRect);
+        QCOMPARE(result.size(), 4);
+
+        // Verify each zone has positive dimensions and offset stacking
+        for (int i = 0; i < result.size(); ++i) {
+            auto map = result[i].toMap();
+            auto geo = map[QLatin1String("relativeGeometry")].toMap();
+            qreal x = geo[QLatin1String("x")].toReal();
+            qreal y = geo[QLatin1String("y")].toReal();
+            qreal w = geo[QLatin1String("width")].toReal();
+            qreal h = geo[QLatin1String("height")].toReal();
+
+            QVERIFY2(w > 0.0, qPrintable(QStringLiteral("Zone %1 width (%2) must be > 0").arg(i).arg(w)));
+            QVERIFY2(h > 0.0, qPrintable(QStringLiteral("Zone %1 height (%2) must be > 0").arg(i).arg(h)));
+            QVERIFY2(x >= 0.0, qPrintable(QStringLiteral("Zone %1 x (%2) must be >= 0").arg(i).arg(x)));
+            QVERIFY2(y >= 0.0, qPrintable(QStringLiteral("Zone %1 y (%2) must be >= 0").arg(i).arg(y)));
+        }
+
+        // Verify zones are not all identical (offset was applied)
+        auto firstGeo = result[0].toMap()[QLatin1String("relativeGeometry")].toMap();
+        auto lastGeo = result[result.size() - 1].toMap()[QLatin1String("relativeGeometry")].toMap();
+        bool different = (firstGeo[QLatin1String("x")].toReal() != lastGeo[QLatin1String("x")].toReal())
+            || (firstGeo[QLatin1String("y")].toReal() != lastGeo[QLatin1String("y")].toReal())
+            || (firstGeo[QLatin1String("width")].toReal() != lastGeo[QLatin1String("width")].toReal())
+            || (firstGeo[QLatin1String("height")].toReal() != lastGeo[QLatin1String("height")].toReal());
+        QVERIFY2(different, "Monocle preview zones should have offset stacking, not be identical");
+    }
+
+    void testMonoclePreview_singleZoneNoOffset()
+    {
+        // A single zone should not get offset treatment
+        const QRect previewRect(0, 0, 1000, 1000);
+        QVector<QRect> singleZone;
+        singleZone.append(previewRect);
+
+        auto result = AlgorithmRegistry::zonesToRelativeGeometry(singleZone, previewRect);
+        QCOMPARE(result.size(), 1);
+
+        auto geo = result[0].toMap()[QLatin1String("relativeGeometry")].toMap();
+        QCOMPARE(geo[QLatin1String("x")].toReal(), 0.0);
+        QCOMPARE(geo[QLatin1String("y")].toReal(), 0.0);
+        QCOMPARE(geo[QLatin1String("width")].toReal(), 1.0);
+        QCOMPARE(geo[QLatin1String("height")].toReal(), 1.0);
     }
 };
 

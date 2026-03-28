@@ -52,7 +52,7 @@ function calculateZones(params) {
         : distributeWithMinSizes(area.width, count, gap, slotMinWidths);
 
     // splitRatio also controls height fraction
-    const baseHeight = Math.max(50, Math.round(area.height * widthFraction));
+    const baseHeight = Math.max(50, Math.floor(area.height * widthFraction));
 
     const zones = [];
     let currentX = area.x;
@@ -60,7 +60,7 @@ function calculateZones(params) {
         const slotW = slotWidths[i];
 
         // Window width: fraction of slot, but never smaller than min width
-        let winWidth = Math.max(50, Math.round(slotW * widthFraction));
+        let winWidth = Math.max(50, Math.floor(slotW * widthFraction));
         if (minWidths[i] > 0) {
             winWidth = Math.max(winWidth, minWidths[i]);
         }

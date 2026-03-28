@@ -39,17 +39,28 @@ function distributeWithMinSizes(total, count, gap, minDims) {
             remaining -= allocated;
             remainingMin -= mins[i];
         }
-        // Ensure sizes don't exceed available (rounding can cause overshoot)
-        let totalAllocated = 0;
-        for (let j = 0; j < count; j++) totalAllocated += sizes[j];
-        if (totalAllocated > available && count > 0) {
-            sizes[count - 1] = Math.max(1, sizes[count - 1] - (totalAllocated - available));
-        }
-        // Fix undershoot from rounding
-        totalAllocated = 0;
-        for (let j = 0; j < count; j++) totalAllocated += sizes[j];
-        if (totalAllocated < available && count > 0) {
-            sizes[count - 1] += (available - totalAllocated);
+        // Correct rounding errors: distribute across elements, not just last
+        let currentSum = 0;
+        for (let i = 0; i < count; i++) currentSum += sizes[i];
+        let diff = currentSum - available;
+        if (diff > 0) {
+            // Overshoot: subtract from largest elements first
+            for (let pass = 0; diff > 0 && pass < count; pass++) {
+                for (let i = count - 1; i >= 0 && diff > 0; i--) {
+                    if (sizes[i] > 1) {
+                        sizes[i]--;
+                        diff--;
+                    }
+                }
+            }
+        } else if (diff < 0) {
+            // Undershoot: add to smallest elements first
+            for (let pass = 0; diff < 0 && pass < count; pass++) {
+                for (let i = 0; i < count && diff < 0; i++) {
+                    sizes[i]++;
+                    diff++;
+                }
+            }
         }
     } else {
         const base = Math.floor(available / count);

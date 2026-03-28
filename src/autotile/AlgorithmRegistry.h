@@ -43,8 +43,7 @@ class TilingAlgorithm;
  * - Master-Stack: Classic master/stack layout
  * - Columns: Equal-width vertical columns
  *
- * Future algorithms (Monocle, Dwindle, Spiral, Rows, ThreeColumn) can be
- * added by implementing TilingAlgorithm and calling registerAlgorithm().
+ * All built-in algorithms are registered via @c builtinId JS scripts.
  *
  * Usage:
  * @code

@@ -249,6 +249,18 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_engine->evaluate(QStringLiteral("var PZ_MAX_SPLIT = %1;").arg(MaxSplitRatio),
                        QStringLiteral("builtin:constants"));
 
+    // Freeze constants immediately so builtin helper scripts cannot reassign them.
+    // The frozenGlobals loop below will re-freeze them (harmless no-op on already-frozen properties).
+    static const QLatin1String earlyFreezeConstants[] = {
+        QLatin1String("PZ_MIN_ZONE_SIZE"),
+        QLatin1String("PZ_MIN_SPLIT"),
+        QLatin1String("PZ_MAX_SPLIT"),
+    };
+    for (const auto& name : earlyFreezeConstants) {
+        m_engine->evaluate(
+            QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});").arg(name));
+    }
+
     // Inject built-in helpers from ScriptedAlgorithmHelpers and JsBuiltins.
     // NOTE: Each helper's exported global name(s) must also appear in the
     // frozenGlobals[] array below — a missing entry is a sandbox escape.

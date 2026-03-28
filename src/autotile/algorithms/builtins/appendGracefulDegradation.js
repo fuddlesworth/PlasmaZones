@@ -9,6 +9,7 @@
  * Port of TilingAlgorithm::appendGracefulDegradation.
  */
 function appendGracefulDegradation(zones, remaining, leftover, innerGap) {
+    if (zones.length === 0) return;
     if (leftover <= 0) return;
     if (remaining.width >= remaining.height) {
         const maxFit = Math.max(1, Math.floor(remaining.width / PZ_MIN_ZONE_SIZE));

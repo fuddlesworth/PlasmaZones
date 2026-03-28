@@ -8,6 +8,7 @@
 #include <QByteArray>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QString>
 #include <QTemporaryDir>
 #include <QTest>
@@ -63,9 +64,20 @@ public:
 
         if (!QDir().mkpath(m_xdgRoot.path() + QStringLiteral("/plasmazones")))
             return false;
-        if (!QFile::link(sourceDir + QStringLiteral("/data/algorithms"),
-                         m_xdgRoot.path() + QStringLiteral("/plasmazones/algorithms")))
-            return false;
+        const QString sourceAlgoDir = sourceDir + QStringLiteral("/data/algorithms");
+        const QString algoLink = m_xdgRoot.path() + QStringLiteral("/plasmazones/algorithms");
+        if (!QFile::link(sourceAlgoDir, algoLink)) {
+            // Symlink failed (Windows, restricted FS) — fall back to recursive copy
+            QDir sourceDir(sourceAlgoDir);
+            QDir destDir(algoLink);
+            if (!destDir.mkpath(QStringLiteral(".")))
+                return false;
+            const auto entries = sourceDir.entryInfoList(QDir::Files);
+            for (const auto& entry : entries) {
+                if (!QFile::copy(entry.absoluteFilePath(), destDir.filePath(entry.fileName())))
+                    return false;
+            }
+        }
 
         m_savedDataDirs = qgetenv("XDG_DATA_DIRS");
         m_savedDataHome = qgetenv("XDG_DATA_HOME");

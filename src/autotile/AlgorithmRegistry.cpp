@@ -204,7 +204,14 @@ QString AlgorithmRegistry::defaultAlgorithmId()
 
 TilingAlgorithm* AlgorithmRegistry::defaultAlgorithm() const
 {
-    return algorithm(defaultAlgorithmId());
+    auto* algo = algorithm(defaultAlgorithmId());
+    if (!algo && !m_algorithms.isEmpty()) {
+        // Configured default not registered (e.g. BSP script failed to load).
+        // Fall back to the first available algorithm so callers never get nullptr
+        // when algorithms are registered.
+        algo = m_algorithms.value(m_registrationOrder.first(), nullptr);
+    }
+    return algo;
 }
 
 void AlgorithmRegistry::registerBuiltInAlgorithms()
@@ -265,7 +272,7 @@ QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect>& zo
 
         QVariantMap relGeo;
         if (isMonocle) {
-            const qreal offset = i * MonoclePreviewOffset;
+            const qreal offset = qMin(i * MonoclePreviewOffset, 0.45);
             relGeo[QLatin1String("x")] = offset;
             relGeo[QLatin1String("y")] = offset;
             relGeo[QLatin1String("width")] = qMax(0.01, 1.0 - offset * 2);

@@ -64,6 +64,8 @@ pz_add_test(test_tiling_algo_grid_threecolumn autotile/test_tiling_algo_grid_thr
 target_compile_definitions(test_tiling_algo_grid_threecolumn PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_tiling_algo_wide_centered autotile/test_tiling_algo_wide_centered.cpp)
 target_compile_definitions(test_tiling_algo_wide_centered PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_tiling_algo_cascade_stair_spread autotile/test_tiling_algo_cascade_stair_spread.cpp)
+target_compile_definitions(test_tiling_algo_cascade_stair_spread PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Algorithm Registry Tests
@@ -218,6 +220,7 @@ set(_all_tests
     test_wts_lifecycle test_wts_session test_wts_queries
     test_tiling_algo_masterstack test_tiling_algo_spiral_monocle
     test_tiling_algo_grid_threecolumn test_tiling_algo_wide_centered
+    test_tiling_algo_cascade_stair_spread
     test_algorithm_registry test_algorithm_registry_custom
     test_scripted_algorithm test_split_tree test_scripted_algorithm_loader
     test_autotile_engine_core test_autotile_engine_master
