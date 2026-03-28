@@ -7,18 +7,9 @@
 #include "autotile/AlgorithmRegistry.h"
 #include "autotile/TilingAlgorithm.h"
 #include "autotile/TilingState.h"
-#include "autotile/algorithms/MasterStackAlgorithm.h"
-#include "autotile/algorithms/ColumnsAlgorithm.h"
-#include "autotile/algorithms/BSPAlgorithm.h"
-#include "autotile/algorithms/RowsAlgorithm.h"
-#include "autotile/algorithms/DwindleAlgorithm.h"
-#include "autotile/algorithms/SpiralAlgorithm.h"
-#include "autotile/algorithms/MonocleAlgorithm.h"
-#include "autotile/algorithms/ThreeColumnAlgorithm.h"
-#include "autotile/algorithms/GridAlgorithm.h"
-#include "autotile/algorithms/WideAlgorithm.h"
-#include "autotile/algorithms/CenteredMasterAlgorithm.h"
 #include "core/constants.h"
+
+#include "../helpers/ScriptedAlgoTestSetup.h"
 
 using namespace PlasmaZones;
 
@@ -30,7 +21,15 @@ class TestAlgorithmRegistry : public QObject
 {
     Q_OBJECT
 
+private:
+    PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
+
 private Q_SLOTS:
+    void initTestCase()
+    {
+        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
+    }
+
     // =========================================================================
     // Singleton tests
     // =========================================================================

@@ -3,6 +3,7 @@
 
 #include "ScriptedAlgorithm.h"
 #include "ScriptedAlgorithmHelpers.h"
+#include "ScriptedAlgorithmJsBuiltins.h"
 #include "ScriptedAlgorithmSandbox.h"
 #include "../SplitTree.h"
 #include "../TilingState.h"
@@ -240,17 +241,37 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         return false;
     }
 
+    // Inject frozen constants so JS helpers and user scripts can reference them
+    m_engine->evaluate(QStringLiteral("var PZ_MIN_ZONE_SIZE = %1;").arg(MinZoneSizePx),
+                       QStringLiteral("builtin:constants"));
+    m_engine->evaluate(QStringLiteral("var PZ_MIN_SPLIT = %1;").arg(MinSplitRatio),
+                       QStringLiteral("builtin:constants"));
+    m_engine->evaluate(QStringLiteral("var PZ_MAX_SPLIT = %1;").arg(MaxSplitRatio),
+                       QStringLiteral("builtin:constants"));
+
     // Inject built-in helpers from ScriptedAlgorithmHelpers
     m_engine->evaluate(ScriptedHelpers::treeHelperJs(), QStringLiteral("builtin:applyTreeGeometry"));
     m_engine->evaluate(ScriptedHelpers::lShapeHelperJs(), QStringLiteral("builtin:lShapeLayout"));
     m_engine->evaluate(ScriptedHelpers::deckHelperJs(), QStringLiteral("builtin:deckLayout"));
     m_engine->evaluate(ScriptedHelpers::distributeEvenlyHelperJs(), QStringLiteral("builtin:distributeEvenly"));
+    m_engine->evaluate(ScriptedHelpers::distributeWithGapsJs(), QStringLiteral("builtin:distributeWithGaps"));
+    m_engine->evaluate(ScriptedHelpers::distributeWithMinSizesJs(), QStringLiteral("builtin:distributeWithMinSizes"));
+    m_engine->evaluate(ScriptedHelpers::solveTwoPartJs(), QStringLiteral("builtin:solveTwoPart"));
+    m_engine->evaluate(ScriptedHelpers::solveThreeColumnJs(), QStringLiteral("builtin:solveThreeColumn"));
+    m_engine->evaluate(ScriptedHelpers::cumulativeMinDimsJs(), QStringLiteral("builtin:computeCumulativeMinDims"));
+    m_engine->evaluate(ScriptedHelpers::gracefulDegradationJs(), QStringLiteral("builtin:appendGracefulDegradation"));
+    m_engine->evaluate(ScriptedHelpers::dwindleLayoutJs(), QStringLiteral("builtin:dwindleLayout"));
 
-    // Freeze helper globals so user scripts cannot overwrite them.
+    // Freeze helper globals and constants so user scripts cannot overwrite them.
     // This must happen after injection since hardenSandbox's freezeGlobal calls
     // ran before the helpers existed.
-    for (const auto& helperName : {QLatin1String("applyTreeGeometry"), QLatin1String("lShapeLayout"),
-                                   QLatin1String("deckLayout"), QLatin1String("distributeEvenly")}) {
+    for (const auto& helperName :
+         {QLatin1String("PZ_MIN_ZONE_SIZE"), QLatin1String("PZ_MIN_SPLIT"), QLatin1String("PZ_MAX_SPLIT"),
+          QLatin1String("applyTreeGeometry"), QLatin1String("lShapeLayout"), QLatin1String("deckLayout"),
+          QLatin1String("distributeEvenly"), QLatin1String("distributeWithGaps"),
+          QLatin1String("distributeWithMinSizes"), QLatin1String("solveTwoPart"), QLatin1String("solveThreeColumn"),
+          QLatin1String("computeCumulativeMinDims"), QLatin1String("appendGracefulDegradation"),
+          QLatin1String("dwindleLayout")}) {
         m_engine->evaluate(QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});")
                                .arg(QLatin1String(helperName)));
     }
@@ -607,6 +628,43 @@ bool ScriptedAlgorithm::isScripted() const noexcept
 bool ScriptedAlgorithm::isUserScript() const noexcept
 {
     return m_isUserScript;
+}
+
+QString ScriptedAlgorithm::builtinId() const
+{
+    return m_metadata.builtinId;
+}
+
+void ScriptedAlgorithm::prepareTilingState(TilingState* state) const
+{
+    if (!m_metadata.supportsMemory) {
+        return; // Only memory-aware scripts need tree preparation
+    }
+
+    if (!state || state->splitTree()) {
+        return; // Already has a tree (or no state)
+    }
+
+    // Only reset the split ratio to our default (0.5) if it still holds a
+    // value from a different algorithm (e.g., MasterStack's 0.6).
+    const qreal currentRatio = state->splitRatio();
+    const qreal defRatio = defaultSplitRatio();
+    if (!qFuzzyCompare(1.0 + currentRatio, 1.0 + defRatio)
+        && (currentRatio > defRatio + 0.05 || currentRatio < defRatio - 0.05)) {
+        state->setSplitRatio(defRatio);
+    }
+
+    const QStringList tiledWindows = state->tiledWindows();
+    if (tiledWindows.size() <= 1) {
+        return; // No tree needed for 0-1 windows
+    }
+
+    const qreal ratio = state->splitRatio();
+    auto newTree = std::make_unique<SplitTree>();
+    for (const QString& windowId : tiledWindows) {
+        newTree->insertAtEnd(windowId, ratio);
+    }
+    state->setSplitTree(std::move(newTree));
 }
 
 } // namespace PlasmaZones

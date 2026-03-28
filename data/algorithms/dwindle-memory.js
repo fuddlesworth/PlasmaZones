@@ -1,0 +1,45 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// @name Dwindle (Memory)
+// @builtinId dwindle-memory
+// @description Remembers split positions — resize one split without affecting others
+// @producesOverlappingZones false
+// @supportsMasterCount false
+// @supportsSplitRatio true
+// @defaultSplitRatio 0.5
+// @defaultMaxWindows 5
+// @minimumWindows 1
+// @zoneNumberDisplay all
+// @supportsMemory true
+
+/**
+ * Dwindle layout with persistent split memory.
+ *
+ * When params.tree exists and has the right leaf count, zone geometries
+ * are computed from the tree (preserving user-resized splits). Otherwise,
+ * falls back to stateless dwindle logic.
+ *
+ * The prepareTilingState() is handled by the C++ ScriptedAlgorithm wrapper
+ * when @supportsMemory true is set.
+ *
+ * @param {Object} params - Tiling parameters
+ * @returns {Array<{x: number, y: number, width: number, height: number}>}
+ */
+function calculateZones(params) {
+    var count = params.windowCount;
+    if (count <= 0) return [];
+
+    var area = params.area;
+    var gap = params.innerGap || 0;
+    var splitRatio = params.splitRatio;
+    var minSizes = params.minSizes || [];
+
+    // Use persistent split tree if available and leaf count matches
+    if (params.tree && params.tree.leafCount === count) {
+        return applyTreeGeometry(params.tree, area, gap);
+    }
+
+    // Fallback: stateless dwindle layout
+    return dwindleLayout(area, count, splitRatio, gap, minSizes);
+}

@@ -1,0 +1,29 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// @name Dwindle
+// @builtinId dwindle
+// @description Each new window gets a smaller split, alternating direction
+// @supportsMasterCount false
+// @supportsSplitRatio true
+// @defaultSplitRatio 0.5
+// @defaultMaxWindows 5
+
+/**
+ * Dwindle layout: recursively subdivides space using alternating
+ * vertical/horizontal splits. Each window takes the left/top portion
+ * of the remaining area.
+ *
+ * @param {Object} params - Tiling parameters
+ * @returns {Array<{x: number, y: number, width: number, height: number}>}
+ */
+function calculateZones(params) {
+    var count = params.windowCount;
+    if (count <= 0) return [];
+    var area = params.area;
+    var gap = params.innerGap || 0;
+    var splitRatio = params.splitRatio;
+    var minSizes = params.minSizes || [];
+
+    return dwindleLayout(area, count, splitRatio, gap, minSizes);
+}

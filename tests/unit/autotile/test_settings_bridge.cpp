@@ -12,6 +12,7 @@
 #include "core/constants.h"
 #include "config/configbackend_qsettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/ScriptedAlgoTestSetup.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -42,12 +43,13 @@ class TestSettingsBridge : public QObject
 
 private:
     std::unique_ptr<IsolatedConfigGuard> m_configGuard;
+    PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
 
 private Q_SLOTS:
 
     void initTestCase()
     {
-        AlgorithmRegistry::instance();
+        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
     }
 
     void init()

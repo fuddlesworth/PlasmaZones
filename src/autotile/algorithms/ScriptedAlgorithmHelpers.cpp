@@ -311,6 +311,17 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
                 || value == QLatin1String("firstAndLast") || value == QLatin1String("none")) {
                 meta.zoneNumberDisplay = value;
             }
+        } else if (key == QLatin1String("builtinId")) {
+            static const QRegularExpression builtinIdRe(QStringLiteral("^[a-z][a-z0-9-]*$"));
+            if (value.startsWith(QLatin1String("script:"))) {
+                qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: @builtinId must not start with 'script:'"
+                                      << "value=" << value << "in" << filePath;
+            } else if (!builtinIdRe.match(value).hasMatch()) {
+                qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: invalid @builtinId" << value << "in"
+                                      << filePath;
+            } else {
+                meta.builtinId = value;
+            }
         } else if (key != QLatin1String("icon")) {
             qCDebug(lcAutotile) << "ScriptedAlgorithm::parseMetadata: unknown metadata key" << key << "in" << filePath;
         }

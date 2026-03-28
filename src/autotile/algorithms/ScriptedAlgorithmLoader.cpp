@@ -199,8 +199,6 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             qCWarning(lcAutotile) << "Skipping script with invalid filename:" << file;
             continue;
         }
-        const QString scriptId = QStringLiteral("script:") + baseName;
-
         // Create with nullptr parent so the registry takes full ownership
         // via setParent(this) in registerAlgorithm(). If the algo is invalid,
         // we delete it explicitly below.
@@ -210,6 +208,10 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             delete algo;
             continue;
         }
+
+        // Use @builtinId metadata if present, otherwise default to "script:filename"
+        const QString scriptId =
+            algo->builtinId().isEmpty() ? (QStringLiteral("script:") + baseName) : algo->builtinId();
 
         // registerAlgorithm() handles replacement internally (removes old,
         // takes ownership of new) — no need to unregister first.

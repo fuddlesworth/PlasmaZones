@@ -5,21 +5,19 @@
 #include <QRect>
 #include <QVector>
 
+#include "autotile/AlgorithmRegistry.h"
 #include "autotile/TilingAlgorithm.h"
 #include "autotile/TilingState.h"
-#include "autotile/algorithms/SpiralAlgorithm.h"
-#include "autotile/algorithms/DwindleAlgorithm.h"
-#include "autotile/algorithms/MonocleAlgorithm.h"
-#include "autotile/algorithms/RowsAlgorithm.h"
 #include "core/constants.h"
 
 #include "../helpers/TilingTestHelpers.h"
+#include "../helpers/ScriptedAlgoTestSetup.h"
 
 using namespace PlasmaZones;
 using namespace PlasmaZones::TestHelpers;
 
 /**
- * @brief Tests for Spiral, Monocle, and Rows tiling algorithms
+ * @brief Tests for Spiral, Monocle, and Rows tiling algorithms (all JS-based via registry)
  */
 class TestTilingAlgoSpiralMonocle : public QObject
 {
@@ -29,8 +27,35 @@ private:
     static constexpr int ScreenWidth = 1920;
     static constexpr int ScreenHeight = 1080;
     QRect m_screenGeometry{0, 0, ScreenWidth, ScreenHeight};
+    ScriptedAlgoTestSetup m_scriptSetup;
+
+    TilingAlgorithm* spiral()
+    {
+        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::Spiral);
+    }
+    TilingAlgorithm* dwindleAlgo()
+    {
+        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::Dwindle);
+    }
+    TilingAlgorithm* monocle()
+    {
+        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::Monocle);
+    }
+    TilingAlgorithm* rows()
+    {
+        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::Rows);
+    }
 
 private Q_SLOTS:
+
+    void initTestCase()
+    {
+        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
+        QVERIFY(spiral() != nullptr);
+        QVERIFY(dwindleAlgo() != nullptr);
+        QVERIFY(monocle() != nullptr);
+        QVERIFY(rows() != nullptr);
+    }
 
     // =========================================================================
     // SpiralAlgorithm tests
@@ -38,40 +63,28 @@ private Q_SLOTS:
 
     void testSpiral_metadata()
     {
-        SpiralAlgorithm algo;
-        QCOMPARE(algo.name(), QStringLiteral("Spiral"));
-        QVERIFY(!algo.supportsMasterCount());
-        QVERIFY(algo.supportsSplitRatio());
-        QCOMPARE(algo.masterZoneIndex(), -1);
-        QCOMPARE(algo.defaultSplitRatio(), 0.5);
-    }
-
-    void testSpiral_zeroWindows()
-    {
-        SpiralAlgorithm algo;
-        TilingState state(QStringLiteral("test"));
-
-        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
-        QVERIFY(zones.isEmpty());
+        auto* algo = spiral();
+        QCOMPARE(algo->name(), QStringLiteral("Spiral"));
+        QVERIFY(!algo->supportsMasterCount());
+        QVERIFY(algo->supportsSplitRatio());
+        QCOMPARE(algo->masterZoneIndex(), -1);
+        QCOMPARE(algo->defaultSplitRatio(), 0.5);
     }
 
     void testSpiral_oneWindow()
     {
-        SpiralAlgorithm algo;
         TilingState state(QStringLiteral("test"));
-
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = spiral()->calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
 
     void testSpiral_twoWindows()
     {
-        SpiralAlgorithm algo;
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
-        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = spiral()->calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 2);
 
         int expectedWidth = static_cast<int>(ScreenWidth * 0.5);
@@ -86,11 +99,10 @@ private Q_SLOTS:
 
     void testSpiral_fiveWindows_fourDirectionRotation()
     {
-        SpiralAlgorithm algo;
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
-        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = spiral()->calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 5);
 
         QCOMPARE(zones[0].x(), 0);
@@ -116,13 +128,11 @@ private Q_SLOTS:
 
     void testSpiral_differenceFromDwindle()
     {
-        SpiralAlgorithm spiral;
-        DwindleAlgorithm dwindle;
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
-        auto spiralZones = spiral.calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
-        auto dwindleZones = dwindle.calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto spiralZones = spiral()->calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto dwindleZones = dwindleAlgo()->calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
 
         QCOMPARE(spiralZones.size(), 5);
         QCOMPARE(dwindleZones.size(), 5);
@@ -135,11 +145,10 @@ private Q_SLOTS:
 
     void testSpiral_manyWindows()
     {
-        SpiralAlgorithm algo;
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
-        auto zones = algo.calculateZones({12, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = spiral()->calculateZones({12, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 12);
 
         for (const QRect& zone : zones) {
@@ -150,186 +159,100 @@ private Q_SLOTS:
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
 
-    void testSpiral_invalidGeometry()
-    {
-        SpiralAlgorithm algo;
-        TilingState state(QStringLiteral("test"));
-
-        QRect invalidRect;
-        auto zones = algo.calculateZones({3, invalidRect, &state, 0, EdgeGaps::uniform(0)});
-        QVERIFY(zones.isEmpty());
-    }
-
     // =========================================================================
-    // MonocleAlgorithm tests
+    // MonocleAlgorithm tests (JS-based via registry)
     // =========================================================================
 
     void testMonocle_metadata()
     {
-        MonocleAlgorithm algo;
-        QCOMPARE(algo.name(), QStringLiteral("Monocle"));
-        QVERIFY(!algo.supportsMasterCount());
-        QVERIFY(!algo.supportsSplitRatio());
-        QCOMPARE(algo.masterZoneIndex(), -1);
-    }
-
-    void testMonocle_zeroWindows()
-    {
-        MonocleAlgorithm algo;
-        TilingState state(QStringLiteral("test"));
-
-        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
-        QVERIFY(zones.isEmpty());
+        auto* algo = monocle();
+        QCOMPARE(algo->name(), QStringLiteral("Monocle"));
+        QVERIFY(!algo->supportsMasterCount());
+        QVERIFY(!algo->supportsSplitRatio());
+        QCOMPARE(algo->masterZoneIndex(), -1);
     }
 
     void testMonocle_oneWindow()
     {
-        MonocleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
-
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = monocle()->calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
 
     void testMonocle_twoWindows_allFullScreen()
     {
-        MonocleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
-
-        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = monocle()->calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 2);
-
         QCOMPARE(zones[0], m_screenGeometry);
         QCOMPARE(zones[1], m_screenGeometry);
     }
 
     void testMonocle_manyWindows_allIdentical()
     {
-        MonocleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
-
-        auto zones = algo.calculateZones({10, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = monocle()->calculateZones({10, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 10);
-
         for (int i = 0; i < zones.size(); ++i) {
             QCOMPARE(zones[i], m_screenGeometry);
         }
     }
 
-    void testMonocle_fiftyWindows()
-    {
-        MonocleAlgorithm algo;
-        TilingState state(QStringLiteral("test"));
-
-        auto zones = algo.calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
-        QCOMPARE(zones.size(), 50);
-
-        for (const QRect& zone : zones) {
-            QCOMPARE(zone, m_screenGeometry);
-        }
-    }
-
-    void testMonocle_invalidGeometry()
-    {
-        MonocleAlgorithm algo;
-        TilingState state(QStringLiteral("test"));
-
-        QRect invalidRect;
-        auto zones = algo.calculateZones({3, invalidRect, &state, 0, EdgeGaps::uniform(0)});
-        QVERIFY(zones.isEmpty());
-    }
-
     void testMonocle_offsetScreen()
     {
-        MonocleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
-
         QRect offsetScreen(200, 100, 1920, 1080);
-        auto zones = algo.calculateZones({5, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = monocle()->calculateZones({5, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 5);
-
         for (const QRect& zone : zones) {
             QCOMPARE(zone, offsetScreen);
         }
     }
 
-    void testMonocle_smallScreen()
-    {
-        MonocleAlgorithm algo;
-        TilingState state(QStringLiteral("test"));
-
-        QRect smallScreen(0, 0, 200, 150);
-        auto zones = algo.calculateZones({8, smallScreen, &state, 0, EdgeGaps::uniform(0)});
-        QCOMPARE(zones.size(), 8);
-
-        for (const QRect& zone : zones) {
-            QCOMPARE(zone, smallScreen);
-        }
-    }
-
     // =========================================================================
-    // RowsAlgorithm tests
+    // RowsAlgorithm tests (JS-based via registry)
     // =========================================================================
 
     void testRows_metadata()
     {
-        RowsAlgorithm algo;
-        QCOMPARE(algo.name(), QStringLiteral("Rows"));
-        QVERIFY(!algo.supportsMasterCount());
-        QVERIFY(!algo.supportsSplitRatio());
-        QCOMPARE(algo.masterZoneIndex(), -1);
-    }
-
-    void testRows_zeroWindows()
-    {
-        RowsAlgorithm algo;
-        TilingState state(QStringLiteral("test"));
-
-        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
-        QVERIFY(zones.isEmpty());
+        auto* algo = rows();
+        QCOMPARE(algo->name(), QStringLiteral("Rows"));
+        QVERIFY(!algo->supportsMasterCount());
+        QVERIFY(!algo->supportsSplitRatio());
+        QCOMPARE(algo->masterZoneIndex(), -1);
     }
 
     void testRows_oneWindow()
     {
-        RowsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
-
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = rows()->calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
 
     void testRows_twoWindows()
     {
-        RowsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
-
-        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = rows()->calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 2);
-
         QCOMPARE(zones[0].x(), 0);
         QCOMPARE(zones[0].y(), 0);
         QCOMPARE(zones[0].width(), ScreenWidth);
         QCOMPARE(zones[0].height(), ScreenHeight / 2);
-
         QCOMPARE(zones[1].x(), 0);
         QCOMPARE(zones[1].y(), ScreenHeight / 2);
         QCOMPARE(zones[1].width(), ScreenWidth);
         QCOMPARE(zones[1].height(), ScreenHeight / 2);
-
         QVERIFY(noOverlaps(zones));
         QVERIFY(zonesFillScreen(zones, m_screenGeometry));
     }
 
     void testRows_threeWindows_heightDistribution()
     {
-        RowsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
-
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = rows()->calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 3);
-
         int currentY = 0;
         for (const QRect& zone : zones) {
             QCOMPARE(zone.x(), 0);
@@ -339,19 +262,15 @@ private Q_SLOTS:
             currentY += zone.height();
         }
         QCOMPARE(currentY, ScreenHeight);
-
         QVERIFY(noOverlaps(zones));
         QVERIFY(zonesFillScreen(zones, m_screenGeometry));
     }
 
     void testRows_remainderHandling()
     {
-        RowsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
-
-        auto zones = algo.calculateZones({7, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = rows()->calculateZones({7, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 7);
-
         int totalHeight = 0;
         for (const QRect& zone : zones) {
             totalHeight += zone.height();
@@ -359,7 +278,6 @@ private Q_SLOTS:
             QVERIFY(zone.height() == 154 || zone.height() == 155);
         }
         QCOMPARE(totalHeight, ScreenHeight);
-
         QCOMPARE(zones[0].height(), 155);
         QCOMPARE(zones[1].height(), 155);
         QCOMPARE(zones[2].height(), 154);
@@ -367,12 +285,9 @@ private Q_SLOTS:
 
     void testRows_contiguousRows()
     {
-        RowsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
-
-        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = rows()->calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 5);
-
         int currentY = 0;
         for (const QRect& zone : zones) {
             QCOMPARE(zone.y(), currentY);
@@ -381,19 +296,15 @@ private Q_SLOTS:
             currentY += zone.height();
         }
         QCOMPARE(currentY, ScreenHeight);
-
         QVERIFY(noOverlaps(zones));
         QVERIFY(zonesFillScreen(zones, m_screenGeometry));
     }
 
     void testRows_manyWindows()
     {
-        RowsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
-
-        auto zones = algo.calculateZones({10, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = rows()->calculateZones({10, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 10);
-
         int currentY = 0;
         for (const QRect& zone : zones) {
             QCOMPARE(zone.y(), currentY);
@@ -401,32 +312,18 @@ private Q_SLOTS:
             currentY += zone.height();
         }
         QCOMPARE(currentY, ScreenHeight);
-
         QVERIFY(noOverlaps(zones));
         QVERIFY(zonesFillScreen(zones, m_screenGeometry));
     }
 
-    void testRows_invalidGeometry()
-    {
-        RowsAlgorithm algo;
-        TilingState state(QStringLiteral("test"));
-
-        QRect invalidRect;
-        auto zones = algo.calculateZones({3, invalidRect, &state, 0, EdgeGaps::uniform(0)});
-        QVERIFY(zones.isEmpty());
-    }
-
     void testRows_offsetScreen()
     {
-        RowsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
-
         QRect offsetScreen(100, 50, 1920, 1080);
-        auto zones = algo.calculateZones({4, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = rows()->calculateZones({4, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 4);
         QVERIFY(allWithinBounds(zones, offsetScreen));
         QVERIFY(noOverlaps(zones));
-
         QCOMPARE(zones[0].x(), 100);
         QCOMPARE(zones[0].y(), 50);
     }

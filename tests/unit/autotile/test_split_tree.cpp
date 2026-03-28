@@ -9,10 +9,11 @@
 #include "autotile/SplitTree.h"
 #include "autotile/TilingAlgorithm.h"
 #include "autotile/TilingState.h"
-#include "autotile/algorithms/DwindleMemoryAlgorithm.h"
+#include "autotile/AlgorithmRegistry.h"
 #include "core/constants.h"
 
 #include "../helpers/TilingTestHelpers.h"
+#include "../helpers/ScriptedAlgoTestSetup.h"
 
 using namespace PlasmaZones;
 using namespace PlasmaZones::TestHelpers;
@@ -25,8 +26,20 @@ private:
     static constexpr int ScreenWidth = 1920;
     static constexpr int ScreenHeight = 1080;
     QRect m_screenGeometry{0, 0, ScreenWidth, ScreenHeight};
+    ScriptedAlgoTestSetup m_scriptSetup;
+
+    TilingAlgorithm* dwindleMemory()
+    {
+        return AlgorithmRegistry::instance()->algorithm(DBus::AutotileAlgorithm::DwindleMemory);
+    }
 
 private Q_SLOTS:
+
+    void initTestCase()
+    {
+        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
+        QVERIFY(dwindleMemory() != nullptr);
+    }
 
     // =========================================================================
     // SplitTree core tests
@@ -385,7 +398,7 @@ private Q_SLOTS:
 
     void testAlgo_withTree()
     {
-        DwindleMemoryAlgorithm algo;
+        auto* algo = dwindleMemory();
         TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
         state.addWindow(QStringLiteral("win2"));
@@ -397,7 +410,7 @@ private Q_SLOTS:
         tree->insertAtEnd(QStringLiteral("win3"));
         state.setSplitTree(std::move(tree));
 
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo->calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 3);
 
         for (const QRect& zone : zones) {
@@ -409,14 +422,14 @@ private Q_SLOTS:
 
     void testAlgo_withoutTree()
     {
-        DwindleMemoryAlgorithm algo;
+        auto* algo = dwindleMemory();
         TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
         state.addWindow(QStringLiteral("win2"));
         state.addWindow(QStringLiteral("win3"));
 
         // No split tree set — should fall back to stateless dwindle
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo->calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 3);
 
         for (const QRect& zone : zones) {
@@ -427,7 +440,7 @@ private Q_SLOTS:
 
     void testAlgo_treeCountMismatch()
     {
-        DwindleMemoryAlgorithm algo;
+        auto* algo = dwindleMemory();
         TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
         state.addWindow(QStringLiteral("win2"));
@@ -439,22 +452,22 @@ private Q_SLOTS:
         tree->insertAtEnd(QStringLiteral("win2"));
         state.setSplitTree(std::move(tree));
 
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo->calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 3);
     }
 
     void testAlgo_metadata()
     {
-        DwindleMemoryAlgorithm algo;
-        QVERIFY(!algo.name().isEmpty());
-        QVERIFY(!algo.description().isEmpty());
-        QVERIFY(algo.supportsSplitRatio());
-        QVERIFY(algo.supportsMemory());
+        auto* algo = dwindleMemory();
+        QVERIFY(!algo->name().isEmpty());
+        QVERIFY(!algo->description().isEmpty());
+        QVERIFY(algo->supportsSplitRatio());
+        QVERIFY(algo->supportsMemory());
     }
 
     void testAlgo_prepareTilingState_createsTree()
     {
-        DwindleMemoryAlgorithm algo;
+        auto* algo = dwindleMemory();
         TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
         state.addWindow(QStringLiteral("win2"));
@@ -466,14 +479,14 @@ private Q_SLOTS:
         QVERIFY(state.splitTree() == nullptr);
 
         // prepareTilingState should create a tree with 3 leaves
-        algo.prepareTilingState(&state);
+        algo->prepareTilingState(&state);
         QVERIFY(state.splitTree() != nullptr);
         QCOMPARE(state.splitTree()->leafCount(), 3);
     }
 
     void testAlgo_prepareTilingState_skipsIfTreeExists()
     {
-        DwindleMemoryAlgorithm algo;
+        auto* algo = dwindleMemory();
         TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
         state.addWindow(QStringLiteral("win2"));
@@ -487,17 +500,17 @@ private Q_SLOTS:
         const auto* originalTree = state.splitTree();
 
         // prepareTilingState should not replace existing tree
-        algo.prepareTilingState(&state);
+        algo->prepareTilingState(&state);
         QVERIFY(state.splitTree() == originalTree);
     }
 
     void testAlgo_prepareTilingState_skipsSingleWindow()
     {
-        DwindleMemoryAlgorithm algo;
+        auto* algo = dwindleMemory();
         TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
 
-        algo.prepareTilingState(&state);
+        algo->prepareTilingState(&state);
         QVERIFY(state.splitTree() == nullptr);
     }
 

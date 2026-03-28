@@ -106,6 +106,14 @@ public:
     QString scriptId() const;
 
     /**
+     * @brief Optional built-in algorithm ID from @builtinId metadata
+     *
+     * When non-empty, the loader uses this ID instead of "script:filename"
+     * for algorithm registration.
+     */
+    QString builtinId() const;
+
+    /**
      * @brief Mark whether this script was loaded from a user directory
      * @param isUser true if from ~/.local/share/plasmazones/algorithms/
      */
@@ -130,6 +138,7 @@ public:
     bool centerLayout() const override;
     bool isScripted() const noexcept override;
     bool isUserScript() const noexcept override;
+    void prepareTilingState(TilingState* state) const override;
 
 private:
     /**

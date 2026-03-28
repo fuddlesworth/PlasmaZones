@@ -28,6 +28,7 @@ struct ScriptMetadata
     bool supportsMemory = false;
     bool producesOverlappingZones = false;
     bool centerLayout = false;
+    QString builtinId; ///< Optional: register as built-in algorithm ID instead of "script:filename"
 };
 
 /**

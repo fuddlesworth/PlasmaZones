@@ -12,6 +12,8 @@
 #include "autotile/AlgorithmRegistry.h"
 #include "core/constants.h"
 
+#include "../helpers/ScriptedAlgoTestSetup.h"
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -26,11 +28,14 @@ class TestAutotileEngineCore : public QObject
 {
     Q_OBJECT
 
+private:
+    PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
+
 private Q_SLOTS:
 
     void initTestCase()
     {
-        AlgorithmRegistry::instance();
+        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
     }
 
     // =========================================================================

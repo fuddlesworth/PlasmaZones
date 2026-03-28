@@ -11,6 +11,8 @@
 #include "autotile/TilingState.h"
 #include "core/constants.h"
 
+#include "../helpers/ScriptedAlgoTestSetup.h"
+
 using namespace PlasmaZones;
 
 /**
@@ -29,11 +31,14 @@ class TestPerScreenConfig : public QObject
 {
     Q_OBJECT
 
+private:
+    PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
+
 private Q_SLOTS:
 
     void initTestCase()
     {
-        AlgorithmRegistry::instance();
+        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
