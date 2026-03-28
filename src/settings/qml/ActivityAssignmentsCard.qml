@@ -129,22 +129,39 @@ SettingsCard {
 
                     }
 
-                    CheckBox {
-                        id: activityDisableCheck
+                    Label {
+                        text: i18n("Disable PlasmaZones for this activity on:")
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        font.weight: Font.DemiBold
+                        opacity: 0.7
+                        visible: root.appSettings.screens.length > 0
+                    }
 
-                        Layout.fillWidth: true
-                        text: i18n("Disable PlasmaZones for this activity")
-                        checked: root.appSettings.isActivityDisabled(activityDelegate.activityId)
-                        onToggled: root.appSettings.setActivityDisabled(activityDelegate.activityId, checked)
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("When enabled, zones will not appear while this activity is active")
+                    Repeater {
+                        model: root.appSettings.screens
 
-                        Connections {
-                            function onDisabledActivitiesChanged() {
-                                activityDisableCheck.checked = root.appSettings.isActivityDisabled(activityDelegate.activityId);
+                        CheckBox {
+                            id: activityDisableCheck
+
+                            required property var modelData
+                            property string screenName: modelData.name || ""
+
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Kirigami.Units.gridUnit
+                            text: screenName
+                            checked: root.appSettings.isActivityDisabled(screenName, activityDelegate.activityId)
+                            onToggled: root.appSettings.setActivityDisabled(screenName, activityDelegate.activityId, checked)
+                            ToolTip.visible: hovered
+                            ToolTip.text: i18n("When enabled, zones will not appear on %1 while this activity is active", screenName)
+
+                            Connections {
+                                function onDisabledActivitiesChanged() {
+                                    activityDisableCheck.checked = root.appSettings.isActivityDisabled(activityDisableCheck.screenName, activityDelegate.activityId);
+                                }
+
+                                target: root.appSettings
                             }
 
-                            target: root.appSettings
                         }
 
                     }

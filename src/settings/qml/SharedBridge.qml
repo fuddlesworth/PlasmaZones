@@ -52,20 +52,20 @@ QtObject {
         settingsController.setMonitorDisabled(name, disabled);
     }
 
-    function isDesktopDisabled(desktop) {
-        return settingsController.isDesktopDisabled(desktop);
+    function isDesktopDisabled(screenName, desktop) {
+        return settingsController.isDesktopDisabled(screenName, desktop);
     }
 
-    function setDesktopDisabled(desktop, disabled) {
-        settingsController.setDesktopDisabled(desktop, disabled);
+    function setDesktopDisabled(screenName, desktop, disabled) {
+        settingsController.setDesktopDisabled(screenName, desktop, disabled);
     }
 
-    function isActivityDisabled(activityId) {
-        return settingsController.isActivityDisabled(activityId);
+    function isActivityDisabled(screenName, activityId) {
+        return settingsController.isActivityDisabled(screenName, activityId);
     }
 
-    function setActivityDisabled(activityId, disabled) {
-        settingsController.setActivityDisabled(activityId, disabled);
+    function setActivityDisabled(screenName, activityId, disabled) {
+        settingsController.setActivityDisabled(screenName, activityId, disabled);
     }
 
     function isScreenLocked(screen, mode) {

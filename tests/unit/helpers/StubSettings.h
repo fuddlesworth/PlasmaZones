@@ -108,14 +108,14 @@ public:
     {
         return false;
     }
-    QList<int> disabledDesktops() const override
+    QStringList disabledDesktops() const override
     {
         return {};
     }
-    void setDisabledDesktops(const QList<int>&) override
+    void setDisabledDesktops(const QStringList&) override
     {
     }
-    bool isDesktopDisabled(int) const override
+    bool isDesktopDisabled(const QString& /*screenIdOrName*/, int) const override
     {
         return false;
     }
@@ -126,7 +126,7 @@ public:
     void setDisabledActivities(const QStringList&) override
     {
     }
-    bool isActivityDisabled(const QString&) const override
+    bool isActivityDisabled(const QString& /*screenIdOrName*/, const QString&) const override
     {
         return false;
     }

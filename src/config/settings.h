@@ -52,7 +52,7 @@ public:
     Q_PROPERTY(
         QStringList disabledMonitors READ disabledMonitors WRITE setDisabledMonitors NOTIFY disabledMonitorsChanged)
     Q_PROPERTY(
-        QList<int> disabledDesktops READ disabledDesktops WRITE setDisabledDesktops NOTIFY disabledDesktopsChanged)
+        QStringList disabledDesktops READ disabledDesktops WRITE setDisabledDesktops NOTIFY disabledDesktopsChanged)
     Q_PROPERTY(QStringList disabledActivities READ disabledActivities WRITE setDisabledActivities NOTIFY
                    disabledActivitiesChanged)
     Q_PROPERTY(bool showZoneNumbers READ showZoneNumbers WRITE setShowZoneNumbers NOTIFY showZoneNumbersChanged)
@@ -424,19 +424,19 @@ public:
     void setDisabledMonitors(const QStringList& screenIdOrNames) override;
     bool isMonitorDisabled(const QString& screenIdOrName) const override;
 
-    QList<int> disabledDesktops() const override
+    QStringList disabledDesktops() const override
     {
         return m_disabledDesktops;
     }
-    void setDisabledDesktops(const QList<int>& desktops) override;
-    bool isDesktopDisabled(int desktop) const override;
+    void setDisabledDesktops(const QStringList& entries) override;
+    bool isDesktopDisabled(const QString& screenIdOrName, int desktop) const override;
 
     QStringList disabledActivities() const override
     {
         return m_disabledActivities;
     }
-    void setDisabledActivities(const QStringList& activityIds) override;
-    bool isActivityDisabled(const QString& activityId) const override;
+    void setDisabledActivities(const QStringList& entries) override;
+    bool isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const override;
 
     bool showZoneNumbers() const override
     {
@@ -1561,7 +1561,7 @@ private:
     // Display
     bool m_showZonesOnAllMonitors = ConfigDefaults::showOnAllMonitors();
     QStringList m_disabledMonitors;
-    QList<int> m_disabledDesktops;
+    QStringList m_disabledDesktops;
     QStringList m_disabledActivities;
     bool m_showZoneNumbers = ConfigDefaults::showNumbers();
     bool m_flashZonesOnSwitch = ConfigDefaults::flashOnSwitch();

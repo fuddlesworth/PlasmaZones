@@ -375,94 +375,84 @@ SettingsCard {
 
                     }
 
+                    // ─── Disabled Desktops (per-monitor) ─────────────────
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.gridUnit * 2
+                        visible: monitorDelegate.expanded && root.appSettings.virtualDesktopCount > 1
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Kirigami.Separator {
+                            Layout.fillWidth: true
+                        }
+
+                        Label {
+                            text: i18n("Disabled Desktops")
+                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                            font.weight: Font.DemiBold
+                            opacity: 0.7
+                        }
+
+                        Repeater {
+                            model: root.appSettings.virtualDesktopCount
+
+                            CheckBox {
+                                id: desktopDisableCheck
+
+                                required property int index
+                                property int desktopNumber: index + 1
+
+                                text: root.appSettings.virtualDesktopNames[index] || i18n("Desktop %1", desktopNumber)
+                                checked: root.appSettings.isDesktopDisabled(monitorDelegate.screenName, desktopNumber)
+                                onToggled: root.appSettings.setDesktopDisabled(monitorDelegate.screenName, desktopNumber, checked)
+
+                                Connections {
+                                    function onDisabledDesktopsChanged() {
+                                        desktopDisableCheck.checked = root.appSettings.isDesktopDisabled(monitorDelegate.screenName, desktopDisableCheck.desktopNumber);
+                                    }
+
+                                    target: root.appSettings
+                                }
+
+                            }
+
+                        }
+
+                        Kirigami.InlineMessage {
+                            function allDesktopsDisabledOnScreen() {
+                                let count = root.appSettings.virtualDesktopCount;
+                                if (count <= 1)
+                                    return false;
+
+                                for (let i = 1; i <= count; i++) {
+                                    if (!root.appSettings.isDesktopDisabled(monitorDelegate.screenName, i))
+                                        return false;
+
+                                }
+                                return true;
+                            }
+
+                            Layout.fillWidth: true
+                            visible: allDesktopsDisabledOnScreen()
+                            type: Kirigami.MessageType.Warning
+                            text: i18n("All desktops are disabled on this monitor.")
+
+                            Connections {
+                                function onDisabledDesktopsChanged() {
+                                    parent.visible = parent.allDesktopsDisabledOnScreen();
+                                }
+
+                                target: root.appSettings
+                            }
+
+                        }
+
+                    }
+
                     Item {
                         height: Kirigami.Units.smallSpacing
                     }
 
-                }
-
-            }
-
-        }
-
-        // ─── Disabled Desktops ────────────────────────────────────────
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.margins: Kirigami.Units.smallSpacing
-            visible: root.appSettings.virtualDesktopCount > 1
-            spacing: Kirigami.Units.smallSpacing
-
-            Kirigami.Separator {
-                Layout.fillWidth: true
-            }
-
-            Label {
-                text: i18n("Disabled Desktops")
-                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-                font.weight: Font.DemiBold
-                opacity: 0.7
-            }
-
-            Label {
-                Layout.fillWidth: true
-                text: i18n("PlasmaZones will not activate on disabled desktops.")
-                wrapMode: Text.WordWrap
-                font: Kirigami.Theme.smallFont
-                opacity: 0.5
-            }
-
-            Repeater {
-                id: desktopDisableRepeater
-
-                model: root.appSettings.virtualDesktopCount
-
-                CheckBox {
-                    id: desktopDisableCheck
-
-                    required property int index
-                    property int desktopNumber: index + 1
-
-                    text: root.appSettings.virtualDesktopNames[index] || i18n("Desktop %1", desktopNumber)
-                    checked: root.appSettings.isDesktopDisabled(desktopNumber)
-                    onToggled: root.appSettings.setDesktopDisabled(desktopNumber, checked)
-
-                    Connections {
-                        function onDisabledDesktopsChanged() {
-                            desktopDisableCheck.checked = root.appSettings.isDesktopDisabled(desktopDisableCheck.desktopNumber);
-                        }
-
-                        target: root.appSettings
-                    }
-
-                }
-
-            }
-
-            Kirigami.InlineMessage {
-                function allDesktopsDisabled() {
-                    let count = root.appSettings.virtualDesktopCount;
-                    if (count <= 1)
-                        return false;
-
-                    for (let i = 1; i <= count; i++) {
-                        if (!root.appSettings.isDesktopDisabled(i))
-                            return false;
-
-                    }
-                    return true;
-                }
-
-                Layout.fillWidth: true
-                visible: allDesktopsDisabled()
-                type: Kirigami.MessageType.Warning
-                text: i18n("All desktops are disabled. PlasmaZones will not activate on any desktop.")
-
-                Connections {
-                    function onDisabledDesktopsChanged() {
-                        parent.visible = parent.allDesktopsDisabled();
-                    }
-
-                    target: root.appSettings
                 }
 
             }

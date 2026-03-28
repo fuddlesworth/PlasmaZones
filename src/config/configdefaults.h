@@ -87,7 +87,7 @@ public:
     {
         return false;
     }
-    static QList<int> disabledDesktops()
+    static QStringList disabledDesktops()
     {
         return {};
     }

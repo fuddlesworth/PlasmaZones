@@ -221,10 +221,10 @@ public:
     // Screen helpers
     Q_INVOKABLE bool isMonitorDisabled(const QString& screenName) const;
     Q_INVOKABLE void setMonitorDisabled(const QString& screenName, bool disabled);
-    Q_INVOKABLE bool isDesktopDisabled(int desktop) const;
-    Q_INVOKABLE void setDesktopDisabled(int desktop, bool disabled);
-    Q_INVOKABLE bool isActivityDisabled(const QString& activityId) const;
-    Q_INVOKABLE void setActivityDisabled(const QString& activityId, bool disabled);
+    Q_INVOKABLE bool isDesktopDisabled(const QString& screenName, int desktop) const;
+    Q_INVOKABLE void setDesktopDisabled(const QString& screenName, int desktop, bool disabled);
+    Q_INVOKABLE bool isActivityDisabled(const QString& screenName, const QString& activityId) const;
+    Q_INVOKABLE void setActivityDisabled(const QString& screenName, const QString& activityId, bool disabled);
 
     // Font helpers (for FontPickerDialog)
     Q_INVOKABLE QStringList fontStylesForFamily(const QString& family) const;

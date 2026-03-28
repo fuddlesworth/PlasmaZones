@@ -97,12 +97,12 @@ public:
     virtual QStringList disabledMonitors() const = 0;
     virtual void setDisabledMonitors(const QStringList& screenIdOrNames) = 0;
     virtual bool isMonitorDisabled(const QString& screenIdOrName) const = 0;
-    virtual QList<int> disabledDesktops() const = 0;
-    virtual void setDisabledDesktops(const QList<int>& desktops) = 0;
-    virtual bool isDesktopDisabled(int desktop) const = 0;
+    virtual QStringList disabledDesktops() const = 0;
+    virtual void setDisabledDesktops(const QStringList& entries) = 0;
+    virtual bool isDesktopDisabled(const QString& screenIdOrName, int desktop) const = 0;
     virtual QStringList disabledActivities() const = 0;
-    virtual void setDisabledActivities(const QStringList& activityIds) = 0;
-    virtual bool isActivityDisabled(const QString& activityId) const = 0;
+    virtual void setDisabledActivities(const QStringList& entries) = 0;
+    virtual bool isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const = 0;
     virtual QStringList lockedScreens() const = 0;
     virtual void setLockedScreens(const QStringList& screens) = 0;
     virtual void setScreenLocked(const QString& screenIdOrName, bool locked) = 0;
@@ -340,9 +340,9 @@ inline bool isContextDisabled(const IZoneVisualizationSettings* s, const QString
         return false;
     if (s->isMonitorDisabled(screenId))
         return true;
-    if (desktop > 0 && s->isDesktopDisabled(desktop))
+    if (desktop > 0 && s->isDesktopDisabled(screenId, desktop))
         return true;
-    if (!activity.isEmpty() && s->isActivityDisabled(activity))
+    if (!activity.isEmpty() && s->isActivityDisabled(screenId, activity))
         return true;
     return false;
 }

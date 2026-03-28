@@ -1130,41 +1130,43 @@ void SettingsController::setMonitorDisabled(const QString& screenName, bool disa
     m_screenHelper.setMonitorDisabled(screenName, disabled);
 }
 
-bool SettingsController::isDesktopDisabled(int desktop) const
+bool SettingsController::isDesktopDisabled(const QString& screenName, int desktop) const
 {
-    return m_settings.isDesktopDisabled(desktop);
+    return m_settings.isDesktopDisabled(screenName, desktop);
 }
 
-void SettingsController::setDesktopDisabled(int desktop, bool disabled)
+void SettingsController::setDesktopDisabled(const QString& screenName, int desktop, bool disabled)
 {
-    QList<int> desktops = m_settings.disabledDesktops();
-    if (disabled && !desktops.contains(desktop)) {
-        desktops.append(desktop);
-        m_settings.setDisabledDesktops(desktops);
+    QString key = screenName + QLatin1Char('/') + QString::number(desktop);
+    QStringList entries = m_settings.disabledDesktops();
+    if (disabled && !entries.contains(key)) {
+        entries.append(key);
+        m_settings.setDisabledDesktops(entries);
         setNeedsSave(true);
         Q_EMIT disabledDesktopsChanged();
-    } else if (!disabled && desktops.removeAll(desktop) > 0) {
-        m_settings.setDisabledDesktops(desktops);
+    } else if (!disabled && entries.removeAll(key) > 0) {
+        m_settings.setDisabledDesktops(entries);
         setNeedsSave(true);
         Q_EMIT disabledDesktopsChanged();
     }
 }
 
-bool SettingsController::isActivityDisabled(const QString& activityId) const
+bool SettingsController::isActivityDisabled(const QString& screenName, const QString& activityId) const
 {
-    return m_settings.isActivityDisabled(activityId);
+    return m_settings.isActivityDisabled(screenName, activityId);
 }
 
-void SettingsController::setActivityDisabled(const QString& activityId, bool disabled)
+void SettingsController::setActivityDisabled(const QString& screenName, const QString& activityId, bool disabled)
 {
-    QStringList activities = m_settings.disabledActivities();
-    if (disabled && !activities.contains(activityId)) {
-        activities.append(activityId);
-        m_settings.setDisabledActivities(activities);
+    QString key = screenName + QLatin1Char('/') + activityId;
+    QStringList entries = m_settings.disabledActivities();
+    if (disabled && !entries.contains(key)) {
+        entries.append(key);
+        m_settings.setDisabledActivities(entries);
         setNeedsSave(true);
         Q_EMIT disabledActivitiesChanged();
-    } else if (!disabled && activities.removeAll(activityId) > 0) {
-        m_settings.setDisabledActivities(activities);
+    } else if (!disabled && entries.removeAll(key) > 0) {
+        m_settings.setDisabledActivities(entries);
         setNeedsSave(true);
         Q_EMIT disabledActivitiesChanged();
     }
@@ -1329,10 +1331,15 @@ void SettingsController::onVirtualDesktopsChanged()
 
     // Prune disabled-desktop entries that reference desktops beyond the new count.
     // See start.cpp comment re: mid-range renumbering limitation.
-    QList<int> disabled = m_settings.disabledDesktops();
+    QStringList disabled = m_settings.disabledDesktops();
     const int before = disabled.size();
-    disabled.removeIf([this](int d) {
-        return d > m_virtualDesktopCount;
+    disabled.removeIf([this](const QString& entry) {
+        int slashIdx = entry.lastIndexOf(QLatin1Char('/'));
+        if (slashIdx < 0)
+            return true; // malformed entry
+        bool ok = false;
+        int d = entry.mid(slashIdx + 1).toInt(&ok);
+        return !ok || d > m_virtualDesktopCount;
     });
     if (disabled.size() != before) {
         m_settings.setDisabledDesktops(disabled);
@@ -1359,8 +1366,12 @@ void SettingsController::onActivitiesChanged()
         }
         QStringList disabledActs = m_settings.disabledActivities();
         const int before = disabledActs.size();
-        disabledActs.removeIf([&validIds](const QString& id) {
-            return !validIds.contains(id);
+        disabledActs.removeIf([&validIds](const QString& entry) {
+            int slashIdx = entry.lastIndexOf(QLatin1Char('/'));
+            if (slashIdx < 0)
+                return true; // malformed entry
+            QString actId = entry.mid(slashIdx + 1);
+            return !validIds.contains(actId);
         });
         if (disabledActs.size() != before) {
             m_settings.setDisabledActivities(disabledActs);

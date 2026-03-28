@@ -113,18 +113,56 @@ bool Settings::isMonitorDisabled(const QString& screenIdOrName) const
     return false;
 }
 
-SETTINGS_SETTER(const QList<int>&, DisabledDesktops, m_disabledDesktops, disabledDesktopsChanged)
+SETTINGS_SETTER(const QStringList&, DisabledDesktops, m_disabledDesktops, disabledDesktopsChanged)
 
-bool Settings::isDesktopDisabled(int desktop) const
+bool Settings::isDesktopDisabled(const QString& screenIdOrName, int desktop) const
 {
-    return desktop > 0 && m_disabledDesktops.contains(desktop);
+    if (desktop <= 0)
+        return false;
+
+    // Resolve screen identifier bidirectionally (same pattern as isMonitorDisabled)
+    QStringList namesToCheck = {screenIdOrName};
+    if (Utils::isConnectorName(screenIdOrName)) {
+        QString resolved = Utils::screenIdForName(screenIdOrName);
+        if (resolved != screenIdOrName)
+            namesToCheck.append(resolved);
+    } else {
+        QString connector = Utils::screenNameForId(screenIdOrName);
+        if (!connector.isEmpty() && connector != screenIdOrName)
+            namesToCheck.append(connector);
+    }
+
+    const QString desktopStr = QString::number(desktop);
+    for (const QString& name : std::as_const(namesToCheck)) {
+        if (m_disabledDesktops.contains(name + QLatin1Char('/') + desktopStr))
+            return true;
+    }
+    return false;
 }
 
 SETTINGS_SETTER(const QStringList&, DisabledActivities, m_disabledActivities, disabledActivitiesChanged)
 
-bool Settings::isActivityDisabled(const QString& activityId) const
+bool Settings::isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const
 {
-    return !activityId.isEmpty() && m_disabledActivities.contains(activityId);
+    if (activityId.isEmpty())
+        return false;
+
+    QStringList namesToCheck = {screenIdOrName};
+    if (Utils::isConnectorName(screenIdOrName)) {
+        QString resolved = Utils::screenIdForName(screenIdOrName);
+        if (resolved != screenIdOrName)
+            namesToCheck.append(resolved);
+    } else {
+        QString connector = Utils::screenNameForId(screenIdOrName);
+        if (!connector.isEmpty() && connector != screenIdOrName)
+            namesToCheck.append(connector);
+    }
+
+    for (const QString& name : std::as_const(namesToCheck)) {
+        if (m_disabledActivities.contains(name + QLatin1Char('/') + activityId))
+            return true;
+    }
+    return false;
 }
 
 bool Settings::isScreenLocked(const QString& screenIdOrName) const
