@@ -28,7 +28,7 @@ Item {
     // Y range: [-1, 2] mapped to canvas, allowing overshoot
     readonly property real yMin: -1
     readonly property real yMax: 2
-    // Default curve string (Ease Out Cubic) — matches plasmazones.kcfg
+    // Default curve string (Ease Out Cubic) — matches ConfigDefaults
     readonly property string defaultCurve: "0.33,1.00,0.68,1.00"
     // Parsed control point values (internal state, bezier only)
     property real cp1x: 0.33

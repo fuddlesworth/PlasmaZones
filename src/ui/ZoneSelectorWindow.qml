@@ -33,8 +33,7 @@ Window {
     property real screenAspectRatio: 16 / 9
     property int screenWidth: 1920 // Actual screen width for scaling
     // Selector configuration from settings
-    // Note: These are fallback defaults that match plasmazones.kcfg.
-    // C++ (OverlayService) sets these properties with actual settings values.
+    // Fallback defaults; C++ (OverlayService) sets these with actual settings values.
     // See ConfigDefaults class for the single source of truth.
     property int selectorPosition: 0
     property int selectorLayoutMode: 1
@@ -109,6 +108,18 @@ Window {
     // Signals (zoneSelected is used by C++ for hover-based zone selection)
     signal zoneSelected(string layoutId, int zoneIndex, var relativeGeometry)
 
+    // Scroll the zone selector from C++ (D-Bus forwarded wheel/keyboard events)
+    function applyScrollDelta(angleDeltaY) {
+        var step = angleDeltaY / 120 * 0.1;
+        if (root.needsScrolling) {
+            var vBar = scrollView.ScrollBar.vertical;
+            vBar.position = Math.max(0, Math.min(1 - vBar.size, vBar.position - step));
+        } else if (root.needsHorizontalScrolling) {
+            var hBar = scrollView.ScrollBar.horizontal;
+            hBar.position = Math.max(0, Math.min(1 - hBar.size, hBar.position - step));
+        }
+    }
+
     // Window configuration for overlay - LayerShellQt handles layering on Wayland
     flags: Qt.FramelessWindowHint | Qt.Tool
     color: "transparent"
@@ -119,18 +130,6 @@ Window {
 
         readonly property int shortDuration: 150
         readonly property int normalDuration: 200
-    }
-
-    // Scroll the zone selector from C++ (D-Bus forwarded wheel/keyboard events)
-    function applyScrollDelta(angleDeltaY) {
-        var step = angleDeltaY / 120.0 * 0.10;
-        if (root.needsScrolling) {
-            var vBar = scrollView.ScrollBar.vertical;
-            vBar.position = Math.max(0, Math.min(1 - vBar.size, vBar.position - step));
-        } else if (root.needsHorizontalScrolling) {
-            var hBar = scrollView.ScrollBar.horizontal;
-            hBar.position = Math.max(0, Math.min(1 - hBar.size, hBar.position - step));
-        }
     }
 
     // Auto-scroll constants for drag-based scrolling.

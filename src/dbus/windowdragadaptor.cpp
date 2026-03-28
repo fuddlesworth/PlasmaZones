@@ -234,7 +234,9 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     }
 
     QScreen* screen = screenAtPoint(cursorX, cursorY);
-    if (screen && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
+    if (screen
+        && isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_layoutManager->currentVirtualDesktop(),
+                             m_layoutManager->currentActivity())) {
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;
             m_overlayService->hideZoneSelector();

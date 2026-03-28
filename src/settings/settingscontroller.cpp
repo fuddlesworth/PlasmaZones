@@ -1130,6 +1130,48 @@ void SettingsController::setMonitorDisabled(const QString& screenName, bool disa
     m_screenHelper.setMonitorDisabled(screenName, disabled);
 }
 
+bool SettingsController::isDesktopDisabled(const QString& screenName, int desktop) const
+{
+    return m_settings.isDesktopDisabled(screenName, desktop);
+}
+
+void SettingsController::setDesktopDisabled(const QString& screenName, int desktop, bool disabled)
+{
+    QString key = screenName + QLatin1Char('/') + QString::number(desktop);
+    QStringList entries = m_settings.disabledDesktops();
+    if (disabled && !entries.contains(key)) {
+        entries.append(key);
+        m_settings.setDisabledDesktops(entries);
+        setNeedsSave(true);
+        Q_EMIT disabledDesktopsChanged();
+    } else if (!disabled && entries.removeAll(key) > 0) {
+        m_settings.setDisabledDesktops(entries);
+        setNeedsSave(true);
+        Q_EMIT disabledDesktopsChanged();
+    }
+}
+
+bool SettingsController::isActivityDisabled(const QString& screenName, const QString& activityId) const
+{
+    return m_settings.isActivityDisabled(screenName, activityId);
+}
+
+void SettingsController::setActivityDisabled(const QString& screenName, const QString& activityId, bool disabled)
+{
+    QString key = screenName + QLatin1Char('/') + activityId;
+    QStringList entries = m_settings.disabledActivities();
+    if (disabled && !entries.contains(key)) {
+        entries.append(key);
+        m_settings.setDisabledActivities(entries);
+        setNeedsSave(true);
+        Q_EMIT disabledActivitiesChanged();
+    } else if (!disabled && entries.removeAll(key) > 0) {
+        m_settings.setDisabledActivities(entries);
+        setNeedsSave(true);
+        Q_EMIT disabledActivitiesChanged();
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Virtual desktops / activities (D-Bus queries to daemon)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1286,12 +1328,41 @@ void SettingsController::setFillOnDropModifier(int v)
 void SettingsController::onVirtualDesktopsChanged()
 {
     refreshVirtualDesktops();
+
+    // Prune disabled-desktop entries that reference desktops beyond the new count.
+    // See start.cpp comment re: mid-range renumbering limitation.
+    QStringList disabled = m_settings.disabledDesktops();
+    if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
+        m_settings.setDisabledDesktops(disabled);
+        setNeedsSave(true);
+        Q_EMIT disabledDesktopsChanged();
+    }
+
     Q_EMIT virtualDesktopsChanged();
 }
 
 void SettingsController::onActivitiesChanged()
 {
     refreshActivities();
+
+    // Prune disabled-activity entries that reference removed activities
+    if (!m_activities.isEmpty()) {
+        QSet<QString> validIds;
+        for (const QVariant& v : std::as_const(m_activities)) {
+            const QVariantMap map = v.toMap();
+            const QString id = map.value(QStringLiteral("id")).toString();
+            if (!id.isEmpty()) {
+                validIds.insert(id);
+            }
+        }
+        QStringList disabledActs = m_settings.disabledActivities();
+        if (pruneDisabledActivityEntries(disabledActs, validIds)) {
+            m_settings.setDisabledActivities(disabledActs);
+            setNeedsSave(true);
+            Q_EMIT disabledActivitiesChanged();
+        }
+    }
+
     Q_EMIT activitiesChanged();
 }
 

@@ -190,8 +190,6 @@ echo ""
 %{_datadir}/icons/hicolor-light/scalable/apps/plasmazones-editor.svg
 %{_datadir}/icons/hicolor-light/scalable/apps/plasmazones-settings.svg
 
-# KConfig
-%{_datadir}/config.kcfg/plasmazones.kcfg
 
 # Systemd user service
 %{_userunitdir}/plasmazones.service
