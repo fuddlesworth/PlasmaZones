@@ -4,11 +4,15 @@
 // @name Wide
 // @builtinId wide
 // @description Master area on top, remaining windows stacked below
+// @producesOverlappingZones false
 // @supportsMasterCount true
 // @supportsSplitRatio true
 // @defaultSplitRatio 0.5
 // @defaultMaxWindows 5
+// @minimumWindows 1
+// @zoneNumberDisplay all
 // @masterZoneIndex 0
+// @supportsMemory false
 
 /**
  * Wide layout: master row on top, stack row on bottom.
@@ -57,7 +61,7 @@ function calculateZones(params) {
         stackHeight = 0;
     } else {
         var contentHeight = area.height - gap;
-        masterHeight = Math.round(contentHeight * splitRatio);
+        masterHeight = Math.floor(contentHeight * splitRatio);
         stackHeight = contentHeight - masterHeight;
 
         // Joint min-height solve
@@ -68,12 +72,9 @@ function calculateZones(params) {
     }
 
     // Extract per-window min widths for each row
-    var masterMinWidths = [];
+    var masterMinWidths = extractMinWidths(minSizes, masterCount);
     var stackMinWidths = [];
     if (minSizes.length > 0) {
-        for (var i = 0; i < masterCount; i++) {
-            masterMinWidths.push((i < minSizes.length && minSizes[i].w > 0) ? minSizes[i].w : 0);
-        }
         for (var i = 0; i < stackCount; i++) {
             var idx = masterCount + i;
             stackMinWidths.push((idx < minSizes.length && minSizes[idx].w > 0) ? minSizes[idx].w : 0);

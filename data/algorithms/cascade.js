@@ -28,12 +28,18 @@ function calculateZones(params) {
     if (count <= 0) return [];
     var area = params.area;
 
+    // Single window: fill area (defensive — C++ ScriptedAlgorithm short-circuits
+    // single-window before calling JS, but guard against standalone use)
+    if (count === 1) {
+        return [{x: area.x, y: area.y, width: area.width, height: area.height}];
+    }
+
     // Clamp splitRatio to cascade-specific range (C++ wrapper clamps to 0.1-0.9,
     // but cascade needs tighter bounds)
     var offsetRatio = Math.max(0.02, Math.min(0.4, params.splitRatio));
 
-    var offsetX = Math.max(20, Math.round(area.width * offsetRatio / (count - 1)));
-    var offsetY = Math.max(20, Math.round(area.height * offsetRatio / (count - 1)));
+    var offsetX = Math.max(20, Math.floor(area.width * offsetRatio / (count - 1)));
+    var offsetY = Math.max(20, Math.floor(area.height * offsetRatio / (count - 1)));
 
     // Each window is sized to fill the area minus the total cascade offset
     var totalOffsetX = offsetX * (count - 1);

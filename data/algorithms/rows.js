@@ -25,15 +25,7 @@ function calculateZones(params) {
     var area = params.area;
     var gap = params.innerGap || 0;
 
-    // Extract per-window minimum heights
-    var minHeights = [];
-    var hasMinSizes = params.minSizes && params.minSizes.length > 0;
-    if (hasMinSizes) {
-        for (var j = 0; j < count; j++) {
-            minHeights.push((j < params.minSizes.length && params.minSizes[j].h > 0)
-                ? params.minSizes[j].h : 0);
-        }
-    }
+    var minHeights = extractMinHeights(params.minSizes || [], count);
 
     // Calculate row heights with gaps and minimum sizes
     var rowHeights = (minHeights.length === 0)

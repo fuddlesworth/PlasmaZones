@@ -25,15 +25,7 @@ function calculateZones(params) {
     var area = params.area;
     var gap = params.innerGap || 0;
 
-    // Extract per-window minimum widths
-    var minWidths = [];
-    var hasMinSizes = params.minSizes && params.minSizes.length > 0;
-    if (hasMinSizes) {
-        for (var j = 0; j < count; j++) {
-            minWidths.push((j < params.minSizes.length && params.minSizes[j].w > 0)
-                ? params.minSizes[j].w : 0);
-        }
-    }
+    var minWidths = extractMinWidths(params.minSizes || [], count);
 
     // Calculate column widths with gaps and minimum sizes
     var columnWidths = (minWidths.length === 0)

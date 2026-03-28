@@ -4,12 +4,16 @@
 // @name Three Column
 // @builtinId three-column
 // @description Master window centered with columns on each side
+// @producesOverlappingZones false
 // @supportsMasterCount false
 // @supportsSplitRatio true
 // @defaultSplitRatio 0.5
 // @defaultMaxWindows 5
+// @minimumWindows 1
+// @zoneNumberDisplay all
 // @centerLayout true
 // @masterZoneIndex 0
+// @supportsMemory false
 
 /**
  * Three Column layout: center master with left/right side columns.
@@ -30,7 +34,7 @@ function calculateZones(params) {
     if (count === 2) {
         var ratio = Math.max(PZ_MIN_SPLIT, Math.min(splitRatio, PZ_MAX_SPLIT));
         var contentWidth = Math.max(1, area.width - gap);
-        var masterWidth = Math.round(contentWidth * ratio);
+        var masterWidth = Math.floor(contentWidth * ratio);
         var stackWidth = contentWidth - masterWidth;
 
         // Joint min-width solve for 2-window case

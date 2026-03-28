@@ -4,10 +4,14 @@
 // @name Dwindle
 // @builtinId dwindle
 // @description Each new window gets a smaller split, alternating direction
+// @producesOverlappingZones false
 // @supportsMasterCount false
 // @supportsSplitRatio true
 // @defaultSplitRatio 0.5
 // @defaultMaxWindows 5
+// @minimumWindows 1
+// @zoneNumberDisplay all
+// @supportsMemory false
 
 /**
  * Dwindle layout: recursively subdivides space using alternating

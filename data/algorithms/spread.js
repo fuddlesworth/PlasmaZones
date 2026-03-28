@@ -4,11 +4,14 @@
 // @name Spread
 // @builtinId spread
 // @description Windows spread evenly across the screen
+// @producesOverlappingZones true
 // @supportsMasterCount false
 // @supportsSplitRatio true
 // @defaultSplitRatio 0.8
 // @defaultMaxWindows 4
-// @producesOverlappingZones true
+// @minimumWindows 1
+// @zoneNumberDisplay all
+// @supportsMemory false
 
 /**
  * Spread layout: windows distributed evenly across the screen,

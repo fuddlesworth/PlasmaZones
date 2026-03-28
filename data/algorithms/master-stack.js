@@ -4,11 +4,15 @@
 // @name Master + Stack
 // @builtinId master-stack
 // @description Large master area with stacked secondary windows
+// @producesOverlappingZones false
 // @supportsMasterCount true
 // @supportsSplitRatio true
 // @defaultSplitRatio 0.6
 // @defaultMaxWindows 4
+// @minimumWindows 1
+// @zoneNumberDisplay all
 // @masterZoneIndex 0
+// @supportsMemory false
 
 /**
  * Classic master-stack tiling: one or more master windows on the left,
@@ -57,7 +61,7 @@ function calculateZones(params) {
         stackWidth = 0;
     } else {
         var contentWidth = area.width - gap;
-        masterWidth = Math.round(contentWidth * splitRatio);
+        masterWidth = Math.floor(contentWidth * splitRatio);
         stackWidth = contentWidth - masterWidth;
 
         // Joint min-width solve
@@ -68,12 +72,9 @@ function calculateZones(params) {
     }
 
     // Extract per-window min heights for each column
-    var masterMinHeights = [];
+    var masterMinHeights = extractMinHeights(minSizes, masterCount);
     var stackMinHeights = [];
     if (minSizes.length > 0) {
-        for (var i = 0; i < masterCount; i++) {
-            masterMinHeights.push((i < minSizes.length && minSizes[i].h > 0) ? minSizes[i].h : 0);
-        }
         for (var i = 0; i < stackCount; i++) {
             var idx = masterCount + i;
             stackMinHeights.push((idx < minSizes.length && minSizes[idx].h > 0) ? minSizes[idx].h : 0);

@@ -58,7 +58,7 @@ function calculateZones(params) {
     // Case 2: One stack window — 2-column layout (masters left, stack right)
     if (stackCount === 1) {
         var contentWidth = area.width - gap;
-        var masterWidth = Math.round(contentWidth * splitRatio);
+        var masterWidth = Math.floor(contentWidth * splitRatio);
         var stackWidth = contentWidth - masterWidth;
 
         // Min-width clamping

@@ -157,6 +157,8 @@ set(plasmazones_core_SRCS
     autotile/algorithms/ScriptedAlgorithmJsBuiltins.cpp
     autotile/algorithms/ScriptedAlgorithmJsBuiltins.h
     autotile/algorithms/ScriptedAlgorithmLoader.cpp
+    # Builtin JS helpers compiled into the binary as Qt resources
+    autotile/algorithms/builtins.qrc
     autotile/algorithms/ScriptedAlgorithmLoader.h
     autotile/algorithms/ScriptedAlgorithmSandbox.cpp
     autotile/algorithms/ScriptedAlgorithmSandbox.h

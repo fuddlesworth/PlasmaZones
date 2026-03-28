@@ -261,6 +261,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_engine->evaluate(ScriptedHelpers::cumulativeMinDimsJs(), QStringLiteral("builtin:computeCumulativeMinDims"));
     m_engine->evaluate(ScriptedHelpers::gracefulDegradationJs(), QStringLiteral("builtin:appendGracefulDegradation"));
     m_engine->evaluate(ScriptedHelpers::dwindleLayoutJs(), QStringLiteral("builtin:dwindleLayout"));
+    m_engine->evaluate(ScriptedHelpers::extractMinDimsJs(), QStringLiteral("builtin:extractMinDims"));
 
     // Freeze helper globals and constants so user scripts cannot overwrite them.
     // This must happen after injection since hardenSandbox's freezeGlobal calls
@@ -271,7 +272,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
           QLatin1String("distributeEvenly"), QLatin1String("distributeWithGaps"),
           QLatin1String("distributeWithMinSizes"), QLatin1String("solveTwoPart"), QLatin1String("solveThreeColumn"),
           QLatin1String("computeCumulativeMinDims"), QLatin1String("appendGracefulDegradation"),
-          QLatin1String("dwindleLayout")}) {
+          QLatin1String("dwindleLayout"), QLatin1String("extractMinWidths"), QLatin1String("extractMinHeights")}) {
         m_engine->evaluate(QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});")
                                .arg(QLatin1String(helperName)));
     }
@@ -421,7 +422,11 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
 
     // Split tree (read-only deep copy for memory-aware scripts)
     if (params.state && params.state->splitTree() && !params.state->splitTree()->isEmpty()) {
-        jsParams.setProperty(QStringLiteral("tree"), splitNodeToJSValue(params.state->splitTree()->root()));
+        QJSValue jsTree = splitNodeToJSValue(params.state->splitTree()->root());
+        // Expose leafCount on the root so JS scripts can check tree validity
+        // without traversing (matches C++ SplitTree::leafCount() API)
+        jsTree.setProperty(QStringLiteral("leafCount"), params.state->splitTree()->leafCount());
+        jsParams.setProperty(QStringLiteral("tree"), jsTree);
     }
 
     // minSizes array

@@ -1,0 +1,12 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/builtins">
+    <file alias="distributeWithGaps.js">builtins/distributeWithGaps.js</file>
+    <file alias="distributeWithMinSizes.js">builtins/distributeWithMinSizes.js</file>
+    <file alias="solveTwoPart.js">builtins/solveTwoPart.js</file>
+    <file alias="solveThreeColumn.js">builtins/solveThreeColumn.js</file>
+    <file alias="computeCumulativeMinDims.js">builtins/computeCumulativeMinDims.js</file>
+    <file alias="appendGracefulDegradation.js">builtins/appendGracefulDegradation.js</file>
+    <file alias="dwindleLayout.js">builtins/dwindleLayout.js</file>
+    <file alias="extractMinDims.js">builtins/extractMinDims.js</file>
+</qresource>
+</RCC>
