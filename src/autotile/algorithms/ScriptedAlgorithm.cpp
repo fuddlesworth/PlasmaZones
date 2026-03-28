@@ -24,6 +24,28 @@
 #include <mutex>
 #include <thread>
 
+namespace {
+
+/// RAII guard to prevent re-entrant calls into ScriptedAlgorithm::calculateZones.
+/// QJSEngine is not re-entrant; a signal handler calling back into calculateZones
+/// while an evaluation is in flight would corrupt engine state.
+struct ReentrancyGuard
+{
+    bool& flag;
+    explicit ReentrancyGuard(bool& f)
+        : flag(f)
+    {
+        flag = true;
+    }
+    ~ReentrancyGuard()
+    {
+        flag = false;
+    }
+    Q_DISABLE_COPY_MOVE(ReentrancyGuard)
+};
+
+} // namespace
+
 namespace PlasmaZones {
 
 using namespace AutotileDefaults;
@@ -297,6 +319,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     //   distributeEvenly    (standalone)
     //   distributeWithGaps  (standalone)
     //   distributeWithMinSizes → distributeWithGaps
+    //   distributeWithOptionalMins → distributeWithGaps, distributeWithMinSizes
     //   solveTwoPart        (standalone)
     //   solveThreeColumn    (standalone, uses PZ_* constants)
     //   computeCumulativeMinDims (standalone)
@@ -308,13 +331,16 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     //   extractRegionMaxMin  (standalone)
     //   fillArea             (standalone)
     //   masterStackLayout   → fillArea, extractRegionMaxMin, solveTwoPart,
-    //                         extractMinDims, distributeWithGaps, distributeWithMinSizes
+    //                         extractMinDims, distributeWithOptionalMins
+    //   equalColumnsLayout  → extractMinDims, distributeWithOptionalMins
     if (!injectBuiltin(ScriptedHelpers::applyTreeGeometryJs(), QStringLiteral("builtin:applyTreeGeometry"))
         || !injectBuiltin(ScriptedHelpers::lShapeLayoutJs(), QStringLiteral("builtin:lShapeLayout"))
         || !injectBuiltin(ScriptedHelpers::deckLayoutJs(), QStringLiteral("builtin:deckLayout"))
         || !injectBuiltin(ScriptedHelpers::distributeEvenlyJs(), QStringLiteral("builtin:distributeEvenly"))
         || !injectBuiltin(ScriptedHelpers::distributeWithGapsJs(), QStringLiteral("builtin:distributeWithGaps"))
         || !injectBuiltin(ScriptedHelpers::distributeWithMinSizesJs(), QStringLiteral("builtin:distributeWithMinSizes"))
+        || !injectBuiltin(ScriptedHelpers::distributeWithOptionalMinsJs(),
+                          QStringLiteral("builtin:distributeWithOptionalMins"))
         || !injectBuiltin(ScriptedHelpers::solveTwoPartJs(), QStringLiteral("builtin:solveTwoPart"))
         || !injectBuiltin(ScriptedHelpers::solveThreeColumnJs(), QStringLiteral("builtin:solveThreeColumn"))
         || !injectBuiltin(ScriptedHelpers::cumulativeMinDimsJs(), QStringLiteral("builtin:computeCumulativeMinDims"))
@@ -335,9 +361,9 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // This must happen after injection since hardenSandbox's freezeGlobal calls
     // ran before the helpers existed.
     //
-    // IMPORTANT: This list must include every builtin helper global name
-    // injected above (constants + all helper functions). A missing entry
-    // is a sandbox escape — user scripts could overwrite that helper.
+    // IMPORTANT: Every global name injected by builtinHelpers must appear here.
+    // A missing entry is a sandbox escape — user scripts could overwrite the helper.
+    // Update the static_assert count below when adding/removing builtins.
     // User-exported functions (calculateZones, etc.) are intentionally
     // NOT frozen. When adding a new builtin helper, add its exported
     // global name(s) here.
@@ -353,6 +379,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         QLatin1String("distributeEvenly"),
         QLatin1String("distributeWithGaps"),
         QLatin1String("distributeWithMinSizes"),
+        QLatin1String("distributeWithOptionalMins"),
         QLatin1String("solveTwoPart"),
         QLatin1String("solveThreeColumn"),
         QLatin1String("computeCumulativeMinDims"),
@@ -375,6 +402,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         // and invisible to Object.defineProperty on `this`)
         QLatin1String("_extractMinDims"), // internal helper from extractMinDims (used by extractMinWidths/Heights)
     };
+    static_assert(std::size(frozenGlobals) == 29, "frozenGlobals count mismatch — did you add a new builtin?");
     for (const auto& name : frozenGlobals) {
         QJSValue freezeResult = m_engine->evaluate(
             QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});").arg(name));
@@ -484,6 +512,13 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
         return {};
     }
 
+    // Re-entrancy guard — QJSEngine state is not re-entrant
+    if (m_evaluating) {
+        qCWarning(lcAutotile) << "Re-entrant calculateZones call on" << m_scriptId << "— returning empty";
+        return {};
+    }
+    ReentrancyGuard guard(m_evaluating);
+
     if (!m_valid || params.windowCount <= 0 || !params.screenGeometry.isValid()) {
         return {};
     }
@@ -494,6 +529,16 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     // Early return for empty area (e.g., gaps exceed screen geometry)
     if (area.isEmpty()) {
         return {};
+    }
+
+    // Degenerate screen: area too small for meaningful tiling — fill with stacked zones
+    if (area.width() < MinZoneSizePx || area.height() < MinZoneSizePx) {
+        QVector<QRect> zones;
+        zones.reserve(params.windowCount);
+        for (int i = 0; i < params.windowCount; ++i) {
+            zones.append(area);
+        }
+        return zones;
     }
 
     // Single-window case always fills the area. Scripts cannot customize

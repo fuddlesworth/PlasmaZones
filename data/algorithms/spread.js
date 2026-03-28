@@ -29,7 +29,7 @@ function calculateZones(params) {
         return fillArea(area, count);
     }
     const gap = Math.max(0, params.innerGap || 0);
-    const splitRatio = params.splitRatio;
+    const splitRatio = params.splitRatio || 0.5;
     const minSizes = params.minSizes || [];
 
     // Clamp widthFraction to [0.3, 1.0] — upper bound is 1.0 (not PZ_MAX_SPLIT)
@@ -51,9 +51,7 @@ function calculateZones(params) {
     }
 
     // Distribute slot widths respecting scaled minimum sizes
-    const slotWidths = (minSizes.length === 0)
-        ? distributeWithGaps(area.width, count, gap)
-        : distributeWithMinSizes(area.width, count, gap, slotMinWidths);
+    const slotWidths = distributeWithOptionalMins(area.width, count, gap, slotMinWidths);
 
     // splitRatio also controls height fraction
     const baseHeight = Math.max(PZ_MIN_ZONE_SIZE, Math.floor(area.height * widthFraction));

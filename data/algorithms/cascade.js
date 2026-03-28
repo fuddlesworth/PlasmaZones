@@ -33,12 +33,6 @@ function calculateZones(params) {
         return fillArea(area, count);
     }
 
-    // Single window: fill area (defensive — C++ ScriptedAlgorithm short-circuits
-    // single-window before calling JS, but guard against standalone use)
-    if (count === 1) {
-        return [{x: area.x, y: area.y, width: area.width, height: area.height}];
-    }
-
     // Clamp splitRatio to cascade-specific range (0.02-0.4), tighter than the
     // global PZ_MIN_SPLIT/PZ_MAX_SPLIT used by non-overlapping algorithms.
     const offsetRatio = Math.max(0.02, Math.min(0.4, params.splitRatio));

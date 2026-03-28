@@ -185,6 +185,7 @@ private:
     QString m_scriptId;
     bool m_valid = false;
     bool m_isUserScript = false;
+    mutable bool m_evaluating = false; ///< Re-entrancy guard for calculateZones
     mutable bool m_lastCallTimedOut = false; ///< Set by guardedCall on timeout, checked by callers
     mutable uint32_t m_gcCounter = 0; ///< GC throttle counter for calculateZones
     static constexpr uint32_t GcInterval = 8; ///< Collect garbage every N calculateZones calls

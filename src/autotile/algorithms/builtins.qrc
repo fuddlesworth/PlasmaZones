@@ -19,5 +19,6 @@
     <file alias="distributeEvenly.js">builtins/distributeEvenly.js</file>
     <file alias="equalColumnsLayout.js">builtins/equalColumnsLayout.js</file>
     <file alias="fillRegion.js">builtins/fillRegion.js</file>
+    <file alias="distributeWithOptionalMins.js">builtins/distributeWithOptionalMins.js</file>
 </qresource>
 </RCC>

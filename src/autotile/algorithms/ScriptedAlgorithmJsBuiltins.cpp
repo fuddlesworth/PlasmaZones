@@ -147,5 +147,11 @@ QString fillRegionJs()
     return s;
 }
 
+QString distributeWithOptionalMinsJs()
+{
+    static const QString s = loadBuiltinJs(QStringLiteral("distributeWithOptionalMins.js"));
+    return s;
+}
+
 } // namespace ScriptedHelpers
 } // namespace PlasmaZones

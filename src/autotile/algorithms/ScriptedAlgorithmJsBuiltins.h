@@ -182,5 +182,14 @@ QString equalColumnsLayoutJs();
  */
 QString fillRegionJs();
 
+/**
+ * @brief JS source for distributeWithOptionalMins(total, count, gap, minDims) built-in helper
+ *
+ * Wraps the repeated ternary pattern that branches on minDims.length,
+ * delegating to distributeWithGaps when empty or distributeWithMinSizes otherwise.
+ * Loaded from Qt resource :/builtins/distributeWithOptionalMins.js
+ */
+QString distributeWithOptionalMinsJs();
+
 } // namespace ScriptedHelpers
 } // namespace PlasmaZones

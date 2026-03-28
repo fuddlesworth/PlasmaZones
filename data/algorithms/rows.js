@@ -31,9 +31,7 @@ function calculateZones(params) {
     const minHeights = extractMinHeights(params.minSizes || [], count);
 
     // Calculate row heights with gaps and minimum sizes
-    const rowHeights = (minHeights.length === 0)
-        ? distributeWithGaps(area.height, count, gap)
-        : distributeWithMinSizes(area.height, count, gap, minHeights);
+    const rowHeights = distributeWithOptionalMins(area.height, count, gap, minHeights);
 
     const zones = [];
     let currentY = area.y;

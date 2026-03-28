@@ -55,7 +55,7 @@ function calculateZones(params) {
     // Case 2: One stack window — 2-column layout (masters left, stack right)
     if (stackCount === 1) {
         // Degenerate: gap consumes all width or height — fall back to stacking
-        if (area.width <= gap || area.height < PZ_MIN_ZONE_SIZE) {
+        if (area.width - gap <= 0 || area.height < PZ_MIN_ZONE_SIZE) {
             return fillArea(area, count);
         }
         const contentWidth = area.width - gap;
@@ -67,15 +67,13 @@ function calculateZones(params) {
             const minMW = minSizes[0].w || 0;
             const minSW = (masterCount < minSizes.length) ? (minSizes[masterCount].w || 0) : 0;
             const solved = solveTwoPart(contentWidth, masterWidth, stackWidth, minMW, minSW);
-            masterWidth = solved.first;
-            stackWidth = solved.second;
+            masterWidth = Math.max(1, solved.first);
+            stackWidth = Math.max(1, solved.second);
         }
 
         // Masters stacked vertically on left
         const masterMinH = extractMinHeights(minSizes, masterCount);
-        const mHeights = (masterMinH.length === 0)
-            ? distributeWithGaps(area.height, masterCount, gap)
-            : distributeWithMinSizes(area.height, masterCount, gap, masterMinH);
+        const mHeights = distributeWithOptionalMins(area.height, masterCount, gap, masterMinH);
         const zones = [];
         let currentY = area.y;
         for (let i = 0; i < masterCount; i++) {
@@ -89,12 +87,13 @@ function calculateZones(params) {
     }
 
     // Case 3: 3-column layout — left stack, center masters, right stack
+    // TODO: Extract shared 3-column layout logic with three-column.js (see PR #259 review)
     const leftCount = Math.ceil(stackCount / 2);
     const rightCount = stackCount - leftCount;
 
     const contentWidth = area.width - 2 * gap;
 
-    if (contentWidth < 3) {
+    if (contentWidth < 3 * PZ_MIN_ZONE_SIZE) {
         return fillArea(area, count);
     }
 
@@ -120,29 +119,18 @@ function calculateZones(params) {
     const rightX = cols.rightX;
 
     // Calculate per-column minimum heights
-    const masterMinH = [];
-    if (minSizes.length > 0) {
-        for (let i = 0; i < masterCount; i++) {
-            masterMinH.push((i < minSizes.length) ? (minSizes[i].h || 0) : 0);
-        }
-    }
+    const masterMinH = extractMinHeights(minSizes, masterCount);
     const sideMinH = (minSizes.length > 0)
         ? interleaveMinHeights(minSizes, stackIsLeft, stackCount, leftCount, rightCount, masterCount)
         : {leftMinH: [], rightMinH: []};
     const leftMinH = sideMinH.leftMinH;
     const rightMinH = sideMinH.rightMinH;
 
-    const masterHeights = masterMinH.length === 0
-        ? distributeWithGaps(area.height, masterCount, gap)
-        : distributeWithMinSizes(area.height, masterCount, gap, masterMinH);
-    const leftHeights = leftMinH.length === 0
-        ? distributeWithGaps(area.height, leftCount, gap)
-        : distributeWithMinSizes(area.height, leftCount, gap, leftMinH);
+    const masterHeights = distributeWithOptionalMins(area.height, masterCount, gap, masterMinH);
+    const leftHeights = distributeWithOptionalMins(area.height, leftCount, gap, leftMinH);
     let rightHeights = [];
     if (rightCount > 0) {
-        rightHeights = rightMinH.length === 0
-            ? distributeWithGaps(area.height, rightCount, gap)
-            : distributeWithMinSizes(area.height, rightCount, gap, rightMinH);
+        rightHeights = distributeWithOptionalMins(area.height, rightCount, gap, rightMinH);
     }
 
     // Masters in center column (stacked vertically)

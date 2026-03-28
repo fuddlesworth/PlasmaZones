@@ -13,7 +13,7 @@
 function fillArea(area, count) {
     const zones = [];
     for (let i = 0; i < count; i++) {
-        zones.push({x: area.x, y: area.y, width: area.width, height: area.height});
+        zones.push({x: area.x, y: area.y, width: Math.max(1, area.width), height: Math.max(1, area.height)});
     }
     return zones;
 }

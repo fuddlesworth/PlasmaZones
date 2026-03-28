@@ -26,7 +26,7 @@ function solveTwoPart(contentDim, firstDim, secondDim, minFirst, minSecond) {
             firstDim = contentDim - secondDim;
         }
     }
-    firstDim = Math.max(0, firstDim);
-    secondDim = Math.max(0, secondDim);
+    firstDim = Math.max(1, firstDim);
+    secondDim = Math.max(1, secondDim);
     return {first: firstDim, second: secondDim};
 }

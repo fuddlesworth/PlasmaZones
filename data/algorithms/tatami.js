@@ -34,13 +34,8 @@ function calculateZones(params) {
         return fillArea(area, count);
     }
 
-    // Single window: full area
-    if (count === 1) {
-        return [{ x: area.x, y: area.y, width: area.width, height: area.height }];
-    }
-
-    // Degenerate case: gap consumes all available width — fall back to stacking
-    if (gap >= area.width || gap >= area.height) {
+    // Degenerate case: gap consumes all available width or height — fall back to stacking
+    if (area.width - gap <= 0 || area.height - gap <= 0) {
         return fillArea(area, count);
     }
 

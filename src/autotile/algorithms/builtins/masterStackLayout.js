@@ -46,6 +46,9 @@ function masterStackLayout(area, count, gap, splitRatio, masterCount, minSizes, 
         stackPrimary = 0;
     } else {
         const contentPrimary = primarySize - gap;
+        if (contentPrimary <= 0) {
+            return fillArea(area, count);
+        }
         masterPrimary = Math.floor(contentPrimary * splitRatio);
         stackPrimary = contentPrimary - masterPrimary;
         const solved = solveTwoPart(contentPrimary, masterPrimary, stackPrimary,
@@ -68,9 +71,7 @@ function masterStackLayout(area, count, gap, splitRatio, masterCount, minSizes, 
     }
 
     // Distribute secondary dimension for master zones
-    const masterSecondary = (masterMinSec.length === 0)
-        ? distributeWithGaps(secondarySize, masterCount, gap)
-        : distributeWithMinSizes(secondarySize, masterCount, gap, masterMinSec);
+    const masterSecondary = distributeWithOptionalMins(secondarySize, masterCount, gap, masterMinSec);
 
     // Generate master zones
     const zones = [];
@@ -89,9 +90,7 @@ function masterStackLayout(area, count, gap, splitRatio, masterCount, minSizes, 
 
     // Generate stack zones
     if (stackCount > 0) {
-        const stackSecondary = (stackMinSec.length === 0)
-            ? distributeWithGaps(secondarySize, stackCount, gap)
-            : distributeWithMinSizes(secondarySize, stackCount, gap, stackMinSec);
+        const stackSecondary = distributeWithOptionalMins(secondarySize, stackCount, gap, stackMinSec);
         const stackStart = primaryPos + masterPrimary + gap;
 
         cursor = secondaryPos;

@@ -74,6 +74,7 @@ function calculateZones(params) {
     }
 
     // Three or more windows: true three-column layout
+    // TODO: Extract shared 3-column layout logic with centered-master.js (see PR #259 review)
     const clampedRatio = Math.max(PZ_MIN_SPLIT, Math.min(splitRatio, PZ_MAX_SPLIT));
     const contentWidth = area.width - 2 * gap;
 
@@ -119,16 +120,12 @@ function calculateZones(params) {
     // Calculate heights with gaps between vertically stacked zones
     let leftHeights = [];
     if (leftCount > 0) {
-        leftHeights = (leftMinHeights.length === 0)
-            ? distributeWithGaps(area.height, leftCount, gap)
-            : distributeWithMinSizes(area.height, leftCount, gap, leftMinHeights);
+        leftHeights = distributeWithOptionalMins(area.height, leftCount, gap, leftMinHeights);
     }
 
     let rightHeights = [];
     if (rightCount > 0) {
-        rightHeights = (rightMinHeights.length === 0)
-            ? distributeWithGaps(area.height, rightCount, gap)
-            : distributeWithMinSizes(area.height, rightCount, gap, rightMinHeights);
+        rightHeights = distributeWithOptionalMins(area.height, rightCount, gap, rightMinHeights);
     }
 
     // First zone: center/master (full height)

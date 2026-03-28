@@ -15,9 +15,7 @@
 function equalColumnsLayout(area, count, gap, minSizes) {
     if (count <= 0) return [];
     var minWidths = extractMinWidths(minSizes, count);
-    var columnWidths = (minWidths.length === 0)
-        ? distributeWithGaps(area.width, count, gap)
-        : distributeWithMinSizes(area.width, count, gap, minWidths);
+    var columnWidths = distributeWithOptionalMins(area.width, count, gap, minWidths);
     var zones = [];
     var currentX = area.x;
     for (var i = 0; i < count; i++) {

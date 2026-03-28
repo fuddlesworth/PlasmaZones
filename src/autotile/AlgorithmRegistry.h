@@ -277,6 +277,16 @@ private:
      */
     TilingAlgorithm* removeAlgorithmInternal(const QString& id);
 
+    /**
+     * @brief Safely delete an algorithm via deleteLater()
+     *
+     * Detaches the algorithm from parent ownership and schedules deferred
+     * deletion to avoid re-entrancy issues during signal emission.
+     *
+     * @param algo Algorithm to delete (nullptr is a safe no-op)
+     */
+    void safeDeleteAlgorithm(TilingAlgorithm* algo);
+
     QHash<QString, TilingAlgorithm*> m_algorithms;
     QStringList m_registrationOrder; ///< Preserve order for UI
 

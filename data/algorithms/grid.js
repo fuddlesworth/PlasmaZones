@@ -58,12 +58,8 @@ function calculateZones(params) {
     }
 
     // Calculate column widths and row heights
-    const columnWidths = (minSizes.length === 0)
-        ? distributeWithGaps(area.width, cols, gap)
-        : distributeWithMinSizes(area.width, cols, gap, colMinWidths);
-    const rowHeights = (minSizes.length === 0)
-        ? distributeWithGaps(area.height, rows, gap)
-        : distributeWithMinSizes(area.height, rows, gap, rowMinHeights);
+    const columnWidths = distributeWithOptionalMins(area.width, cols, gap, colMinWidths);
+    const rowHeights = distributeWithOptionalMins(area.height, rows, gap, rowMinHeights);
 
     // Pre-compute column X positions
     const colX = [area.x];
@@ -94,9 +90,7 @@ function calculateZones(params) {
                     lastRowMinWidths.push((idx < minSizes.length && minSizes[idx].w > 0) ? minSizes[idx].w : 0);
                 }
             }
-            const lastRowWidths = (lastRowMinWidths.length === 0)
-                ? distributeWithGaps(area.width, windowsInThisRow, gap)
-                : distributeWithMinSizes(area.width, windowsInThisRow, gap, lastRowMinWidths);
+            const lastRowWidths = distributeWithOptionalMins(area.width, windowsInThisRow, gap, lastRowMinWidths);
             let lastRowX = area.x;
             for (let j = 0; j < windowsInThisRow; j++) {
                 zones.push({x: lastRowX, y: rowY[row], width: lastRowWidths[j], height: rowHeights[row]});
