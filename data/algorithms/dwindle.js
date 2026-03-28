@@ -22,12 +22,12 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 function calculateZones(params) {
-    var count = params.windowCount;
+    const count = params.windowCount;
     if (count <= 0) return [];
-    var area = params.area;
-    var gap = params.innerGap || 0;
-    var splitRatio = params.splitRatio;
-    var minSizes = params.minSizes || [];
+    const area = params.area;
+    const gap = params.innerGap || 0;
+    const splitRatio = params.splitRatio;
+    const minSizes = params.minSizes || [];
 
     return dwindleLayout(area, count, splitRatio, gap, minSizes);
 }

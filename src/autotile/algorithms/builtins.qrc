@@ -9,5 +9,9 @@
     <file alias="dwindleLayout.js">builtins/dwindleLayout.js</file>
     <file alias="extractMinDims.js">builtins/extractMinDims.js</file>
     <file alias="interleaveStacks.js">builtins/interleaveStacks.js</file>
+    <file alias="applyPerWindowMinSize.js">builtins/applyPerWindowMinSize.js</file>
+    <file alias="extractRegionMaxMin.js">builtins/extractRegionMaxMin.js</file>
+    <file alias="fillArea.js">builtins/fillArea.js</file>
+    <file alias="masterStackLayout.js">builtins/masterStackLayout.js</file>
 </qresource>
 </RCC>

@@ -31,47 +31,80 @@ static QString loadBuiltinJs(const QString& name)
 
 QString distributeWithGapsJs()
 {
-    return loadBuiltinJs(QStringLiteral("distributeWithGaps.js"));
+    static const QString s = loadBuiltinJs(QStringLiteral("distributeWithGaps.js"));
+    return s;
 }
 
 QString distributeWithMinSizesJs()
 {
-    return loadBuiltinJs(QStringLiteral("distributeWithMinSizes.js"));
+    static const QString s = loadBuiltinJs(QStringLiteral("distributeWithMinSizes.js"));
+    return s;
 }
 
 QString solveTwoPartJs()
 {
-    return loadBuiltinJs(QStringLiteral("solveTwoPart.js"));
+    static const QString s = loadBuiltinJs(QStringLiteral("solveTwoPart.js"));
+    return s;
 }
 
 QString solveThreeColumnJs()
 {
-    return loadBuiltinJs(QStringLiteral("solveThreeColumn.js"));
+    static const QString s = loadBuiltinJs(QStringLiteral("solveThreeColumn.js"));
+    return s;
 }
 
 QString cumulativeMinDimsJs()
 {
-    return loadBuiltinJs(QStringLiteral("computeCumulativeMinDims.js"));
+    static const QString s = loadBuiltinJs(QStringLiteral("computeCumulativeMinDims.js"));
+    return s;
 }
 
 QString gracefulDegradationJs()
 {
-    return loadBuiltinJs(QStringLiteral("appendGracefulDegradation.js"));
+    static const QString s = loadBuiltinJs(QStringLiteral("appendGracefulDegradation.js"));
+    return s;
 }
 
 QString dwindleLayoutJs()
 {
-    return loadBuiltinJs(QStringLiteral("dwindleLayout.js"));
+    static const QString s = loadBuiltinJs(QStringLiteral("dwindleLayout.js"));
+    return s;
 }
 
 QString extractMinDimsJs()
 {
-    return loadBuiltinJs(QStringLiteral("extractMinDims.js"));
+    static const QString s = loadBuiltinJs(QStringLiteral("extractMinDims.js"));
+    return s;
 }
 
 QString interleaveStacksJs()
 {
-    return loadBuiltinJs(QStringLiteral("interleaveStacks.js"));
+    static const QString s = loadBuiltinJs(QStringLiteral("interleaveStacks.js"));
+    return s;
+}
+
+QString applyPerWindowMinSizeJs()
+{
+    static const QString s = loadBuiltinJs(QStringLiteral("applyPerWindowMinSize.js"));
+    return s;
+}
+
+QString extractRegionMaxMinJs()
+{
+    static const QString s = loadBuiltinJs(QStringLiteral("extractRegionMaxMin.js"));
+    return s;
+}
+
+QString fillAreaJs()
+{
+    static const QString s = loadBuiltinJs(QStringLiteral("fillArea.js"));
+    return s;
+}
+
+QString masterStackLayoutJs()
+{
+    static const QString s = loadBuiltinJs(QStringLiteral("masterStackLayout.js"));
+    return s;
 }
 
 } // namespace ScriptedHelpers

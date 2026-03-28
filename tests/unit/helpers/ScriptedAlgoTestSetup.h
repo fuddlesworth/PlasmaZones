@@ -59,9 +59,11 @@ public:
         if (!m_xdgRoot.isValid())
             return false;
 
-        QDir().mkpath(m_xdgRoot.path() + QStringLiteral("/plasmazones"));
-        QFile::link(sourceDir + QStringLiteral("/data/algorithms"),
-                    m_xdgRoot.path() + QStringLiteral("/plasmazones/algorithms"));
+        if (!QDir().mkpath(m_xdgRoot.path() + QStringLiteral("/plasmazones")))
+            return false;
+        if (!QFile::link(sourceDir + QStringLiteral("/data/algorithms"),
+                         m_xdgRoot.path() + QStringLiteral("/plasmazones/algorithms")))
+            return false;
 
         m_savedDataDirs = qgetenv("XDG_DATA_DIRS");
         m_savedDataHome = qgetenv("XDG_DATA_HOME");

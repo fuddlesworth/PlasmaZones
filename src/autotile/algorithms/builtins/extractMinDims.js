@@ -8,13 +8,16 @@
  *
  * @param {Array} minSizes - Array of {w, h} objects
  * @param {number} count - Number of elements to extract
+ * @param {number} [startIdx=0] - Starting index into minSizes
  * @returns {Array<number>} Minimum widths (empty if no minSizes)
  */
-function extractMinWidths(minSizes, count) {
+function extractMinWidths(minSizes, count, startIdx) {
     if (!minSizes || minSizes.length === 0) return [];
+    startIdx = startIdx || 0;
     var result = [];
     for (var i = 0; i < count; i++) {
-        result.push((i < minSizes.length && minSizes[i].w > 0) ? minSizes[i].w : 0);
+        var idx = startIdx + i;
+        result.push((idx < minSizes.length && minSizes[idx].w > 0) ? minSizes[idx].w : 0);
     }
     return result;
 }
@@ -25,13 +28,16 @@ function extractMinWidths(minSizes, count) {
  *
  * @param {Array} minSizes - Array of {w, h} objects
  * @param {number} count - Number of elements to extract
+ * @param {number} [startIdx=0] - Starting index into minSizes
  * @returns {Array<number>} Minimum heights (empty if no minSizes)
  */
-function extractMinHeights(minSizes, count) {
+function extractMinHeights(minSizes, count, startIdx) {
     if (!minSizes || minSizes.length === 0) return [];
+    startIdx = startIdx || 0;
     var result = [];
     for (var i = 0; i < count; i++) {
-        result.push((i < minSizes.length && minSizes[i].h > 0) ? minSizes[i].h : 0);
+        var idx = startIdx + i;
+        result.push((idx < minSizes.length && minSizes[idx].h > 0) ? minSizes[idx].h : 0);
     }
     return result;
 }

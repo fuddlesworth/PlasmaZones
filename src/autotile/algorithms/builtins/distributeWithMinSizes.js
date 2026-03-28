@@ -35,6 +35,12 @@ function distributeWithMinSizes(total, count, gap, minDims) {
             sizes[i] = allocated;
             remaining -= allocated; remainingMin -= mins[i];
         }
+        // Ensure sizes don't exceed available (rounding can cause overshoot)
+        var totalAllocated = 0;
+        for (var j = 0; j < count; j++) totalAllocated += sizes[j];
+        if (totalAllocated > available && count > 0) {
+            sizes[count - 1] = Math.max(1, sizes[count - 1] - (totalAllocated - available));
+        }
     } else {
         var base = Math.floor(available / count);
         var rem = available % count;

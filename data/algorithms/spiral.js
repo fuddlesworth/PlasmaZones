@@ -27,25 +27,27 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 function calculateZones(params) {
-    var count = params.windowCount;
+    const count = params.windowCount;
     if (count <= 0) return [];
-    var area = params.area;
-    var gap = params.innerGap || 0;
-    var splitRatio = params.splitRatio;
-    var minSizes = params.minSizes || [];
+    const area = params.area;
+    const gap = params.innerGap || 0;
+    let splitRatio = params.splitRatio;
+    const minSizes = params.minSizes || [];
 
     // Clamp splitRatio
     splitRatio = Math.max(PZ_MIN_SPLIT, Math.min(splitRatio, PZ_MAX_SPLIT));
 
     // Precompute direction-aware cumulative min dimensions
-    var cumMinDims = computeCumulativeMinDims(count, minSizes, gap);
-    var remainingMinW = cumMinDims.minW;
-    var remainingMinH = cumMinDims.minH;
+    // computeCumulativeMinDims uses i%2===0 for V/H alternation, which matches
+    // spiral's 4-dir rotation: dirs 0,2 are vertical (even), dirs 1,3 are horizontal (odd).
+    const cumMinDims = computeCumulativeMinDims(count, minSizes, gap);
+    const remainingMinW = cumMinDims.minW;
+    const remainingMinH = cumMinDims.minH;
 
-    var remaining = {x: area.x, y: area.y, width: area.width, height: area.height};
-    var zones = [];
+    let remaining = {x: area.x, y: area.y, width: area.width, height: area.height};
+    const zones = [];
 
-    for (var i = 0; i < count; i++) {
+    for (let i = 0; i < count; i++) {
         // Last window or remaining area too small -- assign all of it
         if (i === count - 1 || remaining.width < PZ_MIN_ZONE_SIZE
             || remaining.height < PZ_MIN_ZONE_SIZE) {
@@ -55,18 +57,18 @@ function calculateZones(params) {
             break;
         }
 
-        var dir = i % 4;
+        const dir = i % 4;
 
         if (dir === 0 || dir === 2) {
             // Vertical split
-            var contentWidth = remaining.width - gap;
+            const contentWidth = remaining.width - gap;
             if (contentWidth <= 0) {
                 zones.push({x: remaining.x, y: remaining.y,
                     width: remaining.width, height: remaining.height});
                 appendGracefulDegradation(zones, remaining, count - i - 1, gap);
                 break;
             }
-            var windowWidth = Math.floor(contentWidth * splitRatio);
+            let windowWidth = Math.floor(contentWidth * splitRatio);
 
             // Clamp for min sizes
             if (minSizes.length > 0 && i < minSizes.length && minSizes[i].w > 0) {
@@ -77,7 +79,7 @@ function calculateZones(params) {
             }
             windowWidth = Math.max(1, Math.min(windowWidth, contentWidth - 1));
 
-            var otherWidth = contentWidth - windowWidth;
+            const otherWidth = contentWidth - windowWidth;
 
             if (dir === 0) {
                 // Right: window=left, remaining=right
@@ -94,14 +96,14 @@ function calculateZones(params) {
             }
         } else {
             // Horizontal split (dir === 1 or dir === 3)
-            var contentHeight = remaining.height - gap;
+            const contentHeight = remaining.height - gap;
             if (contentHeight <= 0) {
                 zones.push({x: remaining.x, y: remaining.y,
                     width: remaining.width, height: remaining.height});
                 appendGracefulDegradation(zones, remaining, count - i - 1, gap);
                 break;
             }
-            var windowHeight = Math.floor(contentHeight * splitRatio);
+            let windowHeight = Math.floor(contentHeight * splitRatio);
 
             // Clamp for min sizes
             if (minSizes.length > 0 && i < minSizes.length && minSizes[i].h > 0) {
@@ -112,7 +114,7 @@ function calculateZones(params) {
             }
             windowHeight = Math.max(1, Math.min(windowHeight, contentHeight - 1));
 
-            var otherHeight = contentHeight - windowHeight;
+            const otherHeight = contentHeight - windowHeight;
 
             if (dir === 1) {
                 // Down: window=top, remaining=bottom

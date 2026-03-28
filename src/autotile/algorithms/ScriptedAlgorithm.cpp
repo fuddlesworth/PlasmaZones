@@ -263,6 +263,10 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_engine->evaluate(ScriptedHelpers::dwindleLayoutJs(), QStringLiteral("builtin:dwindleLayout"));
     m_engine->evaluate(ScriptedHelpers::extractMinDimsJs(), QStringLiteral("builtin:extractMinDims"));
     m_engine->evaluate(ScriptedHelpers::interleaveStacksJs(), QStringLiteral("builtin:interleaveStacks"));
+    m_engine->evaluate(ScriptedHelpers::applyPerWindowMinSizeJs(), QStringLiteral("builtin:applyPerWindowMinSize"));
+    m_engine->evaluate(ScriptedHelpers::extractRegionMaxMinJs(), QStringLiteral("builtin:extractRegionMaxMin"));
+    m_engine->evaluate(ScriptedHelpers::fillAreaJs(), QStringLiteral("builtin:fillArea"));
+    m_engine->evaluate(ScriptedHelpers::masterStackLayoutJs(), QStringLiteral("builtin:masterStackLayout"));
 
     // Freeze helper globals and constants so user scripts cannot overwrite them.
     // This must happen after injection since hardenSandbox's freezeGlobal calls
@@ -286,7 +290,11 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
                                    QLatin1String("buildStackIsLeft"),
                                    QLatin1String("interleaveMinWidths"),
                                    QLatin1String("interleaveMinHeights"),
-                                   QLatin1String("assignInterleavedStacks")}) {
+                                   QLatin1String("assignInterleavedStacks"),
+                                   QLatin1String("applyPerWindowMinSize"),
+                                   QLatin1String("extractRegionMaxMin"),
+                                   QLatin1String("fillArea"),
+                                   QLatin1String("masterStackLayout")}) {
         m_engine->evaluate(QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});")
                                .arg(QLatin1String(helperName)));
     }
@@ -668,8 +676,8 @@ void ScriptedAlgorithm::prepareTilingState(TilingState* state) const
     // value from a different algorithm (e.g., MasterStack's 0.6).
     const qreal currentRatio = state->splitRatio();
     const qreal defRatio = defaultSplitRatio();
-    if (!qFuzzyCompare(1.0 + currentRatio, 1.0 + defRatio)
-        && (currentRatio > defRatio + 0.05 || currentRatio < defRatio - 0.05)) {
+    static constexpr qreal SplitRatioHysteresis = 0.05;
+    if (currentRatio > defRatio + SplitRatioHysteresis || currentRatio < defRatio - SplitRatioHysteresis) {
         state->setSplitRatio(defRatio);
     }
 

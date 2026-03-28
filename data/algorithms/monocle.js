@@ -24,12 +24,12 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 function calculateZones(params) {
-    var count = params.windowCount;
+    const count = params.windowCount;
     if (count <= 0) return [];
-    var area = params.area;
+    const area = params.area;
 
-    var zones = [];
-    for (var i = 0; i < count; i++) {
+    const zones = [];
+    for (let i = 0; i < count; i++) {
         zones.push({ x: area.x, y: area.y, width: area.width, height: area.height });
     }
     return zones;

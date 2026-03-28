@@ -20,21 +20,21 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 function calculateZones(params) {
-    var count = params.windowCount;
+    const count = params.windowCount;
     if (count <= 0) return [];
-    var area = params.area;
-    var gap = params.innerGap || 0;
+    const area = params.area;
+    const gap = params.innerGap || 0;
 
-    var minHeights = extractMinHeights(params.minSizes || [], count);
+    const minHeights = extractMinHeights(params.minSizes || [], count);
 
     // Calculate row heights with gaps and minimum sizes
-    var rowHeights = (minHeights.length === 0)
+    const rowHeights = (minHeights.length === 0)
         ? distributeWithGaps(area.height, count, gap)
         : distributeWithMinSizes(area.height, count, gap, minHeights);
 
-    var zones = [];
-    var currentY = area.y;
-    for (var i = 0; i < count; i++) {
+    const zones = [];
+    let currentY = area.y;
+    for (let i = 0; i < count; i++) {
         zones.push({ x: area.x, y: currentY, width: area.width, height: rowHeights[i] });
         currentY += rowHeights[i] + gap;
     }

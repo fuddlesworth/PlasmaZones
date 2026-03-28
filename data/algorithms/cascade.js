@@ -24,9 +24,9 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 function calculateZones(params) {
-    var count = params.windowCount;
+    const count = params.windowCount;
     if (count <= 0) return [];
-    var area = params.area;
+    const area = params.area;
 
     // Single window: fill area (defensive — C++ ScriptedAlgorithm short-circuits
     // single-window before calling JS, but guard against standalone use)
@@ -36,29 +36,28 @@ function calculateZones(params) {
 
     // Clamp splitRatio to cascade-specific range (C++ wrapper clamps to 0.1-0.9,
     // but cascade needs tighter bounds)
-    var offsetRatio = Math.max(0.02, Math.min(0.4, params.splitRatio));
+    const offsetRatio = Math.max(0.02, Math.min(0.4, params.splitRatio));
 
-    var offsetX = Math.max(20, Math.round(area.width * offsetRatio / (count - 1)));
-    var offsetY = Math.max(20, Math.round(area.height * offsetRatio / (count - 1)));
+    const offsetX = Math.max(20, Math.round(area.width * offsetRatio / (count - 1)));
+    const offsetY = Math.max(20, Math.round(area.height * offsetRatio / (count - 1)));
 
     // Each window is sized to fill the area minus the total cascade offset
-    var totalOffsetX = offsetX * (count - 1);
-    var totalOffsetY = offsetY * (count - 1);
-    var winWidth = Math.max(100, area.width - totalOffsetX);
-    var winHeight = Math.max(100, area.height - totalOffsetY);
+    const totalOffsetX = offsetX * (count - 1);
+    const totalOffsetY = offsetY * (count - 1);
+    const winWidth = Math.max(100, area.width - totalOffsetX);
+    const winHeight = Math.max(100, area.height - totalOffsetY);
 
-    var zones = [];
-    for (var i = 0; i < count; i++) {
-        var x = area.x + offsetX * i;
-        var y = area.y + offsetY * i;
-        var w = winWidth;
-        var h = winHeight;
+    const zones = [];
+    for (let i = 0; i < count; i++) {
+        const x = area.x + offsetX * i;
+        const y = area.y + offsetY * i;
+        let w = winWidth;
+        let h = winHeight;
 
         // Apply per-window minimum sizes
-        if (params.minSizes && i < params.minSizes.length) {
-            if (params.minSizes[i].w > 0) w = Math.max(w, params.minSizes[i].w);
-            if (params.minSizes[i].h > 0) h = Math.max(h, params.minSizes[i].h);
-        }
+        const clamped = applyPerWindowMinSize(w, h, params.minSizes, i);
+        w = clamped.w;
+        h = clamped.h;
 
         zones.push({ x: x, y: y, width: w, height: h });
     }

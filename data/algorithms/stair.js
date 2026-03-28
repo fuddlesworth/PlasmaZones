@@ -24,36 +24,35 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 function calculateZones(params) {
-    var count = params.windowCount;
+    const count = params.windowCount;
     if (count <= 0) return [];
-    var area = params.area;
+    const area = params.area;
 
     // Clamp splitRatio to stair-specific range (C++ wrapper clamps to 0.1-0.9,
     // but stair needs tighter bounds)
-    var sizeRatio = Math.max(0.3, Math.min(0.8, params.splitRatio));
+    const sizeRatio = Math.max(0.3, Math.min(0.8, params.splitRatio));
 
     // All windows are the same size
-    var winWidth = Math.max(100, Math.round(area.width * sizeRatio));
-    var winHeight = Math.max(100, Math.round(area.height * sizeRatio));
+    const winWidth = Math.max(100, Math.round(area.width * sizeRatio));
+    const winHeight = Math.max(100, Math.round(area.height * sizeRatio));
 
     // Diagonal offset distributes the remaining space evenly across steps
-    var totalOffsetX = area.width - winWidth;
-    var totalOffsetY = area.height - winHeight;
-    var stepX = (count > 1) ? Math.floor(totalOffsetX / (count - 1)) : 0;
-    var stepY = (count > 1) ? Math.floor(totalOffsetY / (count - 1)) : 0;
+    const totalOffsetX = area.width - winWidth;
+    const totalOffsetY = area.height - winHeight;
+    const stepX = (count > 1) ? Math.floor(totalOffsetX / (count - 1)) : 0;
+    const stepY = (count > 1) ? Math.floor(totalOffsetY / (count - 1)) : 0;
 
-    var zones = [];
-    for (var i = 0; i < count; i++) {
-        var x = area.x + stepX * i;
-        var y = area.y + stepY * i;
-        var w = winWidth;
-        var h = winHeight;
+    const zones = [];
+    for (let i = 0; i < count; i++) {
+        const x = area.x + stepX * i;
+        const y = area.y + stepY * i;
+        let w = winWidth;
+        let h = winHeight;
 
         // Apply per-window minimum sizes
-        if (params.minSizes && i < params.minSizes.length) {
-            if (params.minSizes[i].w > 0) w = Math.max(w, params.minSizes[i].w);
-            if (params.minSizes[i].h > 0) h = Math.max(h, params.minSizes[i].h);
-        }
+        const clamped = applyPerWindowMinSize(w, h, params.minSizes, i);
+        w = clamped.w;
+        h = clamped.h;
 
         zones.push({ x: x, y: y, width: w, height: h });
     }

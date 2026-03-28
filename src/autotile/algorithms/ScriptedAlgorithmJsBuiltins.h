@@ -90,5 +90,41 @@ QString extractMinDimsJs();
  */
 QString interleaveStacksJs();
 
+/**
+ * @brief JS source for applyPerWindowMinSize(w, h, minSizes, i) built-in helper
+ *
+ * Applies per-window minimum size constraints from the minSizes array.
+ * Returns {w, h} with dimensions clamped to minimums.
+ * Loaded from Qt resource :/builtins/applyPerWindowMinSize.js
+ */
+QString applyPerWindowMinSizeJs();
+
+/**
+ * @brief JS source for extractRegionMaxMin(minSizes, startIdx, endIdx, axis) built-in helper
+ *
+ * Scans a region of the minSizes array for the maximum minimum dimension
+ * on the given axis ('w' or 'h'). Used by master-stack layouts.
+ * Loaded from Qt resource :/builtins/extractRegionMaxMin.js
+ */
+QString extractRegionMaxMinJs();
+
+/**
+ * @brief JS source for fillArea(area, count) built-in helper
+ *
+ * Creates an array of identical zones covering the full area.
+ * Used as a degenerate-screen fallback.
+ * Loaded from Qt resource :/builtins/fillArea.js
+ */
+QString fillAreaJs();
+
+/**
+ * @brief JS source for masterStackLayout(area, count, gap, splitRatio, masterCount, minSizes, horizontal) helper
+ *
+ * Shared implementation for master-stack and wide layouts.
+ * horizontal=false: master left, stack right. horizontal=true: master top, stack bottom.
+ * Loaded from Qt resource :/builtins/masterStackLayout.js
+ */
+QString masterStackLayoutJs();
+
 } // namespace ScriptedHelpers
 } // namespace PlasmaZones

@@ -23,25 +23,25 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 function calculateZones(params) {
-    var count = params.windowCount;
+    const count = params.windowCount;
     if (count <= 0) return [];
-    var area = params.area;
-    var gap = params.innerGap || 0;
-    var splitRatio = params.splitRatio;
-    var minSizes = params.minSizes || [];
+    const area = params.area;
+    const gap = params.innerGap || 0;
+    const splitRatio = params.splitRatio;
+    const minSizes = params.minSizes || [];
 
     // Two windows: simple left/right split
     if (count === 2) {
-        var ratio = Math.max(PZ_MIN_SPLIT, Math.min(splitRatio, PZ_MAX_SPLIT));
-        var contentWidth = Math.max(1, area.width - gap);
-        var masterWidth = Math.floor(contentWidth * ratio);
-        var stackWidth = contentWidth - masterWidth;
+        const ratio = Math.max(PZ_MIN_SPLIT, Math.min(splitRatio, PZ_MAX_SPLIT));
+        const contentWidth = Math.max(1, area.width - gap);
+        let masterWidth = Math.floor(contentWidth * ratio);
+        let stackWidth = contentWidth - masterWidth;
 
         // Joint min-width solve for 2-window case
         if (minSizes.length > 0) {
-            var minMW = (0 < minSizes.length && minSizes[0].w > 0) ? minSizes[0].w : 0;
-            var minSW = (1 < minSizes.length && minSizes[1].w > 0) ? minSizes[1].w : 0;
-            var solved = solveTwoPart(contentWidth, masterWidth, stackWidth, minMW, minSW);
+            const minMW = (0 < minSizes.length && minSizes[0].w > 0) ? minSizes[0].w : 0;
+            const minSW = (1 < minSizes.length && minSizes[1].w > 0) ? minSizes[1].w : 0;
+            const solved = solveTwoPart(contentWidth, masterWidth, stackWidth, minMW, minSW);
             masterWidth = solved.first;
             stackWidth = solved.second;
         }
@@ -54,10 +54,10 @@ function calculateZones(params) {
 
     // Fall back to equal columns if screen is too narrow for three columns
     if (count >= 3 && area.width < 3 * PZ_MIN_ZONE_SIZE) {
-        var widths = distributeWithGaps(area.width, count, gap);
-        var zones = [];
-        var x = area.x;
-        for (var i = 0; i < count; i++) {
+        const widths = distributeWithGaps(area.width, count, gap);
+        const zones = [];
+        let x = area.x;
+        for (let i = 0; i < count; i++) {
             zones.push({x: x, y: area.y, width: widths[i], height: area.height});
             x += widths[i] + gap;
         }
@@ -65,61 +65,56 @@ function calculateZones(params) {
     }
 
     // Three or more windows: true three-column layout
-    var contentWidth = area.width - 2 * gap;
+    const contentWidth = area.width - 2 * gap;
 
     if (contentWidth <= 0) {
-        // Degenerate case: screen too narrow for 3 columns with gaps
-        var zones = [];
-        for (var i = 0; i < count; i++) {
-            zones.push({x: area.x, y: area.y, width: area.width, height: area.height});
-        }
-        return zones;
+        return fillArea(area, count);
     }
 
     // Count windows for each column (excluding master)
-    var stackCount = count - 1;
-    var leftCount = Math.ceil(stackCount / 2); // Left gets extra if odd
-    var rightCount = stackCount - leftCount;
+    const stackCount = count - 1;
+    const leftCount = Math.ceil(stackCount / 2); // Left gets extra if odd
+    const rightCount = stackCount - leftCount;
 
     // Compute per-column minimum widths from minSizes
     // Zone ordering: [center(0), left1(1), right1(2), left2(3), right2(4), ...]
-    var stackIsLeft = buildStackIsLeft(stackCount, leftCount, rightCount);
-    var minCenterWidth = 0;
+    const stackIsLeft = buildStackIsLeft(stackCount, leftCount, rightCount);
+    let minCenterWidth = 0;
     if (minSizes.length > 0) {
         minCenterWidth = (minSizes[0].w > 0) ? minSizes[0].w : 0;
     }
-    var sideMinW = (minSizes.length > 0)
+    const sideMinW = (minSizes.length > 0)
         ? interleaveMinWidths(minSizes, stackIsLeft, stackCount, 1)
         : {minLeftWidth: 0, minRightWidth: 0};
-    var minLeftWidth = sideMinW.minLeftWidth;
-    var minRightWidth = sideMinW.minRightWidth;
+    const minLeftWidth = sideMinW.minLeftWidth;
+    const minRightWidth = sideMinW.minRightWidth;
 
-    var cols = solveThreeColumn(area.x, contentWidth, gap, splitRatio,
+    const cols = solveThreeColumn(area.x, contentWidth, gap, splitRatio,
                                 minLeftWidth, minCenterWidth, minRightWidth);
 
-    var leftWidth = cols.leftWidth;
-    var centerWidth = cols.centerWidth;
-    var rightWidth = cols.rightWidth;
-    var leftX = cols.leftX;
-    var centerX = cols.centerX;
-    var rightX = cols.rightX;
+    const leftWidth = cols.leftWidth;
+    const centerWidth = cols.centerWidth;
+    const rightWidth = cols.rightWidth;
+    const leftX = cols.leftX;
+    const centerX = cols.centerX;
+    const rightX = cols.rightX;
 
     // Build per-column min heights from minSizes interleaving order
-    var sideMinH = (minSizes.length > 0)
+    const sideMinH = (minSizes.length > 0)
         ? interleaveMinHeights(minSizes, stackIsLeft, stackCount, leftCount, rightCount, 1)
         : {leftMinH: [], rightMinH: []};
-    var leftMinHeights = sideMinH.leftMinH;
-    var rightMinHeights = sideMinH.rightMinH;
+    const leftMinHeights = sideMinH.leftMinH;
+    const rightMinHeights = sideMinH.rightMinH;
 
     // Calculate heights with gaps between vertically stacked zones
-    var leftHeights = [];
+    let leftHeights = [];
     if (leftCount > 0) {
         leftHeights = (leftMinHeights.length === 0)
             ? distributeWithGaps(area.height, leftCount, gap)
             : distributeWithMinSizes(area.height, leftCount, gap, leftMinHeights);
     }
 
-    var rightHeights = [];
+    let rightHeights = [];
     if (rightCount > 0) {
         rightHeights = (rightMinHeights.length === 0)
             ? distributeWithGaps(area.height, rightCount, gap)
@@ -127,7 +122,7 @@ function calculateZones(params) {
     }
 
     // First zone: center/master (full height)
-    var zones = [];
+    const zones = [];
     zones.push({x: centerX, y: area.y, width: centerWidth, height: area.height});
 
     // Interleave left and right column windows
