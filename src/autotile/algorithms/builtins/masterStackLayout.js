@@ -20,7 +20,7 @@ function masterStackLayout(area, count, gap, splitRatio, masterCount, minSizes, 
     if (count <= 0) return [];
 
     if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
-        return [{ x: area.x, y: area.y, width: area.width, height: area.height }];
+        return fillArea(area, count);
     }
 
     masterCount = Math.max(1, Math.min(masterCount, count));

@@ -68,11 +68,11 @@ public:
         const QString algoLink = m_xdgRoot.path() + QStringLiteral("/plasmazones/algorithms");
         if (!QFile::link(sourceAlgoDir, algoLink)) {
             // Symlink failed (Windows, restricted FS) — fall back to recursive copy
-            QDir sourceDir(sourceAlgoDir);
+            QDir srcAlgoDir(sourceAlgoDir);
             QDir destDir(algoLink);
             if (!destDir.mkpath(QStringLiteral(".")))
                 return false;
-            const auto entries = sourceDir.entryInfoList(QDir::Files);
+            const auto entries = srcAlgoDir.entryInfoList(QDir::Files);
             for (const auto& entry : entries) {
                 if (!QFile::copy(entry.absoluteFilePath(), destDir.filePath(entry.fileName())))
                     return false;

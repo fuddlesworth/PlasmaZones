@@ -220,14 +220,10 @@ private Q_SLOTS:
         auto* registry = AlgorithmRegistry::instance();
         TilingState state(QStringLiteral("test"));
         const QRect screen(0, 0, 1920, 1080);
-        const QStringList builtinIds = {
-            QLatin1String("bsp"),     QLatin1String("cascade"),      QLatin1String("centered-master"),
-            QLatin1String("columns"), QLatin1String("dwindle"),      QLatin1String("dwindle-memory"),
-            QLatin1String("grid"),    QLatin1String("master-stack"), QLatin1String("monocle"),
-            QLatin1String("rows"),    QLatin1String("spiral"),       QLatin1String("spread"),
-            QLatin1String("stair"),   QLatin1String("three-column"), QLatin1String("wide"),
-        };
-        for (const auto& id : builtinIds) {
+        const auto allIds = registry->availableAlgorithms();
+        QVERIFY2(allIds.size() >= 15,
+                 qPrintable(QStringLiteral("Expected at least 15 algorithms, got %1").arg(allIds.size())));
+        for (const auto& id : allIds) {
             auto* algo = registry->algorithm(id);
             QVERIFY2(algo != nullptr, qPrintable(QStringLiteral("Null algorithm: ") + id));
             auto zones = algo->calculateZones({3, screen, &state, 0, EdgeGaps::uniform(0)});

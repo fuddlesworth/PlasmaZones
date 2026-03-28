@@ -141,7 +141,9 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
         }
     }
 
-    // Also detect newly added or updated scripts (not just removals)
+    // Also detect newly added or updated scripts (not just removals).
+    // NOTE: `changed` only tracks ID/path changes, not content edits —
+    // content change detection is handled by always emitting algorithmsChanged() below.
     if (!changed) {
         for (const QString& id : std::as_const(newScriptIds)) {
             if (!oldScriptIdToPath.contains(id) || oldScriptIdToPath.value(id) != m_scriptIdToPath.value(id)) {

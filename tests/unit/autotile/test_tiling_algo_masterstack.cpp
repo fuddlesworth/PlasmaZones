@@ -165,6 +165,12 @@ private Q_SLOTS:
         QCOMPARE(algo->defaultSplitRatio(), 0.5);
     }
 
+    void testMasterStack_zeroWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        QVERIFY(ms()->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
+    }
+
     void testBSP_zeroAndOneWindow()
     {
         TilingState state(QStringLiteral("test"));

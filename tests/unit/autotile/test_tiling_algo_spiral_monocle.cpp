@@ -58,6 +58,30 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // Zero window count tests
+    // =========================================================================
+
+    void testSpiral_zeroWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        QVERIFY(spiral()->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
+    }
+
+    void testDwindle_zeroWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        QVERIFY(dwindleAlgo()->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
+    }
+
+    void testDwindleMemory_zeroWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        auto* dwMem = AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle-memory"));
+        QVERIFY(dwMem != nullptr);
+        QVERIFY(dwMem->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
+    }
+
+    // =========================================================================
     // SpiralAlgorithm tests
     // =========================================================================
 

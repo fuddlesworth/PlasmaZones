@@ -30,6 +30,11 @@ function calculateZones(params) {
     const splitRatio = params.splitRatio;
     const minSizes = params.minSizes || [];
 
+    // Single window: fill area
+    if (count === 1) {
+        return [{ x: area.x, y: area.y, width: area.width, height: area.height }];
+    }
+
     // Two windows: simple left/right split
     if (count === 2) {
         const ratio = Math.max(PZ_MIN_SPLIT, Math.min(splitRatio, PZ_MAX_SPLIT));

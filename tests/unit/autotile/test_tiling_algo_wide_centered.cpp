@@ -54,6 +54,21 @@ private Q_SLOTS:
         QVERIFY(masterStack() != nullptr);
     }
 
+    void testWide_zeroWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        QVERIFY(wide()->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
+    }
+
+    void testCenteredMaster_zeroWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        QVERIFY(AlgorithmRegistry::instance()
+                    ->algorithm(QLatin1String("centered-master"))
+                    ->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
+                    .isEmpty());
+    }
+
     void testWide_singleWindow()
     {
         TilingState state(QStringLiteral("test"));
@@ -256,31 +271,23 @@ private Q_SLOTS:
     void testAllAlgorithms_largeWindowCount()
     {
         TilingState state(QStringLiteral("test"));
-        QCOMPARE(masterStack()->calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).size(), 50);
-        QCOMPARE(dw()->calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).size(), 50);
-        QCOMPARE(threeCol()->calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).size(), 50);
-        QCOMPARE(grid()->calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).size(), 50);
-        QCOMPARE(wide()->calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).size(), 50);
-        QCOMPARE(AlgorithmRegistry::instance()
-                     ->algorithm(QLatin1String("columns"))
-                     ->calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
-                     .size(),
-                 50);
-        QCOMPARE(AlgorithmRegistry::instance()
-                     ->algorithm(QLatin1String("bsp"))
-                     ->calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
-                     .size(),
-                 50);
-        QCOMPARE(AlgorithmRegistry::instance()
-                     ->algorithm(QLatin1String("rows"))
-                     ->calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
-                     .size(),
-                 50);
-        QCOMPARE(AlgorithmRegistry::instance()
-                     ->algorithm(QLatin1String("centered-master"))
-                     ->calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
-                     .size(),
-                 50);
+        const QStringList algoIds = {
+            QLatin1String("master-stack"), QLatin1String("dwindle"), QLatin1String("three-column"),
+            QLatin1String("grid"),         QLatin1String("wide"),    QLatin1String("columns"),
+            QLatin1String("bsp"),          QLatin1String("rows"),    QLatin1String("centered-master"),
+        };
+        for (const auto& id : algoIds) {
+            auto zones = AlgorithmRegistry::instance()->algorithm(id)->calculateZones(
+                {50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+            QCOMPARE(zones.size(), 50);
+            for (const QRect& zone : zones) {
+                QVERIFY2(zone.width() > 0 && zone.height() > 0,
+                         qPrintable(QStringLiteral("Algorithm %1: zone has non-positive dimension (%2x%3)")
+                                        .arg(id)
+                                        .arg(zone.width())
+                                        .arg(zone.height())));
+            }
+        }
     }
 
     void test_splitRatioBoundaryValues()

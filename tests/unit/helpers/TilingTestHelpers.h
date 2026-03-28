@@ -9,9 +9,11 @@
 namespace PlasmaZones::TestHelpers {
 
 /**
- * @brief Verify zones fill the screen exactly (total area equals screen area).
+ * @brief Verify zones have the same total area as the screen.
  *
- * Note: This does not catch overlaps, only ensures total coverage.
+ * This checks area equivalence, not pixel-perfect coverage. It does not
+ * guarantee that every pixel of the screen is covered, nor does it detect
+ * overlaps — use noOverlaps() for that.
  */
 inline bool zonesFillScreen(const QVector<QRect>& zones, const QRect& screen)
 {

@@ -54,10 +54,10 @@ function calculateZones(params) {
 
     const splitRatio = params.splitRatio;
 
-    const centerW = Math.round(area.width * splitRatio);
-    const centerH = Math.round(area.height * splitRatio);
-    const marginX = Math.round((area.width - centerW) / 2);
-    const marginY = Math.round((area.height - centerH) / 2);
+    const centerW = Math.floor(area.width * splitRatio);
+    const centerH = Math.floor(area.height * splitRatio);
+    const marginX = Math.floor((area.width - centerW) / 2);
+    const marginY = Math.floor((area.height - centerH) / 2);
 
     const centerX = area.x + marginX;
     const centerY = area.y + marginY;
@@ -65,11 +65,7 @@ function calculateZones(params) {
     // Degenerate case: gaps consume margin space on either axis — panels would
     // have negative or zero dimensions.  Fall back to stacking all windows on the center.
     if (marginX <= gap || marginY <= gap) {
-        const zones = [];
-        for (let i = 0; i < count; i++) {
-            zones.push({ x: area.x, y: area.y, width: area.width, height: area.height });
-        }
-        return zones;
+        return fillArea(area, count);
     }
 
     const zones = [];

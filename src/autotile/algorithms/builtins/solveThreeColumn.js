@@ -9,8 +9,10 @@
  * Port of TilingAlgorithm::solveThreeColumnWidths.
  */
 function solveThreeColumn(areaX, contentWidth, innerGap, splitRatio, minL, minC, minR) {
-    if (contentWidth <= 0) {
-        return {leftWidth:1, centerWidth:1, rightWidth:1, leftX:areaX, centerX:areaX, rightX:areaX};
+    if (contentWidth < 3) {
+        const cw = Math.max(1, contentWidth - 2);
+        return {leftWidth:1, centerWidth:cw, rightWidth:1,
+            leftX:areaX, centerX:areaX + 1, rightX:areaX + 1 + cw};
     }
     const effMinLeft = Math.max(PZ_MIN_ZONE_SIZE, minL);
     const effMinRight = Math.max(PZ_MIN_ZONE_SIZE, minR);

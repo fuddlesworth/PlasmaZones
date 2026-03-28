@@ -28,9 +28,9 @@ function calculateZones(params) {
     const gap = params.innerGap || 0;
 
     const splitRatio = params.splitRatio;
-    let columnWidth = Math.round(area.width * splitRatio);
+    let columnWidth = Math.floor(area.width * splitRatio);
     columnWidth = Math.max(1, columnWidth);
-    const offsetX = area.x + Math.round((area.width - columnWidth) / 2);
+    const offsetX = area.x + Math.floor((area.width - columnWidth) / 2);
 
     const totalGaps = (count - 1) * gap;
 

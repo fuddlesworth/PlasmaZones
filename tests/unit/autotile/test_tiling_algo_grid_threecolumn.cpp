@@ -62,6 +62,36 @@ private Q_SLOTS:
         QCOMPARE(algo->defaultSplitRatio(), 0.5);
     }
 
+    void testThreeColumn_zeroWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        QVERIFY(threeCol()->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
+    }
+
+    void testGrid_zeroWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        QVERIFY(grid()->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
+    }
+
+    void testColumns_zeroWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        QVERIFY(AlgorithmRegistry::instance()
+                    ->algorithm(QLatin1String("columns"))
+                    ->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
+                    .isEmpty());
+    }
+
+    void testRows_zeroWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        QVERIFY(AlgorithmRegistry::instance()
+                    ->algorithm(QLatin1String("rows"))
+                    ->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)})
+                    .isEmpty());
+    }
+
     void testThreeColumn_zeroAndOneWindow()
     {
         TilingState state(QStringLiteral("test"));

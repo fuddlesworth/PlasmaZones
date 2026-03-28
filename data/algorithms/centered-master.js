@@ -66,7 +66,7 @@ function calculateZones(params) {
 
         // Min-width clamping
         if (minSizes.length > 0) {
-            const minMW = (0 < minSizes.length) ? (minSizes[0].w || 0) : 0;
+            const minMW = (minSizes.length > 0) ? (minSizes[0].w || 0) : 0;
             const minSW = (masterCount < minSizes.length) ? (minSizes[masterCount].w || 0) : 0;
             const solved = solveTwoPart(contentWidth, masterWidth, stackWidth, minMW, minSW);
             masterWidth = solved.first;
@@ -79,10 +79,10 @@ function calculateZones(params) {
             ? distributeWithGaps(area.height, masterCount, gap)
             : distributeWithMinSizes(area.height, masterCount, gap, masterMinH);
         const zones = [];
-        let cy = area.y;
+        let currentY = area.y;
         for (let i = 0; i < masterCount; i++) {
-            zones.push({x: area.x, y: cy, width: masterWidth, height: mHeights[i]});
-            cy += mHeights[i] + gap;
+            zones.push({x: area.x, y: currentY, width: masterWidth, height: mHeights[i]});
+            currentY += mHeights[i] + gap;
         }
 
         // Single stack on right
@@ -96,7 +96,7 @@ function calculateZones(params) {
 
     const contentWidth = area.width - 2 * gap;
 
-    if (contentWidth <= 0) {
+    if (contentWidth < 3) {
         return fillArea(area, count);
     }
 

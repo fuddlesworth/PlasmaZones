@@ -55,6 +55,28 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // Zero window count tests
+    // =========================================================================
+
+    void testCascade_zeroWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        QVERIFY(cascade()->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
+    }
+
+    void testStair_zeroWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        QVERIFY(stair()->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
+    }
+
+    void testSpread_zeroWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        QVERIFY(spread()->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
+    }
+
+    // =========================================================================
     // Cascade algorithm tests
     // =========================================================================
 
@@ -84,6 +106,15 @@ private Q_SLOTS:
             QVERIFY(zone.width() > 0);
             QVERIFY(zone.height() > 0);
         }
+        // Cascade should step diagonally: each successive zone offset right and down
+        QVERIFY2(zones[1].x() > zones[0].x(),
+                 qPrintable(QStringLiteral("Cascade zone[1].x (%1) should be > zone[0].x (%2)")
+                                .arg(zones[1].x())
+                                .arg(zones[0].x())));
+        QVERIFY2(zones[1].y() > zones[0].y(),
+                 qPrintable(QStringLiteral("Cascade zone[1].y (%1) should be > zone[0].y (%2)")
+                                .arg(zones[1].y())
+                                .arg(zones[0].y())));
     }
 
     void testCascade_gaps()
@@ -139,6 +170,11 @@ private Q_SLOTS:
             QVERIFY(zone.width() > 0);
             QVERIFY(zone.height() > 0);
         }
+        // Stair should step in the x direction: each successive zone shifts horizontally
+        QVERIFY2(zones[1].x() != zones[0].x(),
+                 qPrintable(QStringLiteral("Stair zone[1].x (%1) should differ from zone[0].x (%2)")
+                                .arg(zones[1].x())
+                                .arg(zones[0].x())));
     }
 
     void testStair_gaps()
@@ -195,6 +231,17 @@ private Q_SLOTS:
             QVERIFY(zone.width() > 0);
             QVERIFY(zone.height() > 0);
         }
+        // Spread should distribute zones across the area width
+        int minX = zones[0].x();
+        int maxRight = zones[0].right();
+        for (int i = 1; i < zones.size(); ++i) {
+            minX = qMin(minX, zones[i].x());
+            maxRight = qMax(maxRight, zones[i].right());
+        }
+        int spread = maxRight - minX;
+        QVERIFY2(spread > ScreenWidth / 2,
+                 qPrintable(QStringLiteral("Spread zones should span a significant portion of the screen width, got %1")
+                                .arg(spread)));
     }
 
     void testSpread_gaps()

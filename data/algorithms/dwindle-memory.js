@@ -36,6 +36,8 @@ function calculateZones(params) {
     const minSizes = params.minSizes || [];
 
     // Use persistent split tree if available and leaf count matches
+    // Note: minSizes are not applied when using persistent tree splits.
+    // The tree stores ratios that reflect the user's manual adjustments.
     if (params.tree && params.tree.leafCount === count) {
         return applyTreeGeometry(params.tree, area, gap);
     }

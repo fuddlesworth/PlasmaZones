@@ -8,7 +8,8 @@
  * Port of TilingAlgorithm::distributeWithGaps.
  */
 function distributeWithGaps(total, count, gap) {
-    if (count <= 0 || total <= 0) return [];
+    if (count <= 0) return [];
+    if (total <= 0) return Array(count).fill(1);
     if (count === 1) return [total];
     const totalGaps = (count - 1) * gap;
     const available = Math.max(count, total - totalGaps);
@@ -26,10 +27,20 @@ function distributeWithGaps(total, count, gap) {
     if (usedSpace > total) {
         // Proportionally shrink sizes to fit
         const shrinkRatio = Math.max(0, total - totalGaps) / Math.max(1, usedSpace - totalGaps);
-        let newSum = 0;
         for (let i = 0; i < count; i++) {
             sizes[i] = Math.max(1, Math.floor(sizes[i] * shrinkRatio));
-            newSum += sizes[i];
+        }
+        // After shrinking, Math.max(1, ...) floors may cause sum to exceed total.
+        // Subtract excess from the largest element (clamped to 1).
+        let shrunkSum = 0;
+        for (let i = 0; i < count; i++) shrunkSum += sizes[i];
+        if (shrunkSum + totalGaps > total) {
+            const excess = shrunkSum + totalGaps - total;
+            let maxIdx = 0;
+            for (let i = 1; i < count; i++) {
+                if (sizes[i] > sizes[maxIdx]) maxIdx = i;
+            }
+            sizes[maxIdx] = Math.max(1, sizes[maxIdx] - excess);
         }
     }
     return sizes;

@@ -36,7 +36,14 @@ function dwindleLayout(area, count, splitRatio, innerGap, minSizes) {
                 if (minSizes && minSizes.length > 0 && remainingMinW[i + 1] > 0) {
                     windowWidth = Math.min(windowWidth, contentWidth - remainingMinW[i + 1]);
                 }
-                windowWidth = Math.min(Math.max(windowWidth, 1), contentWidth - 1);
+                if (contentWidth < 2) {
+                    // Cannot split further; give full width and degrade remaining
+                    zones.push({x: remaining.x, y: remaining.y,
+                        width: remaining.width, height: remaining.height});
+                    appendGracefulDegradation(zones, remaining, count - i - 1, innerGap);
+                    break;
+                }
+                windowWidth = Math.max(1, Math.min(windowWidth, contentWidth - 1));
                 zones.push({x: remaining.x, y: remaining.y,
                     width: windowWidth, height: remaining.height});
                 remaining = {x: remaining.x + windowWidth + innerGap, y: remaining.y,
@@ -52,7 +59,14 @@ function dwindleLayout(area, count, splitRatio, innerGap, minSizes) {
                     windowHeight = Math.min(windowHeight,
                         contentHeight - remainingMinH[i + 1]);
                 }
-                windowHeight = Math.min(Math.max(windowHeight, 1), contentHeight - 1);
+                if (contentHeight < 2) {
+                    // Cannot split further; give full height and degrade remaining
+                    zones.push({x: remaining.x, y: remaining.y,
+                        width: remaining.width, height: remaining.height});
+                    appendGracefulDegradation(zones, remaining, count - i - 1, innerGap);
+                    break;
+                }
+                windowHeight = Math.max(1, Math.min(windowHeight, contentHeight - 1));
                 zones.push({x: remaining.x, y: remaining.y,
                     width: remaining.width, height: windowHeight});
                 remaining = {x: remaining.x,
