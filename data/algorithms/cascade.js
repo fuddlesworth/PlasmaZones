@@ -37,6 +37,11 @@ function calculateZones(params) {
     // global PZ_MIN_SPLIT/PZ_MAX_SPLIT used by non-overlapping algorithms.
     const offsetRatio = Math.max(0.02, Math.min(0.4, params.splitRatio));
 
+    // Single window: no cascade offset needed — fill entire area
+    if (count === 1) {
+        return [{ x: area.x, y: area.y, width: area.width, height: area.height }];
+    }
+
     // Initial minimum of 20px per step; may be reduced by maxOffset clamp below
     // when window minimum sizes constrain the available cascade space.
     let offsetX = Math.max(20, Math.floor(area.width * offsetRatio / (count - 1)));

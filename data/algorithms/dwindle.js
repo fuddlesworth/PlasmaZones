@@ -25,9 +25,9 @@ function calculateZones(params) {
     const count = params.windowCount;
     if (count <= 0) return [];
     const area = params.area;
-    const gap = Math.max(0, params.innerGap || 0);
-    const splitRatio = params.splitRatio;
+    const gap = params.innerGap;
     const minSizes = params.minSizes || [];
 
-    return dwindleLayout(area, count, splitRatio, gap, minSizes);
+    // splitRatio is clamped inside dwindleLayout()
+    return dwindleLayout(area, count, params.splitRatio, gap, minSizes);
 }

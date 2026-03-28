@@ -32,7 +32,7 @@ function calculateZones(params) {
     if (count <= 0) return [];
 
     const area = params.area;
-    const gap = Math.max(0, params.innerGap || 0);
+    const gap = params.innerGap;
     const minSizes = params.minSizes || [];
     const splitRatio = params.splitRatio;
 

@@ -26,7 +26,7 @@ function calculateZones(params) {
     if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
         return fillArea(area, count);
     }
-    const gap = Math.max(0, params.innerGap || 0);
+    const gap = params.innerGap;
 
     const minHeights = extractMinHeights(params.minSizes || [], count);
 

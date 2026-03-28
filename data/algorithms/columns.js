@@ -26,5 +26,5 @@ function calculateZones(params) {
     if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
         return fillArea(area, count);
     }
-    return equalColumnsLayout(area, count, Math.max(0, params.innerGap || 0), params.minSizes || []);
+    return equalColumnsLayout(area, count, params.innerGap, params.minSizes || []);
 }

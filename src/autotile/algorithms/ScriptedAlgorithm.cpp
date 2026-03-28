@@ -315,7 +315,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // Dependency graph (arrows mean "depends on"):
     //   applyTreeGeometry  (standalone)
     //   lShapeLayout       (standalone)
-    //   deckLayout          (standalone)
+    //   deckLayout          → fillArea
     //   distributeEvenly    (standalone)
     //   distributeWithGaps  (standalone)
     //   distributeWithMinSizes → distributeWithGaps
@@ -329,13 +329,13 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     //   interleaveStacks    (standalone)
     //   applyPerWindowMinSize (standalone)
     //   extractRegionMaxMin  (standalone)
-    //   fillArea             (standalone)
+    //   fillRegion           (standalone)
+    //   fillArea             → fillRegion
     //   masterStackLayout   → fillArea, extractRegionMaxMin, solveTwoPart,
     //                         extractMinDims, distributeWithOptionalMins
     //   equalColumnsLayout  → extractMinDims, distributeWithOptionalMins
     if (!injectBuiltin(ScriptedHelpers::applyTreeGeometryJs(), QStringLiteral("builtin:applyTreeGeometry"))
         || !injectBuiltin(ScriptedHelpers::lShapeLayoutJs(), QStringLiteral("builtin:lShapeLayout"))
-        || !injectBuiltin(ScriptedHelpers::deckLayoutJs(), QStringLiteral("builtin:deckLayout"))
         || !injectBuiltin(ScriptedHelpers::distributeEvenlyJs(), QStringLiteral("builtin:distributeEvenly"))
         || !injectBuiltin(ScriptedHelpers::distributeWithGapsJs(), QStringLiteral("builtin:distributeWithGaps"))
         || !injectBuiltin(ScriptedHelpers::distributeWithMinSizesJs(), QStringLiteral("builtin:distributeWithMinSizes"))
@@ -350,10 +350,11 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         || !injectBuiltin(ScriptedHelpers::interleaveStacksJs(), QStringLiteral("builtin:interleaveStacks"))
         || !injectBuiltin(ScriptedHelpers::applyPerWindowMinSizeJs(), QStringLiteral("builtin:applyPerWindowMinSize"))
         || !injectBuiltin(ScriptedHelpers::extractRegionMaxMinJs(), QStringLiteral("builtin:extractRegionMaxMin"))
+        || !injectBuiltin(ScriptedHelpers::fillRegionJs(), QStringLiteral("builtin:fillRegion"))
         || !injectBuiltin(ScriptedHelpers::fillAreaJs(), QStringLiteral("builtin:fillArea"))
+        || !injectBuiltin(ScriptedHelpers::deckLayoutJs(), QStringLiteral("builtin:deckLayout"))
         || !injectBuiltin(ScriptedHelpers::masterStackLayoutJs(), QStringLiteral("builtin:masterStackLayout"))
-        || !injectBuiltin(ScriptedHelpers::equalColumnsLayoutJs(), QStringLiteral("builtin:equalColumnsLayout"))
-        || !injectBuiltin(ScriptedHelpers::fillRegionJs(), QStringLiteral("builtin:fillRegion"))) {
+        || !injectBuiltin(ScriptedHelpers::equalColumnsLayoutJs(), QStringLiteral("builtin:equalColumnsLayout"))) {
         return false;
     }
 

@@ -28,13 +28,12 @@ function calculateZones(params) {
     if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
         return fillArea(area, count);
     }
-    const gap = Math.max(0, params.innerGap || 0);
-    const splitRatio = params.splitRatio || 0.5;
+    const gap = params.innerGap;
     const minSizes = params.minSizes || [];
 
     // Clamp widthFraction to [0.3, 1.0] — upper bound is 1.0 (not PZ_MAX_SPLIT)
     // because spread windows should be able to fill their entire slot.
-    const widthFraction = Math.max(0.3, Math.min(splitRatio, 1.0));
+    const widthFraction = Math.max(0.3, Math.min(params.splitRatio, 1.0));
 
     // Extract per-window minimum sizes.
     // Slot minimums are scaled up by 1/widthFraction so the window minimum is

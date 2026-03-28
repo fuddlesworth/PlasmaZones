@@ -39,7 +39,9 @@ function applyTreeGeometry(node, rect, gap, _depth) {
             zones = zones.concat(applyTreeGeometry(node.first, rect, 0, _depth + 1));
             zones = zones.concat(applyTreeGeometry(node.second, rect, 0, _depth + 1));
         } else {
-            const h1 = Math.floor(content * ratio);
+            // Math.round preserves backward compatibility with saved user splits
+            // from the C++ DwindleMemoryAlgorithm era.
+            const h1 = Math.round(content * ratio);
             const h2 = content - h1;
             zones = zones.concat(applyTreeGeometry(node.first,
                 {x: rect.x, y: rect.y, width: rect.width, height: h1}, gap, _depth + 1));
@@ -52,7 +54,7 @@ function applyTreeGeometry(node, rect, gap, _depth) {
             zones = zones.concat(applyTreeGeometry(node.first, rect, 0, _depth + 1));
             zones = zones.concat(applyTreeGeometry(node.second, rect, 0, _depth + 1));
         } else {
-            const w1 = Math.floor(content * ratio);
+            const w1 = Math.round(content * ratio);
             const w2 = content - w1;
             zones = zones.concat(applyTreeGeometry(node.first,
                 {x: rect.x, y: rect.y, width: w1, height: rect.height}, gap, _depth + 1));

@@ -33,6 +33,11 @@ function calculateZones(params) {
         return fillArea(area, count);
     }
 
+    // Single window: fill entire area — no staircase offset needed
+    if (count === 1) {
+        return [{ x: area.x, y: area.y, width: area.width, height: area.height }];
+    }
+
     // Tighter than PZ_MIN_SPLIT/PZ_MAX_SPLIT: below 0.3 windows are too small for staircase effect
     const sizeRatio = Math.max(0.3, Math.min(0.8, params.splitRatio));
 
@@ -46,8 +51,8 @@ function calculateZones(params) {
     // Diagonal offset distributes the remaining space evenly across steps
     const totalOffsetX = Math.max(0, area.width - winWidth);
     const totalOffsetY = Math.max(0, area.height - winHeight);
-    const stepX = (count > 1) ? Math.floor(totalOffsetX / (count - 1)) : 0;
-    const stepY = (count > 1) ? Math.floor(totalOffsetY / (count - 1)) : 0;
+    const stepX = Math.floor(totalOffsetX / (count - 1));
+    const stepY = Math.floor(totalOffsetY / (count - 1));
 
     const zones = [];
     for (let i = 0; i < count; i++) {

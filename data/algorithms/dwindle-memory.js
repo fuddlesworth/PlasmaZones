@@ -31,8 +31,7 @@ function calculateZones(params) {
     if (count <= 0) return [];
 
     const area = params.area;
-    const gap = Math.max(0, params.innerGap || 0);
-    const splitRatio = params.splitRatio;
+    const gap = params.innerGap;
     const minSizes = params.minSizes || [];
 
     // Use persistent split tree if available and leaf count matches
@@ -42,6 +41,6 @@ function calculateZones(params) {
         return applyTreeGeometry(params.tree, area, gap);
     }
 
-    // Fallback: stateless dwindle layout
-    return dwindleLayout(area, count, splitRatio, gap, minSizes);
+    // Fallback: stateless dwindle layout (clamps splitRatio internally)
+    return dwindleLayout(area, count, params.splitRatio, gap, minSizes);
 }

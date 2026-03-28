@@ -22,10 +22,11 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 function calculateZones(params) {
+    // splitRatio is clamped inside masterStackLayout()
     return masterStackLayout(
         params.area,
         params.windowCount,
-        Math.max(0, params.innerGap || 0),
+        params.innerGap,
         params.splitRatio,
         params.masterCount || 1,
         params.minSizes || [],
