@@ -34,9 +34,9 @@ function calculateZones(params) {
         return [{x: area.x, y: area.y, width: area.width, height: area.height}];
     }
 
-    // Clamp splitRatio to cascade-specific range (C++ wrapper clamps to 0.1-0.9,
-    // but cascade needs tighter bounds)
-    const offsetRatio = Math.max(PZ_MIN_SPLIT, Math.min(0.4, params.splitRatio));
+    // Clamp splitRatio to cascade-specific range (0.02-0.4), tighter than the
+    // global PZ_MIN_SPLIT/PZ_MAX_SPLIT used by non-overlapping algorithms.
+    const offsetRatio = Math.max(0.02, Math.min(0.4, params.splitRatio));
 
     // Initial minimum of 20px per step; may be reduced by maxOffset clamp below
     // when window minimum sizes constrain the available cascade space.

@@ -31,9 +31,10 @@ function calculateZones(params) {
     // Tighter than PZ_MIN_SPLIT/PZ_MAX_SPLIT: below 0.3 windows are too small for staircase effect
     const sizeRatio = Math.max(0.3, Math.min(0.8, params.splitRatio));
 
-    // All windows are the same size
-    let winWidth = Math.max(PZ_MIN_ZONE_SIZE, Math.floor(area.width * sizeRatio));
-    let winHeight = Math.max(PZ_MIN_ZONE_SIZE, Math.floor(area.height * sizeRatio));
+    // All windows are the same size (min 100px to preserve the C++ staircase visual minimum)
+    const StairMinWindowPx = 100;
+    let winWidth = Math.max(StairMinWindowPx, Math.floor(area.width * sizeRatio));
+    let winHeight = Math.max(StairMinWindowPx, Math.floor(area.height * sizeRatio));
     winWidth = Math.min(winWidth, area.width);
     winHeight = Math.min(winHeight, area.height);
 

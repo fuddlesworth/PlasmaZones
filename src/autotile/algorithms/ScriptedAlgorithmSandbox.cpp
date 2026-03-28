@@ -166,6 +166,7 @@ bool hardenSandbox(QJSEngine* engine)
             if (!val.isUndefined()) {
                 freezeObj.call({val});
             }
+            // Proxy is critical: it can intercept all property access and construct sandbox escapes
             disableGlobal(name, name == QLatin1String("Proxy"));
         }
     }

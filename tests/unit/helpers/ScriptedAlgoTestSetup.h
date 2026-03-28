@@ -12,6 +12,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include "autotile/AlgorithmRegistry.h"
 #include "autotile/algorithms/ScriptedAlgorithmLoader.h"
 
 #include "XdgEnvGuard.h"
@@ -75,6 +76,14 @@ public:
 
         m_loader = std::make_unique<ScriptedAlgorithmLoader>();
         m_loader->scanAndRegister();
+
+        // Verify a minimum number of algorithms loaded to catch silent JS/builtin failures
+        auto* registry = AlgorithmRegistry::instance();
+        if (registry->availableAlgorithms().size() < 15) {
+            qWarning() << "ScriptedAlgoTestSetup: Only" << registry->availableAlgorithms().size()
+                       << "algorithms loaded, expected at least 15";
+            return false;
+        }
         return true;
     }
 

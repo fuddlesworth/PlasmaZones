@@ -24,7 +24,8 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 
-const MaxBSPDepth = 50;
+// Use the sandbox-injected MAX_TREE_DEPTH constant (kept in sync with C++ core/constants.h)
+const MaxBSPDepth = (typeof MAX_TREE_DEPTH !== 'undefined') ? MAX_TREE_DEPTH : 50;
 
 function calculateZones(params) {
     const count = params.windowCount;

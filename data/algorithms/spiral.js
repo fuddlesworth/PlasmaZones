@@ -34,6 +34,10 @@ function calculateZones(params) {
     let splitRatio = params.splitRatio;
     const minSizes = params.minSizes || [];
 
+    if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
+        return fillArea(area, count);
+    }
+
     // Clamp splitRatio
     splitRatio = Math.max(PZ_MIN_SPLIT, Math.min(splitRatio, PZ_MAX_SPLIT));
 

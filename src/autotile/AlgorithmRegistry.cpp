@@ -165,12 +165,15 @@ bool AlgorithmRegistry::unregisterAlgorithm(const QString& id)
         return false;
     }
 
+    // Emit before delete so signal handlers can safely reference the id
+    // without risk of use-after-free on any cached algorithm pointers.
+    Q_EMIT algorithmUnregistered(id);
+
     // Use synchronous delete (not deleteLater) to match cleanup() and
     // registerAlgorithm() semantics — prevents double-free if cleanup()
     // runs before the deferred-delete queue drains.
     algorithm->setParent(nullptr);
     delete algorithm;
-    Q_EMIT algorithmUnregistered(id);
     return true;
 }
 

@@ -74,7 +74,7 @@ function calculateZones(params) {
 
         // Min-width clamping
         if (minSizes.length > 0) {
-            const minMW = (minSizes.length > 0) ? (minSizes[0].w || 0) : 0;
+            const minMW = minSizes[0].w || 0;
             const minSW = (masterCount < minSizes.length) ? (minSizes[masterCount].w || 0) : 0;
             const solved = solveTwoPart(contentWidth, masterWidth, stackWidth, minMW, minSW);
             masterWidth = solved.first;
