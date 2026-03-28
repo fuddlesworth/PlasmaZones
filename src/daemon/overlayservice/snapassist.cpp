@@ -17,7 +17,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <LayerShellQt/Window>
+#include "../../core/layersurface.h"
 
 namespace PlasmaZones {
 
@@ -114,15 +114,14 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     }
 
     // Match main overlay: full-screen anchors so zone coordinates (overlay-local) line up
-    if (auto* layerWindow = LayerShellQt::Window::get(m_snapAssistWindow)) {
-        layerWindow->setScreen(screen);
-        layerWindow->setLayer(LayerShellQt::Window::LayerTop);
-        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
-        layerWindow->setAnchors(
-            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
-        layerWindow->setExclusiveZone(-1);
-        layerWindow->setScope(QStringLiteral("plasmazones-snap-assist"));
+    if (auto* layerSurface = LayerSurface::get(m_snapAssistWindow)) {
+        layerSurface->setScreen(screen);
+        layerSurface->setLayer(LayerSurface::LayerTop);
+        layerSurface->setKeyboardInteractivity(LayerSurface::KeyboardInteractivityExclusive);
+        layerSurface->setAnchors(LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorBottom
+                                                       | LayerSurface::AnchorLeft | LayerSurface::AnchorRight));
+        layerSurface->setExclusiveZone(-1);
+        layerSurface->setScope(QStringLiteral("plasmazones-snap-assist"));
     }
 
     assertWindowOnScreen(m_snapAssistWindow, screen);
@@ -364,15 +363,14 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
 
     // Full-screen layer shell with keyboard interactivity
-    if (auto* layerWindow = LayerShellQt::Window::get(m_layoutPickerWindow)) {
-        layerWindow->setScreen(screen);
-        layerWindow->setLayer(LayerShellQt::Window::LayerTop);
-        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
-        layerWindow->setAnchors(
-            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
-        layerWindow->setExclusiveZone(-1);
-        layerWindow->setScope(QStringLiteral("plasmazones-layout-picker"));
+    if (auto* layerSurface = LayerSurface::get(m_layoutPickerWindow)) {
+        layerSurface->setScreen(screen);
+        layerSurface->setLayer(LayerSurface::LayerTop);
+        layerSurface->setKeyboardInteractivity(LayerSurface::KeyboardInteractivityExclusive);
+        layerSurface->setAnchors(LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorBottom
+                                                       | LayerSurface::AnchorLeft | LayerSurface::AnchorRight));
+        layerSurface->setExclusiveZone(-1);
+        layerSurface->setScope(QStringLiteral("plasmazones-layout-picker"));
     }
 
     assertWindowOnScreen(m_layoutPickerWindow, screen);

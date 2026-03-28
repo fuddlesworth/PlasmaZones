@@ -22,7 +22,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <LayerShellQt/Window>
+#include "../../core/layersurface.h"
 
 namespace PlasmaZones {
 
@@ -305,13 +305,12 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     m_shaderPreviewWindow->setScreen(screen);
     m_shaderPreviewWindow->setGeometry(x, y, width, height);
 
-    if (auto* layerWindow = LayerShellQt::Window::get(m_shaderPreviewWindow)) {
+    if (auto* layerSurface = LayerSurface::get(m_shaderPreviewWindow)) {
         const QRect screenGeom = screen->geometry();
         const int localX = x - screenGeom.x();
         const int localY = y - screenGeom.y();
-        layerWindow->setAnchors(
-            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft));
-        layerWindow->setMargins(QMargins(localX, localY, 0, 0));
+        layerSurface->setAnchors(LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft));
+        layerSurface->setMargins(QMargins(localX, localY, 0, 0));
     }
 
     // Shader properties — set all auxiliary props BEFORE shaderSource,
@@ -360,11 +359,11 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
         QScreen* screen = m_shaderPreviewWindow->screen();
         if (screen) {
             m_shaderPreviewWindow->setGeometry(x, y, width, height);
-            if (auto* layerWindow = LayerShellQt::Window::get(m_shaderPreviewWindow)) {
+            if (auto* layerSurface = LayerSurface::get(m_shaderPreviewWindow)) {
                 const QRect screenGeom = screen->geometry();
                 const int localX = x - screenGeom.x();
                 const int localY = y - screenGeom.y();
-                layerWindow->setMargins(QMargins(localX, localY, 0, 0));
+                layerSurface->setMargins(QMargins(localX, localY, 0, 0));
             }
         }
     }
@@ -414,12 +413,12 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen)
 
     window->setProperty("isShaderOverlay", true);
 
-    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        layerWindow->setScreen(screen);
-        layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
-        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-        layerWindow->setScope(QStringLiteral("plasmazones-shader-preview"));
-        layerWindow->setExclusiveZone(-1);
+    if (auto* layerSurface = LayerSurface::get(window)) {
+        layerSurface->setScreen(screen);
+        layerSurface->setLayer(LayerSurface::LayerOverlay);
+        layerSurface->setKeyboardInteractivity(LayerSurface::KeyboardInteractivityNone);
+        layerSurface->setScope(QStringLiteral("plasmazones-shader-preview"));
+        layerSurface->setExclusiveZone(-1);
     }
 
     m_shaderPreviewWindow = window;

@@ -20,8 +20,7 @@
 #include <QJsonParseError>
 #include <atomic>
 
-#include <LayerShellQt/Window>
-
+#include "../../core/layersurface.h"
 #include "../../core/logging.h"
 #include "../../core/settings_interfaces.h"
 #include "../../core/shaderregistry.h"
@@ -76,30 +75,29 @@ inline ZoneSelectorConfig defaultZoneSelectorConfig()
 // DRY helpers replacing duplicated patterns across TUs
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Configure LayerShellQt window properties in one call.
-// Replaces 7 occurrences of get-LayerShellQt::Window + setScope + setLayer +
+// Configure layer surface properties in one call.
+// Replaces 7 occurrences of get + setScope + setLayer +
 // setKeyboardInteractivity + setAnchors + setExclusiveZone pattern.
 // Pass anchors = 0 to skip setAnchors (caller will set them separately).
-inline void configureLayerShell(QQuickWindow* window, QScreen* screen, int layer, int keyboardInteractivity,
-                                const QString& scope,
-                                LayerShellQt::Window::Anchors anchors = LayerShellQt::Window::Anchors())
+inline void configureLayerSurface(QQuickWindow* window, QScreen* screen, LayerSurface::Layer layer,
+                                  LayerSurface::KeyboardInteractivity keyboardInteractivity, const QString& scope,
+                                  LayerSurface::Anchors anchors = LayerSurface::Anchors())
 {
     if (!window) {
         return;
     }
-    auto* layerWindow = LayerShellQt::Window::get(window);
-    if (!layerWindow) {
+    auto* layerSurface = LayerSurface::get(window);
+    if (!layerSurface) {
         return;
     }
-    layerWindow->setScreen(screen);
-    layerWindow->setLayer(static_cast<LayerShellQt::Window::Layer>(layer));
-    layerWindow->setKeyboardInteractivity(
-        static_cast<LayerShellQt::Window::KeyboardInteractivity>(keyboardInteractivity));
-    if (anchors != LayerShellQt::Window::Anchors()) {
-        layerWindow->setAnchors(anchors);
+    layerSurface->setScreen(screen);
+    layerSurface->setLayer(layer);
+    layerSurface->setKeyboardInteractivity(keyboardInteractivity);
+    if (anchors != LayerSurface::Anchors()) {
+        layerSurface->setAnchors(anchors);
     }
-    layerWindow->setExclusiveZone(-1);
-    layerWindow->setScope(scope);
+    layerSurface->setExclusiveZone(-1);
+    layerSurface->setScope(scope);
 }
 
 // Resolve target screen from a screen name/ID string with fallback to primary.
@@ -170,39 +168,34 @@ inline void ensureShaderTimerStarted(QElapsedTimer& timer, QMutex& mutex, std::a
 // Zone selector helpers shared across overlayservice_selector*.cpp TUs
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Convert ZoneSelectorPosition to LayerShellQt anchors
-inline LayerShellQt::Window::Anchors getAnchorsForPosition(ZoneSelectorPosition pos)
+// Convert ZoneSelectorPosition to layer surface anchors
+inline LayerSurface::Anchors getAnchorsForPosition(ZoneSelectorPosition pos)
 {
     switch (pos) {
     case ZoneSelectorPosition::TopLeft:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
+        return LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft);
     case ZoneSelectorPosition::Top:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
-                                             | LayerShellQt::Window::AnchorRight);
+        return LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft | LayerSurface::AnchorRight);
     case ZoneSelectorPosition::TopRight:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorRight);
+        return LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorRight);
     case ZoneSelectorPosition::Left:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
-                                             | LayerShellQt::Window::AnchorBottom);
+        return LayerSurface::Anchors(LayerSurface::AnchorLeft | LayerSurface::AnchorTop | LayerSurface::AnchorBottom);
     case ZoneSelectorPosition::Center:
         // Anchor to all edges so the window fills the screen; the QML "center" state
         // positions the container in the middle of the full-screen transparent window.
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                             | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight);
+        return LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorBottom | LayerSurface::AnchorLeft
+                                     | LayerSurface::AnchorRight);
     case ZoneSelectorPosition::Right:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
-                                             | LayerShellQt::Window::AnchorBottom);
+        return LayerSurface::Anchors(LayerSurface::AnchorRight | LayerSurface::AnchorTop | LayerSurface::AnchorBottom);
     case ZoneSelectorPosition::BottomLeft:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft);
+        return LayerSurface::Anchors(LayerSurface::AnchorBottom | LayerSurface::AnchorLeft);
     case ZoneSelectorPosition::Bottom:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft
-                                             | LayerShellQt::Window::AnchorRight);
+        return LayerSurface::Anchors(LayerSurface::AnchorBottom | LayerSurface::AnchorLeft | LayerSurface::AnchorRight);
     case ZoneSelectorPosition::BottomRight:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorRight);
+        return LayerSurface::Anchors(LayerSurface::AnchorBottom | LayerSurface::AnchorRight);
     default:
         // Default to top anchors
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
-                                             | LayerShellQt::Window::AnchorRight);
+        return LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft | LayerSurface::AnchorRight);
     }
 }
 

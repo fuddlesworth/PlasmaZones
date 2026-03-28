@@ -19,7 +19,7 @@
 #include <QQmlContext>
 #include <QMutexLocker>
 #include <QPointer>
-#include <LayerShellQt/Window>
+#include "../../core/layersurface.h"
 
 namespace PlasmaZones {
 
@@ -305,16 +305,15 @@ void OverlayService::createOverlayWindow(QScreen* screen)
         }
     }
 
-    // Configure LayerShellQt for full-screen overlay
-    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        layerWindow->setScreen(screen);
-        layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
-        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-        layerWindow->setAnchors(
-            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
-        layerWindow->setExclusiveZone(-1);
-        layerWindow->setScope(QStringLiteral("plasmazones-overlay-%1").arg(screen->name()));
+    // Configure layer surface for full-screen overlay
+    if (auto* layerSurface = LayerSurface::get(window)) {
+        layerSurface->setScreen(screen);
+        layerSurface->setLayer(LayerSurface::LayerOverlay);
+        layerSurface->setKeyboardInteractivity(LayerSurface::KeyboardInteractivityNone);
+        layerSurface->setAnchors(LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorBottom
+                                                       | LayerSurface::AnchorLeft | LayerSurface::AnchorRight));
+        layerSurface->setExclusiveZone(-1);
+        layerSurface->setScope(QStringLiteral("plasmazones-overlay-%1").arg(screen->name()));
     }
 
     if (!Platform::isSupported()) {

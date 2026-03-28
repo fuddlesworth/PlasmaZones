@@ -17,7 +17,7 @@
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QQmlEngine>
-#include <LayerShellQt/Window>
+#include "../../core/layersurface.h"
 
 namespace PlasmaZones {
 
@@ -240,11 +240,11 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
         : defaultZoneSelectorConfig();
     const auto pos = static_cast<ZoneSelectorPosition>(config.position);
 
-    // Configure LayerShellQt for zone selector (LayerTop for pointer input)
-    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
+    // Configure layer surface for zone selector (LayerTop for pointer input)
+    if (auto* layerSurface = LayerSurface::get(window)) {
         layerWindow->setScreen(screen);
-        layerWindow->setLayer(LayerShellQt::Window::LayerTop);
-        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
+        layerSurface->setLayer(LayerSurface::LayerTop);
+        layerSurface->setKeyboardInteractivity(LayerSurface::KeyboardInteractivityNone);
 
         layerWindow->setAnchors(getAnchorsForPosition(pos));
         layerWindow->setExclusiveZone(-1);
@@ -389,8 +389,7 @@ void OverlayService::scrollZoneSelector(int angleDeltaY)
     }
     for (auto* window : std::as_const(m_zoneSelectorWindows)) {
         if (window) {
-            QMetaObject::invokeMethod(window, "applyScrollDelta",
-                                      Q_ARG(QVariant, angleDeltaY));
+            QMetaObject::invokeMethod(window, "applyScrollDelta", Q_ARG(QVariant, angleDeltaY));
         }
     }
 }

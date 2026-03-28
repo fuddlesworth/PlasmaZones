@@ -27,7 +27,7 @@
 #include "../core/logging.h"
 #include "pz_qml_i18n.h"
 
-#include <LayerShellQt/Window>
+#include "../core/layersurface.h"
 
 namespace PlasmaZones {
 

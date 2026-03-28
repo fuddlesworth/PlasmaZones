@@ -17,7 +17,7 @@
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QQmlEngine>
-#include <LayerShellQt/Window>
+#include "../../core/layersurface.h"
 
 namespace PlasmaZones {
 
@@ -252,7 +252,7 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     if (auto* contentRoot = window->contentItem()) {
         contentRoot->polish();
     }
-    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
+    if (auto* layerSurface = LayerSurface::get(window)) {
         const int screenW = screenGeom.width();
         const int screenH = screenGeom.height();
         const int hMargin = std::max(0, (screenW - layout.barWidth) / 2);
@@ -262,63 +262,58 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
         // coordinates over any panels, so hover coordinates match (no offset mismatch).
 
         // Initialize to Top position as safe default
-        LayerShellQt::Window::Anchors anchors = LayerShellQt::Window::Anchors(
-            LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight);
+        LayerSurface::Anchors anchors =
+            LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft | LayerSurface::AnchorRight);
         QMargins margins = QMargins(hMargin, 0, hMargin, std::max(0, screenH - layout.barHeight));
 
         switch (pos) {
         case ZoneSelectorPosition::TopLeft:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
+            anchors = LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft);
             margins = QMargins(0, 0, screenW - layout.barWidth, screenH - layout.barHeight);
             break;
         case ZoneSelectorPosition::Top:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
-                                                    | LayerShellQt::Window::AnchorRight);
+            anchors =
+                LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft | LayerSurface::AnchorRight);
             margins = QMargins(hMargin, 0, hMargin, std::max(0, screenH - layout.barHeight));
             break;
         case ZoneSelectorPosition::TopRight:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorRight);
+            anchors = LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorRight);
             margins = QMargins(screenW - layout.barWidth, 0, 0, screenH - layout.barHeight);
             break;
         case ZoneSelectorPosition::Left:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
-                                                    | LayerShellQt::Window::AnchorBottom);
+            anchors =
+                LayerSurface::Anchors(LayerSurface::AnchorLeft | LayerSurface::AnchorTop | LayerSurface::AnchorBottom);
             margins = QMargins(0, vMargin, 0, vMargin);
             break;
         case ZoneSelectorPosition::Right:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
-                                                    | LayerShellQt::Window::AnchorBottom);
+            anchors =
+                LayerSurface::Anchors(LayerSurface::AnchorRight | LayerSurface::AnchorTop | LayerSurface::AnchorBottom);
             margins = QMargins(0, vMargin, 0, vMargin);
             break;
         case ZoneSelectorPosition::BottomLeft:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft);
+            anchors = LayerSurface::Anchors(LayerSurface::AnchorBottom | LayerSurface::AnchorLeft);
             margins = QMargins(0, screenH - layout.barHeight, screenW - layout.barWidth, 0);
             break;
         case ZoneSelectorPosition::Bottom:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft
-                                              | LayerShellQt::Window::AnchorRight);
+            anchors = LayerSurface::Anchors(LayerSurface::AnchorBottom | LayerSurface::AnchorLeft
+                                            | LayerSurface::AnchorRight);
             margins = QMargins(hMargin, std::max(0, screenH - layout.barHeight), hMargin, 0);
             break;
         case ZoneSelectorPosition::BottomRight:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorRight);
+            anchors = LayerSurface::Anchors(LayerSurface::AnchorBottom | LayerSurface::AnchorRight);
             margins = QMargins(screenW - layout.barWidth, screenH - layout.barHeight, 0, 0);
             break;
         case ZoneSelectorPosition::Center:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                              | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight);
+            anchors = LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorBottom
+                                            | LayerSurface::AnchorLeft | LayerSurface::AnchorRight);
             margins = QMargins(0, 0, 0, 0);
             break;
         default:
             // Already initialized to Top position
             break;
         }
-        layerWindow->setAnchors(anchors);
-        layerWindow->setMargins(margins);
+        layerSurface->setAnchors(anchors);
+        layerSurface->setMargins(margins);
     }
     applyZoneSelectorGeometry(window, screen, layout, pos);
 
