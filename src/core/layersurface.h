@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include <QMargins>
 #include <QObject>
 #include <QPointer>
@@ -98,6 +100,10 @@ public:
     /// Returns true if the compositor supports zwlr_layer_shell_v1.
     /// Only valid after QGuiApplication is constructed and the QPA plugin has initialized.
     static bool isSupported();
+
+    /// Compute layer-shell size: 0 for axes anchored to both edges, clamped otherwise.
+    /// Pure static helper shared between QPA plugin and tests.
+    static std::pair<uint32_t, uint32_t> computeLayerSize(int anchors, const QSize& windowSize);
 
 Q_SIGNALS:
     void layerChanged();

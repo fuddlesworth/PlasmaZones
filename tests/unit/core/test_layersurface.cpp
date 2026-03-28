@@ -9,21 +9,6 @@
 
 #include "core/layersurface.h"
 
-// Replicate computeLayerSize logic here for testing. The production version lives in
-// LayerShellWindow (not exported — uses Qt Wayland private headers). This must stay
-// in sync with layershellwindow.cpp; if the logic diverges, fix both.
-namespace {
-std::pair<uint32_t, uint32_t> computeLayerSize(int anchors, const QSize& windowSize)
-{
-    using PlasmaZones::LayerSurface;
-    bool anchoredH = (anchors & LayerSurface::AnchorLeft) && (anchors & LayerSurface::AnchorRight);
-    bool anchoredV = (anchors & LayerSurface::AnchorTop) && (anchors & LayerSurface::AnchorBottom);
-    uint32_t w = anchoredH ? 0 : static_cast<uint32_t>(qMax(0, windowSize.width()));
-    uint32_t h = anchoredV ? 0 : static_cast<uint32_t>(qMax(0, windowSize.height()));
-    return {w, h};
-}
-} // namespace
-
 using namespace PlasmaZones;
 
 class TestLayerSurface : public QObject
@@ -92,7 +77,7 @@ private Q_SLOTS:
         QCOMPARE(surface->anchors(), LayerSurface::Anchors());
         QCOMPARE(surface->exclusiveZone(), int32_t(-1));
         QCOMPARE(surface->keyboardInteractivity(), LayerSurface::KeyboardInteractivityNone);
-        QVERIFY(surface->scope().isEmpty());
+        QCOMPARE(surface->scope(), QStringLiteral("plasmazones"));
         QCOMPARE(surface->screen(), nullptr);
         QCOMPARE(surface->margins(), QMargins());
     }
@@ -196,6 +181,20 @@ private Q_SLOTS:
         surface->setScreen(QGuiApplication::primaryScreen());
         // setScreen after show returns early without emitting
         QCOMPARE(spy.count(), 0);
+        window.close();
+    }
+
+    void testSetScope_warnsAfterShow()
+    {
+        QWindow window;
+        auto* surface = LayerSurface::get(&window);
+        QSignalSpy spy(surface, &LayerSurface::scopeChanged);
+
+        window.show();
+        surface->setScope(QStringLiteral("new-scope"));
+        // setScope after show returns early without emitting (scope is immutable)
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(surface->scope(), QStringLiteral("plasmazones")); // original default unchanged
         window.close();
     }
 
@@ -340,9 +339,9 @@ private Q_SLOTS:
     void testComputeLayerSize_allAnchors_zeroSize()
     {
         // Anchored to all edges: compositor controls size, we send 0x0
-        auto [w, h] = computeLayerSize(LayerSurface::AnchorTop | LayerSurface::AnchorBottom | LayerSurface::AnchorLeft
-                                           | LayerSurface::AnchorRight,
-                                       QSize(800, 600));
+        auto [w, h] = LayerSurface::computeLayerSize(LayerSurface::AnchorTop | LayerSurface::AnchorBottom
+                                                         | LayerSurface::AnchorLeft | LayerSurface::AnchorRight,
+                                                     QSize(800, 600));
         QCOMPARE(w, uint32_t(0));
         QCOMPARE(h, uint32_t(0));
     }
@@ -350,7 +349,8 @@ private Q_SLOTS:
     void testComputeLayerSize_horizontalAnchors_zeroWidth()
     {
         // Anchored left+right: width is compositor-controlled, height is explicit
-        auto [w, h] = computeLayerSize(LayerSurface::AnchorLeft | LayerSurface::AnchorRight, QSize(800, 100));
+        auto [w, h] =
+            LayerSurface::computeLayerSize(LayerSurface::AnchorLeft | LayerSurface::AnchorRight, QSize(800, 100));
         QCOMPARE(w, uint32_t(0));
         QCOMPARE(h, uint32_t(100));
     }
@@ -358,7 +358,8 @@ private Q_SLOTS:
     void testComputeLayerSize_verticalAnchors_zeroHeight()
     {
         // Anchored top+bottom: height is compositor-controlled, width is explicit
-        auto [w, h] = computeLayerSize(LayerSurface::AnchorTop | LayerSurface::AnchorBottom, QSize(300, 600));
+        auto [w, h] =
+            LayerSurface::computeLayerSize(LayerSurface::AnchorTop | LayerSurface::AnchorBottom, QSize(300, 600));
         QCOMPARE(w, uint32_t(300));
         QCOMPARE(h, uint32_t(0));
     }
@@ -366,7 +367,7 @@ private Q_SLOTS:
     void testComputeLayerSize_noAnchors_explicitSize()
     {
         // No anchors: full explicit size
-        auto [w, h] = computeLayerSize(0, QSize(400, 200));
+        auto [w, h] = LayerSurface::computeLayerSize(0, QSize(400, 200));
         QCOMPARE(w, uint32_t(400));
         QCOMPARE(h, uint32_t(200));
     }
@@ -374,7 +375,8 @@ private Q_SLOTS:
     void testComputeLayerSize_singleAnchor_explicitSize()
     {
         // Single anchor (e.g. top-left): explicit size
-        auto [w, h] = computeLayerSize(LayerSurface::AnchorTop | LayerSurface::AnchorLeft, QSize(250, 150));
+        auto [w, h] =
+            LayerSurface::computeLayerSize(LayerSurface::AnchorTop | LayerSurface::AnchorLeft, QSize(250, 150));
         QCOMPARE(w, uint32_t(250));
         QCOMPARE(h, uint32_t(150));
     }
@@ -382,7 +384,7 @@ private Q_SLOTS:
     void testComputeLayerSize_negativeSize_clampedToZero()
     {
         // Negative dimensions are clamped to 0 before uint32_t cast
-        auto [w, h] = computeLayerSize(0, QSize(-10, -5));
+        auto [w, h] = LayerSurface::computeLayerSize(0, QSize(-10, -5));
         QCOMPARE(w, uint32_t(0));
         QCOMPARE(h, uint32_t(0));
     }

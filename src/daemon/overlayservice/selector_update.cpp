@@ -255,6 +255,9 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
             margins = QMargins(hMargin, 0, hMargin, std::max(0, screenH - layout.barHeight));
             break;
         }
+        // Batch anchors + margins into a single propertiesChanged() emission
+        // to avoid a one-frame glitch with new anchors but old margins.
+        LayerSurface::BatchGuard batch(layerSurface);
         layerSurface->setAnchors(anchors);
         layerSurface->setMargins(margins);
     }

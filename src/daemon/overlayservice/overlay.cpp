@@ -280,10 +280,9 @@ void OverlayService::createOverlayWindow(QScreen* screen)
         }
     }
 
-    // Set window geometry to cover full screen
+    // Set window size to cover full screen. Position is controlled by layer-surface
+    // anchors (AnchorAll), not by setX/setY which are no-ops on layer surfaces.
     const QRect geom = screen->geometry();
-    window->setX(geom.x());
-    window->setY(geom.y());
     window->setWidth(geom.width());
     window->setHeight(geom.height());
 
@@ -324,8 +323,8 @@ void OverlayService::createOverlayWindow(QScreen* screen)
             return;
         }
         if (auto* w = m_overlayWindows.value(screenPtr)) {
-            w->setX(newGeom.x());
-            w->setY(newGeom.y());
+            // Only set size — position is controlled by layer-surface anchors (AnchorAll),
+            // setX/setY are no-ops on layer surfaces.
             w->setWidth(newGeom.width());
             w->setHeight(newGeom.height());
             updateOverlayWindow(screenPtr);

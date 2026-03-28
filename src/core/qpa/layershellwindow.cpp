@@ -38,10 +38,9 @@ LayerShellWindow::LayerShellWindow(LayerShellIntegration* integration, QtWayland
 
     // Read initial properties from QWindow dynamic properties
     int layer = qwindow->property(LayerSurfaceProps::Layer).toInt();
+    // Scope default ("plasmazones") is set by LayerSurface::get() — if still empty
+    // here, the caller explicitly wants no scope (or forgot to set one).
     QString scope = qwindow->property(LayerSurfaceProps::Scope).toString();
-    if (scope.isEmpty()) {
-        scope = QStringLiteral("plasmazones");
-    }
 
     // Create the layer surface
     m_wlSurface = QtWaylandClient::QWaylandShellIntegration::wlSurfaceForWindow(waylandWindow);
@@ -122,11 +121,7 @@ void LayerShellWindow::setWindowGeometry(const QRect& rect)
 
 std::pair<uint32_t, uint32_t> LayerShellWindow::computeLayerSize(int anchors, const QSize& windowSize)
 {
-    bool anchoredH = (anchors & LayerSurface::AnchorLeft) && (anchors & LayerSurface::AnchorRight);
-    bool anchoredV = (anchors & LayerSurface::AnchorTop) && (anchors & LayerSurface::AnchorBottom);
-    uint32_t w = anchoredH ? 0 : static_cast<uint32_t>(qMax(0, windowSize.width()));
-    uint32_t h = anchoredV ? 0 : static_cast<uint32_t>(qMax(0, windowSize.height()));
-    return {w, h};
+    return LayerSurface::computeLayerSize(anchors, windowSize);
 }
 
 void LayerShellWindow::applyProperties()

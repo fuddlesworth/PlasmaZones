@@ -21,11 +21,15 @@ static QHash<QWindow*, LayerSurface*> s_surfaces;
 LayerSurface::LayerSurface(QWindow* window)
     : QObject(window)
     , m_window(window)
+    , m_scope(QStringLiteral("plasmazones"))
 {
     // Mark window so the QPA shell integration creates a layer surface
     // instead of an xdg_toplevel when the platform window is created.
     window->setProperty(LayerSurfaceProps::IsLayerShell, true);
     window->setProperty(LayerSurfaceProps::Surface, QVariant::fromValue(this));
+    // Set default scope so the QPA plugin always has a non-empty value.
+    // Prevents compositor quirks with empty scope strings.
+    window->setProperty(LayerSurfaceProps::Scope, m_scope);
     // No QObject::destroyed connection needed — LayerSurface is parented to
     // the window, so ~LayerSurface runs (and removes from s_surfaces) before
     // the parent window finishes destruction.
@@ -149,6 +153,12 @@ void LayerSurface::setScope(const QString& scope)
     if (m_scope == scope) {
         return;
     }
+    if (m_window->isVisible()) {
+        qCWarning(lcLayerSurface) << "setScope() called after show(); scope is immutable at the protocol level"
+                                  << "— the layer surface retains the original scope"
+                                  << "(scope is baked into zwlr_layer_shell_v1_get_layer_surface)";
+        return;
+    }
     m_scope = scope;
     m_window->setProperty(LayerSurfaceProps::Scope, scope);
     Q_EMIT scopeChanged();
@@ -199,6 +209,15 @@ void LayerSurface::setMargins(const QMargins& margins)
 QMargins LayerSurface::margins() const
 {
     return m_margins;
+}
+
+std::pair<uint32_t, uint32_t> LayerSurface::computeLayerSize(int anchors, const QSize& windowSize)
+{
+    bool anchoredH = (anchors & AnchorLeft) && (anchors & AnchorRight);
+    bool anchoredV = (anchors & AnchorTop) && (anchors & AnchorBottom);
+    uint32_t w = anchoredH ? 0 : static_cast<uint32_t>(qMax(0, windowSize.width()));
+    uint32_t h = anchoredV ? 0 : static_cast<uint32_t>(qMax(0, windowSize.height()));
+    return {w, h};
 }
 
 } // namespace PlasmaZones
