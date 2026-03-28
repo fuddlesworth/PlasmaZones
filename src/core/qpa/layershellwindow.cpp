@@ -48,11 +48,19 @@ LayerShellWindow::LayerShellWindow(LayerShellIntegration* integration, QtWayland
         qCCritical(lcLayerShellWindow) << "wlSurfaceForWindow returned null — cannot create layer surface";
         return;
     }
+    // Guard against TOCTOU race: the global may have been removed between
+    // createShellSurface()'s null check and this point (e.g. compositor crash).
+    struct zwlr_layer_shell_v1* shell = integration->layerShell();
+    if (!shell) {
+        qCCritical(lcLayerShellWindow) << "zwlr_layer_shell_v1 global removed between createShellSurface()"
+                                       << "and LayerShellWindow constructor — cannot create layer surface";
+        return;
+    }
     // Keep the QByteArray alive for the duration of the call — constData() returns
     // a pointer into the QByteArray, which must not be a dangling temporary.
     const QByteArray scopeUtf8 = scope.toUtf8();
-    m_layerSurface = zwlr_layer_shell_v1_get_layer_surface(integration->layerShell(), m_wlSurface, m_output,
-                                                           static_cast<uint32_t>(layer), scopeUtf8.constData());
+    m_layerSurface = zwlr_layer_shell_v1_get_layer_surface(shell, m_wlSurface, m_output, static_cast<uint32_t>(layer),
+                                                           scopeUtf8.constData());
 
     zwlr_layer_surface_v1_add_listener(m_layerSurface, &s_layerSurfaceListener, this);
 
@@ -167,6 +175,10 @@ void LayerShellWindow::handleConfigure(void* data, struct zwlr_layer_surface_v1*
     // we pass the values through directly — no DPR division needed.
     // Qt's Wayland platform plugin handles the logical→buffer scaling internally
     // (via wl_surface.set_buffer_scale or wp_fractional_scale_v1).
+    //
+    // Note: calling resize() from within a Wayland protocol callback is safe here
+    // because Qt's Wayland backend defers the actual wl_surface.commit until the
+    // next event loop iteration — it does not re-enter the Wayland dispatch.
     QWindow* qwindow = self->m_waylandWindow->window();
     if (width > 0 && height > 0 && qwindow) {
         qwindow->resize(static_cast<int>(width), static_cast<int>(height));

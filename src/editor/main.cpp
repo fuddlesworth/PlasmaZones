@@ -5,6 +5,7 @@
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/qpa/layershellpluginloader.h"
+#include "../core/layersurface.h"
 #include "../core/translationloader.h"
 #include "version.h"
 #include "../daemon/rendering/zoneshaderitem.h"
@@ -45,6 +46,15 @@ int main(int argc, char* argv[])
 
     QGuiApplication app(argc, argv);
     PlasmaZones::loadTranslations(&app);
+
+    // Verify the layer-shell QPA plugin loaded successfully. If not, shader preview
+    // overlays will be created as xdg_toplevel (wrong stacking/anchoring).
+    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && !PlasmaZones::LayerSurface::isSupported()) {
+        qCWarning(lcEditor) << "Layer-shell QPA plugin did not initialize —"
+                            << "shader preview overlays may not stack correctly."
+                            << "Check that pz-layer-shell.so is installed to Qt's"
+                            << "wayland-shell-integration plugin directory.";
+    }
 
     app.setApplicationName(QStringLiteral("plasmazones-editor"));
     app.setApplicationVersion(PlasmaZones::VERSION_STRING);

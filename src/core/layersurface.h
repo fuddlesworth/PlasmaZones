@@ -86,8 +86,10 @@ public:
 
     void setScreen(QScreen* screen);
     /// Returns the target screen, or nullptr if unset / screen was unplugged.
-    /// The returned pointer may become dangling if the screen is destroyed;
-    /// callers must not cache the result across event loop iterations.
+    /// After hot-unplug, QPointer ensures this returns nullptr rather than dangling.
+    /// Note: the layer surface itself remains bound to the (now-gone) wl_output —
+    /// the compositor will either close the surface or leave it on the remaining output.
+    /// Callers must not cache the result across event loop iterations.
     QScreen* screen() const;
 
     void setMargins(const QMargins& margins);

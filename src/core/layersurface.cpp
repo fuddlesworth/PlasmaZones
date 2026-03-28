@@ -162,6 +162,9 @@ void LayerSurface::setScope(const QString& scope)
     m_scope = scope;
     m_window->setProperty(LayerSurfaceProps::Scope, scope);
     Q_EMIT scopeChanged();
+    // No emitPropertiesChanged() — scope is only read at surface creation time by
+    // the QPA plugin (baked into zwlr_layer_shell_v1_get_layer_surface), so pushing
+    // a protocol update would be meaningless. Same rationale applies to setScreen().
     emitPropertiesChanged();
 }
 
@@ -185,6 +188,10 @@ void LayerSurface::setScreen(QScreen* screen)
         m_window->setScreen(screen);
     }
     Q_EMIT screenChanged();
+    // No emitPropertiesChanged() — screen/output binding is immutable at the protocol
+    // level (baked into zwlr_layer_shell_v1_get_layer_surface at surface creation time).
+    // The QPA plugin reads the screen once in LayerShellWindow's constructor and does
+    // not listen for screenChanged, so a protocol push would be meaningless.
 }
 
 QScreen* LayerSurface::screen() const
@@ -213,6 +220,9 @@ QMargins LayerSurface::margins() const
 
 std::pair<uint32_t, uint32_t> LayerSurface::computeLayerSize(int anchors, const QSize& windowSize)
 {
+    // windowSize is in logical (device-independent) pixels from QWindow::size().
+    // zwlr_layer_surface_v1_set_size expects logical pixels — Qt's Wayland backend
+    // handles the logical→buffer scaling internally (wl_surface.set_buffer_scale).
     bool anchoredH = (anchors & AnchorLeft) && (anchors & AnchorRight);
     bool anchoredV = (anchors & AnchorTop) && (anchors & AnchorBottom);
     uint32_t w = anchoredH ? 0 : static_cast<uint32_t>(qMax(0, windowSize.width()));
