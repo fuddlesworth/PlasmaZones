@@ -66,16 +66,24 @@ function solveThreeColumn(areaX, contentWidth, innerGap, splitRatio, minL, minC,
     leftWidth = Math.max(1, leftWidth);
     centerWidth = Math.max(1, centerWidth);
     rightWidth = Math.max(1, rightWidth);
-    const colSum = leftWidth + centerWidth + rightWidth;
-    if (colSum > contentWidth) {
+    let colSum = leftWidth + centerWidth + rightWidth;
+    while (colSum > contentWidth) {
         const excess = colSum - contentWidth;
-        if (centerWidth >= leftWidth && centerWidth >= rightWidth) {
-            centerWidth = Math.max(1, centerWidth - excess);
-        } else if (leftWidth >= rightWidth) {
-            leftWidth = Math.max(1, leftWidth - excess);
+        if (excess <= 0) break;
+        // Take from largest column first
+        if (centerWidth >= leftWidth && centerWidth >= rightWidth && centerWidth > 1) {
+            const take = Math.min(excess, centerWidth - 1);
+            centerWidth -= take;
+        } else if (leftWidth >= rightWidth && leftWidth > 1) {
+            const take = Math.min(excess, leftWidth - 1);
+            leftWidth -= take;
+        } else if (rightWidth > 1) {
+            const take = Math.min(excess, rightWidth - 1);
+            rightWidth -= take;
         } else {
-            rightWidth = Math.max(1, rightWidth - excess);
+            break; // All columns at minimum
         }
+        colSum = leftWidth + centerWidth + rightWidth;
     }
     return {leftWidth: leftWidth, centerWidth: centerWidth, rightWidth: rightWidth,
         leftX: areaX, centerX: areaX + leftWidth + innerGap,

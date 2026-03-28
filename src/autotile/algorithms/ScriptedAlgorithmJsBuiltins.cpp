@@ -26,7 +26,11 @@ static QString loadBuiltinJs(const QString& name)
         qCCritical(lcAutotile) << "Failed to load builtin JS resource:" << name;
         return QString();
     }
-    return QTextStream(&file).readAll();
+    const QString content = QTextStream(&file).readAll();
+    if (content.isEmpty()) {
+        qCCritical(lcAutotile) << "Builtin JS resource is empty:" << name;
+    }
+    return content;
 }
 
 QString distributeWithGapsJs()

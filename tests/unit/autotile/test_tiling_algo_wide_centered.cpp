@@ -142,6 +142,87 @@ private Q_SLOTS:
         QCOMPARE(cm->defaultMaxWindows(), 7);
     }
 
+    void testCenteredMaster_twoWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        state.setSplitRatio(0.55);
+        auto* cm = AlgorithmRegistry::instance()->algorithm(QLatin1String("centered-master"));
+        auto zones = cm->calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 2);
+        QVERIFY(noOverlaps(zones));
+        QVERIFY(allWithinBounds(zones, m_screenGeometry));
+    }
+
+    void testCenteredMaster_threeWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        state.setSplitRatio(0.55);
+        auto* cm = AlgorithmRegistry::instance()->algorithm(QLatin1String("centered-master"));
+        auto zones = cm->calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 3);
+        QVERIFY(noOverlaps(zones));
+        QVERIFY(allWithinBounds(zones, m_screenGeometry));
+        // Center master zone should be wider than either side stack
+        // The master (first zone) gets splitRatio of the width
+        QVERIFY(zones[0].width() > zones[1].width());
+        QVERIFY(zones[0].width() > zones[2].width());
+    }
+
+    void testCenteredMaster_fourWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        state.setMasterCount(1);
+        state.setSplitRatio(0.55);
+        auto* cm = AlgorithmRegistry::instance()->algorithm(QLatin1String("centered-master"));
+        auto zones = cm->calculateZones({4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 4);
+        QVERIFY(noOverlaps(zones));
+        QVERIFY(allWithinBounds(zones, m_screenGeometry));
+    }
+
+    void testCenteredMaster_withGaps()
+    {
+        TilingState state(QStringLiteral("test"));
+        state.setSplitRatio(0.55);
+        auto* cm = AlgorithmRegistry::instance()->algorithm(QLatin1String("centered-master"));
+        auto zones = cm->calculateZones({3, m_screenGeometry, &state, 10, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 3);
+        QVERIFY(noOverlaps(zones));
+        QVERIFY(allWithinBounds(zones, m_screenGeometry));
+        // With inner gaps, zones should not be touching each other
+        for (int i = 0; i < zones.size(); ++i) {
+            for (int j = i + 1; j < zones.size(); ++j) {
+                // Adjacent zones should have at least the gap between them
+                QRect expanded = zones[i].adjusted(-1, -1, 1, 1);
+                if (expanded.intersects(zones[j])) {
+                    // If they are adjacent horizontally, check gap
+                    if (zones[i].right() < zones[j].left()) {
+                        QVERIFY(zones[j].left() - zones[i].right() >= 10);
+                    } else if (zones[j].right() < zones[i].left()) {
+                        QVERIFY(zones[i].left() - zones[j].right() >= 10);
+                    }
+                }
+            }
+        }
+    }
+
+    void testCenteredMaster_multipleMasters()
+    {
+        TilingState state(QStringLiteral("test"));
+        state.setMasterCount(2);
+        state.setSplitRatio(0.55);
+        auto* cm = AlgorithmRegistry::instance()->algorithm(QLatin1String("centered-master"));
+        auto zones = cm->calculateZones({4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 4);
+        QVERIFY(noOverlaps(zones));
+        QVERIFY(allWithinBounds(zones, m_screenGeometry));
+        // First 2 zones are masters sharing the center column width
+        // Both masters should be in the center region
+        // Masters should have the same x position (stacked vertically in center)
+        QCOMPARE(zones[0].x(), zones[1].x());
+        QCOMPARE(zones[0].width(), zones[1].width());
+    }
+
     void testAllAlgorithms_negativeWindowCount()
     {
         TilingState state(QStringLiteral("test"));

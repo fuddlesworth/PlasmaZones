@@ -48,6 +48,8 @@ public:
 
     ScriptedAlgoTestSetup(const ScriptedAlgoTestSetup&) = delete;
     ScriptedAlgoTestSetup& operator=(const ScriptedAlgoTestSetup&) = delete;
+    ScriptedAlgoTestSetup(ScriptedAlgoTestSetup&&) = delete;
+    ScriptedAlgoTestSetup& operator=(ScriptedAlgoTestSetup&&) = delete;
 
     /**
      * @brief Set up XDG environment and load scripted algorithms

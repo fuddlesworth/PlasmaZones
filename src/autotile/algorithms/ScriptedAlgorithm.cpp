@@ -252,32 +252,50 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // Inject built-in helpers from ScriptedAlgorithmHelpers and JsBuiltins.
     // NOTE: Each helper's exported global name(s) must also appear in the
     // frozenGlobals[] array below — a missing entry is a sandbox escape.
-    m_engine->evaluate(ScriptedHelpers::treeHelperJs(), QStringLiteral("builtin:applyTreeGeometry"));
-    m_engine->evaluate(ScriptedHelpers::lShapeHelperJs(), QStringLiteral("builtin:lShapeLayout"));
-    m_engine->evaluate(ScriptedHelpers::deckHelperJs(), QStringLiteral("builtin:deckLayout"));
-    m_engine->evaluate(ScriptedHelpers::distributeEvenlyHelperJs(), QStringLiteral("builtin:distributeEvenly"));
-    m_engine->evaluate(ScriptedHelpers::distributeWithGapsJs(), QStringLiteral("builtin:distributeWithGaps"));
-    m_engine->evaluate(ScriptedHelpers::distributeWithMinSizesJs(), QStringLiteral("builtin:distributeWithMinSizes"));
-    m_engine->evaluate(ScriptedHelpers::solveTwoPartJs(), QStringLiteral("builtin:solveTwoPart"));
-    m_engine->evaluate(ScriptedHelpers::solveThreeColumnJs(), QStringLiteral("builtin:solveThreeColumn"));
-    m_engine->evaluate(ScriptedHelpers::cumulativeMinDimsJs(), QStringLiteral("builtin:computeCumulativeMinDims"));
-    m_engine->evaluate(ScriptedHelpers::gracefulDegradationJs(), QStringLiteral("builtin:appendGracefulDegradation"));
-    m_engine->evaluate(ScriptedHelpers::dwindleLayoutJs(), QStringLiteral("builtin:dwindleLayout"));
-    m_engine->evaluate(ScriptedHelpers::extractMinDimsJs(), QStringLiteral("builtin:extractMinDims"));
-    m_engine->evaluate(ScriptedHelpers::interleaveStacksJs(), QStringLiteral("builtin:interleaveStacks"));
-    m_engine->evaluate(ScriptedHelpers::applyPerWindowMinSizeJs(), QStringLiteral("builtin:applyPerWindowMinSize"));
-    m_engine->evaluate(ScriptedHelpers::extractRegionMaxMinJs(), QStringLiteral("builtin:extractRegionMaxMin"));
-    m_engine->evaluate(ScriptedHelpers::fillAreaJs(), QStringLiteral("builtin:fillArea"));
-    m_engine->evaluate(ScriptedHelpers::masterStackLayoutJs(), QStringLiteral("builtin:masterStackLayout"));
+    auto injectBuiltin = [this, &filePath](const QString& source, const QString& label) -> bool {
+        if (source.isEmpty()) {
+            qCWarning(lcAutotile) << "ScriptedAlgorithm: empty builtin source for" << label << "file=" << filePath;
+            return false;
+        }
+        const QJSValue result = m_engine->evaluate(source, label);
+        if (result.isError()) {
+            qCWarning(lcAutotile) << "ScriptedAlgorithm: builtin injection failed for" << label
+                                  << "error=" << result.toString() << "file=" << filePath;
+            return false;
+        }
+        return true;
+    };
+
+    if (!injectBuiltin(ScriptedHelpers::treeHelperJs(), QStringLiteral("builtin:applyTreeGeometry"))
+        || !injectBuiltin(ScriptedHelpers::lShapeHelperJs(), QStringLiteral("builtin:lShapeLayout"))
+        || !injectBuiltin(ScriptedHelpers::deckHelperJs(), QStringLiteral("builtin:deckLayout"))
+        || !injectBuiltin(ScriptedHelpers::distributeEvenlyHelperJs(), QStringLiteral("builtin:distributeEvenly"))
+        || !injectBuiltin(ScriptedHelpers::distributeWithGapsJs(), QStringLiteral("builtin:distributeWithGaps"))
+        || !injectBuiltin(ScriptedHelpers::distributeWithMinSizesJs(), QStringLiteral("builtin:distributeWithMinSizes"))
+        || !injectBuiltin(ScriptedHelpers::solveTwoPartJs(), QStringLiteral("builtin:solveTwoPart"))
+        || !injectBuiltin(ScriptedHelpers::solveThreeColumnJs(), QStringLiteral("builtin:solveThreeColumn"))
+        || !injectBuiltin(ScriptedHelpers::cumulativeMinDimsJs(), QStringLiteral("builtin:computeCumulativeMinDims"))
+        || !injectBuiltin(ScriptedHelpers::gracefulDegradationJs(), QStringLiteral("builtin:appendGracefulDegradation"))
+        || !injectBuiltin(ScriptedHelpers::dwindleLayoutJs(), QStringLiteral("builtin:dwindleLayout"))
+        || !injectBuiltin(ScriptedHelpers::extractMinDimsJs(), QStringLiteral("builtin:extractMinDims"))
+        || !injectBuiltin(ScriptedHelpers::interleaveStacksJs(), QStringLiteral("builtin:interleaveStacks"))
+        || !injectBuiltin(ScriptedHelpers::applyPerWindowMinSizeJs(), QStringLiteral("builtin:applyPerWindowMinSize"))
+        || !injectBuiltin(ScriptedHelpers::extractRegionMaxMinJs(), QStringLiteral("builtin:extractRegionMaxMin"))
+        || !injectBuiltin(ScriptedHelpers::fillAreaJs(), QStringLiteral("builtin:fillArea"))
+        || !injectBuiltin(ScriptedHelpers::masterStackLayoutJs(), QStringLiteral("builtin:masterStackLayout"))) {
+        return false;
+    }
 
     // Freeze helper globals and constants so user scripts cannot overwrite them.
     // This must happen after injection since hardenSandbox's freezeGlobal calls
     // ran before the helpers existed.
     //
-    // IMPORTANT: This list must include every global name injected above
-    // (constants + all helper functions). A missing entry is a sandbox escape —
-    // user scripts could overwrite that helper. When adding a new helper,
-    // add its exported global name(s) here.
+    // IMPORTANT: This list must include every builtin helper global name
+    // injected above (constants + all helper functions). A missing entry
+    // is a sandbox escape — user scripts could overwrite that helper.
+    // User-exported functions (calculateZones, etc.) are intentionally
+    // NOT frozen. When adding a new builtin helper, add its exported
+    // global name(s) here.
     static const QLatin1String frozenGlobals[] = {
         // Injected constants
         QLatin1String("PZ_MIN_ZONE_SIZE"),

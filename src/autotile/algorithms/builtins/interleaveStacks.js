@@ -45,7 +45,7 @@ function interleaveMinWidths(minSizes, stackIsLeft, stackCount, masterOffset) {
     for (let i = 0; i < stackCount; i++) {
         const zoneIdx = masterOffset + i;
         if (zoneIdx < minSizes.length) {
-            const mw = minSizes[zoneIdx].w || 0;
+            const mw = (minSizes[zoneIdx].w > 0) ? minSizes[zoneIdx].w : 0;
             if (stackIsLeft[i]) {
                 if (mw > minLeftWidth) minLeftWidth = mw;
             } else {
@@ -76,7 +76,7 @@ function interleaveMinHeights(minSizes, stackIsLeft, stackCount, leftCount, righ
     let ri = 0;
     for (let i = 0; i < stackCount; i++) {
         const zoneIdx = masterOffset + i;
-        const mh = (zoneIdx < minSizes.length) ? (minSizes[zoneIdx].h || 0) : 0;
+        const mh = (zoneIdx < minSizes.length && minSizes[zoneIdx].h > 0) ? minSizes[zoneIdx].h : 0;
         if (stackIsLeft[i] && li < leftCount) {
             leftMinH[li] = mh;
             li++;

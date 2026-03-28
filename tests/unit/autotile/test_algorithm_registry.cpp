@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <QTest>
+#include <QRect>
 #include <QSignalSpy>
+#include <QStringList>
 
 #include "autotile/AlgorithmRegistry.h"
 #include "autotile/TilingAlgorithm.h"
@@ -190,6 +192,48 @@ private Q_SLOTS:
         QVERIFY(available.contains(QLatin1String("dwindle-memory")));
         // At least 15 built-in algorithms are registered before any scripted loader runs
         QVERIFY(available.size() >= 15);
+    }
+
+    // =========================================================================
+    // Backwards compatibility & sandbox tests
+    // =========================================================================
+
+    void testBuiltIn_builtinIdBackwardsCompatibility()
+    {
+        auto* registry = AlgorithmRegistry::instance();
+        const QStringList builtinIds = {
+            QLatin1String("bsp"),     QLatin1String("cascade"),      QLatin1String("centered-master"),
+            QLatin1String("columns"), QLatin1String("dwindle"),      QLatin1String("dwindle-memory"),
+            QLatin1String("grid"),    QLatin1String("master-stack"), QLatin1String("monocle"),
+            QLatin1String("rows"),    QLatin1String("spiral"),       QLatin1String("spread"),
+            QLatin1String("stair"),   QLatin1String("three-column"), QLatin1String("wide"),
+        };
+        for (const auto& id : builtinIds) {
+            QVERIFY2(registry->hasAlgorithm(id), qPrintable(QStringLiteral("Missing algorithm: ") + id));
+        }
+    }
+
+    void testBuiltIn_allAlgorithmsCalculateZones()
+    {
+        auto* registry = AlgorithmRegistry::instance();
+        TilingState state(QStringLiteral("test"));
+        const QRect screen(0, 0, 1920, 1080);
+        const QStringList builtinIds = {
+            QLatin1String("bsp"),     QLatin1String("cascade"),      QLatin1String("centered-master"),
+            QLatin1String("columns"), QLatin1String("dwindle"),      QLatin1String("dwindle-memory"),
+            QLatin1String("grid"),    QLatin1String("master-stack"), QLatin1String("monocle"),
+            QLatin1String("rows"),    QLatin1String("spiral"),       QLatin1String("spread"),
+            QLatin1String("stair"),   QLatin1String("three-column"), QLatin1String("wide"),
+        };
+        for (const auto& id : builtinIds) {
+            auto* algo = registry->algorithm(id);
+            QVERIFY2(algo != nullptr, qPrintable(QStringLiteral("Null algorithm: ") + id));
+            auto zones = algo->calculateZones({3, screen, &state, 0, EdgeGaps::uniform(0)});
+            QVERIFY2(!zones.isEmpty(), qPrintable(QStringLiteral("No zones from: ") + id));
+            QVERIFY2(zones.size() == 3,
+                     qPrintable(QStringLiteral("Expected 3 zones from: ") + id + QStringLiteral(", got: ")
+                                + QString::number(zones.size())));
+        }
     }
 
     // =========================================================================

@@ -142,8 +142,8 @@ function growTree(root, defaultRatio) {
 
 // ─── Geometry computation (top-down) ────────────────────────────────────────
 
-function computeSubtreeMinDims(node, minSizes, leafStartIdx, innerGap) {
-    if (!node) return {w: 0, h: 0, leafCount: 0};
+function computeSubtreeMinDims(node, minSizes, leafStartIdx, innerGap, depth) {
+    if (!node || (depth || 0) > MaxBSPDepth) return {w: 0, h: 0, leafCount: 0};
 
     if (isLeaf(node)) {
         if (leafStartIdx < minSizes.length) {
@@ -153,8 +153,8 @@ function computeSubtreeMinDims(node, minSizes, leafStartIdx, innerGap) {
         return {w: 0, h: 0, leafCount: 1};
     }
 
-    const firstResult = computeSubtreeMinDims(node.first, minSizes, leafStartIdx, innerGap);
-    const secondResult = computeSubtreeMinDims(node.second, minSizes, leafStartIdx + firstResult.leafCount, innerGap);
+    const firstResult = computeSubtreeMinDims(node.first, minSizes, leafStartIdx, innerGap, (depth || 0) + 1);
+    const secondResult = computeSubtreeMinDims(node.second, minSizes, leafStartIdx + firstResult.leafCount, innerGap, (depth || 0) + 1);
     const totalLeaves = firstResult.leafCount + secondResult.leafCount;
 
     if (node.splitHorizontal) {
@@ -293,7 +293,8 @@ function findLargestLeaf(node, depth) {
     const leftArea = left.cachedArea;
     const rightArea = right.cachedArea;
 
-    // Fallback to right (deepest) when no geometry is available
+    // When both areas are zero (no geometry yet), prefer right (deeper subtree).
+    // When areas are equal and non-zero, prefer left (earlier in tree order).
     if (leftArea === 0 && rightArea === 0) return right;
 
     return (leftArea >= rightArea) ? left : right;
