@@ -69,6 +69,11 @@ bool TilingAlgorithm::isUserScript() const noexcept
     return false;
 }
 
+bool TilingAlgorithm::supportsMinSizes() const noexcept
+{
+    return true;
+}
+
 bool TilingAlgorithm::supportsMemory() const noexcept
 {
     return false;

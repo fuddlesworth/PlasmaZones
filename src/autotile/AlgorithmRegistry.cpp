@@ -29,8 +29,6 @@ bool AlgorithmRegistry::PreviewParams::operator==(const PreviewParams& other) co
         && savedAlgorithmSettings == other.savedAlgorithmSettings;
 }
 
-using namespace DBus::AutotileAlgorithm;
-
 // Global pending registrations list - shared by all AlgorithmRegistrar instantiations
 QList<PendingAlgorithmRegistration>& pendingAlgorithmRegistrations()
 {
@@ -116,11 +114,9 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
     // Preserve registration order position so replacements don't shift to the end
     int oldIndex = m_registrationOrder.indexOf(id);
     auto* old = removeAlgorithmInternal(id);
-    if (old && old != algorithm) {
-        old->deleteLater();
-    }
 
-    // Take ownership
+    // Register the new algorithm BEFORE emitting signals so that signal handlers
+    // querying the registry see the new algorithm already in place.
     algorithm->setParent(this);
     m_algorithms.insert(id, algorithm);
     if (oldIndex >= 0) {
@@ -129,7 +125,16 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
         m_registrationOrder.append(id);
     }
 
-    Q_EMIT algorithmRegistered(id);
+    if (old && old != algorithm) {
+        // Emit unregistered then registered so listeners see the full replacement
+        // sequence with the new algorithm already queryable.
+        Q_EMIT algorithmUnregistered(id, true);
+        Q_EMIT algorithmRegistered(id);
+
+        safeDeleteAlgorithm(old);
+    } else {
+        Q_EMIT algorithmRegistered(id);
+    }
 }
 
 QString AlgorithmRegistry::findAlgorithmId(TilingAlgorithm* algorithm) const
@@ -161,9 +166,31 @@ bool AlgorithmRegistry::unregisterAlgorithm(const QString& id)
         return false;
     }
 
-    algorithm->deleteLater();
-    Q_EMIT algorithmUnregistered(id);
+    // Emit before delete so signal handlers can safely reference the id
+    // without risk of use-after-free on any cached algorithm pointers.
+    Q_EMIT algorithmUnregistered(id, false);
+
+    safeDeleteAlgorithm(algorithm);
     return true;
+}
+
+void AlgorithmRegistry::safeDeleteAlgorithm(TilingAlgorithm* algo)
+{
+    if (!algo) {
+        return;
+    }
+    // Use deleteLater() to avoid re-entrancy: signal handlers connected to
+    // algorithmUnregistered may call back into the registry. Synchronous
+    // delete during signal emission would risk use-after-free if a handler
+    // holds a pointer to the algorithm.
+    //
+    // setParent(nullptr) detaches from the registry's QObject tree so the
+    // registry destructor doesn't double-delete. This is safe because:
+    //   1. The algorithm was already removed from m_algorithms by
+    //      removeAlgorithmInternal(), so cleanup() won't see it.
+    //   2. deleteLater() ensures the QObject event loop handles final deletion.
+    algo->setParent(nullptr);
+    algo->deleteLater();
 }
 
 TilingAlgorithm* AlgorithmRegistry::algorithm(const QString& id) const
@@ -205,7 +232,14 @@ QString AlgorithmRegistry::defaultAlgorithmId()
 
 TilingAlgorithm* AlgorithmRegistry::defaultAlgorithm() const
 {
-    return algorithm(defaultAlgorithmId());
+    auto* algo = algorithm(defaultAlgorithmId());
+    if (!algo && !m_algorithms.isEmpty() && !m_registrationOrder.isEmpty()) {
+        // Configured default not registered (e.g. BSP script failed to load).
+        // Fall back to the first available algorithm so callers never get nullptr
+        // when algorithms are registered.
+        algo = m_algorithms.value(m_registrationOrder.first(), nullptr);
+    }
+    return algo;
 }
 
 void AlgorithmRegistry::registerBuiltInAlgorithms()
@@ -266,7 +300,7 @@ QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect>& zo
 
         QVariantMap relGeo;
         if (isMonocle) {
-            const qreal offset = i * MonoclePreviewOffset;
+            const qreal offset = qMin(i * MonoclePreviewOffset, AutotileDefaults::MaxMonoclePreviewOffset);
             relGeo[QLatin1String("x")] = offset;
             relGeo[QLatin1String("y")] = offset;
             relGeo[QLatin1String("width")] = qMax(0.01, 1.0 - offset * 2);

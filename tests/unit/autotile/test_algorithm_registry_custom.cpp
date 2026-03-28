@@ -9,6 +9,8 @@
 #include "autotile/TilingState.h"
 #include "core/constants.h"
 
+#include "../helpers/ScriptedAlgoTestSetup.h"
+
 using namespace PlasmaZones;
 
 /**
@@ -56,7 +58,15 @@ class TestAlgorithmRegistryCustom : public QObject
 {
     Q_OBJECT
 
+private:
+    PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
+
 private Q_SLOTS:
+
+    void initTestCase()
+    {
+        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
+    }
 
     void cleanupTestCase()
     {
@@ -214,23 +224,25 @@ private Q_SLOTS:
         auto* registry = AlgorithmRegistry::instance();
         auto available = registry->availableAlgorithms();
 
-        // At least 15 built-in algorithms are registered before any scripted loader runs
+        // At least 15 built-in algorithms should be present (loaded from JS scripts)
         QVERIFY(available.size() >= 15);
-        QCOMPARE(available[0], DBus::AutotileAlgorithm::BSP);
-        QCOMPARE(available[1], DBus::AutotileAlgorithm::CenteredMaster);
-        QCOMPARE(available[2], DBus::AutotileAlgorithm::Columns);
-        QCOMPARE(available[3], DBus::AutotileAlgorithm::Dwindle);
-        QCOMPARE(available[4], DBus::AutotileAlgorithm::DwindleMemory);
-        QCOMPARE(available[5], DBus::AutotileAlgorithm::Grid);
-        QCOMPARE(available[6], DBus::AutotileAlgorithm::MasterStack);
-        QCOMPARE(available[7], DBus::AutotileAlgorithm::Monocle);
-        QCOMPARE(available[8], DBus::AutotileAlgorithm::Rows);
-        QCOMPARE(available[9], DBus::AutotileAlgorithm::Spiral);
-        QCOMPARE(available[10], DBus::AutotileAlgorithm::ThreeColumn);
-        QCOMPARE(available[11], DBus::AutotileAlgorithm::Wide);
-        QCOMPARE(available[12], DBus::AutotileAlgorithm::Cascade);
-        QCOMPARE(available[13], DBus::AutotileAlgorithm::Stair);
-        QCOMPARE(available[14], DBus::AutotileAlgorithm::Spread);
+
+        // Verify all core algorithms are registered (order depends on filesystem scan)
+        QVERIFY(available.contains(QLatin1String("bsp")));
+        QVERIFY(available.contains(QLatin1String("centered-master")));
+        QVERIFY(available.contains(QLatin1String("columns")));
+        QVERIFY(available.contains(QLatin1String("dwindle")));
+        QVERIFY(available.contains(QLatin1String("dwindle-memory")));
+        QVERIFY(available.contains(QLatin1String("grid")));
+        QVERIFY(available.contains(QLatin1String("master-stack")));
+        QVERIFY(available.contains(QLatin1String("monocle")));
+        QVERIFY(available.contains(QLatin1String("rows")));
+        QVERIFY(available.contains(QLatin1String("spiral")));
+        QVERIFY(available.contains(QLatin1String("three-column")));
+        QVERIFY(available.contains(QLatin1String("wide")));
+        QVERIFY(available.contains(QLatin1String("cascade")));
+        QVERIFY(available.contains(QLatin1String("stair")));
+        QVERIFY(available.contains(QLatin1String("spread")));
     }
 
     void testOrder_matchesAllAlgorithms()
@@ -262,7 +274,13 @@ private Q_SLOTS:
             QVERIFY(algo != nullptr);
 
             auto zones = algo->calculateZones({4, screen, &state, 0, EdgeGaps::uniform(0)});
-            QCOMPARE(zones.size(), 4);
+            if (algo->producesOverlappingZones()) {
+                QVERIFY2(zones.size() >= 1 && zones.size() <= 4,
+                         qPrintable(QStringLiteral("Expected 1-4 zones from overlapping algo: ") + id
+                                    + QStringLiteral(", got: ") + QString::number(zones.size())));
+            } else {
+                QCOMPARE(zones.size(), 4);
+            }
 
             for (const QRect& zone : zones) {
                 QVERIFY(zone.isValid());

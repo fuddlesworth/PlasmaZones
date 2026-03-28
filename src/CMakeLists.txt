@@ -150,41 +150,15 @@ set(plasmazones_core_SRCS
     autotile/SettingsBridge.h
     autotile/OverflowManager.cpp
     autotile/OverflowManager.h
-    autotile/algorithms/MasterStackAlgorithm.cpp
-    autotile/algorithms/MasterStackAlgorithm.h
-    autotile/algorithms/ColumnsAlgorithm.cpp
-    autotile/algorithms/ColumnsAlgorithm.h
-    autotile/algorithms/RowsAlgorithm.cpp
-    autotile/algorithms/RowsAlgorithm.h
-    autotile/algorithms/BSPAlgorithm.cpp
-    autotile/algorithms/BSPAlgorithm.h
-    autotile/algorithms/DwindleAlgorithm.cpp
-    autotile/algorithms/DwindleAlgorithm.h
-    autotile/algorithms/DwindleMemoryAlgorithm.cpp
-    autotile/algorithms/DwindleMemoryAlgorithm.h
-    autotile/algorithms/SpiralAlgorithm.cpp
-    autotile/algorithms/SpiralAlgorithm.h
-    autotile/algorithms/ThreeColumnAlgorithm.cpp
-    autotile/algorithms/ThreeColumnAlgorithm.h
-    autotile/algorithms/MonocleAlgorithm.cpp
-    autotile/algorithms/MonocleAlgorithm.h
-    autotile/algorithms/GridAlgorithm.cpp
-    autotile/algorithms/GridAlgorithm.h
-    autotile/algorithms/WideAlgorithm.cpp
-    autotile/algorithms/WideAlgorithm.h
-    autotile/algorithms/CenteredMasterAlgorithm.cpp
-    autotile/algorithms/CenteredMasterAlgorithm.h
-    autotile/algorithms/CascadeAlgorithm.cpp
-    autotile/algorithms/CascadeAlgorithm.h
-    autotile/algorithms/StairAlgorithm.cpp
-    autotile/algorithms/StairAlgorithm.h
-    autotile/algorithms/SpreadAlgorithm.cpp
-    autotile/algorithms/SpreadAlgorithm.h
     autotile/algorithms/ScriptedAlgorithm.cpp
     autotile/algorithms/ScriptedAlgorithm.h
     autotile/algorithms/ScriptedAlgorithmHelpers.cpp
     autotile/algorithms/ScriptedAlgorithmHelpers.h
+    autotile/algorithms/ScriptedAlgorithmJsBuiltins.cpp
+    autotile/algorithms/ScriptedAlgorithmJsBuiltins.h
     autotile/algorithms/ScriptedAlgorithmLoader.cpp
+    # Builtin JS helpers compiled into the binary as Qt resources
+    autotile/algorithms/builtins.qrc
     autotile/algorithms/ScriptedAlgorithmLoader.h
     autotile/algorithms/ScriptedAlgorithmSandbox.cpp
     autotile/algorithms/ScriptedAlgorithmSandbox.h

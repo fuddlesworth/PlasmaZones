@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Quadrant Priority
+// @builtinId quadrant-priority
 // @description First window gets a large corner; rest fill the L-shaped remainder
 // @producesOverlappingZones false
 // @supportsMasterCount false
@@ -10,6 +11,7 @@
 // @defaultMaxWindows 5
 // @minimumWindows 1
 // @zoneNumberDisplay all
+// @masterZoneIndex 0
 // @supportsMemory false
 
 /**
@@ -31,8 +33,8 @@ function calculateZones(params) {
     const count = params.windowCount;
     if (count <= 0) return [];
     const area = params.area;
-    const gap = params.innerGap || 0;
-    const splitRatio = params.splitRatio;
+    const gap = params.innerGap;
+    const splitRatio = clampSplitRatio(params.splitRatio);
 
     // Quadrant Priority: ceil/floor distribution, bottom row spans full width,
     // right column constrained to master height

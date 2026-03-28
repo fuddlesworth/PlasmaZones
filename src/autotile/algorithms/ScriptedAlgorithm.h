@@ -8,6 +8,7 @@
 #include "ScriptedAlgorithmHelpers.h"
 #include <QJSValue>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <type_traits>
@@ -106,6 +107,14 @@ public:
     QString scriptId() const;
 
     /**
+     * @brief Optional built-in algorithm ID from @builtinId metadata
+     *
+     * When non-empty, the loader uses this ID instead of "script:filename"
+     * for algorithm registration.
+     */
+    QString builtinId() const;
+
+    /**
      * @brief Mark whether this script was loaded from a user directory
      * @param isUser true if from ~/.local/share/plasmazones/algorithms/
      */
@@ -125,11 +134,13 @@ public:
     int minimumWindows() const override;
     int defaultMaxWindows() const override;
     bool producesOverlappingZones() const override;
+    bool supportsMinSizes() const noexcept override;
     bool supportsMemory() const noexcept override;
     QString zoneNumberDisplay() const noexcept override;
     bool centerLayout() const override;
     bool isScripted() const noexcept override;
     bool isUserScript() const noexcept override;
+    void prepareTilingState(TilingState* state) const override;
 
 private:
     /**
@@ -176,6 +187,7 @@ private:
     QString m_scriptId;
     bool m_valid = false;
     bool m_isUserScript = false;
+    mutable std::atomic<bool> m_evaluating{false}; ///< Re-entrancy guard for calculateZones
     mutable bool m_lastCallTimedOut = false; ///< Set by guardedCall on timeout, checked by callers
     mutable uint32_t m_gcCounter = 0; ///< GC throttle counter for calculateZones
     static constexpr uint32_t GcInterval = 8; ///< Collect garbage every N calculateZones calls

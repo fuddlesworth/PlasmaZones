@@ -43,8 +43,7 @@ class TilingAlgorithm;
  * - Master-Stack: Classic master/stack layout
  * - Columns: Equal-width vertical columns
  *
- * Future algorithms (Monocle, Dwindle, Spiral, Rows, ThreeColumn) can be
- * added by implementing TilingAlgorithm and calling registerAlgorithm().
+ * All built-in algorithms are registered via @c builtinId JS scripts.
  *
  * Usage:
  * @code
@@ -61,7 +60,7 @@ class TilingAlgorithm;
  *       or from the main thread.
  *
  * @see TilingAlgorithm for the algorithm interface
- * @see DBus::AutotileAlgorithm in constants.h for algorithm ID constants
+ * @see AlgorithmRegistry::availableAlgorithms() for discovering algorithm IDs
  */
 class PLASMAZONES_EXPORT AlgorithmRegistry : public QObject
 {
@@ -94,7 +93,7 @@ public:
      * The registry takes ownership of the algorithm. If an algorithm with
      * the same ID already exists, the old one is deleted and replaced.
      *
-     * @param id Unique identifier for the algorithm (use DBus::AutotileAlgorithm constants)
+     * @param id Unique identifier for the algorithm (e.g. QLatin1String("bsp"))
      * @param algorithm Algorithm instance (ownership transferred)
      */
     void registerAlgorithm(const QString& id, TilingAlgorithm* algorithm);
@@ -238,15 +237,25 @@ public:
 Q_SIGNALS:
     /**
      * @brief Emitted when an algorithm is registered
+     *
+     * On replacement (re-registration of an existing ID),
+     * algorithmUnregistered(id, true) is emitted first, then
+     * algorithmRegistered(id). The new algorithm is already queryable
+     * via algorithm(id) when either signal fires.
+     *
      * @param id The registered algorithm's ID
      */
     void algorithmRegistered(const QString& id);
 
     /**
-     * @brief Emitted when an algorithm is unregistered
-     * @param id The removed algorithm's ID
+     * @brief Emitted when an algorithm is unregistered or replaced
+     *
+     * @param id The algorithm's ID
+     * @param replacing true if a new algorithm has already been registered
+     *        under @p id (replacement case). false if the algorithm was
+     *        explicitly removed and @c algorithm(id) now returns nullptr.
      */
-    void algorithmUnregistered(const QString& id);
+    void algorithmUnregistered(const QString& id, bool replacing);
 
 private:
     explicit AlgorithmRegistry(QObject* parent = nullptr);
@@ -277,6 +286,16 @@ private:
      * @return Pointer to removed algorithm, or nullptr if not found
      */
     TilingAlgorithm* removeAlgorithmInternal(const QString& id);
+
+    /**
+     * @brief Safely delete an algorithm via deleteLater()
+     *
+     * Detaches the algorithm from parent ownership and schedules deferred
+     * deletion to avoid re-entrancy issues during signal emission.
+     *
+     * @param algo Algorithm to delete (nullptr is a safe no-op)
+     */
+    void safeDeleteAlgorithm(TilingAlgorithm* algo);
 
     QHash<QString, TilingAlgorithm*> m_algorithms;
     QStringList m_registrationOrder; ///< Preserve order for UI
@@ -313,7 +332,7 @@ PLASMAZONES_EXPORT QList<PendingAlgorithmRegistration>& pendingAlgorithmRegistra
  * @code
  * namespace {
  * PlasmaZones::AlgorithmRegistrar<MyAlgorithm> registrar(
- *     DBus::AutotileAlgorithm::MyAlgo, 10);  // priority 10
+ *     QLatin1String("my-algo"), 10);  // priority 10
  * }
  * @endcode
  *
@@ -326,7 +345,7 @@ public:
     /**
      * @brief Register an algorithm at static initialization time
      *
-     * @param id Algorithm identifier (use DBus::AutotileAlgorithm constants)
+     * @param id Algorithm identifier (e.g. QLatin1String("master-stack"))
      * @param priority Registration order (lower = registered first, default 100)
      */
     explicit AlgorithmRegistrar(const QString& id, int priority = 100)

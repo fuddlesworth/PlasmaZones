@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Floating Center
+// @builtinId floating-center
 // @description Centered main window with peripheral panels on all sides
 // @producesOverlappingZones false
 // @supportsMasterCount false
@@ -10,7 +11,9 @@
 // @defaultMaxWindows 6
 // @minimumWindows 1
 // @zoneNumberDisplay all
+// @masterZoneIndex 0
 // @supportsMemory false
+// @supportsMinSizes false
 
 /**
  * Floating Center layout: one centered main window with remaining windows
@@ -35,6 +38,18 @@
 function renderPanel(zones, startX, startY, panelW, panelH, count, gap, horizontal) {
     if (count <= 0) return;
     const totalSize = horizontal ? panelW : panelH;
+
+    // Degenerate gap: if gaps consume all available panel dimension, equal-split without gaps
+    if ((count - 1) * gap >= totalSize) {
+        const equalSize = Math.max(1, Math.floor(totalSize / count));
+        if (horizontal) {
+            zones.push.apply(zones, fillRegion(startX, startY, equalSize, panelH, count));
+        } else {
+            zones.push.apply(zones, fillRegion(startX, startY, panelW, equalSize, count));
+        }
+        return;
+    }
+
     const slots = distributeEvenly(horizontal ? startX : startY, totalSize, count, gap);
     for (let i = 0; i < slots.length; i++) {
         if (horizontal) {
@@ -45,18 +60,33 @@ function renderPanel(zones, startX, startY, panelW, panelH, count, gap, horizont
     }
 }
 
+// Note: this algorithm does not support per-window minimum sizes (minSizes).
 function calculateZones(params) {
     const count = params.windowCount;
     if (count <= 0) return [];
     const area = params.area;
-    const gap = params.innerGap || 0;
+    const gap = params.innerGap;
 
-    const splitRatio = params.splitRatio;
+    if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
+        return fillArea(area, count);
+    }
 
-    const centerW = Math.round(area.width * splitRatio);
-    const centerH = Math.round(area.height * splitRatio);
-    const marginX = Math.round((area.width - centerW) / 2);
-    const marginY = Math.round((area.height - centerH) / 2);
+    // Single window: just center it in the area (no margins/panels needed)
+    if (count === 1) {
+        const splitRatio1 = clampSplitRatio(params.splitRatio);
+        const cw = Math.floor(area.width * splitRatio1);
+        const ch = Math.floor(area.height * splitRatio1);
+        const cx = area.x + Math.floor((area.width - cw) / 2);
+        const cy = area.y + Math.floor((area.height - ch) / 2);
+        return [{ x: cx, y: cy, width: cw, height: ch }];
+    }
+
+    const splitRatio = clampSplitRatio(params.splitRatio);
+
+    const centerW = Math.floor(area.width * splitRatio);
+    const centerH = Math.floor(area.height * splitRatio);
+    const marginX = Math.floor((area.width - centerW) / 2);
+    const marginY = Math.floor((area.height - centerH) / 2);
 
     const centerX = area.x + marginX;
     const centerY = area.y + marginY;
@@ -64,11 +94,7 @@ function calculateZones(params) {
     // Degenerate case: gaps consume margin space on either axis — panels would
     // have negative or zero dimensions.  Fall back to stacking all windows on the center.
     if (marginX <= gap || marginY <= gap) {
-        const zones = [];
-        for (let i = 0; i < count; i++) {
-            zones.push({ x: area.x, y: area.y, width: area.width, height: area.height });
-        }
-        return zones;
+        return fillArea(area, count);
     }
 
     const zones = [];

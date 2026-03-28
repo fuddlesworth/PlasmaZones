@@ -1,0 +1,323 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// @name Binary Split
+// @builtinId bsp
+// @description Balanced recursive splitting into equal regions
+// @producesOverlappingZones false
+// @supportsMasterCount false
+// @supportsSplitRatio true
+// @defaultSplitRatio 0.5
+// @defaultMaxWindows 5
+// @minimumWindows 1
+// @zoneNumberDisplay all
+// @supportsMemory false
+
+/**
+ * BSP (Binary Space Partitioning) tiling algorithm.
+ *
+ * Builds a balanced binary tree from scratch by repeatedly splitting the
+ * largest leaf. Each internal node stores a split direction and ratio.
+ * Deterministic: same inputs always produce the same layout.
+ *
+ * @param {Object} params - Tiling parameters
+ * @returns {Array<{x: number, y: number, width: number, height: number}>}
+ */
+
+// Use the sandbox-injected MAX_TREE_DEPTH constant (kept in sync with C++ core/constants.h).
+// MAX_TREE_DEPTH is always defined and frozen by the sandbox before this script runs.
+
+function calculateZones(params) {
+    const count = params.windowCount;
+    if (count <= 0) return [];
+
+    const area = params.area;
+    const gap = params.innerGap;
+    const minSizes = params.minSizes;
+    const splitRatio = params.splitRatio;
+
+    if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
+        return fillArea(area, count);
+    }
+
+    // Build a fresh tree from scratch each time for deterministic output
+    const root = buildTree(count, splitRatio, area);
+
+    // Apply geometry top-down with inner gaps at each split point
+    bspApplyGeometry(root, area, gap, minSizes, 0, 0);
+
+    // Collect leaf geometries
+    let zones = [];
+    collectLeaves(root, zones, 0);
+
+    // Filter out invalid zones (zero or negative dimensions)
+    zones = zones.filter(function(z) { return z.width > 0 && z.height > 0; });
+
+    if (zones.length === 0) {
+        // All zones invalid — fall back to equal columns
+        return equalColumnsLayout(area, count, gap, minSizes);
+    }
+
+    if (zones.length < count) {
+        // Some zones invalid — fill remainder with graceful degradation
+        appendGracefulDegradation(zones, area, count - zones.length, gap);
+    }
+
+    return zones;
+}
+
+// ─── Tree construction ──────────────────────────────────────────────────────
+
+function makeNode() {
+    return {
+        first: null,
+        second: null,
+        geometry: {x: 0, y: 0, width: 0, height: 0},
+        cachedArea: 0,
+        splitHorizontal: false,
+        splitRatio: 0.5
+    };
+}
+
+function isLeaf(node) {
+    return !node.first && !node.second;
+}
+
+function buildTree(windowCount, defaultRatio, refRect) {
+    if (windowCount <= 0) return null;
+
+    // Clamp splitRatio during tree construction
+    const ratio = Math.min(Math.max(defaultRatio, PZ_MIN_SPLIT), PZ_MAX_SPLIT);
+
+    // Start with a single leaf as root
+    const root = makeNode();
+
+    // Use actual screen geometry so split direction heuristics match the
+    // real screen. Falls back to 1920x1080 if the provided rect is invalid.
+    const buildRect = (refRect && refRect.width > 0 && refRect.height > 0)
+        ? refRect
+        : {x: 0, y: 0, width: 1920, height: 1080};
+
+    let leafCount = 1;
+    const maxIterations = 1000;
+    let iterations = 0;
+    while (leafCount < windowCount && iterations < maxIterations) {
+        iterations++;
+        // Apply geometry so largestLeaf can find the optimal split candidate
+        bspApplyGeometry(root, buildRect, 0, [], 0, 0);
+        const result = growTree(root, ratio);
+        if (!result) break;
+        leafCount++;
+    }
+
+    return root;
+}
+
+function growTree(root, defaultRatio) {
+    if (!root) return false;
+
+    // Find the largest leaf to split (produces balanced layouts)
+    const leaf = findLargestLeaf(root, 0);
+    if (!leaf || !isLeaf(leaf)) return false;
+
+    // Split this leaf into an internal node with two leaf children
+    leaf.first = makeNode();
+    leaf.second = makeNode();
+
+    // Choose split direction based on current geometry (if available) or default
+    if (leaf.geometry.width > 0 && leaf.geometry.height > 0) {
+        leaf.splitHorizontal = chooseSplitDirection(leaf.geometry);
+    } else {
+        // Estimate: count depth from root and alternate
+        // (no parent pointer in JS version, but geometry should always be set
+        //  since we call bspApplyGeometry before growTree)
+        leaf.splitHorizontal = false;
+    }
+
+    leaf.splitRatio = defaultRatio;
+    return true;
+}
+
+// ─── Geometry computation (top-down) ────────────────────────────────────────
+
+function computeSubtreeMinDims(node, minSizes, leafStartIdx, innerGap, depth) {
+    if (!node || (depth || 0) > MAX_TREE_DEPTH) return {w: 0, h: 0, leafCount: 0};
+
+    if (isLeaf(node)) {
+        if (leafStartIdx < minSizes.length) {
+            const ms = minSizes[leafStartIdx];
+            return {w: Math.max(ms.w || 0, 0), h: Math.max(ms.h || 0, 0), leafCount: 1};
+        }
+        return {w: 0, h: 0, leafCount: 1};
+    }
+
+    const firstResult = computeSubtreeMinDims(node.first, minSizes, leafStartIdx, innerGap, (depth || 0) + 1);
+    const secondResult = computeSubtreeMinDims(node.second, minSizes, leafStartIdx + firstResult.leafCount, innerGap, (depth || 0) + 1);
+    const totalLeaves = firstResult.leafCount + secondResult.leafCount;
+
+    if (node.splitHorizontal) {
+        // Top/bottom split: width = max, height = sum + gap
+        return {
+            w: Math.max(firstResult.w, secondResult.w),
+            h: firstResult.h + innerGap + secondResult.h,
+            leafCount: totalLeaves
+        };
+    } else {
+        // Left/right split: width = sum + gap, height = max
+        return {
+            w: firstResult.w + innerGap + secondResult.w,
+            h: Math.max(firstResult.h, secondResult.h),
+            leafCount: totalLeaves
+        };
+    }
+}
+
+function clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio, firstDim, secondDim) {
+    if (minFirstRatio <= maxFirstRatio) {
+        return Math.max(minFirstRatio, Math.min(maxFirstRatio, ratio));
+    }
+    const totalMin = firstDim + secondDim;
+    if (totalMin > 0) {
+        ratio = firstDim / totalMin;
+        return clampSplitRatio(ratio);
+    }
+    return ratio;
+}
+
+function bspApplyGeometry(node, rect, innerGap, minSizes, leafStartIdx, depth) {
+    if (!node || depth > MAX_TREE_DEPTH) return;
+
+    node.geometry = {x: rect.x, y: rect.y, width: rect.width, height: rect.height};
+    node.cachedArea = (rect.width > 0 && rect.height > 0) ? rect.width * rect.height : 0;
+
+    if (isLeaf(node)) return;
+
+    // Clamp ratio
+    let ratio = clampSplitRatio(node.splitRatio);
+
+    // Clamp ratio to respect subtree minimum dimensions
+    if (minSizes.length > 0) {
+        const firstResult = computeSubtreeMinDims(node.first, minSizes, leafStartIdx, innerGap);
+        const secondResult = computeSubtreeMinDims(node.second, minSizes,
+            leafStartIdx + firstResult.leafCount, innerGap);
+
+        if (node.splitHorizontal) {
+            const contentHeight = rect.height - innerGap;
+            if (contentHeight > 0 && (firstResult.h > 0 || secondResult.h > 0)) {
+                let minFirstRatio = (firstResult.h > 0) ? firstResult.h / contentHeight : PZ_MIN_SPLIT;
+                let maxFirstRatio = (secondResult.h > 0) ? 1.0 - secondResult.h / contentHeight : PZ_MAX_SPLIT;
+                minFirstRatio = clampSplitRatio(minFirstRatio);
+                maxFirstRatio = clampSplitRatio(maxFirstRatio);
+                ratio = clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio,
+                    firstResult.h, secondResult.h);
+            }
+        } else {
+            const contentWidth = rect.width - innerGap;
+            if (contentWidth > 0 && (firstResult.w > 0 || secondResult.w > 0)) {
+                let minFirstRatio = (firstResult.w > 0) ? firstResult.w / contentWidth : PZ_MIN_SPLIT;
+                let maxFirstRatio = (secondResult.w > 0) ? 1.0 - secondResult.w / contentWidth : PZ_MAX_SPLIT;
+                minFirstRatio = clampSplitRatio(minFirstRatio);
+                maxFirstRatio = clampSplitRatio(maxFirstRatio);
+                ratio = clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio,
+                    firstResult.w, secondResult.w);
+            }
+        }
+    }
+
+    // Count first child leaves for leaf index threading
+    const firstChildLeaves = countLeavesInSubtree(node.first, 0);
+
+    if (node.splitHorizontal) {
+        // Split top/bottom with innerGap between children
+        const contentHeight = rect.height - innerGap;
+        if (contentHeight <= 0) return;
+        const firstHeight = Math.floor(contentHeight * ratio);
+        const secondHeight = contentHeight - firstHeight;
+        const firstRect = {x: rect.x, y: rect.y, width: rect.width, height: firstHeight};
+        const secondRect = {x: rect.x, y: rect.y + firstHeight + innerGap, width: rect.width, height: secondHeight};
+
+        // Guard: skip split if either partition is degenerate
+        if (firstRect.width <= 0 || firstRect.height <= 0 || secondRect.width <= 0 || secondRect.height <= 0) {
+            zeroLeaves(node.first);
+            zeroLeaves(node.second);
+            return;
+        }
+
+        bspApplyGeometry(node.first, firstRect, innerGap, minSizes, leafStartIdx, depth + 1);
+        bspApplyGeometry(node.second, secondRect, innerGap, minSizes, leafStartIdx + firstChildLeaves, depth + 1);
+    } else {
+        // Split left/right with innerGap between children
+        const contentWidth = rect.width - innerGap;
+        if (contentWidth <= 0) return;
+        const firstWidth = Math.floor(contentWidth * ratio);
+        const secondWidth = contentWidth - firstWidth;
+        const firstRect = {x: rect.x, y: rect.y, width: firstWidth, height: rect.height};
+        const secondRect = {x: rect.x + firstWidth + innerGap, y: rect.y, width: secondWidth, height: rect.height};
+
+        // Guard: skip split if either partition is degenerate
+        if (firstRect.width <= 0 || firstRect.height <= 0 || secondRect.width <= 0 || secondRect.height <= 0) {
+            zeroLeaves(node.first);
+            zeroLeaves(node.second);
+            return;
+        }
+
+        bspApplyGeometry(node.first, firstRect, innerGap, minSizes, leafStartIdx, depth + 1);
+        bspApplyGeometry(node.second, secondRect, innerGap, minSizes, leafStartIdx + firstChildLeaves, depth + 1);
+    }
+}
+
+function collectLeaves(node, zones, depth) {
+    if (!node || depth > MAX_TREE_DEPTH) return;
+
+    if (isLeaf(node)) {
+        zones.push({x: node.geometry.x, y: node.geometry.y,
+                     width: node.geometry.width, height: node.geometry.height});
+    } else {
+        collectLeaves(node.first, zones, depth + 1);
+        collectLeaves(node.second, zones, depth + 1);
+    }
+}
+
+// ─── Tree traversal helpers ─────────────────────────────────────────────────
+
+function countLeavesInSubtree(node, depth) {
+    if (!node || depth > MAX_TREE_DEPTH) return 0;
+    if (isLeaf(node)) return 1;
+    return countLeavesInSubtree(node.first, depth + 1) + countLeavesInSubtree(node.second, depth + 1);
+}
+
+function findLargestLeaf(node, depth) {
+    if (!node || depth > MAX_TREE_DEPTH) return null;
+    if (isLeaf(node)) return node;
+
+    const left = findLargestLeaf(node.first, depth + 1);
+    const right = findLargestLeaf(node.second, depth + 1);
+
+    if (!left) return right;
+    if (!right) return left;
+
+    const leftArea = left.cachedArea;
+    const rightArea = right.cachedArea;
+
+    // When both areas are zero (no geometry yet), prefer right (deeper subtree).
+    // When areas are equal and non-zero, prefer left (earlier in tree order).
+    if (leftArea === 0 && rightArea === 0) return right;
+
+    return (leftArea >= rightArea) ? left : right;
+}
+
+function chooseSplitDirection(geometry) {
+    // Split perpendicular to longest axis for balanced regions
+    return geometry.height > geometry.width;
+}
+
+function zeroLeaves(node) {
+    if (!node) return;
+    if (!node.first && !node.second) {
+        node.geometry = { x: 0, y: 0, width: 0, height: 0 };
+        node.cachedArea = 0;
+        return;
+    }
+    if (node.first) zeroLeaves(node.first);
+    if (node.second) zeroLeaves(node.second);
+}

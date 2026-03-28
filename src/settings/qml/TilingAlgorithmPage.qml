@@ -51,21 +51,30 @@ Flickable {
     // Check capabilities map first (for future extensibility via scripted algorithm metadata),
     // falling back to hardcoded IDs for built-in algorithms. See PR #256 / M13.
     readonly property bool algoCenterLayout: algoCapabilities ? (algoCapabilities.centerLayout === true) : (root.selectedAlgorithm === "three-column" || root.selectedAlgorithm === "centered-master")
+    // Live split ratio — trackable by QML's binding engine (unlike the old
+    // savedAlgoSetting JS function whose conditional branches hid dependencies).
+    readonly property real currentSplitRatio: {
+        if (root.selectedAlgorithm === root.effectiveAlgorithm)
+            return root.settingValue("SplitRatio", appSettings.autotileSplitRatio);
 
-    function savedAlgoSetting(key, fallback) {
-        // For the active algorithm, prefer the live global setting over the
-        // per-algorithm map (which is only updated on algorithm switch).
-        if (root.selectedAlgorithm === root.effectiveAlgorithm) {
-            if (key === "splitRatio")
-                return root.settingValue("SplitRatio", appSettings.autotileSplitRatio);
+        let perAlgo = appSettings.autotilePerAlgorithmSettings;
+        let entry = perAlgo ? perAlgo[root.selectedAlgorithm] : null;
+        if (entry && entry["splitRatio"] !== undefined)
+            return entry["splitRatio"];
 
-            if (key === "masterCount")
-                return root.settingValue("MasterCount", appSettings.autotileMasterCount);
+        return root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6;
+    }
+    // Live master count — same pattern as above.
+    readonly property int currentMasterCount: {
+        if (root.selectedAlgorithm === root.effectiveAlgorithm)
+            return root.settingValue("MasterCount", appSettings.autotileMasterCount);
 
-        }
-        var perAlgo = appSettings.autotilePerAlgorithmSettings;
-        var entry = perAlgo ? perAlgo[root.selectedAlgorithm] : null;
-        return (entry && entry[key] !== undefined) ? entry[key] : fallback;
+        let perAlgo = appSettings.autotilePerAlgorithmSettings;
+        let entry = perAlgo ? perAlgo[root.selectedAlgorithm] : null;
+        if (entry && entry["masterCount"] !== undefined)
+            return entry["masterCount"];
+
+        return 1;
     }
 
     function settingValue(key, globalValue) {
@@ -216,9 +225,9 @@ Flickable {
                                     if (splitRatioSlider.slider.pressed)
                                         return splitRatioSlider.slider.value;
 
-                                    return root.savedAlgoSetting("splitRatio", root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6);
+                                    return root.currentSplitRatio;
                                 }
-                                masterCount: root.savedAlgoSetting("masterCount", 1)
+                                masterCount: root.currentMasterCount
                                 zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"
                             }
 
@@ -368,43 +377,44 @@ Flickable {
                     Binding {
                         target: splitRatioSlider.slider
                         property: "value"
-                        value: root.savedAlgoSetting("splitRatio", root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6)
+                        value: root.settingValue("SplitRatio", appSettings.autotileSplitRatio)
                         when: !splitRatioSlider.slider.pressed
                         restoreMode: Binding.RestoreNone
                     }
 
                     // Master count - for master-stack and centered-master
-                    RowLayout {
+                    Label {
                         Layout.alignment: Qt.AlignHCenter
-                        spacing: Kirigami.Units.smallSpacing
+                        text: root.algoCenterLayout ? i18n("Center Count") : i18n("Master Count")
+                        font.weight: Font.DemiBold
                         visible: root.algoSupportsMasterCount
+                    }
 
-                        Label {
-                            text: root.algoCenterLayout ? i18n("Center count:") : i18n("Master count:")
+                    SettingsSlider {
+                        id: masterCountSlider
+
+                        Layout.fillWidth: true
+                        visible: root.algoSupportsMasterCount
+                        Accessible.name: root.algoCenterLayout ? i18n("Center count") : i18n("Master count")
+                        from: settingsController.autotileMasterCountMin
+                        to: 5
+                        stepSize: 1
+                        formatValue: function(v) {
+                            return Math.round(v).toString();
                         }
-
-                        SpinBox {
-                            id: masterCountSpinBox
-
-                            from: settingsController.autotileMasterCountMin
-                            to: 5
-                            onValueModified: {
-                                root.writeSetting("MasterCount", value, function(v) {
-                                    appSettings.autotileMasterCount = v;
-                                });
-                            }
-                            Accessible.name: root.algoCenterLayout ? i18n("Center count") : i18n("Master count")
-                            ToolTip.visible: hovered
-                            ToolTip.text: root.algoCenterLayout ? i18n("Number of windows in the center area") : i18n("Number of windows in the master area")
-
-                            Binding on value {
-                                value: root.savedAlgoSetting("masterCount", 1)
-                                when: !masterCountSpinBox.activeFocus
-                                restoreMode: Binding.RestoreNone
-                            }
-
+                        onMoved: (value) => {
+                            root.writeSetting("MasterCount", Math.round(value), function(v) {
+                                appSettings.autotileMasterCount = v;
+                            });
                         }
+                    }
 
+                    Binding {
+                        target: masterCountSlider.slider
+                        property: "value"
+                        value: root.settingValue("MasterCount", appSettings.autotileMasterCount)
+                        when: !masterCountSlider.slider.pressed
+                        restoreMode: Binding.RestoreNone
                     }
 
                 }

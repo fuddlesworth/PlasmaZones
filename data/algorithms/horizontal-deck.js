@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Horizontal Deck
+// @builtinId horizontal-deck
 // @description Focused window on top; remaining windows peek from the bottom edge
 // @producesOverlappingZones true
 // @supportsMasterCount false
@@ -28,7 +29,7 @@ function calculateZones(params) {
     const count = params.windowCount;
     if (count <= 0) return [];
     const area = params.area;
-    const focusedFraction = params.splitRatio;
+    const splitRatio = clampSplitRatio(params.splitRatio);
 
-    return deckLayout(area, count, focusedFraction, true);
+    return deckLayout(area, count, splitRatio, true);
 }

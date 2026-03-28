@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Focus + Sidebar
+// @builtinId focus-sidebar
 // @description Main window with vertically stacked sidebar; ratio controls main window width
 // @producesOverlappingZones false
 // @supportsMasterCount false
@@ -10,6 +11,7 @@
 // @defaultMaxWindows 5
 // @minimumWindows 1
 // @zoneNumberDisplay all
+// @masterZoneIndex 0
 // @supportsMemory false
 
 /**
@@ -23,12 +25,16 @@
 function calculateZones(params) {
     const count = params.windowCount;
     const area = params.area;
-    const gap = params.innerGap || 0;
+    const gap = params.innerGap;
 
     if (count <= 0) return [];
 
-    const splitRatio = params.splitRatio;
-    const mainWidth = Math.max(1, Math.round(area.width * splitRatio - gap / 2));
+    if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
+        return fillArea(area, count);
+    }
+
+    const splitRatio = clampSplitRatio(params.splitRatio);
+    const mainWidth = Math.max(1, Math.floor(area.width * splitRatio - gap / 2));
     const sidebarX = Math.min(area.x + mainWidth + gap, area.x + area.width - 1);
     const sidebarWidth = Math.max(1, area.x + area.width - sidebarX);
 
@@ -49,10 +55,7 @@ function calculateZones(params) {
 
     // Degenerate gap: stack sidebar windows when gaps exceed available height
     if (totalGaps >= area.height) {
-        for (let i = 0; i < sidebarCount; i++) {
-            zones.push({ x: sidebarX, y: area.y, width: sidebarWidth, height: area.height });
-        }
-        return zones;
+        return zones.concat(fillRegion(sidebarX, area.y, sidebarWidth, area.height, sidebarCount));
     }
 
     // Use injected distributeEvenly helper for vertical stacking

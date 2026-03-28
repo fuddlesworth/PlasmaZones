@@ -3,12 +3,14 @@
 
 #include "ScriptedAlgorithm.h"
 #include "ScriptedAlgorithmHelpers.h"
+#include "ScriptedAlgorithmJsBuiltins.h"
 #include "ScriptedAlgorithmSandbox.h"
 #include "../SplitTree.h"
 #include "../TilingState.h"
 #include "core/constants.h"
 #include "core/logging.h"
 #include "pz_i18n.h"
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QJSEngine>
@@ -21,6 +23,32 @@
 #include <functional>
 #include <mutex>
 #include <thread>
+
+namespace {
+
+/// RAII guard to prevent re-entrant calls into ScriptedAlgorithm::calculateZones.
+/// QJSEngine is not re-entrant; a signal handler calling back into calculateZones
+/// while an evaluation is in flight would corrupt engine state.
+///
+/// memory_order_relaxed is sufficient: this guards single-thread re-entrancy
+/// (e.g. signal handler calling calculateZones during JS evaluation), not
+/// cross-thread synchronization. QJSEngine is main-thread-only.
+struct ReentrancyGuard
+{
+    std::atomic<bool>& flag;
+    explicit ReentrancyGuard(std::atomic<bool>& f)
+        : flag(f)
+    {
+        flag.store(true, std::memory_order_relaxed);
+    }
+    ~ReentrancyGuard()
+    {
+        flag.store(false, std::memory_order_relaxed);
+    }
+    Q_DISABLE_COPY_MOVE(ReentrancyGuard)
+};
+
+} // namespace
 
 namespace PlasmaZones {
 
@@ -69,6 +97,16 @@ ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
     , m_engine(new QJSEngine(this))
     , m_watchdog(std::make_shared<WatchdogContext>())
 {
+    // ScriptedAlgorithmJsBuiltins uses static lazy initialization (function-local
+    // statics) that is thread-safe for first-call but not for concurrent QJSEngine
+    // evaluation. Enforce the single-thread contract.
+    Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
+    // Runtime guard — Q_ASSERT vanishes in release builds but QJSEngine corruption
+    // from off-thread construction is silent and catastrophic.
+    if (QCoreApplication::instance() && QThread::currentThread() != QCoreApplication::instance()->thread()) {
+        qCCritical(lcAutotile) << "ScriptedAlgorithm must be constructed on the main thread";
+        return;
+    }
     m_watchdog->engine = m_engine;
     m_watchdog->watchdogThread = std::thread([ctx = m_watchdog]() {
         while (true) {
@@ -240,19 +278,165 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         return false;
     }
 
-    // Inject built-in helpers from ScriptedAlgorithmHelpers
-    m_engine->evaluate(ScriptedHelpers::treeHelperJs(), QStringLiteral("builtin:applyTreeGeometry"));
-    m_engine->evaluate(ScriptedHelpers::lShapeHelperJs(), QStringLiteral("builtin:lShapeLayout"));
-    m_engine->evaluate(ScriptedHelpers::deckHelperJs(), QStringLiteral("builtin:deckLayout"));
-    m_engine->evaluate(ScriptedHelpers::distributeEvenlyHelperJs(), QStringLiteral("builtin:distributeEvenly"));
+    // Inject frozen constants so JS helpers and user scripts can reference them.
+    // Check return values — if the engine is broken these would silently be
+    // undefined and every helper using them would produce NaN.
+    const QJSValue constResult1 = m_engine->evaluate(QStringLiteral("var PZ_MIN_ZONE_SIZE = %1;").arg(MinZoneSizePx),
+                                                     QStringLiteral("builtin:constants"));
+    const QJSValue constResult2 = m_engine->evaluate(QStringLiteral("var PZ_MIN_SPLIT = %1;").arg(MinSplitRatio),
+                                                     QStringLiteral("builtin:constants"));
+    const QJSValue constResult3 = m_engine->evaluate(QStringLiteral("var PZ_MAX_SPLIT = %1;").arg(MaxSplitRatio),
+                                                     QStringLiteral("builtin:constants"));
+    const QJSValue constResult4 = m_engine->evaluate(
+        QStringLiteral("var MAX_TREE_DEPTH = %1;").arg(MaxRuntimeTreeDepth), QStringLiteral("builtin:constants"));
+    if (constResult1.isError() || constResult2.isError() || constResult3.isError() || constResult4.isError()) {
+        qCWarning(lcAutotile) << "ScriptedAlgorithm: constant injection failed, file=" << filePath;
+        return false;
+    }
 
-    // Freeze helper globals so user scripts cannot overwrite them.
+    // Freeze constants immediately so builtin helper scripts cannot reassign them.
+    // The frozenGlobals loop below will re-freeze them (harmless no-op on already-frozen properties).
+    static const QLatin1String earlyFreezeConstants[] = {
+        QLatin1String("PZ_MIN_ZONE_SIZE"),
+        QLatin1String("PZ_MIN_SPLIT"),
+        QLatin1String("PZ_MAX_SPLIT"),
+        QLatin1String("MAX_TREE_DEPTH"),
+    };
+    for (const auto& name : earlyFreezeConstants) {
+        QJSValue r = m_engine->evaluate(
+            QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});").arg(name));
+        if (r.isError()) {
+            qCWarning(lcAutotile) << "Failed to early-freeze constant:" << name << r.toString();
+            return false;
+        }
+    }
+
+    // Inject built-in helpers from ScriptedAlgorithmHelpers and JsBuiltins.
+    // NOTE: Each helper's exported global name(s) must also appear in the
+    // frozenGlobals[] array below — a missing entry is a sandbox escape.
+    auto injectBuiltin = [this, &filePath](const QString& source, const QString& label) -> bool {
+        if (source.isEmpty()) {
+            qCWarning(lcAutotile) << "ScriptedAlgorithm: empty builtin source for" << label << "file=" << filePath;
+            return false;
+        }
+        const QJSValue result = m_engine->evaluate(source, label);
+        if (result.isError()) {
+            qCWarning(lcAutotile) << "ScriptedAlgorithm: builtin injection failed for" << label
+                                  << "error=" << result.toString() << "file=" << filePath;
+            return false;
+        }
+        return true;
+    };
+
+    // Injection order matters: each helper must be injected after its dependencies.
+    // Dependency graph (arrows mean "depends on"):
+    //   applyTreeGeometry  (standalone)
+    //   lShapeLayout       (standalone)
+    //   deckLayout          → fillArea
+    //   distributeEvenly    (standalone)
+    //   distributeWithGaps  (standalone)
+    //   distributeWithMinSizes → distributeWithGaps
+    //   distributeWithOptionalMins → distributeWithGaps, distributeWithMinSizes
+    //   solveTwoPart        (standalone)
+    //   solveThreeColumn    (standalone, uses PZ_* constants)
+    //   computeCumulativeMinDims (standalone)
+    //   appendGracefulDegradation → distributeWithGaps
+    //   dwindleLayout       → computeCumulativeMinDims, appendGracefulDegradation
+    //   extractMinDims      (standalone)
+    //   interleaveStacks    (standalone)
+    //   applyPerWindowMinSize (standalone)
+    //   extractRegionMaxMin  (standalone)
+    //   fillRegion           (standalone)
+    //   fillArea             → fillRegion
+    //   masterStackLayout   → fillArea, extractRegionMaxMin, solveTwoPart,
+    //                         extractMinDims, distributeWithOptionalMins
+    //   equalColumnsLayout  → extractMinDims, distributeWithOptionalMins
+    //   threeColumnLayout   → fillArea, extractRegionMaxMin, solveThreeColumn,
+    //                         extractMinDims, interleaveStacks, distributeWithOptionalMins
+    if (!injectBuiltin(ScriptedHelpers::clampSplitRatioJs(), QStringLiteral("builtin:clampSplitRatio"))
+        || !injectBuiltin(ScriptedHelpers::applyTreeGeometryJs(), QStringLiteral("builtin:applyTreeGeometry"))
+        || !injectBuiltin(ScriptedHelpers::lShapeLayoutJs(), QStringLiteral("builtin:lShapeLayout"))
+        || !injectBuiltin(ScriptedHelpers::distributeEvenlyJs(), QStringLiteral("builtin:distributeEvenly"))
+        || !injectBuiltin(ScriptedHelpers::distributeWithGapsJs(), QStringLiteral("builtin:distributeWithGaps"))
+        || !injectBuiltin(ScriptedHelpers::distributeWithMinSizesJs(), QStringLiteral("builtin:distributeWithMinSizes"))
+        || !injectBuiltin(ScriptedHelpers::distributeWithOptionalMinsJs(),
+                          QStringLiteral("builtin:distributeWithOptionalMins"))
+        || !injectBuiltin(ScriptedHelpers::solveTwoPartJs(), QStringLiteral("builtin:solveTwoPart"))
+        || !injectBuiltin(ScriptedHelpers::solveThreeColumnJs(), QStringLiteral("builtin:solveThreeColumn"))
+        || !injectBuiltin(ScriptedHelpers::cumulativeMinDimsJs(), QStringLiteral("builtin:computeCumulativeMinDims"))
+        || !injectBuiltin(ScriptedHelpers::gracefulDegradationJs(), QStringLiteral("builtin:appendGracefulDegradation"))
+        || !injectBuiltin(ScriptedHelpers::dwindleLayoutJs(), QStringLiteral("builtin:dwindleLayout"))
+        || !injectBuiltin(ScriptedHelpers::extractMinDimsJs(), QStringLiteral("builtin:extractMinDims"))
+        || !injectBuiltin(ScriptedHelpers::interleaveStacksJs(), QStringLiteral("builtin:interleaveStacks"))
+        || !injectBuiltin(ScriptedHelpers::applyPerWindowMinSizeJs(), QStringLiteral("builtin:applyPerWindowMinSize"))
+        || !injectBuiltin(ScriptedHelpers::extractRegionMaxMinJs(), QStringLiteral("builtin:extractRegionMaxMin"))
+        || !injectBuiltin(ScriptedHelpers::fillRegionJs(), QStringLiteral("builtin:fillRegion"))
+        || !injectBuiltin(ScriptedHelpers::fillAreaJs(), QStringLiteral("builtin:fillArea"))
+        || !injectBuiltin(ScriptedHelpers::deckLayoutJs(), QStringLiteral("builtin:deckLayout"))
+        || !injectBuiltin(ScriptedHelpers::masterStackLayoutJs(), QStringLiteral("builtin:masterStackLayout"))
+        || !injectBuiltin(ScriptedHelpers::equalColumnsLayoutJs(), QStringLiteral("builtin:equalColumnsLayout"))
+        || !injectBuiltin(ScriptedHelpers::threeColumnLayoutJs(), QStringLiteral("builtin:threeColumnLayout"))) {
+        return false;
+    }
+
+    // Freeze helper globals and constants so user scripts cannot overwrite them.
     // This must happen after injection since hardenSandbox's freezeGlobal calls
     // ran before the helpers existed.
-    for (const auto& helperName : {QLatin1String("applyTreeGeometry"), QLatin1String("lShapeLayout"),
-                                   QLatin1String("deckLayout"), QLatin1String("distributeEvenly")}) {
-        m_engine->evaluate(QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});")
-                               .arg(QLatin1String(helperName)));
+    //
+    // IMPORTANT: Every global name injected by builtinHelpers must appear here.
+    // A missing entry is a sandbox escape — user scripts could overwrite the helper.
+    // Update the static_assert count below when adding/removing builtins.
+    // User-exported functions (calculateZones, etc.) are intentionally
+    // NOT frozen. When adding a new builtin helper, add its exported
+    // global name(s) here.
+    static const QLatin1String frozenGlobals[] = {
+        // Injected constants (from C++ AutotileDefaults)
+        QLatin1String("PZ_MIN_ZONE_SIZE"),
+        QLatin1String("PZ_MIN_SPLIT"),
+        QLatin1String("PZ_MAX_SPLIT"),
+        QLatin1String("MAX_TREE_DEPTH"),
+        // Helpers from ScriptedAlgorithmJsBuiltins
+        QLatin1String("applyTreeGeometry"),
+        QLatin1String("lShapeLayout"),
+        QLatin1String("deckLayout"),
+        QLatin1String("distributeEvenly"),
+        QLatin1String("distributeWithGaps"),
+        QLatin1String("distributeWithMinSizes"),
+        QLatin1String("distributeWithOptionalMins"),
+        QLatin1String("solveTwoPart"),
+        QLatin1String("solveThreeColumn"),
+        QLatin1String("computeCumulativeMinDims"),
+        QLatin1String("appendGracefulDegradation"),
+        QLatin1String("dwindleLayout"),
+        QLatin1String("extractMinWidths"), // from extractMinDims
+        QLatin1String("extractMinHeights"), // from extractMinDims
+        QLatin1String("buildStackIsLeft"), // from interleaveStacks
+        QLatin1String("interleaveMinWidths"), // from interleaveStacks
+        QLatin1String("interleaveMinHeights"), // from interleaveStacks
+        QLatin1String("assignInterleavedStacks"), // from interleaveStacks
+        QLatin1String("applyPerWindowMinSize"),
+        QLatin1String("extractRegionMaxMin"),
+        QLatin1String("fillArea"),
+        QLatin1String("masterStackLayout"),
+        QLatin1String("equalColumnsLayout"),
+        QLatin1String("fillRegion"),
+        QLatin1String("threeColumnLayout"),
+        QLatin1String("_extractMinDims"), // internal helper from extractMinDims (used by extractMinWidths/Heights)
+        QLatin1String("clampSplitRatio"),
+    };
+    static_assert(std::size(frozenGlobals) == 31, "frozenGlobals count mismatch — did you add a new builtin?");
+    bool freezeFailed = false;
+    for (const auto& name : frozenGlobals) {
+        QJSValue freezeResult = m_engine->evaluate(
+            QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});").arg(name));
+        if (freezeResult.isError()) {
+            qCWarning(lcAutotile) << "Failed to freeze global:" << name << freezeResult.toString();
+            freezeFailed = true;
+        }
+    }
+    if (freezeFailed) {
+        qCWarning(lcAutotile) << "ScriptedAlgorithm: aborting load — global freeze failed, file=" << filePath;
+        return false;
     }
 
     // Use guardedCall helper for watchdog arm-evaluate-disarm-check pattern.
@@ -265,17 +449,16 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // the global object after the IIFE body executes.
     static const QString wrapPrefix = QStringLiteral("(function(eval, Function) {");
     static const QString wrapSuffix = QStringLiteral(
-        "\nvar __pz_g = this;"
-        "if (typeof calculateZones === 'function') __pz_g.calculateZones = calculateZones;"
-        "if (typeof masterZoneIndex === 'function') __pz_g.masterZoneIndex = masterZoneIndex;"
-        "if (typeof supportsMasterCount === 'function') __pz_g.supportsMasterCount = supportsMasterCount;"
-        "if (typeof supportsSplitRatio === 'function') __pz_g.supportsSplitRatio = supportsSplitRatio;"
-        "if (typeof defaultSplitRatio === 'function') __pz_g.defaultSplitRatio = defaultSplitRatio;"
-        "if (typeof minimumWindows === 'function') __pz_g.minimumWindows = minimumWindows;"
-        "if (typeof defaultMaxWindows === 'function') __pz_g.defaultMaxWindows = defaultMaxWindows;"
-        "if (typeof producesOverlappingZones === 'function') __pz_g.producesOverlappingZones = "
+        "\nif (typeof calculateZones === 'function') this.calculateZones = calculateZones;"
+        "if (typeof masterZoneIndex === 'function') this.masterZoneIndex = masterZoneIndex;"
+        "if (typeof supportsMasterCount === 'function') this.supportsMasterCount = supportsMasterCount;"
+        "if (typeof supportsSplitRatio === 'function') this.supportsSplitRatio = supportsSplitRatio;"
+        "if (typeof defaultSplitRatio === 'function') this.defaultSplitRatio = defaultSplitRatio;"
+        "if (typeof minimumWindows === 'function') this.minimumWindows = minimumWindows;"
+        "if (typeof defaultMaxWindows === 'function') this.defaultMaxWindows = defaultMaxWindows;"
+        "if (typeof producesOverlappingZones === 'function') this.producesOverlappingZones = "
         "producesOverlappingZones;"
-        "if (typeof centerLayout === 'function') __pz_g.centerLayout = centerLayout;"
+        "if (typeof centerLayout === 'function') this.centerLayout = centerLayout;"
         "}).call(this, void 0, void 0);\n");
     const QString wrappedSource = wrapPrefix + source + wrapSuffix;
     const QJSValue result = guardedCall([this, &wrappedSource, &filePath]() {
@@ -357,6 +540,13 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
         return {};
     }
 
+    // Re-entrancy guard — QJSEngine state is not re-entrant
+    if (m_evaluating) {
+        qCWarning(lcAutotile) << "Re-entrant calculateZones call on" << m_scriptId << "— returning empty";
+        return {};
+    }
+    ReentrancyGuard guard(m_evaluating);
+
     if (!m_valid || params.windowCount <= 0 || !params.screenGeometry.isValid()) {
         return {};
     }
@@ -369,6 +559,16 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
         return {};
     }
 
+    // Degenerate screen: area too small for meaningful tiling — fill with stacked zones
+    if (area.width() < MinZoneSizePx || area.height() < MinZoneSizePx) {
+        QVector<QRect> zones;
+        zones.reserve(params.windowCount);
+        for (int i = 0; i < params.windowCount; ++i) {
+            zones.append(area);
+        }
+        return zones;
+    }
+
     // Single-window case always fills the area. Scripts cannot customize
     // single-window behavior — this is intentional to avoid unnecessary JS calls.
     if (params.windowCount == 1) {
@@ -376,9 +576,11 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     }
 
     // Build the JS params object
+    // Normalize innerGap to >= 0 here so every JS script doesn't need to repeat
+    // Math.max(0, params.innerGap || 0).
     QJSValue jsParams = m_engine->newObject();
     jsParams.setProperty(QStringLiteral("windowCount"), params.windowCount);
-    jsParams.setProperty(QStringLiteral("innerGap"), params.innerGap);
+    jsParams.setProperty(QStringLiteral("innerGap"), std::max(0, params.innerGap));
 
     // area sub-object
     QJSValue jsArea = m_engine->newObject();
@@ -400,7 +602,11 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
 
     // Split tree (read-only deep copy for memory-aware scripts)
     if (params.state && params.state->splitTree() && !params.state->splitTree()->isEmpty()) {
-        jsParams.setProperty(QStringLiteral("tree"), splitNodeToJSValue(params.state->splitTree()->root()));
+        QJSValue jsTree = splitNodeToJSValue(params.state->splitTree()->root());
+        // Expose leafCount on the root so JS scripts can check tree validity
+        // without traversing (matches C++ SplitTree::leafCount() API)
+        jsTree.setProperty(QStringLiteral("leafCount"), params.state->splitTree()->leafCount());
+        jsParams.setProperty(QStringLiteral("tree"), jsTree);
     }
 
     // minSizes array
@@ -581,6 +787,11 @@ bool ScriptedAlgorithm::producesOverlappingZones() const
                                    m_metadata.producesOverlappingZones);
 }
 
+bool ScriptedAlgorithm::supportsMinSizes() const noexcept
+{
+    return m_metadata.supportsMinSizes;
+}
+
 bool ScriptedAlgorithm::supportsMemory() const noexcept
 {
     return m_metadata.supportsMemory;
@@ -607,6 +818,49 @@ bool ScriptedAlgorithm::isScripted() const noexcept
 bool ScriptedAlgorithm::isUserScript() const noexcept
 {
     return m_isUserScript;
+}
+
+QString ScriptedAlgorithm::builtinId() const
+{
+    return m_metadata.builtinId;
+}
+
+void ScriptedAlgorithm::prepareTilingState(TilingState* state) const
+{
+    if (!m_metadata.supportsMemory) {
+        return; // Only memory-aware scripts need tree preparation
+    }
+
+    if (!state || state->splitTree()) {
+        return; // Already has a tree (or no state)
+    }
+
+    // Only reset the split ratio to our default (0.5) if it still holds a
+    // value from a different algorithm (e.g., MasterStack's 0.6).
+    const qreal currentRatio = state->splitRatio();
+    const qreal defRatio = defaultSplitRatio();
+    // Reset split ratio to our default when it still holds a value from a
+    // different algorithm (e.g. MasterStack's 0.6). Small differences within
+    // the hysteresis band are kept so user fine-tuning is not discarded.
+    if (currentRatio > defRatio + AutotileDefaults::SplitRatioHysteresis
+        || currentRatio < defRatio - AutotileDefaults::SplitRatioHysteresis) {
+        state->setSplitRatio(defRatio);
+    }
+
+    const QStringList tiledWindows = state->tiledWindows();
+    if (tiledWindows.size() <= 1) {
+        return; // No tree needed for 0-1 windows
+    }
+
+    // Cap window count to prevent unbounded tree growth (MaxZones = 256)
+    const int maxWindows = qMin(static_cast<int>(tiledWindows.size()), AutotileDefaults::MaxZones);
+
+    const qreal ratio = state->splitRatio();
+    auto newTree = std::make_unique<SplitTree>();
+    for (int i = 0; i < maxWindows; ++i) {
+        newTree->insertAtEnd(tiledWindows[i], ratio);
+    }
+    state->setSplitTree(std::move(newTree));
 }
 
 } // namespace PlasmaZones

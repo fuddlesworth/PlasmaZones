@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Paper
+// @builtinId paper
 // @description Equal-width overlapping pages like a document viewer; splitRatio controls page width
 // @producesOverlappingZones true
 // @supportsMasterCount false
@@ -29,8 +30,8 @@ function calculateZones(params) {
     if (count <= 0) return [];
     const area = params.area;
 
-    const pageRatio = params.splitRatio;
-    let pageWidth = Math.round(area.width * pageRatio);
+    const pageRatio = clampSplitRatio(params.splitRatio);
+    let pageWidth = Math.floor(area.width * pageRatio);
     if (pageWidth < 1) pageWidth = 1;
     if (pageWidth > area.width) pageWidth = area.width;
 
