@@ -235,41 +235,6 @@ public:
      */
     static int configuredMaxWindows();
 
-    /**
-     * @brief Convert an algorithm to QVariantMap for QML consumption
-     *
-     * Creates a layout-compatible variant map including id (with autotile: prefix),
-     * name, description, zones preview, and category.
-     *
-     * @param algorithm The tiling algorithm
-     * @param algorithmId The algorithm's registry ID
-     * @return QVariantMap suitable for zone selector/OSD
-     */
-    static QVariantMap algorithmToVariantMap(TilingAlgorithm* algorithm, const QString& algorithmId);
-
-    /**
-     * @brief Section grouping metadata for a tiling algorithm
-     *
-     * Used by both algorithmToVariantMap() and layoututils appendAutotileEntries()
-     * to avoid duplicating the isScripted/isUserScript → section mapping.
-     */
-    struct SectionInfo
-    {
-        QString key;
-        QString label;
-        int order = 0;
-    };
-
-    /**
-     * @brief Get section grouping info for a tiling algorithm
-     *
-     * Returns one of three sections:
-     * - "built-in"   (order 0): Standard C++ algorithms and system-installed scripts
-     * - "persistent" (order 1): Memory-capable algorithms (e.g. DwindleMemory)
-     * - "custom"     (order 2): User-provided scripted algorithms
-     */
-    static SectionInfo sectionForAlgorithm(TilingAlgorithm* algorithm);
-
 Q_SIGNALS:
     /**
      * @brief Emitted when an algorithm is registered

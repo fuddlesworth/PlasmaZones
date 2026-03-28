@@ -8,7 +8,6 @@
 #include "core/constants.h"
 #include "core/layout.h"
 #include "core/logging.h"
-#include "pz_i18n.h"
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -380,57 +379,6 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm,
     }
 
     return list;
-}
-
-QVariantMap AlgorithmRegistry::algorithmToVariantMap(TilingAlgorithm* algorithm, const QString& algorithmId)
-{
-    QVariantMap map;
-
-    if (!algorithm) {
-        return map;
-    }
-
-    // Use autotile: prefix for ID to distinguish from manual layout UUIDs
-    map[QLatin1String("id")] = LayoutId::makeAutotileId(algorithmId);
-    map[QLatin1String("name")] = algorithm->name();
-    map[QLatin1String("description")] = algorithm->description();
-    map[QLatin1String("zoneCount")] = effectiveMaxWindows(algorithm);
-    map[QLatin1String("zones")] = generatePreviewZones(algorithm);
-    map[QLatin1String("category")] = static_cast<int>(LayoutCategory::Autotile);
-    map[QLatin1String("zoneNumberDisplay")] = algorithm->zoneNumberDisplay();
-    if (algorithm->supportsMemory()) {
-        map[QLatin1String("memory")] = true;
-    }
-
-    // Section grouping for LayoutsPage
-    const auto section = sectionForAlgorithm(algorithm);
-    map[QLatin1String("sectionKey")] = section.key;
-    map[QLatin1String("sectionLabel")] = section.label;
-    map[QLatin1String("sectionOrder")] = section.order;
-
-    return map;
-}
-
-AlgorithmRegistry::SectionInfo AlgorithmRegistry::sectionForAlgorithm(TilingAlgorithm* algorithm)
-{
-    if (!algorithm) {
-        return {QStringLiteral("built-in"), PzI18n::tr("Built-in"), 0};
-    }
-
-    // User-created scripts get their own section so users can easily
-    // distinguish their custom algorithms from bundled ones.
-    if (algorithm->isScripted() && algorithm->isUserScript()) {
-        return {QStringLiteral("custom"), PzI18n::tr("Custom"), 2};
-    }
-
-    // Memory-enabled algorithms (DwindleMemory, or system scripts with memory)
-    // are grouped separately to highlight their persistent behavior.
-    if (algorithm->supportsMemory()) {
-        return {QStringLiteral("persistent"), PzI18n::tr("Persistent"), 1};
-    }
-
-    // Built-in C++ algorithms and system-installed scripts
-    return {QStringLiteral("built-in"), PzI18n::tr("Built-in"), 0};
 }
 
 } // namespace PlasmaZones

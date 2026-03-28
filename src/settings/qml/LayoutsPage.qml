@@ -100,20 +100,73 @@ ColumnLayout {
                         else if (root.viewMode === 1 && isAutotile)
                             filtered.push(allLayouts[i]);
                     }
-                    // Group by sectionKey (data-driven: each item carries its own
-                    // sectionKey, sectionLabel, sectionOrder from the C++ side)
                     let groups = {
                     };
-                    for (let i = 0; i < filtered.length; i++) {
-                        let key = filtered[i].sectionKey || "default";
-                        if (!groups[key])
-                            groups[key] = {
-                            "items": [],
-                            "order": filtered[i].sectionOrder !== undefined ? filtered[i].sectionOrder : 0,
-                            "label": filtered[i].sectionLabel || ""
-                        };
+                    if (root.viewMode === 1) {
+                        // Tiling view: group by capability (algorithms can appear in multiple groups)
+                        let capGroups = [{
+                            "key": "masterCount",
+                            "label": i18n("Master Count"),
+                            "order": 0,
+                            "test": (a) => {
+                                return a.supportsMasterCount === true;
+                            }
+                        }, {
+                            "key": "overlapping",
+                            "label": i18n("Overlapping Zones"),
+                            "order": 1,
+                            "test": (a) => {
+                                return a.producesOverlappingZones === true;
+                            }
+                        }, {
+                            "key": "splitRatio",
+                            "label": i18n("Split Ratio"),
+                            "order": 2,
+                            "test": (a) => {
+                                return a.supportsSplitRatio === true;
+                            }
+                        }];
+                        for (let g = 0; g < capGroups.length; g++) {
+                            let cap = capGroups[g];
+                            groups[cap.key] = {
+                                "items": [],
+                                "order": cap.order,
+                                "label": cap.label
+                            };
+                        }
+                        for (let i = 0; i < filtered.length; i++) {
+                            let placed = false;
+                            for (let g = 0; g < capGroups.length; g++) {
+                                if (capGroups[g].test(filtered[i])) {
+                                    groups[capGroups[g].key].items.push(filtered[i]);
+                                    placed = true;
+                                }
+                            }
+                            // Algorithms with no capabilities still appear
+                            if (!placed) {
+                                if (!groups["other"])
+                                    groups["other"] = {
+                                    "items": [],
+                                    "order": 99,
+                                    "label": i18n("Other")
+                                };
 
-                        groups[key].items.push(filtered[i]);
+                                groups["other"].items.push(filtered[i]);
+                            }
+                        }
+                    } else {
+                        // Snapping view: group by sectionKey (aspect ratio, data-driven from C++)
+                        for (let i = 0; i < filtered.length; i++) {
+                            let key = filtered[i].sectionKey || "default";
+                            if (!groups[key])
+                                groups[key] = {
+                                "items": [],
+                                "order": filtered[i].sectionOrder !== undefined ? filtered[i].sectionOrder : 0,
+                                "label": filtered[i].sectionLabel || ""
+                            };
+
+                            groups[key].items.push(filtered[i]);
+                        }
                     }
                     // Sort items within each group alphabetically
                     for (let key in groups) {
@@ -121,7 +174,7 @@ ColumnLayout {
                             return (a.name || "").localeCompare(b.name || "");
                         });
                     }
-                    // Sort groups by sectionOrder, then build section model
+                    // Sort groups by order, then build section model
                     let sorted = Object.values(groups).sort((a, b) => {
                         return a.order - b.order;
                     });
