@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QScreen>
@@ -46,13 +48,13 @@ inline ZoneSelectorConfig defaultZoneSelectorConfig()
 }
 
 // Configure layer surface properties in one call.
-// When setAnchors is true (default), anchors are applied; pass false to skip
-// (caller will set them separately). This avoids conflating AnchorNone with "not provided".
+// Pass std::nullopt for anchors to skip setting them (caller will set separately).
+// This avoids conflating AnchorNone (a valid value) with "not provided".
 // exclusiveZone defaults to -1 (overlay ignores panels); use 0 for sensors.
 inline void configureLayerSurface(QQuickWindow* window, QScreen* screen, LayerSurface::Layer layer,
                                   LayerSurface::KeyboardInteractivity keyboardInteractivity, const QString& scope,
-                                  LayerSurface::Anchors anchors = LayerSurface::Anchors(), int32_t exclusiveZone = -1,
-                                  bool setAnchors = true)
+                                  std::optional<LayerSurface::Anchors> anchors = std::nullopt,
+                                  int32_t exclusiveZone = -1)
 {
     if (!window) {
         return;
@@ -64,8 +66,8 @@ inline void configureLayerSurface(QQuickWindow* window, QScreen* screen, LayerSu
     layerSurface->setScreen(screen);
     layerSurface->setLayer(layer);
     layerSurface->setKeyboardInteractivity(keyboardInteractivity);
-    if (setAnchors) {
-        layerSurface->setAnchors(anchors);
+    if (anchors.has_value()) {
+        layerSurface->setAnchors(*anchors);
     }
     layerSurface->setExclusiveZone(exclusiveZone);
     layerSurface->setScope(scope);
