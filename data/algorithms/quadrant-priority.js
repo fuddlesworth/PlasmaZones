@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Quadrant Priority
+// @builtinId quadrant-priority
 // @description First window gets a large corner; rest fill the L-shaped remainder
 // @producesOverlappingZones false
 // @supportsMasterCount false

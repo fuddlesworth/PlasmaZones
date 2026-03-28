@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Floating Center
+// @builtinId floating-center
 // @description Centered main window with peripheral panels on all sides
 // @producesOverlappingZones false
 // @supportsMasterCount false

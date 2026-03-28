@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Paper
+// @builtinId paper
 // @description Equal-width overlapping pages like a document viewer; splitRatio controls page width
 // @producesOverlappingZones true
 // @supportsMasterCount false

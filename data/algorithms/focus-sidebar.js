@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Focus + Sidebar
+// @builtinId focus-sidebar
 // @description Main window with vertically stacked sidebar; ratio controls main window width
 // @producesOverlappingZones false
 // @supportsMasterCount false

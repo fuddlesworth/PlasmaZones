@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Horizontal Deck
+// @builtinId horizontal-deck
 // @description Focused window on top; remaining windows peek from the bottom edge
 // @producesOverlappingZones true
 // @supportsMasterCount false

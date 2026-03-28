@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Deck
+// @builtinId deck
 // @description Focused window takes the left portion; remaining windows peek from the right edge. Ratio controls focused window width
 // @producesOverlappingZones true
 // @supportsMasterCount false

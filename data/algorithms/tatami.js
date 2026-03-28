@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Tatami
+// @builtinId tatami
 // @description Japanese tatami mat pattern where no four corners ever meet at the same point
 // @producesOverlappingZones false
 // @supportsMasterCount false

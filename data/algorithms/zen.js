@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Zen
+// @builtinId zen
 // @description Centered column with margins — focused, distraction-free layout
 // @producesOverlappingZones false
 // @supportsMasterCount false

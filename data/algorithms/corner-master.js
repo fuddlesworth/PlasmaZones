@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // @name Corner Master
+// @builtinId corner-master
 // @description Master window in a corner; rest fill the L-shaped remainder
 // @producesOverlappingZones false
 // @supportsMasterCount false
