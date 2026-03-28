@@ -43,11 +43,6 @@ function calculateZones(params) {
     // global PZ_MIN_SPLIT/PZ_MAX_SPLIT used by non-overlapping algorithms.
     const offsetRatio = Math.max(CascadeMinOffsetRatio, Math.min(CascadeMaxOffsetRatio, params.splitRatio));
 
-    // Single window: no cascade offset needed — fill entire area
-    if (count === 1) {
-        return [{ x: area.x, y: area.y, width: area.width, height: area.height }];
-    }
-
     // Initial minimum of CascadeMinOffsetPx per step; may be reduced by maxOffset
     // clamp below when window minimum sizes constrain the available cascade space.
     let offsetX = Math.max(CascadeMinOffsetPx, Math.floor(area.width * offsetRatio / (count - 1)));
@@ -75,7 +70,7 @@ function calculateZones(params) {
         let h = winHeight;
 
         // Apply per-window minimum sizes, clamped to remaining space at this offset
-        const clamped = applyPerWindowMinSize(w, h, params.minSizes || [], i);
+        const clamped = applyPerWindowMinSize(w, h, params.minSizes, i);
         w = Math.max(1, Math.min(clamped.w, area.x + area.width - x));
         h = Math.max(1, Math.min(clamped.h, area.y + area.height - y));
 

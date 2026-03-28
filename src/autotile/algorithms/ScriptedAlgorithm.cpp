@@ -29,6 +29,10 @@ namespace {
 /// RAII guard to prevent re-entrant calls into ScriptedAlgorithm::calculateZones.
 /// QJSEngine is not re-entrant; a signal handler calling back into calculateZones
 /// while an evaluation is in flight would corrupt engine state.
+///
+/// memory_order_relaxed is sufficient: this guards single-thread re-entrancy
+/// (e.g. signal handler calling calculateZones during JS evaluation), not
+/// cross-thread synchronization. QJSEngine is main-thread-only.
 struct ReentrancyGuard
 {
     std::atomic<bool>& flag;
@@ -299,8 +303,12 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         QLatin1String("MAX_TREE_DEPTH"),
     };
     for (const auto& name : earlyFreezeConstants) {
-        m_engine->evaluate(
+        QJSValue r = m_engine->evaluate(
             QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});").arg(name));
+        if (r.isError()) {
+            qCWarning(lcAutotile) << "Failed to early-freeze constant:" << name << r.toString();
+            return false;
+        }
     }
 
     // Inject built-in helpers from ScriptedAlgorithmHelpers and JsBuiltins.
@@ -345,7 +353,8 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     //   equalColumnsLayout  → extractMinDims, distributeWithOptionalMins
     //   threeColumnLayout   → fillArea, extractRegionMaxMin, solveThreeColumn,
     //                         extractMinDims, interleaveStacks, distributeWithOptionalMins
-    if (!injectBuiltin(ScriptedHelpers::applyTreeGeometryJs(), QStringLiteral("builtin:applyTreeGeometry"))
+    if (!injectBuiltin(ScriptedHelpers::clampSplitRatioJs(), QStringLiteral("builtin:clampSplitRatio"))
+        || !injectBuiltin(ScriptedHelpers::applyTreeGeometryJs(), QStringLiteral("builtin:applyTreeGeometry"))
         || !injectBuiltin(ScriptedHelpers::lShapeLayoutJs(), QStringLiteral("builtin:lShapeLayout"))
         || !injectBuiltin(ScriptedHelpers::distributeEvenlyJs(), QStringLiteral("builtin:distributeEvenly"))
         || !injectBuiltin(ScriptedHelpers::distributeWithGapsJs(), QStringLiteral("builtin:distributeWithGaps"))
@@ -413,8 +422,9 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         QLatin1String("fillRegion"),
         QLatin1String("threeColumnLayout"),
         QLatin1String("_extractMinDims"), // internal helper from extractMinDims (used by extractMinWidths/Heights)
+        QLatin1String("clampSplitRatio"),
     };
-    static_assert(std::size(frozenGlobals) == 30, "frozenGlobals count mismatch — did you add a new builtin?");
+    static_assert(std::size(frozenGlobals) == 31, "frozenGlobals count mismatch — did you add a new builtin?");
     bool freezeFailed = false;
     for (const auto& name : frozenGlobals) {
         QJSValue freezeResult = m_engine->evaluate(
@@ -775,6 +785,11 @@ bool ScriptedAlgorithm::producesOverlappingZones() const
 {
     return resolveJsOverride<bool>(m_jsProducesOverlappingZones, m_cachedProducesOverlappingZones,
                                    m_metadata.producesOverlappingZones);
+}
+
+bool ScriptedAlgorithm::supportsMinSizes() const noexcept
+{
+    return m_metadata.supportsMinSizes;
 }
 
 bool ScriptedAlgorithm::supportsMemory() const noexcept

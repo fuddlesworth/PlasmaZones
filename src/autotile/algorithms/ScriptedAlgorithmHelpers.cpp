@@ -117,6 +117,8 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
             meta.supportsMemory = (value == QLatin1String("true"));
         } else if (key == QLatin1String("centerLayout")) {
             meta.centerLayout = (value == QLatin1String("true"));
+        } else if (key == QLatin1String("supportsMinSizes")) {
+            meta.supportsMinSizes = (value == QLatin1String("true"));
         } else if (key == QLatin1String("defaultSplitRatio")) {
             bool ok = false;
             const qreal v = value.toDouble(&ok);

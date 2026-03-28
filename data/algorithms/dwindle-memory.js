@@ -32,7 +32,7 @@ function calculateZones(params) {
 
     const area = params.area;
     const gap = params.innerGap;
-    const minSizes = params.minSizes || [];
+    const minSizes = params.minSizes;
 
     // Degenerate screen — fall back before checking tree
     if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {

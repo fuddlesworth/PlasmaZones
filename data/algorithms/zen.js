@@ -30,7 +30,7 @@ function calculateZones(params) {
     }
     const gap = params.innerGap;
 
-    const splitRatio = Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, params.splitRatio));
+    const splitRatio = clampSplitRatio(params.splitRatio);
     let columnWidth = Math.floor(area.width * splitRatio);
     columnWidth = Math.max(1, columnWidth);
     const offsetX = area.x + Math.floor((area.width - columnWidth) / 2);

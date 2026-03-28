@@ -200,5 +200,14 @@ QString distributeWithOptionalMinsJs();
  */
 QString threeColumnLayoutJs();
 
+/**
+ * @brief JS source for clampSplitRatio(ratio) built-in helper
+ *
+ * Clamps a ratio to [PZ_MIN_SPLIT, PZ_MAX_SPLIT]. Eliminates the repeated
+ * Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, ratio)) pattern.
+ * Loaded from Qt resource :/builtins/clampSplitRatio.js
+ */
+QString clampSplitRatioJs();
+
 } // namespace ScriptedHelpers
 } // namespace PlasmaZones

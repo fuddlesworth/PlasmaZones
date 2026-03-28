@@ -29,7 +29,7 @@ function calculateZones(params) {
         return fillArea(area, count);
     }
     const gap = params.innerGap;
-    const minSizes = params.minSizes || [];
+    const minSizes = params.minSizes;
 
     // splitRatio is clamped inside dwindleLayout()
     return dwindleLayout(area, count, params.splitRatio, gap, minSizes);

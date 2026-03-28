@@ -21,5 +21,6 @@
     <file alias="fillRegion.js">builtins/fillRegion.js</file>
     <file alias="distributeWithOptionalMins.js">builtins/distributeWithOptionalMins.js</file>
     <file alias="threeColumnLayout.js">builtins/threeColumnLayout.js</file>
+    <file alias="clampSplitRatio.js">builtins/clampSplitRatio.js</file>
 </qresource>
 </RCC>

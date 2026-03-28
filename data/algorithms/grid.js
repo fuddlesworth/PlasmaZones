@@ -28,7 +28,7 @@ function calculateZones(params) {
         return fillArea(area, count);
     }
     const gap = params.innerGap;
-    const minSizes = params.minSizes || [];
+    const minSizes = params.minSizes;
 
     // Calculate grid dimensions
     const cols = Math.ceil(Math.sqrt(count));

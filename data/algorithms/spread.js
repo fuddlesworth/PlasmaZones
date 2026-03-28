@@ -32,7 +32,7 @@ function calculateZones(params) {
         return fillArea(area, count);
     }
     const gap = params.innerGap;
-    const minSizes = params.minSizes || [];
+    const minSizes = params.minSizes;
 
     // Clamp widthFraction to [SpreadMinFraction, 1.0] — upper bound is 1.0 (not PZ_MAX_SPLIT)
     // because spread windows should be able to fill their entire slot.

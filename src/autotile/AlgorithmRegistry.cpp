@@ -63,22 +63,6 @@ void AlgorithmRegistry::cleanup()
         return; // Already cleaned up (e.g., aboutToQuit already ran)
     }
 
-    // Drain any pending deleteLater() calls from safeDeleteAlgorithm().
-    // Hot-reload during shutdown could leave orphaned algorithms with
-    // parent=nullptr that are still queued for deferred deletion. Flushing
-    // them here prevents double-free if we then synchronously delete the
-    // same pointer (impossible today, but defensive against future changes)
-    // and ensures QJSEngine internals are torn down while Qt is alive.
-    //
-    // Use per-object sendPostedEvents() instead of the nullptr overload,
-    // which would drain ALL deferred-delete events globally — potentially
-    // destroying objects owned by unrelated subsystems mid-shutdown.
-    if (QCoreApplication::instance()) {
-        for (auto* algo : std::as_const(m_algorithms)) {
-            QCoreApplication::sendPostedEvents(algo, QEvent::DeferredDelete);
-        }
-    }
-
     // Explicitly delete all algorithm children while Qt is still alive.
     // This prevents crashes when the static singleton is destroyed after
     // QCoreApplication during static destruction (ScriptedAlgorithm
@@ -144,7 +128,7 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
     if (old && old != algorithm) {
         // Emit unregistered then registered so listeners see the full replacement
         // sequence with the new algorithm already queryable.
-        Q_EMIT algorithmUnregistered(id);
+        Q_EMIT algorithmUnregistered(id, true);
         Q_EMIT algorithmRegistered(id);
 
         safeDeleteAlgorithm(old);
@@ -184,7 +168,7 @@ bool AlgorithmRegistry::unregisterAlgorithm(const QString& id)
 
     // Emit before delete so signal handlers can safely reference the id
     // without risk of use-after-free on any cached algorithm pointers.
-    Q_EMIT algorithmUnregistered(id);
+    Q_EMIT algorithmUnregistered(id, false);
 
     safeDeleteAlgorithm(algorithm);
     return true;

@@ -134,6 +134,7 @@ public:
     int minimumWindows() const override;
     int defaultMaxWindows() const override;
     bool producesOverlappingZones() const override;
+    bool supportsMinSizes() const noexcept override;
     bool supportsMemory() const noexcept override;
     QString zoneNumberDisplay() const noexcept override;
     bool centerLayout() const override;

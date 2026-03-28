@@ -5,7 +5,10 @@
  * Distribute `total` pixels evenly across `count` slots, deducting
  * (count-1)*gap from total first. Returns array of int sizes.
  *
- * Port of TilingAlgorithm::distributeWithGaps.
+ * Port of TilingAlgorithm::distributeWithGaps, with two improvements:
+ *   - Proportional gap shrinking when gaps exceed available space
+ *   - Single-pass overflow correction loop when Math.max inflates available
+ * These edge cases may produce different results than the original C++.
  */
 function distributeWithGaps(total, count, gap) {
     gap = Math.max(0, gap);

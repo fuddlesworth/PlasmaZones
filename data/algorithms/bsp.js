@@ -33,7 +33,7 @@ function calculateZones(params) {
 
     const area = params.area;
     const gap = params.innerGap;
-    const minSizes = params.minSizes || [];
+    const minSizes = params.minSizes;
     const splitRatio = params.splitRatio;
 
     if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
@@ -179,7 +179,7 @@ function clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio, firstD
     const totalMin = firstDim + secondDim;
     if (totalMin > 0) {
         ratio = firstDim / totalMin;
-        return Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, ratio));
+        return clampSplitRatio(ratio);
     }
     return ratio;
 }
@@ -193,7 +193,7 @@ function bspApplyGeometry(node, rect, innerGap, minSizes, leafStartIdx, depth) {
     if (isLeaf(node)) return;
 
     // Clamp ratio
-    let ratio = Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, node.splitRatio));
+    let ratio = clampSplitRatio(node.splitRatio);
 
     // Clamp ratio to respect subtree minimum dimensions
     if (minSizes.length > 0) {
@@ -206,8 +206,8 @@ function bspApplyGeometry(node, rect, innerGap, minSizes, leafStartIdx, depth) {
             if (contentHeight > 0 && (firstResult.h > 0 || secondResult.h > 0)) {
                 let minFirstRatio = (firstResult.h > 0) ? firstResult.h / contentHeight : PZ_MIN_SPLIT;
                 let maxFirstRatio = (secondResult.h > 0) ? 1.0 - secondResult.h / contentHeight : PZ_MAX_SPLIT;
-                minFirstRatio = Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, minFirstRatio));
-                maxFirstRatio = Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, maxFirstRatio));
+                minFirstRatio = clampSplitRatio(minFirstRatio);
+                maxFirstRatio = clampSplitRatio(maxFirstRatio);
                 ratio = clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio,
                     firstResult.h, secondResult.h);
             }
@@ -216,8 +216,8 @@ function bspApplyGeometry(node, rect, innerGap, minSizes, leafStartIdx, depth) {
             if (contentWidth > 0 && (firstResult.w > 0 || secondResult.w > 0)) {
                 let minFirstRatio = (firstResult.w > 0) ? firstResult.w / contentWidth : PZ_MIN_SPLIT;
                 let maxFirstRatio = (secondResult.w > 0) ? 1.0 - secondResult.w / contentWidth : PZ_MAX_SPLIT;
-                minFirstRatio = Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, minFirstRatio));
-                maxFirstRatio = Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, maxFirstRatio));
+                minFirstRatio = clampSplitRatio(minFirstRatio);
+                maxFirstRatio = clampSplitRatio(maxFirstRatio);
                 ratio = clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio,
                     firstResult.w, secondResult.w);
             }

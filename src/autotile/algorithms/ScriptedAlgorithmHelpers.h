@@ -28,6 +28,7 @@ struct ScriptMetadata
     bool supportsMemory = false;
     bool producesOverlappingZones = false;
     bool centerLayout = false;
+    bool supportsMinSizes = true; ///< Default true — most algorithms support min sizes
     QString builtinId; ///< Optional: register as built-in algorithm ID instead of "script:filename"
 };
 

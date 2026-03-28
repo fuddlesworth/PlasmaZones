@@ -32,14 +32,14 @@ function calculateZones(params) {
     const area = params.area;
     const gap = params.innerGap;
     let splitRatio = params.splitRatio;
-    const minSizes = params.minSizes || [];
+    const minSizes = params.minSizes;
 
     if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
         return fillArea(area, count);
     }
 
     // Clamp splitRatio
-    splitRatio = Math.max(PZ_MIN_SPLIT, Math.min(splitRatio, PZ_MAX_SPLIT));
+    splitRatio = clampSplitRatio(splitRatio);
 
     // Precompute direction-aware cumulative min dimensions
     // computeCumulativeMinDims uses i%2===0 for V/H alternation, which matches

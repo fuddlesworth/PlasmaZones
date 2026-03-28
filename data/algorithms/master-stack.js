@@ -30,7 +30,7 @@ function calculateZones(params) {
         params.innerGap,
         params.splitRatio,
         params.masterCount || 1,
-        params.minSizes || [],
+        params.minSizes,
         false
     );
 }

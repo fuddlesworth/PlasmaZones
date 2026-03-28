@@ -160,5 +160,11 @@ QString threeColumnLayoutJs()
     return s;
 }
 
+QString clampSplitRatioJs()
+{
+    static const QString s = loadBuiltinJs(QStringLiteral("clampSplitRatio.js"));
+    return s;
+}
+
 } // namespace ScriptedHelpers
 } // namespace PlasmaZones

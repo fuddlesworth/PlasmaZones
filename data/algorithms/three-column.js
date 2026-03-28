@@ -27,9 +27,10 @@ function calculateZones(params) {
     if (count <= 0) return [];
     const area = params.area;
     const gap = params.innerGap;
-    const splitRatio = Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, params.splitRatio));
-    const minSizes = params.minSizes || [];
+    const splitRatio = clampSplitRatio(params.splitRatio);
+    const minSizes = params.minSizes;
 
+    // Degenerate screen — C++ wrapper also checks, belt-and-suspenders
     if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
         return fillArea(area, count);
     }

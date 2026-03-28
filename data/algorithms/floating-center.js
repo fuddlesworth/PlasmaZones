@@ -13,6 +13,7 @@
 // @zoneNumberDisplay all
 // @masterZoneIndex 0
 // @supportsMemory false
+// @supportsMinSizes false
 
 /**
  * Floating Center layout: one centered main window with remaining windows
@@ -72,7 +73,7 @@ function calculateZones(params) {
 
     // Single window: just center it in the area (no margins/panels needed)
     if (count === 1) {
-        const splitRatio1 = Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, params.splitRatio));
+        const splitRatio1 = clampSplitRatio(params.splitRatio);
         const cw = Math.floor(area.width * splitRatio1);
         const ch = Math.floor(area.height * splitRatio1);
         const cx = area.x + Math.floor((area.width - cw) / 2);
@@ -80,7 +81,7 @@ function calculateZones(params) {
         return [{ x: cx, y: cy, width: cw, height: ch }];
     }
 
-    const splitRatio = Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, params.splitRatio));
+    const splitRatio = clampSplitRatio(params.splitRatio);
 
     const centerW = Math.floor(area.width * splitRatio);
     const centerH = Math.floor(area.height * splitRatio);

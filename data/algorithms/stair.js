@@ -37,11 +37,6 @@ function calculateZones(params) {
         return fillArea(area, count);
     }
 
-    // Single window: fill entire area — no staircase offset needed
-    if (count === 1) {
-        return [{ x: area.x, y: area.y, width: area.width, height: area.height }];
-    }
-
     // Tighter than PZ_MIN_SPLIT/PZ_MAX_SPLIT: below StairMinSizeRatio windows are too small
     const sizeRatio = Math.max(StairMinSizeRatio, Math.min(StairMaxSizeRatio, params.splitRatio));
 
@@ -66,7 +61,7 @@ function calculateZones(params) {
         let h = winHeight;
 
         // Apply per-window minimum sizes, clamped to remaining space at this offset
-        const clamped = applyPerWindowMinSize(w, h, params.minSizes || [], i);
+        const clamped = applyPerWindowMinSize(w, h, params.minSizes, i);
         w = Math.max(1, Math.min(clamped.w, area.x + area.width - x));
         h = Math.max(1, Math.min(clamped.h, area.y + area.height - y));
 

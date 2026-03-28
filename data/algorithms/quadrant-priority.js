@@ -34,7 +34,7 @@ function calculateZones(params) {
     if (count <= 0) return [];
     const area = params.area;
     const gap = params.innerGap;
-    const splitRatio = Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, params.splitRatio));
+    const splitRatio = clampSplitRatio(params.splitRatio);
 
     // Quadrant Priority: ceil/floor distribution, bottom row spans full width,
     // right column constrained to master height

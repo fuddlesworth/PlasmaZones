@@ -238,33 +238,24 @@ Q_SIGNALS:
     /**
      * @brief Emitted when an algorithm is registered
      *
-     * On replacement (re-registration of an existing ID), algorithmUnregistered
-     * is emitted first, then algorithmRegistered. In both cases the new algorithm
-     * is already queryable via algorithm(id) when the signal fires.
+     * On replacement (re-registration of an existing ID),
+     * algorithmUnregistered(id, true) is emitted first, then
+     * algorithmRegistered(id). The new algorithm is already queryable
+     * via algorithm(id) when either signal fires.
      *
      * @param id The registered algorithm's ID
      */
     void algorithmRegistered(const QString& id);
 
     /**
-     * @brief Emitted when an algorithm is unregistered
+     * @brief Emitted when an algorithm is unregistered or replaced
      *
-     * This signal has dual semantics depending on the trigger:
-     *
-     * **Replacement** (re-registration with the same ID): the new algorithm is
-     * already registered under @p id when this signal fires. Calling
-     * @c algorithm(id) returns the replacement, and @c hasAlgorithm(id) is true.
-     *
-     * **Explicit unregister**: the algorithm has been removed before emission.
-     * Calling @c algorithm(id) returns @c nullptr, and @c hasAlgorithm(id)
-     * is false.
-     *
-     * Handlers that need to distinguish between the two cases should call
-     * @c hasAlgorithm(id) inside the slot.
-     *
-     * @param id The removed algorithm's ID
+     * @param id The algorithm's ID
+     * @param replacing true if a new algorithm has already been registered
+     *        under @p id (replacement case). false if the algorithm was
+     *        explicitly removed and @c algorithm(id) now returns nullptr.
      */
-    void algorithmUnregistered(const QString& id);
+    void algorithmUnregistered(const QString& id, bool replacing);
 
 private:
     explicit AlgorithmRegistry(QObject* parent = nullptr);

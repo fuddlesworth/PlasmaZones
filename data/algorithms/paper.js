@@ -30,7 +30,7 @@ function calculateZones(params) {
     if (count <= 0) return [];
     const area = params.area;
 
-    const pageRatio = Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, params.splitRatio));
+    const pageRatio = clampSplitRatio(params.splitRatio);
     let pageWidth = Math.floor(area.width * pageRatio);
     if (pageWidth < 1) pageWidth = 1;
     if (pageWidth > area.width) pageWidth = area.width;

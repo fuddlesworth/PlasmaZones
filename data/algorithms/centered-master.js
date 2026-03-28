@@ -37,15 +37,16 @@ function calculateZones(params) {
 
     const area = params.area;
     const gap = params.innerGap;
-    const minSizes = params.minSizes || [];
+    const minSizes = params.minSizes;
 
+    // Degenerate screen — C++ wrapper also checks, belt-and-suspenders
     if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
         return fillArea(area, count);
     }
 
     const masterCount = Math.max(1, Math.min(params.masterCount || 1, count));
     const stackCount = count - masterCount;
-    const splitRatio = Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, params.splitRatio));
+    const splitRatio = clampSplitRatio(params.splitRatio);
 
     // Case 1: Only masters — delegate to shared masterStackLayout (DRY)
     if (stackCount === 0) {
