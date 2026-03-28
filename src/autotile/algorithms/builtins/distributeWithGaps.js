@@ -46,5 +46,32 @@ function distributeWithGaps(total, count, gap) {
             excess -= take;
         }
     }
+    // Final boundary clamping: sizes + gaps must never exceed total
+    let finalSum = totalGaps;
+    for (let i = 0; i < count; i++) finalSum += sizes[i];
+    if (finalSum > total) {
+        const sizeOnly = Math.max(0, total - totalGaps);
+        let currentSizeSum = 0;
+        for (let i = 0; i < count; i++) currentSizeSum += sizes[i];
+        if (currentSizeSum > 0) {
+            for (let i = 0; i < count; i++) {
+                sizes[i] = Math.max(1, Math.floor(sizes[i] * sizeOnly / currentSizeSum));
+            }
+        }
+        // Correct any remaining overflow from Math.max(1, ...) floors
+        let correctedSum = 0;
+        for (let i = 0; i < count; i++) correctedSum += sizes[i];
+        let overshoot = correctedSum + totalGaps - total;
+        while (overshoot > 0) {
+            let maxIdx = -1;
+            for (let i = 0; i < count; i++) {
+                if (sizes[i] > 1 && (maxIdx < 0 || sizes[i] > sizes[maxIdx])) maxIdx = i;
+            }
+            if (maxIdx < 0) break;
+            var take2 = Math.min(overshoot, sizes[maxIdx] - 1);
+            sizes[maxIdx] -= take2;
+            overshoot -= take2;
+        }
+    }
     return sizes;
 }

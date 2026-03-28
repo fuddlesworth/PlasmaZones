@@ -9,6 +9,7 @@
  * Port of DwindleAlgorithm::calculateZones core logic.
  */
 function dwindleLayout(area, count, splitRatio, innerGap, minSizes) {
+    if (count <= 0) return [];
     splitRatio = Math.min(Math.max(splitRatio, PZ_MIN_SPLIT), PZ_MAX_SPLIT);
     const cumMinDims = computeCumulativeMinDims(count, minSizes, innerGap);
     const remainingMinW = cumMinDims.minW;
@@ -16,6 +17,43 @@ function dwindleLayout(area, count, splitRatio, innerGap, minSizes) {
     let remaining = {x: area.x, y: area.y, width: area.width, height: area.height};
     let splitVertical = true;
     const zones = [];
+
+    // Split along a single axis, returning the window size and new remaining rect,
+    // or null if the content is too small to split.
+    // axis: 'w' (vertical split on width) or 'h' (horizontal split on height)
+    function trySplit(axis, i) {
+        var isWidth = (axis === 'w');
+        var totalDim = isWidth ? remaining.width : remaining.height;
+        var contentDim = totalDim - innerGap;
+        if (contentDim < 2) return null;
+        var windowDim = Math.floor(contentDim * splitRatio);
+        var minDimArr = isWidth ? remainingMinW : remainingMinH;
+        var minProp = isWidth ? 'w' : 'h';
+        if (minSizes && minSizes.length > 0 && i < minSizes.length
+            && minSizes[i][minProp] > 0) {
+            windowDim = Math.max(windowDim, minSizes[i][minProp]);
+        }
+        if (minSizes && minSizes.length > 0 && minDimArr[i + 1] > 0) {
+            windowDim = Math.min(windowDim, contentDim - minDimArr[i + 1]);
+        }
+        windowDim = Math.max(1, Math.min(windowDim, contentDim - 1));
+        var zone;
+        var newRemaining;
+        if (isWidth) {
+            zone = {x: remaining.x, y: remaining.y,
+                width: windowDim, height: remaining.height};
+            newRemaining = {x: remaining.x + windowDim + innerGap, y: remaining.y,
+                width: contentDim - windowDim, height: remaining.height};
+        } else {
+            zone = {x: remaining.x, y: remaining.y,
+                width: remaining.width, height: windowDim};
+            newRemaining = {x: remaining.x,
+                y: remaining.y + windowDim + innerGap,
+                width: remaining.width, height: contentDim - windowDim};
+        }
+        return {zone: zone, newRemaining: newRemaining};
+    }
+
     for (let i = 0; i < count; i++) {
         if (i === count - 1 || remaining.width < PZ_MIN_ZONE_SIZE
             || remaining.height < PZ_MIN_ZONE_SIZE
@@ -26,53 +64,15 @@ function dwindleLayout(area, count, splitRatio, innerGap, minSizes) {
             appendGracefulDegradation(zones, remaining, count - i - 1, innerGap);
             break;
         } else {
-            if (splitVertical) {
-                const contentWidth = remaining.width - innerGap;
-                let windowWidth = Math.floor(contentWidth * splitRatio);
-                if (minSizes && minSizes.length > 0 && i < minSizes.length
-                    && minSizes[i].w > 0) {
-                    windowWidth = Math.max(windowWidth, minSizes[i].w);
-                }
-                if (minSizes && minSizes.length > 0 && remainingMinW[i + 1] > 0) {
-                    windowWidth = Math.min(windowWidth, contentWidth - remainingMinW[i + 1]);
-                }
-                if (contentWidth < 2) {
-                    // Cannot split further; give full width and degrade remaining
-                    zones.push({x: remaining.x, y: remaining.y,
-                        width: remaining.width, height: remaining.height});
-                    appendGracefulDegradation(zones, remaining, count - i - 1, innerGap);
-                    break;
-                }
-                windowWidth = Math.max(1, Math.min(windowWidth, contentWidth - 1));
+            var result = trySplit(splitVertical ? 'w' : 'h', i);
+            if (!result) {
                 zones.push({x: remaining.x, y: remaining.y,
-                    width: windowWidth, height: remaining.height});
-                remaining = {x: remaining.x + windowWidth + innerGap, y: remaining.y,
-                    width: contentWidth - windowWidth, height: remaining.height};
-            } else {
-                const contentHeight = remaining.height - innerGap;
-                let windowHeight = Math.floor(contentHeight * splitRatio);
-                if (minSizes && minSizes.length > 0 && i < minSizes.length
-                    && minSizes[i].h > 0) {
-                    windowHeight = Math.max(windowHeight, minSizes[i].h);
-                }
-                if (minSizes && minSizes.length > 0 && remainingMinH[i + 1] > 0) {
-                    windowHeight = Math.min(windowHeight,
-                        contentHeight - remainingMinH[i + 1]);
-                }
-                if (contentHeight < 2) {
-                    // Cannot split further; give full height and degrade remaining
-                    zones.push({x: remaining.x, y: remaining.y,
-                        width: remaining.width, height: remaining.height});
-                    appendGracefulDegradation(zones, remaining, count - i - 1, innerGap);
-                    break;
-                }
-                windowHeight = Math.max(1, Math.min(windowHeight, contentHeight - 1));
-                zones.push({x: remaining.x, y: remaining.y,
-                    width: remaining.width, height: windowHeight});
-                remaining = {x: remaining.x,
-                    y: remaining.y + windowHeight + innerGap,
-                    width: remaining.width, height: contentHeight - windowHeight};
+                    width: remaining.width, height: remaining.height});
+                appendGracefulDegradation(zones, remaining, count - i - 1, innerGap);
+                break;
             }
+            zones.push(result.zone);
+            remaining = result.newRemaining;
             splitVertical = !splitVertical;
         }
     }

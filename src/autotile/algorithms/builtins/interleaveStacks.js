@@ -31,7 +31,6 @@ function buildStackIsLeft(stackCount, leftCount, rightCount) {
             // Both counts exhausted — should not happen with correct inputs;
             // default to left to avoid undefined behavior
             stackIsLeft.push(true);
-            li++;
         }
     }
     return stackIsLeft;

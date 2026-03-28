@@ -54,13 +54,31 @@ function calculateZones(params) {
         }
     }
 
+    // Degenerate gap: if gaps consume all available space, fall back to equal-size without gaps
+    const colGapsTotal = (cols - 1) * gap;
+    const rowGapsTotal = (rows - 1) * gap;
+
     // Calculate column widths and row heights
-    const columnWidths = (minSizes.length === 0)
-        ? distributeWithGaps(area.width, cols, gap)
-        : distributeWithMinSizes(area.width, cols, gap, colMinWidths);
-    const rowHeights = (minSizes.length === 0)
-        ? distributeWithGaps(area.height, rows, gap)
-        : distributeWithMinSizes(area.height, rows, gap, rowMinHeights);
+    let columnWidths;
+    if (colGapsTotal >= area.width) {
+        const equalW = Math.floor(area.width / cols);
+        columnWidths = [];
+        for (let c = 0; c < cols; c++) columnWidths.push(Math.max(1, equalW));
+    } else {
+        columnWidths = (minSizes.length === 0)
+            ? distributeWithGaps(area.width, cols, gap)
+            : distributeWithMinSizes(area.width, cols, gap, colMinWidths);
+    }
+    let rowHeights;
+    if (rowGapsTotal >= area.height) {
+        const equalH = Math.floor(area.height / rows);
+        rowHeights = [];
+        for (let r = 0; r < rows; r++) rowHeights.push(Math.max(1, equalH));
+    } else {
+        rowHeights = (minSizes.length === 0)
+            ? distributeWithGaps(area.height, rows, gap)
+            : distributeWithMinSizes(area.height, rows, gap, rowMinHeights);
+    }
 
     // Pre-compute column X positions
     const colX = [area.x];
@@ -91,9 +109,16 @@ function calculateZones(params) {
                     lastRowMinWidths.push((idx < minSizes.length && minSizes[idx].w > 0) ? minSizes[idx].w : 0);
                 }
             }
-            const lastRowWidths = (lastRowMinWidths.length === 0)
-                ? distributeWithGaps(area.width, windowsInThisRow, gap)
-                : distributeWithMinSizes(area.width, windowsInThisRow, gap, lastRowMinWidths);
+            let lastRowWidths;
+            if ((windowsInThisRow - 1) * gap >= area.width) {
+                const equalW = Math.floor(area.width / windowsInThisRow);
+                lastRowWidths = [];
+                for (let k = 0; k < windowsInThisRow; k++) lastRowWidths.push(Math.max(1, equalW));
+            } else {
+                lastRowWidths = (lastRowMinWidths.length === 0)
+                    ? distributeWithGaps(area.width, windowsInThisRow, gap)
+                    : distributeWithMinSizes(area.width, windowsInThisRow, gap, lastRowMinWidths);
+            }
             let lastRowX = area.x;
             for (let j = 0; j < windowsInThisRow; j++) {
                 zones.push({x: lastRowX, y: rowY[row], width: lastRowWidths[j], height: rowHeights[row]});

@@ -37,6 +37,20 @@
 function renderPanel(zones, startX, startY, panelW, panelH, count, gap, horizontal) {
     if (count <= 0) return;
     const totalSize = horizontal ? panelW : panelH;
+
+    // Degenerate gap: if gaps consume all available panel dimension, equal-split without gaps
+    if ((count - 1) * gap >= totalSize) {
+        const equalSize = Math.max(1, Math.floor(totalSize / count));
+        for (let i = 0; i < count; i++) {
+            if (horizontal) {
+                zones.push({ x: startX, y: startY, width: equalSize, height: panelH });
+            } else {
+                zones.push({ x: startX, y: startY, width: panelW, height: equalSize });
+            }
+        }
+        return;
+    }
+
     const slots = distributeEvenly(horizontal ? startX : startY, totalSize, count, gap);
     for (let i = 0; i < slots.length; i++) {
         if (horizontal) {

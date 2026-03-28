@@ -415,6 +415,69 @@ private Q_SLOTS:
     // Frozen globals sync test — verify builtins are immutable in sandbox
     // =========================================================================
 
+    // =========================================================================
+    // Zero windows sweep — every algorithm must return empty list for count=0
+    // =========================================================================
+
+    void testAllAlgorithms_zeroWindows()
+    {
+        TilingState state(QStringLiteral("test"));
+        for (const auto& id : allAlgoIds()) {
+            auto* algo = AlgorithmRegistry::instance()->algorithm(id);
+            auto zones = algo->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+            QVERIFY2(zones.isEmpty(),
+                     qPrintable(QStringLiteral("Algorithm '%1' returned %2 zones for windowCount=0, expected 0")
+                                    .arg(id)
+                                    .arg(zones.size())));
+        }
+    }
+
+    // =========================================================================
+    // Single window sweep — every algorithm must return valid zone(s)
+    // =========================================================================
+
+    void testAllAlgorithms_singleWindow()
+    {
+        TilingState state(QStringLiteral("test"));
+        for (const auto& id : allAlgoIds()) {
+            auto* algo = AlgorithmRegistry::instance()->algorithm(id);
+            auto zones = algo->calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+
+            // Non-overlapping algorithms must return exactly 1 zone;
+            // overlapping algorithms (monocle, cascade, stair, paper, horizontal-deck)
+            // may return 1 or more.
+            if (!algo->producesOverlappingZones()) {
+                QVERIFY2(
+                    zones.size() == 1,
+                    qPrintable(QStringLiteral("Algorithm '%1' (non-overlapping) returned %2 zones for windowCount=1")
+                                   .arg(id)
+                                   .arg(zones.size())));
+            } else {
+                QVERIFY2(zones.size() >= 1,
+                         qPrintable(QStringLiteral("Algorithm '%1' returned %2 zones for windowCount=1, expected >= 1")
+                                        .arg(id)
+                                        .arg(zones.size())));
+            }
+
+            // All zones must have positive dimensions and be within bounds
+            for (int i = 0; i < zones.size(); ++i) {
+                QVERIFY2(zones[i].width() > 0 && zones[i].height() > 0,
+                         qPrintable(QStringLiteral("Algorithm '%1' zone %2 has non-positive dimension (%3x%4)")
+                                        .arg(id)
+                                        .arg(i)
+                                        .arg(zones[i].width())
+                                        .arg(zones[i].height())));
+            }
+            QVERIFY2(
+                allWithinBounds(zones, m_screenGeometry),
+                qPrintable(QStringLiteral("Algorithm '%1' zone(s) exceed screen bounds for windowCount=1").arg(id)));
+        }
+    }
+
+    // =========================================================================
+    // Frozen globals sync test — verify builtins are immutable in sandbox
+    // =========================================================================
+
     void testFrozenGlobals_builtinsCannotBeOverwritten()
     {
         // Use a known algorithm to verify that injected builtins are frozen.

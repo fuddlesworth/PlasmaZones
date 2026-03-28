@@ -16,11 +16,9 @@
  * @param {string|number} [rightHeight='master'] - Right column height: 'master' or pixel value
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
-function lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rightHeight) {
+function lShapeLayout(area, count, gap, splitRatio, distribute = 'alternate', bottomWidth = 'master', rightHeight = 'master') {
+    if (count <= 0) return [];
     splitRatio = Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, splitRatio));
-    if (distribute === undefined) distribute = 'alternate';
-    if (bottomWidth === undefined) bottomWidth = 'master';
-    if (rightHeight === undefined) rightHeight = 'master';
     const masterW = Math.max(1, Math.floor(area.width * splitRatio - gap / 2));
     const masterH = Math.max(1, Math.floor(area.height * splitRatio - gap / 2));
     const zones = [{ x: area.x, y: area.y, width: masterW, height: masterH }];

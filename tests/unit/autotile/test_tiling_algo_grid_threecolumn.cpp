@@ -16,6 +16,23 @@
 using namespace PlasmaZones;
 using namespace PlasmaZones::TestHelpers;
 
+/**
+ * @brief Unit tests for grid, three-column, columns, rows, BSP, dwindle,
+ *        and master-stack tiling algorithms.
+ *
+ * Despite the file name (test_tiling_algo_grid_threecolumn), this file covers
+ * a broader set of algorithms:
+ *   - grid:          layout, gaps, metadata, zero/single/many windows
+ *   - three-column:  center-master layout, interleaved filling, gaps, offsets
+ *   - columns:       zero-window, single-zone, gap-aware tests
+ *   - rows:          zero-window, gap-aware tests
+ *   - bsp:           negative-content-width edge case
+ *   - dwindle:       gap-exceeds-remaining edge case
+ *   - master-stack:  gap-aware layout, unsatisfiable minWidths
+ *
+ * The file name is kept for backwards compatibility with existing CI
+ * configurations and CMakeLists.txt references.
+ */
 class TestTilingAlgoGridThreeColumn : public QObject
 {
     Q_OBJECT

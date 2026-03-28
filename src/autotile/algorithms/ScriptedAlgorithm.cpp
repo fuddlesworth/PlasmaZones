@@ -10,6 +10,7 @@
 #include "core/constants.h"
 #include "core/logging.h"
 #include "pz_i18n.h"
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QJSEngine>
@@ -70,6 +71,10 @@ ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
     , m_engine(new QJSEngine(this))
     , m_watchdog(std::make_shared<WatchdogContext>())
 {
+    // ScriptedAlgorithmJsBuiltins uses static lazy initialization (function-local
+    // statics) that is thread-safe for first-call but not for concurrent QJSEngine
+    // evaluation. Enforce the single-thread contract.
+    Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
     m_watchdog->engine = m_engine;
     m_watchdog->watchdogThread = std::thread([ctx = m_watchdog]() {
         while (true) {
@@ -355,7 +360,10 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         QLatin1String("extractRegionMaxMin"),
         QLatin1String("fillArea"),
         QLatin1String("masterStackLayout"),
-        QLatin1String("MAX_TREE_DEPTH"), // from applyTreeGeometry (const, but freeze for defense-in-depth)
+        QLatin1String("MAX_TREE_DEPTH"), // from applyTreeGeometry (declared with `var` so it's a
+        // freezable global property; `const` would be block-scoped
+        // and invisible to Object.defineProperty on `this`)
+        QLatin1String("_extractMinDims"), // internal helper from extractMinDims (used by extractMinWidths/Heights)
     };
     for (const auto& name : frozenGlobals) {
         m_engine->evaluate(

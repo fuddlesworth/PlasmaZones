@@ -11,39 +11,36 @@
 function appendGracefulDegradation(zones, remaining, leftover, innerGap) {
     if (zones.length === 0) return;
     if (leftover <= 0) return;
+
+    // Helper: degrade along a single axis.
+    // primaryPos/primarySize: the axis we distribute along (x/width or y/height)
+    // secondaryPos/secondarySize: the cross-axis (y/height or x/width)
+    // buildZone(pos, size): returns a zone rect from primary position+size
+    function degradeAxis(primarySize, primaryPos, buildZone) {
+        if (primarySize <= 0) return;
+        var maxFit = Math.max(1, Math.floor(primarySize / PZ_MIN_ZONE_SIZE));
+        var fitCount = Math.min(leftover + 1, maxFit);
+        var sizes = distributeWithGaps(primarySize, fitCount, innerGap);
+        if (sizes.length === 0) return;
+        zones[zones.length - 1] = buildZone(primaryPos, sizes[0]);
+        var cursor = primaryPos + sizes[0] + innerGap;
+        for (var j = 1; j < fitCount; j++) {
+            zones.push(buildZone(cursor, sizes[j]));
+            cursor += sizes[j] + innerGap;
+        }
+        for (var j2 = fitCount; j2 <= leftover; j2++) {
+            var last = zones[zones.length - 1];
+            zones.push({x: last.x, y: last.y, width: last.width, height: last.height});
+        }
+    }
+
     if (remaining.width >= remaining.height) {
-        if (remaining.width <= 0) return;
-        const maxFit = Math.max(1, Math.floor(remaining.width / PZ_MIN_ZONE_SIZE));
-        const fitCount = Math.min(leftover + 1, maxFit);
-        const widths = distributeWithGaps(remaining.width, fitCount, innerGap);
-        if (widths.length === 0) return;
-        zones[zones.length - 1] = {x: remaining.x, y: remaining.y,
-            width: widths[0], height: remaining.height};
-        let cx = remaining.x + widths[0] + innerGap;
-        for (let j = 1; j < fitCount; j++) {
-            zones.push({x: cx, y: remaining.y, width: widths[j], height: remaining.height});
-            cx += widths[j] + innerGap;
-        }
-        for (let j = fitCount; j <= leftover; j++) {
-            zones.push({x: zones[zones.length-1].x, y: zones[zones.length-1].y,
-                width: zones[zones.length-1].width, height: zones[zones.length-1].height});
-        }
+        degradeAxis(remaining.width, remaining.x, function(pos, size) {
+            return {x: pos, y: remaining.y, width: size, height: remaining.height};
+        });
     } else {
-        if (remaining.height <= 0) return;
-        const maxFit = Math.max(1, Math.floor(remaining.height / PZ_MIN_ZONE_SIZE));
-        const fitCount = Math.min(leftover + 1, maxFit);
-        const heights = distributeWithGaps(remaining.height, fitCount, innerGap);
-        if (heights.length === 0) return;
-        zones[zones.length - 1] = {x: remaining.x, y: remaining.y,
-            width: remaining.width, height: heights[0]};
-        let cy = remaining.y + heights[0] + innerGap;
-        for (let j = 1; j < fitCount; j++) {
-            zones.push({x: remaining.x, y: cy, width: remaining.width, height: heights[j]});
-            cy += heights[j] + innerGap;
-        }
-        for (let j = fitCount; j <= leftover; j++) {
-            zones.push({x: zones[zones.length-1].x, y: zones[zones.length-1].y,
-                width: zones[zones.length-1].width, height: zones[zones.length-1].height});
-        }
+        degradeAxis(remaining.height, remaining.y, function(pos, size) {
+            return {x: remaining.x, y: pos, width: remaining.width, height: size};
+        });
     }
 }

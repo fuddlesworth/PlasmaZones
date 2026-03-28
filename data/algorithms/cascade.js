@@ -38,6 +38,8 @@ function calculateZones(params) {
     // but cascade needs tighter bounds)
     const offsetRatio = Math.max(0.02, Math.min(0.4, params.splitRatio));
 
+    // Initial minimum of 20px per step; may be reduced by maxOffset clamp below
+    // when window minimum sizes constrain the available cascade space.
     let offsetX = Math.max(20, Math.floor(area.width * offsetRatio / (count - 1)));
     let offsetY = Math.max(20, Math.floor(area.height * offsetRatio / (count - 1)));
 

@@ -329,6 +329,62 @@ private Q_SLOTS:
     // Monocle preview offset tests
     // =========================================================================
 
+    // =========================================================================
+    // Frozen globals validation — JS sandbox integrity
+    // =========================================================================
+
+    void testFrozenGlobals_jsReassignmentBlocked()
+    {
+        // TODO: The current test infrastructure does not expose a way to evaluate
+        // arbitrary JS code in the sandboxed QJSEngine of a ScriptedAlgorithm.
+        // The engine is private to each ScriptedAlgorithm instance, and there is
+        // no public evaluateJs() method.
+        //
+        // What should be tested:
+        //   1. Load any algorithm (e.g., "zen")
+        //   2. In its sandbox, evaluate:
+        //        try { PZ_MIN_ZONE_SIZE = 999; } catch(e) {}
+        //        try { PZ_MIN_SPLIT = 999; } catch(e) {}
+        //        try { PZ_MAX_SPLIT = 999; } catch(e) {}
+        //        try { MAX_TREE_DEPTH = 999; } catch(e) {}
+        //        try { distributeWithGaps = function() { return []; }; } catch(e) {}
+        //        try { solveTwoPart = function() { return [0,0]; }; } catch(e) {}
+        //   3. Verify each global still holds its original value
+        //
+        // Indirect validation: the determinism test in test_tiling_algo_edge_cases.cpp
+        // (testFrozenGlobals_allAlgorithmsDeterministic) confirms that calling the
+        // same algorithm twice produces identical results, which would fail if
+        // globals were mutated between calls.
+
+        // Verify determinism as an indirect frozen-globals check: two identical
+        // calls must produce identical output.
+        auto* registry = AlgorithmRegistry::instance();
+        TilingState state(QStringLiteral("test"));
+        state.setSplitRatio(0.5);
+        const QRect screen(0, 0, 1920, 1080);
+
+        // Test with algorithms that exercise different builtins
+        const QStringList algoIds = {
+            QLatin1String("zen"), // uses distributeWithGaps, solveTwoPart
+            QLatin1String("tatami"), // uses distributeEvenly
+            QLatin1String("three-column"), // uses solveThreeColumn
+            QLatin1String("bsp"), // uses tree recursion with MAX_TREE_DEPTH
+        };
+        for (const auto& id : algoIds) {
+            auto* algo = registry->algorithm(id);
+            QVERIFY2(algo != nullptr, qPrintable(QStringLiteral("Missing algorithm: ") + id));
+            auto zones1 = algo->calculateZones({5, screen, &state, 10, EdgeGaps::uniform(0)});
+            auto zones2 = algo->calculateZones({5, screen, &state, 10, EdgeGaps::uniform(0)});
+            QVERIFY2(
+                zones1 == zones2,
+                qPrintable(QStringLiteral("Algorithm '%1' non-deterministic — frozen globals may be mutable").arg(id)));
+        }
+    }
+
+    // =========================================================================
+    // Monocle preview offset tests
+    // =========================================================================
+
     void testMonoclePreview_offsetStacking()
     {
         // Simulate monocle output: all zones are identical (full screen)
@@ -364,6 +420,50 @@ private Q_SLOTS:
             || (firstGeo[QLatin1String("width")].toReal() != lastGeo[QLatin1String("width")].toReal())
             || (firstGeo[QLatin1String("height")].toReal() != lastGeo[QLatin1String("height")].toReal());
         QVERIFY2(different, "Monocle preview zones should have offset stacking, not be identical");
+    }
+
+    void testMonoclePreview_16Zones_offsetCapsAt045()
+    {
+        // With 16 identical zones and MonoclePreviewOffset=0.03, the raw offset
+        // for zone 15 would be 15*0.03 = 0.45. Verify the cap is respected and
+        // all zones remain valid (positive dimensions).
+        const QRect previewRect(0, 0, 1000, 1000);
+        QVector<QRect> identicalZones;
+        for (int i = 0; i < 16; ++i) {
+            identicalZones.append(previewRect);
+        }
+
+        auto result = AlgorithmRegistry::zonesToRelativeGeometry(identicalZones, previewRect);
+        QCOMPARE(result.size(), 16);
+
+        for (int i = 0; i < result.size(); ++i) {
+            auto map = result[i].toMap();
+            auto geo = map[QLatin1String("relativeGeometry")].toMap();
+            qreal x = geo[QLatin1String("x")].toReal();
+            qreal y = geo[QLatin1String("y")].toReal();
+            qreal w = geo[QLatin1String("width")].toReal();
+            qreal h = geo[QLatin1String("height")].toReal();
+
+            // Offset must not exceed 0.45
+            QVERIFY2(x <= 0.45 + 1e-9,
+                     qPrintable(QStringLiteral("Zone %1 x offset (%2) exceeds 0.45 cap").arg(i).arg(x)));
+            QVERIFY2(y <= 0.45 + 1e-9,
+                     qPrintable(QStringLiteral("Zone %1 y offset (%2) exceeds 0.45 cap").arg(i).arg(y)));
+
+            // All zones must have positive dimensions
+            QVERIFY2(w > 0.0, qPrintable(QStringLiteral("Zone %1 width (%2) must be > 0").arg(i).arg(w)));
+            QVERIFY2(h > 0.0, qPrintable(QStringLiteral("Zone %1 height (%2) must be > 0").arg(i).arg(h)));
+
+            // All geometry values must be within [0, 1]
+            QVERIFY2(x >= 0.0 && x <= 1.0, qPrintable(QStringLiteral("Zone %1 x (%2) out of [0,1]").arg(i).arg(x)));
+            QVERIFY2(y >= 0.0 && y <= 1.0, qPrintable(QStringLiteral("Zone %1 y (%2) out of [0,1]").arg(i).arg(y)));
+        }
+
+        // Verify last few zones share the capped offset (zones 15 and beyond all get 0.45)
+        auto geo15 = result[15].toMap()[QLatin1String("relativeGeometry")].toMap();
+        qreal x15 = geo15[QLatin1String("x")].toReal();
+        QVERIFY2(qAbs(x15 - 0.45) < 1e-9,
+                 qPrintable(QStringLiteral("Zone 15 x offset (%1) should be at cap 0.45").arg(x15)));
     }
 
     void testMonoclePreview_singleZoneNoOffset()

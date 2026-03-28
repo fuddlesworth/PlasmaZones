@@ -13,8 +13,8 @@
  * @param {boolean} [horizontal=false] - false=vertical peek (width axis), true=horizontal peek (height axis)
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
-function deckLayout(area, count, focusedFraction, horizontal) {
-    if (horizontal === undefined) horizontal = false;
+function deckLayout(area, count, focusedFraction, horizontal = false) {
+    if (count <= 0) return [];
     const axisSize = horizontal ? area.height : area.width;
     const bgCount = count - 1;
     const focusedSize = Math.max(1, Math.floor(axisSize * focusedFraction));

@@ -16,10 +16,13 @@
  */
 
 // Must match AutotileDefaults::MaxRuntimeTreeDepth in core/constants.h
-const MAX_TREE_DEPTH = 50;
+// Use var so the property attaches to the global object and can be frozen
+// by Object.defineProperty in the C++ sandbox (const is block-scoped in V4).
+var MAX_TREE_DEPTH = 50;
 
 function applyTreeGeometry(node, rect, gap, _depth) {
-    if ((_depth || 0) > MAX_TREE_DEPTH) return [];
+    _depth = _depth || 0;
+    if (_depth > MAX_TREE_DEPTH) return [];
     if (!node) return [];
     if (node.windowId !== undefined && node.windowId !== '') {
         return [{x: rect.x, y: rect.y, width: rect.width, height: rect.height}];
@@ -33,28 +36,28 @@ function applyTreeGeometry(node, rect, gap, _depth) {
     if (node.horizontal) {
         content = rect.height - gap;
         if (content <= 0) {
-            zones = zones.concat(applyTreeGeometry(node.first, rect, 0, (_depth || 0) + 1));
-            zones = zones.concat(applyTreeGeometry(node.second, rect, 0, (_depth || 0) + 1));
+            zones = zones.concat(applyTreeGeometry(node.first, rect, 0, _depth + 1));
+            zones = zones.concat(applyTreeGeometry(node.second, rect, 0, _depth + 1));
         } else {
             const h1 = Math.floor(content * ratio);
             const h2 = content - h1;
             zones = zones.concat(applyTreeGeometry(node.first,
-                {x: rect.x, y: rect.y, width: rect.width, height: h1}, gap, (_depth || 0) + 1));
+                {x: rect.x, y: rect.y, width: rect.width, height: h1}, gap, _depth + 1));
             zones = zones.concat(applyTreeGeometry(node.second,
-                {x: rect.x, y: rect.y + h1 + gap, width: rect.width, height: h2}, gap, (_depth || 0) + 1));
+                {x: rect.x, y: rect.y + h1 + gap, width: rect.width, height: h2}, gap, _depth + 1));
         }
     } else {
         content = rect.width - gap;
         if (content <= 0) {
-            zones = zones.concat(applyTreeGeometry(node.first, rect, 0, (_depth || 0) + 1));
-            zones = zones.concat(applyTreeGeometry(node.second, rect, 0, (_depth || 0) + 1));
+            zones = zones.concat(applyTreeGeometry(node.first, rect, 0, _depth + 1));
+            zones = zones.concat(applyTreeGeometry(node.second, rect, 0, _depth + 1));
         } else {
             const w1 = Math.floor(content * ratio);
             const w2 = content - w1;
             zones = zones.concat(applyTreeGeometry(node.first,
-                {x: rect.x, y: rect.y, width: w1, height: rect.height}, gap, (_depth || 0) + 1));
+                {x: rect.x, y: rect.y, width: w1, height: rect.height}, gap, _depth + 1));
             zones = zones.concat(applyTreeGeometry(node.second,
-                {x: rect.x + w1 + gap, y: rect.y, width: w2, height: rect.height}, gap, (_depth || 0) + 1));
+                {x: rect.x + w1 + gap, y: rect.y, width: w2, height: rect.height}, gap, _depth + 1));
         }
     }
     return zones;

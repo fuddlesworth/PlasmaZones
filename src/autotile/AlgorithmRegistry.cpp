@@ -116,7 +116,13 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
     int oldIndex = m_registrationOrder.indexOf(id);
     auto* old = removeAlgorithmInternal(id);
     if (old && old != algorithm) {
-        old->deleteLater();
+        // Use synchronous delete (not deleteLater) to match cleanup() semantics.
+        // The old algorithm is no longer referenced — it was just removed from
+        // m_algorithms — so immediate deletion is safe. Using deleteLater() here
+        // would risk a double-free if cleanup() runs in the same event loop cycle
+        // (aboutToQuit fires before the deferred-delete queue drains).
+        old->setParent(nullptr);
+        delete old;
     }
 
     // Take ownership
@@ -160,7 +166,11 @@ bool AlgorithmRegistry::unregisterAlgorithm(const QString& id)
         return false;
     }
 
-    algorithm->deleteLater();
+    // Use synchronous delete (not deleteLater) to match cleanup() and
+    // registerAlgorithm() semantics — prevents double-free if cleanup()
+    // runs before the deferred-delete queue drains.
+    algorithm->setParent(nullptr);
+    delete algorithm;
     Q_EMIT algorithmUnregistered(id);
     return true;
 }
