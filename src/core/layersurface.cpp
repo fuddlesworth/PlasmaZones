@@ -59,7 +59,7 @@ void LayerSurface::setLayer(Layer layer)
     Q_EMIT layerChanged();
 }
 
-Layer LayerSurface::layer() const
+LayerSurface::Layer LayerSurface::layer() const
 {
     return m_layer;
 }

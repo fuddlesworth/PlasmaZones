@@ -8,14 +8,14 @@
 #include <QScreen>
 #include <QWindow>
 
-namespace PlasmaZones {
+#include "plasmazones_export.h"
 
-class LayerSurfacePrivate;
+namespace PlasmaZones {
 
 /// Drop-in replacement for LayerShellQt::Window backed by a custom QPA
 /// shell integration plugin that speaks zwlr_layer_shell_v1 directly.
 /// No KDE dependency required.
-class LayerSurface : public QObject
+class PLASMAZONES_EXPORT LayerSurface : public QObject
 {
     Q_OBJECT
 

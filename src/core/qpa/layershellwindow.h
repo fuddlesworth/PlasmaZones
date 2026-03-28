@@ -4,7 +4,11 @@
 #pragma once
 
 #include <QtWaylandClient/private/qwaylandshellsurface_p.h>
+extern "C" {
+#define namespace namespace_
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
+#undef namespace
+}
 
 namespace PlasmaZones {
 
@@ -29,12 +33,14 @@ public:
     // Apply current properties from LayerSurface → protocol
     void applyProperties();
 
-private:
+    // Public for C callback struct initialization
     static void handleConfigure(void* data, struct zwlr_layer_surface_v1* surface, uint32_t serial, uint32_t width,
                                 uint32_t height);
     static void handleClosed(void* data, struct zwlr_layer_surface_v1* surface);
 
+private:
     LayerShellIntegration* m_integration = nullptr;
+    QtWaylandClient::QWaylandWindow* m_waylandWindow = nullptr;
     struct zwlr_layer_surface_v1* m_layerSurface = nullptr;
     struct wl_output* m_output = nullptr;
     bool m_configured = false;

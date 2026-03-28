@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 2.4.7 LANGUAGES CXX)
+project(PlasmaZones VERSION 2.4.7 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -69,7 +69,7 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qml_autoge
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qmlplugin_autogen/include)
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qmlplugin_init_autogen/include)
 
-# KDE/Qt requirements (Plasma 6.6 target: KF 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6)
+# KDE/Qt requirements (Plasma 6.6 target: KF 6.6, Qt 6.6, KWin 6.6)
 set(QT_MIN_VERSION "6.6.0")
 set(KF_MIN_VERSION "6.6.0")
 
@@ -145,10 +145,13 @@ else()
     message(STATUS "Building WITHOUT KDE Frameworks (portable Qt-only mode)")
 endif()
 
-# LayerShellQt for Wayland overlay support (REQUIRED, 6.6+ for setScreen/wantsToBeOnActiveScreen API)
-# PlasmaZones requires Wayland with LayerShellQt for proper overlay functionality.
+# Wayland layer-shell support (direct zwlr_layer_shell_v1 protocol, no KDE dependency)
+# PlasmaZones requires Wayland for proper overlay functionality.
 # X11 support has been removed as of v1.2.0 - Plasma 6 is Wayland-first.
-find_package(LayerShellQt 6.6 REQUIRED)
+find_package(Wayland REQUIRED COMPONENTS Client)
+find_package(Qt6 REQUIRED COMPONENTS WaylandClient)
+find_package(Qt6WaylandClientPrivate REQUIRED)
+find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
 
 # Systemd user unit directory (fallback if not provided by ECM)
 if(NOT DEFINED KDE_INSTALL_SYSTEMDUSERUNITDIR)

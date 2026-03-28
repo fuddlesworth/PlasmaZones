@@ -4,7 +4,11 @@
 #pragma once
 
 #include <QtWaylandClient/private/qwaylandshellintegration_p.h>
+extern "C" {
+#define namespace namespace_
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
+#undef namespace
+}
 
 namespace PlasmaZones {
 
@@ -32,11 +36,12 @@ public:
     /// Access the singleton instance (available after initialize()).
     static LayerShellIntegration* instance();
 
-private:
+    // Public for C callback struct initialization
     static void registryHandler(void* data, struct wl_registry* registry, uint32_t id, const char* interface,
                                 uint32_t version);
     static void registryRemoveHandler(void* data, struct wl_registry* registry, uint32_t id);
 
+private:
     struct zwlr_layer_shell_v1* m_layerShell = nullptr;
     struct wl_registry* m_registry = nullptr;
     uint32_t m_layerShellId = 0;

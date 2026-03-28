@@ -174,10 +174,10 @@ target_link_libraries(test_zone_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Qui
 add_test(NAME test_zone_shader_item COMMAND test_zone_shader_item)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ui/ — Overlay Helpers Tests — need Qt6::Quick + LayerShellQt + QGuiApplication
+# ui/ — Overlay Helpers Tests — need Qt6::Quick + QGuiApplication
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_overlay_helpers ui/test_overlay_helpers.cpp)
-target_link_libraries(test_overlay_helpers PRIVATE Qt6::Test Qt6::Core Qt6::Quick LayerShellQt::Interface plasmazones_core)
+target_link_libraries(test_overlay_helpers PRIVATE Qt6::Test Qt6::Core Qt6::Quick plasmazones_core)
 add_test(NAME test_overlay_helpers COMMAND test_overlay_helpers)
 
 # ═══════════════════════════════════════════════════════════════════════════════

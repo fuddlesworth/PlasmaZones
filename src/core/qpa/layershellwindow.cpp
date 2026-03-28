@@ -8,6 +8,7 @@
 #include <QLoggingCategory>
 #include <QtWaylandClient/private/qwaylanddisplay_p.h>
 #include <QtWaylandClient/private/qwaylandscreen_p.h>
+#include <QtWaylandClient/private/qwaylandshellintegration_p.h>
 #include <QtWaylandClient/private/qwaylandwindow_p.h>
 
 Q_LOGGING_CATEGORY(lcLayerShellWindow, "plasmazones.qpa.layershellwindow")
@@ -19,11 +20,12 @@ static const struct zwlr_layer_surface_v1_listener s_layerSurfaceListener = {
     .closed = LayerShellWindow::handleClosed,
 };
 
-LayerShellWindow::LayerShellWindow(LayerShellIntegration* integration, QtWaylandClient::QWaylandWindow* window)
-    : QWaylandShellSurface(window)
+LayerShellWindow::LayerShellWindow(LayerShellIntegration* integration, QtWaylandClient::QWaylandWindow* waylandWindow)
+    : QWaylandShellSurface(waylandWindow)
     , m_integration(integration)
+    , m_waylandWindow(waylandWindow)
 {
-    QWindow* qwindow = window->window();
+    QWindow* qwindow = waylandWindow->window();
 
     // Resolve wl_output from QScreen
     QScreen* targetScreen = qwindow->screen();
@@ -39,7 +41,7 @@ LayerShellWindow::LayerShellWindow(LayerShellIntegration* integration, QtWayland
     QString scope = qwindow->property("_pz_scope").toString();
 
     // Create the layer surface
-    struct wl_surface* wlSurface = QWaylandShellIntegration::wlSurfaceForWindow(window);
+    struct wl_surface* wlSurface = QtWaylandClient::QWaylandShellIntegration::wlSurfaceForWindow(waylandWindow);
     m_layerSurface = zwlr_layer_shell_v1_get_layer_surface(integration->layerShell(), wlSurface, m_output,
                                                            static_cast<uint32_t>(layer), scope.toUtf8().constData());
 
@@ -76,10 +78,7 @@ void LayerShellWindow::applyConfigure()
 void LayerShellWindow::setWindowGeometry(const QRect& rect)
 {
     if (m_layerSurface) {
-        // For layer surfaces, size of 0 means "compositor decides" for that axis.
-        // When anchored to opposing edges, we want 0 (let compositor size us).
-        // Otherwise use the explicit size.
-        QWindow* qwindow = waylandWindow()->window();
+        QWindow* qwindow = m_waylandWindow->window();
         int anchors = qwindow->property("_pz_anchors").toInt();
         bool anchoredH = (anchors & LayerSurface::AnchorLeft) && (anchors & LayerSurface::AnchorRight);
         bool anchoredV = (anchors & LayerSurface::AnchorTop) && (anchors & LayerSurface::AnchorBottom);
@@ -96,7 +95,7 @@ void LayerShellWindow::applyProperties()
         return;
     }
 
-    QWindow* qwindow = waylandWindow()->window();
+    QWindow* qwindow = m_waylandWindow->window();
 
     // Anchors
     int anchors = qwindow->property("_pz_anchors").toInt();
@@ -138,12 +137,15 @@ void LayerShellWindow::handleConfigure(void* data, struct zwlr_layer_surface_v1*
 
     // Resize the Qt window to the compositor-assigned size
     if (width > 0 && height > 0) {
-        QWindow* qwindow = self->waylandWindow()->window();
+        QWindow* qwindow = self->m_waylandWindow->window();
         qwindow->resize(static_cast<int>(width), static_cast<int>(height));
     }
 
-    // Trigger a frame
-    self->waylandWindow()->handleExpose(QRect(0, 0, static_cast<int>(width), static_cast<int>(height)));
+    // Trigger exposure so Qt starts rendering
+    QWindow* qwindow = self->m_waylandWindow->window();
+    if (qwindow) {
+        qwindow->requestUpdate();
+    }
 
     qCDebug(lcLayerShellWindow) << "Configured:" << width << "x" << height;
 }
@@ -154,7 +156,7 @@ void LayerShellWindow::handleClosed(void* data, struct zwlr_layer_surface_v1* su
     auto* self = static_cast<LayerShellWindow*>(data);
     qCDebug(lcLayerShellWindow) << "Layer surface closed by compositor";
 
-    QWindow* qwindow = self->waylandWindow()->window();
+    QWindow* qwindow = self->m_waylandWindow->window();
     if (qwindow) {
         qwindow->close();
     }
