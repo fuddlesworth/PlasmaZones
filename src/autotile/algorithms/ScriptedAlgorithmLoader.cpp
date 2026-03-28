@@ -5,6 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "ScriptedAlgorithm.h"
 #include "core/logging.h"
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -27,9 +28,11 @@ ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(QObject* parent)
 
 ScriptedAlgorithmLoader::~ScriptedAlgorithmLoader()
 {
-    // Guard: during static destruction, AlgorithmRegistry may already be cleaned up.
-    // unregisterAlgorithm() on a cleaned-up registry is a no-op (empty map),
-    // but we skip the loop entirely if the map is empty to avoid unnecessary work.
+    // Guard: during static destruction, AlgorithmRegistry (a Meyer's singleton)
+    // may already be destroyed. QCoreApplication being null is a reliable proxy
+    // for "we are in static destruction" — skip cleanup to avoid dangling pointer.
+    if (!QCoreApplication::instance())
+        return;
     auto* registry = AlgorithmRegistry::instance();
     if (registry->availableAlgorithms().isEmpty())
         return;
@@ -191,6 +194,12 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         // takes ownership of new) — no need to unregister first.
         auto* registry = AlgorithmRegistry::instance();
         algo->setUserScript(isUserDir);
+
+        // Warn when a user script overrides a bundled algorithm ID
+        if (isUserDir && registry->hasAlgorithm(scriptId)) {
+            qCWarning(lcAutotile) << "User script overrides bundled algorithm:" << scriptId << "from=" << fullPath;
+        }
+
         registry->registerAlgorithm(scriptId, algo);
         m_scriptIdToPath[scriptId] = fullPath;
 

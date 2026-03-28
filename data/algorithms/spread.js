@@ -25,6 +25,9 @@ function calculateZones(params) {
     const count = params.windowCount;
     if (count <= 0) return [];
     const area = params.area;
+    if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
+        return fillArea(area, count);
+    }
     const gap = Math.max(0, params.innerGap || 0);
     const splitRatio = params.splitRatio;
     const minSizes = params.minSizes || [];

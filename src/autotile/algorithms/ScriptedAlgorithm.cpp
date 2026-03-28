@@ -246,13 +246,19 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         return false;
     }
 
-    // Inject frozen constants so JS helpers and user scripts can reference them
-    m_engine->evaluate(QStringLiteral("var PZ_MIN_ZONE_SIZE = %1;").arg(MinZoneSizePx),
-                       QStringLiteral("builtin:constants"));
-    m_engine->evaluate(QStringLiteral("var PZ_MIN_SPLIT = %1;").arg(MinSplitRatio),
-                       QStringLiteral("builtin:constants"));
-    m_engine->evaluate(QStringLiteral("var PZ_MAX_SPLIT = %1;").arg(MaxSplitRatio),
-                       QStringLiteral("builtin:constants"));
+    // Inject frozen constants so JS helpers and user scripts can reference them.
+    // Check return values — if the engine is broken these would silently be
+    // undefined and every helper using them would produce NaN.
+    const QJSValue constResult1 = m_engine->evaluate(QStringLiteral("var PZ_MIN_ZONE_SIZE = %1;").arg(MinZoneSizePx),
+                                                     QStringLiteral("builtin:constants"));
+    const QJSValue constResult2 = m_engine->evaluate(QStringLiteral("var PZ_MIN_SPLIT = %1;").arg(MinSplitRatio),
+                                                     QStringLiteral("builtin:constants"));
+    const QJSValue constResult3 = m_engine->evaluate(QStringLiteral("var PZ_MAX_SPLIT = %1;").arg(MaxSplitRatio),
+                                                     QStringLiteral("builtin:constants"));
+    if (constResult1.isError() || constResult2.isError() || constResult3.isError()) {
+        qCWarning(lcAutotile) << "ScriptedAlgorithm: constant injection failed, file=" << filePath;
+        return false;
+    }
 
     // Freeze constants immediately so builtin helper scripts cannot reassign them.
     // The frozenGlobals loop below will re-freeze them (harmless no-op on already-frozen properties).
@@ -373,7 +379,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         QJSValue freezeResult = m_engine->evaluate(
             QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});").arg(name));
         if (freezeResult.isError()) {
-            qWarning() << "Failed to freeze global:" << name << freezeResult.toString();
+            qCWarning(lcAutotile) << "Failed to freeze global:" << name << freezeResult.toString();
         }
     }
 
@@ -753,7 +759,10 @@ void ScriptedAlgorithm::prepareTilingState(TilingState* state) const
     // value from a different algorithm (e.g., MasterStack's 0.6).
     const qreal currentRatio = state->splitRatio();
     const qreal defRatio = defaultSplitRatio();
-    static constexpr qreal SplitRatioHysteresis = 0.05;
+    // Reset split ratio to our default when it still holds a value from a
+    // different algorithm (e.g. MasterStack's 0.6). Small differences within
+    // the hysteresis band are kept so user fine-tuning is not discarded.
+    static constexpr qreal SplitRatioHysteresis = AutotileDefaults::SplitRatioHysteresis;
     if (currentRatio > defRatio + SplitRatioHysteresis || currentRatio < defRatio - SplitRatioHysteresis) {
         state->setSplitRatio(defRatio);
     }

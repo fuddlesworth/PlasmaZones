@@ -281,7 +281,7 @@ QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect>& zo
 
         QVariantMap relGeo;
         if (isMonocle) {
-            const qreal offset = qMin(i * MonoclePreviewOffset, 0.45);
+            const qreal offset = qMin(i * MonoclePreviewOffset, AutotileDefaults::MaxMonoclePreviewOffset);
             relGeo[QLatin1String("x")] = offset;
             relGeo[QLatin1String("y")] = offset;
             relGeo[QLatin1String("width")] = qMax(0.01, 1.0 - offset * 2);
