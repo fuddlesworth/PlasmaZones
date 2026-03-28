@@ -147,23 +147,36 @@ void Daemon::connectDesktopActivity()
         showDesktopSwitchOsd(desktop, currentActivity());
     });
 
-    // Prune stale TilingState entries when desktops are removed
+    // Prune stale TilingState entries and disabled-desktop numbers when desktops are removed
     connect(m_virtualDesktopManager.get(), &VirtualDesktopManager::desktopCountChanged, this, [this](int newCount) {
-        if (!m_autotileEngine) {
-            return;
-        }
-        // Desktop numbers are 1-based. Any state with desktop > newCount is stale.
-        // Iterate the engine's own state map to find stale desktops (avoids
-        // the arbitrary upper bound of the old newCount+20 sweep).
-        QSet<int> staleDesktops;
-        for (auto it = m_autotileEngine->screenStates().constBegin(); it != m_autotileEngine->screenStates().constEnd();
-             ++it) {
-            if (it.key().desktop > newCount) {
-                staleDesktops.insert(it.key().desktop);
+        // Prune stale disabled-desktop entries (desktop numbers > newCount no longer exist).
+        // NOTE: KDE Plasma renumbers desktops when one in the middle is removed (e.g.
+        // removing desktop 2 of 4 shifts 3→2 and 4→3). We only prune out-of-range
+        // entries here; mid-range renumbering would require tracking which desktop was
+        // removed (not available from desktopCountChanged). A future improvement could
+        // use KDE's desktop UUIDs instead of 1-based numbers.
+        if (m_settings) {
+            QStringList disabled = m_settings->disabledDesktops();
+            if (pruneDisabledDesktopEntries(disabled, newCount)) {
+                m_settings->setDisabledDesktops(disabled);
+                m_settings->save();
             }
         }
-        for (int d : staleDesktops) {
-            m_autotileEngine->pruneStatesForDesktop(d);
+
+        if (m_autotileEngine) {
+            // Desktop numbers are 1-based. Any state with desktop > newCount is stale.
+            // Iterate the engine's own state map to find stale desktops (avoids
+            // the arbitrary upper bound of the old newCount+20 sweep).
+            QSet<int> staleDesktops;
+            for (auto it = m_autotileEngine->screenStates().constBegin();
+                 it != m_autotileEngine->screenStates().constEnd(); ++it) {
+                if (it.key().desktop > newCount) {
+                    staleDesktops.insert(it.key().desktop);
+                }
+            }
+            for (int d : staleDesktops) {
+                m_autotileEngine->pruneStatesForDesktop(d);
+            }
         }
         // Prune fallback assignment maps
         pruneContextMapsForDesktop(newCount);
@@ -185,14 +198,26 @@ void Daemon::connectDesktopActivity()
     if (ActivityManager::isAvailable()) {
         m_activityManager->start();
 
-        // Prune stale TilingState entries when activities are added/removed
+        // Prune stale TilingState entries and disabled-activity IDs when activities are added/removed
         connect(m_activityManager.get(), &ActivityManager::activitiesChanged, this, [this]() {
-            if (!m_autotileEngine || !m_activityManager) {
+            if (!m_activityManager) {
                 return;
             }
             const QStringList activities = m_activityManager->activities();
-            m_autotileEngine->pruneStatesForActivities(activities);
             const QSet<QString> validSet(activities.begin(), activities.end());
+
+            // Prune disabled-activity entries that reference removed activities
+            if (m_settings) {
+                QStringList disabled = m_settings->disabledActivities();
+                if (pruneDisabledActivityEntries(disabled, validSet)) {
+                    m_settings->setDisabledActivities(disabled);
+                    m_settings->save();
+                }
+            }
+
+            if (m_autotileEngine) {
+                m_autotileEngine->pruneStatesForActivities(activities);
+            }
             pruneContextMapsForActivities(validSet);
         });
 

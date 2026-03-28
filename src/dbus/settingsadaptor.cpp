@@ -238,6 +238,8 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("overlayDisplayMode")] = QStringLiteral("int");
     REGISTER_STRINGLIST_SETTING("disabledMonitors", disabledMonitors, setDisabledMonitors)
+    REGISTER_STRINGLIST_SETTING("disabledDesktops", disabledDesktops, setDisabledDesktops)
+    REGISTER_STRINGLIST_SETTING("disabledActivities", disabledActivities, setDisabledActivities)
 
     // Appearance settings
     REGISTER_BOOL_SETTING("useSystemColors", useSystemColors, setUseSystemColors)

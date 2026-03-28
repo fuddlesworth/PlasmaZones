@@ -71,7 +71,8 @@ void OverlayService::setSettings(ISettings* settings)
 
                         // Recreate windows with correct type per-screen
                         for (QScreen* screen : screens) {
-                            if (!m_settings || !m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
+                            if (!isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                                                   m_currentActivity)) {
                                 createOverlayWindow(screen);
                                 updateOverlayWindow(screen);
                                 if (wasVisible && m_overlayWindows.value(screen)) {
@@ -89,12 +90,9 @@ void OverlayService::setSettings(ISettings* settings)
                 }
             });
 
-            connect(m_settings, &ISettings::enableAudioVisualizerChanged, this,
-                    &OverlayService::syncCavaState);
-            connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this,
-                    &OverlayService::syncCavaState);
-            connect(m_settings, &ISettings::shaderFrameRateChanged, this,
-                    &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::shaderFrameRateChanged, this, &OverlayService::syncCavaState);
 
             // Hot-reload shaders when files change on disk.
             // ShaderRegistry detects file changes via QFileSystemWatcher and emits

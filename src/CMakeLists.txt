@@ -511,11 +511,6 @@ install(FILES
     DESTINATION ${KDE_INSTALL_SYSTEMDUSERUNITDIR}
 )
 
-# Install KConfig settings file
-install(FILES
-    config/plasmazones.kcfg
-    DESTINATION ${KDE_INSTALL_KCFGDIR}
-)
 
 # Daemon desktop file: use full Exec path so KWin's fetchRestrictedDBusInterfacesFromPid
 # can match the process (it compares executable path to desktop Exec).

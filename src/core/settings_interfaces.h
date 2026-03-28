@@ -7,6 +7,7 @@
 #include "enums.h"
 #include <QString>
 #include <QStringList>
+#include <QSet>
 #include <QColor>
 #include <QVariantList>
 #include <QVariantMap>
@@ -97,6 +98,12 @@ public:
     virtual QStringList disabledMonitors() const = 0;
     virtual void setDisabledMonitors(const QStringList& screenIdOrNames) = 0;
     virtual bool isMonitorDisabled(const QString& screenIdOrName) const = 0;
+    virtual QStringList disabledDesktops() const = 0;
+    virtual void setDisabledDesktops(const QStringList& entries) = 0;
+    virtual bool isDesktopDisabled(const QString& screenIdOrName, int desktop) const = 0;
+    virtual QStringList disabledActivities() const = 0;
+    virtual void setDisabledActivities(const QStringList& entries) = 0;
+    virtual bool isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const = 0;
     virtual QStringList lockedScreens() const = 0;
     virtual void setLockedScreens(const QStringList& screens) = 0;
     virtual void setScreenLocked(const QString& screenIdOrName, bool locked) = 0;
@@ -320,5 +327,64 @@ public:
     virtual QString defaultLayoutId() const = 0;
     virtual void setDefaultLayoutId(const QString& layoutId) = 0;
 };
+
+/**
+ * @brief Check if PlasmaZones is disabled for a given screen/desktop/activity context.
+ *
+ * Returns true if the screen is disabled, OR the desktop is disabled, OR the activity
+ * is disabled. Use at every point where overlay/snapping/autotile is gated.
+ */
+inline bool isContextDisabled(const IZoneVisualizationSettings* s, const QString& screenId, int desktop,
+                              const QString& activity)
+{
+    if (!s)
+        return false;
+    if (s->isMonitorDisabled(screenId))
+        return true;
+    if (desktop > 0 && s->isDesktopDisabled(screenId, desktop))
+        return true;
+    if (!activity.isEmpty() && s->isActivityDisabled(screenId, activity))
+        return true;
+    return false;
+}
+
+/**
+ * @brief Remove disabled-desktop entries whose desktop number exceeds @p maxDesktop.
+ * @return true if any entries were removed.
+ *
+ * Composite key format: "screenId/desktopNumber". Malformed entries are also removed.
+ */
+inline bool pruneDisabledDesktopEntries(QStringList& entries, int maxDesktop)
+{
+    const int before = entries.size();
+    entries.removeIf([maxDesktop](const QString& entry) {
+        int slashIdx = entry.lastIndexOf(QLatin1Char('/'));
+        if (slashIdx < 0)
+            return true; // malformed entry
+        bool ok = false;
+        int d = entry.mid(slashIdx + 1).toInt(&ok);
+        return !ok || d > maxDesktop;
+    });
+    return entries.size() != before;
+}
+
+/**
+ * @brief Remove disabled-activity entries whose activity UUID is not in @p validActivityIds.
+ * @return true if any entries were removed.
+ *
+ * Composite key format: "screenId/activityUuid". Malformed entries are also removed.
+ */
+inline bool pruneDisabledActivityEntries(QStringList& entries, const QSet<QString>& validActivityIds)
+{
+    const int before = entries.size();
+    entries.removeIf([&validActivityIds](const QString& entry) {
+        int slashIdx = entry.lastIndexOf(QLatin1Char('/'));
+        if (slashIdx < 0)
+            return true; // malformed entry
+        QString actId = entry.mid(slashIdx + 1);
+        return !validActivityIds.contains(actId);
+    });
+    return entries.size() != before;
+}
 
 } // namespace PlasmaZones

@@ -44,6 +44,10 @@ void Daemon::updateAutotileScreens()
     QHash<QString, QString> screenAlgorithms;
     for (QScreen* screen : m_screenManager->screens()) {
         QString screenId = Utils::screenIdentifier(screen);
+        // Skip screens/desktops/activities where PlasmaZones is disabled
+        if (isContextDisabled(m_settings.get(), screenId, desktop, activity)) {
+            continue;
+        }
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
         if (LayoutId::isAutotile(assignmentId)) {
             autotileScreens.insert(screenId);

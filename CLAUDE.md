@@ -79,11 +79,10 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - Editor settings: separate, in `EditorController` (separate process)
 
 ### Adding a Setting
-1. `plasmazones.kcfg` — entry with default
-2. `configdefaults.h` — static accessor
-3. `interfaces.h` — signal in ISettings
-4. `settings.h` — Q_PROPERTY + getter + setter + member
-5. `settings.cpp` — setter (check changed, emit), load/save/reset using `ConfigDefaults::xxx()`
+1. `configdefaults.h` — static accessor with default
+2. `interfaces.h` — signal in ISettings
+3. `settings.h` — Q_PROPERTY + getter + setter + member
+4. `settings.cpp` — setter (check changed, emit), load/save/reset using `ConfigDefaults::xxx()`
 
 ### Shortcuts
 - `IShortcutBackend` (KGlobalAccel / XDG Portal / D-Bus fallback) — never use KGlobalAccel directly

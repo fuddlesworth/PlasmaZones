@@ -23,10 +23,10 @@ enum class ZoneGeometryMode {
  * @brief Default values for zone appearance and core module constants
  *
  * These defaults are used by core module files that can't depend on config.
- * For user-configurable settings, see ConfigDefaults and plasmazones.kcfg.
+ * For user-configurable settings, see ConfigDefaults.
  *
  * Layout ratio constants (PriorityGridMainRatio, FocusSideRatio, etc.) are
- * structural constants for built-in layouts and are NOT in .kcfg.
+ * structural constants for built-in layouts.
  */
 namespace Defaults {
 // Alpha values for semi-transparent colors

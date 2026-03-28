@@ -156,8 +156,7 @@ public:
     void hideShaderPreview() override;
 
     // Snap Assist overlay (window picker after snapping)
-    void showSnapAssist(const QString& screenId, const QString& emptyZonesJson,
-                        const QString& candidatesJson) override;
+    void showSnapAssist(const QString& screenId, const QString& emptyZonesJson, const QString& candidatesJson) override;
     void hideSnapAssist() override;
     bool isSnapAssistVisible() const override;
     void setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl) override;
@@ -189,6 +188,10 @@ private:
     // Refresh zone selector and overlay windows that are currently visible.
     // Skips hidden windows — showZoneSelector()/show() refresh before showing.
     void refreshVisibleWindows();
+
+    // Hide overlay/selector windows on screens where the current context is disabled,
+    // then update remaining visible windows. Used by setCurrentVirtualDesktop/Activity.
+    void hideDisabledAndRefresh();
 
     void createOverlayWindow(QScreen* screen);
     void destroyOverlayWindow(QScreen* screen);

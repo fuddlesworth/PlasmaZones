@@ -64,9 +64,11 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     const int capturedLastCursorX = m_lastCursorX;
     const int capturedLastCursorY = m_lastCursorY;
 
-    // Release on a disabled monitor: do not snap to overlay zone (avoids snapping to a zone on another screen)
+    // Release on a disabled context: do not snap to overlay zone
     bool useOverlayZone = true;
-    if (releaseScreen && m_settings && m_settings->isMonitorDisabled(releaseScreenId)) {
+    int curDesktopDrop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
+    QString curActivityDrop = m_layoutManager ? m_layoutManager->currentActivity() : QString();
+    if (releaseScreen && isContextDisabled(m_settings, releaseScreenId, curDesktopDrop, curActivityDrop)) {
         useOverlayZone = false;
     }
 
@@ -110,7 +112,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 m_settings->isContextLocked(prefix + Utils::screenIdentifier(screen), curDesktop, curActivity);
         }
         if (screen && !selectorScreenLocked
-            && (!m_settings || !m_settings->isMonitorDisabled(Utils::screenIdentifier(screen)))) {
+            && !isContextDisabled(m_settings, Utils::screenIdentifier(screen), curDesktopDrop, curActivityDrop)) {
             QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(screen);
             if (zoneGeom.isValid()) {
                 snapX = zoneGeom.x();

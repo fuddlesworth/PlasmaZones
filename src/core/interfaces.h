@@ -109,6 +109,8 @@ Q_SIGNALS:
     void snappingEnabledChanged();
     void showZonesOnAllMonitorsChanged();
     void disabledMonitorsChanged();
+    void disabledDesktopsChanged();
+    void disabledActivitiesChanged();
     void showZoneNumbersChanged();
     void flashZonesOnSwitchChanged();
     void showOsdOnLayoutSwitchChanged();

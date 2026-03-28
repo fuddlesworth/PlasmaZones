@@ -59,8 +59,9 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
         if (!showOnAllMonitors && screen != cursorScreen) {
             continue;
         }
-        // Skip monitors where PlasmaZones is disabled
-        if (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
+        // Skip monitors/desktops/activities where PlasmaZones is disabled
+        if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                              m_currentActivity)) {
             continue;
         }
         // Skip autotile-managed screens (overlay is for manual zone selection)
@@ -112,7 +113,8 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
             destroyOverlayWindow(screen);
         }
         for (QScreen* screen : screensToRecreate) {
-            if (!m_settings || !m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
+            if (!isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                                   m_currentActivity)) {
                 createOverlayWindow(screen);
                 updateOverlayWindow(screen);
                 if (auto* window = m_overlayWindows.value(screen)) {
