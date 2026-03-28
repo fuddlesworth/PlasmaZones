@@ -440,6 +440,11 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
     if (entry.memory) {
         json[QLatin1String("memory")] = true;
     }
+    if (entry.isAutotile) {
+        json[QLatin1String("supportsMasterCount")] = entry.supportsMasterCount;
+        json[QLatin1String("supportsSplitRatio")] = entry.supportsSplitRatio;
+        json[QLatin1String("producesOverlappingZones")] = entry.producesOverlappingZones;
+    }
 
     // hiddenFromSelector is added by callers that have access to the Layout*
 
