@@ -36,8 +36,12 @@ function calculateZones(params) {
     if (count <= 0) return [];
 
     const area = params.area;
-    const gap = params.innerGap || 0;
+    const gap = Math.max(0, params.innerGap || 0);
     const minSizes = params.minSizes || [];
+
+    if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
+        return fillArea(area, count);
+    }
 
     const masterCount = Math.max(1, Math.min(params.masterCount || 1, count));
     const stackCount = count - masterCount;
@@ -138,41 +142,17 @@ function calculateZones(params) {
     const leftMinH = sideMinH.leftMinH;
     const rightMinH = sideMinH.rightMinH;
 
-    // Degenerate gap: if gaps consume all available height, fall back to equal-size without gaps
-    const masterGapsTotal = (masterCount - 1) * gap;
-    const leftGapsTotal = (leftCount - 1) * gap;
-    const rightGapsTotal = (rightCount - 1) * gap;
-
-    let masterHeights;
-    if (masterGapsTotal >= area.height) {
-        const equalH = Math.floor(area.height / masterCount);
-        masterHeights = [];
-        for (let i = 0; i < masterCount; i++) masterHeights.push(Math.max(1, equalH));
-    } else {
-        masterHeights = masterMinH.length === 0
-            ? distributeWithGaps(area.height, masterCount, gap)
-            : distributeWithMinSizes(area.height, masterCount, gap, masterMinH);
-    }
-    let leftHeights;
-    if (leftGapsTotal >= area.height) {
-        const equalH = Math.floor(area.height / leftCount);
-        leftHeights = [];
-        for (let i = 0; i < leftCount; i++) leftHeights.push(Math.max(1, equalH));
-    } else {
-        leftHeights = leftMinH.length === 0
-            ? distributeWithGaps(area.height, leftCount, gap)
-            : distributeWithMinSizes(area.height, leftCount, gap, leftMinH);
-    }
+    const masterHeights = masterMinH.length === 0
+        ? distributeWithGaps(area.height, masterCount, gap)
+        : distributeWithMinSizes(area.height, masterCount, gap, masterMinH);
+    const leftHeights = leftMinH.length === 0
+        ? distributeWithGaps(area.height, leftCount, gap)
+        : distributeWithMinSizes(area.height, leftCount, gap, leftMinH);
     let rightHeights = [];
     if (rightCount > 0) {
-        if (rightGapsTotal >= area.height) {
-            const equalH = Math.floor(area.height / rightCount);
-            for (let i = 0; i < rightCount; i++) rightHeights.push(Math.max(1, equalH));
-        } else {
-            rightHeights = rightMinH.length === 0
-                ? distributeWithGaps(area.height, rightCount, gap)
-                : distributeWithMinSizes(area.height, rightCount, gap, rightMinH);
-        }
+        rightHeights = rightMinH.length === 0
+            ? distributeWithGaps(area.height, rightCount, gap)
+            : distributeWithMinSizes(area.height, rightCount, gap, rightMinH);
     }
 
     // Masters in center column (stacked vertically)

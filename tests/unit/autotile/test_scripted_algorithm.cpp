@@ -448,16 +448,31 @@ private Q_SLOTS:
         QTest::addColumn<QString>("filename");
         QTest::addColumn<QString>("expectedName");
 
-        QTest::newRow("deck") << QStringLiteral("deck.js") << QStringLiteral("Deck");
-        QTest::newRow("tatami") << QStringLiteral("tatami.js") << QStringLiteral("Tatami");
-        QTest::newRow("zen") << QStringLiteral("zen.js") << QStringLiteral("Zen");
-        QTest::newRow("paper") << QStringLiteral("paper.js") << QStringLiteral("Paper");
-        QTest::newRow("horizontal-deck") << QStringLiteral("horizontal-deck.js") << QStringLiteral("Horizontal Deck");
+        QTest::newRow("bsp") << QStringLiteral("bsp.js") << QStringLiteral("Binary Split");
+        QTest::newRow("cascade") << QStringLiteral("cascade.js") << QStringLiteral("Cascade");
+        QTest::newRow("centered-master") << QStringLiteral("centered-master.js") << QStringLiteral("Centered Master");
+        QTest::newRow("columns") << QStringLiteral("columns.js") << QStringLiteral("Columns");
         QTest::newRow("corner-master") << QStringLiteral("corner-master.js") << QStringLiteral("Corner Master");
+        QTest::newRow("deck") << QStringLiteral("deck.js") << QStringLiteral("Deck");
+        QTest::newRow("dwindle") << QStringLiteral("dwindle.js") << QStringLiteral("Dwindle");
+        QTest::newRow("dwindle-memory") << QStringLiteral("dwindle-memory.js") << QStringLiteral("Dwindle (Memory)");
+        QTest::newRow("floating-center") << QStringLiteral("floating-center.js") << QStringLiteral("Floating Center");
+        QTest::newRow("focus-sidebar") << QStringLiteral("focus-sidebar.js") << QStringLiteral("Focus + Sidebar");
+        QTest::newRow("grid") << QStringLiteral("grid.js") << QStringLiteral("Grid");
+        QTest::newRow("horizontal-deck") << QStringLiteral("horizontal-deck.js") << QStringLiteral("Horizontal Deck");
+        QTest::newRow("master-stack") << QStringLiteral("master-stack.js") << QStringLiteral("Master + Stack");
+        QTest::newRow("monocle") << QStringLiteral("monocle.js") << QStringLiteral("Monocle");
+        QTest::newRow("paper") << QStringLiteral("paper.js") << QStringLiteral("Paper");
         QTest::newRow("quadrant-priority")
             << QStringLiteral("quadrant-priority.js") << QStringLiteral("Quadrant Priority");
-        QTest::newRow("focus-sidebar") << QStringLiteral("focus-sidebar.js") << QStringLiteral("Focus + Sidebar");
-        QTest::newRow("floating-center") << QStringLiteral("floating-center.js") << QStringLiteral("Floating Center");
+        QTest::newRow("rows") << QStringLiteral("rows.js") << QStringLiteral("Rows");
+        QTest::newRow("spiral") << QStringLiteral("spiral.js") << QStringLiteral("Spiral");
+        QTest::newRow("spread") << QStringLiteral("spread.js") << QStringLiteral("Spread");
+        QTest::newRow("stair") << QStringLiteral("stair.js") << QStringLiteral("Stair");
+        QTest::newRow("tatami") << QStringLiteral("tatami.js") << QStringLiteral("Tatami");
+        QTest::newRow("three-column") << QStringLiteral("three-column.js") << QStringLiteral("Three Column");
+        QTest::newRow("wide") << QStringLiteral("wide.js") << QStringLiteral("Wide");
+        QTest::newRow("zen") << QStringLiteral("zen.js") << QStringLiteral("Zen");
     }
 
     void testExampleAlgo()

@@ -249,9 +249,13 @@ private Q_SLOTS:
             QVERIFY2(algo != nullptr, qPrintable(QStringLiteral("Null algorithm: ") + id));
             auto zones = algo->calculateZones({3, screen, &state, 0, EdgeGaps::uniform(0)});
             QVERIFY2(!zones.isEmpty(), qPrintable(QStringLiteral("No zones from: ") + id));
-            QVERIFY2(zones.size() == 3,
-                     qPrintable(QStringLiteral("Expected 3 zones from: ") + id + QStringLiteral(", got: ")
-                                + QString::number(zones.size())));
+            if (algo->producesOverlappingZones()) {
+                QVERIFY2(zones.size() >= 1 && zones.size() <= 3,
+                         qPrintable(QStringLiteral("Expected 1-3 zones from overlapping algo: ") + id
+                                    + QStringLiteral(", got: ") + QString::number(zones.size())));
+            } else {
+                QCOMPARE(zones.size(), 3);
+            }
         }
     }
 

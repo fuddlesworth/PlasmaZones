@@ -63,7 +63,7 @@ function calculateZones(params) {
     const count = params.windowCount;
     if (count <= 0) return [];
     const area = params.area;
-    const gap = params.innerGap || 0;
+    const gap = Math.max(0, params.innerGap || 0);
 
     const splitRatio = Math.max(PZ_MIN_SPLIT, Math.min(PZ_MAX_SPLIT, params.splitRatio));
 

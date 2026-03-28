@@ -22,13 +22,13 @@ function dwindleLayout(area, count, splitRatio, innerGap, minSizes) {
     // or null if the content is too small to split.
     // axis: 'w' (vertical split on width) or 'h' (horizontal split on height)
     function trySplit(axis, i) {
-        var isWidth = (axis === 'w');
-        var totalDim = isWidth ? remaining.width : remaining.height;
-        var contentDim = totalDim - innerGap;
+        const isWidth = (axis === 'w');
+        const totalDim = isWidth ? remaining.width : remaining.height;
+        const contentDim = totalDim - innerGap;
         if (contentDim < 2) return null;
-        var windowDim = Math.floor(contentDim * splitRatio);
-        var minDimArr = isWidth ? remainingMinW : remainingMinH;
-        var minProp = isWidth ? 'w' : 'h';
+        let windowDim = Math.floor(contentDim * splitRatio);
+        const minDimArr = isWidth ? remainingMinW : remainingMinH;
+        const minProp = isWidth ? 'w' : 'h';
         if (minSizes && minSizes.length > 0 && i < minSizes.length
             && minSizes[i][minProp] > 0) {
             windowDim = Math.max(windowDim, minSizes[i][minProp]);
@@ -37,8 +37,8 @@ function dwindleLayout(area, count, splitRatio, innerGap, minSizes) {
             windowDim = Math.min(windowDim, contentDim - minDimArr[i + 1]);
         }
         windowDim = Math.max(1, Math.min(windowDim, contentDim - 1));
-        var zone;
-        var newRemaining;
+        let zone;
+        let newRemaining;
         if (isWidth) {
             zone = {x: remaining.x, y: remaining.y,
                 width: windowDim, height: remaining.height};
@@ -64,7 +64,7 @@ function dwindleLayout(area, count, splitRatio, innerGap, minSizes) {
             appendGracefulDegradation(zones, remaining, count - i - 1, innerGap);
             break;
         } else {
-            var result = trySplit(splitVertical ? 'w' : 'h', i);
+            const result = trySplit(splitVertical ? 'w' : 'h', i);
             if (!result) {
                 zones.push({x: remaining.x, y: remaining.y,
                     width: remaining.width, height: remaining.height});

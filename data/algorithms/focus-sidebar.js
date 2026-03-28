@@ -25,7 +25,7 @@
 function calculateZones(params) {
     const count = params.windowCount;
     const area = params.area;
-    const gap = params.innerGap || 0;
+    const gap = Math.max(0, params.innerGap || 0);
 
     if (count <= 0) return [];
 

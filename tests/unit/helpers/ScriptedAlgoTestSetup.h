@@ -5,7 +5,6 @@
 
 #include <memory>
 
-#include <QByteArray>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -15,6 +14,8 @@
 
 #include "autotile/algorithms/ScriptedAlgorithmLoader.h"
 
+#include "XdgEnvGuard.h"
+
 namespace PlasmaZones {
 namespace TestHelpers {
 
@@ -23,7 +24,7 @@ namespace TestHelpers {
  *
  * Creates a temporary XDG data directory with a symlink to the project's
  * data/algorithms/ directory, sets XDG env vars, and runs the ScriptedAlgorithmLoader.
- * Restores the original environment on destruction.
+ * Restores the original environment on destruction via XdgEnvGuard.
  *
  * Usage in test class:
  *   ScriptedAlgoTestSetup m_scriptSetup;
@@ -33,19 +34,7 @@ class ScriptedAlgoTestSetup
 {
 public:
     ScriptedAlgoTestSetup() = default;
-    ~ScriptedAlgoTestSetup()
-    {
-        if (m_initialized) {
-            if (m_hadDataDirs)
-                qputenv("XDG_DATA_DIRS", m_savedDataDirs);
-            else
-                qunsetenv("XDG_DATA_DIRS");
-            if (m_hadDataHome)
-                qputenv("XDG_DATA_HOME", m_savedDataHome);
-            else
-                qunsetenv("XDG_DATA_HOME");
-        }
-    }
+    ~ScriptedAlgoTestSetup() = default;
 
     ScriptedAlgoTestSetup(const ScriptedAlgoTestSetup&) = delete;
     ScriptedAlgoTestSetup& operator=(const ScriptedAlgoTestSetup&) = delete;
@@ -79,27 +68,20 @@ public:
             }
         }
 
-        m_savedDataDirs = qgetenv("XDG_DATA_DIRS");
-        m_savedDataHome = qgetenv("XDG_DATA_HOME");
-        m_hadDataDirs = qEnvironmentVariableIsSet("XDG_DATA_DIRS");
-        m_hadDataHome = qEnvironmentVariableIsSet("XDG_DATA_HOME");
+        // XdgEnvGuard saves the current env; we overwrite for the test
+        m_envGuard = std::make_unique<XdgEnvGuard>();
         qputenv("XDG_DATA_DIRS", m_xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", m_xdgRoot.path().toUtf8());
 
         m_loader = std::make_unique<ScriptedAlgorithmLoader>();
         m_loader->scanAndRegister();
-        m_initialized = true;
         return true;
     }
 
 private:
     std::unique_ptr<ScriptedAlgorithmLoader> m_loader;
+    std::unique_ptr<XdgEnvGuard> m_envGuard;
     QTemporaryDir m_xdgRoot;
-    QByteArray m_savedDataDirs;
-    QByteArray m_savedDataHome;
-    bool m_hadDataDirs = false;
-    bool m_hadDataHome = false;
-    bool m_initialized = false;
 };
 
 } // namespace TestHelpers

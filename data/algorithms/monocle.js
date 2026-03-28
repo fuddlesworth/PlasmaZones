@@ -28,9 +28,5 @@ function calculateZones(params) {
     if (count <= 0) return [];
     const area = params.area;
 
-    const zones = [];
-    for (let i = 0; i < count; i++) {
-        zones.push({ x: area.x, y: area.y, width: area.width, height: area.height });
-    }
-    return zones;
+    return fillArea(area, count);
 }

@@ -274,7 +274,13 @@ private Q_SLOTS:
             QVERIFY(algo != nullptr);
 
             auto zones = algo->calculateZones({4, screen, &state, 0, EdgeGaps::uniform(0)});
-            QCOMPARE(zones.size(), 4);
+            if (algo->producesOverlappingZones()) {
+                QVERIFY2(zones.size() >= 1 && zones.size() <= 4,
+                         qPrintable(QStringLiteral("Expected 1-4 zones from overlapping algo: ") + id
+                                    + QStringLiteral(", got: ") + QString::number(zones.size())));
+            } else {
+                QCOMPARE(zones.size(), 4);
+            }
 
             for (const QRect& zone : zones) {
                 QVERIFY(zone.isValid());

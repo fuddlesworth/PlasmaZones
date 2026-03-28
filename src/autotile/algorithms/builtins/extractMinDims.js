@@ -12,9 +12,9 @@
  */
 function _extractMinDims(minSizes, count, startIdx, axis) {
     if (!minSizes || minSizes.length === 0) return [];
-    var result = [];
-    for (var i = 0; i < count; i++) {
-        var idx = startIdx + i;
+    const result = [];
+    for (let i = 0; i < count; i++) {
+        const idx = startIdx + i;
         result.push((idx < minSizes.length && minSizes[idx][axis] > 0) ? minSizes[idx][axis] : 0);
     }
     return result;
@@ -30,8 +30,7 @@ function _extractMinDims(minSizes, count, startIdx, axis) {
  * @param {number} [startIdx=0] - Starting index into minSizes
  * @returns {Array<number>} Minimum widths (empty if no minSizes)
  */
-function extractMinWidths(minSizes, count, startIdx) {
-    if (startIdx == null) startIdx = 0;
+function extractMinWidths(minSizes, count, startIdx = 0) {
     return _extractMinDims(minSizes, count, startIdx, 'w');
 }
 
@@ -44,7 +43,6 @@ function extractMinWidths(minSizes, count, startIdx) {
  * @param {number} [startIdx=0] - Starting index into minSizes
  * @returns {Array<number>} Minimum heights (empty if no minSizes)
  */
-function extractMinHeights(minSizes, count, startIdx) {
-    if (startIdx == null) startIdx = 0;
+function extractMinHeights(minSizes, count, startIdx = 0) {
     return _extractMinDims(minSizes, count, startIdx, 'h');
 }

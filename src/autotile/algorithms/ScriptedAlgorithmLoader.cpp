@@ -128,9 +128,10 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
     }
 
     // Remove stale scripts that no longer exist on disk.
-    // AlgorithmRegistry::unregisterAlgorithm() uses deleteLater(), so any
-    // in-flight calculateZones() calls on the old algorithm object will
-    // finish before it is destroyed.
+    // AlgorithmRegistry::unregisterAlgorithm() uses synchronous delete.
+    // This is safe here because scanAndRegister() runs on the main thread
+    // where calculateZones() is also called (QJSEngine is single-threaded),
+    // so no in-flight calls can exist.
     bool changed = false;
     for (auto it = oldScriptIdToPath.constBegin(); it != oldScriptIdToPath.constEnd(); ++it) {
         if (!newScriptIds.contains(it.key())) {

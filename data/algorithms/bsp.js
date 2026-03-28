@@ -31,9 +31,13 @@ function calculateZones(params) {
     if (count <= 0) return [];
 
     const area = params.area;
-    const gap = params.innerGap || 0;
+    const gap = Math.max(0, params.innerGap || 0);
     const minSizes = params.minSizes || [];
     const splitRatio = params.splitRatio;
+
+    if (area.width < PZ_MIN_ZONE_SIZE || area.height < PZ_MIN_ZONE_SIZE) {
+        return fillArea(area, count);
+    }
 
     // Build a fresh tree from scratch each time for deterministic output
     const root = buildTree(count, splitRatio, area);
@@ -45,17 +49,17 @@ function calculateZones(params) {
     let zones = [];
     collectLeaves(root, zones, 0);
 
-    // Validate that all zones have positive dimensions
-    let hasInvalidZone = false;
-    for (let i = 0; i < zones.length; i++) {
-        if (zones[i].width <= 0 || zones[i].height <= 0) {
-            hasInvalidZone = true;
-            break;
-        }
+    // Filter out invalid zones (zero or negative dimensions)
+    zones = zones.filter(function(z) { return z.width > 0 && z.height > 0; });
+
+    if (zones.length === 0) {
+        // All zones invalid — fall back to equal columns
+        return equalColumnsLayout(area, count, gap, minSizes);
     }
 
-    if (hasInvalidZone) {
-        zones = equalColumnsLayout(area, count, gap, minSizes);
+    if (zones.length < count) {
+        // Some zones invalid — fill remainder with graceful degradation
+        appendGracefulDegradation(zones, area, count - zones.length, gap);
     }
 
     return zones;
@@ -81,6 +85,9 @@ function isLeaf(node) {
 function buildTree(windowCount, defaultRatio, refRect) {
     if (windowCount <= 0) return null;
 
+    // Clamp splitRatio during tree construction
+    const ratio = Math.min(Math.max(defaultRatio, PZ_MIN_SPLIT), PZ_MAX_SPLIT);
+
     // Start with a single leaf as root
     const root = makeNode();
 
@@ -97,7 +104,7 @@ function buildTree(windowCount, defaultRatio, refRect) {
         iterations++;
         // Apply geometry so largestLeaf can find the optimal split candidate
         bspApplyGeometry(root, buildRect, 0, [], 0, 0);
-        const result = growTree(root, defaultRatio);
+        const result = growTree(root, ratio);
         if (!result) break;
         leafCount++;
     }

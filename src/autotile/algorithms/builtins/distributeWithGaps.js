@@ -68,7 +68,7 @@ function distributeWithGaps(total, count, gap) {
                 if (sizes[i] > 1 && (maxIdx < 0 || sizes[i] > sizes[maxIdx])) maxIdx = i;
             }
             if (maxIdx < 0) break;
-            var take2 = Math.min(overshoot, sizes[maxIdx] - 1);
+            const take2 = Math.min(overshoot, sizes[maxIdx] - 1);
             sizes[maxIdx] -= take2;
             overshoot -= take2;
         }

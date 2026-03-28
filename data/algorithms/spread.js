@@ -25,12 +25,12 @@ function calculateZones(params) {
     const count = params.windowCount;
     if (count <= 0) return [];
     const area = params.area;
-    const gap = params.innerGap || 0;
+    const gap = Math.max(0, params.innerGap || 0);
     const splitRatio = params.splitRatio;
     const minSizes = params.minSizes || [];
 
     // Clamp widthFraction to [0.3, 1.0]
-    const widthFraction = Math.max(0.3, Math.min(splitRatio, 1.0));
+    const widthFraction = Math.max(0.3, Math.min(splitRatio, PZ_MAX_SPLIT));
 
     // Extract per-window minimum sizes.
     // Slot minimums are scaled up by 1/widthFraction so the window minimum is
@@ -52,7 +52,7 @@ function calculateZones(params) {
         : distributeWithMinSizes(area.width, count, gap, slotMinWidths);
 
     // splitRatio also controls height fraction
-    const baseHeight = Math.max(50, Math.floor(area.height * widthFraction));
+    const baseHeight = Math.max(PZ_MIN_ZONE_SIZE, Math.floor(area.height * widthFraction));
 
     const zones = [];
     let currentX = area.x;
@@ -60,7 +60,7 @@ function calculateZones(params) {
         const slotW = slotWidths[i];
 
         // Window width: fraction of slot, but never smaller than min width
-        let winWidth = Math.max(50, Math.floor(slotW * widthFraction));
+        let winWidth = Math.max(PZ_MIN_ZONE_SIZE, Math.floor(slotW * widthFraction));
         if (minWidths[i] > 0) {
             winWidth = Math.max(winWidth, minWidths[i]);
         }

@@ -370,8 +370,11 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         QLatin1String("_extractMinDims"), // internal helper from extractMinDims (used by extractMinWidths/Heights)
     };
     for (const auto& name : frozenGlobals) {
-        m_engine->evaluate(
+        QJSValue freezeResult = m_engine->evaluate(
             QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});").arg(name));
+        if (freezeResult.isError()) {
+            qWarning() << "Failed to freeze global:" << name << freezeResult.toString();
+        }
     }
 
     // Use guardedCall helper for watchdog arm-evaluate-disarm-check pattern.
@@ -384,17 +387,16 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // the global object after the IIFE body executes.
     static const QString wrapPrefix = QStringLiteral("(function(eval, Function) {");
     static const QString wrapSuffix = QStringLiteral(
-        "\nvar __pz_g = this;"
-        "if (typeof calculateZones === 'function') __pz_g.calculateZones = calculateZones;"
-        "if (typeof masterZoneIndex === 'function') __pz_g.masterZoneIndex = masterZoneIndex;"
-        "if (typeof supportsMasterCount === 'function') __pz_g.supportsMasterCount = supportsMasterCount;"
-        "if (typeof supportsSplitRatio === 'function') __pz_g.supportsSplitRatio = supportsSplitRatio;"
-        "if (typeof defaultSplitRatio === 'function') __pz_g.defaultSplitRatio = defaultSplitRatio;"
-        "if (typeof minimumWindows === 'function') __pz_g.minimumWindows = minimumWindows;"
-        "if (typeof defaultMaxWindows === 'function') __pz_g.defaultMaxWindows = defaultMaxWindows;"
-        "if (typeof producesOverlappingZones === 'function') __pz_g.producesOverlappingZones = "
+        "\nif (typeof calculateZones === 'function') this.calculateZones = calculateZones;"
+        "if (typeof masterZoneIndex === 'function') this.masterZoneIndex = masterZoneIndex;"
+        "if (typeof supportsMasterCount === 'function') this.supportsMasterCount = supportsMasterCount;"
+        "if (typeof supportsSplitRatio === 'function') this.supportsSplitRatio = supportsSplitRatio;"
+        "if (typeof defaultSplitRatio === 'function') this.defaultSplitRatio = defaultSplitRatio;"
+        "if (typeof minimumWindows === 'function') this.minimumWindows = minimumWindows;"
+        "if (typeof defaultMaxWindows === 'function') this.defaultMaxWindows = defaultMaxWindows;"
+        "if (typeof producesOverlappingZones === 'function') this.producesOverlappingZones = "
         "producesOverlappingZones;"
-        "if (typeof centerLayout === 'function') __pz_g.centerLayout = centerLayout;"
+        "if (typeof centerLayout === 'function') this.centerLayout = centerLayout;"
         "}).call(this, void 0, void 0);\n");
     const QString wrappedSource = wrapPrefix + source + wrapSuffix;
     const QJSValue result = guardedCall([this, &wrappedSource, &filePath]() {

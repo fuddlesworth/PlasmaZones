@@ -59,6 +59,7 @@ function solveThreeColumn(areaX, contentWidth, innerGap, splitRatio, minL, minC,
             const fromCenter = Math.max(0, Math.min(deficit, centerWidth - Math.max(minC, 1)));
             centerWidth -= fromCenter;
             leftWidth = contentWidth - rightWidth - centerWidth;
+            leftWidth = Math.max(1, leftWidth);
         }
         if (minC > 0 && centerWidth < minC) {
             let deficit = minC - centerWidth;

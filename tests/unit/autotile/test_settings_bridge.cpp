@@ -115,6 +115,9 @@ private Q_SLOTS:
         // Since backfillWindows is private, we test the observable effect through
         // the settings bridge: config maxWindows increase alone does not trigger
         // backfill without syncFromSettings. This test verifies the gate behavior.
+        // TODO: strengthen this test — currently only verifies the gate behavior,
+        // not actual backfill. Wire up Settings + syncFromSettings to test real
+        // backfill path.
         QVERIFY(state->tiledWindowCount() >= 2);
     }
 

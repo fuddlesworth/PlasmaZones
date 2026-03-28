@@ -25,7 +25,7 @@ function calculateZones(params) {
     return masterStackLayout(
         params.area,
         params.windowCount,
-        params.innerGap || 0,
+        Math.max(0, params.innerGap || 0),
         params.splitRatio,
         params.masterCount || 1,
         params.minSizes || [],

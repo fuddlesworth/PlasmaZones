@@ -166,7 +166,7 @@ bool hardenSandbox(QJSEngine* engine)
             if (!val.isUndefined()) {
                 freezeObj.call({val});
             }
-            disableGlobal(name);
+            disableGlobal(name, name == QLatin1String("Proxy"));
         }
     }
 

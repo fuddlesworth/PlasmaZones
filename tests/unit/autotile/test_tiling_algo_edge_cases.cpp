@@ -503,6 +503,81 @@ private Q_SLOTS:
         QCOMPARE(tz1, tz2);
     }
 
+    // =========================================================================
+    // Asymmetric edge gaps — top=30, bottom=10, left=20, right=0
+    // =========================================================================
+
+    void testAsymmetricEdgeGaps()
+    {
+        TilingState state(QStringLiteral("test"));
+        // EdgeGaps field order: top, bottom, left, right
+        const EdgeGaps asymGaps{30, 10, 20, 0};
+        const QRect reducedArea(m_screenGeometry.x() + asymGaps.left, m_screenGeometry.y() + asymGaps.top,
+                                m_screenGeometry.width() - asymGaps.left - asymGaps.right,
+                                m_screenGeometry.height() - asymGaps.top - asymGaps.bottom);
+
+        const QStringList testAlgos = {
+            QLatin1String("master-stack"),
+            QLatin1String("grid"),
+            QLatin1String("three-column"),
+        };
+
+        for (const auto& id : testAlgos) {
+            auto* algo = AlgorithmRegistry::instance()->algorithm(id);
+            QVERIFY2(algo != nullptr, qPrintable(QStringLiteral("Algorithm '%1' not found").arg(id)));
+            auto zones = algo->calculateZones({3, m_screenGeometry, &state, 0, asymGaps});
+            QCOMPARE(zones.size(), 3);
+            for (int i = 0; i < zones.size(); ++i) {
+                QVERIFY2(zones[i].left() >= reducedArea.left(),
+                         qPrintable(QStringLiteral("Algorithm '%1' zone %2 left (%3) < reduced area left (%4)")
+                                        .arg(id)
+                                        .arg(i)
+                                        .arg(zones[i].left())
+                                        .arg(reducedArea.left())));
+                QVERIFY2(zones[i].top() >= reducedArea.top(),
+                         qPrintable(QStringLiteral("Algorithm '%1' zone %2 top (%3) < reduced area top (%4)")
+                                        .arg(id)
+                                        .arg(i)
+                                        .arg(zones[i].top())
+                                        .arg(reducedArea.top())));
+                QVERIFY2(zones[i].right() <= reducedArea.right(),
+                         qPrintable(QStringLiteral("Algorithm '%1' zone %2 right (%3) > reduced area right (%4)")
+                                        .arg(id)
+                                        .arg(i)
+                                        .arg(zones[i].right())
+                                        .arg(reducedArea.right())));
+                QVERIFY2(zones[i].bottom() <= reducedArea.bottom(),
+                         qPrintable(QStringLiteral("Algorithm '%1' zone %2 bottom (%3) > reduced area bottom (%4)")
+                                        .arg(id)
+                                        .arg(i)
+                                        .arg(zones[i].bottom())
+                                        .arg(reducedArea.bottom())));
+                QVERIFY2(
+                    zones[i].width() > 0 && zones[i].height() > 0,
+                    qPrintable(QStringLiteral("Algorithm '%1' zone %2 has non-positive dimension").arg(id).arg(i)));
+            }
+        }
+    }
+
+    // =========================================================================
+    // supportsMemory sweep — only dwindle-memory returns true
+    // =========================================================================
+
+    void testSupportsMemory_sweep()
+    {
+        for (const auto& id : allAlgoIds()) {
+            auto* algo = AlgorithmRegistry::instance()->algorithm(id);
+            QVERIFY2(algo != nullptr, qPrintable(QStringLiteral("Algorithm '%1' not found").arg(id)));
+            if (id == QLatin1String("dwindle-memory")) {
+                QVERIFY2(algo->supportsMemory(),
+                         qPrintable(QStringLiteral("dwindle-memory should return supportsMemory() == true")));
+            } else {
+                QVERIFY2(!algo->supportsMemory(),
+                         qPrintable(QStringLiteral("Algorithm '%1' should return supportsMemory() == false").arg(id)));
+            }
+        }
+    }
+
     void testFrozenGlobals_allAlgorithmsDeterministic()
     {
         // Every algorithm should produce identical output for identical input,

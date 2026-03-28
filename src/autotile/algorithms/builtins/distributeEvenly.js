@@ -28,11 +28,11 @@ function distributeEvenly(start, total, count, gap) {
         const itemSize = Math.max(1, Math.floor(shrinkRatio));
         const shrunkGap = Math.max(0, Math.floor(gap * shrinkRatio));
         const r = [];
-        var pos = start;
+        let pos = start;
         for (let i = 0; i < count; i++) {
             if (i === count - 1) {
                 pos = Math.min(pos, start + total - 1);
-                var clampedSize = Math.max(1, Math.min(itemSize, start + total - pos));
+                const clampedSize = Math.max(1, Math.min(itemSize, start + total - pos));
                 r.push({pos: pos, size: clampedSize});
             } else {
                 r.push({pos: pos, size: itemSize});
