@@ -105,16 +105,16 @@ void LayerShellIntegration::registryRemoveHandler(void* data, struct wl_registry
     auto* self = static_cast<LayerShellIntegration*>(data);
     if (id == self->m_layerShellId) {
         qCWarning(lcLayerShellIntegration) << "zwlr_layer_shell_v1 global removed —"
-                                           << "existing layer surfaces continue to work,"
-                                           << "but new layer surface creation will fail";
-        if (self->m_layerShell) {
-            // The destroy request was added in protocol version 3. For older
-            // versions we must just drop our reference without sending destroy.
-            if (self->m_boundVersion >= 3) {
-                zwlr_layer_shell_v1_destroy(self->m_layerShell);
-            }
-            self->m_layerShell = nullptr;
-        }
+                                           << "new layer surface creation will fail."
+                                           << "Existing layer surfaces may become invalid.";
+        // Do NOT destroy the global object here — existing LayerShellWindow
+        // instances hold zwlr_layer_surface_v1 objects created from this global.
+        // Destroying the global while child surfaces are alive causes UAF.
+        // The compositor removing the global means it is shutting down or
+        // reconfiguring; the layer surfaces will be invalidated by the compositor
+        // and receive closed events. We just null our pointer to prevent new
+        // surface creation.
+        self->m_layerShell = nullptr;
         self->m_layerShellId = 0;
         self->m_boundVersion = 0;
     }

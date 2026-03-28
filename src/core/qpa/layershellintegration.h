@@ -5,6 +5,11 @@
 
 #include <QtWaylandClient/private/qwaylandshellintegration_p.h>
 #include "../plasmazones_export.h"
+// The generated protocol header uses "namespace" as a parameter name in
+// zwlr_layer_shell_v1_get_layer_surface(). This is a C identifier that
+// collides with the C++ reserved word. The #define renames it to
+// "namespace_" so the header compiles in C++ mode. This is the same
+// workaround used by LayerShellQt and other C++ Wayland clients.
 extern "C" {
 #define namespace namespace_
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"

@@ -26,6 +26,8 @@ makedepends=(
     'ninja'
     'qt6-tools'
     'kwin'
+    'wayland'
+    'wayland-protocols'
 )
 optdepends=(
     'plasma-activities: activity-based layouts'

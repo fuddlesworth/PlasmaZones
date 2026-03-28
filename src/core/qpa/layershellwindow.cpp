@@ -49,8 +49,11 @@ LayerShellWindow::LayerShellWindow(LayerShellIntegration* integration, QtWayland
         qCCritical(lcLayerShellWindow) << "wlSurfaceForWindow returned null — cannot create layer surface";
         return;
     }
+    // Keep the QByteArray alive for the duration of the call — constData() returns
+    // a pointer into the QByteArray, which must not be a dangling temporary.
+    const QByteArray scopeUtf8 = scope.toUtf8();
     m_layerSurface = zwlr_layer_shell_v1_get_layer_surface(integration->layerShell(), m_wlSurface, m_output,
-                                                           static_cast<uint32_t>(layer), scope.toUtf8().constData());
+                                                           static_cast<uint32_t>(layer), scopeUtf8.constData());
 
     zwlr_layer_surface_v1_add_listener(m_layerSurface, &s_layerSurfaceListener, this);
 
@@ -169,12 +172,14 @@ void LayerShellWindow::handleConfigure(void* data, struct zwlr_layer_surface_v1*
     zwlr_layer_surface_v1_ack_configure(surface, serial);
 
     // Resize the Qt window to the compositor-assigned size.
-    // The compositor sends surface-local coordinates, but QWindow::resize() works
-    // in device-independent pixels. Divide by devicePixelRatio for fractional scaling.
+    // The configure event sends surface-local coordinates (logical pixels).
+    // QWindow::resize() also works in logical (device-independent) pixels, so
+    // we pass the values through directly — no DPR division needed.
+    // Qt's Wayland platform plugin handles the logical→buffer scaling internally
+    // (via wl_surface.set_buffer_scale or wp_fractional_scale_v1).
     QWindow* qwindow = self->m_waylandWindow->window();
     if (width > 0 && height > 0 && qwindow) {
-        const qreal dpr = qwindow->devicePixelRatio();
-        qwindow->resize(qRound(static_cast<qreal>(width) / dpr), qRound(static_cast<qreal>(height) / dpr));
+        qwindow->resize(static_cast<int>(width), static_cast<int>(height));
     }
 
     // Re-apply current properties and commit so the compositor sees

@@ -86,7 +86,9 @@ public:
     QMargins margins() const;
 
     /// Get or create a LayerSurface for the given window.
-    /// The window must not yet be shown (call before show()).
+    /// For first-time creation, the window must not yet be shown (call before show()).
+    /// Subsequent calls on the same window return the existing LayerSurface even
+    /// after show() — this is safe and expected (e.g. for updating margins/anchors).
     /// Ownership follows QObject parent (window).
     static LayerSurface* get(QWindow* window);
 
@@ -114,6 +116,11 @@ private:
     QWindow* m_window = nullptr;
     Layer m_layer = LayerTop;
     Anchors m_anchors;
+    // Default -1: surface ignores exclusive zones from other surfaces (panels, bars)
+    // and stretches to full output edges. Protocol default is 0 (surface is pushed
+    // to avoid exclusive zones). We use -1 because PlasmaZones overlays must cover
+    // the entire screen including panel areas. Callers that need the protocol default
+    // (e.g. geometry sensors) must call setExclusiveZone(0) explicitly.
     int32_t m_exclusiveZone = -1;
     KeyboardInteractivity m_keyboard = KeyboardInteractivityNone;
     QString m_scope;

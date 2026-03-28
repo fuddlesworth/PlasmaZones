@@ -5,6 +5,7 @@
 
 #include <utility>
 #include <QtWaylandClient/private/qwaylandshellsurface_p.h>
+// See layershellintegration.h for why we rename the C "namespace" identifier.
 extern "C" {
 #define namespace namespace_
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
