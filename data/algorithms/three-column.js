@@ -83,28 +83,16 @@ function calculateZones(params) {
 
     // Compute per-column minimum widths from minSizes
     // Zone ordering: [center(0), left1(1), right1(2), left2(3), right2(4), ...]
+    var stackIsLeft = buildStackIsLeft(stackCount, leftCount, rightCount);
     var minCenterWidth = 0;
-    var minLeftWidth = 0;
-    var minRightWidth = 0;
     if (minSizes.length > 0) {
         minCenterWidth = (minSizes[0].w > 0) ? minSizes[0].w : 0;
-        var li = 0;
-        var ri = 0;
-        for (var i = 0; i < stackCount; i++) {
-            var zoneIdx = i + 1; // skip center at index 0
-            var mw = (zoneIdx < minSizes.length && minSizes[zoneIdx].w > 0) ? minSizes[zoneIdx].w : 0;
-            if (i % 2 === 0 && li < leftCount) {
-                if (mw > minLeftWidth) minLeftWidth = mw;
-                li++;
-            } else if (ri < rightCount) {
-                if (mw > minRightWidth) minRightWidth = mw;
-                ri++;
-            } else if (li < leftCount) {
-                if (mw > minLeftWidth) minLeftWidth = mw;
-                li++;
-            }
-        }
     }
+    var sideMinW = (minSizes.length > 0)
+        ? interleaveMinWidths(minSizes, stackIsLeft, stackCount, 1)
+        : {minLeftWidth: 0, minRightWidth: 0};
+    var minLeftWidth = sideMinW.minLeftWidth;
+    var minRightWidth = sideMinW.minRightWidth;
 
     var cols = solveThreeColumn(area.x, contentWidth, gap, splitRatio,
                                 minLeftWidth, minCenterWidth, minRightWidth);
@@ -117,28 +105,11 @@ function calculateZones(params) {
     var rightX = cols.rightX;
 
     // Build per-column min heights from minSizes interleaving order
-    var leftMinHeights = [];
-    var rightMinHeights = [];
-    if (minSizes.length > 0) {
-        for (var i = 0; i < leftCount; i++) leftMinHeights.push(0);
-        for (var i = 0; i < rightCount; i++) rightMinHeights.push(0);
-        var li = 0;
-        var ri = 0;
-        for (var i = 0; i < stackCount; i++) {
-            var zoneIdx = i + 1;
-            var mh = (zoneIdx < minSizes.length && minSizes[zoneIdx].h > 0) ? minSizes[zoneIdx].h : 0;
-            if (i % 2 === 0 && li < leftCount) {
-                leftMinHeights[li] = mh;
-                li++;
-            } else if (ri < rightCount) {
-                rightMinHeights[ri] = mh;
-                ri++;
-            } else if (li < leftCount) {
-                leftMinHeights[li] = mh;
-                li++;
-            }
-        }
-    }
+    var sideMinH = (minSizes.length > 0)
+        ? interleaveMinHeights(minSizes, stackIsLeft, stackCount, leftCount, rightCount, 1)
+        : {leftMinH: [], rightMinH: []};
+    var leftMinHeights = sideMinH.leftMinH;
+    var rightMinHeights = sideMinH.rightMinH;
 
     // Calculate heights with gaps between vertically stacked zones
     var leftHeights = [];
@@ -160,26 +131,9 @@ function calculateZones(params) {
     zones.push({x: centerX, y: area.y, width: centerWidth, height: area.height});
 
     // Interleave left and right column windows
-    var leftIdx = 0;
-    var rightIdx = 0;
-    var leftY = area.y;
-    var rightY = area.y;
-
-    for (var i = 0; i < stackCount; i++) {
-        if (i % 2 === 0 && leftIdx < leftCount) {
-            zones.push({x: leftX, y: leftY, width: leftWidth, height: leftHeights[leftIdx]});
-            leftY += leftHeights[leftIdx] + gap;
-            leftIdx++;
-        } else if (rightIdx < rightCount) {
-            zones.push({x: rightX, y: rightY, width: rightWidth, height: rightHeights[rightIdx]});
-            rightY += rightHeights[rightIdx] + gap;
-            rightIdx++;
-        } else if (leftIdx < leftCount) {
-            zones.push({x: leftX, y: leftY, width: leftWidth, height: leftHeights[leftIdx]});
-            leftY += leftHeights[leftIdx] + gap;
-            leftIdx++;
-        }
-    }
+    assignInterleavedStacks(zones, stackIsLeft, stackCount,
+                            leftX, rightX, leftWidth, rightWidth,
+                            leftHeights, rightHeights, area.y, gap);
 
     return zones;
 }

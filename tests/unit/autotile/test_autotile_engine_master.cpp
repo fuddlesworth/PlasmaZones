@@ -134,13 +134,16 @@ private Q_SLOTS:
         engine.setAutotileScreens(screens);
         engine.setAlgorithm(QLatin1String("monocle"));
 
+        // Monocle flag requires >= 2 windows (single window is just normal tiling)
         engine.windowOpened(QStringLiteral("win-mono-1"), screenName);
+        engine.windowOpened(QStringLiteral("win-mono-2"), screenName);
         QCoreApplication::processEvents();
 
         QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
 
         TilingState* state = engine.stateForScreen(screenName);
-        state->setCalculatedZones({QRect(10, 42, 1900, 1038)});
+        const QRect fullArea(10, 42, 1900, 1038);
+        state->setCalculatedZones({fullArea, fullArea});
         engine.retile(screenName);
 
         QVERIFY(tiledSpy.count() >= 1);

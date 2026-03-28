@@ -262,17 +262,31 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_engine->evaluate(ScriptedHelpers::gracefulDegradationJs(), QStringLiteral("builtin:appendGracefulDegradation"));
     m_engine->evaluate(ScriptedHelpers::dwindleLayoutJs(), QStringLiteral("builtin:dwindleLayout"));
     m_engine->evaluate(ScriptedHelpers::extractMinDimsJs(), QStringLiteral("builtin:extractMinDims"));
+    m_engine->evaluate(ScriptedHelpers::interleaveStacksJs(), QStringLiteral("builtin:interleaveStacks"));
 
     // Freeze helper globals and constants so user scripts cannot overwrite them.
     // This must happen after injection since hardenSandbox's freezeGlobal calls
     // ran before the helpers existed.
-    for (const auto& helperName :
-         {QLatin1String("PZ_MIN_ZONE_SIZE"), QLatin1String("PZ_MIN_SPLIT"), QLatin1String("PZ_MAX_SPLIT"),
-          QLatin1String("applyTreeGeometry"), QLatin1String("lShapeLayout"), QLatin1String("deckLayout"),
-          QLatin1String("distributeEvenly"), QLatin1String("distributeWithGaps"),
-          QLatin1String("distributeWithMinSizes"), QLatin1String("solveTwoPart"), QLatin1String("solveThreeColumn"),
-          QLatin1String("computeCumulativeMinDims"), QLatin1String("appendGracefulDegradation"),
-          QLatin1String("dwindleLayout"), QLatin1String("extractMinWidths"), QLatin1String("extractMinHeights")}) {
+    for (const auto& helperName : {QLatin1String("PZ_MIN_ZONE_SIZE"),
+                                   QLatin1String("PZ_MIN_SPLIT"),
+                                   QLatin1String("PZ_MAX_SPLIT"),
+                                   QLatin1String("applyTreeGeometry"),
+                                   QLatin1String("lShapeLayout"),
+                                   QLatin1String("deckLayout"),
+                                   QLatin1String("distributeEvenly"),
+                                   QLatin1String("distributeWithGaps"),
+                                   QLatin1String("distributeWithMinSizes"),
+                                   QLatin1String("solveTwoPart"),
+                                   QLatin1String("solveThreeColumn"),
+                                   QLatin1String("computeCumulativeMinDims"),
+                                   QLatin1String("appendGracefulDegradation"),
+                                   QLatin1String("dwindleLayout"),
+                                   QLatin1String("extractMinWidths"),
+                                   QLatin1String("extractMinHeights"),
+                                   QLatin1String("buildStackIsLeft"),
+                                   QLatin1String("interleaveMinWidths"),
+                                   QLatin1String("interleaveMinHeights"),
+                                   QLatin1String("assignInterleavedStacks")}) {
         m_engine->evaluate(QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});")
                                .arg(QLatin1String(helperName)));
     }

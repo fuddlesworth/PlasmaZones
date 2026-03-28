@@ -8,5 +8,6 @@
     <file alias="appendGracefulDegradation.js">builtins/appendGracefulDegradation.js</file>
     <file alias="dwindleLayout.js">builtins/dwindleLayout.js</file>
     <file alias="extractMinDims.js">builtins/extractMinDims.js</file>
+    <file alias="interleaveStacks.js">builtins/interleaveStacks.js</file>
 </qresource>
 </RCC>

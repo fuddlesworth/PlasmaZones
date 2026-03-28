@@ -69,5 +69,10 @@ QString extractMinDimsJs()
     return loadBuiltinJs(QStringLiteral("extractMinDims.js"));
 }
 
+QString interleaveStacksJs()
+{
+    return loadBuiltinJs(QStringLiteral("interleaveStacks.js"));
+}
+
 } // namespace ScriptedHelpers
 } // namespace PlasmaZones

@@ -38,8 +38,8 @@ function calculateZones(params) {
     // but cascade needs tighter bounds)
     var offsetRatio = Math.max(0.02, Math.min(0.4, params.splitRatio));
 
-    var offsetX = Math.max(20, Math.floor(area.width * offsetRatio / (count - 1)));
-    var offsetY = Math.max(20, Math.floor(area.height * offsetRatio / (count - 1)));
+    var offsetX = Math.max(20, Math.round(area.width * offsetRatio / (count - 1)));
+    var offsetY = Math.max(20, Math.round(area.height * offsetRatio / (count - 1)));
 
     // Each window is sized to fill the area minus the total cascade offset
     var totalOffsetX = offsetX * (count - 1);

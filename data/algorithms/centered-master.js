@@ -100,41 +100,20 @@ function calculateZones(params) {
     }
 
     // Build stackIsLeft mapping (even -> left, odd -> right)
-    var stackIsLeft = [];
-    var li = 0;
-    var ri = 0;
-    for (var i = 0; i < stackCount; i++) {
-        if (i % 2 === 0 && li < leftCount) {
-            stackIsLeft.push(true);
-            li++;
-        } else if (ri < rightCount) {
-            stackIsLeft.push(false);
-            ri++;
-        } else {
-            stackIsLeft.push(true);
-            li++;
-        }
-    }
+    var stackIsLeft = buildStackIsLeft(stackCount, leftCount, rightCount);
 
     // Compute per-column minimum widths
     var minCenterWidth = 0;
-    var minLeftWidth = 0;
-    var minRightWidth = 0;
     if (minSizes.length > 0) {
         for (var i = 0; i < masterCount && i < minSizes.length; i++) {
             minCenterWidth = Math.max(minCenterWidth, minSizes[i].w || 0);
         }
-        for (var i = 0; i < stackCount; i++) {
-            var zoneIdx = masterCount + i;
-            if (zoneIdx < minSizes.length) {
-                if (stackIsLeft[i]) {
-                    minLeftWidth = Math.max(minLeftWidth, minSizes[zoneIdx].w || 0);
-                } else {
-                    minRightWidth = Math.max(minRightWidth, minSizes[zoneIdx].w || 0);
-                }
-            }
-        }
     }
+    var sideMinW = (minSizes.length > 0)
+        ? interleaveMinWidths(minSizes, stackIsLeft, stackCount, masterCount)
+        : {minLeftWidth: 0, minRightWidth: 0};
+    var minLeftWidth = sideMinW.minLeftWidth;
+    var minRightWidth = sideMinW.minRightWidth;
 
     var cols = solveThreeColumn(area.x, contentWidth, gap, splitRatio,
                                 minLeftWidth, minCenterWidth, minRightWidth);
@@ -148,21 +127,16 @@ function calculateZones(params) {
 
     // Calculate per-column minimum heights
     var masterMinH = [];
-    var leftMinH = [];
-    var rightMinH = [];
     if (minSizes.length > 0) {
         for (var i = 0; i < masterCount; i++) {
             masterMinH.push((i < minSizes.length) ? (minSizes[i].h || 0) : 0);
         }
-        for (var i = 0; i < stackCount; i++) {
-            var mh = (masterCount + i < minSizes.length) ? (minSizes[masterCount + i].h || 0) : 0;
-            if (stackIsLeft[i]) {
-                leftMinH.push(mh);
-            } else {
-                rightMinH.push(mh);
-            }
-        }
     }
+    var sideMinH = (minSizes.length > 0)
+        ? interleaveMinHeights(minSizes, stackIsLeft, stackCount, leftCount, rightCount, masterCount)
+        : {leftMinH: [], rightMinH: []};
+    var leftMinH = sideMinH.leftMinH;
+    var rightMinH = sideMinH.rightMinH;
 
     var masterHeights = masterMinH.length === 0
         ? distributeWithGaps(area.height, masterCount, gap)
@@ -186,22 +160,9 @@ function calculateZones(params) {
     }
 
     // Assign stack windows using precomputed side mapping
-    var leftIdx = 0;
-    var rightIdx = 0;
-    var leftY = area.y;
-    var rightY = area.y;
-
-    for (var i = 0; i < stackCount; i++) {
-        if (stackIsLeft[i]) {
-            zones.push({x: leftX, y: leftY, width: leftWidth, height: leftHeights[leftIdx]});
-            leftY += leftHeights[leftIdx] + gap;
-            leftIdx++;
-        } else {
-            zones.push({x: rightX, y: rightY, width: rightWidth, height: rightHeights[rightIdx]});
-            rightY += rightHeights[rightIdx] + gap;
-            rightIdx++;
-        }
-    }
+    assignInterleavedStacks(zones, stackIsLeft, stackCount,
+                            leftX, rightX, leftWidth, rightWidth,
+                            leftHeights, rightHeights, area.y, gap);
 
     return zones;
 }

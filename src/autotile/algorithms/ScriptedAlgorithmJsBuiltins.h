@@ -81,5 +81,14 @@ QString dwindleLayoutJs();
  */
 QString extractMinDimsJs();
 
+/**
+ * @brief JS source for stack interleaving helpers shared by centered-master and three-column
+ *
+ * Provides buildStackIsLeft(), interleaveMinWidths(), interleaveMinHeights(),
+ * and assignInterleavedStacks() for DRY left/right column interleaving.
+ * Loaded from Qt resource :/builtins/interleaveStacks.js
+ */
+QString interleaveStacksJs();
+
 } // namespace ScriptedHelpers
 } // namespace PlasmaZones
