@@ -62,14 +62,7 @@ function calculateZones(params) {
 
     // Fall back to equal columns if screen is too narrow for three columns
     if (count >= 3 && area.width < 3 * PZ_MIN_ZONE_SIZE + 2 * gap) {
-        const widths = distributeWithGaps(area.width, count, gap);
-        const zones = [];
-        let x = area.x;
-        for (let i = 0; i < count; i++) {
-            zones.push({x: x, y: area.y, width: widths[i], height: area.height});
-            x += widths[i] + gap;
-        }
-        return zones;
+        return equalColumnsLayout(area, count, gap, minSizes);
     }
 
     // Three or more windows: true three-column layout (masterCount = 1)

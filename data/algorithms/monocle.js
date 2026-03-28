@@ -17,8 +17,9 @@
  * Overlapping layout -- innerGap intentionally ignored (zones overlap by design).
  * The focused window is on top; others are stacked behind it.
  *
- * Note: single-window case is handled by the C++ ScriptedAlgorithm wrapper,
- * so this function only receives count >= 2.
+ * The C++ ScriptedAlgorithm wrapper handles the single-window case before
+ * calling this function, but count === 1 is still handled correctly here
+ * (fillArea produces a single full-area zone).
  *
  * @param {Object} params - Tiling parameters
  * @returns {Array<{x: number, y: number, width: number, height: number}>}

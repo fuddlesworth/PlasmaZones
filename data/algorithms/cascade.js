@@ -53,15 +53,17 @@ function calculateZones(params) {
     let offsetX = Math.max(CascadeMinOffsetPx, Math.floor(area.width * offsetRatio / (count - 1)));
     let offsetY = Math.max(CascadeMinOffsetPx, Math.floor(area.height * offsetRatio / (count - 1)));
 
-    // Each window is sized to fill the area minus the total cascade offset
+    // Each window is sized to fill the area minus the total cascade offset,
+    // clamped to both the minimum window size and the actual area dimensions.
     const totalOffsetX = offsetX * (count - 1);
     const totalOffsetY = offsetY * (count - 1);
-    const winWidth = Math.max(CascadeMinWindowPx, area.width - totalOffsetX);
-    const winHeight = Math.max(CascadeMinWindowPx, area.height - totalOffsetY);
+    const winWidth = Math.min(Math.max(CascadeMinWindowPx, area.width - totalOffsetX), area.width);
+    const winHeight = Math.min(Math.max(CascadeMinWindowPx, area.height - totalOffsetY), area.height);
 
-    // Clamp offsets so last window stays within area
-    const maxOffsetX = Math.max(1, Math.floor((area.width - winWidth) / Math.max(1, count - 1)));
-    const maxOffsetY = Math.max(1, Math.floor((area.height - winHeight) / Math.max(1, count - 1)));
+    // Clamp offsets so last window stays within area.
+    // When winWidth >= area.width (small screen), maxOffset is 0 — windows stack at origin.
+    const maxOffsetX = Math.max(0, Math.floor((area.width - winWidth) / Math.max(1, count - 1)));
+    const maxOffsetY = Math.max(0, Math.floor((area.height - winHeight) / Math.max(1, count - 1)));
     offsetX = Math.min(offsetX, maxOffsetX);
     offsetY = Math.min(offsetY, maxOffsetY);
 

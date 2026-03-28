@@ -183,9 +183,12 @@ void AlgorithmRegistry::safeDeleteAlgorithm(TilingAlgorithm* algo)
     // algorithmUnregistered may call back into the registry. Synchronous
     // delete during signal emission would risk use-after-free if a handler
     // holds a pointer to the algorithm.
-    // The double-free concern with cleanup() is addressed by cleanup()
-    // clearing m_algorithms before deleting — deleteLater'd objects that
-    // are no longer in the map are harmless.
+    //
+    // setParent(nullptr) detaches from the registry's QObject tree so the
+    // registry destructor doesn't double-delete. This is safe because:
+    //   1. The algorithm was already removed from m_algorithms by
+    //      removeAlgorithmInternal(), so cleanup() won't see it.
+    //   2. deleteLater() ensures the QObject event loop handles final deletion.
     algo->setParent(nullptr);
     algo->deleteLater();
 }
