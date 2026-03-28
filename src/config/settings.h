@@ -51,6 +51,10 @@ public:
                    showZonesOnAllMonitorsChanged)
     Q_PROPERTY(
         QStringList disabledMonitors READ disabledMonitors WRITE setDisabledMonitors NOTIFY disabledMonitorsChanged)
+    Q_PROPERTY(
+        QList<int> disabledDesktops READ disabledDesktops WRITE setDisabledDesktops NOTIFY disabledDesktopsChanged)
+    Q_PROPERTY(QStringList disabledActivities READ disabledActivities WRITE setDisabledActivities NOTIFY
+                   disabledActivitiesChanged)
     Q_PROPERTY(bool showZoneNumbers READ showZoneNumbers WRITE setShowZoneNumbers NOTIFY showZoneNumbersChanged)
     Q_PROPERTY(
         bool flashZonesOnSwitch READ flashZonesOnSwitch WRITE setFlashZonesOnSwitch NOTIFY flashZonesOnSwitchChanged)
@@ -419,6 +423,20 @@ public:
     }
     void setDisabledMonitors(const QStringList& screenIdOrNames) override;
     bool isMonitorDisabled(const QString& screenIdOrName) const override;
+
+    QList<int> disabledDesktops() const override
+    {
+        return m_disabledDesktops;
+    }
+    void setDisabledDesktops(const QList<int>& desktops) override;
+    bool isDesktopDisabled(int desktop) const override;
+
+    QStringList disabledActivities() const override
+    {
+        return m_disabledActivities;
+    }
+    void setDisabledActivities(const QStringList& activityIds) override;
+    bool isActivityDisabled(const QString& activityId) const override;
 
     bool showZoneNumbers() const override
     {
@@ -1543,6 +1561,8 @@ private:
     // Display
     bool m_showZonesOnAllMonitors = ConfigDefaults::showOnAllMonitors();
     QStringList m_disabledMonitors;
+    QList<int> m_disabledDesktops;
+    QStringList m_disabledActivities;
     bool m_showZoneNumbers = ConfigDefaults::showNumbers();
     bool m_flashZonesOnSwitch = ConfigDefaults::flashOnSwitch();
     bool m_showOsdOnLayoutSwitch = ConfigDefaults::showOsdOnLayoutSwitch();
@@ -1685,12 +1705,11 @@ private:
     QString m_openSettingsShortcut = ConfigDefaults::openSettingsShortcut();
     QString m_previousLayoutShortcut = ConfigDefaults::previousLayoutShortcut();
     QString m_nextLayoutShortcut = ConfigDefaults::nextLayoutShortcut();
-    QString m_quickLayoutShortcuts[9] = {
-        ConfigDefaults::quickLayout1Shortcut(), ConfigDefaults::quickLayout2Shortcut(),
-        ConfigDefaults::quickLayout3Shortcut(), ConfigDefaults::quickLayout4Shortcut(),
-        ConfigDefaults::quickLayout5Shortcut(), ConfigDefaults::quickLayout6Shortcut(),
-        ConfigDefaults::quickLayout7Shortcut(), ConfigDefaults::quickLayout8Shortcut(),
-        ConfigDefaults::quickLayout9Shortcut()};
+    QString m_quickLayoutShortcuts[9] = {ConfigDefaults::quickLayout1Shortcut(), ConfigDefaults::quickLayout2Shortcut(),
+                                         ConfigDefaults::quickLayout3Shortcut(), ConfigDefaults::quickLayout4Shortcut(),
+                                         ConfigDefaults::quickLayout5Shortcut(), ConfigDefaults::quickLayout6Shortcut(),
+                                         ConfigDefaults::quickLayout7Shortcut(), ConfigDefaults::quickLayout8Shortcut(),
+                                         ConfigDefaults::quickLayout9Shortcut()};
 
     // Keyboard Navigation Shortcuts
     // Meta+Shift+Left/Right conflicts with KDE's "Window to Next/Previous Screen";
@@ -1719,12 +1738,11 @@ private:
 
     // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
     // Meta+1-9 conflicts with KDE's virtual desktop switching; we use Meta+Ctrl+1-9 instead.
-    QString m_snapToZoneShortcuts[9] = {
-        ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
-        ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
-        ConfigDefaults::snapToZone5Shortcut(), ConfigDefaults::snapToZone6Shortcut(),
-        ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
-        ConfigDefaults::snapToZone9Shortcut()};
+    QString m_snapToZoneShortcuts[9] = {ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
+                                        ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
+                                        ConfigDefaults::snapToZone5Shortcut(), ConfigDefaults::snapToZone6Shortcut(),
+                                        ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
+                                        ConfigDefaults::snapToZone9Shortcut()};
 
     // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
     // Rotates all windows in the current layout clockwise or counterclockwise

@@ -1130,6 +1130,46 @@ void SettingsController::setMonitorDisabled(const QString& screenName, bool disa
     m_screenHelper.setMonitorDisabled(screenName, disabled);
 }
 
+bool SettingsController::isDesktopDisabled(int desktop) const
+{
+    return m_settings.isDesktopDisabled(desktop);
+}
+
+void SettingsController::setDesktopDisabled(int desktop, bool disabled)
+{
+    QList<int> desktops = m_settings.disabledDesktops();
+    if (disabled && !desktops.contains(desktop)) {
+        desktops.append(desktop);
+        m_settings.setDisabledDesktops(desktops);
+        setNeedsSave(true);
+        Q_EMIT disabledDesktopsChanged();
+    } else if (!disabled && desktops.removeAll(desktop) > 0) {
+        m_settings.setDisabledDesktops(desktops);
+        setNeedsSave(true);
+        Q_EMIT disabledDesktopsChanged();
+    }
+}
+
+bool SettingsController::isActivityDisabled(const QString& activityId) const
+{
+    return m_settings.isActivityDisabled(activityId);
+}
+
+void SettingsController::setActivityDisabled(const QString& activityId, bool disabled)
+{
+    QStringList activities = m_settings.disabledActivities();
+    if (disabled && !activities.contains(activityId)) {
+        activities.append(activityId);
+        m_settings.setDisabledActivities(activities);
+        setNeedsSave(true);
+        Q_EMIT disabledActivitiesChanged();
+    } else if (!disabled && activities.removeAll(activityId) > 0) {
+        m_settings.setDisabledActivities(activities);
+        setNeedsSave(true);
+        Q_EMIT disabledActivitiesChanged();
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Virtual desktops / activities (D-Bus queries to daemon)
 // ═══════════════════════════════════════════════════════════════════════════════

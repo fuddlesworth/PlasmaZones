@@ -114,7 +114,9 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
 Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScreen)
 {
     outScreen = screenAtPoint(x, y);
-    if (!outScreen || (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(outScreen)))) {
+    if (!outScreen
+        || isContextDisabled(m_settings, Utils::screenIdentifier(outScreen), m_layoutManager->currentVirtualDesktop(),
+                             m_layoutManager->currentActivity())) {
         return nullptr;
     }
 

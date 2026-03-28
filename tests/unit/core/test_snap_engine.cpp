@@ -100,6 +100,28 @@ public:
     {
         return false;
     }
+    QList<int> disabledDesktops() const override
+    {
+        return {};
+    }
+    void setDisabledDesktops(const QList<int>&) override
+    {
+    }
+    bool isDesktopDisabled(int) const override
+    {
+        return false;
+    }
+    QStringList disabledActivities() const override
+    {
+        return {};
+    }
+    void setDisabledActivities(const QStringList&) override
+    {
+    }
+    bool isActivityDisabled(const QString&) const override
+    {
+        return false;
+    }
     bool showZoneNumbers() const override
     {
         return true;

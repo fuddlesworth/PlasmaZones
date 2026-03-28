@@ -113,6 +113,20 @@ bool Settings::isMonitorDisabled(const QString& screenIdOrName) const
     return false;
 }
 
+SETTINGS_SETTER(const QList<int>&, DisabledDesktops, m_disabledDesktops, disabledDesktopsChanged)
+
+bool Settings::isDesktopDisabled(int desktop) const
+{
+    return m_disabledDesktops.contains(desktop);
+}
+
+SETTINGS_SETTER(const QStringList&, DisabledActivities, m_disabledActivities, disabledActivitiesChanged)
+
+bool Settings::isActivityDisabled(const QString& activityId) const
+{
+    return !activityId.isEmpty() && m_disabledActivities.contains(activityId);
+}
+
 bool Settings::isScreenLocked(const QString& screenIdOrName) const
 {
     return isContextLocked(screenIdOrName, 0, QString());

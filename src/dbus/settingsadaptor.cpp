@@ -238,6 +238,27 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("overlayDisplayMode")] = QStringLiteral("int");
     REGISTER_STRINGLIST_SETTING("disabledMonitors", disabledMonitors, setDisabledMonitors)
+    // DisabledDesktops: stored as QList<int>, converted from/to QVariantList over D-Bus
+    m_getters[QStringLiteral("disabledDesktops")] = [this]() {
+        QVariantList vl;
+        for (int d : m_settings->disabledDesktops())
+            vl.append(d);
+        return QVariant(vl);
+    };
+    m_setters[QStringLiteral("disabledDesktops")] = [this](const QVariant& v) {
+        QList<int> desktops;
+        const QVariantList vl = v.toList();
+        for (const QVariant& item : vl) {
+            bool ok = false;
+            int d = item.toInt(&ok);
+            if (ok && d > 0)
+                desktops.append(d);
+        }
+        m_settings->setDisabledDesktops(desktops);
+        return true;
+    };
+    m_schemas[QStringLiteral("disabledDesktops")] = QStringLiteral("intlist");
+    REGISTER_STRINGLIST_SETTING("disabledActivities", disabledActivities, setDisabledActivities)
 
     // Appearance settings
     REGISTER_BOOL_SETTING("useSystemColors", useSystemColors, setUseSystemColors)

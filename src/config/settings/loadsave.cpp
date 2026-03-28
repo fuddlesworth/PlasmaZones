@@ -82,6 +82,26 @@ void Settings::loadDisplayConfig(QSettingsConfigGroup& display)
             }
         }
     }
+    // DisabledDesktops is a comma-separated list of desktop numbers
+    QString disabledDesktopsStr = display.readString(QStringLiteral("DisabledDesktops"));
+    m_disabledDesktops.clear();
+    if (!disabledDesktopsStr.isEmpty()) {
+        const QStringList parts = disabledDesktopsStr.split(QLatin1Char(','), Qt::SkipEmptyParts);
+        for (const QString& p : parts) {
+            bool ok = false;
+            int desktop = p.trimmed().toInt(&ok);
+            if (ok && desktop > 0)
+                m_disabledDesktops.append(desktop);
+        }
+    }
+    // DisabledActivities is a comma-separated list of activity UUIDs
+    QString disabledActivitiesStr = display.readString(QStringLiteral("DisabledActivities"));
+    m_disabledActivities = disabledActivitiesStr.isEmpty()
+        ? QStringList()
+        : disabledActivitiesStr.split(QLatin1Char(','), Qt::SkipEmptyParts);
+    for (int i = 0; i < m_disabledActivities.size(); ++i) {
+        m_disabledActivities[i] = m_disabledActivities[i].trimmed();
+    }
     m_showZoneNumbers = display.readBool(QStringLiteral("ShowNumbers"), ConfigDefaults::showNumbers());
     m_flashZonesOnSwitch = display.readBool(QStringLiteral("FlashOnSwitch"), ConfigDefaults::flashOnSwitch());
     m_showOsdOnLayoutSwitch =
@@ -629,6 +649,11 @@ void Settings::saveDisplayConfig(QSettingsConfigGroup& display)
 {
     display.writeBool(QStringLiteral("ShowOnAllMonitors"), m_showZonesOnAllMonitors);
     display.writeString(QStringLiteral("DisabledMonitors"), m_disabledMonitors.join(QLatin1Char(',')));
+    QStringList desktopStrs;
+    for (int d : m_disabledDesktops)
+        desktopStrs.append(QString::number(d));
+    display.writeString(QStringLiteral("DisabledDesktops"), desktopStrs.join(QLatin1Char(',')));
+    display.writeString(QStringLiteral("DisabledActivities"), m_disabledActivities.join(QLatin1Char(',')));
     display.writeBool(QStringLiteral("ShowNumbers"), m_showZoneNumbers);
     display.writeBool(QStringLiteral("FlashOnSwitch"), m_flashZonesOnSwitch);
     display.writeBool(QStringLiteral("ShowOsdOnLayoutSwitch"), m_showOsdOnLayoutSwitch);

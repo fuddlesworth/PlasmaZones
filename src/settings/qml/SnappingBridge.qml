@@ -33,22 +33,8 @@ QtObject {
     // Forward external lock/slot changes (daemon shortcuts) to QML consumers
     property Connections _externalSignals
 
-    _externalSignals: Connections {
-        function onLockedScreensChanged() {
-            lockedScreensChanged();
-        }
-
-        function onQuickLayoutSlotsChanged() {
-            quickLayoutSlotsChanged();
-        }
-
-        function onScreenLayoutChanged() {
-            screenAssignmentsChanged();
-        }
-
-        target: settingsController
-    }
-
+    signal disabledDesktopsChanged()
+    signal disabledActivitiesChanged()
     signal screenAssignmentsChanged()
     signal tilingScreenAssignmentsChanged()
     signal tilingDesktopAssignmentsChanged()
@@ -65,6 +51,22 @@ QtObject {
 
     function setMonitorDisabled(name, disabled) {
         settingsController.setMonitorDisabled(name, disabled);
+    }
+
+    function isDesktopDisabled(desktop) {
+        return settingsController.isDesktopDisabled(desktop);
+    }
+
+    function setDesktopDisabled(desktop, disabled) {
+        settingsController.setDesktopDisabled(desktop, disabled);
+    }
+
+    function isActivityDisabled(activityId) {
+        return settingsController.isActivityDisabled(activityId);
+    }
+
+    function setActivityDisabled(activityId, disabled) {
+        settingsController.setActivityDisabled(activityId, disabled);
     }
 
     function assignLayoutToScreen(screen, layout) {
@@ -170,6 +172,30 @@ QtObject {
 
     function getRunningWindows() {
         return settingsController.getRunningWindows();
+    }
+
+    _externalSignals: Connections {
+        function onLockedScreensChanged() {
+            lockedScreensChanged();
+        }
+
+        function onQuickLayoutSlotsChanged() {
+            quickLayoutSlotsChanged();
+        }
+
+        function onScreenLayoutChanged() {
+            screenAssignmentsChanged();
+        }
+
+        function onDisabledDesktopsChanged() {
+            disabledDesktopsChanged();
+        }
+
+        function onDisabledActivitiesChanged() {
+            disabledActivitiesChanged();
+        }
+
+        target: settingsController
     }
 
 }

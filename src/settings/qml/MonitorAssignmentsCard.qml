@@ -385,6 +385,59 @@ SettingsCard {
 
         }
 
+        // ─── Disabled Desktops ────────────────────────────────────────
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.margins: Kirigami.Units.smallSpacing
+            visible: root.appSettings.virtualDesktopCount > 1
+            spacing: Kirigami.Units.smallSpacing
+
+            Kirigami.Separator {
+                Layout.fillWidth: true
+            }
+
+            Label {
+                text: i18n("Disabled Desktops")
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                font.weight: Font.DemiBold
+                opacity: 0.7
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: i18n("PlasmaZones will not activate on disabled desktops.")
+                wrapMode: Text.WordWrap
+                font: Kirigami.Theme.smallFont
+                opacity: 0.5
+            }
+
+            Repeater {
+                model: root.appSettings.virtualDesktopCount
+
+                CheckBox {
+                    id: desktopDisableCheck
+
+                    required property int index
+                    property int desktopNumber: index + 1
+
+                    text: root.appSettings.virtualDesktopNames[index] || i18n("Desktop %1", desktopNumber)
+                    checked: root.appSettings.isDesktopDisabled(desktopNumber)
+                    onToggled: root.appSettings.setDesktopDisabled(desktopNumber, checked)
+
+                    Connections {
+                        function onDisabledDesktopsChanged() {
+                            desktopDisableCheck.checked = root.appSettings.isDesktopDisabled(desktopDisableCheck.desktopNumber);
+                        }
+
+                        target: root.appSettings
+                    }
+
+                }
+
+            }
+
+        }
+
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.smallSpacing

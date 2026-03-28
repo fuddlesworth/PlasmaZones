@@ -97,6 +97,12 @@ public:
     virtual QStringList disabledMonitors() const = 0;
     virtual void setDisabledMonitors(const QStringList& screenIdOrNames) = 0;
     virtual bool isMonitorDisabled(const QString& screenIdOrName) const = 0;
+    virtual QList<int> disabledDesktops() const = 0;
+    virtual void setDisabledDesktops(const QList<int>& desktops) = 0;
+    virtual bool isDesktopDisabled(int desktop) const = 0;
+    virtual QStringList disabledActivities() const = 0;
+    virtual void setDisabledActivities(const QStringList& activityIds) = 0;
+    virtual bool isActivityDisabled(const QString& activityId) const = 0;
     virtual QStringList lockedScreens() const = 0;
     virtual void setLockedScreens(const QStringList& screens) = 0;
     virtual void setScreenLocked(const QString& screenIdOrName, bool locked) = 0;
@@ -320,5 +326,25 @@ public:
     virtual QString defaultLayoutId() const = 0;
     virtual void setDefaultLayoutId(const QString& layoutId) = 0;
 };
+
+/**
+ * @brief Check if PlasmaZones is disabled for a given screen/desktop/activity context.
+ *
+ * Returns true if the screen is disabled, OR the desktop is disabled, OR the activity
+ * is disabled. Use at every point where overlay/snapping/autotile is gated.
+ */
+inline bool isContextDisabled(const IZoneVisualizationSettings* s, const QString& screenId, int desktop,
+                              const QString& activity)
+{
+    if (!s)
+        return false;
+    if (s->isMonitorDisabled(screenId))
+        return true;
+    if (desktop > 0 && s->isDesktopDisabled(desktop))
+        return true;
+    if (!activity.isEmpty() && s->isActivityDisabled(activity))
+        return true;
+    return false;
+}
 
 } // namespace PlasmaZones

@@ -129,6 +129,26 @@ SettingsCard {
 
                     }
 
+                    CheckBox {
+                        id: activityDisableCheck
+
+                        Layout.fillWidth: true
+                        text: i18n("Disable PlasmaZones for this activity")
+                        checked: root.appSettings.isActivityDisabled(activityDelegate.activityId)
+                        onToggled: root.appSettings.setActivityDisabled(activityDelegate.activityId, checked)
+                        ToolTip.visible: hovered
+                        ToolTip.text: i18n("When enabled, zones will not appear while this activity is active")
+
+                        Connections {
+                            function onDisabledActivitiesChanged() {
+                                activityDisableCheck.checked = root.appSettings.isActivityDisabled(activityDelegate.activityId);
+                            }
+
+                            target: root.appSettings
+                        }
+
+                    }
+
                     // Per-screen assignments using AssignmentRow + lock toggle
                     Repeater {
                         model: root.appSettings.screens

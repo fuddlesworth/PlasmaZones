@@ -39,8 +39,9 @@ void OverlayService::showZoneSelector(QScreen* targetScreen)
         if (targetScreen && screen != targetScreen) {
             continue;
         }
-        // Skip monitors where PlasmaZones is disabled
-        if (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
+        // Skip monitors/desktops/activities where PlasmaZones is disabled
+        if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                              m_currentActivity)) {
             continue;
         }
         // Skip autotile-managed screens (zone selector is for manual zone selection)
@@ -389,8 +390,7 @@ void OverlayService::scrollZoneSelector(int angleDeltaY)
     }
     for (auto* window : std::as_const(m_zoneSelectorWindows)) {
         if (window) {
-            QMetaObject::invokeMethod(window, "applyScrollDelta",
-                                      Q_ARG(QVariant, angleDeltaY));
+            QMetaObject::invokeMethod(window, "applyScrollDelta", Q_ARG(QVariant, angleDeltaY));
         }
     }
 }
