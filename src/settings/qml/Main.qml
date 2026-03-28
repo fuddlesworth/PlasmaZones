@@ -90,7 +90,7 @@ ApplicationWindow {
             "iconName": "preferences-system"
         }, {
             "name": "snap-zoneselector",
-            "label": i18n("Zone Layout"),
+            "label": i18n("Zone Selector"),
             "iconName": "view-choose"
         }, {
             "name": "snap-effects",
@@ -115,7 +115,7 @@ ApplicationWindow {
             "iconName": "preferences-system"
         }, {
             "name": "tile-algorithm",
-            "label": i18n("Algorithm"),
+            "label": i18n("Algorithms"),
             "iconName": "view-grid"
         }, {
             "name": "tile-assignments",
