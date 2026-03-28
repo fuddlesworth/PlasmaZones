@@ -304,12 +304,8 @@ implementation.
 Before `QGuiApplication` is created:
 
 ```cpp
-#ifndef PLASMAZONES_USE_LAYERSHELLQT
-    // Register our layer-shell QPA integration
-    qputenv("QT_WAYLAND_SHELL_INTEGRATION", "pz-layer-shell");
-    // OR register programmatically after QGuiApplication
-    LayerShellIntegration::registerPlugin();
-#endif
+    // Register our layer-shell QPA integration (respects existing env var)
+    PlasmaZones::registerLayerShellPlugin();
 ```
 
 ### Step 2.6: Handle `wl_output` ↔ `QScreen` mapping
@@ -450,7 +446,6 @@ Add `qt6-wayland-devel` (or equivalent) if not already present.
 
 - Update README with multi-compositor support section
 - Add build instructions for non-KDE systems
-- Document `-DUSE_LAYERSHELLQT=OFF` flag
 
 ---
 

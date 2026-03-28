@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <utility>
 #include <QtWaylandClient/private/qwaylandshellsurface_p.h>
 extern "C" {
 #define namespace namespace_
@@ -32,6 +33,9 @@ public:
 
     // Apply current properties from LayerSurface → protocol
     void applyProperties();
+
+    // Compute layer-shell size: 0 for axes anchored to both edges, clamped otherwise
+    static std::pair<uint32_t, uint32_t> computeLayerSize(int anchors, const QSize& windowSize);
 
     // Public for C callback struct initialization
     static void handleConfigure(void* data, struct zwlr_layer_surface_v1* surface, uint32_t serial, uint32_t width,

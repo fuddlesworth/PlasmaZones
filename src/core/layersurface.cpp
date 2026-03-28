@@ -53,10 +53,10 @@ LayerSurface* LayerSurface::get(QWindow* window)
     }
 
     if (window->isVisible()) {
-        qCWarning(lcLayerSurface) << "LayerSurface::get() called after window is visible;"
-                                  << "layer, scope, and output are immutable after show()."
-                                  << "Dynamic properties (anchors, margins, keyboard, exclusiveZone)"
-                                  << "will still be pushed to the compositor.";
+        qCCritical(lcLayerSurface) << "LayerSurface::get() called after window is already visible."
+                                   << "The platform window was created as xdg_toplevel, not a layer surface."
+                                   << "Layer, scope, screen, and anchors will have NO effect."
+                                   << "Caller must call LayerSurface::get() BEFORE QWindow::show().";
     }
 
     auto* surface = new LayerSurface(window);
@@ -158,6 +158,7 @@ void LayerSurface::setScreen(QScreen* screen)
     if (m_window->isVisible()) {
         qCWarning(lcLayerSurface) << "setScreen() called after show(); output binding is immutable"
                                   << "— the layer surface remains on the original screen";
+        return;
     }
     m_screen = screen;
     if (screen) {

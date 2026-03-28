@@ -9,9 +9,12 @@ namespace PlasmaZones {
 
 /// Call before QGuiApplication to register the pz-layer-shell QPA plugin.
 /// Lightweight header — does not pull in Qt Wayland private headers.
+/// Respects any existing QT_WAYLAND_SHELL_INTEGRATION value (e.g. for debugging).
 inline void registerLayerShellPlugin()
 {
-    qputenv("QT_WAYLAND_SHELL_INTEGRATION", "pz-layer-shell");
+    if (qEnvironmentVariableIsEmpty("QT_WAYLAND_SHELL_INTEGRATION")) {
+        qputenv("QT_WAYLAND_SHELL_INTEGRATION", "pz-layer-shell");
+    }
 }
 
 } // namespace PlasmaZones

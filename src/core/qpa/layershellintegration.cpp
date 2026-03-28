@@ -5,6 +5,7 @@
 #include "layershellwindow.h"
 #include "../layersurface.h"
 
+#include <cstring>
 #include <QLoggingCategory>
 #include <QtWaylandClient/private/qwaylanddisplay_p.h>
 #include <QtWaylandClient/private/qwaylandwindow_p.h>
@@ -80,6 +81,12 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
 {
     auto* self = static_cast<LayerShellIntegration*>(data);
     if (strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0) {
+        // Only bind once — if a compositor advertises the global multiple times,
+        // ignore subsequent advertisements to avoid leaking the first binding.
+        if (self->m_layerShell) {
+            qCDebug(lcLayerShellIntegration) << "Ignoring duplicate zwlr_layer_shell_v1 global (id" << id << ")";
+            return;
+        }
         // Bind version 4 max (supports on_demand keyboard interactivity, added in v4).
         // The vendored protocol XML is v5 (includes set_exclusive_edge), but we don't
         // use v5 features. Capping at v4 avoids negotiation issues with older compositors.

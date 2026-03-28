@@ -21,6 +21,7 @@ Build-Depends:
  kwin-dev (>= 6.6.0),
  libxkbcommon-dev,
  qt6-wayland-dev (>= 6.6.0),
+ qt6-wayland-private-dev (>= 6.6.0),
  plasma-activities-dev,
 Standards-Version: 4.6.2
 Homepage: https://github.com/fuddlesworth/PlasmaZones

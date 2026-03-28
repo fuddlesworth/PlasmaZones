@@ -108,17 +108,22 @@ void LayerShellWindow::setWindowGeometry(const QRect& rect)
     if (m_layerSurface) {
         QWindow* qwindow = m_waylandWindow->window();
         int anchors = qwindow->property(LayerSurfaceProps::Anchors).toInt();
-        bool anchoredH = (anchors & LayerSurface::AnchorLeft) && (anchors & LayerSurface::AnchorRight);
-        bool anchoredV = (anchors & LayerSurface::AnchorTop) && (anchors & LayerSurface::AnchorBottom);
-
-        uint32_t w = anchoredH ? 0 : static_cast<uint32_t>(qMax(0, rect.width()));
-        uint32_t h = anchoredV ? 0 : static_cast<uint32_t>(qMax(0, rect.height()));
+        auto [w, h] = computeLayerSize(anchors, rect.size());
         zwlr_layer_surface_v1_set_size(m_layerSurface, w, h);
 
         if (m_wlSurface) {
             wl_surface_commit(m_wlSurface);
         }
     }
+}
+
+std::pair<uint32_t, uint32_t> LayerShellWindow::computeLayerSize(int anchors, const QSize& windowSize)
+{
+    bool anchoredH = (anchors & LayerSurface::AnchorLeft) && (anchors & LayerSurface::AnchorRight);
+    bool anchoredV = (anchors & LayerSurface::AnchorTop) && (anchors & LayerSurface::AnchorBottom);
+    uint32_t w = anchoredH ? 0 : static_cast<uint32_t>(qMax(0, windowSize.width()));
+    uint32_t h = anchoredV ? 0 : static_cast<uint32_t>(qMax(0, windowSize.height()));
+    return {w, h};
 }
 
 void LayerShellWindow::applyProperties()
@@ -149,11 +154,7 @@ void LayerShellWindow::applyProperties()
     zwlr_layer_surface_v1_set_margin(m_layerSurface, marginTop, marginRight, marginBottom, marginLeft);
 
     // Size — use 0 for axes anchored to both edges; clamp to avoid uint32_t wrap on negative
-    bool anchoredH = (anchors & LayerSurface::AnchorLeft) && (anchors & LayerSurface::AnchorRight);
-    bool anchoredV = (anchors & LayerSurface::AnchorTop) && (anchors & LayerSurface::AnchorBottom);
-    QSize size = qwindow->size();
-    uint32_t w = anchoredH ? 0 : static_cast<uint32_t>(qMax(0, size.width()));
-    uint32_t h = anchoredV ? 0 : static_cast<uint32_t>(qMax(0, size.height()));
+    auto [w, h] = computeLayerSize(anchors, qwindow->size());
     zwlr_layer_surface_v1_set_size(m_layerSurface, w, h);
 }
 
