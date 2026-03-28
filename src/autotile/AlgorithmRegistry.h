@@ -237,12 +237,22 @@ public:
 Q_SIGNALS:
     /**
      * @brief Emitted when an algorithm is registered
+     *
+     * On replacement (re-registration of an existing ID), algorithmUnregistered
+     * is emitted first, then algorithmRegistered. In both cases the new algorithm
+     * is already queryable via algorithm(id) when the signal fires.
+     *
      * @param id The registered algorithm's ID
      */
     void algorithmRegistered(const QString& id);
 
     /**
      * @brief Emitted when an algorithm is unregistered
+     *
+     * On replacement, the new algorithm is already in the registry when this
+     * signal fires — handlers should not assume the ID is absent.
+     * On explicit unregister, the algorithm has been removed before emission.
+     *
      * @param id The removed algorithm's ID
      */
     void algorithmUnregistered(const QString& id);

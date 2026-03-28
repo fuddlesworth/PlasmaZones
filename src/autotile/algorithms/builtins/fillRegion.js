@@ -14,8 +14,8 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 function fillRegion(x, y, w, h, count) {
-    var zones = [];
-    for (var i = 0; i < count; i++) {
+    const zones = [];
+    for (let i = 0; i < count; i++) {
         zones.push({x: x, y: y, width: w, height: h});
     }
     return zones;

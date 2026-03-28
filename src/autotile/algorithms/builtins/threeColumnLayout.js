@@ -17,45 +17,45 @@
  * @returns {Array<{x: number, y: number, width: number, height: number}>}
  */
 function threeColumnLayout(area, count, gap, splitRatio, masterCount, minSizes) {
-    var stackCount = count - masterCount;
-    var leftCount = Math.ceil(stackCount / 2);
-    var rightCount = stackCount - leftCount;
+    const stackCount = count - masterCount;
+    const leftCount = Math.ceil(stackCount / 2);
+    const rightCount = stackCount - leftCount;
 
-    var contentWidth = area.width - 2 * gap;
+    const contentWidth = area.width - 2 * gap;
     if (contentWidth < 3 * PZ_MIN_ZONE_SIZE) {
         return fillArea(area, count);
     }
 
     // Build left/right interleaving map
-    var stackIsLeft = buildStackIsLeft(stackCount, leftCount, rightCount);
+    const stackIsLeft = buildStackIsLeft(stackCount, leftCount, rightCount);
 
     // Compute per-column minimum widths from minSizes
-    var minCenterWidth = extractRegionMaxMin(minSizes, 0, masterCount, 'w');
-    var sideMinW = (minSizes.length > 0)
+    const minCenterWidth = extractRegionMaxMin(minSizes, 0, masterCount, 'w');
+    const sideMinW = (minSizes.length > 0)
         ? interleaveMinWidths(minSizes, stackIsLeft, stackCount, masterCount)
         : {minLeftWidth: 0, minRightWidth: 0};
 
-    var cols = solveThreeColumn(area.x, contentWidth, gap, splitRatio,
-                                sideMinW.minLeftWidth, minCenterWidth, sideMinW.minRightWidth);
+    const cols = solveThreeColumn(area.x, contentWidth, gap, splitRatio,
+                                  sideMinW.minLeftWidth, minCenterWidth, sideMinW.minRightWidth);
 
     // Compute per-column minimum heights
-    var masterMinH = extractMinHeights(minSizes, masterCount);
-    var sideMinH = (minSizes.length > 0)
+    const masterMinH = extractMinHeights(minSizes, masterCount);
+    const sideMinH = (minSizes.length > 0)
         ? interleaveMinHeights(minSizes, stackIsLeft, stackCount, leftCount, rightCount, masterCount)
         : {leftMinH: [], rightMinH: []};
 
-    var masterHeights = distributeWithOptionalMins(area.height, masterCount, gap, masterMinH);
-    var leftHeights = (leftCount > 0)
+    const masterHeights = distributeWithOptionalMins(area.height, masterCount, gap, masterMinH);
+    const leftHeights = (leftCount > 0)
         ? distributeWithOptionalMins(area.height, leftCount, gap, sideMinH.leftMinH)
         : [];
-    var rightHeights = (rightCount > 0)
+    const rightHeights = (rightCount > 0)
         ? distributeWithOptionalMins(area.height, rightCount, gap, sideMinH.rightMinH)
         : [];
 
     // Masters in center column (stacked vertically)
-    var zones = [];
-    var currentY = area.y;
-    for (var i = 0; i < masterCount; i++) {
+    const zones = [];
+    let currentY = area.y;
+    for (let i = 0; i < masterCount; i++) {
         zones.push({x: cols.centerX, y: currentY, width: cols.centerWidth, height: masterHeights[i]});
         currentY += masterHeights[i] + gap;
     }

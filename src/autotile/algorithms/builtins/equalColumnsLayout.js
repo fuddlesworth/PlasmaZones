@@ -14,11 +14,11 @@
  */
 function equalColumnsLayout(area, count, gap, minSizes) {
     if (count <= 0) return [];
-    var minWidths = extractMinWidths(minSizes, count);
-    var columnWidths = distributeWithOptionalMins(area.width, count, gap, minWidths);
-    var zones = [];
-    var currentX = area.x;
-    for (var i = 0; i < count; i++) {
+    const minWidths = extractMinWidths(minSizes, count);
+    const columnWidths = distributeWithOptionalMins(area.width, count, gap, minWidths);
+    const zones = [];
+    let currentX = area.x;
+    for (let i = 0; i < count; i++) {
         zones.push({x: currentX, y: area.y, width: columnWidths[i], height: area.height});
         currentX += columnWidths[i] + gap;
     }
