@@ -2,7 +2,7 @@
 # Window tiling and autotiling for KDE Plasma
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6+).
+# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, KWin 6.6+).
 #
 # Build: rpmbuild -ba plasmazones.spec
 # Clean build: mock -r fedora-43-x86_64 plasmazones-1.2.0-1.fc43.src.rpm
@@ -68,17 +68,17 @@ BuildRequires:  kf6-kglobalaccel-devel >= 6.6.0
 BuildRequires:  kf6-kirigami-devel >= 6.6.0
 %endif
 
-# Plasma 6.6 / KWin 6.6 (effect API), LayerShellQt 6.6 (setScreen API)
+# Plasma 6.6 / KWin 6.6 (effect API)
 # The KWin effect plugin links against libkwin; RPM auto-generates soname deps
 # for ABI safety. Patch releases (6.6.x) maintain ABI and IID compatibility.
 %if 0%{?suse_version}
 BuildRequires:  kwin6-devel
-BuildRequires:  cmake(LayerShellQt) >= 6.6.0
+BuildRequires:  cmake(Qt6WaylandClient)
 BuildRequires:  cmake(PlasmaActivities)
 BuildRequires:  pkgconfig(systemd)
 %else
 BuildRequires:  kwin-devel >= 6.6.0
-BuildRequires:  layer-shell-qt-devel >= 6.6.0
+BuildRequires:  qt6-qtwayland-devel
 BuildRequires:  libepoxy-devel
 BuildRequires:  wayland-devel
 BuildRequires:  libdrm-devel
@@ -96,7 +96,7 @@ Requires:       qt6-qtdeclarative
 Requires:       qt6-qtshadertools
 Requires:       kf6-kirigami >= 6.6.0
 Requires:       kf6-kcmutils >= 6.6.0
-Requires:       layer-shell-qt >= 6.6.0
+Requires:       qt6-qtwayland >= 6.6.0
 Requires:       kwin >= 6.6.0
 %endif
 Requires:       hicolor-icon-theme

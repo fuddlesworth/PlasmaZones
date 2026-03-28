@@ -18,7 +18,7 @@ depends=(
     'ki18n'
     'kcmutils'
     'kglobalaccel'
-    'layer-shell-qt'
+    'qt6-wayland'
 )
 optdepends=(
     'plasma-activities: activity-based layouts'

@@ -1,7 +1,7 @@
 # PlasmaZones Nix package
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6).
+# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, KWin 6.6).
 # nixos-unstable has the full Plasma 6.6 stack since Feb 2026 (nixpkgs PR #479797).
 #
 # Usage:
@@ -46,17 +46,16 @@ let
     in
     if parsed != null then builtins.head parsed else "0.0.0";
 
-  # PlasmaZones requires LayerShellQt 6.6 (setScreen API). Fail fast with a clear
-  # message instead of a CMake error when the provided nixpkgs has the 6.5 stack.
-  layerShellQtVersion = lib.getVersion kdePackages.layer-shell-qt;
-  hasLayerShellQt66 = lib.versionAtLeast layerShellQtVersion "6.6";
+  # PlasmaZones requires Qt6 6.6+ and KWin 6.6+. Fail fast with a clear
+  # message when the provided nixpkgs has an older stack.
+  qtVersion = lib.getVersion qt6.qtbase;
+  hasQt66 = lib.versionAtLeast qtVersion "6.6";
 in
 
-assert hasLayerShellQt66 || throw ''
-  PlasmaZones requires the Plasma 6.6 stack (LayerShellQt 6.6+, KWin 6.6+).
-  Your nixpkgs provides layer-shell-qt ${layerShellQtVersion}.
-  Use a nixpkgs channel or revision that has KDE/Plasma 6.6 (e.g. a recent
-  nixos-unstable after the 6.6 bump, or a NixOS 25.xx channel).
+assert hasQt66 || throw ''
+  PlasmaZones requires Qt 6.6+ and KDE/Plasma 6.6+ (KWin 6.6+).
+  Your nixpkgs provides Qt ${qtVersion}.
+  Use a nixpkgs channel or revision that has the Plasma 6.6 stack.
 '';
 
 stdenv.mkDerivation {
@@ -79,13 +78,12 @@ stdenv.mkDerivation {
     qt6.qtdeclarative    # Quick QuickControls2 (QML engine + runtime)
     qt6.qtshadertools    # ShaderTools ShaderToolsPrivate (zone overlay shaders)
     qt6.qtsvg            # Svg (SVG icon rendering)
+    qt6.qtwayland        # WaylandClient (layer-shell QPA plugin)
   ] ++ (with kdePackages; [
     # KDE Frameworks 6 (6.6+ for Plasma 6.6)
     kcmutils
     kglobalaccel
     kirigami
-    # Wayland overlay support (required; 6.6+ for setScreen API)
-    layer-shell-qt
 
     # KWin integration (effect plugin; 6.6+ for prePaintWindow(RenderView)/paintWindow(Region) API)
     kwin

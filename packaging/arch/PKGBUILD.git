@@ -18,7 +18,7 @@ depends=(
     'kconfigwidgets'
     'kcmutils'
     'kglobalaccel'
-    'layer-shell-qt'
+    'qt6-wayland'
 )
 makedepends=(
     'git'

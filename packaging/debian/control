@@ -1,4 +1,4 @@
-# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6). Built on KDE Neon.
+# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, KWin 6.6). Built on KDE Neon.
 Source: plasmazones
 Section: kde
 Priority: optional
@@ -20,7 +20,7 @@ Build-Depends:
  libkf6kirigami-dev (>= 6.6.0) | kf6-kirigami-dev (>= 6.6.0),
  kwin-dev (>= 6.6.0),
  libxkbcommon-dev,
- liblayershellqtinterface-dev (>= 6.4.0),
+ qt6-wayland-dev,
  plasma-activities-dev,
 Standards-Version: 4.6.2
 Homepage: https://github.com/fuddlesworth/PlasmaZones
@@ -34,7 +34,7 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  kwin-common (>= 4:6.6.0),
- layer-shell-qt (>= 6.4.0),
+ qt6-wayland (>= 6.6.0),
  libqt6shadertools6 (>= 6.6.0),
 Recommends:
  systemd,

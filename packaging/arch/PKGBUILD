@@ -1,7 +1,7 @@
 # Maintainer: fuddlesworth <fuddlesworth at users dot noreply dot github dot com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6).
+# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, KWin 6.6).
 
 pkgname=plasmazones
 pkgver=0.0.0
@@ -18,7 +18,7 @@ depends=(
     'kirigami'
     'kcmutils'
     'kglobalaccel'
-    'layer-shell-qt'
+    'qt6-wayland'
 )
 makedepends=(
     'cmake'

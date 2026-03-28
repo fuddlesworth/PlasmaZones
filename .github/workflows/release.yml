@@ -63,7 +63,7 @@ jobs:
             libkf6kcmutils-dev \
             libkf6windowsystem-dev libkf6globalaccel-dev \
             libkf6notifications-dev \
-            liblayershellqtinterface-dev plasma-activities-dev
+            qt6-wayland-dev plasma-activities-dev
           # Kirigami dev package name varies across distros
           apt-get install -y --no-install-recommends libkf6kirigami-dev 2>/dev/null \
             || apt-get install -y --no-install-recommends kf6-kirigami-dev
@@ -116,7 +116,7 @@ jobs:
             kf6-kirigami-devel \
             kf6-kcmutils-devel \
             kf6-kglobalaccel-devel \
-            layer-shell-qt-devel plasma-activities-devel
+            qt6-qtwayland-devel plasma-activities-devel
 
       - name: Setup rpmbuild
         run: rpmdev-setuptree
@@ -183,7 +183,7 @@ jobs:
             'cmake(KF6KCMUtils)' \
             'cmake(KF6GlobalAccel)' \
             'cmake(KF6WindowSystem)' \
-            kwin6-devel 'cmake(LayerShellQt)' 'cmake(PlasmaActivities)' \
+            kwin6-devel 'cmake(Qt6WaylandClient)' 'cmake(PlasmaActivities)' \
             'pkgconfig(systemd)'
 
       - name: Setup rpmbuild
@@ -243,7 +243,7 @@ jobs:
             kwin wayland libepoxy libdrm \
             kconfig kconfigwidgets \
             kcmutils kglobalaccel \
-            layer-shell-qt plasma-activities
+            qt6-wayland plasma-activities
 
       - name: Configure
         run: |
@@ -326,7 +326,7 @@ jobs:
             kwin \
             kconfig kconfigwidgets \
             kcmutils kglobalaccel \
-            layer-shell-qt plasma-activities
+            qt6-wayland plasma-activities
 
       - name: Prepare PKGBUILD
         run: |
