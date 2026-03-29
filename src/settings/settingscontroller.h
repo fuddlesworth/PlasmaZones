@@ -555,6 +555,7 @@ Q_SIGNALS:
     void availableAlgorithmsChanged();
     void algorithmCreated(const QString& algorithmId);
     void algorithmCreationFailed(const QString& reason);
+    void algorithmOperationFailed(const QString& reason);
     void layoutCreationFailed(const QString& reason);
     void screensChanged();
     void dismissedUpdateVersionChanged();
@@ -605,6 +606,9 @@ private Q_SLOTS:
 private:
     QString scriptedFilePath(const QString& algorithmId) const;
     void watchForAlgorithmRegistration(const QString& expectedId);
+    void cancelAlgorithmWatcher(const QString& expectedId);
+
+    QHash<QString, std::shared_ptr<QMetaObject::Connection>> m_algorithmWatchers;
 
     void setNeedsSave(bool needs);
     void scheduleLayoutLoad();

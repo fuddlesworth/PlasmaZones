@@ -1878,22 +1878,43 @@ QString SettingsController::scriptedFilePath(const QString& algorithmId) const
     return path;
 }
 
+void SettingsController::cancelAlgorithmWatcher(const QString& expectedId)
+{
+    auto it = m_algorithmWatchers.find(expectedId);
+    if (it != m_algorithmWatchers.end()) {
+        if (*it->get())
+            disconnect(*it->get());
+        m_algorithmWatchers.erase(it);
+    }
+}
+
 void SettingsController::watchForAlgorithmRegistration(const QString& expectedId)
 {
+    // Cancel any existing watcher for this ID to prevent stacking
+    cancelAlgorithmWatcher(expectedId);
+
     auto* registry = AlgorithmRegistry::instance();
     auto conn = std::make_shared<QMetaObject::Connection>();
+    m_algorithmWatchers[expectedId] = conn;
     *conn = connect(registry, &AlgorithmRegistry::algorithmRegistered, this,
-                    [this, expectedId, conn](const QString& registeredId) {
+                    [this, expectedId](const QString& registeredId) {
                         if (registeredId == expectedId) {
-                            disconnect(*conn);
+                            auto it = m_algorithmWatchers.find(expectedId);
+                            if (it != m_algorithmWatchers.end()) {
+                                disconnect(*it->get());
+                                m_algorithmWatchers.erase(it);
+                            }
                             Q_EMIT algorithmCreated(expectedId);
                         }
                     });
     // The context object (this) ensures the lambda is not invoked if SettingsController
     // is destroyed before the timer fires — QTimer::singleShot with a context guarantees this.
-    QTimer::singleShot(10000, this, [this, conn, expectedId]() {
-        if (*conn) {
-            disconnect(*conn);
+    QTimer::singleShot(10000, this, [this, expectedId]() {
+        auto it = m_algorithmWatchers.find(expectedId);
+        if (it != m_algorithmWatchers.end()) {
+            if (*it->get())
+                disconnect(*it->get());
+            m_algorithmWatchers.erase(it);
             qCWarning(lcCore) << "Algorithm registration timed out for:" << expectedId;
             Q_EMIT algorithmCreationFailed(
                 PzI18n::tr("Algorithm was created but not picked up by the registry. "
@@ -1964,7 +1985,7 @@ bool SettingsController::deleteAlgorithm(const QString& algorithmId)
     const bool ok = QFile::remove(filePath);
     if (!ok) {
         qCWarning(lcCore) << "Failed to delete algorithm file:" << filePath;
-        Q_EMIT algorithmCreationFailed(PzI18n::tr("Could not delete algorithm file. Check file permissions."));
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not delete algorithm file. Check file permissions."));
     }
     // QFileSystemWatcher will pick up the deletion and trigger a refresh
     return ok;
@@ -2010,14 +2031,18 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
     if (baseCopyName.endsWith(QLatin1String(" (Copy)")))
         baseCopyName.chop(7);
     const QString newName = baseCopyName + QStringLiteral(" (Copy)");
-    static const QRegularExpression nameRe(QStringLiteral("// @name .+"));
-    static const QRegularExpression idRe(QStringLiteral("// @builtinId .+"));
+    static const QRegularExpression nameRe(QStringLiteral("^// @name .+"), QRegularExpression::MultilineOption);
+    static const QRegularExpression idRe(QStringLiteral("^// @builtinId .+"), QRegularExpression::MultilineOption);
     content.replace(nameRe, QStringLiteral("// @name ") + newName);
     content.replace(idRe, QStringLiteral("// @builtinId ") + newFilename);
 
     QFile destFile(destPath);
-    if (!destFile.open(QIODevice::WriteOnly | QIODevice::Text))
+    if (!destFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qCWarning(lcCore) << "Failed to write duplicate algorithm file:" << destPath;
+        Q_EMIT algorithmOperationFailed(
+            PzI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
         return false;
+    }
     destFile.write(content.toUtf8());
     destFile.close();
 

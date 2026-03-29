@@ -1188,6 +1188,7 @@ ApplicationWindow {
                 MenuItem {
                     text: i18n("Open in Text Editor")
                     icon.name: "document-open"
+                    Accessible.name: text
                     onTriggered: {
                         if (layoutContextMenu.isAutotile)
                             settingsController.openAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId));

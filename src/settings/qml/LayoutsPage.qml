@@ -429,6 +429,12 @@ ColumnLayout {
 
         }
 
+        function onAlgorithmOperationFailed(reason) {
+            if (window && window.showToast)
+                window.showToast(reason);
+
+        }
+
         target: settingsController
     }
 
@@ -439,7 +445,7 @@ ColumnLayout {
         property string algorithmId: ""
 
         title: i18n("Export Algorithm")
-        nameFilters: [i18n("JavaScript files (*.js)")]
+        nameFilters: ["JavaScript files (*.js)"]
         fileMode: FileDialog.SaveFile
         onAccepted: {
             if (!settingsController.exportAlgorithm(algorithmExportDialog.algorithmId, root.filePathFromUrl(selectedFile))) {
