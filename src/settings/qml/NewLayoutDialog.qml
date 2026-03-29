@@ -23,6 +23,9 @@ Kirigami.Dialog {
     property int selectedAspectRatio: -1
     property bool openInEditor: true
     property string _previousAutoName: ""
+    readonly property color _subtleBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
+    readonly property color _subtleBorder: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+    readonly property color _accentBorder: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3)
     // Match the user's primary monitor aspect ratio for the preview.
     // Re-evaluated on open so it picks up the correct screen even if the
     // dialog is constructed before the window is shown on a display.
@@ -303,9 +306,9 @@ Kirigami.Dialog {
                     Layout.maximumHeight: Kirigami.Units.gridUnit * 12
                     Layout.alignment: Qt.AlignHCenter
                     radius: Kirigami.Units.smallSpacing * 2
-                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
+                    color: root._subtleBg
                     border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                    border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3)
+                    border.color: root._accentBorder
 
                     QFZCommon.ZonePreview {
                         anchors.fill: parent
@@ -345,9 +348,9 @@ Kirigami.Dialog {
                     Layout.fillWidth: true
                     implicitHeight: configColumn.implicitHeight + Kirigami.Units.largeSpacing * 2
                     radius: Kirigami.Units.smallSpacing * 2
-                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
+                    color: root._subtleBg
                     border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                    border.color: root._subtleBorder
 
                     ColumnLayout {
                         id: configColumn

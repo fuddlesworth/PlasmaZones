@@ -414,6 +414,8 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
     } else {
         Q_EMIT layoutCreationFailed(PzI18n::tr("Could not create layout — the daemon may not be running."));
     }
+    // Still refresh — the daemon may have partially processed the request
+    scheduleLayoutLoad();
     return false;
 }
 
@@ -1982,8 +1984,11 @@ bool SettingsController::deleteAlgorithm(const QString& algorithmId)
     const QString userDir = rawUserDir + QLatin1Char('/');
     const QString canonicalPath = QFileInfo(filePath).canonicalFilePath();
     if (rawUserDir.isEmpty() || canonicalPath.isEmpty() || !canonicalPath.startsWith(userDir)) {
-        qCWarning(lcCore) << "Refusing to delete non-user algorithm file:" << filePath;
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot delete — file is outside the user algorithms directory."));
+        qCWarning(lcCore) << "Refusing to delete non-user algorithm file:" << filePath << "userDir=" << rawUserDir
+                          << "canonical=" << canonicalPath;
+        Q_EMIT algorithmOperationFailed(
+            rawUserDir.isEmpty() ? PzI18n::tr("Cannot delete — user algorithms directory does not exist.")
+                                 : PzI18n::tr("Cannot delete — file is outside the user algorithms directory."));
         return false;
     }
 
@@ -2036,10 +2041,10 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
     QString content = QString::fromUtf8(sourceFile.readAll());
     sourceFile.close();
 
-    // Update @name and @builtinId in the copy — strip existing " (Copy)" suffix to avoid accumulation
+    // Update @name and @builtinId in the copy — strip all existing " (Copy)" suffixes to avoid accumulation
     const QString newFilename = QFileInfo(destPath).completeBaseName();
     QString baseCopyName = algo->name();
-    if (baseCopyName.endsWith(QLatin1String(" (Copy)")))
+    while (baseCopyName.endsWith(QLatin1String(" (Copy)")))
         baseCopyName.chop(7);
     const QString newName = baseCopyName + QStringLiteral(" (Copy)");
     static const QRegularExpression nameRe(QStringLiteral("^// @name .+"), QRegularExpression::MultilineOption);
@@ -2054,10 +2059,12 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
             PzI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
         return false;
     }
-    const qint64 written = destFile.write(content.toUtf8());
+    const QByteArray encoded = content.toUtf8();
+    const qint64 written = destFile.write(encoded);
     destFile.close();
-    if (written < 0) {
-        qCWarning(lcCore) << "Failed to write duplicate algorithm content:" << destPath;
+    if (written < 0 || written != encoded.size()) {
+        qCWarning(lcCore) << "Failed to write duplicate algorithm content:" << destPath << "written=" << written
+                          << "expected=" << encoded.size();
         QFile::remove(destPath);
         Q_EMIT algorithmOperationFailed(
             PzI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
@@ -2185,34 +2192,26 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
                 const QString templateContent = QString::fromUtf8(file.readAll());
                 file.close();
 
-                // Skip metadata block (comment lines — both // and /* */ — and blank
-                // lines at the top). A non-comment, non-blank line ends the header.
+                // Skip the metadata header: SPDX lines, `// @annotation` lines, and
+                // surrounding blank lines. Stop as soon as we hit a non-metadata line
+                // (including doc-comments like `/** ... */` or `// Helper:`) so the
+                // template body's own documentation is preserved.
                 const QStringList lines = templateContent.split(QLatin1Char('\n'));
                 int bodyStart = 0;
-                bool seenComment = false;
-                bool inBlockComment = false;
                 for (int i = 0; i < lines.size(); ++i) {
                     const QString trimmed = lines[i].trimmed();
-                    if (inBlockComment) {
-                        seenComment = true;
-                        bodyStart = i + 1;
-                        if (trimmed.contains(QLatin1String("*/")))
-                            inBlockComment = false;
-                        continue;
-                    }
-                    if (trimmed.startsWith(QLatin1String("/*"))) {
-                        seenComment = true;
-                        inBlockComment = !trimmed.contains(QLatin1String("*/"));
+                    // SPDX headers
+                    if (trimmed.startsWith(QLatin1String("// SPDX-"))) {
                         bodyStart = i + 1;
                         continue;
                     }
-                    if (trimmed.startsWith(QLatin1String("//"))) {
-                        seenComment = true;
+                    // Metadata annotations (// @name, // @builtinId, etc.)
+                    if (trimmed.startsWith(QLatin1String("// @"))) {
                         bodyStart = i + 1;
                         continue;
                     }
-                    // Blank lines before or between comment lines are part of the header
-                    if (trimmed.isEmpty() && (seenComment || i == 0)) {
+                    // Blank lines between metadata lines are part of the header
+                    if (trimmed.isEmpty() && i == bodyStart) {
                         bodyStart = i + 1;
                         continue;
                     }
@@ -2253,10 +2252,12 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
         Q_EMIT algorithmCreationFailed(PzI18n::tr("Could not write algorithm file. Check disk space and permissions."));
         return QString();
     }
-    const qint64 written = outFile.write(content.toUtf8());
+    const QByteArray encoded = content.toUtf8();
+    const qint64 written = outFile.write(encoded);
     outFile.close();
-    if (written < 0) {
-        qCWarning(lcCore) << "Failed to write algorithm content:" << destPath;
+    if (written < 0 || written != encoded.size()) {
+        qCWarning(lcCore) << "Failed to write algorithm content:" << destPath << "written=" << written
+                          << "expected=" << encoded.size();
         QFile::remove(destPath);
         Q_EMIT algorithmCreationFailed(PzI18n::tr("Could not write algorithm file. Check disk space and permissions."));
         return QString();
