@@ -598,6 +598,9 @@ private Q_SLOTS:
     void onScreenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
 
 private:
+    QString scriptedFilePath(const QString& algorithmId) const;
+    void watchForAlgorithmRegistration(const QString& expectedId);
+
     void setNeedsSave(bool needs);
     void scheduleLayoutLoad();
     void refreshVirtualDesktops();

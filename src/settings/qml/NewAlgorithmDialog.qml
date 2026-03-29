@@ -125,193 +125,41 @@ Kirigami.Dialog {
                     Repeater {
                         model: root.baseTemplates
 
-                        delegate: Item {
+                        delegate: WizardTemplateCard {
                             id: templateDelegate
 
                             required property var modelData
                             required property int index
-                            readonly property bool isSelected: root.baseTemplate === modelData.id
-                            property bool isHovered: false
 
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: Kirigami.Units.gridUnit * 10
-                            Accessible.name: modelData.name
-                            Accessible.description: modelData.desc
-                            Accessible.role: Accessible.Button
-
-                            HoverHandler {
-                                onHoveredChanged: templateDelegate.isHovered = hovered
+                            templateName: modelData.name
+                            templateDesc: modelData.desc
+                            selected: root.baseTemplate === modelData.id
+                            onClicked: root.selectTemplate(modelData)
+                            onDoubleClicked: {
+                                root.selectTemplate(modelData);
+                                root.currentStep = 1;
                             }
 
-                            MouseArea {
+                            AlgorithmPreview {
                                 anchors.fill: parent
-                                hoverEnabled: false
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.selectTemplate(modelData)
-                                onDoubleClicked: {
-                                    root.selectTemplate(modelData);
-                                    root.currentStep = 1;
-                                }
+                                visible: templateDelegate.modelData.id !== "blank"
+                                algorithmId: templateDelegate.modelData.id
+                                windowCount: 4
+                                showLabel: false
+                                appSettings: root.appSettings
                             }
 
-                            Rectangle {
-                                id: templateCard
-
-                                anchors.fill: parent
-                                radius: Kirigami.Units.smallSpacing * 2
-                                color: {
-                                    if (templateDelegate.isSelected)
-                                        return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15);
-
-                                    if (templateDelegate.isHovered)
-                                        return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06);
-
-                                    return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03);
-                                }
-                                border.width: templateDelegate.isSelected ? Math.round(Kirigami.Units.devicePixelRatio * 2) : Math.round(Kirigami.Units.devicePixelRatio)
-                                border.color: {
-                                    if (templateDelegate.isSelected)
-                                        return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6);
-
-                                    if (templateDelegate.isHovered)
-                                        return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3);
-
-                                    return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08);
-                                }
-                                transform: [
-                                    Scale {
-                                        origin.x: templateCard.width / 2
-                                        origin.y: templateCard.height / 2
-                                        xScale: templateDelegate.isHovered ? 1.02 : 1
-                                        yScale: templateDelegate.isHovered ? 1.02 : 1
-
-                                        Behavior on xScale {
-                                            NumberAnimation {
-                                                duration: 200
-                                                easing.type: Easing.OutCubic
-                                            }
-
-                                        }
-
-                                        Behavior on yScale {
-                                            NumberAnimation {
-                                                duration: 200
-                                                easing.type: Easing.OutCubic
-                                            }
-
-                                        }
-
-                                    },
-                                    Translate {
-                                        y: templateDelegate.isHovered ? -1 : 0
-
-                                        Behavior on y {
-                                            NumberAnimation {
-                                                duration: 200
-                                                easing.type: Easing.OutCubic
-                                            }
-
-                                        }
-
-                                    }
-                                ]
-
-                                ColumnLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: Kirigami.Units.smallSpacing * 2
-                                    spacing: Kirigami.Units.smallSpacing
-
-                                    Item {
-                                        Layout.fillWidth: true
-                                        Layout.fillHeight: true
-
-                                        AlgorithmPreview {
-                                            anchors.fill: parent
-                                            visible: templateDelegate.modelData.id !== "blank"
-                                            algorithmId: templateDelegate.modelData.id
-                                            windowCount: 4
-                                            showLabel: false
-                                            appSettings: root.appSettings
-                                        }
-
-                                        Kirigami.Icon {
-                                            anchors.centerIn: parent
-                                            visible: templateDelegate.modelData.id === "blank"
-                                            source: "code-context"
-                                            implicitWidth: Kirigami.Units.iconSizes.huge
-                                            implicitHeight: Kirigami.Units.iconSizes.huge
-                                            color: templateDelegate.isSelected ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
-
-                                            Behavior on color {
-                                                ColorAnimation {
-                                                    duration: 200
-                                                }
-
-                                            }
-
-                                        }
-
-                                    }
-
-                                    Label {
-                                        Layout.fillWidth: true
-                                        text: templateDelegate.modelData.name
-                                        font.weight: templateDelegate.isSelected ? Font.Bold : Font.Normal
-                                        horizontalAlignment: Text.AlignHCenter
-                                    }
-
-                                    Label {
-                                        Layout.fillWidth: true
-                                        text: templateDelegate.modelData.desc
-                                        font: Kirigami.Theme.smallFont
-                                        horizontalAlignment: Text.AlignHCenter
-                                        opacity: 0.5
-                                        wrapMode: Text.WordWrap
-                                        maximumLineCount: 2
-                                    }
-
-                                }
-
-                                // Selected badge
-                                Rectangle {
-                                    anchors.top: parent.top
-                                    anchors.right: parent.right
-                                    anchors.margins: Kirigami.Units.smallSpacing
-                                    width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
-                                    height: width
-                                    radius: width / 2
-                                    color: Kirigami.Theme.highlightColor
-                                    visible: templateDelegate.isSelected
-
-                                    Kirigami.Icon {
-                                        anchors.centerIn: parent
-                                        source: "checkmark"
-                                        width: Kirigami.Units.iconSizes.small
-                                        height: Kirigami.Units.iconSizes.small
-                                        color: Kirigami.Theme.highlightedTextColor
-                                    }
-
-                                }
+                            Kirigami.Icon {
+                                anchors.centerIn: parent
+                                visible: templateDelegate.modelData.id === "blank"
+                                source: "code-context"
+                                implicitWidth: Kirigami.Units.iconSizes.huge
+                                implicitHeight: Kirigami.Units.iconSizes.huge
+                                color: templateDelegate.selected ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
 
                                 Behavior on color {
                                     ColorAnimation {
                                         duration: 200
-                                        easing.type: Easing.OutCubic
-                                    }
-
-                                }
-
-                                Behavior on border.color {
-                                    ColorAnimation {
-                                        duration: 200
-                                        easing.type: Easing.OutCubic
-                                    }
-
-                                }
-
-                                Behavior on border.width {
-                                    NumberAnimation {
-                                        duration: 150
                                     }
 
                                 }
@@ -441,18 +289,21 @@ Kirigami.Dialog {
                                 Layout.fillWidth: true
                                 placeholderText: i18n("My Algorithm")
                                 Accessible.name: i18n("Algorithm name")
-                                Component.onCompleted: {
-                                    root.currentStepChanged.connect(function() {
-                                        if (root.currentStep === 1)
-                                            nameField.forceActiveFocus();
-
-                                    });
-                                }
                                 Keys.onReturnPressed: {
                                     if (wizardFooter.createEnabled)
                                         wizardFooter.createClicked();
 
                                 }
+                            }
+
+                            Connections {
+                                function onCurrentStepChanged() {
+                                    if (root.currentStep === 1)
+                                        nameField.forceActiveFocus();
+
+                                }
+
+                                target: root
                             }
 
                         }

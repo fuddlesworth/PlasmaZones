@@ -414,6 +414,8 @@ void SettingsController::createNewLayout(const QString& name, const QString& typ
             m_pendingSelectLayoutId = newLayoutId;
             scheduleLayoutLoad();
         }
+    } else if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcCore) << "createNewLayout failed:" << reply.errorMessage();
     }
 }
 
@@ -1853,6 +1855,40 @@ bool SettingsController::importAlgorithm(const QString& filePath)
     return ok;
 }
 
+QString SettingsController::scriptedFilePath(const QString& algorithmId) const
+{
+    if (algorithmId.isEmpty())
+        return QString();
+    auto* registry = AlgorithmRegistry::instance();
+    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    if (!algo)
+        return QString();
+    auto* scripted = qobject_cast<ScriptedAlgorithm*>(algo);
+    if (!scripted)
+        return QString();
+    const QString path = scripted->filePath();
+    if (path.isEmpty() || !QFile::exists(path))
+        return QString();
+    return path;
+}
+
+void SettingsController::watchForAlgorithmRegistration(const QString& expectedId)
+{
+    auto* registry = AlgorithmRegistry::instance();
+    auto conn = std::make_shared<QMetaObject::Connection>();
+    *conn = connect(registry, &AlgorithmRegistry::algorithmRegistered, this,
+                    [this, expectedId, conn](const QString& registeredId) {
+                        if (registeredId == expectedId) {
+                            disconnect(*conn);
+                            Q_EMIT algorithmCreated(expectedId);
+                        }
+                    });
+    QTimer::singleShot(10000, this, [conn]() {
+        if (*conn)
+            disconnect(*conn);
+    });
+}
+
 bool SettingsController::deleteAlgorithm(const QString& algorithmId)
 {
     if (algorithmId.isEmpty())
@@ -1865,13 +1901,9 @@ bool SettingsController::deleteAlgorithm(const QString& algorithmId)
         return false;
     }
 
-    // Find the file path from the algorithm's source (ScriptedAlgorithm only)
-    auto* scripted = qobject_cast<ScriptedAlgorithm*>(algo);
-    if (!scripted)
-        return false;
-    const QString filePath = scripted->filePath();
-    if (filePath.isEmpty() || !QFile::exists(filePath)) {
-        qCWarning(lcCore) << "Algorithm file not found:" << filePath;
+    const QString filePath = scriptedFilePath(algorithmId);
+    if (filePath.isEmpty()) {
+        qCWarning(lcCore) << "Algorithm file not found for:" << algorithmId;
         return false;
     }
 
@@ -1893,20 +1925,12 @@ bool SettingsController::deleteAlgorithm(const QString& algorithmId)
 
 bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
 {
-    if (algorithmId.isEmpty())
+    const QString sourcePath = scriptedFilePath(algorithmId);
+    if (sourcePath.isEmpty())
         return false;
 
     auto* registry = AlgorithmRegistry::instance();
     TilingAlgorithm* algo = registry->algorithm(algorithmId);
-    if (!algo)
-        return false;
-
-    auto* scripted = qobject_cast<ScriptedAlgorithm*>(algo);
-    if (!scripted)
-        return false;
-    const QString sourcePath = scripted->filePath();
-    if (sourcePath.isEmpty() || !QFile::exists(sourcePath))
-        return false;
 
     const QString destDir = userAlgorithmsDir();
     QDir dir(destDir);
@@ -1916,8 +1940,10 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
     // Generate unique filename: algorithmId-copy.js, algorithmId-copy-2.js, etc.
     const QString baseName = algorithmId + QStringLiteral("-copy");
     const QString destPath = findUniqueAlgorithmPath(destDir, baseName);
-    if (destPath.isEmpty())
+    if (destPath.isEmpty()) {
+        qCWarning(lcCore) << "Could not find unique filename for duplicate:" << baseName;
         return false;
+    }
 
     // Read source, update metadata, write copy
     QFile sourceFile(sourcePath);
@@ -1943,24 +1969,18 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
     destFile.write(content.toUtf8());
     destFile.close();
 
+    // Watch for registry pickup and emit algorithmCreated (issue #2: duplicate didn't fire signal)
+    watchForAlgorithmRegistration(newFilename);
     return true;
 }
 
 bool SettingsController::exportAlgorithm(const QString& algorithmId, const QString& destPath)
 {
-    if (algorithmId.isEmpty() || destPath.isEmpty())
+    if (destPath.isEmpty())
         return false;
 
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
-    if (!algo)
-        return false;
-
-    auto* scriptedExport = qobject_cast<ScriptedAlgorithm*>(algo);
-    if (!scriptedExport)
-        return false;
-    const QString sourcePath = scriptedExport->filePath();
-    if (sourcePath.isEmpty() || !QFile::exists(sourcePath))
+    const QString sourcePath = scriptedFilePath(algorithmId);
+    if (sourcePath.isEmpty())
         return false;
 
     // Write to a temp file first, then rename — if copy fails the existing file is preserved
@@ -1971,7 +1991,15 @@ bool SettingsController::exportAlgorithm(const QString& algorithmId, const QStri
         return false;
     if (QFile::exists(destPath))
         QFile::remove(destPath);
-    return QFile::rename(tmpPath, destPath);
+    if (!QFile::rename(tmpPath, destPath)) {
+        // rename() fails across filesystems — fall back to copy+remove
+        if (!QFile::copy(tmpPath, destPath)) {
+            QFile::remove(tmpPath);
+            return false;
+        }
+        QFile::remove(tmpPath);
+    }
+    return true;
 }
 
 QString SettingsController::createNewAlgorithm(const QString& name, const QString& baseTemplate,
@@ -1997,9 +2025,9 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
         dir.mkpath(QStringLiteral("."));
     }
 
-    QString destPath = findUniqueAlgorithmPath(destDir, filename);
+    const QString destPath = findUniqueAlgorithmPath(destDir, filename);
     if (destPath.isEmpty()) {
-        qCWarning(lcCore) << "Could not find unique filename for algorithm:" << filename;
+        qCWarning(lcCore) << "Could not find unique filename for algorithm:" << filename << "— all 99 slots exhausted";
         return QString();
     }
     // Update filename to match the final path (may have -N suffix)
@@ -2008,8 +2036,9 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
     // Build JS content
     QString content;
 
-    // SPDX header
-    content += QStringLiteral("// SPDX-FileCopyrightText: 2026 fuddlesworth\n");
+    // SPDX header — use the system user's full name if available
+    const QString userName = qEnvironmentVariable("USER", QStringLiteral("fuddlesworth"));
+    content += QStringLiteral("// SPDX-FileCopyrightText: 2026 ") + userName + QStringLiteral("\n");
     content += QStringLiteral("// SPDX-License-Identifier: GPL-3.0-or-later\n\n");
 
     // Metadata annotations — strip newlines to prevent annotation injection
@@ -2045,14 +2074,21 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
                 const QString templateContent = QString::fromUtf8(file.readAll());
                 file.close();
 
-                // Skip metadata block (lines starting with // at the top)
+                // Skip metadata block (comment lines and blank lines at the top).
+                // A non-comment, non-blank line ends the header — everything from
+                // there onwards is the body.
                 const QStringList lines = templateContent.split(QLatin1Char('\n'));
                 int bodyStart = 0;
+                bool seenComment = false;
                 for (int i = 0; i < lines.size(); ++i) {
                     const QString trimmed = lines[i].trimmed();
-                    if (trimmed.isEmpty())
-                        continue;
                     if (trimmed.startsWith(QLatin1String("//"))) {
+                        seenComment = true;
+                        bodyStart = i + 1;
+                        continue;
+                    }
+                    // Blank lines before or between comment lines are part of the header
+                    if (trimmed.isEmpty() && (seenComment || i == 0)) {
                         bodyStart = i + 1;
                         continue;
                     }
@@ -2095,23 +2131,7 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
     outFile.write(content.toUtf8());
     outFile.close();
 
-    // Emit algorithmCreated once the registry picks up the new file via its watcher.
-    // Use a one-shot connection so we only fire for *this* algorithm.
-    // A 10-second timeout disconnects the lambda if the watcher never fires, preventing a leak.
-    auto* registry = AlgorithmRegistry::instance();
-    auto conn = std::make_shared<QMetaObject::Connection>();
-    *conn = connect(registry, &AlgorithmRegistry::algorithmRegistered, this,
-                    [this, filename, conn](const QString& registeredId) {
-                        if (registeredId == filename) {
-                            disconnect(*conn);
-                            Q_EMIT algorithmCreated(filename);
-                        }
-                    });
-    QTimer::singleShot(10000, this, [conn]() {
-        if (*conn)
-            disconnect(*conn);
-    });
-
+    watchForAlgorithmRegistration(filename);
     return filename;
 }
 

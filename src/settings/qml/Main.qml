@@ -1303,7 +1303,7 @@ ApplicationWindow {
                     icon.name: "edit-copy"
                     visible: layoutContextMenu.isAutotile
                     onTriggered: {
-                        let algoId = layoutContextMenu.layoutId.substring("autotile:".length);
+                        let algoId = layoutContextMenu.layoutId.startsWith("autotile:") ? layoutContextMenu.layoutId.substring("autotile:".length) : layoutContextMenu.layoutId;
                         settingsController.duplicateAlgorithm(algoId);
                     }
                 }
