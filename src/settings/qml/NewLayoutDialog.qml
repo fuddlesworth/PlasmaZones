@@ -325,123 +325,88 @@ Kirigami.Dialog {
                         highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
                     }
 
-                    Rectangle {
-                        anchors.bottom: parent.bottom
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.bottomMargin: Kirigami.Units.smallSpacing
-                        width: templateBadgeLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
-                        height: templateBadgeLabel.implicitHeight + Kirigami.Units.smallSpacing * 2
-                        radius: height / 2
-                        color: root._badgeBg
-                        border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                        border.color: root._badgeBorder
-
-                        Label {
-                            id: templateBadgeLabel
-
-                            anchors.centerIn: parent
-                            text: root.selectedTemplate.name
-                            font.weight: Font.DemiBold
-                        }
-
+                    WizardPreviewBadge {
+                        text: root.selectedTemplate.name
                     }
 
                 }
 
                 // Config card
-                Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: configColumn.implicitHeight + Kirigami.Units.largeSpacing * 2
-                    radius: Kirigami.Units.smallSpacing * 2
-                    color: root._subtleBg
-                    border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                    border.color: root._subtleBorder
-
+                WizardConfigCard {
+                    // Name
                     ColumnLayout {
-                        id: configColumn
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
 
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.margins: Kirigami.Units.largeSpacing
-                        spacing: Kirigami.Units.largeSpacing
+                        Label {
+                            text: i18n("Layout Name")
+                            font.weight: Font.DemiBold
+                            opacity: 0.7
+                        }
 
-                        // Name
-                        ColumnLayout {
+                        TextField {
+                            id: nameField
+
                             Layout.fillWidth: true
-                            spacing: Kirigami.Units.smallSpacing
+                            placeholderText: i18n("My Layout")
+                            Accessible.name: i18n("Layout name")
+                            Keys.onReturnPressed: {
+                                if (wizardFooter.createEnabled)
+                                    wizardFooter.createClicked();
 
-                            Label {
-                                text: i18n("Layout Name")
-                                font.weight: Font.DemiBold
-                                opacity: 0.7
                             }
-
-                            TextField {
-                                id: nameField
-
-                                Layout.fillWidth: true
-                                placeholderText: i18n("My Layout")
-                                Accessible.name: i18n("Layout name")
-                                Keys.onReturnPressed: {
-                                    if (wizardFooter.createEnabled)
-                                        wizardFooter.createClicked();
-
-                                }
-                            }
-
-                            Connections {
-                                function onCurrentStepChanged() {
-                                    if (root.currentStep === 1)
-                                        nameField.forceActiveFocus();
-
-                                }
-
-                                target: root
-                            }
-
                         }
 
-                        // Aspect ratio
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: Kirigami.Units.smallSpacing
+                        Connections {
+                            function onCurrentStepChanged() {
+                                if (root.currentStep === 1)
+                                    nameField.forceActiveFocus();
 
-                            Label {
-                                text: i18n("Aspect Ratio")
-                                font.weight: Font.DemiBold
-                                opacity: 0.7
                             }
 
-                            SettingsButtonGroup {
-                                model: [i18n("Auto"), "16:9", "21:9", "32:9", i18n("Portrait")]
-                                currentIndex: root.selectedAspectRatio + 1
-                                onIndexChanged: (index) => {
-                                    root.selectedAspectRatio = index - 1;
-                                }
+                            target: root
+                        }
+
+                    }
+
+                    // Aspect ratio
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Label {
+                            text: i18n("Aspect Ratio")
+                            font.weight: Font.DemiBold
+                            opacity: 0.7
+                        }
+
+                        SettingsButtonGroup {
+                            model: [i18n("Auto"), "16:9", "21:9", "32:9", i18n("Portrait")]
+                            currentIndex: root.selectedAspectRatio + 1
+                            onIndexChanged: (index) => {
+                                root.selectedAspectRatio = index - 1;
                             }
-
-                            Label {
-                                visible: root.selectedAspectRatio === -1
-                                text: i18n("Auto-detected from your primary monitor")
-                                font: Kirigami.Theme.smallFont
-                                opacity: 0.4
-                            }
-
                         }
 
-                        Kirigami.Separator {
-                            Layout.fillWidth: true
+                        Label {
+                            visible: root.selectedAspectRatio === -1
+                            text: i18n("Auto-detected from your primary monitor")
+                            font: Kirigami.Theme.smallFont
+                            opacity: 0.4
                         }
 
-                        // Options
-                        CheckBox {
-                            text: i18n("Open in editor after creation")
-                            checked: root.openInEditor
-                            onToggled: root.openInEditor = checked
-                            Accessible.name: text
-                        }
+                    }
 
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                    }
+
+                    // Options
+                    CheckBox {
+                        text: i18n("Open in editor after creation")
+                        checked: root.openInEditor
+                        onToggled: root.openInEditor = checked
+                        Accessible.name: text
                     }
 
                 }

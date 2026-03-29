@@ -97,6 +97,8 @@ qt_add_qml_module(plasmazones-settings
         qml/WizardStepIndicator.qml
         qml/WizardFooter.qml
         qml/WizardTemplateCard.qml
+        qml/WizardPreviewBadge.qml
+        qml/WizardConfigCard.qml
         qml/WizardUtils.js
     NO_PLUGIN
 )

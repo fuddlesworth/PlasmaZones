@@ -107,8 +107,8 @@ Rectangle {
             readonly property real leftOffset: relX < 0.01 ? zonePreview.edgeGap : zonePreview.zonePadding / 2
             readonly property real topOffset: relY < 0.01 ? zonePreview.edgeGap : zonePreview.zonePadding / 2
 
-            // Default master count of 1 — grid thumbnails don't have per-layout masterCount
-            visible: index < 1
+            // Use per-layout masterCount if available, default to 1
+            visible: index < (root.layout && root.layout.masterCount !== undefined ? root.layout.masterCount : 1)
             Accessible.ignored: true
             x: zonePreview.x + relX * zonePreview.width + leftOffset + Kirigami.Units.smallSpacing
             y: zonePreview.y + relY * zonePreview.height + topOffset + Kirigami.Units.smallSpacing

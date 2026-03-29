@@ -29,10 +29,17 @@ function clampedScreenAspectRatio(screenWidth, screenHeight) {
  */
 function wizardColors(textColor, highlightColor) {
     return {
-        "subtleBg":      Qt.rgba(textColor.r, textColor.g, textColor.b, 0.03),
-        "subtleBorder":  Qt.rgba(textColor.r, textColor.g, textColor.b, 0.08),
-        "accentBorder":  Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.3),
-        "badgeBg":       Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.2),
-        "badgeBorder":   Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.4)
+        "subtleBg":        Qt.rgba(textColor.r, textColor.g, textColor.b, 0.03),
+        "subtleBorder":    Qt.rgba(textColor.r, textColor.g, textColor.b, 0.08),
+        "accentBorder":    Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.3),
+        "badgeBg":         Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.2),
+        "badgeBorder":     Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.4),
+        // Card-specific colors (WizardTemplateCard)
+        "highlightBg":    Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.15),
+        "hoverBg":        Qt.rgba(textColor.r, textColor.g, textColor.b, 0.06),
+        "defaultBg":      Qt.rgba(textColor.r, textColor.g, textColor.b, 0.03),
+        "selectedBorder": Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.6),
+        "hoverBorder":    Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.3),
+        "defaultBorder":  Qt.rgba(textColor.r, textColor.g, textColor.b, 0.08)
     };
 }

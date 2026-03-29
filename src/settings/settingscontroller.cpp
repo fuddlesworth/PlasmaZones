@@ -53,7 +53,7 @@ QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
     QString path = dir + baseName + QStringLiteral(".js");
     if (!QFile::exists(path))
         return path;
-    for (int i = 2; i <= 999; ++i) {
+    for (int i = 1; i <= 999; ++i) {
         path = dir + baseName + QStringLiteral("-") + QString::number(i) + QStringLiteral(".js");
         if (!QFile::exists(path))
             return path;

@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "WizardUtils.js" as WizardUtils
 import org.kde.kirigami as Kirigami
 
 /**
@@ -20,13 +21,14 @@ Item {
     required property bool selected
     default property alias previewContent: previewArea.data
     property bool isHovered: false
-    // Extracted color constants (DRY — shared across card states)
-    readonly property color _highlightBg: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
-    readonly property color _hoverBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06)
-    readonly property color _defaultBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
-    readonly property color _selectedBorder: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6)
-    readonly property color _hoverBorder: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3)
-    readonly property color _defaultBorder: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+    // Card colors sourced from WizardUtils (DRY — shared with wizard dialogs)
+    readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
+    readonly property color _highlightBg: _colors.highlightBg
+    readonly property color _hoverBg: _colors.hoverBg
+    readonly property color _defaultBg: _colors.defaultBg
+    readonly property color _selectedBorder: _colors.selectedBorder
+    readonly property color _hoverBorder: _colors.hoverBorder
+    readonly property color _defaultBorder: _colors.defaultBorder
 
     signal clicked()
     signal doubleClicked()

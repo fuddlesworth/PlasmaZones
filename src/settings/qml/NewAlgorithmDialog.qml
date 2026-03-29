@@ -243,170 +243,135 @@ Kirigami.Dialog {
 
                     }
 
-                    Rectangle {
-                        anchors.bottom: parent.bottom
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.bottomMargin: Kirigami.Units.smallSpacing
-                        width: algoBadgeLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
-                        height: algoBadgeLabel.implicitHeight + Kirigami.Units.smallSpacing * 2
-                        radius: height / 2
-                        color: root._badgeBg
-                        border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                        border.color: root._badgeBorder
-
-                        Label {
-                            id: algoBadgeLabel
-
-                            anchors.centerIn: parent
-                            text: root.selectedTemplate.name
-                            font.weight: Font.DemiBold
-                        }
-
+                    WizardPreviewBadge {
+                        text: root.selectedTemplate.name
                     }
 
                 }
 
                 // Config card
-                Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: algoConfigColumn.implicitHeight + Kirigami.Units.largeSpacing * 2
-                    radius: Kirigami.Units.smallSpacing * 2
-                    color: root._subtleBg
-                    border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                    border.color: root._subtleBorder
-
+                WizardConfigCard {
+                    // Name
                     ColumnLayout {
-                        id: algoConfigColumn
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
 
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.margins: Kirigami.Units.largeSpacing
-                        spacing: Kirigami.Units.largeSpacing
+                        Label {
+                            text: i18n("Algorithm Name")
+                            font.weight: Font.DemiBold
+                            opacity: 0.7
+                        }
 
-                        // Name
-                        ColumnLayout {
+                        TextField {
+                            id: nameField
+
                             Layout.fillWidth: true
-                            spacing: Kirigami.Units.smallSpacing
+                            placeholderText: i18n("My Algorithm")
+                            Accessible.name: i18n("Algorithm name")
+                            Keys.onReturnPressed: {
+                                if (wizardFooter.createEnabled)
+                                    wizardFooter.createClicked();
+
+                            }
+                        }
+
+                        Connections {
+                            function onCurrentStepChanged() {
+                                if (root.currentStep === 1)
+                                    nameField.forceActiveFocus();
+
+                            }
+
+                            target: root
+                        }
+
+                    }
+
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                    }
+
+                    // Capabilities
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+
+                        RowLayout {
+                            spacing: Kirigami.Units.mediumSpacing
 
                             Label {
-                                text: i18n("Algorithm Name")
+                                text: i18n("Capabilities")
                                 font.weight: Font.DemiBold
                                 opacity: 0.7
                             }
 
-                            TextField {
-                                id: nameField
-
-                                Layout.fillWidth: true
-                                placeholderText: i18n("My Algorithm")
-                                Accessible.name: i18n("Algorithm name")
-                                Keys.onReturnPressed: {
-                                    if (wizardFooter.createEnabled)
-                                        wizardFooter.createClicked();
-
-                                }
-                            }
-
-                            Connections {
-                                function onCurrentStepChanged() {
-                                    if (root.currentStep === 1)
-                                        nameField.forceActiveFocus();
-
-                                }
-
-                                target: root
+                            Label {
+                                text: i18n("(editable later in the .js file)")
+                                font: Kirigami.Theme.smallFont
+                                opacity: 0.4
                             }
 
                         }
 
-                        Kirigami.Separator {
-                            Layout.fillWidth: true
-                        }
+                        GridLayout {
+                            columns: 2
+                            columnSpacing: Kirigami.Units.largeSpacing * 2
+                            rowSpacing: Kirigami.Units.smallSpacing
 
-                        // Capabilities
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: Kirigami.Units.smallSpacing
-
-                            RowLayout {
-                                spacing: Kirigami.Units.mediumSpacing
-
-                                Label {
-                                    text: i18n("Capabilities")
-                                    font.weight: Font.DemiBold
-                                    opacity: 0.7
-                                }
-
-                                Label {
-                                    text: i18n("(editable later in the .js file)")
-                                    font: Kirigami.Theme.smallFont
-                                    opacity: 0.4
-                                }
-
+                            CheckBox {
+                                text: i18n("Master count")
+                                checked: root.supportsMasterCount
+                                onToggled: root.supportsMasterCount = checked
+                                Accessible.name: i18n("Supports master count")
+                                ToolTip.visible: hovered
+                                ToolTip.delay: Kirigami.Units.toolTipDelay
+                                ToolTip.text: i18n("Configurable master/center windows")
                             }
 
-                            GridLayout {
-                                columns: 2
-                                columnSpacing: Kirigami.Units.largeSpacing * 2
-                                rowSpacing: Kirigami.Units.smallSpacing
+                            CheckBox {
+                                text: i18n("Split ratio")
+                                checked: root.supportsSplitRatio
+                                onToggled: root.supportsSplitRatio = checked
+                                Accessible.name: i18n("Supports split ratio")
+                                ToolTip.visible: hovered
+                                ToolTip.delay: Kirigami.Units.toolTipDelay
+                                ToolTip.text: i18n("Adjustable master/stack ratio")
+                            }
 
-                                CheckBox {
-                                    text: i18n("Master count")
-                                    checked: root.supportsMasterCount
-                                    onToggled: root.supportsMasterCount = checked
-                                    Accessible.name: i18n("Supports master count")
-                                    ToolTip.visible: hovered
-                                    ToolTip.delay: Kirigami.Units.toolTipDelay
-                                    ToolTip.text: i18n("Configurable master/center windows")
-                                }
+                            CheckBox {
+                                text: i18n("Overlapping zones")
+                                checked: root.producesOverlappingZones
+                                onToggled: root.producesOverlappingZones = checked
+                                Accessible.name: i18n("Produces overlapping zones")
+                                ToolTip.visible: hovered
+                                ToolTip.delay: Kirigami.Units.toolTipDelay
+                                ToolTip.text: i18n("Zones can overlap each other")
+                            }
 
-                                CheckBox {
-                                    text: i18n("Split ratio")
-                                    checked: root.supportsSplitRatio
-                                    onToggled: root.supportsSplitRatio = checked
-                                    Accessible.name: i18n("Supports split ratio")
-                                    ToolTip.visible: hovered
-                                    ToolTip.delay: Kirigami.Units.toolTipDelay
-                                    ToolTip.text: i18n("Adjustable master/stack ratio")
-                                }
-
-                                CheckBox {
-                                    text: i18n("Overlapping zones")
-                                    checked: root.producesOverlappingZones
-                                    onToggled: root.producesOverlappingZones = checked
-                                    Accessible.name: i18n("Produces overlapping zones")
-                                    ToolTip.visible: hovered
-                                    ToolTip.delay: Kirigami.Units.toolTipDelay
-                                    ToolTip.text: i18n("Zones can overlap each other")
-                                }
-
-                                CheckBox {
-                                    text: i18n("Persistent memory")
-                                    checked: root.supportsMemory
-                                    onToggled: root.supportsMemory = checked
-                                    Accessible.name: i18n("Remembers split positions")
-                                    ToolTip.visible: hovered
-                                    ToolTip.delay: Kirigami.Units.toolTipDelay
-                                    ToolTip.text: i18n("Remembers positions across changes")
-                                }
-
+                            CheckBox {
+                                text: i18n("Persistent memory")
+                                checked: root.supportsMemory
+                                onToggled: root.supportsMemory = checked
+                                Accessible.name: i18n("Remembers split positions")
+                                ToolTip.visible: hovered
+                                ToolTip.delay: Kirigami.Units.toolTipDelay
+                                ToolTip.text: i18n("Remembers positions across changes")
                             }
 
                         }
 
-                        Kirigami.Separator {
-                            Layout.fillWidth: true
-                        }
+                    }
 
-                        // Options
-                        CheckBox {
-                            text: i18n("Open in text editor after creation")
-                            checked: root.openInEditor
-                            onToggled: root.openInEditor = checked
-                            Accessible.name: text
-                        }
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                    }
 
+                    // Options
+                    CheckBox {
+                        text: i18n("Open in text editor after creation")
+                        checked: root.openInEditor
+                        onToggled: root.openInEditor = checked
+                        Accessible.name: text
                     }
 
                 }
