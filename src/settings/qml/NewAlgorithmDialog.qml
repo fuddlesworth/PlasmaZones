@@ -23,6 +23,7 @@ Kirigami.Dialog {
     property bool producesOverlappingZones: false
     property bool supportsMemory: false
     property string _previousAutoName: ""
+    readonly property real screenAspectRatio: Screen.width > 0 && Screen.height > 0 ? (Screen.width / Screen.height) : (16 / 9)
     readonly property var baseTemplates: [{
         "name": i18n("Blank"),
         "id": "blank",
@@ -187,10 +188,8 @@ Kirigami.Dialog {
 
                 // Landscape preview matching monitor aspect ratio
                 Rectangle {
-                    readonly property real screenAspectRatio: Screen.width > 0 && Screen.height > 0 ? (Screen.width / Screen.height) : (16 / 9)
-
                     Layout.preferredWidth: Math.min(Kirigami.Units.gridUnit * 26, parent ? parent.width : Kirigami.Units.gridUnit * 26)
-                    Layout.preferredHeight: Layout.preferredWidth / screenAspectRatio
+                    Layout.preferredHeight: Layout.preferredWidth / root.screenAspectRatio
                     Layout.maximumHeight: Kirigami.Units.gridUnit * 12
                     Layout.alignment: Qt.AlignHCenter
                     radius: Kirigami.Units.smallSpacing * 2
@@ -393,6 +392,15 @@ Kirigami.Dialog {
 
     }
 
+    Connections {
+        function onAlgorithmCreationFailed(reason) {
+            errorLabel.text = reason;
+            errorLabel.visible = true;
+        }
+
+        target: settingsController
+    }
+
     footer: WizardFooter {
         id: wizardFooter
 
@@ -402,10 +410,25 @@ Kirigami.Dialog {
         onBackClicked: root.currentStep = 0
         onNextClicked: root.currentStep = 1
         onCreateClicked: {
-            settingsController.createNewAlgorithm(nameField.text.trim(), root.baseTemplate, root.supportsMasterCount, root.supportsSplitRatio, root.producesOverlappingZones, root.supportsMemory);
-            root.close();
+            errorLabel.visible = false;
+            let result = settingsController.createNewAlgorithm(nameField.text.trim(), root.baseTemplate, root.supportsMasterCount, root.supportsSplitRatio, root.producesOverlappingZones, root.supportsMemory);
+            if (result.length > 0)
+                root.close();
+
         }
         onCancelClicked: root.close()
+
+        Label {
+            id: errorLabel
+
+            anchors.bottom: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottomMargin: Kirigami.Units.smallSpacing
+            visible: false
+            color: Kirigami.Theme.negativeTextColor
+            font: Kirigami.Theme.smallFont
+        }
+
     }
 
 }

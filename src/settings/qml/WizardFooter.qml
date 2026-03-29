@@ -26,8 +26,16 @@ Item {
     RowLayout {
         id: footerLayout
 
-        anchors.centerIn: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.leftMargin: Kirigami.Units.largeSpacing
+        anchors.rightMargin: Kirigami.Units.largeSpacing
         spacing: Kirigami.Units.largeSpacing
+
+        Item {
+            Layout.fillWidth: true
+        }
 
         Button {
             visible: root.currentStep > 0
@@ -62,6 +70,10 @@ Item {
             text: i18n("Cancel")
             Accessible.name: text
             onClicked: root.cancelClicked()
+        }
+
+        Item {
+            Layout.fillWidth: true
         }
 
     }

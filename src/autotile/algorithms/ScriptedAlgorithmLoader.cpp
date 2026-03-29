@@ -218,9 +218,6 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             } else {
                 qCWarning(lcAutotile) << "Duplicate system script for algorithm:" << scriptId << "from=" << fullPath
                                       << "— skipping (first registration wins)";
-                // Still track the ID so it is not treated as stale during refresh
-                if (!m_scriptIdToPath.contains(scriptId))
-                    m_scriptIdToPath[scriptId] = fullPath;
                 delete algo;
                 continue;
             }

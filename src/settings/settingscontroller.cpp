@@ -14,6 +14,7 @@
 #include "../autotile/algorithms/ScriptedAlgorithmLoader.h"
 
 #include "../config/configdefaults.h"
+#include "../pz_i18n.h"
 
 #include <QDBusMessage>
 #include <QFile>
@@ -24,6 +25,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDesktopServices>
+#include <QDate>
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -1931,6 +1933,8 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
 
     auto* registry = AlgorithmRegistry::instance();
     TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    if (!algo)
+        return false;
 
     const QString destDir = userAlgorithmsDir();
     QDir dir(destDir);
@@ -1989,8 +1993,12 @@ bool SettingsController::exportAlgorithm(const QString& algorithmId, const QStri
         QFile::remove(tmpPath);
     if (!QFile::copy(sourcePath, tmpPath))
         return false;
-    if (QFile::exists(destPath))
-        QFile::remove(destPath);
+    if (QFile::exists(destPath)) {
+        if (!QFile::remove(destPath)) {
+            QFile::remove(tmpPath);
+            return false;
+        }
+    }
     if (!QFile::rename(tmpPath, destPath)) {
         // rename() fails across filesystems — fall back to copy+remove
         if (!QFile::copy(tmpPath, destPath)) {
@@ -2028,6 +2036,9 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
     const QString destPath = findUniqueAlgorithmPath(destDir, filename);
     if (destPath.isEmpty()) {
         qCWarning(lcCore) << "Could not find unique filename for algorithm:" << filename << "— all 99 slots exhausted";
+        Q_EMIT algorithmCreationFailed(
+            PzI18n::tr("Could not create algorithm — too many files with the same name. "
+                       "Please rename or delete existing algorithms."));
         return QString();
     }
     // Update filename to match the final path (may have -N suffix)
@@ -2036,9 +2047,10 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
     // Build JS content
     QString content;
 
-    // SPDX header — use the system user's full name if available
-    const QString userName = qEnvironmentVariable("USER", QStringLiteral("fuddlesworth"));
-    content += QStringLiteral("// SPDX-FileCopyrightText: 2026 ") + userName + QStringLiteral("\n");
+    // SPDX header — use current year and a placeholder author
+    const int currentYear = QDate::currentDate().year();
+    content +=
+        QStringLiteral("// SPDX-FileCopyrightText: ") + QString::number(currentYear) + QStringLiteral(" <your name>\n");
     content += QStringLiteral("// SPDX-License-Identifier: GPL-3.0-or-later\n\n");
 
     // Metadata annotations — strip newlines to prevent annotation injection
@@ -2074,14 +2086,27 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
                 const QString templateContent = QString::fromUtf8(file.readAll());
                 file.close();
 
-                // Skip metadata block (comment lines and blank lines at the top).
-                // A non-comment, non-blank line ends the header — everything from
-                // there onwards is the body.
+                // Skip metadata block (comment lines — both // and /* */ — and blank
+                // lines at the top). A non-comment, non-blank line ends the header.
                 const QStringList lines = templateContent.split(QLatin1Char('\n'));
                 int bodyStart = 0;
                 bool seenComment = false;
+                bool inBlockComment = false;
                 for (int i = 0; i < lines.size(); ++i) {
                     const QString trimmed = lines[i].trimmed();
+                    if (inBlockComment) {
+                        seenComment = true;
+                        bodyStart = i + 1;
+                        if (trimmed.contains(QLatin1String("*/")))
+                            inBlockComment = false;
+                        continue;
+                    }
+                    if (trimmed.startsWith(QLatin1String("/*"))) {
+                        seenComment = true;
+                        inBlockComment = !trimmed.contains(QLatin1String("*/"));
+                        bodyStart = i + 1;
+                        continue;
+                    }
                     if (trimmed.startsWith(QLatin1String("//"))) {
                         seenComment = true;
                         bodyStart = i + 1;
