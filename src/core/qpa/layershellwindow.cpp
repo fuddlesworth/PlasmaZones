@@ -375,7 +375,8 @@ void LayerShellWindow::handleConfigure(void* data, struct zwlr_layer_surface_v1*
     // never paints it — mExposed stays false and isExposed() returns false.
     self->m_waylandWindow->updateExposure();
 
-    qCDebug(lcLayerShellWindow) << "Configured:" << width << "x" << height;
+    qCDebug(lcLayerShellWindow) << "Configured:" << width << "x" << height
+                                << (qwindow ? qwindow->objectName() : QStringLiteral("(unknown)"));
 }
 
 void LayerShellWindow::handleClosed(void* data, struct zwlr_layer_surface_v1* surface)
