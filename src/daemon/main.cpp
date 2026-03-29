@@ -99,6 +99,7 @@ int main(int argc, char* argv[])
     // Store instance pointer as a dynamic property so OverlayService::createQmlWindow()
     // can retrieve it and call setVulkanInstance() on each QQuickWindow.
 #if QT_CONFIG(vulkan)
+    qRegisterMetaType<QVulkanInstance*>();
     if (useVulkan) {
         app.setProperty(PzVulkanInstanceProperty, QVariant::fromValue(&vulkanInstance));
     }

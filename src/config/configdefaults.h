@@ -595,19 +595,25 @@ public:
         return entries;
     }
 
-    static QStringList validRenderingBackends()
+    static const QStringList& validRenderingBackends()
     {
-        QStringList keys;
-        for (const auto& e : renderingBackendEntries())
-            keys.append(e.key);
+        static const QStringList keys = [] {
+            QStringList k;
+            for (const auto& e : renderingBackendEntries())
+                k.append(e.key);
+            return k;
+        }();
         return keys;
     }
 
-    static QStringList renderingBackendDisplayNames()
+    static const QStringList& renderingBackendDisplayNames()
     {
-        QStringList names;
-        for (const auto& e : renderingBackendEntries())
-            names.append(e.displayName);
+        static const QStringList names = [] {
+            QStringList n;
+            for (const auto& e : renderingBackendEntries())
+                n.append(e.displayName);
+            return n;
+        }();
         return names;
     }
 

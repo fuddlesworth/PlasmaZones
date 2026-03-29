@@ -160,8 +160,10 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* scree
     } else if (QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan) {
         qCCritical(lcOverlay) << "Vulkan graphics API is active but no QVulkanInstance was provided."
                               << "This can happen when backend is 'auto' and Qt chose Vulkan."
-                              << "Overlay windows may fail to render. Set RenderingBackend=vulkan"
+                              << "Falling back — destroying this overlay window. Set RenderingBackend=vulkan"
                               << "explicitly in plasmazonesrc [Shaders] to enable proper Vulkan support.";
+        window->deleteLater();
+        return nullptr;
     }
 #endif
 
