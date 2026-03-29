@@ -10,9 +10,11 @@
 #include "../autotile/AlgorithmRegistry.h"
 #include "../autotile/TilingAlgorithm.h"
 #include "../autotile/TilingState.h"
+#include "../autotile/algorithms/ScriptedAlgorithm.h"
 #include "../autotile/algorithms/ScriptedAlgorithmLoader.h"
 
 #include "../config/configdefaults.h"
+#include "../pz_i18n.h"
 
 #include <QDBusMessage>
 #include <QFile>
@@ -23,17 +25,55 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDesktopServices>
+#include <QDate>
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QSettings>
 #include <QTimer>
 #include <QUrl>
 
+#include <memory>
+
 namespace PlasmaZones {
+
+namespace {
+QString userAlgorithmsDir()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+        + QStringLiteral("/plasmazones/algorithms/");
+}
+
+QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
+{
+    QString path = dir + baseName + QStringLiteral(".js");
+    if (!QFile::exists(path))
+        return path;
+    for (int i = 1; i <= 999; ++i) {
+        path = dir + baseName + QStringLiteral("-") + QString::number(i) + QStringLiteral(".js");
+        if (!QFile::exists(path))
+            return path;
+    }
+    return QString();
+}
+} // anonymous namespace
+
+SettingsController::~SettingsController()
+{
+    // Disconnect all pending algorithm registration watchers — AlgorithmRegistry
+    // is a singleton that outlives this object, so dangling connections would fire
+    // into a destroyed SettingsController.
+    for (auto it = m_algorithmWatchers.begin(); it != m_algorithmWatchers.end(); ++it) {
+        const auto& connPtr = it.value();
+        if (connPtr && *connPtr)
+            disconnect(*connPtr);
+    }
+    m_algorithmWatchers.clear();
+}
 
 SettingsController::SettingsController(QObject* parent)
     : QObject(parent)
@@ -351,17 +391,53 @@ void SettingsController::loadLayoutsAsync()
 
 void SettingsController::createNewLayout()
 {
+    createNewLayout(QStringLiteral("New Layout"), QStringLiteral("custom"), -1, true);
+}
+
+bool SettingsController::createNewLayout(const QString& name, const QString& type, int aspectRatioClass,
+                                         bool openInEditor)
+{
+    QString sanitizedName = name.trimmed();
+    if (sanitizedName.isEmpty())
+        sanitizedName = QStringLiteral("New Layout");
+
+    const QString layoutType = type.isEmpty() ? QStringLiteral("custom") : type;
+
     QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("createLayout"),
-                                                {QStringLiteral("New Layout"), QStringLiteral("custom")});
+                                                {sanitizedName, layoutType});
 
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString newLayoutId = reply.arguments().first().toString();
         if (!newLayoutId.isEmpty()) {
-            editLayout(newLayoutId);
+            if (aspectRatioClass >= 0) {
+                QDBusMessage arReply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                                                              QStringLiteral("setLayoutAspectRatioClass"),
+                                                              {newLayoutId, aspectRatioClass});
+                if (arReply.type() == QDBusMessage::ErrorMessage) {
+                    qCWarning(lcCore) << "setLayoutAspectRatioClass failed:" << arReply.errorMessage();
+                }
+            }
+            if (openInEditor) {
+                editLayout(newLayoutId);
+            }
             m_pendingSelectLayoutId = newLayoutId;
+            scheduleLayoutLoad();
+            return true;
         }
+        // Daemon returned a reply but with an empty layout ID
+        Q_EMIT layoutOperationFailed(PzI18n::tr("Could not create layout — daemon returned an empty layout ID."));
+        scheduleLayoutLoad();
+        return false;
     }
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcCore) << "createNewLayout failed:" << reply.errorMessage();
+        Q_EMIT layoutOperationFailed(reply.errorMessage());
+    } else {
+        Q_EMIT layoutOperationFailed(PzI18n::tr("Could not create layout — the daemon may not be running."));
+    }
+    // Still refresh — the daemon may have partially processed the request
     scheduleLayoutLoad();
+    return false;
 }
 
 void SettingsController::deleteLayout(const QString& layoutId)
@@ -370,6 +446,7 @@ void SettingsController::deleteLayout(const QString& layoutId)
         DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("deleteLayout"), {layoutId});
     if (reply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "deleteLayout failed:" << reply.errorMessage();
+        Q_EMIT layoutOperationFailed(PzI18n::tr("Could not delete layout: %1").arg(reply.errorMessage()));
     }
     scheduleLayoutLoad();
 }
@@ -383,6 +460,9 @@ void SettingsController::duplicateLayout(const QString& layoutId)
         if (!newId.isEmpty()) {
             m_pendingSelectLayoutId = newId;
         }
+    } else if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcCore) << "duplicateLayout failed:" << reply.errorMessage();
+        Q_EMIT layoutOperationFailed(PzI18n::tr("Could not duplicate layout: %1").arg(reply.errorMessage()));
     }
     scheduleLayoutLoad();
 }
@@ -1798,6 +1878,480 @@ bool SettingsController::importAlgorithm(const QString& filePath)
     const bool ok = QFile::copy(filePath, destPath);
     // ScriptedAlgorithmLoader's QFileSystemWatcher will pick up the new file automatically
     return ok;
+}
+
+QString SettingsController::algorithmIdFromLayoutId(const QString& layoutId)
+{
+    const QLatin1String prefix("autotile:");
+    if (layoutId.startsWith(prefix))
+        return layoutId.mid(prefix.size());
+    return layoutId;
+}
+
+QString SettingsController::scriptedFilePath(const QString& algorithmId) const
+{
+    if (algorithmId.isEmpty())
+        return QString();
+    auto* registry = AlgorithmRegistry::instance();
+    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    if (!algo)
+        return QString();
+    auto* scripted = qobject_cast<ScriptedAlgorithm*>(algo);
+    if (!scripted)
+        return QString();
+    const QString path = scripted->filePath();
+    if (path.isEmpty() || !QFile::exists(path))
+        return QString();
+    return path;
+}
+
+void SettingsController::cancelAlgorithmWatcher(const QString& expectedId)
+{
+    auto it = m_algorithmWatchers.find(expectedId);
+    if (it != m_algorithmWatchers.end()) {
+        const auto& connPtr = it.value();
+        if (connPtr && *connPtr)
+            disconnect(*connPtr);
+        m_algorithmWatchers.erase(it);
+    }
+}
+
+void SettingsController::watchForAlgorithmRegistration(const QString& expectedId)
+{
+    // Cancel any existing watcher for this ID to prevent stacking
+    cancelAlgorithmWatcher(expectedId);
+
+    auto* registry = AlgorithmRegistry::instance();
+    auto conn = std::make_shared<QMetaObject::Connection>();
+    m_algorithmWatchers[expectedId] = conn;
+    *conn = connect(registry, &AlgorithmRegistry::algorithmRegistered, this,
+                    [this, expectedId](const QString& registeredId) {
+                        if (registeredId == expectedId) {
+                            auto it = m_algorithmWatchers.find(expectedId);
+                            if (it != m_algorithmWatchers.end()) {
+                                disconnect(*it.value());
+                                m_algorithmWatchers.erase(it);
+                            }
+                            Q_EMIT algorithmCreated(expectedId);
+                        }
+                    });
+    // The context object (this) ensures the lambda is not invoked if SettingsController
+    // is destroyed before the timer fires — QTimer::singleShot with a context guarantees this.
+    QTimer::singleShot(10000, this, [this, expectedId]() {
+        auto it = m_algorithmWatchers.find(expectedId);
+        if (it != m_algorithmWatchers.end()) {
+            const auto& connPtr = it.value();
+            if (connPtr && *connPtr)
+                disconnect(*connPtr);
+            m_algorithmWatchers.erase(it);
+            qCWarning(lcCore) << "Algorithm registration timed out for:" << expectedId;
+            Q_EMIT algorithmOperationFailed(
+                PzI18n::tr("Algorithm was created but not picked up by the registry. "
+                           "Try refreshing or restarting the application."));
+        }
+    });
+}
+
+void SettingsController::openAlgorithm(const QString& algorithmId)
+{
+    // Try registry first (works for already-registered algorithms)
+    const QString registryPath = scriptedFilePath(algorithmId);
+    if (!registryPath.isEmpty()) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(registryPath));
+        return;
+    }
+
+    // Fallback: try user algorithms dir directly (works right after creation
+    // before the registry has picked up the file via QFileSystemWatcher).
+    // Uses algorithmId as filename — valid for createNewAlgorithm (returns filename)
+    // and duplicateAlgorithm (watches for the filename-based ID).
+    const QString userPath = userAlgorithmsDir() + algorithmId + QStringLiteral(".js");
+    if (QFile::exists(userPath)) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(userPath));
+        return;
+    }
+
+    qCWarning(lcCore) << "Cannot open algorithm — file not found for:" << algorithmId
+                      << "(checked registry and user dir:" << userAlgorithmsDir() << ")";
+}
+
+void SettingsController::openLayoutFile(const QString& layoutId)
+{
+    if (layoutId.isEmpty())
+        return;
+    // Layout files use UUID without braces as the filename
+    const QUuid uuid(layoutId);
+    if (uuid.isNull()) {
+        qCDebug(lcCore) << "openLayoutFile: not a valid UUID layout ID:" << layoutId;
+        return;
+    }
+    const QString bareId = uuid.toString(QUuid::WithoutBraces);
+    const QString filename = bareId + QStringLiteral(".json");
+    // Search user dir first, then all system dirs
+    const QString located =
+        QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/layouts/") + filename);
+    if (located.isEmpty()) {
+        qCWarning(lcCore) << "Layout file not found:" << filename;
+        return;
+    }
+    QDesktopServices::openUrl(QUrl::fromLocalFile(located));
+}
+
+bool SettingsController::deleteAlgorithm(const QString& algorithmId)
+{
+    if (algorithmId.isEmpty()) {
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot delete algorithm — no algorithm selected."));
+        return false;
+    }
+
+    auto* registry = AlgorithmRegistry::instance();
+    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    if (!algo || !algo->isUserScript()) {
+        qCWarning(lcCore) << "Cannot delete algorithm — not a user script:" << algorithmId;
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("Only user-created algorithms can be deleted."));
+        return false;
+    }
+
+    const QString filePath = scriptedFilePath(algorithmId);
+    if (filePath.isEmpty()) {
+        qCWarning(lcCore) << "Algorithm file not found for:" << algorithmId;
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("Algorithm file not found."));
+        return false;
+    }
+
+    // Only allow deleting from the user algorithms directory (canonicalize to defeat symlinks).
+    // If the user dir doesn't exist yet, canonicalFilePath() returns empty — guard against
+    // that becoming "/" which would match any absolute path.
+    const QString rawUserDir = QFileInfo(userAlgorithmsDir()).canonicalFilePath();
+    const QString userDir = rawUserDir + QLatin1Char('/');
+    const QString canonicalPath = QFileInfo(filePath).canonicalFilePath();
+    if (rawUserDir.isEmpty() || canonicalPath.isEmpty() || !canonicalPath.startsWith(userDir)) {
+        qCWarning(lcCore) << "Refusing to delete non-user algorithm file:" << filePath << "userDir=" << rawUserDir
+                          << "canonical=" << canonicalPath;
+        Q_EMIT algorithmOperationFailed(
+            rawUserDir.isEmpty() ? PzI18n::tr("Cannot delete — user algorithms directory does not exist.")
+                                 : PzI18n::tr("Cannot delete — file is outside the user algorithms directory."));
+        return false;
+    }
+
+    // Cancel any pending registration watcher for this algorithm — otherwise
+    // the 10s timeout fires algorithmOperationFailed for a deliberately deleted file.
+    cancelAlgorithmWatcher(algorithmId);
+
+    // Use the canonical path for removal to ensure we delete the actual file,
+    // not a symlink pointing into the user dir.
+    const bool ok = QFile::remove(canonicalPath);
+    if (!ok) {
+        qCWarning(lcCore) << "Failed to delete algorithm file:" << canonicalPath;
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not delete algorithm file. Check file permissions."));
+    }
+    // QFileSystemWatcher will pick up the deletion and trigger a refresh
+    return ok;
+}
+
+bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
+{
+    const QString sourcePath = scriptedFilePath(algorithmId);
+    if (sourcePath.isEmpty()) {
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot duplicate — algorithm file not found."));
+        return false;
+    }
+
+    auto* registry = AlgorithmRegistry::instance();
+    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    if (!algo) {
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot duplicate — algorithm is no longer registered."));
+        return false;
+    }
+
+    const QString destDir = userAlgorithmsDir();
+    QDir dir(destDir);
+    if (!dir.exists())
+        dir.mkpath(QStringLiteral("."));
+
+    // Generate unique filename: algorithmId-copy.js, algorithmId-copy-2.js, etc.
+    const QString baseName = algorithmId + QStringLiteral("-copy");
+    const QString destPath = findUniqueAlgorithmPath(destDir, baseName);
+    if (destPath.isEmpty()) {
+        qCWarning(lcCore) << "Could not find unique filename for duplicate:" << baseName;
+        Q_EMIT algorithmOperationFailed(
+            PzI18n::tr("Could not duplicate algorithm — too many copies exist. "
+                       "Please rename or delete existing copies."));
+        return false;
+    }
+
+    // Canonicalize source path to follow symlinks and ensure we read the actual file
+    const QString canonicalSource = QFileInfo(sourcePath).canonicalFilePath();
+    if (canonicalSource.isEmpty()) {
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot duplicate — could not resolve algorithm file path."));
+        return false;
+    }
+
+    // Read source, update metadata, write copy
+    QFile sourceFile(canonicalSource);
+    if (!sourceFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not read source algorithm file."));
+        return false;
+    }
+    QString content = QString::fromUtf8(sourceFile.readAll());
+    sourceFile.close();
+
+    // Update @name and @builtinId in the copy — strip all existing " (Copy)" suffixes to avoid accumulation
+    const QString newFilename = QFileInfo(destPath).completeBaseName();
+    QString baseCopyName = algo->name();
+    while (baseCopyName.endsWith(QLatin1String(" (Copy)")))
+        baseCopyName.chop(7);
+    QString newName = baseCopyName + QStringLiteral(" (Copy)");
+    // Sanitize newlines to prevent annotation injection (parity with createNewAlgorithm)
+    newName.replace(QLatin1Char('\n'), QLatin1Char(' '));
+    newName.replace(QLatin1Char('\r'), QLatin1Char(' '));
+    // Replace only the FIRST @name and @builtinId annotations — using replace(QRegularExpression)
+    // would replace ALL matches, corrupting any matching patterns in the algorithm body.
+    static const QRegularExpression nameRe(QStringLiteral("^// @name .+"), QRegularExpression::MultilineOption);
+    static const QRegularExpression idRe(QStringLiteral("^// @builtinId .+"), QRegularExpression::MultilineOption);
+    QRegularExpressionMatch nameMatch = nameRe.match(content);
+    if (nameMatch.hasMatch())
+        content.replace(nameMatch.capturedStart(), nameMatch.capturedLength(), QStringLiteral("// @name ") + newName);
+    QRegularExpressionMatch idMatch = idRe.match(content);
+    if (idMatch.hasMatch())
+        content.replace(idMatch.capturedStart(), idMatch.capturedLength(),
+                        QStringLiteral("// @builtinId ") + newFilename);
+
+    QFile destFile(destPath);
+    if (!destFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qCWarning(lcCore) << "Failed to write duplicate algorithm file:" << destPath;
+        Q_EMIT algorithmOperationFailed(
+            PzI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
+        return false;
+    }
+    const QByteArray encoded = content.toUtf8();
+    const qint64 written = destFile.write(encoded);
+    destFile.close();
+    if (written < 0 || written != encoded.size()) {
+        qCWarning(lcCore) << "Failed to write duplicate algorithm content:" << destPath << "written=" << written
+                          << "expected=" << encoded.size();
+        QFile::remove(destPath);
+        Q_EMIT algorithmOperationFailed(
+            PzI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
+        return false;
+    }
+
+    // Watch for registry pickup and emit algorithmCreated (issue #2: duplicate didn't fire signal)
+    watchForAlgorithmRegistration(newFilename);
+    return true;
+}
+
+bool SettingsController::exportAlgorithm(const QString& algorithmId, const QString& destPath)
+{
+    if (destPath.isEmpty()) {
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("No export destination specified."));
+        return false;
+    }
+
+    const QString sourcePath = scriptedFilePath(algorithmId);
+    if (sourcePath.isEmpty()) {
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot export — algorithm file not found."));
+        return false;
+    }
+
+    // Write to a temp file first, then rename — if copy fails the existing file is preserved
+    const QString tmpPath = destPath + QStringLiteral(".tmp");
+    if (QFile::exists(tmpPath))
+        QFile::remove(tmpPath);
+    if (!QFile::copy(sourcePath, tmpPath)) {
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not copy algorithm file for export."));
+        return false;
+    }
+    if (QFile::exists(destPath)) {
+        if (!QFile::remove(destPath)) {
+            QFile::remove(tmpPath);
+            Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not replace existing file at export destination."));
+            return false;
+        }
+    }
+    if (!QFile::rename(tmpPath, destPath)) {
+        // rename() fails across filesystems — fall back to copy+remove
+        if (!QFile::copy(tmpPath, destPath)) {
+            QFile::remove(tmpPath);
+            Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not write to export destination."));
+            return false;
+        }
+        if (!QFile::remove(tmpPath))
+            qCWarning(lcCore) << "Failed to clean up temporary export file:" << tmpPath;
+    }
+    return true;
+}
+
+QString SettingsController::createNewAlgorithm(const QString& name, const QString& baseTemplate,
+                                               bool supportsMasterCount, bool supportsSplitRatio,
+                                               bool producesOverlappingZones, bool supportsMemory)
+{
+    // Sanitize name to a filename: lowercase, replace non-alphanumeric (except hyphens) with
+    // hyphens, collapse multiple hyphens, strip leading/trailing hyphens
+    QString filename = name.trimmed().toLower();
+    static const QRegularExpression nonAlnum(QStringLiteral("[^a-z0-9-]"));
+    filename.replace(nonAlnum, QStringLiteral("-"));
+    static const QRegularExpression multiHyphen(QStringLiteral("-{2,}"));
+    filename.replace(multiHyphen, QStringLiteral("-"));
+    static const QRegularExpression leadTrailHyphen(QStringLiteral("^-|-$"));
+    filename.replace(leadTrailHyphen, QString());
+    if (filename.isEmpty())
+        filename = QStringLiteral("untitled-algorithm");
+
+    // Build destination path
+    const QString destDir = userAlgorithmsDir();
+    QDir dir(destDir);
+    if (!dir.exists()) {
+        dir.mkpath(QStringLiteral("."));
+    }
+
+    const QString destPath = findUniqueAlgorithmPath(destDir, filename);
+    if (destPath.isEmpty()) {
+        qCWarning(lcCore) << "Could not find unique filename for algorithm:" << filename << "— all 999 slots exhausted";
+        Q_EMIT algorithmOperationFailed(
+            PzI18n::tr("Could not create algorithm — too many files with the same name. "
+                       "Please rename or delete existing algorithms."));
+        return QString();
+    }
+    // Update filename to match the final path (may have -N suffix)
+    filename = QFileInfo(destPath).completeBaseName();
+
+    // Build JS content
+    QString content;
+
+    // SPDX header — use current year and a placeholder author
+    const int currentYear = QDate::currentDate().year();
+    content +=
+        QStringLiteral("// SPDX-FileCopyrightText: ") + QString::number(currentYear) + QStringLiteral(" <your name>\n");
+    content += QStringLiteral("// SPDX-License-Identifier: GPL-3.0-or-later\n\n");
+
+    // Metadata annotations — strip newlines to prevent annotation injection
+    QString sanitizedDisplayName = name.trimmed();
+    sanitizedDisplayName.replace(QLatin1Char('\n'), QLatin1Char(' '));
+    sanitizedDisplayName.replace(QLatin1Char('\r'), QLatin1Char(' '));
+    content += QStringLiteral("// @name ") + sanitizedDisplayName + QStringLiteral("\n");
+    content += QStringLiteral("// @builtinId ") + filename + QStringLiteral("\n");
+    content += QStringLiteral("// @description Custom tiling algorithm\n");
+    content += QStringLiteral("// @producesOverlappingZones ")
+        + (producesOverlappingZones ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n");
+    content += QStringLiteral("// @supportsMasterCount ")
+        + (supportsMasterCount ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n");
+    content += QStringLiteral("// @supportsSplitRatio ")
+        + (supportsSplitRatio ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n");
+    content += QStringLiteral("// @defaultSplitRatio 0.5\n");
+    content += QStringLiteral("// @defaultMaxWindows 6\n");
+    content += QStringLiteral("// @minimumWindows 1\n");
+    content += QStringLiteral("// @zoneNumberDisplay all\n");
+    content += QStringLiteral("// @supportsMemory ")
+        + (supportsMemory ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n\n");
+
+    // Try to read base template body from system algorithm dirs
+    bool foundTemplate = false;
+    if (baseTemplate != QLatin1String("blank") && !baseTemplate.isEmpty()) {
+        const QString templateFile =
+            QStandardPaths::locate(QStandardPaths::GenericDataLocation,
+                                   QStringLiteral("plasmazones/algorithms/") + baseTemplate + QStringLiteral(".js"));
+
+        if (!templateFile.isEmpty()) {
+            QFile file(templateFile);
+            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                const QString templateContent = QString::fromUtf8(file.readAll());
+                file.close();
+
+                // Skip the metadata header: SPDX lines, `// @annotation` lines,
+                // `/* ... */` block comments before the first code line, and
+                // surrounding blank lines. Stop as soon as we hit a non-metadata line
+                // (including doc-comments like `/** ... */` or `// Helper:`) so the
+                // template body's own documentation is preserved.
+                const QStringList lines = templateContent.split(QLatin1Char('\n'));
+                int bodyStart = 0;
+                bool inBlockComment = false;
+                for (int i = 0; i < lines.size(); ++i) {
+                    const QString trimmed = lines[i].trimmed();
+                    // Track /* ... */ block comments in the header region
+                    if (inBlockComment) {
+                        bodyStart = i + 1;
+                        if (trimmed.contains(QLatin1String("*/")))
+                            inBlockComment = false;
+                        continue;
+                    }
+                    // SPDX headers
+                    if (trimmed.startsWith(QLatin1String("// SPDX-"))) {
+                        bodyStart = i + 1;
+                        continue;
+                    }
+                    // Metadata annotations (// @name, // @builtinId, etc.)
+                    if (trimmed.startsWith(QLatin1String("// @"))) {
+                        bodyStart = i + 1;
+                        continue;
+                    }
+                    // Block comment opening in the header — only skip if we haven't
+                    // yet passed into the body (avoids stripping doc-comments after metadata).
+                    // NOTE: this also matches /** JSDoc */ style comments. We assume bundled
+                    // templates do not place JSDoc between metadata annotations.
+                    if (trimmed.startsWith(QLatin1String("/*"))) {
+                        bodyStart = i + 1;
+                        if (!trimmed.contains(QLatin1String("*/")))
+                            inBlockComment = true;
+                        continue;
+                    }
+                    // Blank lines between metadata lines are part of the header
+                    if (trimmed.isEmpty() && i == bodyStart) {
+                        bodyStart = i + 1;
+                        continue;
+                    }
+                    break;
+                }
+
+                // Append everything from bodyStart onwards
+                if (bodyStart < lines.size()) {
+                    for (int i = bodyStart; i < lines.size(); ++i) {
+                        content += lines[i];
+                        if (i < lines.size() - 1)
+                            content += QLatin1Char('\n');
+                    }
+                    foundTemplate = true;
+                }
+            }
+        }
+    }
+
+    if (!foundTemplate) {
+        content += QStringLiteral(
+            "/**\n"
+            " * Custom tiling algorithm.\n"
+            " *\n"
+            " * @param {Object} params - Tiling parameters\n"
+            " * @returns {Array<{x: number, y: number, width: number, height: number}>}\n"
+            " */\n"
+            "function calculateZones(params) {\n"
+            "    if (params.windowCount <= 0) return [];\n"
+            "    return fillArea(params.area, params.windowCount);\n"
+            "}\n");
+    }
+
+    // Write the file
+    QFile outFile(destPath);
+    if (!outFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qCWarning(lcCore) << "Failed to write algorithm file:" << destPath;
+        Q_EMIT algorithmOperationFailed(
+            PzI18n::tr("Could not write algorithm file. Check disk space and permissions."));
+        return QString();
+    }
+    const QByteArray encoded = content.toUtf8();
+    const qint64 written = outFile.write(encoded);
+    outFile.close();
+    if (written < 0 || written != encoded.size()) {
+        qCWarning(lcCore) << "Failed to write algorithm content:" << destPath << "written=" << written
+                          << "expected=" << encoded.size();
+        QFile::remove(destPath);
+        Q_EMIT algorithmOperationFailed(
+            PzI18n::tr("Could not write algorithm file. Check disk space and permissions."));
+        return QString();
+    }
+
+    watchForAlgorithmRegistration(filename);
+    return filename;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

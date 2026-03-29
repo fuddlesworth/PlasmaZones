@@ -48,7 +48,8 @@ ColumnLayout {
         Layout.bottomMargin: Kirigami.Units.smallSpacing
         appSettings: root.settingsBridge
         viewMode: root.viewMode
-        onRequestCreateNewLayout: settingsController.createNewLayout()
+        onRequestCreateNewLayout: newLayoutDialog.open()
+        onRequestCreateNewAlgorithm: newAlgorithmDialog.open()
         onRequestImportLayout: importDialog.open()
         onRequestImportFromKZones: settingsController.importFromKZones()
         onRequestImportKZonesFile: kzonesFileDialog.open()
@@ -381,20 +382,86 @@ ColumnLayout {
         }
 
         function onExportRequested(layoutId) {
-            exportDialog.layoutId = layoutId;
-            exportDialog.open();
+            if (layoutId.startsWith("autotile:")) {
+                algorithmExportDialog.algorithmId = settingsController.algorithmIdFromLayoutId(layoutId);
+                algorithmExportDialog.open();
+            } else {
+                exportDialog.layoutId = layoutId;
+                exportDialog.open();
+            }
         }
 
         target: window.layoutContextMenu
     }
 
-    // Delete confirmation dialog
+    // New Layout wizard dialog
+    NewLayoutDialog {
+        id: newLayoutDialog
+
+        appSettings: root.settingsBridge
+        controller: settingsController
+    }
+
+    // New Algorithm wizard dialog
+    NewAlgorithmDialog {
+        id: newAlgorithmDialog
+
+        controller: settingsController
+    }
+
+    // Algorithm created/failed signals from C++ (fires after AlgorithmRegistry picks up the new file)
+    Connections {
+        function onAlgorithmCreated(algorithmId) {
+            // Always rebuild so the new algorithm is available; only switch view
+            // and auto-select if the user is already looking at the tiling view
+            // (avoids jarring view switch when duplicating from a different context)
+            layoutGrid.rebuildModel();
+            if (root.viewMode === 1)
+                layoutGrid.selectedLayoutId = "autotile:" + algorithmId;
+
+        }
+
+        function onAlgorithmOperationFailed(reason) {
+            // Only show toast when the wizard dialog is closed — if the dialog
+            // is open, it shows the error inline via its own Connections block
+            if (!newAlgorithmDialog.opened && window && window.showToast)
+                window.showToast(reason);
+
+        }
+
+        function onLayoutOperationFailed(reason) {
+            // Only show toast when the wizard dialog is closed — if the dialog
+            // is open, it shows the error inline via its own Connections block
+            if (!newLayoutDialog.opened && window && window.showToast)
+                window.showToast(reason);
+
+        }
+
+        target: settingsController
+    }
+
+    // Algorithm export file dialog
+    FileDialog {
+        id: algorithmExportDialog
+
+        property string algorithmId: ""
+
+        title: i18n("Export Algorithm")
+        nameFilters: ["JavaScript files (*.js)"]
+        fileMode: FileDialog.SaveFile
+        onAccepted: {
+            settingsController.exportAlgorithm(algorithmExportDialog.algorithmId, root.filePathFromUrl(selectedFile));
+        }
+    }
+
+    // Delete confirmation dialog (handles both layouts and algorithms)
     Kirigami.PromptDialog {
         id: deleteConfirmDialog
 
         property var layoutToDelete: null
+        readonly property bool isAlgorithm: layoutToDelete && layoutToDelete.isAutotile === true
 
-        title: i18n("Delete Layout")
+        title: isAlgorithm ? i18n("Delete Algorithm") : i18n("Delete Layout")
         subtitle: layoutToDelete ? i18n("Are you sure you want to delete \"%1\"?", layoutToDelete.name || "") : ""
         standardButtons: Kirigami.Dialog.NoButton
         onRejected: layoutToDelete = null
@@ -405,7 +472,12 @@ ColumnLayout {
                 icon.name: "edit-delete"
                 onTriggered: {
                     if (deleteConfirmDialog.layoutToDelete) {
-                        settingsController.deleteLayout(deleteConfirmDialog.layoutToDelete.id);
+                        if (deleteConfirmDialog.isAlgorithm) {
+                            let algoId = settingsController.algorithmIdFromLayoutId(deleteConfirmDialog.layoutToDelete.id);
+                            settingsController.deleteAlgorithm(algoId);
+                        } else {
+                            settingsController.deleteLayout(deleteConfirmDialog.layoutToDelete.id);
+                        }
                         deleteConfirmDialog.layoutToDelete = null;
                     }
                     deleteConfirmDialog.close();

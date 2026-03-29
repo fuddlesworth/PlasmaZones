@@ -124,7 +124,7 @@ class SettingsController : public QObject
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
-    ~SettingsController() override = default;
+    ~SettingsController() override;
 
     QString activePage() const
     {
@@ -202,6 +202,9 @@ public:
 
     // Layout CRUD (D-Bus to daemon)
     Q_INVOKABLE void createNewLayout();
+    Q_INVOKABLE bool createNewLayout(const QString& name, const QString& type, int aspectRatioClass, bool openInEditor);
+    Q_INVOKABLE QString createNewAlgorithm(const QString& name, const QString& baseTemplate, bool supportsMasterCount,
+                                           bool supportsSplitRatio, bool producesOverlappingZones, bool supportsMemory);
     Q_INVOKABLE void deleteLayout(const QString& layoutId);
     Q_INVOKABLE void duplicateLayout(const QString& layoutId);
     Q_INVOKABLE void editLayout(const QString& layoutId);
@@ -509,6 +512,12 @@ public:
                                                       int masterCount) const;
     Q_INVOKABLE void openAlgorithmsFolder();
     Q_INVOKABLE bool importAlgorithm(const QString& filePath);
+    Q_INVOKABLE static QString algorithmIdFromLayoutId(const QString& layoutId);
+    Q_INVOKABLE void openAlgorithm(const QString& algorithmId);
+    Q_INVOKABLE void openLayoutFile(const QString& layoutId);
+    Q_INVOKABLE bool deleteAlgorithm(const QString& algorithmId);
+    Q_INVOKABLE bool duplicateAlgorithm(const QString& algorithmId);
+    Q_INVOKABLE bool exportAlgorithm(const QString& algorithmId, const QString& destPath);
 
     // ── Per-screen autotile overrides ────────────────────────────────────────
     Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenName) const;
@@ -544,6 +553,9 @@ Q_SIGNALS:
     void layoutsChanged();
     void layoutAdded(const QString& layoutId);
     void availableAlgorithmsChanged();
+    void algorithmCreated(const QString& algorithmId);
+    void algorithmOperationFailed(const QString& reason);
+    void layoutOperationFailed(const QString& reason);
     void screensChanged();
     void dismissedUpdateVersionChanged();
 
@@ -591,6 +603,12 @@ private Q_SLOTS:
     void onScreenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
 
 private:
+    QString scriptedFilePath(const QString& algorithmId) const;
+    void watchForAlgorithmRegistration(const QString& expectedId);
+    void cancelAlgorithmWatcher(const QString& expectedId);
+
+    QHash<QString, std::shared_ptr<QMetaObject::Connection>> m_algorithmWatchers;
+
     void setNeedsSave(bool needs);
     void scheduleLayoutLoad();
     void refreshVirtualDesktops();

@@ -1184,6 +1184,22 @@ ApplicationWindow {
                     visible: false
                 }
 
+                // -- Open in Editor (external text editor) --
+                MenuItem {
+                    text: i18n("Open in Text Editor")
+                    icon.name: "document-open"
+                    Accessible.name: text
+                    onTriggered: {
+                        if (layoutContextMenu.isAutotile)
+                            settingsController.openAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId));
+                        else
+                            settingsController.openLayoutFile(layoutContextMenu.layoutId);
+                    }
+                }
+
+                MenuSeparator {
+                }
+
                 // -- State --
                 MenuItem {
                     text: i18n("Set as Default")
@@ -1263,7 +1279,7 @@ ApplicationWindow {
                     onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 4)
                 }
 
-                // -- Manage --
+                // -- Manage (snapping layouts) --
                 MenuSeparator {
                     visible: layoutContextMenu.viewMode === 0 && !layoutContextMenu.isAutotile
                 }
@@ -1278,7 +1294,7 @@ ApplicationWindow {
                 MenuItem {
                     text: i18n("Export")
                     icon.name: "document-export"
-                    visible: layoutContextMenu.viewMode === 0
+                    visible: layoutContextMenu.viewMode === 0 && !layoutContextMenu.isAutotile
                     onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId)
                 }
 
@@ -1290,6 +1306,39 @@ ApplicationWindow {
                     text: i18n("Delete")
                     icon.name: "edit-delete"
                     visible: layoutContextMenu.viewMode === 0 && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
+                    onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
+                }
+
+                // -- Algorithms: Manage --
+                MenuSeparator {
+                    // Only show if at least one item below is visible (Duplicate/Export always
+                    // are, so this fires for any autotile entry — but keeps the separator hidden
+                    // when !isAutotile, avoiding a dangling line for snapping layouts).
+                    visible: layoutContextMenu.isAutotile
+                }
+
+                MenuItem {
+                    text: i18n("Duplicate")
+                    icon.name: "edit-copy"
+                    visible: layoutContextMenu.isAutotile
+                    onTriggered: settingsController.duplicateAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId))
+                }
+
+                MenuItem {
+                    text: i18n("Export")
+                    icon.name: "document-export"
+                    visible: layoutContextMenu.isAutotile
+                    onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId)
+                }
+
+                MenuSeparator {
+                    visible: layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem
+                }
+
+                MenuItem {
+                    text: i18n("Delete")
+                    icon.name: "edit-delete"
+                    visible: layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem
                     onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
                 }
 
