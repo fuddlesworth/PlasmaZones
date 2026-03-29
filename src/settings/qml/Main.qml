@@ -1166,7 +1166,7 @@ ApplicationWindow {
                             _screenItems.push(item);
                         }
                     }
-                    screenSeparator.visible = _screenItems.length > 0;
+                    screenSeparator.visible = true;
                     layoutContextMenu.popup();
                 }
 
@@ -1182,6 +1182,21 @@ ApplicationWindow {
                     id: screenSeparator
 
                     visible: false
+                }
+
+                // -- Open in Editor (external text editor) --
+                MenuItem {
+                    text: i18n("Open in Text Editor")
+                    icon.name: "document-edit"
+                    onTriggered: {
+                        if (layoutContextMenu.isAutotile)
+                            settingsController.openAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId));
+                        else
+                            settingsController.openLayoutFile(layoutContextMenu.layoutId);
+                    }
+                }
+
+                MenuSeparator {
                 }
 
                 // -- State --
@@ -1293,7 +1308,7 @@ ApplicationWindow {
                     onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
                 }
 
-                // -- Manage (algorithms) --
+                // -- Algorithms: Manage --
                 MenuSeparator {
                     visible: layoutContextMenu.isAutotile
                 }

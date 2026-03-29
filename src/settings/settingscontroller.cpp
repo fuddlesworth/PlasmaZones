@@ -1902,6 +1902,35 @@ void SettingsController::watchForAlgorithmRegistration(const QString& expectedId
     });
 }
 
+void SettingsController::openAlgorithm(const QString& algorithmId)
+{
+    const QString path = scriptedFilePath(algorithmId);
+    if (path.isEmpty()) {
+        qCWarning(lcCore) << "Cannot open algorithm — file not found for:" << algorithmId;
+        return;
+    }
+    QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+}
+
+void SettingsController::openLayoutFile(const QString& layoutId)
+{
+    if (layoutId.isEmpty())
+        return;
+    // Layout files use UUID without braces as the filename
+    const QString bareId = QUuid(layoutId).toString(QUuid::WithoutBraces);
+    if (bareId.isEmpty())
+        return;
+    const QString filename = bareId + QStringLiteral(".json");
+    // Search user dir first, then all system dirs
+    const QString located =
+        QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/layouts/") + filename);
+    if (located.isEmpty()) {
+        qCWarning(lcCore) << "Layout file not found:" << filename;
+        return;
+    }
+    QDesktopServices::openUrl(QUrl::fromLocalFile(located));
+}
+
 bool SettingsController::deleteAlgorithm(const QString& algorithmId)
 {
     if (algorithmId.isEmpty())

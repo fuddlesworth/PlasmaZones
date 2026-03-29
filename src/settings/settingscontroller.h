@@ -513,6 +513,8 @@ public:
     Q_INVOKABLE void openAlgorithmsFolder();
     Q_INVOKABLE bool importAlgorithm(const QString& filePath);
     Q_INVOKABLE static QString algorithmIdFromLayoutId(const QString& layoutId);
+    Q_INVOKABLE void openAlgorithm(const QString& algorithmId);
+    Q_INVOKABLE void openLayoutFile(const QString& layoutId);
     Q_INVOKABLE bool deleteAlgorithm(const QString& algorithmId);
     Q_INVOKABLE bool duplicateAlgorithm(const QString& algorithmId);
     Q_INVOKABLE bool exportAlgorithm(const QString& algorithmId, const QString& destPath);

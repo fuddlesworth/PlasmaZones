@@ -405,7 +405,7 @@ ColumnLayout {
     NewAlgorithmDialog {
         id: newAlgorithmDialog
 
-        appSettings: root.settingsBridge
+        appSettings: settingsController
     }
 
     // Algorithm created/failed signals from C++ (fires after AlgorithmRegistry picks up the new file)

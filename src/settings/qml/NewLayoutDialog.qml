@@ -256,18 +256,21 @@ Kirigami.Dialog {
                         delegate: WizardTemplateCard {
                             id: templateDelegate
 
-                            templateName: modelData.name
-                            templateDesc: modelData.desc
-                            selected: root.selectedType === modelData.type
-                            onClicked: root.selectTemplate(modelData)
+                            required property var modelData
+                            required property int index
+
+                            templateName: templateDelegate.modelData.name
+                            templateDesc: templateDelegate.modelData.desc
+                            selected: root.selectedType === templateDelegate.modelData.type
+                            onClicked: root.selectTemplate(templateDelegate.modelData)
                             onDoubleClicked: {
-                                root.selectTemplate(modelData);
+                                root.selectTemplate(templateDelegate.modelData);
                                 root.currentStep = 1;
                             }
 
                             QFZCommon.ZonePreview {
                                 anchors.fill: parent
-                                zones: modelData.zones
+                                zones: templateDelegate.modelData.zones
                                 showZoneNumbers: true
                                 isHovered: templateDelegate.isHovered || templateDelegate.selected
                                 highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, templateDelegate.selected ? 0.8 : 0.5)

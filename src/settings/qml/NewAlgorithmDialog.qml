@@ -22,6 +22,7 @@ Kirigami.Dialog {
     property bool supportsSplitRatio: false
     property bool producesOverlappingZones: false
     property bool supportsMemory: false
+    property bool openInEditor: true
     property string _previousAutoName: ""
     // Re-evaluated on open so it picks up the correct screen.
     // Clamped to [1.0, 3.6] to keep the preview usable on extreme aspect ratios (e.g. 32:9).
@@ -87,6 +88,7 @@ Kirigami.Dialog {
         root.supportsSplitRatio = false;
         root.producesOverlappingZones = false;
         root.supportsMemory = false;
+        root.openInEditor = true;
         root.screenAspectRatio = (Screen.width > 0 && Screen.height > 0) ? Math.max(1, Math.min(3.6, Screen.width / Screen.height)) : (16 / 9);
     }
 
@@ -385,6 +387,18 @@ Kirigami.Dialog {
 
                         }
 
+                        Kirigami.Separator {
+                            Layout.fillWidth: true
+                        }
+
+                        // Options
+                        CheckBox {
+                            text: i18n("Open in text editor after creation")
+                            checked: root.openInEditor
+                            onToggled: root.openInEditor = checked
+                            Accessible.name: text
+                        }
+
                     }
 
                 }
@@ -414,9 +428,12 @@ Kirigami.Dialog {
         onCreateClicked: {
             wizardFooter.errorText = "";
             let result = settingsController.createNewAlgorithm(nameField.text.trim(), root.baseTemplate, root.supportsMasterCount, root.supportsSplitRatio, root.producesOverlappingZones, root.supportsMemory);
-            if (result.length > 0)
-                root.close();
+            if (result.length > 0) {
+                if (root.openInEditor)
+                    settingsController.openAlgorithm(result);
 
+                root.close();
+            }
         }
         onCancelClicked: root.close()
     }
