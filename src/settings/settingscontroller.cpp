@@ -378,20 +378,10 @@ void SettingsController::loadLayoutsAsync()
 
 void SettingsController::createNewLayout()
 {
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("createLayout"),
-                                                {QStringLiteral("New Layout"), QStringLiteral("custom")});
-
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QString newLayoutId = reply.arguments().first().toString();
-        if (!newLayoutId.isEmpty()) {
-            editLayout(newLayoutId);
-            m_pendingSelectLayoutId = newLayoutId;
-        }
-    }
-    scheduleLayoutLoad();
+    createNewLayout(QStringLiteral("New Layout"), QStringLiteral("custom"), -1, true);
 }
 
-void SettingsController::createNewLayout(const QString& name, const QString& type, int aspectRatioClass,
+bool SettingsController::createNewLayout(const QString& name, const QString& type, int aspectRatioClass,
                                          bool openInEditor)
 {
     QString sanitizedName = name.trimmed();
@@ -415,10 +405,16 @@ void SettingsController::createNewLayout(const QString& name, const QString& typ
             }
             m_pendingSelectLayoutId = newLayoutId;
             scheduleLayoutLoad();
+            return true;
         }
-    } else if (reply.type() == QDBusMessage::ErrorMessage) {
-        qCWarning(lcCore) << "createNewLayout failed:" << reply.errorMessage();
     }
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcCore) << "createNewLayout failed:" << reply.errorMessage();
+        Q_EMIT layoutCreationFailed(reply.errorMessage());
+    } else {
+        Q_EMIT layoutCreationFailed(PzI18n::tr("Could not create layout — the daemon may not be running."));
+    }
+    return false;
 }
 
 void SettingsController::deleteLayout(const QString& layoutId)
@@ -1857,6 +1853,14 @@ bool SettingsController::importAlgorithm(const QString& filePath)
     return ok;
 }
 
+QString SettingsController::algorithmIdFromLayoutId(const QString& layoutId)
+{
+    const QLatin1String prefix("autotile:");
+    if (layoutId.startsWith(prefix))
+        return layoutId.mid(prefix.size());
+    return layoutId;
+}
+
 QString SettingsController::scriptedFilePath(const QString& algorithmId) const
 {
     if (algorithmId.isEmpty())
@@ -1885,9 +1889,14 @@ void SettingsController::watchForAlgorithmRegistration(const QString& expectedId
                             Q_EMIT algorithmCreated(expectedId);
                         }
                     });
-    QTimer::singleShot(10000, this, [conn]() {
-        if (*conn)
+    QTimer::singleShot(10000, this, [this, conn, expectedId]() {
+        if (*conn) {
             disconnect(*conn);
+            qCWarning(lcCore) << "Algorithm registration timed out for:" << expectedId;
+            Q_EMIT algorithmCreationFailed(
+                PzI18n::tr("Algorithm was created but not picked up by the registry. "
+                           "Try refreshing or restarting the application."));
+        }
     });
 }
 
@@ -1946,6 +1955,9 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
     const QString destPath = findUniqueAlgorithmPath(destDir, baseName);
     if (destPath.isEmpty()) {
         qCWarning(lcCore) << "Could not find unique filename for duplicate:" << baseName;
+        Q_EMIT algorithmCreationFailed(
+            PzI18n::tr("Could not duplicate algorithm — too many copies exist. "
+                       "Please rename or delete existing copies."));
         return false;
     }
 

@@ -26,10 +26,6 @@ ColumnLayout {
         return url.toString().replace(/^file:\/\/+/, "/");
     }
 
-    function algorithmIdFromLayoutId(layoutId) {
-        return layoutId.startsWith("autotile:") ? layoutId.substring("autotile:".length) : layoutId;
-    }
-
     spacing: 0
 
     // Reset to Snapping Layouts when autotiling is disabled
@@ -387,7 +383,7 @@ ColumnLayout {
 
         function onExportRequested(layoutId) {
             if (layoutId.startsWith("autotile:")) {
-                algorithmExportDialog.algorithmId = root.algorithmIdFromLayoutId(layoutId);
+                algorithmExportDialog.algorithmId = settingsController.algorithmIdFromLayoutId(layoutId);
                 algorithmExportDialog.open();
             } else {
                 exportDialog.layoutId = layoutId;
@@ -415,11 +411,13 @@ ColumnLayout {
     // Algorithm created signal from C++ (fires after AlgorithmRegistry picks up the new file)
     Connections {
         function onAlgorithmCreated(algorithmId) {
-            if (root.viewMode !== 1)
-                root.viewMode = 1;
-
+            // Always rebuild so the new algorithm is available; only switch view
+            // and auto-select if the user is already looking at the tiling view
+            // (avoids jarring view switch when duplicating from a different context)
             layoutGrid.rebuildModel();
-            layoutGrid.selectedLayoutId = "autotile:" + algorithmId;
+            if (root.viewMode === 1)
+                layoutGrid.selectedLayoutId = "autotile:" + algorithmId;
+
         }
 
         target: settingsController
@@ -435,7 +433,11 @@ ColumnLayout {
         nameFilters: [i18n("JavaScript files (*.js)")]
         fileMode: FileDialog.SaveFile
         onAccepted: {
-            settingsController.exportAlgorithm(algorithmExportDialog.algorithmId, root.filePathFromUrl(selectedFile));
+            if (!settingsController.exportAlgorithm(algorithmExportDialog.algorithmId, root.filePathFromUrl(selectedFile))) {
+                if (window && window.showToast)
+                    window.showToast(i18n("Failed to export algorithm"));
+
+            }
         }
     }
 
@@ -458,7 +460,7 @@ ColumnLayout {
                 onTriggered: {
                     if (deleteConfirmDialog.layoutToDelete) {
                         if (deleteConfirmDialog.isAlgorithm) {
-                            let algoId = root.algorithmIdFromLayoutId(deleteConfirmDialog.layoutToDelete.id);
+                            let algoId = settingsController.algorithmIdFromLayoutId(deleteConfirmDialog.layoutToDelete.id);
                             settingsController.deleteAlgorithm(algoId);
                         } else {
                             settingsController.deleteLayout(deleteConfirmDialog.layoutToDelete.id);

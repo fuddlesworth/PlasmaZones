@@ -157,10 +157,6 @@ ApplicationWindow {
         "portrait": i18n("Portrait (9:16)")
     })
 
-    function algorithmIdFromLayoutId(layoutId) {
-        return layoutId.startsWith("autotile:") ? layoutId.substring("autotile:".length) : layoutId;
-    }
-
     function _rebuildSidebar() {
         sidebarModel.clear();
         let searchText = sidebarSearch.text.toLowerCase();
@@ -1306,7 +1302,7 @@ ApplicationWindow {
                     text: i18n("Duplicate")
                     icon.name: "edit-copy"
                     visible: layoutContextMenu.isAutotile
-                    onTriggered: settingsController.duplicateAlgorithm(window.algorithmIdFromLayoutId(layoutContextMenu.layoutId))
+                    onTriggered: settingsController.duplicateAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId))
                 }
 
                 MenuItem {

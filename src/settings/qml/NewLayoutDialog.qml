@@ -22,8 +22,10 @@ Kirigami.Dialog {
     property int selectedAspectRatio: -1
     property bool openInEditor: true
     property string _previousAutoName: ""
-    // Match the user's primary monitor aspect ratio for the preview
-    readonly property real screenAspectRatio: Screen.width > 0 && Screen.height > 0 ? (Screen.width / Screen.height) : (16 / 9)
+    // Match the user's primary monitor aspect ratio for the preview.
+    // Re-evaluated on open so it picks up the correct screen even if the
+    // dialog is constructed before the window is shown on a display.
+    property real screenAspectRatio: 16 / 9
     // Template previews match TemplateService strategies exactly
     // (see src/editor/services/TemplateService.cpp and core/constants.h)
     readonly property var templates: [{
@@ -207,6 +209,7 @@ Kirigami.Dialog {
         root.openInEditor = true;
         nameField.text = "";
         root._previousAutoName = "";
+        root.screenAspectRatio = (Screen.width > 0 && Screen.height > 0) ? (Screen.width / Screen.height) : (16 / 9);
     }
 
     ColumnLayout {
@@ -436,6 +439,15 @@ Kirigami.Dialog {
 
     }
 
+    Connections {
+        function onLayoutCreationFailed(reason) {
+            layoutErrorLabel.text = reason;
+            layoutErrorLabel.visible = true;
+        }
+
+        target: settingsController
+    }
+
     footer: WizardFooter {
         id: wizardFooter
 
@@ -445,10 +457,24 @@ Kirigami.Dialog {
         onBackClicked: root.currentStep = 0
         onNextClicked: root.currentStep = 1
         onCreateClicked: {
-            settingsController.createNewLayout(nameField.text.trim(), root.selectedType, root.selectedAspectRatio, root.openInEditor);
-            root.close();
+            layoutErrorLabel.visible = false;
+            if (settingsController.createNewLayout(nameField.text.trim(), root.selectedType, root.selectedAspectRatio, root.openInEditor))
+                root.close();
+
         }
         onCancelClicked: root.close()
+
+        Label {
+            id: layoutErrorLabel
+
+            anchors.bottom: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottomMargin: Kirigami.Units.smallSpacing
+            visible: false
+            color: Kirigami.Theme.negativeTextColor
+            font: Kirigami.Theme.smallFont
+        }
+
     }
 
 }

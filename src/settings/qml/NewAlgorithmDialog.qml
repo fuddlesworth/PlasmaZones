@@ -23,7 +23,8 @@ Kirigami.Dialog {
     property bool producesOverlappingZones: false
     property bool supportsMemory: false
     property string _previousAutoName: ""
-    readonly property real screenAspectRatio: Screen.width > 0 && Screen.height > 0 ? (Screen.width / Screen.height) : (16 / 9)
+    // Re-evaluated on open so it picks up the correct screen
+    property real screenAspectRatio: 16 / 9
     readonly property var baseTemplates: [{
         "name": i18n("Blank"),
         "id": "blank",
@@ -85,6 +86,7 @@ Kirigami.Dialog {
         root.supportsSplitRatio = false;
         root.producesOverlappingZones = false;
         root.supportsMemory = false;
+        root.screenAspectRatio = (Screen.width > 0 && Screen.height > 0) ? (Screen.width / Screen.height) : (16 / 9);
     }
 
     ColumnLayout {
