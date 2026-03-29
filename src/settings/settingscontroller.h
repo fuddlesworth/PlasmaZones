@@ -350,11 +350,7 @@ public:
 
     QStringList renderingBackendDisplayNames() const
     {
-        // Translate display names from ConfigDefaults (single source of truth for key<->name coupling)
-        QStringList translated;
-        for (const auto& name : PlasmaZones::ConfigDefaults::renderingBackendDisplayNames())
-            translated.append(PzI18n::tr(name.toUtf8().constData()));
-        return translated;
+        return m_renderingBackendDisplayNames;
     }
 
     // ── Cava detection ───────────────────────────────────────────────────────
@@ -641,6 +637,7 @@ private:
     static QVariantList convertTriggersForStorage(const QVariantList& triggers);
 
     Settings m_settings;
+    QStringList m_renderingBackendDisplayNames;
     DaemonController m_daemonController;
     UpdateChecker m_updateChecker;
     QString m_dismissedUpdateVersion;

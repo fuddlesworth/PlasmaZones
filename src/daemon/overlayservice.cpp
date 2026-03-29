@@ -154,16 +154,28 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* scree
     // set before it can create a Vulkan surface. The instance is stored as a dynamic
     // property on QGuiApplication by main.cpp.
 #if QT_CONFIG(vulkan)
-    auto* vulkanInstance = qApp->property(PzVulkanInstanceProperty).value<QVulkanInstance*>();
+    auto* vulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
     if (vulkanInstance) {
         window->setVulkanInstance(vulkanInstance);
     } else if (QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan) {
-        qCCritical(lcOverlay) << "Vulkan graphics API is active but no QVulkanInstance was provided."
-                              << "This can happen when backend is 'auto' and Qt chose Vulkan."
-                              << "Falling back — destroying this overlay window. Set RenderingBackend=vulkan"
-                              << "explicitly in plasmazonesrc [Shaders] to enable proper Vulkan support.";
-        window->deleteLater();
-        return nullptr;
+        // This can happen when backend is 'auto' and Qt chose Vulkan at runtime.
+        // Create a QVulkanInstance on-the-fly so overlays still work.
+        if (!m_fallbackVulkanInstance) {
+            m_fallbackVulkanInstance = std::make_unique<QVulkanInstance>();
+            m_fallbackVulkanInstance->setApiVersion(QVersionNumber(1, 1));
+            if (m_fallbackVulkanInstance->create()) {
+                qCInfo(lcOverlay) << "Created fallback QVulkanInstance for 'auto' backend (Qt chose Vulkan).";
+                qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty,
+                                  QVariant::fromValue(m_fallbackVulkanInstance.get()));
+            } else {
+                qCCritical(lcOverlay) << "Failed to create fallback QVulkanInstance."
+                                      << "Overlay windows will not render correctly.";
+                m_fallbackVulkanInstance.reset();
+                window->deleteLater();
+                return nullptr;
+            }
+        }
+        window->setVulkanInstance(m_fallbackVulkanInstance.get());
     }
 #endif
 

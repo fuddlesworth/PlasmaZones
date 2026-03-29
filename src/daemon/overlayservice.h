@@ -12,6 +12,7 @@
 #include <QString>
 #include <atomic>
 #include <memory>
+#include "vulkan_metatype.h"
 
 #include "../core/interfaces.h"
 #include "../core/layout.h"
@@ -359,6 +360,11 @@ private:
 
     // Screens excluded from overlay display (autotile-managed screens)
     QSet<QString> m_excludedScreens;
+
+    // Fallback QVulkanInstance for when 'auto' backend resolves to Vulkan
+#if QT_CONFIG(vulkan)
+    std::unique_ptr<QVulkanInstance> m_fallbackVulkanInstance;
+#endif
 };
 
 } // namespace PlasmaZones

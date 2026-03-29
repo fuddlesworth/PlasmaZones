@@ -44,7 +44,7 @@ const float TAU = 6.28318530718;
 // OpenGL framebuffers are Y-up, Vulkan framebuffers are Y-down.
 // iFlipBufferY is 1 for OpenGL, 0 for Vulkan — use it to flip only when needed.
 vec2 fragCoordFromTexCoord(vec2 uv) {
-    float y = (iFlipBufferY == 1) ? (1.0 - uv.y) : uv.y;
+    float y = (iFlipBufferY != 0) ? (1.0 - uv.y) : uv.y;
     return vec2(uv.x, y) * iResolution;
 }
 

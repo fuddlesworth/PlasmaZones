@@ -56,7 +56,7 @@ int main(int argc, char* argv[])
 #endif
     {
         QSettings cfg(PlasmaZones::ConfigDefaults::configFilePath(), QSettings::IniFormat);
-        cfg.beginGroup(QStringLiteral("Shaders"));
+        cfg.beginGroup(QStringLiteral("General"));
         const QString backend = PlasmaZones::ConfigDefaults::normalizeRenderingBackend(
             cfg.value(QStringLiteral("RenderingBackend"), PlasmaZones::ConfigDefaults::renderingBackend()).toString());
         cfg.endGroup();
@@ -87,10 +87,13 @@ int main(int argc, char* argv[])
             QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
         }
         // "auto" → let Qt choose (default behavior)
-        const char* detail = useVulkan             ? "(Vulkan active)"
-            : (backend == QLatin1String("vulkan")) ? "(Vulkan failed, OpenGL fallback)"
-            : (backend == QLatin1String("auto"))   ? "(Qt default)"
-                                                   : "(OpenGL)";
+        const char* detail = "(OpenGL)";
+        if (useVulkan)
+            detail = "(Vulkan active)";
+        else if (backend == QLatin1String("vulkan"))
+            detail = "(Vulkan failed, OpenGL fallback)";
+        else if (backend == QLatin1String("auto"))
+            detail = "(Qt default)";
         qCInfo(PlasmaZones::lcDaemon) << "Rendering backend:" << backend << detail;
     }
 
@@ -101,7 +104,7 @@ int main(int argc, char* argv[])
 #if QT_CONFIG(vulkan)
     qRegisterMetaType<QVulkanInstance*>();
     if (useVulkan) {
-        app.setProperty(PzVulkanInstanceProperty, QVariant::fromValue(&vulkanInstance));
+        app.setProperty(PlasmaZones::PzVulkanInstanceProperty, QVariant::fromValue(&vulkanInstance));
     }
 #endif
     PlasmaZones::loadTranslations(&app);

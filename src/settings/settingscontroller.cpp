@@ -79,6 +79,10 @@ SettingsController::SettingsController(QObject* parent)
     : QObject(parent)
     , m_screenHelper(&m_settings, this)
 {
+    // Translate rendering backend display names once at construction
+    for (const auto& name : PlasmaZones::ConfigDefaults::renderingBackendDisplayNames())
+        m_renderingBackendDisplayNames.append(PzI18n::tr(name.toUtf8().constData()));
+
     // Load scripted algorithms so they appear in the algorithm dropdown.
     // The daemon also creates its own ScriptedAlgorithmLoader — the KCM runs
     // in a separate process, so both need an independent loader to populate

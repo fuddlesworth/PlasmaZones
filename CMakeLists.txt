@@ -387,6 +387,8 @@ add_custom_target(uninstall
 # OPTIONAL so PlasmaZones builds silently on systems without Vulkan dev packages —
 # the Vulkan backend simply won't be available at runtime.
 # All Vulkan-specific C++ code is guarded with #if QT_CONFIG(vulkan).
+# Note: packaging specs (PKGBUILD, debian/control, rpm .spec, nix) list Vulkan as a
+# hard BuildRequires to ensure the backend is always available in distribution packages.
 set_package_properties(WrapVulkanHeaders PROPERTIES TYPE OPTIONAL)
 
 # Feature summary (REQUIRED + OPTIONAL only; RUNTIME hidden to reduce noise)

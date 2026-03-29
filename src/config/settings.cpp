@@ -174,11 +174,16 @@ void Settings::load()
     }
     loadPerScreenOverrides(m_configBackend.get());
 
+    // Rendering backend lives in [General] (affects whole graphics pipeline, not just shaders)
+    {
+        auto general = m_configBackend->group(QStringLiteral("General"));
+        m_renderingBackend = ConfigDefaults::normalizeRenderingBackend(
+            general->readString(QStringLiteral("RenderingBackend"), ConfigDefaults::renderingBackend()));
+    }
+
     // Shaders (small enough to stay inline)
     {
         auto shaders = m_configBackend->group(QStringLiteral("Shaders"));
-        m_renderingBackend = ConfigDefaults::normalizeRenderingBackend(
-            shaders->readString(QStringLiteral("RenderingBackend"), ConfigDefaults::renderingBackend()));
         m_enableShaderEffects =
             shaders->readBool(QStringLiteral("EnableShaderEffects"), ConfigDefaults::enableShaderEffects());
         m_shaderFrameRate =
@@ -264,10 +269,15 @@ void Settings::save()
         saveEditorConfig(*editor);
     }
 
+    // Rendering backend in [General]
+    {
+        auto general = m_configBackend->group(QStringLiteral("General"));
+        general->writeString(QStringLiteral("RenderingBackend"), m_renderingBackend);
+    }
+
     // Shader Effects
     {
         auto shaders = m_configBackend->group(QStringLiteral("Shaders"));
-        shaders->writeString(QStringLiteral("RenderingBackend"), m_renderingBackend);
         shaders->writeBool(QStringLiteral("EnableShaderEffects"), m_enableShaderEffects);
         shaders->writeInt(QStringLiteral("ShaderFrameRate"), m_shaderFrameRate);
         shaders->writeBool(QStringLiteral("EnableAudioVisualizer"), m_enableAudioVisualizer);
@@ -281,21 +291,14 @@ void Settings::save()
 
 void Settings::reset()
 {
-    const QStringList groups = {QStringLiteral("Activation"),
-                                QStringLiteral("Display"),
-                                QStringLiteral("Appearance"),
-                                QStringLiteral("Zones"),
-                                QStringLiteral("Behavior"),
-                                QStringLiteral("Exclusions"),
-                                QStringLiteral("ZoneSelector"),
-                                QStringLiteral("Shaders"),
-                                QStringLiteral("GlobalShortcuts"),
-                                QStringLiteral("Autotiling"),
-                                QStringLiteral("AutotileShortcuts"),
-                                QStringLiteral("Animations"),
-                                QStringLiteral("Updates"),
-                                QStringLiteral("Editor"),
-                                QStringLiteral("TilingQuickLayoutSlots")};
+    const QStringList groups = {QStringLiteral("General"),    QStringLiteral("Activation"),
+                                QStringLiteral("Display"),    QStringLiteral("Appearance"),
+                                QStringLiteral("Zones"),      QStringLiteral("Behavior"),
+                                QStringLiteral("Exclusions"), QStringLiteral("ZoneSelector"),
+                                QStringLiteral("Shaders"),    QStringLiteral("GlobalShortcuts"),
+                                QStringLiteral("Autotiling"), QStringLiteral("AutotileShortcuts"),
+                                QStringLiteral("Animations"), QStringLiteral("Updates"),
+                                QStringLiteral("Editor"),     QStringLiteral("TilingQuickLayoutSlots")};
     for (const QString& groupName : groups) {
         m_configBackend->deleteGroup(groupName);
     }
