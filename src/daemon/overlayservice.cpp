@@ -24,7 +24,7 @@
 #include <QQuickWindow>
 #include <QTimer>
 #include <QMutexLocker>
-#include <QVulkanInstance>
+#include "vulkan_fwd.h"
 #include "../core/logging.h"
 #include "pz_qml_i18n.h"
 

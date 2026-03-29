@@ -97,6 +97,11 @@ Flickable {
                     ComboBox {
                         id: renderingBackendCombo
 
+                        // Snapshot of the backend value when this page was created.
+                        // Note: if the user changes, saves, closes, and re-opens settings
+                        // without restarting the daemon, this re-snapshots the saved value
+                        // so the "restart required" message won't re-appear. Tracking the
+                        // daemon's active backend would require a D-Bus query (future work).
                         property string initialBackend: ""
 
                         function syncIndex() {

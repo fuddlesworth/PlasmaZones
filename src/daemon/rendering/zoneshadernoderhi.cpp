@@ -62,8 +62,7 @@ static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, cons
 const QList<QShaderBaker::GeneratedShader>& detail::bakeTargets()
 {
     static const QList<QShaderBaker::GeneratedShader> targets = {
-        {QShader::SpirvShader, QShaderVersion(130)}, // SPIR-V 1.3 — for Vulkan 1.1+ drivers
-        {QShader::SpirvShader, QShaderVersion(100)}, // SPIR-V 1.0 — Vulkan 1.0 fallback
+        {QShader::SpirvShader, QShaderVersion(13)}, // SPIR-V 1.3 (Vulkan 1.1 — matches setApiVersion)
         {QShader::GlslShader, QShaderVersion(330)},
         {QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs)},
         {QShader::GlslShader, QShaderVersion(310, QShaderVersion::GlslEs)},
@@ -168,7 +167,8 @@ void ZoneShaderNodeRhi::prepare()
     if (!m_initialized) {
         m_initialized = true;
         qCInfo(lcOverlay) << "ZoneShaderNodeRhi initializing — RHI backend:" << rhi->backendName()
-                          << "driver:" << rhi->driverInfo().deviceName;
+                          << "driver:" << rhi->driverInfo().deviceName
+                          << "Y-up framebuffer:" << rhi->isYUpInFramebuffer();
         // Create VBO (fullscreen quad)
         m_vbo.reset(
             rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(RhiConstants::QuadVertices)));

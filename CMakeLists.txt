@@ -383,8 +383,9 @@ add_custom_target(uninstall
 # Build/install only installs files. Enabling the daemon, refreshing sycoca/KWin,
 # and user-facing messages are handled by packaging (Arch .install, Debian postinst, RPM %post).
 
-# Vulkan headers are needed at build time for QVulkanInstance (Vulkan backend support)
-set_package_properties(WrapVulkanHeaders PROPERTIES TYPE OPTIONAL)
+# Vulkan headers are needed at build time for QVulkanInstance (Vulkan backend support).
+# REQUIRED so CMake fails clearly if headers are missing rather than a cryptic compile error.
+set_package_properties(WrapVulkanHeaders PROPERTIES TYPE REQUIRED)
 
 # Feature summary (REQUIRED + OPTIONAL only; RUNTIME hidden to reduce noise)
 feature_summary(WHAT REQUIRED_PACKAGES_FOUND REQUIRED_PACKAGES_NOT_FOUND

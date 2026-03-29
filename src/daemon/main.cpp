@@ -16,8 +16,7 @@
 #include <QIcon>
 #include <QQuickWindow>
 #include <QSettings>
-#include <QVulkanInstance>
-Q_DECLARE_METATYPE(QVulkanInstance*)
+#include "vulkan_fwd.h"
 #include <QThread>
 #include <QTimer>
 #include <QtQml/qqmlextensionplugin.h>
@@ -49,6 +48,8 @@ int main(int argc, char* argv[])
     // QQuickWindow::setGraphicsApi() must be called before the app object exists.
     // Vulkan instance creation is also done here so that fallback to OpenGL can
     // happen before the graphics API is locked in by QGuiApplication construction.
+    // vulkanInstance is declared BEFORE app so C++ destruction order guarantees
+    // it outlives QGuiApplication (and all QQuickWindows that reference it).
     bool useVulkan = false;
     QVulkanInstance vulkanInstance;
     {
@@ -83,8 +84,7 @@ int main(int argc, char* argv[])
 
     QGuiApplication app(argc, argv);
 
-    // vulkanInstance lives on the stack for the lifetime of main(). Store a pointer
-    // in a dynamic property on QGuiApplication so OverlayService::createQmlWindow()
+    // Store instance pointer as a dynamic property so OverlayService::createQmlWindow()
     // can retrieve it and call setVulkanInstance() on each QQuickWindow.
     if (useVulkan) {
         app.setProperty("_pz_vulkanInstance", QVariant::fromValue(&vulkanInstance));

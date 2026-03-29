@@ -286,10 +286,15 @@ public:
     }
     QString renderingBackend() const override
     {
-        return QStringLiteral("auto");
+        return m_renderingBackend;
     }
-    void setRenderingBackend(const QString&) override
+    void setRenderingBackend(const QString& backend) override
     {
+        if (m_renderingBackend != backend) {
+            m_renderingBackend = backend;
+            Q_EMIT renderingBackendChanged();
+            Q_EMIT settingsChanged();
+        }
     }
     bool enableShaderEffects() const override
     {
@@ -708,6 +713,7 @@ public:
 
 private:
     QString m_defaultLayoutId;
+    QString m_renderingBackend = QStringLiteral("auto");
 };
 
 } // namespace PlasmaZones

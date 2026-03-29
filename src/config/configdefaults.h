@@ -562,11 +562,14 @@ public:
 
     static QString configFilePath()
     {
-        QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-        if (configDir.isEmpty()) {
-            configDir = QDir::homePath() + QStringLiteral("/.config");
-        }
-        return configDir + QStringLiteral("/plasmazonesrc");
+        static const QString path = [] {
+            QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+            if (configDir.isEmpty()) {
+                configDir = QDir::homePath() + QStringLiteral("/.config");
+            }
+            return configDir + QStringLiteral("/plasmazonesrc");
+        }();
+        return path;
     }
 
     static QString renderingBackend()
