@@ -9,14 +9,18 @@
 
 // Minimal stub — only needs to exist for the linker. The generated
 // wlr-layer-shell protocol code references this symbol for the
-// get_popup request, but PlasmaZones never calls get_popup. If this
-// stub is ever reached at runtime, the NULL method arrays will cause
-// an immediate crash — which is the correct behavior since it means
-// we have a logic error (we should never create layer-shell popups).
+// get_popup request, but PlasmaZones never calls get_popup.
 //
 // Weak attribute prevents duplicate symbol errors if another linked library
 // (e.g. Qt's own Wayland modules) also defines xdg_popup_interface.
 // This stub is Linux/Wayland-only — MSVC/Windows is not a target platform.
+//
+// SAFETY: The NULL method/event arrays mean any runtime attempt to use this
+// interface (e.g. via zwlr_layer_surface_v1_get_popup) will crash immediately.
+// This is intentional — PlasmaZones never creates layer-shell popups, so
+// reaching this code path indicates a logic error. If layer-shell popups are
+// ever needed, replace this stub with a real xdg_popup_interface binding
+// (from wayland-protocols' xdg-shell).
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((weak))
 #endif

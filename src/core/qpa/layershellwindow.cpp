@@ -113,6 +113,8 @@ LayerShellWindow::~LayerShellWindow()
     if (m_integration && m_globalRemovedCallbackId != 0) {
         m_integration->removeGlobalRemovedCallback(m_globalRemovedCallbackId);
     }
+    // Safe even after handleClosed() — that path nulls m_layerSurface after
+    // destroying it, so this check correctly skips the double-destroy.
     if (m_layerSurface) {
         zwlr_layer_surface_v1_destroy(m_layerSurface);
     }
@@ -225,8 +227,13 @@ QSize LayerShellWindow::computeConfigureSize(uint32_t width, uint32_t height) co
     bool compositorControlsW = (anchors & LayerSurface::AnchorLeft) && (anchors & LayerSurface::AnchorRight);
     bool compositorControlsH = (anchors & LayerSurface::AnchorTop) && (anchors & LayerSurface::AnchorBottom);
 
-    int newW = compositorControlsW ? static_cast<int>(width) : qwindow->width();
-    int newH = compositorControlsH ? static_cast<int>(height) : qwindow->height();
+    // For non-compositor-controlled axes, prefer the app-set size. But if the
+    // app size is 0 (e.g. newly created window before first resize), accept the
+    // compositor's value to avoid creating a zero-size surface.
+    int appW = qwindow->width();
+    int appH = qwindow->height();
+    int newW = compositorControlsW ? static_cast<int>(width) : (appW > 0 ? appW : static_cast<int>(width));
+    int newH = compositorControlsH ? static_cast<int>(height) : (appH > 0 ? appH : static_cast<int>(height));
     return QSize(newW, newH);
 }
 

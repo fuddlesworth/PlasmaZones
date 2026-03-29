@@ -78,6 +78,9 @@ public:
     /// Convenience constant: anchor to all four edges (full-screen overlay).
     static constexpr Anchors AnchorAll = Anchors(AnchorTop | AnchorBottom | AnchorLeft | AnchorRight);
 
+    // ── Mutable properties (can be changed after show()) ──────────────
+    // These push protocol updates to the compositor via propertiesChanged().
+
     void setLayer(Layer layer);
     Layer layer() const;
 
@@ -90,6 +93,13 @@ public:
     void setKeyboardInteractivity(KeyboardInteractivity interactivity);
     KeyboardInteractivity keyboardInteractivity() const;
 
+    void setMargins(const QMargins& margins);
+    QMargins margins() const;
+
+    // ── Immutable properties (baked into get_layer_surface at creation) ─
+    // Must be set BEFORE show(). Calling after show() logs a warning and
+    // returns without effect — the protocol does not support changing these.
+
     void setScope(const QString& scope);
     QString scope() const;
 
@@ -100,9 +110,6 @@ public:
     /// the compositor will either close the surface or leave it on the remaining output.
     /// Callers must not cache the result across event loop iterations.
     QScreen* screen() const;
-
-    void setMargins(const QMargins& margins);
-    QMargins margins() const;
 
     /// Get or create a LayerSurface for the given window.
     /// For first-time creation, the window must not yet be shown (call before show()).

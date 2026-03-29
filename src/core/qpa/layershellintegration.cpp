@@ -100,7 +100,15 @@ LayerShellIntegration::createShellSurface(QtWaylandClient::QWaylandWindow* windo
         return nullptr;
     }
 
-    return new LayerShellWindow(this, window);
+    auto* shellWindow = new LayerShellWindow(this, window);
+    if (!shellWindow->isValid()) {
+        // Constructor failed to create a layer surface (wl_surface was null or
+        // the global was removed between our check and the constructor). Delete
+        // the zombie to avoid Qt calling methods on a half-initialized object.
+        delete shellWindow;
+        return nullptr;
+    }
+    return shellWindow;
 }
 
 void LayerShellIntegration::registryHandler(void* data, struct wl_registry* registry, uint32_t id,

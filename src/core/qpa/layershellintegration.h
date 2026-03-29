@@ -55,6 +55,9 @@ public:
     /// to prevent use-after-free when the caller is destroyed before the event fires.
     using GlobalRemovedCallback = std::function<void()>;
     using CallbackId = uint64_t;
+    /// Note: if the global has already been removed (m_globalAvailable == false),
+    /// the callback will never fire. Callers registering after removal should
+    /// check layerShell() == nullptr and handle the "already gone" case directly.
     CallbackId addGlobalRemovedCallback(GlobalRemovedCallback cb)
     {
         CallbackId id = m_nextCallbackId++;

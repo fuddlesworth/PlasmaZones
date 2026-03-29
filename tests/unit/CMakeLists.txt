@@ -165,7 +165,12 @@ pz_add_test(test_layoutmanager_assignment core/test_layoutmanager_assignment.cpp
 # core/ — LayerSurface + computeLayerSize Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_layersurface core/test_layersurface.cpp)
-target_link_libraries(test_layersurface PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+target_link_libraries(test_layersurface PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::WaylandClientPrivate Wayland::Client plasmazones_core)
+# QPA integration header includes generated protocol headers and the export header
+target_include_directories(test_layersurface PRIVATE
+    ${CMAKE_BINARY_DIR}/src            # plasmazones_export.h
+    ${CMAKE_BINARY_DIR}/src/generated-protocols  # wlr-layer-shell protocol header
+)
 add_test(NAME test_layersurface COMMAND test_layersurface)
 
 # ═══════════════════════════════════════════════════════════════════════════════

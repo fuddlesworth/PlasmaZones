@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "core/layersurface.h"
+#include "core/qpa/layershellintegration.h"
 
 #include <QTest>
 #include <QSignalSpy>
@@ -549,6 +550,65 @@ private Q_SLOTS:
         QVERIFY(freshSurface != nullptr);
         QCOMPARE(freshSurface->parent(), &newWindow);
         cleanupSurface(&newWindow);
+    }
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LayerShellIntegration — global removed callback lifecycle
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testGlobalRemovedCallback_firesAndIsCleared()
+    {
+        // Test the callback registration/deregistration/fire lifecycle
+        // without needing a real Wayland compositor. We test the
+        // LayerShellIntegration's callback bookkeeping directly.
+        LayerShellIntegration integration;
+
+        bool called1 = false;
+        bool called2 = false;
+        auto id1 = integration.addGlobalRemovedCallback([&called1]() {
+            called1 = true;
+        });
+        Q_UNUSED(integration.addGlobalRemovedCallback([&called2]() {
+            called2 = true;
+        }))
+
+        // Remove one callback before firing
+        integration.removeGlobalRemovedCallback(id1);
+
+        // Simulate global removal by calling the static handler with a fake
+        // registry id=0 — since m_layerShellId is 0 (never bound), this triggers
+        // the removal path.
+        LayerShellIntegration::registryRemoveHandler(&integration, nullptr, 0);
+
+        QVERIFY(!called1); // Was removed before firing
+        QVERIFY(called2); // Was still registered
+
+        // After firing, the callback vector should be cleared (std::exchange)
+        // Adding a new callback after removal should work but never fire
+        // (since the global is already gone — documented in the header)
+        bool called3 = false;
+        integration.addGlobalRemovedCallback([&called3]() {
+            called3 = true;
+        });
+        // No second removal event, so called3 stays false
+        QVERIFY(!called3);
+    }
+
+    void testGlobalRemovedCallback_deregisterPreventsUAF()
+    {
+        LayerShellIntegration integration;
+
+        // Simulate a callback that would UAF if not deregistered
+        bool called = false;
+        auto id = integration.addGlobalRemovedCallback([&called]() {
+            called = true;
+        });
+
+        // Deregister (simulates LayerShellWindow destructor)
+        integration.removeGlobalRemovedCallback(id);
+
+        // Trigger removal — callback must NOT fire
+        LayerShellIntegration::registryRemoveHandler(&integration, nullptr, 0);
+        QVERIFY(!called);
     }
 };
 

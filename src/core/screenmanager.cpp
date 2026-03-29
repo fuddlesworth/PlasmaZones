@@ -169,7 +169,7 @@ void ScreenManager::createGeometrySensor(QScreen* screen)
     layerSurface->setKeyboardInteractivity(LayerSurface::KeyboardInteractivityNone);
     layerSurface->setAnchors(LayerSurface::AnchorAll);
     layerSurface->setExclusiveZone(0);
-    layerSurface->setScope(QStringLiteral("plasmazones-sensor-%1").arg(screen->name()));
+    layerSurface->setScope(QStringLiteral("plasmazones-sensor-%1").arg(Utils::screenIdentifier(screen)));
     // Do NOT call sensor->setOpacity(0.0): on Wayland, Qt's QWaylandWindow does not implement
     // QWindow::setOpacity(), so it logs "This plugin does not support setting window opacity".
     // The sensor is in LayerBackground with no content; it does not need explicit transparency.

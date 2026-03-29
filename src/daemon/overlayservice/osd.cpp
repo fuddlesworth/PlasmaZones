@@ -38,7 +38,10 @@ void centerLayerWindowOnScreen(QQuickWindow* window, const QRect& screenGeom, in
     if (!window) {
         return;
     }
-    auto* layerSurface = LayerSurface::get(window);
+    // Use findChild to retrieve the existing LayerSurface — do NOT use
+    // LayerSurface::get() here, because get() creates a new one if absent,
+    // which is wrong for a window that should already have been configured.
+    auto* layerSurface = window->findChild<LayerSurface*>(QString(), Qt::FindDirectChildrenOnly);
     if (!layerSurface) {
         qCWarning(lcOverlay) << "centerLayerWindowOnScreen: no LayerSurface for window"
                              << "— was LayerSurface::get() called before show()?";
@@ -258,7 +261,7 @@ void OverlayService::createLayoutOsdWindow(QScreen* screen)
     // Configure layer surface for Wayland overlay (prevents window from appearing in taskbar)
     // Anchors will be set dynamically in showLayoutOsd() based on window size
     configureLayerSurface(window, screen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
-                          QStringLiteral("plasmazones-layout-osd-%1").arg(screen->name()));
+                          QStringLiteral("plasmazones-layout-osd-%1").arg(Utils::screenIdentifier(screen)));
 
     auto layoutOsdConn = connect(window, SIGNAL(dismissed()), this, SLOT(hideLayoutOsd()));
     if (!layoutOsdConn) {
@@ -428,7 +431,7 @@ void OverlayService::createNavigationOsdWindow(QScreen* screen)
 
     // Configure layer surface for Wayland overlay
     configureLayerSurface(window, screen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
-                          QStringLiteral("plasmazones-navigation-osd-%1").arg(screen->name()));
+                          QStringLiteral("plasmazones-navigation-osd-%1").arg(Utils::screenIdentifier(screen)));
 
     auto navOsdConn = connect(window, SIGNAL(dismissed()), this, SLOT(hideNavigationOsd()));
     if (!navOsdConn) {

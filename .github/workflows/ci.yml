@@ -34,7 +34,7 @@ jobs:
             kwin \
             kconfig kconfigwidgets \
             kcmutils kglobalaccel \
-            qt6-wayland plasma-activities
+            qt6-wayland wayland wayland-protocols plasma-activities
 
       - name: Configure
         run: |

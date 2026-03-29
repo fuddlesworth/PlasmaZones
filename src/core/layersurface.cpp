@@ -207,7 +207,13 @@ void LayerSurface::setScreen(QScreen* screen)
         if (screen) {
             m_window->setScreen(screen);
         } else {
-            m_window->setScreen(QGuiApplication::primaryScreen());
+            QScreen* primary = QGuiApplication::primaryScreen();
+            if (primary) {
+                m_window->setScreen(primary);
+            } else {
+                qCWarning(lcLayerSurface) << "setScreen(nullptr): no primary screen available —"
+                                          << "window retains its current screen binding";
+            }
         }
     }
     Q_EMIT screenChanged();
