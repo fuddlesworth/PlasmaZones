@@ -109,6 +109,7 @@ Rectangle {
 
             // Default master count of 1 — grid thumbnails don't have per-layout masterCount
             visible: index < 1
+            Accessible.ignored: true
             x: zonePreview.x + relX * zonePreview.width + leftOffset + Kirigami.Units.smallSpacing
             y: zonePreview.y + relY * zonePreview.height + topOffset + Kirigami.Units.smallSpacing
             width: Kirigami.Units.smallSpacing * 2

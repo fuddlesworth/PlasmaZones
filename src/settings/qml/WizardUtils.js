@@ -18,3 +18,21 @@ function clampedScreenAspectRatio(screenWidth, screenHeight) {
         return Math.max(1, Math.min(3.6, screenWidth / screenHeight));
     return 16 / 9;
 }
+
+/**
+ * Wizard color palette derived from Kirigami theme colors.
+ * Centralizes the Qt.rgba() calls shared across wizard dialogs.
+ *
+ * @param {color} textColor      - Kirigami.Theme.textColor
+ * @param {color} highlightColor - Kirigami.Theme.highlightColor
+ * @returns {Object} palette with subtleBg, subtleBorder, accentBorder, badgeBg, badgeBorder
+ */
+function wizardColors(textColor, highlightColor) {
+    return {
+        "subtleBg":      Qt.rgba(textColor.r, textColor.g, textColor.b, 0.03),
+        "subtleBorder":  Qt.rgba(textColor.r, textColor.g, textColor.b, 0.08),
+        "accentBorder":  Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.3),
+        "badgeBg":       Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.2),
+        "badgeBorder":   Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.4)
+    };
+}

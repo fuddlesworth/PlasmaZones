@@ -24,11 +24,12 @@ Kirigami.Dialog {
     property int selectedAspectRatio: -1
     property bool openInEditor: true
     property string _previousAutoName: ""
-    readonly property color _subtleBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
-    readonly property color _subtleBorder: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
-    readonly property color _accentBorder: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3)
-    readonly property color _badgeBg: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2)
-    readonly property color _badgeBorder: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4)
+    readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
+    readonly property color _subtleBg: _colors.subtleBg
+    readonly property color _subtleBorder: _colors.subtleBorder
+    readonly property color _accentBorder: _colors.accentBorder
+    readonly property color _badgeBg: _colors.badgeBg
+    readonly property color _badgeBorder: _colors.badgeBorder
     // Match the user's primary monitor aspect ratio for the preview.
     // Re-evaluated on open so it picks up the correct screen even if the
     // dialog is constructed before the window is shown on a display.

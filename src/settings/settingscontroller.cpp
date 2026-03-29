@@ -1896,8 +1896,9 @@ void SettingsController::cancelAlgorithmWatcher(const QString& expectedId)
 {
     auto it = m_algorithmWatchers.find(expectedId);
     if (it != m_algorithmWatchers.end()) {
-        if (it.value() && *it.value())
-            disconnect(*it.value());
+        const auto& connPtr = it.value();
+        if (connPtr && *connPtr)
+            disconnect(*connPtr);
         m_algorithmWatchers.erase(it);
     }
 }
@@ -1926,8 +1927,9 @@ void SettingsController::watchForAlgorithmRegistration(const QString& expectedId
     QTimer::singleShot(10000, this, [this, expectedId]() {
         auto it = m_algorithmWatchers.find(expectedId);
         if (it != m_algorithmWatchers.end()) {
-            if (*it.value())
-                disconnect(*it.value());
+            const auto& connPtr = it.value();
+            if (connPtr && *connPtr)
+                disconnect(*connPtr);
             m_algorithmWatchers.erase(it);
             qCWarning(lcCore) << "Algorithm registration timed out for:" << expectedId;
             Q_EMIT algorithmOperationFailed(
@@ -1947,14 +1949,17 @@ void SettingsController::openAlgorithm(const QString& algorithmId)
     }
 
     // Fallback: try user algorithms dir directly (works right after creation
-    // before the registry has picked up the file via QFileSystemWatcher)
+    // before the registry has picked up the file via QFileSystemWatcher).
+    // Uses algorithmId as filename — valid for createNewAlgorithm (returns filename)
+    // and duplicateAlgorithm (watches for the filename-based ID).
     const QString userPath = userAlgorithmsDir() + algorithmId + QStringLiteral(".js");
     if (QFile::exists(userPath)) {
         QDesktopServices::openUrl(QUrl::fromLocalFile(userPath));
         return;
     }
 
-    qCWarning(lcCore) << "Cannot open algorithm — file not found for:" << algorithmId;
+    qCWarning(lcCore) << "Cannot open algorithm — file not found for:" << algorithmId
+                      << "(checked registry and user dir:" << userAlgorithmsDir() << ")";
 }
 
 void SettingsController::openLayoutFile(const QString& layoutId)
@@ -1963,8 +1968,10 @@ void SettingsController::openLayoutFile(const QString& layoutId)
         return;
     // Layout files use UUID without braces as the filename
     const QUuid uuid(layoutId);
-    if (uuid.isNull())
+    if (uuid.isNull()) {
+        qCDebug(lcCore) << "openLayoutFile: not a valid UUID layout ID:" << layoutId;
         return;
+    }
     const QString bareId = uuid.toString(QUuid::WithoutBraces);
     const QString filename = bareId + QStringLiteral(".json");
     // Search user dir first, then all system dirs
@@ -2060,8 +2067,15 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
         return false;
     }
 
+    // Canonicalize source path to follow symlinks and ensure we read the actual file
+    const QString canonicalSource = QFileInfo(sourcePath).canonicalFilePath();
+    if (canonicalSource.isEmpty()) {
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot duplicate — could not resolve algorithm file path."));
+        return false;
+    }
+
     // Read source, update metadata, write copy
-    QFile sourceFile(sourcePath);
+    QFile sourceFile(canonicalSource);
     if (!sourceFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not read source algorithm file."));
         return false;
