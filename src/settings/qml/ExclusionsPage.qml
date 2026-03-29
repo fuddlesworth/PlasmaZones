@@ -19,8 +19,10 @@ Flickable {
         onPicked: (value) => {
             if (forApps) {
                 appSettings.addExcludedApplication(value);
+                appsCard.refreshModel();
             } else {
                 appSettings.addExcludedWindowClass(value);
+                classesCard.refreshModel();
             }
         }
     }
@@ -139,8 +141,12 @@ Flickable {
                 model: appSettings.excludedApplications
                 useMonospaceFont: false
                 showPickButton: true
-                onAddRequested: (text) => appSettings.addExcludedApplication(text)
-                onRemoveRequested: (index) => appSettings.removeExcludedApplicationAt(index)
+                onAddRequested: (text) => {
+                    return appSettings.addExcludedApplication(text);
+                }
+                onRemoveRequested: (index) => {
+                    return appSettings.removeExcludedApplicationAt(index);
+                }
                 onPickRequested: windowPickerDialog.openForApps()
             }
 
@@ -163,8 +169,12 @@ Flickable {
                 model: appSettings.excludedWindowClasses
                 useMonospaceFont: true
                 showPickButton: true
-                onAddRequested: (text) => appSettings.addExcludedWindowClass(text)
-                onRemoveRequested: (index) => appSettings.removeExcludedWindowClassAt(index)
+                onAddRequested: (text) => {
+                    return appSettings.addExcludedWindowClass(text);
+                }
+                onRemoveRequested: (index) => {
+                    return appSettings.removeExcludedWindowClassAt(index);
+                }
                 onPickRequested: windowPickerDialog.openForClasses()
             }
 

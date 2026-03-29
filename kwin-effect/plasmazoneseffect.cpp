@@ -273,7 +273,15 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 m_dragActivationDetected = false;
 
                 if (!m_dragStartedSent) {
-                    // Drag ended without ever activating zones — no D-Bus state to clean up
+                    // Drag ended without ever activating zones — no D-Bus state to clean up.
+                    // BUT: if the window was snapped, notify the daemon so it can handle
+                    // unsnap (restore original size, clear zone assignment, mark floating).
+                    // Without this, dragging a snapped window without the activation trigger
+                    // leaves stale zone state that persists across close/reopen.
+                    if (!cancelled && !m_pendingDragWindowId.isEmpty()) {
+                        fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("notifyDragOutUnsnap"),
+                                              {m_pendingDragWindowId}, QStringLiteral("notifyDragOutUnsnap"));
+                    }
                     m_pendingDragWindowId.clear();
                     m_pendingDragGeometry = QRectF();
                     return;
@@ -879,20 +887,12 @@ void PlasmaZonesEffect::slotDaemonReady()
         qCDebug(lcEffect) << "Re-sent cursor screen:" << cursorScreenId;
     }
 
-    // Re-notify active window (gives daemon lastActiveScreenName)
+    // Re-notify active window (gives daemon lastActiveScreenName).
+    // Use notifyWindowActivated which bypasses user exclusion lists — the daemon
+    // must always know which window is active for correct shortcut handling.
     KWin::EffectWindow* activeWindow = getActiveWindow();
-    if (activeWindow && shouldHandleWindow(activeWindow)) {
-        QString windowId = getWindowId(activeWindow);
-        QString screenId = getWindowScreenId(activeWindow);
-        fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("windowActivated"), {windowId, screenId},
-                              QStringLiteral("windowActivated"));
-        qCDebug(lcEffect) << "Re-notified active window:" << windowId << "on" << screenId;
-
-        // Also notify autotile engine of focus
-        if (m_autotileHandler->isAutotileScreen(screenId)) {
-            fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("notifyWindowFocused"),
-                                  {windowId, screenId}, QStringLiteral("notifyWindowFocused"));
-        }
+    if (activeWindow) {
+        notifyWindowActivated(activeWindow);
     }
 
     // Re-sync floating windows (async, no QDBusInterface needed).
@@ -1855,14 +1855,33 @@ void PlasmaZonesEffect::slotToggleWindowFloatRequested(bool shouldFloat)
 void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, const QString& geometryJson,
                                                    const QString& zoneId, const QString& screenId)
 {
-    QRect geometry = parseZoneGeometry(geometryJson);
-    if (!geometry.isValid()) {
-        qCWarning(lcEffect) << "slotApplyGeometryRequested: invalid geometry" << geometryJson;
-        return;
-    }
     KWin::EffectWindow* w = findWindowById(windowId);
     if (!w) {
         qCDebug(lcEffect) << "slotApplyGeometryRequested: window not found" << windowId;
+        return;
+    }
+
+    // Check for size-only restore (drag-out unsnap without activation trigger).
+    // The daemon sets sizeOnly=true to restore pre-snap width/height while keeping
+    // the window at its current drop position.
+    QJsonDocument doc = QJsonDocument::fromJson(geometryJson.toUtf8());
+    QJsonObject geoObj = doc.object();
+    if (geoObj.value(QLatin1String("sizeOnly")).toBool(false)) {
+        int newWidth = geoObj.value(QLatin1String("width")).toInt();
+        int newHeight = geoObj.value(QLatin1String("height")).toInt();
+        if (newWidth > 0 && newHeight > 0) {
+            QRectF currentFrame = w->frameGeometry();
+            QRect sizeOnlyGeo(qRound(currentFrame.x()), qRound(currentFrame.y()), newWidth, newHeight);
+            qCInfo(lcEffect) << "slotApplyGeometryRequested: size-only restore for" << windowId << newWidth << "x"
+                             << newHeight;
+            applySnapGeometry(w, sizeOnlyGeo);
+        }
+        return;
+    }
+
+    QRect geometry = parseZoneGeometry(geometryJson);
+    if (!geometry.isValid()) {
+        qCWarning(lcEffect) << "slotApplyGeometryRequested: invalid geometry" << geometryJson;
         return;
     }
     // Skip float-restore geometry on minimized windows: when a snapped window is minimized
@@ -2804,7 +2823,25 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
 
 void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
 {
-    if (!w || !shouldHandleWindow(w)) {
+    if (!w) {
+        return;
+    }
+
+    // Skip non-manageable window types but NOT user-excluded apps — the daemon
+    // must always know which window is active so that keyboard shortcuts can
+    // correctly skip excluded windows instead of operating on a stale
+    // m_lastActiveWindowId.
+    const QString windowClass = w->windowClass();
+    if (windowClass.contains(QLatin1String("plasmazonesd"), Qt::CaseInsensitive)
+        || windowClass.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive)) {
+        return;
+    }
+    if (windowClass.contains(QLatin1String("xdg-desktop-portal"), Qt::CaseInsensitive)) {
+        return;
+    }
+    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()
+        || w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isOnScreenDisplay()
+        || w->isModal() || w->isPopupWindow()) {
         return;
     }
 

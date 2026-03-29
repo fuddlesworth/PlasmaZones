@@ -25,12 +25,20 @@ SettingsCard {
     property bool useMonospaceFont: false
     // Whether to show the "Pick from running windows" button
     property bool showPickButton: false
+    // Local copy of the model to force ListView refresh on mutation.
+    // Qt 6 QStringList bindings don't reliably notify ListView of in-place changes.
+    property var localModel: []
 
     // Signals for add/remove actions
     signal addRequested(string text)
     signal removeRequested(int index)
     signal pickRequested()
 
+    function refreshModel() {
+        localModel = model ? Array.from(model) : [];
+    }
+
+    onModelChanged: refreshModel()
     headerText: root.title
 
     contentItem: ColumnLayout {
@@ -49,6 +57,7 @@ SettingsCard {
                     if (text.length > 0) {
                         root.addRequested(text);
                         text = "";
+                        root.refreshModel();
                     }
                 }
             }
@@ -60,6 +69,7 @@ SettingsCard {
                 onClicked: {
                     root.addRequested(inputField.text);
                     inputField.text = "";
+                    root.refreshModel();
                 }
             }
 
@@ -68,7 +78,9 @@ SettingsCard {
                 icon.name: "crosshairs"
                 ToolTip.text: i18n("Pick from running windows")
                 ToolTip.visible: hovered
-                onClicked: root.pickRequested()
+                onClicked: {
+                    root.pickRequested();
+                }
                 Accessible.name: i18n("Pick from running windows")
             }
 
@@ -83,7 +95,7 @@ SettingsCard {
             Layout.minimumHeight: Kirigami.Units.gridUnit * 6
             Layout.margins: Kirigami.Units.smallSpacing
             clip: true
-            model: root.model
+            model: root.localModel
             interactive: false // Parent ScrollView handles scrolling
             focus: true
             keyNavigationEnabled: true
@@ -106,7 +118,10 @@ SettingsCard {
                 width: ListView.view.width
                 highlighted: ListView.isCurrentItem
                 onClicked: listView.currentIndex = index
-                Keys.onDeletePressed: root.removeRequested(index)
+                Keys.onDeletePressed: {
+                    root.removeRequested(index);
+                    root.refreshModel();
+                }
 
                 contentItem: RowLayout {
                     Kirigami.Icon {
@@ -125,7 +140,10 @@ SettingsCard {
 
                     ToolButton {
                         icon.name: "edit-delete"
-                        onClicked: root.removeRequested(index)
+                        onClicked: {
+                            root.removeRequested(index);
+                            root.refreshModel();
+                        }
                         Accessible.name: i18n("Remove %1", modelData)
                     }
 

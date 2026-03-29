@@ -106,6 +106,15 @@ public Q_SLOTS:
     void windowUnsnapped(const QString& windowId);
 
     /**
+     * Notify that a snapped window was dragged without the activation trigger.
+     * If the window was tracked as snapped, treat it as a drag-out unsnap:
+     * save pre-float zone, mark floating, and clear zone assignment so the
+     * window doesn't auto-restore to the zone on close/reopen.
+     * @param windowId Window ID from the effect
+     */
+    void notifyDragOutUnsnap(const QString& windowId);
+
+    /**
      * Batch snap confirmations: process multiple snap/unsnap in one D-Bus call.
      * Used by KWin effect after resnap stagger completes to avoid per-window D-Bus round-trips.
      * @param batchJson JSON array of {windowId, zoneId, screenId, isRestore}
