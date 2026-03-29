@@ -58,6 +58,19 @@ Kirigami.Dialog {
         return baseTemplates[0];
     }
 
+    function selectTemplate(templateData) {
+        root.baseTemplate = templateData.id;
+        root.supportsMasterCount = templateData.hasMaster;
+        root.supportsSplitRatio = templateData.hasSplit;
+        root.producesOverlappingZones = false;
+        root.supportsMemory = false;
+        if (nameField.text === "" || nameField.text === root._previousAutoName) {
+            let auto_name = i18n("My %1", templateData.name);
+            nameField.text = auto_name;
+            root._previousAutoName = auto_name;
+        }
+    }
+
     title: i18nc("@title:window", "New Algorithm")
     preferredWidth: Math.min(Kirigami.Units.gridUnit * 40, parent ? parent.width * 0.9 : Kirigami.Units.gridUnit * 40)
     standardButtons: Kirigami.Dialog.NoButton
@@ -134,29 +147,9 @@ Kirigami.Dialog {
                                 anchors.fill: parent
                                 hoverEnabled: false
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.baseTemplate = modelData.id;
-                                    root.supportsMasterCount = modelData.hasMaster;
-                                    root.supportsSplitRatio = modelData.hasSplit;
-                                    root.producesOverlappingZones = false;
-                                    root.supportsMemory = false;
-                                    if (nameField.text === "" || nameField.text === root._previousAutoName) {
-                                        let auto_name = i18n("My %1", modelData.name);
-                                        nameField.text = auto_name;
-                                        root._previousAutoName = auto_name;
-                                    }
-                                }
+                                onClicked: root.selectTemplate(modelData)
                                 onDoubleClicked: {
-                                    root.baseTemplate = modelData.id;
-                                    root.supportsMasterCount = modelData.hasMaster;
-                                    root.supportsSplitRatio = modelData.hasSplit;
-                                    root.producesOverlappingZones = false;
-                                    root.supportsMemory = false;
-                                    if (nameField.text === "" || nameField.text === root._previousAutoName) {
-                                        let auto_name = i18n("My %1", modelData.name);
-                                        nameField.text = auto_name;
-                                        root._previousAutoName = auto_name;
-                                    }
+                                    root.selectTemplate(modelData);
                                     root.currentStep = 1;
                                 }
                             }
@@ -238,7 +231,7 @@ Kirigami.Dialog {
                                             algorithmId: templateDelegate.modelData.id
                                             windowCount: 4
                                             showLabel: false
-                                            appSettings: settingsController
+                                            appSettings: root.appSettings
                                         }
 
                                         Kirigami.Icon {
@@ -363,7 +356,7 @@ Kirigami.Dialog {
                         anchors.bottomMargin: Kirigami.Units.largeSpacing * 2
                         visible: root.baseTemplate !== "blank"
                         algorithmId: root.baseTemplate
-                        appSettings: settingsController
+                        appSettings: root.appSettings
                         windowCount: 6
                         showLabel: false
                     }
@@ -456,8 +449,8 @@ Kirigami.Dialog {
                                     });
                                 }
                                 Keys.onReturnPressed: {
-                                    if (createButton.enabled)
-                                        createButton.clicked();
+                                    if (wizardFooter.createEnabled)
+                                        wizardFooter.createClicked();
 
                                 }
                             }
@@ -550,6 +543,8 @@ Kirigami.Dialog {
     }
 
     footer: WizardFooter {
+        id: wizardFooter
+
         currentStep: root.currentStep
         createText: i18n("Create Algorithm")
         createEnabled: nameField.text.trim().length > 0

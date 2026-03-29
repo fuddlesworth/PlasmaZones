@@ -26,6 +26,10 @@ ColumnLayout {
         return url.toString().replace(/^file:\/\/+/, "/");
     }
 
+    function algorithmIdFromLayoutId(layoutId) {
+        return layoutId.startsWith("autotile:") ? layoutId.substring("autotile:".length) : layoutId;
+    }
+
     spacing: 0
 
     // Reset to Snapping Layouts when autotiling is disabled
@@ -382,9 +386,8 @@ ColumnLayout {
         }
 
         function onExportRequested(layoutId) {
-            let layout = window.layoutContextMenu.layout;
-            if (layout && layout.isAutotile === true) {
-                algorithmExportDialog.algorithmId = layoutId.replace("autotile:", "");
+            if (layoutId.startsWith("autotile:")) {
+                algorithmExportDialog.algorithmId = root.algorithmIdFromLayoutId(layoutId);
                 algorithmExportDialog.open();
             } else {
                 exportDialog.layoutId = layoutId;
@@ -455,7 +458,7 @@ ColumnLayout {
                 onTriggered: {
                     if (deleteConfirmDialog.layoutToDelete) {
                         if (deleteConfirmDialog.isAlgorithm) {
-                            let algoId = deleteConfirmDialog.layoutToDelete.id.replace("autotile:", "");
+                            let algoId = root.algorithmIdFromLayoutId(deleteConfirmDialog.layoutToDelete.id);
                             settingsController.deleteAlgorithm(algoId);
                         } else {
                             settingsController.deleteLayout(deleteConfirmDialog.layoutToDelete.id);

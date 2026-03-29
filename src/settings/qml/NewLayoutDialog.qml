@@ -187,6 +187,15 @@ Kirigami.Dialog {
         return templates[0];
     }
 
+    function selectTemplate(templateData) {
+        root.selectedType = templateData.type;
+        if (nameField.text === "" || nameField.text === root._previousAutoName) {
+            let auto_name = i18n("My %1 Layout", templateData.name);
+            nameField.text = auto_name;
+            root._previousAutoName = auto_name;
+        }
+    }
+
     title: i18nc("@title:window", "New Layout")
     preferredWidth: Math.min(Kirigami.Units.gridUnit * 40, parent ? parent.width * 0.9 : Kirigami.Units.gridUnit * 40)
     standardButtons: Kirigami.Dialog.NoButton
@@ -260,21 +269,9 @@ Kirigami.Dialog {
                                 anchors.fill: parent
                                 hoverEnabled: false
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.selectedType = modelData.type;
-                                    if (nameField.text === "" || nameField.text === root._previousAutoName) {
-                                        let auto_name = i18n("My %1 Layout", modelData.name);
-                                        nameField.text = auto_name;
-                                        root._previousAutoName = auto_name;
-                                    }
-                                }
+                                onClicked: root.selectTemplate(modelData)
                                 onDoubleClicked: {
-                                    root.selectedType = modelData.type;
-                                    if (nameField.text === "" || nameField.text === root._previousAutoName) {
-                                        let auto_name = i18n("My %1 Layout", modelData.name);
-                                        nameField.text = auto_name;
-                                        root._previousAutoName = auto_name;
-                                    }
+                                    root.selectTemplate(modelData);
                                     root.currentStep = 1;
                                 }
                             }
@@ -531,8 +528,8 @@ Kirigami.Dialog {
                                     });
                                 }
                                 Keys.onReturnPressed: {
-                                    if (createButton.enabled)
-                                        createButton.clicked();
+                                    if (wizardFooter.createEnabled)
+                                        wizardFooter.createClicked();
 
                                 }
                             }
@@ -590,6 +587,8 @@ Kirigami.Dialog {
     }
 
     footer: WizardFooter {
+        id: wizardFooter
+
         currentStep: root.currentStep
         createText: i18n("Create Layout")
         createEnabled: nameField.text.trim().length > 0

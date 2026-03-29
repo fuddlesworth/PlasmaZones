@@ -45,6 +45,19 @@ QString userAlgorithmsDir()
     return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
         + QStringLiteral("/plasmazones/algorithms/");
 }
+
+QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
+{
+    QString path = dir + baseName + QStringLiteral(".js");
+    if (!QFile::exists(path))
+        return path;
+    for (int i = 2; i <= 99; ++i) {
+        path = dir + baseName + QStringLiteral("-") + QString::number(i) + QStringLiteral(".js");
+        if (!QFile::exists(path))
+            return path;
+    }
+    return QString();
+}
 } // anonymous namespace
 
 SettingsController::SettingsController(QObject* parent)
@@ -1901,20 +1914,10 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
         dir.mkpath(QStringLiteral("."));
 
     // Generate unique filename: algorithmId-copy.js, algorithmId-copy-2.js, etc.
-    QString baseName = algorithmId + QStringLiteral("-copy");
-    QString destPath = destDir + baseName + QStringLiteral(".js");
-    if (QFile::exists(destPath)) {
-        bool found = false;
-        for (int i = 2; i <= 99; ++i) {
-            destPath = destDir + baseName + QStringLiteral("-") + QString::number(i) + QStringLiteral(".js");
-            if (!QFile::exists(destPath)) {
-                found = true;
-                break;
-            }
-        }
-        if (!found)
-            return false;
-    }
+    const QString baseName = algorithmId + QStringLiteral("-copy");
+    const QString destPath = findUniqueAlgorithmPath(destDir, baseName);
+    if (destPath.isEmpty())
+        return false;
 
     // Read source, update metadata, write copy
     QFile sourceFile(sourcePath);
@@ -1923,9 +1926,12 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
     QString content = QString::fromUtf8(sourceFile.readAll());
     sourceFile.close();
 
-    // Update @name and @builtinId in the copy
+    // Update @name and @builtinId in the copy — strip existing " (Copy)" suffix to avoid accumulation
     const QString newFilename = QFileInfo(destPath).completeBaseName();
-    const QString newName = algo->name() + QStringLiteral(" (Copy)");
+    QString baseCopyName = algo->name();
+    if (baseCopyName.endsWith(QLatin1String(" (Copy)")))
+        baseCopyName.chop(7);
+    const QString newName = baseCopyName + QStringLiteral(" (Copy)");
     static const QRegularExpression nameRe(QStringLiteral("// @name .+"));
     static const QRegularExpression idRe(QStringLiteral("// @builtinId .+"));
     content.replace(nameRe, QStringLiteral("// @name ") + newName);
@@ -1991,23 +1997,13 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
         dir.mkpath(QStringLiteral("."));
     }
 
-    QString destPath = destDir + filename + QStringLiteral(".js");
-    if (QFile::exists(destPath)) {
-        bool found = false;
-        for (int i = 2; i <= 99; ++i) {
-            destPath = destDir + filename + QStringLiteral("-") + QString::number(i) + QStringLiteral(".js");
-            if (!QFile::exists(destPath)) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            qCWarning(lcCore) << "Could not find unique filename for algorithm:" << filename;
-            return QString();
-        }
-        // Update filename to match the final path
-        filename = QFileInfo(destPath).completeBaseName();
+    QString destPath = findUniqueAlgorithmPath(destDir, filename);
+    if (destPath.isEmpty()) {
+        qCWarning(lcCore) << "Could not find unique filename for algorithm:" << filename;
+        return QString();
     }
+    // Update filename to match the final path (may have -N suffix)
+    filename = QFileInfo(destPath).completeBaseName();
 
     // Build JS content
     QString content;
@@ -2016,8 +2012,11 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
     content += QStringLiteral("// SPDX-FileCopyrightText: 2026 fuddlesworth\n");
     content += QStringLiteral("// SPDX-License-Identifier: GPL-3.0-or-later\n\n");
 
-    // Metadata annotations
-    content += QStringLiteral("// @name ") + name.trimmed() + QStringLiteral("\n");
+    // Metadata annotations — strip newlines to prevent annotation injection
+    QString sanitizedDisplayName = name.trimmed();
+    sanitizedDisplayName.replace(QLatin1Char('\n'), QLatin1Char(' '));
+    sanitizedDisplayName.replace(QLatin1Char('\r'), QLatin1Char(' '));
+    content += QStringLiteral("// @name ") + sanitizedDisplayName + QStringLiteral("\n");
     content += QStringLiteral("// @builtinId ") + filename + QStringLiteral("\n");
     content += QStringLiteral("// @description Custom tiling algorithm\n");
     content += QStringLiteral("// @producesOverlappingZones ")
@@ -2098,6 +2097,7 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
 
     // Emit algorithmCreated once the registry picks up the new file via its watcher.
     // Use a one-shot connection so we only fire for *this* algorithm.
+    // A 10-second timeout disconnects the lambda if the watcher never fires, preventing a leak.
     auto* registry = AlgorithmRegistry::instance();
     auto conn = std::make_shared<QMetaObject::Connection>();
     *conn = connect(registry, &AlgorithmRegistry::algorithmRegistered, this,
@@ -2107,6 +2107,10 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
                             Q_EMIT algorithmCreated(filename);
                         }
                     });
+    QTimer::singleShot(10000, this, [conn]() {
+        if (*conn)
+            disconnect(*conn);
+    });
 
     return filename;
 }
