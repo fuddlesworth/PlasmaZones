@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <QtWaylandClient/private/qwaylandshellsurface_p.h>
 #include "wlr_layer_shell_protocol.h"
 
@@ -47,6 +48,7 @@ private:
     bool m_configured = false;
     uint32_t m_pendingWidth = 0;
     uint32_t m_pendingHeight = 0;
+    uint64_t m_globalRemovedCallbackId = 0;
 };
 
 } // namespace PlasmaZones

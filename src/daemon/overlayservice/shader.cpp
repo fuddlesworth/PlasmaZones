@@ -422,7 +422,7 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen)
     window->setProperty("isShaderOverlay", true);
 
     configureLayerSurface(window, screen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
-                          QStringLiteral("plasmazones-shader-preview"));
+                          QStringLiteral("plasmazones-shader-preview-%1").arg(screen->name()));
 
     m_shaderPreviewWindow = window;
     m_shaderPreviewScreen = screen;

@@ -27,15 +27,6 @@ LayerShellWindow::LayerShellWindow(LayerShellIntegration* integration, QtWayland
 {
     QWindow* qwindow = waylandWindow->window();
 
-    // Resolve wl_output from QScreen
-    QScreen* targetScreen = qwindow->screen();
-    if (targetScreen) {
-        auto* waylandScreen = dynamic_cast<QtWaylandClient::QWaylandScreen*>(targetScreen->handle());
-        if (waylandScreen) {
-            m_output = waylandScreen->output();
-        }
-    }
-
     // Read initial properties from QWindow dynamic properties
     int layer = qwindow->property(LayerSurfaceProps::Layer).toInt();
     // Scope default ("plasmazones") is set by LayerSurface::get() — if still empty
@@ -56,6 +47,20 @@ LayerShellWindow::LayerShellWindow(LayerShellIntegration* integration, QtWayland
                                        << "and LayerShellWindow constructor — cannot create layer surface";
         return;
     }
+
+    // Resolve wl_output from QScreen just-in-time (not cached in constructor).
+    // This minimizes the window where a hot-unplugged screen could yield a
+    // dangling wl_output*. If the screen was unplugged between LayerSurface::get()
+    // and now, screen() returns nullptr and we pass NULL to the compositor
+    // (which then chooses the output — usually primary).
+    QScreen* targetScreen = qwindow->screen();
+    if (targetScreen) {
+        auto* waylandScreen = dynamic_cast<QtWaylandClient::QWaylandScreen*>(targetScreen->handle());
+        if (waylandScreen) {
+            m_output = waylandScreen->output();
+        }
+    }
+
     // Keep the QByteArray alive for the duration of the call — constData() returns
     // a pointer into the QByteArray, which must not be a dangling temporary.
     const QByteArray scopeUtf8 = scope.toUtf8();
@@ -84,7 +89,8 @@ LayerShellWindow::LayerShellWindow(LayerShellIntegration* integration, QtWayland
 
     // If the compositor removes the layer-shell global (crash/restart), stop
     // issuing protocol requests on our now-stale zwlr_layer_surface_v1.
-    integration->addGlobalRemovedCallback([this]() {
+    // Store the callback ID so we can deregister in the destructor to prevent UAF.
+    m_globalRemovedCallbackId = integration->addGlobalRemovedCallback([this]() {
         qCWarning(lcLayerShellWindow) << "Layer-shell global removed — nulling stale surface";
         m_layerSurface = nullptr;
     });
@@ -101,6 +107,12 @@ LayerShellWindow::LayerShellWindow(LayerShellIntegration* integration, QtWayland
 
 LayerShellWindow::~LayerShellWindow()
 {
+    // Deregister the global-removed callback to prevent UAF — if the compositor
+    // removes the global after this window is destroyed, the lambda would fire
+    // with a dangling `this` pointer.
+    if (m_integration && m_globalRemovedCallbackId != 0) {
+        m_integration->removeGlobalRemovedCallback(m_globalRemovedCallbackId);
+    }
     if (m_layerSurface) {
         zwlr_layer_surface_v1_destroy(m_layerSurface);
     }
@@ -166,8 +178,15 @@ void LayerShellWindow::applyProperties()
     int exclusiveZone = qwindow->property(LayerSurfaceProps::ExclusiveZone).toInt();
     zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, exclusiveZone);
 
-    // Keyboard interactivity
+    // Keyboard interactivity — on_demand (value 2) requires protocol v4+.
+    // If the compositor only supports v1-v3, fall back to none (value 0) to
+    // avoid sending an unrecognized enum value that may cause a protocol error.
     int keyboard = qwindow->property(LayerSurfaceProps::Keyboard).toInt();
+    if (keyboard == 2 && m_integration && m_integration->boundVersion() < 4) {
+        qCWarning(lcLayerShellWindow) << "Compositor supports layer-shell v" << m_integration->boundVersion()
+                                      << "— on_demand keyboard interactivity requires v4, falling back to none";
+        keyboard = 0;
+    }
     zwlr_layer_surface_v1_set_keyboard_interactivity(m_layerSurface, static_cast<uint32_t>(keyboard));
 
     // Margins

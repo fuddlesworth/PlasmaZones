@@ -141,9 +141,12 @@ public:
         }
         ~BatchGuard()
         {
-            if (m_surface && --m_surface->m_batchDepth == 0 && m_surface->m_batchDirty) {
-                m_surface->m_batchDirty = false;
-                Q_EMIT m_surface->propertiesChanged();
+            if (m_surface) {
+                Q_ASSERT(m_surface->m_batchDepth > 0);
+                if (--m_surface->m_batchDepth == 0 && m_surface->m_batchDirty) {
+                    m_surface->m_batchDirty = false;
+                    Q_EMIT m_surface->propertiesChanged();
+                }
             }
         }
         BatchGuard(const BatchGuard&) = delete;

@@ -30,6 +30,16 @@ public:
         return m_globalAvailable ? m_layerShell : nullptr;
     }
 
+    /// The protocol version we negotiated with the compositor (1–4).
+    /// Callers should check this before using version-gated features:
+    ///   v2: set_layer (runtime layer changes)
+    ///   v3: destroy request
+    ///   v4: on_demand keyboard interactivity
+    uint32_t boundVersion() const
+    {
+        return m_boundVersion;
+    }
+
     /// Access the singleton instance (available after Qt loads the plugin).
     static LayerShellIntegration* instance();
 
@@ -40,10 +50,23 @@ public:
 
     /// Register a callback invoked when the compositor removes the
     /// zwlr_layer_shell_v1 global (compositor crash/restart).
+    /// Returns an opaque ID that can be passed to removeGlobalRemovedCallback()
+    /// to prevent use-after-free when the caller is destroyed before the event fires.
     using GlobalRemovedCallback = std::function<void()>;
-    void addGlobalRemovedCallback(GlobalRemovedCallback cb)
+    using CallbackId = uint64_t;
+    CallbackId addGlobalRemovedCallback(GlobalRemovedCallback cb)
     {
-        m_globalRemovedCallbacks.push_back(std::move(cb));
+        CallbackId id = m_nextCallbackId++;
+        m_globalRemovedCallbacks.push_back({id, std::move(cb)});
+        return id;
+    }
+    void removeGlobalRemovedCallback(CallbackId id)
+    {
+        m_globalRemovedCallbacks.erase(std::remove_if(m_globalRemovedCallbacks.begin(), m_globalRemovedCallbacks.end(),
+                                                      [id](const auto& entry) {
+                                                          return entry.first == id;
+                                                      }),
+                                       m_globalRemovedCallbacks.end());
     }
 
 private:
@@ -62,7 +85,8 @@ private:
     // (avoids leaking the wl_proxy when the global is removed at runtime).
     bool m_globalAvailable = false;
 
-    std::vector<GlobalRemovedCallback> m_globalRemovedCallbacks;
+    std::vector<std::pair<CallbackId, GlobalRemovedCallback>> m_globalRemovedCallbacks;
+    CallbackId m_nextCallbackId = 1;
 
     // GUI-thread-only singleton. All access (initialize(), instance(), destructor)
     // happens on Qt's main thread. Do NOT access from worker threads.

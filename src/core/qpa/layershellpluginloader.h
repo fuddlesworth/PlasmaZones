@@ -4,6 +4,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QFile>
 #include <QString>
 
 namespace PlasmaZones {
@@ -25,8 +26,21 @@ inline void registerLayerShellPlugin()
         // back to XDG_SESSION_TYPE because it can be "wayland" on systemd machines
         // even in SSH sessions or before the compositor starts, and XDG_RUNTIME_DIR
         // is always set on systemd — so that combination is too permissive.
+        //
+        // Also check XDG_RUNTIME_DIR/wayland-0 as a fallback: some compositors
+        // (e.g. COSMIC) or systemd socket-activation setups may not set
+        // WAYLAND_DISPLAY but the socket exists at the default path.
         if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")) {
             qputenv("QT_WAYLAND_SHELL_INTEGRATION", "pz-layer-shell");
+        } else {
+            // Fallback: check for the default Wayland socket
+            const QByteArray runtimeDir = qgetenv("XDG_RUNTIME_DIR");
+            if (!runtimeDir.isEmpty()) {
+                const QString defaultSocket = QString::fromUtf8(runtimeDir) + QStringLiteral("/wayland-0");
+                if (QFile::exists(defaultSocket)) {
+                    qputenv("QT_WAYLAND_SHELL_INTEGRATION", "pz-layer-shell");
+                }
+            }
         }
     }
 }

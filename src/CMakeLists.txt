@@ -336,6 +336,10 @@ if(NOT DEFINED QT6_INSTALL_PLUGINS)
     if(NOT QT6_INSTALL_PLUGINS)
         set(QT6_INSTALL_PLUGINS "${KDE_INSTALL_QTPLUGINDIR}")
     endif()
+    if(NOT QT6_INSTALL_PLUGINS)
+        message(FATAL_ERROR "Cannot determine Qt plugin install directory. "
+            "Set QT6_INSTALL_PLUGINS or ensure ECM/KDE_INSTALL_QTPLUGINDIR is available.")
+    endif()
 endif()
 install(TARGETS pz-layer-shell
     DESTINATION ${QT6_INSTALL_PLUGINS}/wayland-shell-integration
