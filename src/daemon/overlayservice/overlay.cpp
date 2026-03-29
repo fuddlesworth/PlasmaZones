@@ -420,7 +420,11 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
         writeQmlProperty(window, QStringLiteral("zoneCount"), patched.size());
         writeQmlProperty(window, QStringLiteral("highlightedCount"), highlightedCount);
         updateLabelsTextureForWindow(window, patched, screen, screenLayout);
-        writeQmlProperty(window, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
+        // Note: zoneDataVersion is bumped and broadcast to all windows in
+        // updateGeometries() after all per-screen updates complete. Do not
+        // write it here — updateOverlayWindow() is called per-screen, and
+        // writing the version mid-loop would cause inconsistent state across
+        // windows (some see the new version, others the old one).
     }
 }
 

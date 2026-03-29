@@ -135,6 +135,9 @@ bool LayerShellWindow::isExposed() const
 
 void LayerShellWindow::applyConfigure()
 {
+    if (!m_waylandWindow) {
+        return;
+    }
     // Called by QWaylandWindow::applyConfigure() during Qt's configure cycle.
     // Use the same compositor-controlled-axis logic as handleConfigure.
     if (m_pendingWidth > 0 && m_pendingHeight > 0) {
