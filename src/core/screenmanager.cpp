@@ -164,6 +164,9 @@ void ScreenManager::createGeometrySensor(QScreen* screen)
         return;
     }
 
+    // Batch all property changes into a single propertiesChanged() emission
+    // so the QPA plugin only does one applyProperties()+commit round-trip.
+    LayerSurface::BatchGuard guard(layerSurface);
     layerSurface->setScreen(screen);
     layerSurface->setLayer(LayerSurface::LayerBackground);
     layerSurface->setKeyboardInteractivity(LayerSurface::KeyboardInteractivityNone);

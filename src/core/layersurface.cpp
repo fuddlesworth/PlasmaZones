@@ -3,9 +3,9 @@
 
 #include "layersurface.h"
 #include "qpa/layershellintegration.h"
-#include "logging.h"
 
 #include <QGuiApplication>
+#include <QLoggingCategory>
 #include <QHash>
 #include <QThread>
 
@@ -141,6 +141,12 @@ LayerSurface::Layer LayerSurface::layer() const
 
 void LayerSurface::setAnchors(Anchors anchors)
 {
+    // Mask off undefined bits — protocol defines bits 0-3 only (top/bottom/left/right).
+    if (static_cast<int>(anchors) & ~static_cast<int>(AnchorAll)) {
+        qCWarning(lcLayerSurface) << "setAnchors() called with undefined bits set:" << Qt::hex
+                                  << static_cast<int>(anchors) << "— masking to valid range";
+        anchors &= AnchorAll;
+    }
     if (m_anchors == anchors) {
         return;
     }
@@ -227,33 +233,28 @@ QString LayerSurface::scope() const
 
 void LayerSurface::setScreen(QScreen* screen)
 {
-    if (m_screen == screen) {
-        return;
-    }
     if (m_window && m_window->isVisible()) {
         qCWarning(lcLayerSurface) << "setScreen() called after show(); output binding is immutable"
                                   << "— the layer surface remains on the original screen";
         return;
     }
-    if (screen) {
-        m_screen = screen;
-    } else {
-        QScreen* primary = QGuiApplication::primaryScreen();
-        m_screen = primary; // fallback so screen() returns what the window actually uses
+
+    // Resolve: nullptr means "use primary"
+    QScreen* resolved = screen ? screen : QGuiApplication::primaryScreen();
+
+    if (m_screen == resolved) {
+        return;
     }
+
+    m_screen = resolved;
+
     if (m_window) {
-        if (screen) {
-            m_window->setScreen(screen);
-        } else {
-            QScreen* primary = QGuiApplication::primaryScreen();
-            if (primary) {
-                m_window->setScreen(primary);
-            } else {
-                qCWarning(lcLayerSurface) << "setScreen(nullptr): no primary screen available —"
-                                          << "window retains its current screen binding";
-            }
+        if (resolved) {
+            m_window->setScreen(resolved);
         }
+        // If resolved is still null (no primary), compositor picks output
     }
+
     Q_EMIT screenChanged();
     // No emitPropertiesChanged() — screen/output binding is immutable at the protocol
     // level (baked into zwlr_layer_shell_v1_get_layer_surface at surface creation time).

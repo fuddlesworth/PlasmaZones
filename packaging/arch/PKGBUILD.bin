@@ -13,6 +13,8 @@ depends=(
     'qt6-declarative'
     'qt6-shadertools'
     'qt6-svg'
+    'kconfig'
+    'kconfigwidgets'
     'kirigami'
     'kcmutils'
     'kglobalaccel'

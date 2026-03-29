@@ -7,6 +7,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- Replace LayerShellQt dependency with custom QPA layer-shell plugin (`pz-layer-shell`) for direct `zwlr_layer_shell_v1` support — enables PlasmaZones on any wlr-layer-shell compositor (Hyprland, Sway, Wayfire, niri, COSMIC, river, labwc)
+
 ## [2.4.7] - 2026-03-27
 
 ### Added

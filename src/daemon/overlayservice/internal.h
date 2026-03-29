@@ -67,6 +67,8 @@ inline void configureLayerSurface(QQuickWindow* window, QScreen* screen, LayerSu
     }
     auto* layerSurface = LayerSurface::get(window);
     if (!layerSurface) {
+        qCWarning(lcOverlay) << "configureLayerSurface: LayerSurface::get() returned nullptr for window"
+                             << window->objectName() << "— layer surface properties will not be applied";
         return;
     }
     // Batch all property changes into a single propertiesChanged() emission

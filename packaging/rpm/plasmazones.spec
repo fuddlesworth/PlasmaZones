@@ -74,6 +74,7 @@ BuildRequires:  kf6-kirigami-devel >= 6.6.0
 %if 0%{?suse_version}
 BuildRequires:  kwin6-devel
 BuildRequires:  cmake(Qt6WaylandClient)
+BuildRequires:  cmake(Qt6WaylandClientPrivate)
 BuildRequires:  wayland-devel
 BuildRequires:  cmake(PlasmaActivities)
 BuildRequires:  pkgconfig(systemd)

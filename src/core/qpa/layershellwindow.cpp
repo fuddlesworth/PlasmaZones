@@ -240,8 +240,8 @@ QSize LayerShellWindow::computeConfigureSize(uint32_t width, uint32_t height) co
     // For non-compositor-controlled axes, prefer the app-set size. But if the
     // app size is 0 (e.g. newly created window before first resize), accept the
     // compositor's value to avoid creating a zero-size surface.
-    int appW = qwindow->width();
-    int appH = qwindow->height();
+    int appW = qMax(0, qwindow->width());
+    int appH = qMax(0, qwindow->height());
     int newW = compositorControlsW ? static_cast<int>(width) : (appW > 0 ? appW : static_cast<int>(width));
     int newH = compositorControlsH ? static_cast<int>(height) : (appH > 0 ? appH : static_cast<int>(height));
     return QSize(newW, newH);

@@ -204,3 +204,5 @@ private:
 Q_DECLARE_OPERATORS_FOR_FLAGS(LayerSurface::Anchors)
 
 } // namespace PlasmaZones
+
+Q_DECLARE_METATYPE(PlasmaZones::LayerSurface*)

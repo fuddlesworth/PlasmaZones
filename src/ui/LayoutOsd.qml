@@ -15,8 +15,8 @@ import org.plasmazones.common as QFZCommon
  */
 Window {
     // contentWrapper
-    // Note: Escape shortcut removed - window uses BypassWindowManagerHint
-    // and doesn't receive keyboard focus on Wayland
+    // Note: Escape shortcut removed - layer-shell overlay windows do not
+    // receive keyboard focus on Wayland (KeyboardInteractivityNone)
 
     id: root
 
