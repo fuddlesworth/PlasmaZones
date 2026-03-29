@@ -81,7 +81,7 @@ void Daemon::updateAutotileScreens()
                 // respect their choice.
                 //
                 // Use the engine's runtime algorithm (m_autotileEngine->algorithm())
-                // instead of m_settings->autotileAlgorithm(). During layout cycling,
+                // instead of m_settings->defaultAutotileAlgorithm(). During layout cycling,
                 // the settings algorithm retains the initial KCM value while the
                 // engine's algorithm changes with each cycle. Using the stale settings
                 // value caused incorrect MaxWindows injection and unpredictable
@@ -235,7 +235,7 @@ void Daemon::handleSnappingToAutotile()
     }
 
     // Resolve algorithm from settings (this is a global enable, not per-desktop toggle)
-    QString algoId = m_settings->autotileAlgorithm();
+    QString algoId = m_settings->defaultAutotileAlgorithm();
     if (algoId.isEmpty()) {
         algoId = AlgorithmRegistry::defaultAlgorithmId();
     }

@@ -467,7 +467,7 @@ SETTINGS_SETTER_CLAMPED(ZoneSelectorMaxRows, m_zoneSelectorMaxRows, zoneSelector
 
 SETTINGS_SETTER(bool, AutotileEnabled, m_autotileEnabled, autotileEnabledChanged)
 
-void Settings::setAutotileAlgorithm(const QString& algorithm)
+void Settings::setDefaultAutotileAlgorithm(const QString& algorithm)
 {
     // Validate algorithm ID against the algorithm registry (single source of truth)
     QString validatedAlgorithm = algorithm;
@@ -476,9 +476,9 @@ void Settings::setAutotileAlgorithm(const QString& algorithm)
         validatedAlgorithm = AlgorithmRegistry::defaultAlgorithmId();
     }
 
-    if (m_autotileAlgorithm != validatedAlgorithm) {
-        m_autotileAlgorithm = validatedAlgorithm;
-        Q_EMIT autotileAlgorithmChanged();
+    if (m_defaultAutotileAlgorithm != validatedAlgorithm) {
+        m_defaultAutotileAlgorithm = validatedAlgorithm;
+        Q_EMIT defaultAutotileAlgorithmChanged();
         Q_EMIT settingsChanged();
     }
 }

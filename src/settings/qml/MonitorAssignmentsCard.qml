@@ -330,7 +330,15 @@ SettingsCard {
                                     layoutFilter: root.viewMode === 1 ? 1 : 0
                                     showPreview: true
                                     noneText: i18n("Use default")
-                                    resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.appSettings.defaultLayoutId || "")
+                                    resolvedDefaultId: {
+                                        if (monitorLayout !== "")
+                                            return monitorLayout;
+
+                                        if (root.viewMode === 1)
+                                            return "autotile:" + root.appSettings.defaultAutotileAlgorithm;
+
+                                        return root.appSettings.defaultLayoutId || "";
+                                    }
                                     currentLayoutId: {
                                         void (monitorDelegate._assignmentRevision);
                                         if (root.viewMode === 1) {

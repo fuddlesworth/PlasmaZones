@@ -1209,13 +1209,13 @@ ApplicationWindow {
                             return false;
 
                         if (layoutContextMenu.viewMode === 1)
-                            return layoutContextMenu.layoutId !== ("autotile:" + appSettings.autotileAlgorithm);
+                            return layoutContextMenu.layoutId !== ("autotile:" + appSettings.defaultAutotileAlgorithm);
 
                         return layoutContextMenu.layoutId !== appSettings.defaultLayoutId;
                     }
                     onTriggered: {
                         if (layoutContextMenu.viewMode === 1)
-                            appSettings.autotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
+                            appSettings.defaultAutotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
                         else
                             appSettings.defaultLayoutId = layoutContextMenu.layoutId;
                     }

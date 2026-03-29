@@ -381,8 +381,8 @@ void Settings::loadAutotilingConfig(QSettingsConfigBackend* backend)
 {
     auto autotiling = backend->group(QStringLiteral("Autotiling"));
     m_autotileEnabled = autotiling->readBool(QStringLiteral("AutotileEnabled"), ConfigDefaults::autotileEnabled());
-    m_autotileAlgorithm =
-        autotiling->readString(QStringLiteral("AutotileAlgorithm"), ConfigDefaults::autotileAlgorithm());
+    m_defaultAutotileAlgorithm =
+        autotiling->readString(QStringLiteral("DefaultAutotileAlgorithm"), ConfigDefaults::defaultAutotileAlgorithm());
 
     // Validate saved algorithm ID against registry. Scripted algorithms may not be
     // registered yet at Settings::load() time (they load later in Daemon::init()),
@@ -390,11 +390,12 @@ void Settings::loadAutotilingConfig(QSettingsConfigBackend* backend)
     // performs a second check after scripted algorithms are registered.
     // Script algorithms are registered asynchronously — skip validation
     // to prevent resetting the user's selection on daemon restart.
-    if (!m_autotileAlgorithm.startsWith(QLatin1String("script:"))) {
-        if (!m_autotileAlgorithm.isEmpty() && !AlgorithmRegistry::instance()->algorithm(m_autotileAlgorithm)) {
-            qCWarning(lcConfig) << "Saved algorithm" << m_autotileAlgorithm
+    if (!m_defaultAutotileAlgorithm.startsWith(QLatin1String("script:"))) {
+        if (!m_defaultAutotileAlgorithm.isEmpty()
+            && !AlgorithmRegistry::instance()->algorithm(m_defaultAutotileAlgorithm)) {
+            qCWarning(lcConfig) << "Saved algorithm" << m_defaultAutotileAlgorithm
                                 << "not found in registry, falling back to default";
-            m_autotileAlgorithm = ConfigDefaults::autotileAlgorithm();
+            m_defaultAutotileAlgorithm = ConfigDefaults::defaultAutotileAlgorithm();
         }
     }
 
@@ -776,7 +777,7 @@ void Settings::saveAutotilingConfig(QSettingsConfigBackend* backend)
     {
         auto autotiling = backend->group(QStringLiteral("Autotiling"));
         autotiling->writeBool(QStringLiteral("AutotileEnabled"), m_autotileEnabled);
-        autotiling->writeString(QStringLiteral("AutotileAlgorithm"), m_autotileAlgorithm);
+        autotiling->writeString(QStringLiteral("DefaultAutotileAlgorithm"), m_defaultAutotileAlgorithm);
         autotiling->writeDouble(QStringLiteral("AutotileSplitRatio"), m_autotileSplitRatio);
         autotiling->writeInt(QStringLiteral("AutotileMasterCount"), m_autotileMasterCount);
         // Save per-algorithm settings map (reuse shared serialization helpers)

@@ -174,7 +174,7 @@ SettingsCard {
                                     return displayInfo ? activityScreenContainer.screenName + " — " + displayInfo : activityScreenContainer.screenName;
                                 }
                                 noneText: i18n("Use default")
-                                resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.appSettings.defaultLayoutId || "")
+                                resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.viewMode === 1 ? ("autotile:" + root.appSettings.defaultAutotileAlgorithm) : (root.appSettings.defaultLayoutId || ""))
                                 currentLayoutId: {
                                     void (activityDelegate._activityRevision);
                                     return root.getScreenActivityLayout(activityScreenContainer.screenName, activityDelegate.activityId);

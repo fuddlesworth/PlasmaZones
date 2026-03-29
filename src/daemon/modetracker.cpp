@@ -65,11 +65,11 @@ QString ModeTracker::lastManualLayoutId() const
 QString ModeTracker::lastAutotileAlgorithm() const
 {
     if (!m_layoutManager || m_screenId.isEmpty()) {
-        return m_settings ? m_settings->autotileAlgorithm() : AlgorithmRegistry::defaultAlgorithmId();
+        return m_settings ? m_settings->defaultAutotileAlgorithm() : AlgorithmRegistry::defaultAlgorithmId();
     }
     QString algo = m_layoutManager->tilingAlgorithmForScreen(m_screenId, m_desktop, m_activity);
     if (algo.isEmpty() && m_settings) {
-        algo = m_settings->autotileAlgorithm();
+        algo = m_settings->defaultAutotileAlgorithm();
     }
     return algo.isEmpty() ? AlgorithmRegistry::defaultAlgorithmId() : algo;
 }

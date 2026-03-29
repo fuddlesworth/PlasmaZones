@@ -163,8 +163,8 @@ public:
 
     // Autotiling Settings
     Q_PROPERTY(bool autotileEnabled READ autotileEnabled WRITE setAutotileEnabled NOTIFY autotileEnabledChanged)
-    Q_PROPERTY(
-        QString autotileAlgorithm READ autotileAlgorithm WRITE setAutotileAlgorithm NOTIFY autotileAlgorithmChanged)
+    Q_PROPERTY(QString defaultAutotileAlgorithm READ defaultAutotileAlgorithm WRITE setDefaultAutotileAlgorithm NOTIFY
+                   defaultAutotileAlgorithmChanged)
     Q_PROPERTY(
         qreal autotileSplitRatio READ autotileSplitRatio WRITE setAutotileSplitRatio NOTIFY autotileSplitRatioChanged)
     Q_PROPERTY(
@@ -840,11 +840,11 @@ public:
     }
     void setAutotileEnabled(bool enabled);
 
-    QString autotileAlgorithm() const
+    QString defaultAutotileAlgorithm() const
     {
-        return m_autotileAlgorithm;
+        return m_defaultAutotileAlgorithm;
     }
-    void setAutotileAlgorithm(const QString& algorithm);
+    void setDefaultAutotileAlgorithm(const QString& algorithm);
 
     qreal autotileSplitRatio() const
     {
@@ -1655,7 +1655,7 @@ private:
 
     // Autotiling Settings
     bool m_autotileEnabled = ConfigDefaults::autotileEnabled();
-    QString m_autotileAlgorithm = ConfigDefaults::autotileAlgorithm();
+    QString m_defaultAutotileAlgorithm = ConfigDefaults::defaultAutotileAlgorithm();
     qreal m_autotileSplitRatio = ConfigDefaults::autotileSplitRatio();
     int m_autotileMasterCount = ConfigDefaults::autotileMasterCount();
     QVariantMap m_autotilePerAlgorithmSettings;

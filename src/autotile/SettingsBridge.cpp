@@ -122,7 +122,7 @@ void SettingsBridge::syncFromSettings(Settings* settings)
 
     // Sync algorithm via setAlgorithm (handles validation + fallback + m_config sync)
     const QString oldAlgorithmId = m_engine->m_algorithmId;
-    m_engine->setAlgorithm(settings->autotileAlgorithm());
+    m_engine->setAlgorithm(settings->defaultAutotileAlgorithm());
     if (m_engine->m_algorithmId != oldAlgorithmId) {
         configChanged = true;
     }
@@ -226,10 +226,10 @@ void SettingsBridge::connectToSettings(Settings* settings)
     // as a feature gate — engine enabled state is driven by layout selection
     // (applyEntry) and mode toggle in the daemon.
 
-    QObject::connect(settings, &Settings::autotileAlgorithmChanged, m_engine, [this]() {
+    QObject::connect(settings, &Settings::defaultAutotileAlgorithmChanged, m_engine, [this]() {
         if (!m_settings)
             return;
-        m_engine->setAlgorithm(m_settings->autotileAlgorithm());
+        m_engine->setAlgorithm(m_settings->defaultAutotileAlgorithm());
     });
 
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -331,7 +331,7 @@ void SettingsBridge::syncAlgorithmToSettings(const QString& algoId, qreal splitR
     if (maxWindows != oldMaxWindows) {
         m_settings->setAutotileMaxWindows(maxWindows);
     }
-    m_settings->setAutotileAlgorithm(algoId);
+    m_settings->setDefaultAutotileAlgorithm(algoId);
     m_settings->setAutotileSplitRatio(splitRatio);
     m_settings->setAutotileMasterCount(m_engine->config()->masterCount);
     // Sync per-algorithm map so saved settings survive save/reload

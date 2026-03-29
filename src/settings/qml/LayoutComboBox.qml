@@ -42,7 +42,16 @@ ComboBox {
     // - Monitor dropdown: appSettings.defaultLayoutId (global default)
     // - Per-desktop dropdown: monitor's layout (or global if none)
     // - Activity dropdown: monitor's layout (or global if none)
-    property string resolvedDefaultId: appSettings ? appSettings.defaultLayoutId : ""
+    // When layoutFilter === 1 (autotile only), falls back to the global default algorithm.
+    property string resolvedDefaultId: {
+        if (!appSettings)
+            return "";
+
+        if (root.layoutFilter === 1)
+            return "autotile:" + appSettings.defaultAutotileAlgorithm;
+
+        return appSettings.defaultLayoutId;
+    }
     // Defer model swap while the popup is open to prevent scroll resets.
     // The model will update as soon as the popup closes.
     property bool _rebuildPending: false

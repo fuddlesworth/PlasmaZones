@@ -227,7 +227,7 @@ bool AlgorithmRegistry::hasAlgorithm(const QString& id) const noexcept
 
 QString AlgorithmRegistry::defaultAlgorithmId()
 {
-    return ConfigDefaults::autotileAlgorithm();
+    return ConfigDefaults::defaultAutotileAlgorithm();
 }
 
 TilingAlgorithm* AlgorithmRegistry::defaultAlgorithm() const

@@ -20,7 +20,7 @@ QtObject {
     // 0 = snapping, 1 = tiling — overridden by subclass
     property int assignmentViewMode: -1
     readonly property bool autotileEnabled: appSettings.autotileEnabled
-    readonly property string autotileAlgorithm: appSettings.autotileAlgorithm
+    readonly property string defaultAutotileAlgorithm: appSettings.defaultAutotileAlgorithm
     readonly property string defaultLayoutId: appSettings.defaultLayoutId
     readonly property var screens: settingsController.screens
     readonly property var layouts: settingsController.layouts

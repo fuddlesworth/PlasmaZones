@@ -22,7 +22,7 @@ Item {
     required property real cellHeight
     property int viewMode: 0 // 0 = Snapping Layouts, 1 = Auto Tile
     // The full autotile default ID including prefix, for comparison
-    readonly property string autotileDefaultId: "autotile:" + root.appSettings.autotileAlgorithm
+    readonly property string autotileDefaultId: "autotile:" + root.appSettings.defaultAutotileAlgorithm
     // Selection state (bound from parent GridView)
     property bool isSelected: false
     property bool isHovered: false

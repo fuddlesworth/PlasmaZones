@@ -392,7 +392,7 @@ void SettingsAdaptor::initializeRegistry()
     // Autotile core settings (concrete Settings only)
     if (concrete) {
         REGISTER_CONCRETE_BOOL("autotileEnabled", autotileEnabled, setAutotileEnabled)
-        REGISTER_CONCRETE_STRING("autotileAlgorithm", autotileAlgorithm, setAutotileAlgorithm)
+        REGISTER_CONCRETE_STRING("defaultAutotileAlgorithm", defaultAutotileAlgorithm, setDefaultAutotileAlgorithm)
         REGISTER_CONCRETE_DOUBLE("autotileSplitRatio", autotileSplitRatio, setAutotileSplitRatio)
         REGISTER_CONCRETE_INT("autotileMasterCount", autotileMasterCount, setAutotileMasterCount)
         // Per-algorithm settings map (QVariantMap)

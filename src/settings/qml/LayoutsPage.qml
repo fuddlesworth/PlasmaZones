@@ -191,7 +191,7 @@ ColumnLayout {
                 }
 
                 function selectDefaultLayout(mode) {
-                    let defaultId = (mode === 1) ? ("autotile:" + root.settingsBridge.autotileAlgorithm) : root.settingsBridge.defaultLayoutId;
+                    let defaultId = (mode === 1) ? ("autotile:" + root.settingsBridge.defaultAutotileAlgorithm) : root.settingsBridge.defaultLayoutId;
                     if (defaultId)
                         selectedLayoutId = defaultId;
 

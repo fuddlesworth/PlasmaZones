@@ -54,7 +54,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Common values: "master-stack", "bsp", "columns", "dwindle", "spiral", "monocle"
      * See AlgorithmRegistry for available algorithms.
      */
-    QString algorithmId = ConfigDefaults::autotileAlgorithm();
+    QString algorithmId = ConfigDefaults::defaultAutotileAlgorithm();
 
     // ═══════════════════════════════════════════════════════════════════════
     // Master Area Settings

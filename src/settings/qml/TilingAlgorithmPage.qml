@@ -18,7 +18,7 @@ Flickable {
     readonly property alias hasOverrides: psHelper.hasOverrides
     // m-13: Cache availableAlgorithms() to avoid calling it on every binding re-evaluation
     property var _cachedAlgos: settingsController.availableAlgorithms()
-    readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettings.autotileAlgorithm)
+    readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettings.defaultAutotileAlgorithm)
     // Derive algorithm ID from the combo's current selection (tracks UI immediately,
     // not delayed by D-Bus round-trip to daemon)
     readonly property string selectedAlgorithm: {
@@ -268,11 +268,11 @@ Flickable {
                             // Extract algorithm ID from autotile: prefixed value
                             let selectedId = algorithmCombo.currentValue;
                             if (selectedId === "")
-                                selectedId = settingsController.autotileAlgorithm;
+                                selectedId = settingsController.defaultAutotileAlgorithm;
                             else if (selectedId.startsWith("autotile:"))
                                 selectedId = selectedId.substring(9);
                             root.writeSetting("Algorithm", selectedId, function(v) {
-                                appSettings.autotileAlgorithm = v;
+                                appSettings.defaultAutotileAlgorithm = v;
                             });
                             // Reset maxWindows to the new algorithm's default.
                             // Use Qt.callLater so algoCapabilities binding has

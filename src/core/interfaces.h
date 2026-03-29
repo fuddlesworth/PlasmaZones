@@ -245,7 +245,7 @@ Q_SIGNALS:
 
     // Autotile settings
     void autotileEnabledChanged();
-    void autotileAlgorithmChanged();
+    void defaultAutotileAlgorithmChanged();
     void autotileSplitRatioChanged();
     void autotileMasterCountChanged();
     void autotilePerAlgorithmSettingsChanged();
