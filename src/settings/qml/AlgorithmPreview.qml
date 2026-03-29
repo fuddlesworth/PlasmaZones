@@ -45,6 +45,15 @@ Item {
         }
         return false;
     }
+    readonly property bool _currentAlgoProducesOverlappingZones: {
+        var algos = root._cachedAlgos;
+        for (var i = 0; i < algos.length; i++) {
+            if (algos[i].id === root.algorithmId && algos[i].producesOverlappingZones)
+                return true;
+
+        }
+        return false;
+    }
     // Algorithm display name (avoids hardcoded switch statement)
     property string algorithmName: ""
     // Algorithm name label (hidden when used inside the Tiling tab's algorithm section
@@ -94,6 +103,7 @@ Item {
         isHovered: true
         showZoneNumbers: true
         zoneNumberDisplay: root.zoneNumberDisplay
+        producesOverlappingZones: root._currentAlgoProducesOverlappingZones
         highlightColor: Qt.rgba(root.windowColor.r, root.windowColor.g, root.windowColor.b, 0.7)
         borderColor: Qt.rgba(root.windowBorder.r, root.windowBorder.g, root.windowBorder.b, 0.9)
         zonePadding: 1

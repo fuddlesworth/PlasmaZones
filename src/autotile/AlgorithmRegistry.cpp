@@ -261,30 +261,6 @@ void AlgorithmRegistry::registerBuiltInAlgorithms()
     pending.clear();
 }
 
-namespace {
-/**
- * @brief Check if all zones have identical geometry (monocle-style)
- *
- * Monocle algorithm returns all windows at fullscreen, which would cause
- * zone numbers to stack on top of each other in preview. We detect this
- * and apply visual offsets.
- */
-bool areAllZonesIdentical(const QVector<QRect>& zones)
-{
-    if (zones.size() <= 1) {
-        return false; // Nothing to offset for single zone
-    }
-
-    const QRect& first = zones.first();
-    for (int i = 1; i < zones.size(); ++i) {
-        if (zones[i] != first) {
-            return false;
-        }
-    }
-    return true;
-}
-} // namespace
-
 QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect>& zones, const QRect& previewRect)
 {
     if (!previewRect.isValid() || previewRect.width() == 0 || previewRect.height() == 0) {
@@ -292,25 +268,15 @@ QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect>& zo
     }
 
     QVariantList result;
-    const bool isMonocle = areAllZonesIdentical(zones);
-
     for (int i = 0; i < zones.size(); ++i) {
         QVariantMap zoneMap;
         zoneMap[QLatin1String("zoneNumber")] = i + 1;
 
         QVariantMap relGeo;
-        if (isMonocle) {
-            const qreal offset = qMin(i * MonoclePreviewOffset, AutotileDefaults::MaxMonoclePreviewOffset);
-            relGeo[QLatin1String("x")] = offset;
-            relGeo[QLatin1String("y")] = offset;
-            relGeo[QLatin1String("width")] = qMax(0.01, 1.0 - offset * 2);
-            relGeo[QLatin1String("height")] = qMax(0.01, 1.0 - offset * 2);
-        } else {
-            relGeo[QLatin1String("x")] = static_cast<qreal>(zones[i].x()) / previewRect.width();
-            relGeo[QLatin1String("y")] = static_cast<qreal>(zones[i].y()) / previewRect.height();
-            relGeo[QLatin1String("width")] = static_cast<qreal>(zones[i].width()) / previewRect.width();
-            relGeo[QLatin1String("height")] = static_cast<qreal>(zones[i].height()) / previewRect.height();
-        }
+        relGeo[QLatin1String("x")] = static_cast<qreal>(zones[i].x()) / previewRect.width();
+        relGeo[QLatin1String("y")] = static_cast<qreal>(zones[i].y()) / previewRect.height();
+        relGeo[QLatin1String("width")] = static_cast<qreal>(zones[i].width()) / previewRect.width();
+        relGeo[QLatin1String("height")] = static_cast<qreal>(zones[i].height()) / previewRect.height();
         zoneMap[QLatin1String("relativeGeometry")] = relGeo;
 
         result.append(zoneMap);
@@ -400,7 +366,6 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm,
 
     QVector<QRect> zones = algorithm->calculateZones({count, previewRect, &previewState, 0, {}});
 
-    // Convert to relative geometry (handles monocle offset detection internally)
     QVariantList list = zonesToRelativeGeometry(zones, previewRect);
 
     // Enrich with extra fields needed by zone selector / layout cards

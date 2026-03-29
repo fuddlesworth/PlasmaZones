@@ -155,11 +155,8 @@ public:
     // overlay service, daemon OSD, and KCM algorithm preview)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Monocle preview offset per zone (3% diagonal inset per stacked window)
-    static constexpr qreal MonoclePreviewOffset = 0.03;
-
     /**
-     * @brief Convert pixel zones to relative geometry with monocle offset handling
+     * @brief Convert pixel zones to relative geometry
      *
      * Shared utility for both generatePreviewZones() (layout cards/selector)
      * and KCMPlasmaZones::generateAlgorithmPreview() (live algorithm preview).

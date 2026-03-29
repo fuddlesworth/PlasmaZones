@@ -52,39 +52,11 @@ Item {
     property bool showZoneNumbers: true
     /// How to display zone numbers: "all", "first", "last", "firstAndLast", "none"
     property string zoneNumberDisplay: "all"
-    /// Auto-detect stacked/overlapping layout (monocle, cascade, etc.)
-    /// When true, only the last zone's number label is shown.
-    readonly property bool isStackedLayout: {
-        if (!zones || zones.length <= 1)
-            return false;
-
-        // Check if all consecutive zone pairs significantly overlap.
-        // This catches monocle (identical zones) and cascade (offset but overlapping).
-        for (let i = 1; i < zones.length; i++) {
-            const a = zones[i - 1].relativeGeometry || {
-            };
-            const b = zones[i].relativeGeometry || {
-            };
-            const ax = a.x || 0, ay = a.y || 0, aw = a.width || 1, ah = a.height || 1;
-            const bx = b.x || 0, by = b.y || 0, bw = b.width || 1, bh = b.height || 1;
-            // Intersection rectangle
-            const ix = Math.max(ax, bx);
-            const iy = Math.max(ay, by);
-            const iw = Math.min(ax + aw, bx + bw) - ix;
-            const ih = Math.min(ay + ah, by + bh) - iy;
-            if (iw <= 0 || ih <= 0)
-                return false;
-
-            // No overlap at all
-            const overlapArea = iw * ih;
-            const smallerArea = Math.min(aw * ah, bw * bh);
-            // If overlap is less than 50% of the smaller zone, not stacked
-            if (overlapArea / smallerArea < 0.5)
-                return false;
-
-        }
-        return true;
-    }
+    /// Whether zones overlap by design (monocle, cascade, etc.).
+    /// When true, edge gaps and zone padding are skipped so the algorithm's
+    /// raw geometry is rendered as-is. Set from algorithm metadata
+    /// (@producesOverlappingZones) rather than auto-detected at runtime.
+    property bool producesOverlappingZones: false
     /// Animation duration in milliseconds
     property int animationDuration: 150
     /// Whether zone click/hover signals are enabled (disable for thumbnail use)
@@ -170,12 +142,12 @@ Item {
             readonly property real rightGap: (relX + relWidth) > (1 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2
             readonly property real bottomGap: (relY + relHeight) > (1 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2
 
-            // Position and size - for monocle, C++ already applies offset, so just use raw geometry
-            // For other layouts, apply edge gaps and zone padding
-            x: root.isStackedLayout ? (relX * root.width) : (relX * root.width + leftGap)
-            y: root.isStackedLayout ? (relY * root.height) : (relY * root.height + topGap)
-            width: root.isStackedLayout ? Math.max(root.minZoneSize, relWidth * root.width) : Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
-            height: root.isStackedLayout ? Math.max(root.minZoneSize, relHeight * root.height) : Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
+            // Position and size — overlapping layouts skip edge gaps/padding so the
+            // algorithm's raw geometry is rendered as-is.
+            x: root.producesOverlappingZones ? (relX * root.width) : (relX * root.width + leftGap)
+            y: root.producesOverlappingZones ? (relY * root.height) : (relY * root.height + topGap)
+            width: root.producesOverlappingZones ? Math.max(root.minZoneSize, relWidth * root.width) : Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
+            height: root.producesOverlappingZones ? Math.max(root.minZoneSize, relHeight * root.height) : Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
             // Scale on hover (only if hoverScale > 1.0)
             scale: isZoneHovered && root.hoverScale > 1 ? root.hoverScale : 1
             z: isZoneHovered ? 10 : 1
@@ -220,10 +192,6 @@ Item {
                         return false;
 
                     var display = root.zoneNumberDisplay;
-                    // Auto-detect stacked layouts (monocle-style) if no explicit override
-                    if (display === "all" && root.isStackedLayout)
-                        display = "last";
-
                     switch (display) {
                     case "none":
                         return false;
