@@ -304,14 +304,16 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     m_shaderPreviewShaderId = shaderId;
     m_shaderPreviewWindow->setScreen(screen);
 
-    if (auto* layerSurface = LayerSurface::get(m_shaderPreviewWindow)) {
-        const QRect screenGeom = screen->geometry();
-        const int localX = x - screenGeom.x();
-        const int localY = y - screenGeom.y();
-        // Batch anchors + margins into a single propertiesChanged() emission
-        LayerSurface::BatchGuard batch(layerSurface);
-        layerSurface->setAnchors(LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft));
-        layerSurface->setMargins(QMargins(localX, localY, 0, 0));
+    if (LayerSurface::isSupported()) {
+        if (auto* layerSurface = LayerSurface::find(m_shaderPreviewWindow)) {
+            const QRect screenGeom = screen->geometry();
+            const int localX = x - screenGeom.x();
+            const int localY = y - screenGeom.y();
+            // Batch anchors + margins into a single propertiesChanged() emission
+            LayerSurface::BatchGuard batch(layerSurface);
+            layerSurface->setAnchors(LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft));
+            layerSurface->setMargins(QMargins(localX, localY, 0, 0));
+        }
     }
 
     // Set window size — position is controlled by layer-surface anchors + margins,
@@ -360,7 +362,7 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
             // Size only — position is controlled by layer-surface anchors + margins.
             m_shaderPreviewWindow->setWidth(width);
             m_shaderPreviewWindow->setHeight(height);
-            if (auto* layerSurface = LayerSurface::get(m_shaderPreviewWindow)) {
+            if (auto* layerSurface = LayerSurface::find(m_shaderPreviewWindow)) {
                 const QRect screenGeom = screen->geometry();
                 const int localX = x - screenGeom.x();
                 const int localY = y - screenGeom.y();
@@ -425,6 +427,10 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen)
 void OverlayService::destroyShaderPreviewWindow()
 {
     if (m_shaderPreviewWindow) {
+        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
+        if (m_shaderPreviewScreen) {
+            disconnect(m_shaderPreviewScreen, nullptr, m_shaderPreviewWindow, nullptr);
+        }
         m_shaderPreviewWindow->close();
         m_shaderPreviewWindow->deleteLater();
         m_shaderPreviewWindow = nullptr;

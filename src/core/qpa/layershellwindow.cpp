@@ -377,6 +377,8 @@ void LayerShellWindow::handleClosed(void* data, struct zwlr_layer_surface_v1* su
     }
     // Null the wl_surface to prevent dangling commits from property-change
     // signals that may fire during qwindow->close() teardown.
+    // Safety: close() may re-enter applyProperties() or setWindowGeometry() via
+    // signal cascades, but those methods early-return when m_layerSurface is null.
     self->m_wlSurface = nullptr;
     QWindow* qwindow = self->m_waylandWindow->window();
     if (qwindow) {

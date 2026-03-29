@@ -37,6 +37,7 @@ Depends:
  ${misc:Depends},
  kwin-common (>= 4:6.6.0),
  qt6-wayland (>= 6.6.0),
+ libqt6shadertools6 (>= 6.6.0),
 Recommends:
  systemd,
 Suggests:

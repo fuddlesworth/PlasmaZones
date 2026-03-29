@@ -100,6 +100,15 @@ LayerSurface* LayerSurface::get(QWindow* window)
     return surface;
 }
 
+LayerSurface* LayerSurface::find(QWindow* window)
+{
+    if (!window) {
+        return nullptr;
+    }
+    auto it = s_surfaces->find(window);
+    return (it != s_surfaces->end()) ? *it : nullptr;
+}
+
 bool LayerSurface::isSupported()
 {
     auto* integration = LayerShellIntegration::instance();

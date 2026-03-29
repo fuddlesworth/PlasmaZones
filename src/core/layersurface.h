@@ -118,6 +118,11 @@ public:
     /// Ownership follows QObject parent (window).
     static LayerSurface* get(QWindow* window);
 
+    /// Retrieve the existing LayerSurface for the given window, or nullptr if none.
+    /// Unlike get(), this never creates a new LayerSurface — use for post-show()
+    /// property updates where the surface must already exist.
+    static LayerSurface* find(QWindow* window);
+
     /// Returns true if the compositor supports zwlr_layer_shell_v1.
     /// Only valid after QGuiApplication is constructed and the QPA plugin has initialized.
     static bool isSupported();

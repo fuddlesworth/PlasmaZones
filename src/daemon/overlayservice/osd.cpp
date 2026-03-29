@@ -38,10 +38,7 @@ void centerLayerWindowOnScreen(QQuickWindow* window, const QRect& screenGeom, in
     if (!window) {
         return;
     }
-    // Use findChild to retrieve the existing LayerSurface — do NOT use
-    // LayerSurface::get() here, because get() creates a new one if absent,
-    // which is wrong for a window that should already have been configured.
-    auto* layerSurface = window->findChild<LayerSurface*>(QString(), Qt::FindDirectChildrenOnly);
+    auto* layerSurface = LayerSurface::find(window);
     if (!layerSurface) {
         qCWarning(lcOverlay) << "centerLayerWindowOnScreen: no LayerSurface for window"
                              << "— was LayerSurface::get() called before show()?";

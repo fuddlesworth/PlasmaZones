@@ -208,7 +208,7 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     if (auto* contentRoot = window->contentItem()) {
         contentRoot->polish();
     }
-    if (auto* layerSurface = LayerSurface::get(window)) {
+    if (auto* layerSurface = LayerSurface::find(window)) {
         const int screenW = screenGeom.width();
         const int screenH = screenGeom.height();
         const int hMargin = std::max(0, (screenW - layout.barWidth) / 2);
