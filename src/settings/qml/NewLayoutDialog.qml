@@ -194,6 +194,10 @@ Kirigami.Dialog {
         return templates[0];
     }
 
+    function clampedScreenAspectRatio() {
+        return (Screen.width > 0 && Screen.height > 0) ? Math.max(1, Math.min(3.6, Screen.width / Screen.height)) : (16 / 9);
+    }
+
     function selectTemplate(templateData) {
         root.selectedType = templateData.type;
         if (nameField.text === "" || nameField.text === root._previousAutoName) {
@@ -214,7 +218,7 @@ Kirigami.Dialog {
         root.openInEditor = true;
         nameField.text = "";
         root._previousAutoName = "";
-        root.screenAspectRatio = (Screen.width > 0 && Screen.height > 0) ? Math.max(1, Math.min(3.6, Screen.width / Screen.height)) : (16 / 9);
+        root.screenAspectRatio = root.clampedScreenAspectRatio();
     }
 
     ColumnLayout {

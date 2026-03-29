@@ -65,6 +65,10 @@ Kirigami.Dialog {
         return baseTemplates[0];
     }
 
+    function clampedScreenAspectRatio() {
+        return (Screen.width > 0 && Screen.height > 0) ? Math.max(1, Math.min(3.6, Screen.width / Screen.height)) : (16 / 9);
+    }
+
     function selectTemplate(templateData) {
         root.baseTemplate = templateData.id;
         root.supportsMasterCount = templateData.hasMaster;
@@ -92,7 +96,7 @@ Kirigami.Dialog {
         root.producesOverlappingZones = false;
         root.supportsMemory = false;
         root.openInEditor = true;
-        root.screenAspectRatio = (Screen.width > 0 && Screen.height > 0) ? Math.max(1, Math.min(3.6, Screen.width / Screen.height)) : (16 / 9);
+        root.screenAspectRatio = root.clampedScreenAspectRatio();
     }
 
     ColumnLayout {
@@ -414,7 +418,11 @@ Kirigami.Dialog {
 
     Connections {
         function onAlgorithmCreationFailed(reason) {
-            wizardFooter.errorText = reason;
+            // Only show inline error when the dialog is visible — otherwise
+            // LayoutsPage's toast handler will surface the error (avoids double reporting)
+            if (root.opened)
+                wizardFooter.errorText = reason;
+
         }
 
         target: root.controller

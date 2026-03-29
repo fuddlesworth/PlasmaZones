@@ -397,8 +397,12 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
         QString newLayoutId = reply.arguments().first().toString();
         if (!newLayoutId.isEmpty()) {
             if (aspectRatioClass >= 0) {
-                DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
-                                       QStringLiteral("setLayoutAspectRatioClass"), {newLayoutId, aspectRatioClass});
+                QDBusMessage arReply = DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager),
+                                                              QStringLiteral("setLayoutAspectRatioClass"),
+                                                              {newLayoutId, aspectRatioClass});
+                if (arReply.type() == QDBusMessage::ErrorMessage) {
+                    qCWarning(lcCore) << "setLayoutAspectRatioClass failed:" << arReply.errorMessage();
+                }
             }
             if (openInEditor) {
                 editLayout(newLayoutId);
@@ -407,6 +411,10 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
             scheduleLayoutLoad();
             return true;
         }
+        // Daemon returned a reply but with an empty layout ID
+        Q_EMIT layoutCreationFailed(PzI18n::tr("Could not create layout — daemon returned an empty layout ID."));
+        scheduleLayoutLoad();
+        return false;
     }
     if (reply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "createNewLayout failed:" << reply.errorMessage();
@@ -425,6 +433,7 @@ void SettingsController::deleteLayout(const QString& layoutId)
         DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("deleteLayout"), {layoutId});
     if (reply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "deleteLayout failed:" << reply.errorMessage();
+        Q_EMIT layoutOperationFailed(PzI18n::tr("Could not delete layout: %1").arg(reply.errorMessage()));
     }
     scheduleLayoutLoad();
 }
@@ -438,6 +447,9 @@ void SettingsController::duplicateLayout(const QString& layoutId)
         if (!newId.isEmpty()) {
             m_pendingSelectLayoutId = newId;
         }
+    } else if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcCore) << "duplicateLayout failed:" << reply.errorMessage();
+        Q_EMIT layoutOperationFailed(PzI18n::tr("Could not duplicate layout: %1").arg(reply.errorMessage()));
     }
     scheduleLayoutLoad();
 }
@@ -2192,14 +2204,23 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
                 const QString templateContent = QString::fromUtf8(file.readAll());
                 file.close();
 
-                // Skip the metadata header: SPDX lines, `// @annotation` lines, and
+                // Skip the metadata header: SPDX lines, `// @annotation` lines,
+                // `/* ... */` block comments before the first code line, and
                 // surrounding blank lines. Stop as soon as we hit a non-metadata line
                 // (including doc-comments like `/** ... */` or `// Helper:`) so the
                 // template body's own documentation is preserved.
                 const QStringList lines = templateContent.split(QLatin1Char('\n'));
                 int bodyStart = 0;
+                bool inBlockComment = false;
                 for (int i = 0; i < lines.size(); ++i) {
                     const QString trimmed = lines[i].trimmed();
+                    // Track /* ... */ block comments in the header region
+                    if (inBlockComment) {
+                        bodyStart = i + 1;
+                        if (trimmed.contains(QLatin1String("*/")))
+                            inBlockComment = false;
+                        continue;
+                    }
                     // SPDX headers
                     if (trimmed.startsWith(QLatin1String("// SPDX-"))) {
                         bodyStart = i + 1;
@@ -2208,6 +2229,14 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
                     // Metadata annotations (// @name, // @builtinId, etc.)
                     if (trimmed.startsWith(QLatin1String("// @"))) {
                         bodyStart = i + 1;
+                        continue;
+                    }
+                    // Block comment opening in the header — only skip if we haven't
+                    // yet passed into the body (avoids stripping doc-comments after metadata)
+                    if (trimmed.startsWith(QLatin1String("/*"))) {
+                        bodyStart = i + 1;
+                        if (!trimmed.contains(QLatin1String("*/")))
+                            inBlockComment = true;
                         continue;
                     }
                     // Blank lines between metadata lines are part of the header

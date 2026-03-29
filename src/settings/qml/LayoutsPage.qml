@@ -422,14 +422,20 @@ ColumnLayout {
         }
 
         function onAlgorithmCreationFailed(reason) {
-            // Surface errors that arrive after the wizard dialog has closed
-            // (e.g. 10s registry timeout)
-            if (window && window.showToast)
+            // Only show toast when the wizard dialog is closed — if the dialog
+            // is open, it shows the error inline via its own Connections block
+            if (!newAlgorithmDialog.opened && window && window.showToast)
                 window.showToast(reason);
 
         }
 
         function onAlgorithmOperationFailed(reason) {
+            if (window && window.showToast)
+                window.showToast(reason);
+
+        }
+
+        function onLayoutOperationFailed(reason) {
             if (window && window.showToast)
                 window.showToast(reason);
 

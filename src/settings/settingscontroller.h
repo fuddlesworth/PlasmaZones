@@ -557,6 +557,7 @@ Q_SIGNALS:
     void algorithmCreationFailed(const QString& reason);
     void algorithmOperationFailed(const QString& reason);
     void layoutCreationFailed(const QString& reason);
+    void layoutOperationFailed(const QString& reason);
     void screensChanged();
     void dismissedUpdateVersionChanged();
 

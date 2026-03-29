@@ -20,6 +20,13 @@ Item {
     required property bool selected
     default property alias previewContent: previewArea.data
     property bool isHovered: false
+    // Extracted color constants (DRY — shared across card states)
+    readonly property color _highlightBg: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+    readonly property color _hoverBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06)
+    readonly property color _defaultBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
+    readonly property color _selectedBorder: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6)
+    readonly property color _hoverBorder: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3)
+    readonly property color _defaultBorder: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
 
     signal clicked()
     signal doubleClicked()
@@ -47,25 +54,9 @@ Item {
 
         anchors.fill: parent
         radius: Kirigami.Units.smallSpacing * 2
-        color: {
-            if (root.selected)
-                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15);
-
-            if (root.isHovered)
-                return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06);
-
-            return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03);
-        }
+        color: root.selected ? root._highlightBg : root.isHovered ? root._hoverBg : root._defaultBg
         border.width: root.selected ? Math.round(Kirigami.Units.devicePixelRatio * 2) : Math.round(Kirigami.Units.devicePixelRatio)
-        border.color: {
-            if (root.selected)
-                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6);
-
-            if (root.isHovered)
-                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3);
-
-            return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08);
-        }
+        border.color: root.selected ? root._selectedBorder : root.isHovered ? root._hoverBorder : root._defaultBorder
         transform: [
             Scale {
                 origin.x: templateCard.width / 2
