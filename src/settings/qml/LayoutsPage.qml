@@ -430,7 +430,9 @@ ColumnLayout {
         }
 
         function onLayoutOperationFailed(reason) {
-            if (window && window.showToast)
+            // Only show toast when the wizard dialog is closed — if the dialog
+            // is open, it shows the error inline via its own Connections block
+            if (!newLayoutDialog.opened && window && window.showToast)
                 window.showToast(reason);
 
         }

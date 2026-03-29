@@ -1896,7 +1896,7 @@ void SettingsController::cancelAlgorithmWatcher(const QString& expectedId)
 {
     auto it = m_algorithmWatchers.find(expectedId);
     if (it != m_algorithmWatchers.end()) {
-        if (*it.value())
+        if (it.value() && *it.value())
             disconnect(*it.value());
         m_algorithmWatchers.erase(it);
     }
@@ -1939,12 +1939,22 @@ void SettingsController::watchForAlgorithmRegistration(const QString& expectedId
 
 void SettingsController::openAlgorithm(const QString& algorithmId)
 {
-    const QString path = scriptedFilePath(algorithmId);
-    if (path.isEmpty()) {
-        qCWarning(lcCore) << "Cannot open algorithm — file not found for:" << algorithmId;
+    // Try registry first (works for already-registered algorithms)
+    const QString registryPath = scriptedFilePath(algorithmId);
+    if (!registryPath.isEmpty()) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(registryPath));
         return;
     }
-    QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+
+    // Fallback: try user algorithms dir directly (works right after creation
+    // before the registry has picked up the file via QFileSystemWatcher)
+    const QString userPath = userAlgorithmsDir() + algorithmId + QStringLiteral(".js");
+    if (QFile::exists(userPath)) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(userPath));
+        return;
+    }
+
+    qCWarning(lcCore) << "Cannot open algorithm — file not found for:" << algorithmId;
 }
 
 void SettingsController::openLayoutFile(const QString& layoutId)
@@ -2064,7 +2074,10 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
     QString baseCopyName = algo->name();
     while (baseCopyName.endsWith(QLatin1String(" (Copy)")))
         baseCopyName.chop(7);
-    const QString newName = baseCopyName + QStringLiteral(" (Copy)");
+    QString newName = baseCopyName + QStringLiteral(" (Copy)");
+    // Sanitize newlines to prevent annotation injection (parity with createNewAlgorithm)
+    newName.replace(QLatin1Char('\n'), QLatin1Char(' '));
+    newName.replace(QLatin1Char('\r'), QLatin1Char(' '));
     static const QRegularExpression nameRe(QStringLiteral("^// @name .+"), QRegularExpression::MultilineOption);
     static const QRegularExpression idRe(QStringLiteral("^// @builtinId .+"), QRegularExpression::MultilineOption);
     content.replace(nameRe, QStringLiteral("// @name ") + newName);
