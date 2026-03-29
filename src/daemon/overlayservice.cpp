@@ -24,6 +24,7 @@
 #include <QQuickWindow>
 #include <QTimer>
 #include <QMutexLocker>
+#include <QVulkanInstance>
 #include "../core/logging.h"
 #include "pz_qml_i18n.h"
 
@@ -148,6 +149,14 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* scree
 
     // Take C++ ownership so QML's GC doesn't delete the window
     QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
+
+    // When the Vulkan backend is active, each QQuickWindow needs a QVulkanInstance
+    // set before it can create a Vulkan surface. The instance is stored as a dynamic
+    // property on QGuiApplication by main.cpp.
+    auto* vulkanInstance = qApp->property("_pz_vulkanInstance").value<QVulkanInstance*>();
+    if (vulkanInstance) {
+        window->setVulkanInstance(vulkanInstance);
+    }
 
     // Set the screen before the QPA plugin creates the LayerSurface
     window->setScreen(screen);

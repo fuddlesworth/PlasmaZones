@@ -94,6 +94,36 @@ Flickable {
                         onToggled: appSettings.enableShaderEffects = checked
                     }
 
+                    ComboBox {
+                        Kirigami.FormData.label: i18n("Rendering backend:")
+                        enabled: shaderEffectsCheck.checked
+                        opacity: enabled ? 1 : 0.4
+                        model: settingsController.renderingBackendOptions
+                        displayText: {
+                            switch (currentText) {
+                            case "auto":
+                                return i18n("Automatic");
+                            case "vulkan":
+                                return i18n("Vulkan");
+                            case "opengl":
+                                return i18n("OpenGL");
+                            default:
+                                return currentText;
+                            }
+                        }
+                        currentIndex: settingsController.renderingBackendOptions.indexOf(appSettings.renderingBackend)
+                        onActivated: (index) => {
+                            appSettings.renderingBackend = settingsController.renderingBackendOptions[index];
+                        }
+                    }
+
+                    Kirigami.InlineMessage {
+                        Layout.fillWidth: true
+                        type: Kirigami.MessageType.Information
+                        text: i18n("Rendering backend changes take effect after restarting the daemon.")
+                        visible: shaderEffectsCheck.checked
+                    }
+
                     SettingsSlider {
                         formLabel: i18n("Frame rate:")
                         enabled: shaderEffectsCheck.checked

@@ -558,6 +558,10 @@ public:
     // Shader Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
+    static QString renderingBackend()
+    {
+        return QStringLiteral("auto");
+    }
     static bool enableShaderEffects()
     {
         return true;

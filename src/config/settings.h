@@ -241,6 +241,7 @@ public:
                    autotileRetileShortcutChanged)
 
     // Shader Effects
+    Q_PROPERTY(QString renderingBackend READ renderingBackend WRITE setRenderingBackend NOTIFY renderingBackendChanged)
     Q_PROPERTY(bool enableShaderEffects READ enableShaderEffects WRITE setEnableShaderEffects NOTIFY
                    enableShaderEffectsChanged)
     Q_PROPERTY(int shaderFrameRate READ shaderFrameRate WRITE setShaderFrameRate NOTIFY shaderFrameRateChanged)
@@ -1092,6 +1093,11 @@ public:
                           bool locked) override;
 
     // Shader Effects
+    QString renderingBackend() const override
+    {
+        return m_renderingBackend;
+    }
+    void setRenderingBackend(const QString& backend) override;
     bool enableShaderEffects() const override
     {
         return m_enableShaderEffects;
@@ -1695,6 +1701,7 @@ private:
     QString m_autotileRetileShortcut = ConfigDefaults::autotileRetileShortcut();
 
     // Shader Effects
+    QString m_renderingBackend = ConfigDefaults::renderingBackend();
     bool m_enableShaderEffects = ConfigDefaults::enableShaderEffects();
     int m_shaderFrameRate = ConfigDefaults::shaderFrameRate();
     bool m_enableAudioVisualizer = ConfigDefaults::enableAudioVisualizer();

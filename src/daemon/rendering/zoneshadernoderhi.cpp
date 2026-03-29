@@ -62,6 +62,7 @@ static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, cons
 const QList<QShaderBaker::GeneratedShader>& detail::bakeTargets()
 {
     static const QList<QShaderBaker::GeneratedShader> targets = {
+        {QShader::SpirvShader, QShaderVersion(100)},
         {QShader::GlslShader, QShaderVersion(330)},
         {QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs)},
         {QShader::GlslShader, QShaderVersion(310, QShaderVersion::GlslEs)},
@@ -165,6 +166,8 @@ void ZoneShaderNodeRhi::prepare()
 
     if (!m_initialized) {
         m_initialized = true;
+        qCInfo(lcOverlay) << "ZoneShaderNodeRhi initializing — RHI backend:" << rhi->backendName()
+                          << "driver:" << rhi->driverInfo().deviceName;
         // Create VBO (fullscreen quad)
         m_vbo.reset(
             rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(RhiConstants::QuadVertices)));
@@ -433,7 +436,8 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
     int vpY = 0;
     int vpW = outputSize.width();
     int vpH = outputSize.height();
-    if (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window() && m_item->width() > 0 && m_item->height() > 0) {
+    if (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window() && m_item->width() > 0
+        && m_item->height() > 0) {
         QQuickWindow* win = m_item->window();
         const qreal dpr = win->devicePixelRatio();
         const int itemPxW = qRound(m_item->width() * dpr);

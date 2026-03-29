@@ -173,6 +173,7 @@ Q_SIGNALS:
     void perScreenAutotileSettingsChanged();
     void perScreenSnappingSettingsChanged();
     // Shader effects
+    void renderingBackendChanged();
     void enableShaderEffectsChanged();
     void shaderFrameRateChanged();
     void enableAudioVisualizerChanged();

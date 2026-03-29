@@ -145,6 +145,7 @@ void Settings::load()
 
     // Capture old values for post-load signal emission
     const QString oldDefaultLayoutId = m_defaultLayoutId;
+    const QString oldRenderingBackend = m_renderingBackend;
     const bool oldEnableShaders = m_enableShaderEffects;
     const int oldShaderFrameRate = m_shaderFrameRate;
     const bool oldEnableAudioViz = m_enableAudioVisualizer;
@@ -176,6 +177,13 @@ void Settings::load()
     // Shaders (small enough to stay inline)
     {
         auto shaders = m_configBackend->group(QStringLiteral("Shaders"));
+        m_renderingBackend = shaders->readString(QStringLiteral("RenderingBackend"), ConfigDefaults::renderingBackend())
+                                 .toLower()
+                                 .trimmed();
+        if (m_renderingBackend != QLatin1String("auto") && m_renderingBackend != QLatin1String("vulkan")
+            && m_renderingBackend != QLatin1String("opengl")) {
+            m_renderingBackend = ConfigDefaults::renderingBackend();
+        }
         m_enableShaderEffects =
             shaders->readBool(QStringLiteral("EnableShaderEffects"), ConfigDefaults::enableShaderEffects());
         m_shaderFrameRate =
@@ -184,10 +192,10 @@ void Settings::load()
                    ConfigDefaults::shaderFrameRateMax());
         m_enableAudioVisualizer =
             shaders->readBool(QStringLiteral("EnableAudioVisualizer"), ConfigDefaults::enableAudioVisualizer());
-        m_audioSpectrumBarCount = qBound(
-            ConfigDefaults::audioSpectrumBarCountMin(),
-            shaders->readInt(QStringLiteral("AudioSpectrumBarCount"), ConfigDefaults::audioSpectrumBarCount()),
-            ConfigDefaults::audioSpectrumBarCountMax());
+        m_audioSpectrumBarCount =
+            qBound(ConfigDefaults::audioSpectrumBarCountMin(),
+                   shaders->readInt(QStringLiteral("AudioSpectrumBarCount"), ConfigDefaults::audioSpectrumBarCount()),
+                   ConfigDefaults::audioSpectrumBarCountMax());
     }
 
     {
@@ -211,6 +219,8 @@ void Settings::load()
     Q_EMIT settingsChanged();
 
     // Emit specific signals for settings with runtime side-effects
+    if (m_renderingBackend != oldRenderingBackend)
+        Q_EMIT renderingBackendChanged();
     if (m_enableShaderEffects != oldEnableShaders)
         Q_EMIT enableShaderEffectsChanged();
     if (m_shaderFrameRate != oldShaderFrameRate)
@@ -262,6 +272,7 @@ void Settings::save()
     // Shader Effects (4 entries, not worth a separate helper)
     {
         auto shaders = m_configBackend->group(QStringLiteral("Shaders"));
+        shaders->writeString(QStringLiteral("RenderingBackend"), m_renderingBackend);
         shaders->writeBool(QStringLiteral("EnableShaderEffects"), m_enableShaderEffects);
         shaders->writeInt(QStringLiteral("ShaderFrameRate"), m_shaderFrameRate);
         shaders->writeBool(QStringLiteral("EnableAudioVisualizer"), m_enableAudioVisualizer);

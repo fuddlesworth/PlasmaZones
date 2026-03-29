@@ -81,6 +81,9 @@ class SettingsController : public QObject
                    snapAssistTriggersChanged)
     Q_PROPERTY(QVariantList defaultSnapAssistTriggers READ defaultSnapAssistTriggers CONSTANT)
 
+    // Rendering backend info
+    Q_PROPERTY(QStringList renderingBackendOptions READ renderingBackendOptions CONSTANT)
+
     // Cava detection
     Q_PROPERTY(bool cavaAvailable READ cavaAvailable CONSTANT)
 
@@ -333,6 +336,12 @@ public:
     void setDragActivationTriggers(const QVariantList& triggers);
     void setZoneSpanTriggers(const QVariantList& triggers);
     void setSnapAssistTriggers(const QVariantList& triggers);
+
+    // ── Rendering backend ─────────────────────────────────────────────────────
+    QStringList renderingBackendOptions() const
+    {
+        return {QStringLiteral("auto"), QStringLiteral("vulkan"), QStringLiteral("opengl")};
+    }
 
     // ── Cava detection ───────────────────────────────────────────────────────
     bool cavaAvailable() const;

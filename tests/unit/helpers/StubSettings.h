@@ -284,6 +284,13 @@ public:
     void setLabelFontStrikeout(bool) override
     {
     }
+    QString renderingBackend() const override
+    {
+        return QStringLiteral("auto");
+    }
+    void setRenderingBackend(const QString&) override
+    {
+    }
     bool enableShaderEffects() const override
     {
         return false;
