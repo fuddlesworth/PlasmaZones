@@ -1811,6 +1811,7 @@ QVariantList SettingsController::availableAlgorithms() const
             algoMap[QLatin1String("supportsSplitRatio")] = algo->supportsSplitRatio();
             algoMap[QLatin1String("supportsMasterCount")] = algo->supportsMasterCount();
             algoMap[QLatin1String("defaultSplitRatio")] = algo->defaultSplitRatio();
+            algoMap[QLatin1String("producesOverlappingZones")] = algo->producesOverlappingZones();
             algoMap[QLatin1String("zoneNumberDisplay")] = algo->zoneNumberDisplay();
             algoMap[QLatin1String("centerLayout")] = algo->centerLayout();
             algorithms.append(algoMap);

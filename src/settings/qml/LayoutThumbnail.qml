@@ -82,6 +82,7 @@ Rectangle {
         anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5 + Kirigami.Units.smallSpacing // Space for label
         zones: root.layout && root.layout.zones ? root.layout.zones : []
         isActive: root.isSelected
+        producesOverlappingZones: root.layout && root.layout.producesOverlappingZones === true
         zonePadding: 1 // Minimal padding for thumbnail
         edgeGap: 1 // Minimal edge gap for thumbnail
         minZoneSize: 8

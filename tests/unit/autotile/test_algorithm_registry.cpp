@@ -383,12 +383,13 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Monocle preview offset tests
+    // zonesToRelativeGeometry tests
     // =========================================================================
 
-    void testMonoclePreview_offsetStacking()
+    void testRelativeGeometry_identicalZonesPreserved()
     {
-        // Simulate monocle output: all zones are identical (full screen)
+        // Identical zones (e.g. monocle) should be converted faithfully —
+        // no artificial offsets. The algorithm's raw geometry is authoritative.
         const QRect previewRect(0, 0, 1000, 1000);
         QVector<QRect> identicalZones;
         for (int i = 0; i < 4; ++i) {
@@ -398,36 +399,19 @@ private Q_SLOTS:
         auto result = AlgorithmRegistry::zonesToRelativeGeometry(identicalZones, previewRect);
         QCOMPARE(result.size(), 4);
 
-        // Verify each zone has positive dimensions and offset stacking
         for (int i = 0; i < result.size(); ++i) {
-            auto map = result[i].toMap();
-            auto geo = map[QLatin1String("relativeGeometry")].toMap();
-            qreal x = geo[QLatin1String("x")].toReal();
-            qreal y = geo[QLatin1String("y")].toReal();
-            qreal w = geo[QLatin1String("width")].toReal();
-            qreal h = geo[QLatin1String("height")].toReal();
-
-            QVERIFY2(w > 0.0, qPrintable(QStringLiteral("Zone %1 width (%2) must be > 0").arg(i).arg(w)));
-            QVERIFY2(h > 0.0, qPrintable(QStringLiteral("Zone %1 height (%2) must be > 0").arg(i).arg(h)));
-            QVERIFY2(x >= 0.0, qPrintable(QStringLiteral("Zone %1 x (%2) must be >= 0").arg(i).arg(x)));
-            QVERIFY2(y >= 0.0, qPrintable(QStringLiteral("Zone %1 y (%2) must be >= 0").arg(i).arg(y)));
+            auto geo = result[i].toMap()[QLatin1String("relativeGeometry")].toMap();
+            QCOMPARE(geo[QLatin1String("x")].toReal(), 0.0);
+            QCOMPARE(geo[QLatin1String("y")].toReal(), 0.0);
+            QCOMPARE(geo[QLatin1String("width")].toReal(), 1.0);
+            QCOMPARE(geo[QLatin1String("height")].toReal(), 1.0);
         }
-
-        // Verify zones are not all identical (offset was applied)
-        auto firstGeo = result[0].toMap()[QLatin1String("relativeGeometry")].toMap();
-        auto lastGeo = result[result.size() - 1].toMap()[QLatin1String("relativeGeometry")].toMap();
-        bool different = (firstGeo[QLatin1String("x")].toReal() != lastGeo[QLatin1String("x")].toReal())
-            || (firstGeo[QLatin1String("y")].toReal() != lastGeo[QLatin1String("y")].toReal())
-            || (firstGeo[QLatin1String("width")].toReal() != lastGeo[QLatin1String("width")].toReal())
-            || (firstGeo[QLatin1String("height")].toReal() != lastGeo[QLatin1String("height")].toReal());
-        QVERIFY2(different, "Monocle preview zones should have offset stacking, not be identical");
     }
 
-    void testMonoclePreview_16Zones_offsetCapsAt045()
+    void testIdenticalZones_noOffsetApplied()
     {
-        // With 16 identical zones and MonoclePreviewOffset=0.03, the raw offset
-        // for zone 15 would be 15*0.03 = 0.45. Verify the cap is respected and
-        // all zones remain valid (positive dimensions).
+        // Identical zones (e.g. monocle) should be converted to identical
+        // relative geometry — no artificial offsets applied.
         const QRect previewRect(0, 0, 1000, 1000);
         QVector<QRect> identicalZones;
         for (int i = 0; i < 16; ++i) {
@@ -440,31 +424,11 @@ private Q_SLOTS:
         for (int i = 0; i < result.size(); ++i) {
             auto map = result[i].toMap();
             auto geo = map[QLatin1String("relativeGeometry")].toMap();
-            qreal x = geo[QLatin1String("x")].toReal();
-            qreal y = geo[QLatin1String("y")].toReal();
-            qreal w = geo[QLatin1String("width")].toReal();
-            qreal h = geo[QLatin1String("height")].toReal();
-
-            // Offset must not exceed 0.45
-            QVERIFY2(x <= 0.45 + 1e-9,
-                     qPrintable(QStringLiteral("Zone %1 x offset (%2) exceeds 0.45 cap").arg(i).arg(x)));
-            QVERIFY2(y <= 0.45 + 1e-9,
-                     qPrintable(QStringLiteral("Zone %1 y offset (%2) exceeds 0.45 cap").arg(i).arg(y)));
-
-            // All zones must have positive dimensions
-            QVERIFY2(w > 0.0, qPrintable(QStringLiteral("Zone %1 width (%2) must be > 0").arg(i).arg(w)));
-            QVERIFY2(h > 0.0, qPrintable(QStringLiteral("Zone %1 height (%2) must be > 0").arg(i).arg(h)));
-
-            // All geometry values must be within [0, 1]
-            QVERIFY2(x >= 0.0 && x <= 1.0, qPrintable(QStringLiteral("Zone %1 x (%2) out of [0,1]").arg(i).arg(x)));
-            QVERIFY2(y >= 0.0 && y <= 1.0, qPrintable(QStringLiteral("Zone %1 y (%2) out of [0,1]").arg(i).arg(y)));
+            QCOMPARE(geo[QLatin1String("x")].toReal(), 0.0);
+            QCOMPARE(geo[QLatin1String("y")].toReal(), 0.0);
+            QCOMPARE(geo[QLatin1String("width")].toReal(), 1.0);
+            QCOMPARE(geo[QLatin1String("height")].toReal(), 1.0);
         }
-
-        // Verify last few zones share the capped offset (zones 15 and beyond all get 0.45)
-        auto geo15 = result[15].toMap()[QLatin1String("relativeGeometry")].toMap();
-        qreal x15 = geo15[QLatin1String("x")].toReal();
-        QVERIFY2(qAbs(x15 - 0.45) < 1e-9,
-                 qPrintable(QStringLiteral("Zone 15 x offset (%1) should be at cap 0.45").arg(x15)));
     }
 
     void testMonoclePreview_singleZoneNoOffset()
