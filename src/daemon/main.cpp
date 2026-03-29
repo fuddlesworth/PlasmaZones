@@ -9,12 +9,12 @@
 #include "../core/translationloader.h"
 #include "version.h"
 #include "rendering/zoneshaderitem.h"
+#include "vulkan_support.h"
 #include <QGuiApplication>
 #include <QCommandLineParser>
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QIcon>
-#include "vulkan_metatype.h"
 #include <QQuickWindow>
 #include <QSettings>
 #include <QThread>

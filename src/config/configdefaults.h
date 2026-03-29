@@ -4,8 +4,6 @@
 #pragma once
 
 #include <QColor>
-#include <QDir>
-#include <QStandardPaths>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -13,6 +11,7 @@
 #include <QtCore/qnamespace.h>
 
 #include "../core/constants.h"
+#include "plasmazones_export.h"
 
 namespace PlasmaZones {
 
@@ -563,14 +562,7 @@ public:
     // Returns the absolute path to plasmazonesrc.
     // Not cached — QStandardPaths respects $XDG_CONFIG_HOME changes at runtime,
     // which tests rely on via IsolatedConfigGuard.
-    static QString configFilePath()
-    {
-        QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-        if (configDir.isEmpty()) {
-            configDir = QDir::homePath() + QStringLiteral("/.config");
-        }
-        return configDir + QStringLiteral("/plasmazonesrc");
-    }
+    PLASMAZONES_EXPORT static QString configFilePath();
 
     static QString renderingBackend()
     {
@@ -595,7 +587,7 @@ public:
         return entries;
     }
 
-    static const QStringList& validRenderingBackends()
+    static const QStringList& renderingBackendOptions()
     {
         static const QStringList keys = [] {
             QStringList k;

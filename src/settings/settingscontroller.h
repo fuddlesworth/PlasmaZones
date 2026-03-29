@@ -345,7 +345,7 @@ public:
     // ── Rendering backend ─────────────────────────────────────────────────────
     QStringList renderingBackendOptions() const
     {
-        return PlasmaZones::ConfigDefaults::validRenderingBackends();
+        return PlasmaZones::ConfigDefaults::renderingBackendOptions();
     }
 
     QStringList renderingBackendDisplayNames() const

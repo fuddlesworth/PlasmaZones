@@ -24,9 +24,10 @@
 #include <QQuickWindow>
 #include <QTimer>
 #include <QMutexLocker>
-#include "vulkan_metatype.h"
+
 #include "../core/logging.h"
 #include "pz_qml_i18n.h"
+#include "vulkan_support.h"
 
 #include "../core/layersurface.h"
 
@@ -92,6 +93,13 @@ bool OverlayService::isZoneSelectorVisible() const
 
 OverlayService::~OverlayService()
 {
+    // Clear the Vulkan instance app property before destruction to avoid dangling pointer.
+#if QT_CONFIG(vulkan)
+    if (m_fallbackVulkanInstance && qGuiApp) {
+        qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty, QVariant());
+    }
+#endif
+
     // Disconnect from QGuiApplication first so we don't get screen-related callbacks
     // while we're destroying windows.
     if (qGuiApp) {

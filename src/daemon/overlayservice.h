@@ -12,10 +12,10 @@
 #include <QString>
 #include <atomic>
 #include <memory>
-#include "vulkan_metatype.h"
 
 #include "../core/interfaces.h"
 #include "../core/layout.h"
+#include "vulkan_support.h"
 
 class QQmlEngine;
 
