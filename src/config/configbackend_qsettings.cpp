@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "configbackend_qsettings.h"
+#include "configdefaults.h"
 #include <QColor>
 #include <QDir>
 #include <QFile>
@@ -252,11 +253,7 @@ QStringList QSettingsConfigBackend::groupList() const
 
 std::unique_ptr<QSettingsConfigBackend> QSettingsConfigBackend::createDefault()
 {
-    QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-    if (configDir.isEmpty()) {
-        configDir = QDir::homePath() + QStringLiteral("/.config");
-    }
-    return std::make_unique<QSettingsConfigBackend>(configDir + QStringLiteral("/plasmazonesrc"));
+    return std::make_unique<QSettingsConfigBackend>(ConfigDefaults::configFilePath());
 }
 
 } // namespace PlasmaZones

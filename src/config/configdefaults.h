@@ -4,6 +4,8 @@
 #pragma once
 
 #include <QColor>
+#include <QDir>
+#include <QStandardPaths>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -557,6 +559,15 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
     // Shader Settings
     // ═══════════════════════════════════════════════════════════════════════════
+
+    static QString configFilePath()
+    {
+        QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+        if (configDir.isEmpty()) {
+            configDir = QDir::homePath() + QStringLiteral("/.config");
+        }
+        return configDir + QStringLiteral("/plasmazonesrc");
+    }
 
     static QString renderingBackend()
     {

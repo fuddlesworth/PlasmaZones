@@ -14,10 +14,8 @@
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QIcon>
-#include <QDir>
 #include <QQuickWindow>
 #include <QSettings>
-#include <QStandardPaths>
 #include <QVulkanInstance>
 #include <QThread>
 #include <QTimer>
@@ -53,12 +51,7 @@ int main(int argc, char* argv[])
     bool useVulkan = false;
     QVulkanInstance vulkanInstance;
     {
-        QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-        if (configDir.isEmpty()) {
-            configDir = QDir::homePath() + QStringLiteral("/.config");
-        }
-        const QString configPath = configDir + QStringLiteral("/plasmazonesrc");
-        QSettings cfg(configPath, QSettings::IniFormat);
+        QSettings cfg(PlasmaZones::ConfigDefaults::configFilePath(), QSettings::IniFormat);
         cfg.beginGroup(QStringLiteral("Shaders"));
         const QString backend = PlasmaZones::ConfigDefaults::normalizeRenderingBackend(
             cfg.value(QStringLiteral("RenderingBackend"), QStringLiteral("auto")).toString());
@@ -81,7 +74,8 @@ int main(int argc, char* argv[])
         }
         // "auto" → let Qt choose (default behavior)
         qCInfo(PlasmaZones::lcDaemon) << "Rendering backend:" << backend
-                                      << (useVulkan ? "(Vulkan active)" : "(OpenGL)");
+                                      << (useVulkan ? "(Vulkan active)"
+                                                    : (backend == QLatin1String("auto") ? "(Qt default)" : "(OpenGL)"));
     }
 
     QGuiApplication app(argc, argv);

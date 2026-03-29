@@ -97,7 +97,7 @@ Flickable {
                     ComboBox {
                         id: renderingBackendCombo
 
-                        property string initialBackend: appSettings.renderingBackend
+                        property string initialBackend: ""
 
                         Kirigami.FormData.label: i18n("Rendering backend:")
                         Accessible.name: i18n("Rendering backend")

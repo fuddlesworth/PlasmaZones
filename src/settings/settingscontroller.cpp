@@ -1600,8 +1600,7 @@ bool SettingsController::exportAllSettings(const QString& filePath)
     if (filePath.isEmpty()) {
         return false;
     }
-    QString configPath =
-        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/plasmazonesrc");
+    const QString configPath = PlasmaZones::ConfigDefaults::configFilePath();
     if (!QFile::exists(configPath)) {
         qCWarning(PlasmaZones::lcCore) << "Config file not found:" << configPath;
         return false;
@@ -1622,8 +1621,7 @@ bool SettingsController::importAllSettings(const QString& filePath)
     if (filePath.isEmpty() || !QFile::exists(filePath)) {
         return false;
     }
-    QString configPath =
-        QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/plasmazonesrc");
+    const QString configPath = PlasmaZones::ConfigDefaults::configFilePath();
     // Backup current config
     QString backupPath = configPath + QStringLiteral(".bak");
     if (QFile::exists(backupPath)) {

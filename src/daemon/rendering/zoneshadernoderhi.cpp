@@ -62,7 +62,7 @@ static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, cons
 const QList<QShaderBaker::GeneratedShader>& detail::bakeTargets()
 {
     static const QList<QShaderBaker::GeneratedShader> targets = {
-        {QShader::SpirvShader, QShaderVersion(100)},
+        {QShader::SpirvShader, QShaderVersion(130)},
         {QShader::GlslShader, QShaderVersion(330)},
         {QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs)},
         {QShader::GlslShader, QShaderVersion(310, QShaderVersion::GlslEs)},
