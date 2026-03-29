@@ -161,7 +161,12 @@ Window {
 
     // Window flags - fullscreen editor window on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowFullScreenButtonHint
-    color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.7)
+    // Transparent window clear color — the semi-transparent visual effect is
+    // provided by _windowBackground below. Using alpha on Window.color causes
+    // Menu/Popup surfaces (xdg_popup) to inherit the window-level transparency
+    // on Wayland, making all menus see-through. A child Rectangle achieves the
+    // same visual without affecting popup surface compositing.
+    color: "transparent"
     // Start hidden — on Wayland the compositor assigns the output when the surface
     // is first mapped. We must set the target screen BEFORE showing, otherwise the
     // window always lands on the primary monitor.
@@ -202,6 +207,17 @@ Window {
             drawingArea.forceActiveFocus();
         });
 
+    }
+
+    // Semi-transparent background — replaces the old Window.color alpha=0.7.
+    // A child Rectangle lets the window surface be fully transparent while
+    // popup menus (xdg_popup) get their own opaque surfaces from the style.
+    Rectangle {
+        id: _windowBackground
+
+        anchors.fill: parent
+        z: -1
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.7)
     }
 
     ZoneOperations {
