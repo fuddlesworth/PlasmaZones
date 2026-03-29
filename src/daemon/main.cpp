@@ -54,7 +54,7 @@ int main(int argc, char* argv[])
         QSettings cfg(PlasmaZones::ConfigDefaults::configFilePath(), QSettings::IniFormat);
         cfg.beginGroup(QStringLiteral("Shaders"));
         const QString backend = PlasmaZones::ConfigDefaults::normalizeRenderingBackend(
-            cfg.value(QStringLiteral("RenderingBackend"), QStringLiteral("auto")).toString());
+            cfg.value(QStringLiteral("RenderingBackend"), PlasmaZones::ConfigDefaults::renderingBackend()).toString());
         cfg.endGroup();
 
         if (backend == QLatin1String("vulkan")) {

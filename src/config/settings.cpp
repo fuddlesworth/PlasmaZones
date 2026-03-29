@@ -264,7 +264,7 @@ void Settings::save()
         saveEditorConfig(*editor);
     }
 
-    // Shader Effects (4 entries, not worth a separate helper)
+    // Shader Effects
     {
         auto shaders = m_configBackend->group(QStringLiteral("Shaders"));
         shaders->writeString(QStringLiteral("RenderingBackend"), m_renderingBackend);
