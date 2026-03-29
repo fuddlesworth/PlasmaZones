@@ -6,6 +6,7 @@
 #include "../layersurface.h"
 
 #include <cstring>
+#include <utility>
 #include <QLoggingCategory>
 #include <QtWaylandClient/private/qwaylanddisplay_p.h>
 #include <QtWaylandClient/private/qwaylandwindow_p.h>
@@ -55,14 +56,15 @@ bool LayerShellIntegration::initialize(QtWaylandClient::QWaylandDisplay* display
     wl_display_roundtrip(wlDisplay);
 
     if (!m_layerShell) {
-        qCCritical(lcLayerShellIntegration) << "Compositor does not support zwlr_layer_shell_v1 —"
-                                            << "overlays will fall back to xdg_toplevel (wrong stacking/anchoring)."
-                                            << "GNOME/Mutter does not implement this protocol.";
+        qCWarning(lcLayerShellIntegration) << "Compositor does not support zwlr_layer_shell_v1 —"
+                                           << "overlays will fall back to xdg_toplevel (wrong stacking/anchoring)."
+                                           << "GNOME/Mutter does not implement this protocol.";
         return false;
     }
 
     // Set singleton only after successful initialization — if initialize() returns
     // false, Qt may destroy this object, and we must not leave a dangling s_instance.
+    Q_ASSERT_X(!s_instance || s_instance == this, "LayerShellIntegration", "Double initialization detected");
     s_instance = this;
 
     qCInfo(lcLayerShellIntegration) << "Layer shell integration initialized";
@@ -127,7 +129,7 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
         self->m_layerShellId = id;
         self->m_boundVersion = bindVersion;
         self->m_globalAvailable = true;
-        qCDebug(lcLayerShellIntegration) << "Bound zwlr_layer_shell_v1 v" << bindVersion;
+        qCDebug(lcLayerShellIntegration).nospace() << "Bound zwlr_layer_shell_v1 v" << bindVersion;
     }
 }
 
@@ -155,7 +157,8 @@ void LayerShellIntegration::registryRemoveHandler(void* data, struct wl_registry
         // Their zwlr_layer_surface_v1 objects are now stale — the compositor will
         // send closed events, but nulling m_layerSurface proactively prevents us
         // from issuing protocol requests on dead objects in the interim.
-        for (const auto& [id, cb] : self->m_globalRemovedCallbacks) {
+        auto callbacks = std::exchange(self->m_globalRemovedCallbacks, {});
+        for (const auto& [cbId, cb] : callbacks) {
             cb();
         }
     }

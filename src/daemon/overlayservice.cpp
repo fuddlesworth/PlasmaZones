@@ -149,7 +149,7 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* scree
     // Take C++ ownership so QML's GC doesn't delete the window
     QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
 
-    // Set the screen before configuring LayerShellQt
+    // Set the screen before the QPA plugin creates the LayerSurface
     window->setScreen(screen);
 
     return window;

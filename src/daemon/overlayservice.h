@@ -281,8 +281,8 @@ private:
     /**
      * @brief Re-assert a window's screen and geometry before showing on Wayland
      *
-     * On Wayland, LayerShellQt reads QWindow::screen() at surface commit time.
-     * Call this before show() to ensure the window maps to the correct output.
+     * The QPA plugin binds the Wayland output once during LayerShellWindow
+     * construction. Set QWindow::screen() BEFORE the window is shown.
      */
     static void assertWindowOnScreen(QWindow* window, QScreen* screen);
 

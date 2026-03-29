@@ -17,6 +17,7 @@ class LayerShellIntegration;
 class LayerShellWindow : public QtWaylandClient::QWaylandShellSurface
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(LayerShellWindow)
 
 public:
     LayerShellWindow(LayerShellIntegration* integration, QtWaylandClient::QWaylandWindow* window);
@@ -26,6 +27,12 @@ public:
     bool isExposed() const override;
     void applyConfigure() override;
     void setWindowGeometry(const QRect& rect) override;
+
+    /// Returns false if the constructor failed to create a layer surface (zombie object).
+    [[nodiscard]] bool isValid() const
+    {
+        return m_layerSurface != nullptr;
+    }
 
     // Apply current properties from LayerSurface → protocol
     void applyProperties();
@@ -40,6 +47,9 @@ public:
     static void handleClosed(void* data, struct zwlr_layer_surface_v1* surface);
 
 private:
+    /// Compute the window size from a configure event, respecting compositor-controlled axes.
+    [[nodiscard]] QSize computeConfigureSize(uint32_t width, uint32_t height) const;
+
     LayerShellIntegration* m_integration = nullptr;
     QtWaylandClient::QWaylandWindow* m_waylandWindow = nullptr;
     struct zwlr_layer_surface_v1* m_layerSurface = nullptr;

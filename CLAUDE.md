@@ -64,7 +64,7 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - Business logic in C++, UI in QML; controllers bridge via `Q_PROPERTY`
 - Zone IDs everywhere, never indices
 - JSON persistence in `~/.local/share/plasmazones/layouts/` with relative geometry (0.0–1.0)
-- Wayland only (LayerShellQt for overlays); XWayland windows handled within Wayland session
+- Wayland only (custom layer-shell QPA plugin for overlays); XWayland windows handled within Wayland session
 
 ## i18n
 - C++: `PzI18n::tr()` — NEVER `KLocalizedString`/`i18n()`/`i18nc()` in C++

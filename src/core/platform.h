@@ -12,7 +12,7 @@ namespace PlasmaZones {
  * @brief Platform detection and utilities
  *
  * Provides runtime detection of Wayland display server.
- * PlasmaZones requires Wayland with LayerShellQt - X11 is not supported.
+ * PlasmaZones requires Wayland with layer-shell support — X11 is not supported.
  */
 namespace Platform {
 

@@ -100,7 +100,7 @@ Window {
         zoneShaderRenderer.loadShader();
     }
 
-    // Window flags - LayerShellQt handles the overlay behavior on Wayland
+    // Window flags - QPA layer-shell plugin handles the overlay behavior on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
     visible: false

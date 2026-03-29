@@ -80,7 +80,7 @@ Window {
         return false;
     }
 
-    // Window flags - LayerShellQt handles the overlay behavior on Wayland
+    // Window flags - QPA layer-shell plugin handles the overlay behavior on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
     // Start hidden; OverlayService controls visibility via show()/hide().

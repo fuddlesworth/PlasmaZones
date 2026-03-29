@@ -120,7 +120,7 @@ Window {
         }
     }
 
-    // Window configuration for overlay - LayerShellQt handles layering on Wayland
+    // Window configuration for overlay - QPA layer-shell plugin handles layering on Wayland
     flags: Qt.FramelessWindowHint | Qt.Tool
     color: "transparent"
 

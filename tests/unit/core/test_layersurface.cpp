@@ -1,19 +1,30 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "core/layersurface.h"
+
 #include <QTest>
 #include <QSignalSpy>
 #include <QGuiApplication>
 #include <QPointer>
 #include <QWindow>
 
-#include "core/layersurface.h"
-
 using namespace PlasmaZones;
 
 class TestLayerSurface : public QObject
 {
     Q_OBJECT
+
+private:
+    /// Delete the LayerSurface before the window so the internal registry
+    /// is cleaned while m_window (QPointer) is still alive. Without this,
+    /// QWindow destruction nulls the QPointer before the LayerSurface
+    /// destructor runs, leaving stale entries in the global s_surfaces hash.
+    static void cleanupSurface(QWindow* window)
+    {
+        auto* surface = window->findChild<LayerSurface*>();
+        delete surface;
+    }
 
 private Q_SLOTS:
 
@@ -27,6 +38,7 @@ private Q_SLOTS:
         auto* surface = LayerSurface::get(&window);
         QVERIFY(surface != nullptr);
         QCOMPARE(surface->parent(), &window);
+        cleanupSurface(&window);
     }
 
     void testGet_returnsSameForSameWindow()
@@ -35,6 +47,7 @@ private Q_SLOTS:
         auto* first = LayerSurface::get(&window);
         auto* second = LayerSurface::get(&window);
         QCOMPARE(first, second);
+        cleanupSurface(&window);
     }
 
     void testGet_nullWindow_returnsNull()
@@ -44,13 +57,20 @@ private Q_SLOTS:
 
     void testGet_afterShow_returnsNull()
     {
-        // A window that has never had get() called, then is shown
-        QWindow window;
-        window.show();
-        auto* surface = LayerSurface::get(&window);
+        // A window that has never had get() called, then is shown.
+        // Heap-allocate to avoid stack-address reuse collisions with the
+        // LayerSurface registry from earlier tests.
+        auto* window = new QWindow;
+        window->show();
+        if (!window->isVisible()) {
+            delete window;
+            QSKIP("Platform does not make windows visible on show()");
+        }
+        auto* surface = LayerSurface::get(window);
         // get() on a visible window with no prior LayerSurface returns nullptr
         QCOMPARE(surface, nullptr);
-        window.close();
+        window->close();
+        delete window;
     }
 
     void testGet_afterShow_returnsExistingIfCreatedBefore()
@@ -63,6 +83,7 @@ private Q_SLOTS:
         auto* again = LayerSurface::get(&window);
         QCOMPARE(again, surface);
         window.close();
+        cleanupSurface(&window);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -80,6 +101,7 @@ private Q_SLOTS:
         QCOMPARE(surface->scope(), QStringLiteral("plasmazones"));
         QCOMPARE(surface->screen(), nullptr);
         QCOMPARE(surface->margins(), QMargins());
+        cleanupSurface(&window);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -99,6 +121,7 @@ private Q_SLOTS:
         // Same value — no emission
         surface->setLayer(LayerSurface::LayerOverlay);
         QCOMPARE(spy.count(), 1);
+        cleanupSurface(&window);
     }
 
     void testSetAnchors_emitsOnChange()
@@ -113,6 +136,7 @@ private Q_SLOTS:
 
         surface->setAnchors(LayerSurface::AnchorAll);
         QCOMPARE(spy.count(), 1);
+        cleanupSurface(&window);
     }
 
     void testSetExclusiveZone_emitsOnChange()
@@ -127,6 +151,7 @@ private Q_SLOTS:
 
         surface->setExclusiveZone(0);
         QCOMPARE(spy.count(), 1);
+        cleanupSurface(&window);
     }
 
     void testSetKeyboardInteractivity_emitsOnChange()
@@ -140,6 +165,7 @@ private Q_SLOTS:
 
         surface->setKeyboardInteractivity(LayerSurface::KeyboardInteractivityExclusive);
         QCOMPARE(spy.count(), 1);
+        cleanupSurface(&window);
     }
 
     void testSetScope_emitsOnChange()
@@ -154,6 +180,7 @@ private Q_SLOTS:
 
         surface->setScope(QStringLiteral("test-scope"));
         QCOMPARE(spy.count(), 1);
+        cleanupSurface(&window);
     }
 
     void testSetMargins_emitsOnChange()
@@ -169,6 +196,7 @@ private Q_SLOTS:
 
         surface->setMargins(m);
         QCOMPARE(spy.count(), 1);
+        cleanupSurface(&window);
     }
 
     void testSetScreen_warnsAfterShow()
@@ -182,6 +210,7 @@ private Q_SLOTS:
         // setScreen after show returns early without emitting
         QCOMPARE(spy.count(), 0);
         window.close();
+        cleanupSurface(&window);
     }
 
     void testSetScope_warnsAfterShow()
@@ -196,6 +225,7 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
         QCOMPARE(surface->scope(), QStringLiteral("plasmazones")); // original default unchanged
         window.close();
+        cleanupSurface(&window);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -214,6 +244,7 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 2);
         surface->setExclusiveZone(0);
         QCOMPARE(spy.count(), 3);
+        cleanupSurface(&window);
     }
 
     void testPropertiesChanged_notEmittedForImmutableProps()
@@ -230,6 +261,7 @@ private Q_SLOTS:
 
         surface->setScreen(QGuiApplication::primaryScreen());
         QCOMPARE(spy.count(), 0);
+        cleanupSurface(&window);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -253,6 +285,7 @@ private Q_SLOTS:
         }
         // Single emission after guard destroyed
         QCOMPARE(spy.count(), 1);
+        cleanupSurface(&window);
     }
 
     void testBatchGuard_noEmitIfNothingChanged()
@@ -268,6 +301,7 @@ private Q_SLOTS:
             surface->setExclusiveZone(-1); // default
         }
         QCOMPARE(spy.count(), 0);
+        cleanupSurface(&window);
     }
 
     void testBatchGuard_nested()
@@ -288,6 +322,7 @@ private Q_SLOTS:
         }
         // Outer destroyed — single emission
         QCOMPARE(spy.count(), 1);
+        cleanupSurface(&window);
     }
 
     void testBatchGuard_nullSurface()
@@ -312,6 +347,7 @@ private Q_SLOTS:
         }
         // moved destructs here — single emission
         QCOMPARE(spy.count(), 1);
+        cleanupSurface(&window);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -348,6 +384,7 @@ private Q_SLOTS:
         QCOMPARE(window.property(LayerSurfaceProps::MarginsTop).toInt(), 0);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsRight).toInt(), 0);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsBottom).toInt(), 0);
+        cleanupSurface(&window);
     }
 
     void testPropertiesPropagateToWindow()
@@ -375,6 +412,7 @@ private Q_SLOTS:
         QCOMPARE(window.property(LayerSurfaceProps::MarginsTop).toInt(), 2);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsRight).toInt(), 3);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsBottom).toInt(), 4);
+        cleanupSurface(&window);
     }
 
     void testIsLayerShellProperty()
@@ -384,6 +422,7 @@ private Q_SLOTS:
 
         LayerSurface::get(&window);
         QVERIFY(window.property(LayerSurfaceProps::IsLayerShell).toBool());
+        cleanupSurface(&window);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -456,9 +495,60 @@ private Q_SLOTS:
             QVERIFY(surface != nullptr);
             weak = surface;
             QVERIFY(!weak.isNull());
+            cleanupSurface(&window);
         }
-        // QWindow destroyed — child LayerSurface destroyed with it
+        // QWindow destroyed — child LayerSurface already deleted by cleanupSurface
         QVERIFY(weak.isNull());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // setScreen — success path before show()
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testSetScreen_beforeShow_emitsAndUpdates()
+    {
+        QScreen* primary = QGuiApplication::primaryScreen();
+        if (!primary) {
+            QSKIP("No primary screen available on this platform");
+        }
+
+        QWindow window;
+        auto* surface = LayerSurface::get(&window);
+        QSignalSpy spy(surface, &LayerSurface::screenChanged);
+
+        surface->setScreen(primary);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(surface->screen(), primary);
+
+        // Same value — no emission
+        surface->setScreen(primary);
+        QCOMPARE(spy.count(), 1);
+        cleanupSurface(&window);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Registry cleanup after window address reuse
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testGet_afterWindowDestroy_returnsFreshSurface()
+    {
+        QPointer<LayerSurface> weakFirst;
+        {
+            QWindow window;
+            auto* firstSurface = LayerSurface::get(&window);
+            QVERIFY(firstSurface != nullptr);
+            weakFirst = firstSurface;
+            cleanupSurface(&window);
+            // window destroyed here; registry entry already removed
+        }
+        QVERIFY(weakFirst.isNull());
+
+        // Create a new window — must get a fresh LayerSurface, not a stale one
+        QWindow newWindow;
+        auto* freshSurface = LayerSurface::get(&newWindow);
+        QVERIFY(freshSurface != nullptr);
+        QCOMPARE(freshSurface->parent(), &newWindow);
+        cleanupSurface(&newWindow);
     }
 };
 

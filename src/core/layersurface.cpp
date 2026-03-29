@@ -5,9 +5,9 @@
 #include "qpa/layershellintegration.h"
 #include "logging.h"
 
+#include <QGuiApplication>
 #include <QHash>
 #include <QThread>
-#include <QCoreApplication>
 
 Q_LOGGING_CATEGORY(lcLayerSurface, "plasmazones.layersurface")
 
@@ -16,7 +16,8 @@ namespace PlasmaZones {
 // Global registry: QWindow* → LayerSurface*
 // LayerSurface is parented to the QWindow, so it is destroyed when the window is.
 // Only accessed from the GUI thread (enforced by Q_ASSERT in get()).
-static QHash<QWindow*, LayerSurface*> s_surfaces;
+using SurfaceRegistry = QHash<QWindow*, LayerSurface*>;
+Q_GLOBAL_STATIC(SurfaceRegistry, s_surfaces)
 
 LayerSurface::LayerSurface(QWindow* window)
     : QObject(window)
@@ -48,7 +49,7 @@ LayerSurface::~LayerSurface()
 {
     Q_ASSERT_X(!qApp || QThread::currentThread() == qApp->thread(), "LayerSurface::~LayerSurface",
                "must be destroyed from the GUI thread");
-    s_surfaces.remove(m_window);
+    s_surfaces->remove(m_window);
 }
 
 LayerSurface* LayerSurface::get(QWindow* window)
@@ -60,8 +61,8 @@ LayerSurface* LayerSurface::get(QWindow* window)
         return nullptr;
     }
 
-    auto it = s_surfaces.find(window);
-    if (it != s_surfaces.end()) {
+    auto it = s_surfaces->find(window);
+    if (it != s_surfaces->end()) {
         return *it;
     }
 
@@ -74,7 +75,7 @@ LayerSurface* LayerSurface::get(QWindow* window)
     }
 
     auto* surface = new LayerSurface(window);
-    s_surfaces.insert(window, surface);
+    s_surfaces->insert(window, surface);
     return surface;
 }
 
@@ -99,7 +100,9 @@ void LayerSurface::setLayer(Layer layer)
         return;
     }
     m_layer = layer;
-    m_window->setProperty(LayerSurfaceProps::Layer, static_cast<int>(layer));
+    if (m_window) {
+        m_window->setProperty(LayerSurfaceProps::Layer, static_cast<int>(layer));
+    }
     Q_EMIT layerChanged();
     emitPropertiesChanged();
 }
@@ -115,7 +118,9 @@ void LayerSurface::setAnchors(Anchors anchors)
         return;
     }
     m_anchors = anchors;
-    m_window->setProperty(LayerSurfaceProps::Anchors, static_cast<int>(anchors));
+    if (m_window) {
+        m_window->setProperty(LayerSurfaceProps::Anchors, static_cast<int>(anchors));
+    }
     Q_EMIT anchorsChanged();
     emitPropertiesChanged();
 }
@@ -131,7 +136,9 @@ void LayerSurface::setExclusiveZone(int32_t zone)
         return;
     }
     m_exclusiveZone = zone;
-    m_window->setProperty(LayerSurfaceProps::ExclusiveZone, zone);
+    if (m_window) {
+        m_window->setProperty(LayerSurfaceProps::ExclusiveZone, zone);
+    }
     Q_EMIT exclusiveZoneChanged();
     emitPropertiesChanged();
 }
@@ -147,7 +154,9 @@ void LayerSurface::setKeyboardInteractivity(KeyboardInteractivity interactivity)
         return;
     }
     m_keyboard = interactivity;
-    m_window->setProperty(LayerSurfaceProps::Keyboard, static_cast<int>(interactivity));
+    if (m_window) {
+        m_window->setProperty(LayerSurfaceProps::Keyboard, static_cast<int>(interactivity));
+    }
     Q_EMIT keyboardInteractivityChanged();
     emitPropertiesChanged();
 }
@@ -162,14 +171,16 @@ void LayerSurface::setScope(const QString& scope)
     if (m_scope == scope) {
         return;
     }
-    if (m_window->isVisible()) {
+    if (m_window && m_window->isVisible()) {
         qCWarning(lcLayerSurface) << "setScope() called after show(); scope is immutable at the protocol level"
                                   << "— the layer surface retains the original scope"
                                   << "(scope is baked into zwlr_layer_shell_v1_get_layer_surface)";
         return;
     }
     m_scope = scope;
-    m_window->setProperty(LayerSurfaceProps::Scope, scope);
+    if (m_window) {
+        m_window->setProperty(LayerSurfaceProps::Scope, scope);
+    }
     Q_EMIT scopeChanged();
     // No emitPropertiesChanged() — scope is only read at surface creation time by
     // the QPA plugin (baked into zwlr_layer_shell_v1_get_layer_surface), so pushing
@@ -186,14 +197,18 @@ void LayerSurface::setScreen(QScreen* screen)
     if (m_screen == screen) {
         return;
     }
-    if (m_window->isVisible()) {
+    if (m_window && m_window->isVisible()) {
         qCWarning(lcLayerSurface) << "setScreen() called after show(); output binding is immutable"
                                   << "— the layer surface remains on the original screen";
         return;
     }
     m_screen = screen;
-    if (screen) {
-        m_window->setScreen(screen);
+    if (m_window) {
+        if (screen) {
+            m_window->setScreen(screen);
+        } else {
+            m_window->setScreen(QGuiApplication::primaryScreen());
+        }
     }
     Q_EMIT screenChanged();
     // No emitPropertiesChanged() — screen/output binding is immutable at the protocol
@@ -213,10 +228,12 @@ void LayerSurface::setMargins(const QMargins& margins)
         return;
     }
     m_margins = margins;
-    m_window->setProperty(LayerSurfaceProps::MarginsLeft, margins.left());
-    m_window->setProperty(LayerSurfaceProps::MarginsTop, margins.top());
-    m_window->setProperty(LayerSurfaceProps::MarginsRight, margins.right());
-    m_window->setProperty(LayerSurfaceProps::MarginsBottom, margins.bottom());
+    if (m_window) {
+        m_window->setProperty(LayerSurfaceProps::MarginsLeft, margins.left());
+        m_window->setProperty(LayerSurfaceProps::MarginsTop, margins.top());
+        m_window->setProperty(LayerSurfaceProps::MarginsRight, margins.right());
+        m_window->setProperty(LayerSurfaceProps::MarginsBottom, margins.bottom());
+    }
     Q_EMIT marginsChanged();
     emitPropertiesChanged();
 }

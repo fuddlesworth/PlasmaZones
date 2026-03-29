@@ -95,8 +95,8 @@ void Daemon::connectScreenSignals()
                 m_geometryUpdateTimer.start();
             });
 
-    // Don't pre-create overlay windows at startup. On Wayland with LayerShellQt
-    // this can cause visibility issues. Create on-demand in show() instead,
+    // Don't pre-create overlay windows at startup. On Wayland with the layer-shell
+    // QPA plugin this can cause visibility issues. Create on-demand in show() instead,
     // which also avoids the overlay flashing during login.
     qCInfo(lcDaemon) << "Overlay service: ready," << m_screenManager->screens().count()
                      << "screens available (windows created on-demand)";

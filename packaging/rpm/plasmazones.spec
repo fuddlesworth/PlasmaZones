@@ -74,11 +74,13 @@ BuildRequires:  kf6-kirigami-devel >= 6.6.0
 %if 0%{?suse_version}
 BuildRequires:  kwin6-devel
 BuildRequires:  cmake(Qt6WaylandClient)
+BuildRequires:  wayland-devel
 BuildRequires:  cmake(PlasmaActivities)
 BuildRequires:  pkgconfig(systemd)
 %else
 BuildRequires:  kwin-devel >= 6.6.0
 BuildRequires:  qt6-qtwayland-devel
+BuildRequires:  qt6-qtwayland-private-devel
 BuildRequires:  libepoxy-devel
 BuildRequires:  wayland-devel
 BuildRequires:  libdrm-devel

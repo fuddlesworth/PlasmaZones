@@ -116,7 +116,8 @@ jobs:
             kf6-kirigami-devel \
             kf6-kcmutils-devel \
             kf6-kglobalaccel-devel \
-            qt6-qtwayland-devel plasma-activities-devel
+            qt6-qtwayland-devel qt6-qtwayland-private-devel \
+            plasma-activities-devel
 
       - name: Setup rpmbuild
         run: rpmdev-setuptree

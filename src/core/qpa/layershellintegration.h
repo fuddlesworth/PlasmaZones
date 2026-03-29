@@ -5,6 +5,7 @@
 
 #include <functional>
 #include <memory>
+#include <utility>
 #include <vector>
 #include <QtWaylandClient/private/qwaylandshellintegration_p.h>
 #include "../plasmazones_export.h"

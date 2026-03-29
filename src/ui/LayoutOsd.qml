@@ -93,7 +93,7 @@ Window {
 
     }
 
-    // Window configuration - LayerShellQt handles overlay behavior on Wayland
+    // Window configuration - QPA layer-shell plugin handles overlay behavior on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
     // Size based on container (which is inside contentWrapper)

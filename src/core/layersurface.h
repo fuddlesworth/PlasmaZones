@@ -38,6 +38,15 @@ class PLASMAZONES_EXPORT LayerSurface : public QObject
 {
     Q_OBJECT
 
+    Q_PROPERTY(Layer layer READ layer WRITE setLayer NOTIFY layerChanged)
+    Q_PROPERTY(Anchors anchors READ anchors WRITE setAnchors NOTIFY anchorsChanged)
+    Q_PROPERTY(int32_t exclusiveZone READ exclusiveZone WRITE setExclusiveZone NOTIFY exclusiveZoneChanged)
+    Q_PROPERTY(KeyboardInteractivity keyboardInteractivity READ keyboardInteractivity WRITE setKeyboardInteractivity
+                   NOTIFY keyboardInteractivityChanged)
+    Q_PROPERTY(QString scope READ scope WRITE setScope NOTIFY scopeChanged)
+    Q_PROPERTY(QScreen* screen READ screen WRITE setScreen NOTIFY screenChanged)
+    Q_PROPERTY(QMargins margins READ margins WRITE setMargins NOTIFY marginsChanged)
+
 public:
     ~LayerSurface() override;
 
@@ -167,7 +176,7 @@ private:
 
     void emitPropertiesChanged();
 
-    QWindow* m_window = nullptr;
+    QPointer<QWindow> m_window;
     int m_batchDepth = 0;
     bool m_batchDirty = false;
     Layer m_layer = LayerTop;

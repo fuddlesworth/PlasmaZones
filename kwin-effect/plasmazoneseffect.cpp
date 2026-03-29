@@ -471,7 +471,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
 bool PlasmaZonesEffect::supported()
 {
     // This effect is a compositor plugin that works in KWin on Wayland
-    // Note: PlasmaZones daemon requires Wayland with LayerShellQt
+    // Note: PlasmaZones daemon requires Wayland with layer-shell support
     return true;
 }
 

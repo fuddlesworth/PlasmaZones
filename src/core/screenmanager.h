@@ -27,8 +27,8 @@ class OverlayService;
  * - Geometry change notifications
  * - Available geometry tracking via persistent sensor windows
  *
- * On Wayland with LayerShellQt, this class maintains invisible "sensor"
- * windows that the compositor automatically resizes when panels change.
+ * On Wayland with the layer-shell QPA plugin, this class maintains invisible
+ * "sensor" windows that the compositor automatically resizes when panels change.
  * This provides instant, reactive available geometry updates without
  * any probing or polling.
  */
@@ -217,7 +217,7 @@ private:
     QMap<QString, ScreenPanelOffsets> m_panelOffsets; // Keyed by QScreen name
 
     // Persistent geometry sensor windows (one per screen)
-    // These invisible LayerShellQt windows track available geometry
+    // These invisible layer-shell windows track available geometry
     QHash<QScreen*, QWindow*> m_geometrySensors;
 
     // Delayed panel re-query (e.g. after panel editor close) to pick up settled state

@@ -130,13 +130,9 @@ void LayerShellWindow::applyConfigure()
     if (m_pendingWidth > 0 && m_pendingHeight > 0) {
         QWindow* qwindow = m_waylandWindow->window();
         if (qwindow) {
-            int anchors = qwindow->property(LayerSurfaceProps::Anchors).toInt();
-            bool compositorControlsW = (anchors & LayerSurface::AnchorLeft) && (anchors & LayerSurface::AnchorRight);
-            bool compositorControlsH = (anchors & LayerSurface::AnchorTop) && (anchors & LayerSurface::AnchorBottom);
-            int newW = compositorControlsW ? static_cast<int>(m_pendingWidth) : qwindow->width();
-            int newH = compositorControlsH ? static_cast<int>(m_pendingHeight) : qwindow->height();
-            if (newW != qwindow->width() || newH != qwindow->height()) {
-                qwindow->resize(newW, newH);
+            const QSize newSize = computeConfigureSize(m_pendingWidth, m_pendingHeight);
+            if (newSize != qwindow->size()) {
+                qwindow->resize(newSize);
             }
         }
     }
@@ -174,6 +170,13 @@ void LayerShellWindow::applyProperties()
     int anchors = qwindow->property(LayerSurfaceProps::Anchors).toInt();
     zwlr_layer_surface_v1_set_anchor(m_layerSurface, static_cast<uint32_t>(anchors));
 
+    // Layer — set_layer() requires protocol v2+; the initial layer is set at
+    // creation time, but this allows changing it after show() (like setScope).
+    if (m_integration && m_integration->boundVersion() >= 2) {
+        int layer = qwindow->property(LayerSurfaceProps::Layer).toInt();
+        zwlr_layer_surface_v1_set_layer(m_layerSurface, static_cast<uint32_t>(layer));
+    }
+
     // Exclusive zone
     int exclusiveZone = qwindow->property(LayerSurfaceProps::ExclusiveZone).toInt();
     zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, exclusiveZone);
@@ -199,6 +202,32 @@ void LayerShellWindow::applyProperties()
     // Size — use 0 for axes anchored to both edges; clamp to avoid uint32_t wrap on negative
     auto [w, h] = LayerSurface::computeLayerSize(anchors, qwindow->size());
     zwlr_layer_surface_v1_set_size(m_layerSurface, w, h);
+}
+
+QSize LayerShellWindow::computeConfigureSize(uint32_t width, uint32_t height) const
+{
+    // Layer-shell sizing contract:
+    //   - Axis anchored to both edges (e.g. Left+Right): client sent set_size(0,_),
+    //     compositor decides the width → we MUST accept the configure width.
+    //   - Axis NOT doubly-anchored: client sent an explicit size → the configure
+    //     echoes it back. We keep the app-specified size to avoid overwriting
+    //     carefully calculated OSD/popup dimensions.
+    //
+    // This matters because compositors may send sizes that differ from the screen
+    // geometry (e.g. KDE subtracts panel areas even with exclusiveZone=-1).
+    // Blindly resizing to the configure breaks overlays that assume screen-sized windows.
+    QWindow* qwindow = m_waylandWindow->window();
+    if (!qwindow) {
+        return QSize(static_cast<int>(width), static_cast<int>(height));
+    }
+
+    int anchors = qwindow->property(LayerSurfaceProps::Anchors).toInt();
+    bool compositorControlsW = (anchors & LayerSurface::AnchorLeft) && (anchors & LayerSurface::AnchorRight);
+    bool compositorControlsH = (anchors & LayerSurface::AnchorTop) && (anchors & LayerSurface::AnchorBottom);
+
+    int newW = compositorControlsW ? static_cast<int>(width) : qwindow->width();
+    int newH = compositorControlsH ? static_cast<int>(height) : qwindow->height();
+    return QSize(newW, newH);
 }
 
 void LayerShellWindow::updatePosition()
@@ -265,37 +294,22 @@ void LayerShellWindow::handleConfigure(void* data, struct zwlr_layer_surface_v1*
                                        uint32_t width, uint32_t height)
 {
     auto* self = static_cast<LayerShellWindow*>(data);
+    if (!self->m_layerSurface) {
+        return; // Surface was invalidated (global removed)
+    }
     self->m_configured = true;
     self->m_pendingWidth = width;
     self->m_pendingHeight = height;
 
     zwlr_layer_surface_v1_ack_configure(surface, serial);
 
-    // Resize the Qt window to the compositor-assigned size, but ONLY for axes
-    // where the compositor controls the size (anchored to both opposing edges).
-    //
-    // Layer-shell sizing contract:
-    //   - Axis anchored to both edges (e.g. Left+Right): client sent set_size(0,_),
-    //     compositor decides the width → we MUST accept the configure width.
-    //   - Axis NOT doubly-anchored: client sent an explicit size → the configure
-    //     echoes it back. We keep the app-specified size to avoid overwriting
-    //     carefully calculated OSD/popup dimensions.
-    //
-    // This matters because compositors may send sizes that differ from the screen
-    // geometry (e.g. KDE subtracts panel areas even with exclusiveZone=-1).
-    // Blindly resizing to the configure breaks overlays that assume screen-sized windows.
-    // A configure with width=0 or height=0 means "client decides" (per protocol spec).
-    // In that case we keep the app-specified size unchanged.
+    // Resize the Qt window to the compositor-assigned size, respecting
+    // compositor-controlled axes (see computeConfigureSize for details).
     QWindow* qwindow = self->m_waylandWindow->window();
     if (qwindow && width > 0 && height > 0) {
-        int anchors = qwindow->property(LayerSurfaceProps::Anchors).toInt();
-        bool compositorControlsW = (anchors & LayerSurface::AnchorLeft) && (anchors & LayerSurface::AnchorRight);
-        bool compositorControlsH = (anchors & LayerSurface::AnchorTop) && (anchors & LayerSurface::AnchorBottom);
-
-        int newW = compositorControlsW ? static_cast<int>(width) : qwindow->width();
-        int newH = compositorControlsH ? static_cast<int>(height) : qwindow->height();
-        if (newW != qwindow->width() || newH != qwindow->height()) {
-            qwindow->resize(newW, newH);
+        const QSize newSize = self->computeConfigureSize(width, height);
+        if (newSize != qwindow->size()) {
+            qwindow->resize(newSize);
         }
     }
 
@@ -327,6 +341,11 @@ void LayerShellWindow::handleClosed(void* data, struct zwlr_layer_surface_v1* su
     auto* self = static_cast<LayerShellWindow*>(data);
     qCDebug(lcLayerShellWindow) << "Layer surface closed by compositor";
 
+    // Protocol requires client to destroy after closed event
+    if (self->m_layerSurface) {
+        zwlr_layer_surface_v1_destroy(self->m_layerSurface);
+        self->m_layerSurface = nullptr;
+    }
     QWindow* qwindow = self->m_waylandWindow->window();
     if (qwindow) {
         qwindow->close();
