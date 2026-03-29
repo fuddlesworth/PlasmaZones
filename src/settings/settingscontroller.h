@@ -85,6 +85,7 @@ class SettingsController : public QObject
     // Rendering backend info
     Q_PROPERTY(QStringList renderingBackendOptions READ renderingBackendOptions CONSTANT)
     Q_PROPERTY(QStringList renderingBackendDisplayNames READ renderingBackendDisplayNames CONSTANT)
+    Q_PROPERTY(QString startupRenderingBackend READ startupRenderingBackend CONSTANT)
 
     // Cava detection
     Q_PROPERTY(bool cavaAvailable READ cavaAvailable CONSTANT)
@@ -351,6 +352,13 @@ public:
     QStringList renderingBackendDisplayNames() const
     {
         return m_renderingBackendDisplayNames;
+    }
+
+    // Backend value at settings app launch — survives page recreation so the
+    // "restart required" InlineMessage stays visible after navigating away and back.
+    QString startupRenderingBackend() const
+    {
+        return m_startupRenderingBackend;
     }
 
     // ── Cava detection ───────────────────────────────────────────────────────
@@ -638,6 +646,7 @@ private:
 
     Settings m_settings;
     QStringList m_renderingBackendDisplayNames;
+    QString m_startupRenderingBackend;
     DaemonController m_daemonController;
     UpdateChecker m_updateChecker;
     QString m_dismissedUpdateVersion;

@@ -114,9 +114,6 @@ Flickable {
                     ComboBox {
                         id: renderingBackendCombo
 
-                        // Snapshot of the backend value when this page was created.
-                        property string initialBackend: ""
-
                         function syncIndex() {
                             currentIndex = Math.max(0, settingsController.renderingBackendOptions.indexOf(appSettings.renderingBackend));
                         }
@@ -130,7 +127,6 @@ Flickable {
                                 appSettings.renderingBackend = settingsController.renderingBackendOptions[index];
 
                         }
-                        Component.onCompleted: initialBackend = appSettings.renderingBackend
 
                         Connections {
                             function onRenderingBackendChanged() {
@@ -148,7 +144,7 @@ Flickable {
                     Layout.fillWidth: true
                     type: Kirigami.MessageType.Information
                     text: i18n("Rendering backend changes take effect after restarting the daemon.")
-                    visible: appSettings.renderingBackend !== renderingBackendCombo.initialBackend
+                    visible: appSettings.renderingBackend !== settingsController.startupRenderingBackend
                 }
 
             }

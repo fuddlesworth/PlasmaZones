@@ -83,6 +83,9 @@ SettingsController::SettingsController(QObject* parent)
     for (const auto& name : PlasmaZones::ConfigDefaults::renderingBackendDisplayNames())
         m_renderingBackendDisplayNames.append(PzI18n::tr(name.toUtf8().constData()));
 
+    // Snapshot current backend so the QML "restart required" message survives page recreation
+    m_startupRenderingBackend = m_settings.renderingBackend();
+
     // Load scripted algorithms so they appear in the algorithm dropdown.
     // The daemon also creates its own ScriptedAlgorithmLoader — the KCM runs
     // in a separate process, so both need an independent loader to populate

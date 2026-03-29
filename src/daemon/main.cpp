@@ -87,7 +87,7 @@ int main(int argc, char* argv[])
             QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
         }
         // "auto" → let Qt choose (default behavior)
-        const char* detail = "(OpenGL)";
+        const char* detail = "(explicit OpenGL)";
         if (useVulkan)
             detail = "(Vulkan active)";
         else if (backend == QLatin1String("vulkan"))

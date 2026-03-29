@@ -14,8 +14,15 @@ QString ConfigDefaults::configFilePath()
         configDir = QDir::homePath() + QStringLiteral("/.config");
     }
     if (configDir.isEmpty()) {
-        qWarning("ConfigDefaults::configFilePath(): unable to determine config directory");
-        return QStringLiteral("/tmp/plasmazonesrc");
+        // Both QStandardPaths and QDir::homePath() failed — severely broken environment.
+        // Fall back to the runtime directory (user-private on systemd) or /tmp as last resort.
+        configDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+        if (configDir.isEmpty())
+            configDir = QStringLiteral("/tmp");
+        qWarning(
+            "ConfigDefaults::configFilePath(): unable to determine config directory, "
+            "falling back to %s — config will not persist across reboots",
+            qPrintable(configDir));
     }
     return configDir + QStringLiteral("/plasmazonesrc");
 }

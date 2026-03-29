@@ -577,6 +577,7 @@ public:
 
     // Single source of truth for backend keys and display names.
     // Order here determines ComboBox order in the settings UI.
+    // When adding entries, also add the display name to the translation catalog.
     static const QList<RenderingBackendEntry>& renderingBackendEntries()
     {
         static const QList<RenderingBackendEntry> entries = {

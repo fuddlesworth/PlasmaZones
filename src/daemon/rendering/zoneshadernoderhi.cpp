@@ -63,7 +63,7 @@ const QList<QShaderBaker::GeneratedShader>& detail::bakeTargets()
 {
     static const QList<QShaderBaker::GeneratedShader> targets = {
         {QShader::SpirvShader,
-         QShaderVersion(130)}, // SPIR-V 1.3 — QShaderVersion uses same convention as GLSL (130 = 1.3)
+         QShaderVersion(130)}, // SPIR-V 1.3 (version encoding: 130 = 1.3, matching Vulkan 1.1 API)
         {QShader::GlslShader, QShaderVersion(330)},
         {QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs)},
         {QShader::GlslShader, QShaderVersion(310, QShaderVersion::GlslEs)},
