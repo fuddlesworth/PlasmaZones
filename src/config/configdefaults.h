@@ -560,21 +560,16 @@ public:
     // Shader Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // Returns the absolute path to plasmazonesrc. The result is cached in a
-    // static local, so the first call determines the value for the process
-    // lifetime. On Linux QStandardPaths resolves $XDG_CONFIG_HOME (or ~/.config)
-    // even before QCoreApplication exists; the cache is intentional so that
-    // pre-app and post-app callers always see the same path.
+    // Returns the absolute path to plasmazonesrc.
+    // Not cached — QStandardPaths respects $XDG_CONFIG_HOME changes at runtime,
+    // which tests rely on via IsolatedConfigGuard.
     static QString configFilePath()
     {
-        static const QString path = [] {
-            QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-            if (configDir.isEmpty()) {
-                configDir = QDir::homePath() + QStringLiteral("/.config");
-            }
-            return configDir + QStringLiteral("/plasmazonesrc");
-        }();
-        return path;
+        QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+        if (configDir.isEmpty()) {
+            configDir = QDir::homePath() + QStringLiteral("/.config");
+        }
+        return configDir + QStringLiteral("/plasmazonesrc");
     }
 
     static QString renderingBackend()
