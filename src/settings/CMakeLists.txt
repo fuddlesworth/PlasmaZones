@@ -94,6 +94,8 @@ qt_add_qml_module(plasmazones-settings
         qml/ColorSwatchRow.qml
         qml/NewLayoutDialog.qml
         qml/NewAlgorithmDialog.qml
+        qml/WizardStepIndicator.qml
+        qml/WizardFooter.qml
     NO_PLUGIN
 )
 

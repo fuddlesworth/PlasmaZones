@@ -382,7 +382,8 @@ ColumnLayout {
         }
 
         function onExportRequested(layoutId) {
-            if (layoutId.startsWith("autotile:")) {
+            let layout = window.layoutContextMenu.layout;
+            if (layout && layout.isAutotile === true) {
                 algorithmExportDialog.algorithmId = layoutId.replace("autotile:", "");
                 algorithmExportDialog.open();
             } else {
@@ -406,16 +407,9 @@ ColumnLayout {
         id: newAlgorithmDialog
 
         appSettings: root.settingsBridge
-        onAlgorithmCreated: (algorithmId) => {
-            if (root.viewMode !== 1) {
-                root.viewMode = 1;
-                layoutGrid.rebuildModel();
-            }
-            layoutGrid.selectedLayoutId = "autotile:" + algorithmId;
-        }
     }
 
-    // Algorithm created signal from C++ (delayed after file watcher picks up)
+    // Algorithm created signal from C++ (fires after AlgorithmRegistry picks up the new file)
     Connections {
         function onAlgorithmCreated(algorithmId) {
             if (root.viewMode !== 1)

@@ -35,7 +35,17 @@
 #include <QTimer>
 #include <QUrl>
 
+#include <memory>
+
 namespace PlasmaZones {
+
+namespace {
+QString userAlgorithmsDir()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+        + QStringLiteral("/plasmazones/algorithms/");
+}
+} // anonymous namespace
 
 SettingsController::SettingsController(QObject* parent)
     : QObject(parent)
@@ -389,9 +399,9 @@ void SettingsController::createNewLayout(const QString& name, const QString& typ
                 editLayout(newLayoutId);
             }
             m_pendingSelectLayoutId = newLayoutId;
+            scheduleLayoutLoad();
         }
     }
-    scheduleLayoutLoad();
 }
 
 void SettingsController::deleteLayout(const QString& layoutId)
@@ -1852,10 +1862,10 @@ bool SettingsController::deleteAlgorithm(const QString& algorithmId)
         return false;
     }
 
-    // Only allow deleting from the user algorithms directory
-    const QString userDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/algorithms/");
-    if (!filePath.startsWith(userDir)) {
+    // Only allow deleting from the user algorithms directory (canonicalize to defeat symlinks)
+    const QString userDir = QFileInfo(userAlgorithmsDir()).canonicalFilePath() + QLatin1Char('/');
+    const QString canonicalPath = QFileInfo(filePath).canonicalFilePath();
+    if (userDir.isEmpty() || canonicalPath.isEmpty() || !canonicalPath.startsWith(userDir)) {
         qCWarning(lcCore) << "Refusing to delete non-user algorithm file:" << filePath;
         return false;
     }
@@ -1885,8 +1895,7 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
     if (sourcePath.isEmpty() || !QFile::exists(sourcePath))
         return false;
 
-    const QString destDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/algorithms/");
+    const QString destDir = userAlgorithmsDir();
     QDir dir(destDir);
     if (!dir.exists())
         dir.mkpath(QStringLiteral("."));
@@ -1894,8 +1903,17 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
     // Generate unique filename: algorithmId-copy.js, algorithmId-copy-2.js, etc.
     QString baseName = algorithmId + QStringLiteral("-copy");
     QString destPath = destDir + baseName + QStringLiteral(".js");
-    for (int i = 2; QFile::exists(destPath) && i <= 99; ++i) {
-        destPath = destDir + baseName + QStringLiteral("-") + QString::number(i) + QStringLiteral(".js");
+    if (QFile::exists(destPath)) {
+        bool found = false;
+        for (int i = 2; i <= 99; ++i) {
+            destPath = destDir + baseName + QStringLiteral("-") + QString::number(i) + QStringLiteral(".js");
+            if (!QFile::exists(destPath)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            return false;
     }
 
     // Read source, update metadata, write copy
@@ -1939,11 +1957,15 @@ bool SettingsController::exportAlgorithm(const QString& algorithmId, const QStri
     if (sourcePath.isEmpty() || !QFile::exists(sourcePath))
         return false;
 
-    // Remove existing destination so QFile::copy succeeds
+    // Write to a temp file first, then rename — if copy fails the existing file is preserved
+    const QString tmpPath = destPath + QStringLiteral(".tmp");
+    if (QFile::exists(tmpPath))
+        QFile::remove(tmpPath);
+    if (!QFile::copy(sourcePath, tmpPath))
+        return false;
     if (QFile::exists(destPath))
         QFile::remove(destPath);
-
-    return QFile::copy(sourcePath, destPath);
+    return QFile::rename(tmpPath, destPath);
 }
 
 QString SettingsController::createNewAlgorithm(const QString& name, const QString& baseTemplate,
@@ -1963,8 +1985,7 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
         filename = QStringLiteral("untitled-algorithm");
 
     // Build destination path
-    const QString destDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/algorithms/");
+    const QString destDir = userAlgorithmsDir();
     QDir dir(destDir);
     if (!dir.exists()) {
         dir.mkpath(QStringLiteral("."));
@@ -1972,10 +1993,17 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
 
     QString destPath = destDir + filename + QStringLiteral(".js");
     if (QFile::exists(destPath)) {
+        bool found = false;
         for (int i = 2; i <= 99; ++i) {
             destPath = destDir + filename + QStringLiteral("-") + QString::number(i) + QStringLiteral(".js");
-            if (!QFile::exists(destPath))
+            if (!QFile::exists(destPath)) {
+                found = true;
                 break;
+            }
+        }
+        if (!found) {
+            qCWarning(lcCore) << "Could not find unique filename for algorithm:" << filename;
+            return QString();
         }
         // Update filename to match the final path
         filename = QFileInfo(destPath).completeBaseName();
@@ -2068,10 +2096,17 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
     outFile.write(content.toUtf8());
     outFile.close();
 
-    // Notify after a short delay to let QFileSystemWatcher pick up the change
-    QTimer::singleShot(600, this, [this, filename]() {
-        Q_EMIT algorithmCreated(filename);
-    });
+    // Emit algorithmCreated once the registry picks up the new file via its watcher.
+    // Use a one-shot connection so we only fire for *this* algorithm.
+    auto* registry = AlgorithmRegistry::instance();
+    auto conn = std::make_shared<QMetaObject::Connection>();
+    *conn = connect(registry, &AlgorithmRegistry::algorithmRegistered, this,
+                    [this, filename, conn](const QString& registeredId) {
+                        if (registeredId == filename) {
+                            disconnect(*conn);
+                            Q_EMIT algorithmCreated(filename);
+                        }
+                    });
 
     return filename;
 }

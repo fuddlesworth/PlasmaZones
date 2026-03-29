@@ -196,6 +196,7 @@ Kirigami.Dialog {
         root.selectedType = "custom";
         root.selectedAspectRatio = -1;
         root.openInEditor = true;
+        nameField.text = "";
         root._previousAutoName = "";
     }
 
@@ -203,91 +204,9 @@ Kirigami.Dialog {
         spacing: Kirigami.Units.largeSpacing
 
         // ── Step indicator ─────────────────────────────────────────────
-        RowLayout {
-            Layout.alignment: Qt.AlignHCenter
-            spacing: Kirigami.Units.smallSpacing
-
-            Repeater {
-                model: [i18n("Template"), i18n("Configure")]
-
-                delegate: RowLayout {
-                    id: stepIndicator
-
-                    required property int index
-                    required property string modelData
-
-                    spacing: Kirigami.Units.smallSpacing
-
-                    // Step dot
-                    Rectangle {
-                        width: Kirigami.Units.gridUnit * 1.5
-                        height: width
-                        radius: width / 2
-                        color: {
-                            if (stepIndicator.index === root.currentStep)
-                                return Kirigami.Theme.highlightColor;
-
-                            if (stepIndicator.index < root.currentStep)
-                                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4);
-
-                            return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15);
-                        }
-
-                        Label {
-                            anchors.centerIn: parent
-                            text: (stepIndicator.index + 1).toString()
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
-                            font.weight: Font.Bold
-                            color: stepIndicator.index <= root.currentStep ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
-                            opacity: stepIndicator.index <= root.currentStep ? 1 : 0.4
-                        }
-
-                        Behavior on color {
-                            ColorAnimation {
-                                duration: 200
-                                easing.type: Easing.OutCubic
-                            }
-
-                        }
-
-                    }
-
-                    Label {
-                        text: stepIndicator.modelData
-                        font.weight: stepIndicator.index === root.currentStep ? Font.DemiBold : Font.Normal
-                        opacity: stepIndicator.index <= root.currentStep ? 1 : 0.4
-
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 200
-                            }
-
-                        }
-
-                    }
-
-                    // Connector line (between steps, not after the last one)
-                    Rectangle {
-                        visible: stepIndicator.index < 1
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 3
-                        Layout.preferredHeight: Math.round(Kirigami.Units.devicePixelRatio * 2)
-                        radius: height / 2
-                        color: root.currentStep > 0 ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
-
-                        Behavior on color {
-                            ColorAnimation {
-                                duration: 200
-                                easing.type: Easing.OutCubic
-                            }
-
-                        }
-
-                    }
-
-                }
-
-            }
-
+        WizardStepIndicator {
+            stepLabels: [i18n("Template"), i18n("Configure")]
+            currentStep: root.currentStep
         }
 
         Kirigami.Separator {
@@ -612,9 +531,9 @@ Kirigami.Dialog {
                                     });
                                 }
                                 Keys.onReturnPressed: {
-                                    if (createButton.enabled) {
+                                    if (createButton.enabled)
                                         createButton.clicked();
-                                    }
+
                                 }
                             }
 
@@ -670,58 +589,17 @@ Kirigami.Dialog {
 
     }
 
-    footer: Item {
-        implicitHeight: footerLayout.implicitHeight + Kirigami.Units.largeSpacing * 2
-
-        RowLayout {
-            id: footerLayout
-
-            anchors.centerIn: parent
-            spacing: Kirigami.Units.largeSpacing
-
-            // Back button (step 2 only)
-            Button {
-                visible: root.currentStep > 0
-                text: i18n("Back")
-                icon.name: "go-previous"
-                Accessible.name: text
-                onClicked: root.currentStep = 0
-            }
-
-            // Next button (step 1)
-            Button {
-                visible: root.currentStep === 0
-                text: i18n("Next")
-                icon.name: "go-next"
-                highlighted: true
-                Accessible.name: text
-                onClicked: root.currentStep = 1
-            }
-
-            // Create button (step 2)
-            Button {
-                id: createButton
-
-                visible: root.currentStep === 1
-                text: i18n("Create Layout")
-                icon.name: "list-add"
-                enabled: nameField.text.trim().length > 0
-                highlighted: true
-                Accessible.name: text
-                onClicked: {
-                    settingsController.createNewLayout(nameField.text.trim(), root.selectedType, root.selectedAspectRatio, root.openInEditor);
-                    root.close();
-                }
-            }
-
-            Button {
-                text: i18n("Cancel")
-                Accessible.name: text
-                onClicked: root.close()
-            }
-
+    footer: WizardFooter {
+        currentStep: root.currentStep
+        createText: i18n("Create Layout")
+        createEnabled: nameField.text.trim().length > 0
+        onBackClicked: root.currentStep = 0
+        onNextClicked: root.currentStep = 1
+        onCreateClicked: {
+            settingsController.createNewLayout(nameField.text.trim(), root.selectedType, root.selectedAspectRatio, root.openInEditor);
+            root.close();
         }
-
+        onCancelClicked: root.close()
     }
 
 }
