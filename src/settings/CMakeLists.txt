@@ -92,6 +92,14 @@ qt_add_qml_module(plasmazones-settings
         qml/SettingsSwitch.qml
         qml/SettingsButtonGroup.qml
         qml/ColorSwatchRow.qml
+        qml/NewLayoutDialog.qml
+        qml/NewAlgorithmDialog.qml
+        qml/WizardStepIndicator.qml
+        qml/WizardFooter.qml
+        qml/WizardTemplateCard.qml
+        qml/WizardPreviewBadge.qml
+        qml/WizardConfigCard.qml
+        qml/WizardUtils.js
     NO_PLUGIN
 )
 

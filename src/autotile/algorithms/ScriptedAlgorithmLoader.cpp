@@ -59,7 +59,21 @@ QStringList ScriptedAlgorithmLoader::algorithmDirectories() const
     if (!userDir.isEmpty() && !dirs.contains(userDir)) {
         dirs.prepend(userDir);
     }
-    return dirs;
+
+    // Deduplicate by canonical path — QStandardPaths::locateAll can return
+    // the same physical directory via different XDG_DATA_DIRS entries or symlinks,
+    // which causes scanAndRegister() to see duplicate registrations and mistakenly
+    // unregister valid algorithms as "stale" during refresh.
+    QSet<QString> seen;
+    QStringList deduped;
+    for (const QString& dir : std::as_const(dirs)) {
+        const QString canonical = QFileInfo(dir).canonicalFilePath();
+        if (!canonical.isEmpty() && !seen.contains(canonical)) {
+            seen.insert(canonical);
+            deduped.append(dir);
+        }
+    }
+    return deduped;
 }
 
 void ScriptedAlgorithmLoader::watchDirectory(const QString& dirPath)
@@ -204,6 +218,15 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             } else {
                 qCWarning(lcAutotile) << "Duplicate system script for algorithm:" << scriptId << "from=" << fullPath
                                       << "— skipping (first registration wins)";
+                // Defensive: ensure scriptId is tracked so the stale-removal pass
+                // in scanAndRegister() does not unregister it. In normal operation
+                // the first directory scan already populated m_scriptIdToPath, so
+                // this guard is a no-op — it only fires if a future code path
+                // clears the map between individual directory scans within a single
+                // refresh cycle.
+                if (!m_scriptIdToPath.contains(scriptId)) {
+                    m_scriptIdToPath[scriptId] = fullPath;
+                }
                 delete algo;
                 continue;
             }

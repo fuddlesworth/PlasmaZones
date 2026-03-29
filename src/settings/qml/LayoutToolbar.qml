@@ -23,6 +23,7 @@ RowLayout {
     signal requestImportFromKZones()
     signal requestImportKZonesFile()
     signal requestOpenLayoutsFolder()
+    signal requestCreateNewAlgorithm()
     signal requestImportAlgorithm()
     signal requestOpenAlgorithmsFolder()
     signal viewModeRequested(int mode)
@@ -82,6 +83,14 @@ RowLayout {
         icon.name: "folder-open"
         flat: true
         onClicked: root.requestOpenLayoutsFolder()
+    }
+
+    // New Algorithm — only in Tiling view
+    Button {
+        visible: root.viewMode === 1
+        text: i18n("New Algorithm")
+        icon.name: "list-add"
+        onClicked: root.requestCreateNewAlgorithm()
     }
 
     // Import Algorithm — only in Tiling view
