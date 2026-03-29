@@ -562,6 +562,23 @@ public:
     {
         return QStringLiteral("auto");
     }
+
+    static const QStringList& validRenderingBackends()
+    {
+        static const QStringList backends = {
+            QStringLiteral("auto"),
+            QStringLiteral("vulkan"),
+            QStringLiteral("opengl"),
+        };
+        return backends;
+    }
+
+    static QString normalizeRenderingBackend(const QString& raw)
+    {
+        const QString normalized = raw.toLower().trimmed();
+        return validRenderingBackends().contains(normalized) ? normalized : renderingBackend();
+    }
+
     static bool enableShaderEffects()
     {
         return true;

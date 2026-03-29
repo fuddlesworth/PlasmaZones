@@ -177,13 +177,8 @@ void Settings::load()
     // Shaders (small enough to stay inline)
     {
         auto shaders = m_configBackend->group(QStringLiteral("Shaders"));
-        m_renderingBackend = shaders->readString(QStringLiteral("RenderingBackend"), ConfigDefaults::renderingBackend())
-                                 .toLower()
-                                 .trimmed();
-        if (m_renderingBackend != QLatin1String("auto") && m_renderingBackend != QLatin1String("vulkan")
-            && m_renderingBackend != QLatin1String("opengl")) {
-            m_renderingBackend = ConfigDefaults::renderingBackend();
-        }
+        m_renderingBackend = ConfigDefaults::normalizeRenderingBackend(
+            shaders->readString(QStringLiteral("RenderingBackend"), ConfigDefaults::renderingBackend()));
         m_enableShaderEffects =
             shaders->readBool(QStringLiteral("EnableShaderEffects"), ConfigDefaults::enableShaderEffects());
         m_shaderFrameRate =

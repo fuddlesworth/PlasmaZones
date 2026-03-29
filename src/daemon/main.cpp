@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "daemon.h"
+#include "../config/configdefaults.h"
 #include "../core/logging.h"
 #include "../core/qpa/layershellpluginloader.h"
 #include "../core/layersurface.h"
@@ -45,9 +46,12 @@ int main(int argc, char* argv[])
     // Register our layer-shell QPA plugin before QGuiApplication
     PlasmaZones::registerLayerShellPlugin();
 
-    // Read rendering backend preference before QGuiApplication is created —
+    // Read rendering backend preference and probe Vulkan BEFORE QGuiApplication —
     // QQuickWindow::setGraphicsApi() must be called before the app object exists.
+    // Vulkan instance creation is also done here so that fallback to OpenGL can
+    // happen before the graphics API is locked in by QGuiApplication construction.
     bool useVulkan = false;
+    QVulkanInstance vulkanInstance;
     {
         QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
         if (configDir.isEmpty()) {
@@ -56,34 +60,35 @@ int main(int argc, char* argv[])
         const QString configPath = configDir + QStringLiteral("/plasmazonesrc");
         QSettings cfg(configPath, QSettings::IniFormat);
         cfg.beginGroup(QStringLiteral("Shaders"));
-        const QString backend =
-            cfg.value(QStringLiteral("RenderingBackend"), QStringLiteral("auto")).toString().toLower().trimmed();
+        const QString backend = PlasmaZones::ConfigDefaults::normalizeRenderingBackend(
+            cfg.value(QStringLiteral("RenderingBackend"), QStringLiteral("auto")).toString());
         cfg.endGroup();
+
         if (backend == QLatin1String("vulkan")) {
-            QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
-            useVulkan = true;
+            // Probe Vulkan availability before committing to the API.
+            vulkanInstance.setApiVersion(QVersionNumber(1, 1));
+            if (vulkanInstance.create()) {
+                QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
+                useVulkan = true;
+            } else {
+                qCCritical(PlasmaZones::lcDaemon)
+                    << "Failed to create Vulkan instance — falling back to OpenGL."
+                    << "Check that Vulkan drivers are installed (vulkan-icd-loader, mesa-vulkan-drivers, etc.)";
+                QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+            }
         } else if (backend == QLatin1String("opengl")) {
             QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
         }
         // "auto" → let Qt choose (default behavior)
+        qCInfo(PlasmaZones::lcDaemon) << "Rendering backend:" << backend
+                                      << (useVulkan ? "(Vulkan active)" : "(OpenGL)");
     }
 
     QGuiApplication app(argc, argv);
 
-    // Vulkan requires a QVulkanInstance. Qt's scene graph will use the instance set
-    // on each QQuickWindow. We create it here and store a pointer in a dynamic property
-    // on QGuiApplication so OverlayService::createQmlWindow() can retrieve and set it.
-    QVulkanInstance vulkanInstance;
-    if (useVulkan) {
-        vulkanInstance.setApiVersion(QVersionNumber(1, 1));
-        if (!vulkanInstance.create()) {
-            qCCritical(PlasmaZones::lcDaemon)
-                << "Failed to create Vulkan instance — falling back to OpenGL."
-                << "Check that Vulkan drivers are installed (vulkan-icd-loader, mesa-vulkan-drivers, etc.)";
-            QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-            useVulkan = false;
-        }
-    }
+    // vulkanInstance lives on the stack for the lifetime of main(). Store a pointer
+    // in a dynamic property on QGuiApplication so OverlayService::createQmlWindow()
+    // can retrieve it and call setVulkanInstance() on each QQuickWindow.
     if (useVulkan) {
         app.setProperty("_pz_vulkanInstance", QVariant::fromValue(&vulkanInstance));
     }

@@ -586,21 +586,17 @@ void Settings::setLockedScreens(const QStringList& screens)
 }
 
 // Shader Effects
+
 void Settings::setRenderingBackend(const QString& backend)
 {
-    static const QStringList valid = {
-        QStringLiteral("auto"),
-        QStringLiteral("vulkan"),
-        QStringLiteral("opengl"),
-    };
-    const QString normalized = backend.toLower().trimmed();
-    const QString value = valid.contains(normalized) ? normalized : ConfigDefaults::renderingBackend();
+    const QString value = ConfigDefaults::normalizeRenderingBackend(backend);
     if (m_renderingBackend != value) {
         m_renderingBackend = value;
         Q_EMIT renderingBackendChanged();
         Q_EMIT settingsChanged();
     }
 }
+
 SETTINGS_SETTER(bool, EnableShaderEffects, m_enableShaderEffects, enableShaderEffectsChanged)
 SETTINGS_SETTER_CLAMPED(ShaderFrameRate, m_shaderFrameRate, shaderFrameRateChanged,
                         ConfigDefaults::shaderFrameRateMin(), ConfigDefaults::shaderFrameRateMax())

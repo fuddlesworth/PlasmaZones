@@ -340,7 +340,7 @@ public:
     // ── Rendering backend ─────────────────────────────────────────────────────
     QStringList renderingBackendOptions() const
     {
-        return {QStringLiteral("auto"), QStringLiteral("vulkan"), QStringLiteral("opengl")};
+        return PlasmaZones::ConfigDefaults::validRenderingBackends();
     }
 
     // ── Cava detection ───────────────────────────────────────────────────────

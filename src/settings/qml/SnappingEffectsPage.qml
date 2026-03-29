@@ -95,7 +95,12 @@ Flickable {
                     }
 
                     ComboBox {
+                        id: renderingBackendCombo
+
+                        property string initialBackend: appSettings.renderingBackend
+
                         Kirigami.FormData.label: i18n("Rendering backend:")
+                        Accessible.name: i18n("Rendering backend")
                         enabled: shaderEffectsCheck.checked
                         opacity: enabled ? 1 : 0.4
                         model: settingsController.renderingBackendOptions
@@ -111,17 +116,18 @@ Flickable {
                                 return currentText;
                             }
                         }
-                        currentIndex: settingsController.renderingBackendOptions.indexOf(appSettings.renderingBackend)
+                        currentIndex: Math.max(0, settingsController.renderingBackendOptions.indexOf(appSettings.renderingBackend))
                         onActivated: (index) => {
                             appSettings.renderingBackend = settingsController.renderingBackendOptions[index];
                         }
+                        Component.onCompleted: initialBackend = appSettings.renderingBackend
                     }
 
                     Kirigami.InlineMessage {
                         Layout.fillWidth: true
                         type: Kirigami.MessageType.Information
                         text: i18n("Rendering backend changes take effect after restarting the daemon.")
-                        visible: shaderEffectsCheck.checked
+                        visible: shaderEffectsCheck.checked && appSettings.renderingBackend !== renderingBackendCombo.initialBackend
                     }
 
                     SettingsSlider {
