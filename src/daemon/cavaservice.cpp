@@ -3,6 +3,7 @@
 
 #include "cavaservice.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QStandardPaths>
 #include <QFileInfo>
@@ -228,10 +229,19 @@ void CavaService::onProcessStateChanged(QProcess::ProcessState state)
     }
 }
 
-void CavaService::onProcessFinished(int exitCode, QProcess::ExitStatus /*exitStatus*/)
+void CavaService::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
     if (m_stopping || m_pendingRestart) {
         return;
+    }
+    // SIGTERM (exit code 15 / CrashExit) is expected during daemon shutdown:
+    // systemd sends SIGTERM to the entire process group, so CAVA dies before
+    // CavaService::stop() has a chance to set m_stopping.
+    if (QCoreApplication::closingDown()) {
+        return;
+    }
+    if (exitStatus == QProcess::CrashExit && exitCode == 15) {
+        return; // killed by SIGTERM — normal shutdown
     }
     if (exitCode != 0) {
         const QByteArray stderrOutput = m_process ? m_process->readAllStandardError().left(500) : QByteArray();
@@ -241,8 +251,9 @@ void CavaService::onProcessFinished(int exitCode, QProcess::ExitStatus /*exitSta
 
 void CavaService::onProcessError(QProcess::ProcessError error)
 {
-    // Suppress errors from intentional stop() or restartAsync() — SIGTERM causes QProcess::Crashed
-    if (m_stopping || m_pendingRestart) {
+    // Suppress errors from intentional stop() or restartAsync() — SIGTERM causes QProcess::Crashed.
+    // Also suppress during app shutdown: systemd SIGTERM hits the process group before our stop().
+    if (m_stopping || m_pendingRestart || QCoreApplication::closingDown()) {
         return;
     }
     const QString msg = m_process ? m_process->errorString() : QStringLiteral("Unknown error");

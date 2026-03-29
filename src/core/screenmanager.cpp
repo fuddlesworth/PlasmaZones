@@ -207,7 +207,8 @@ void ScreenManager::createGeometrySensor(QScreen* screen)
 
 void ScreenManager::destroyGeometrySensor(QScreen* screen)
 {
-    if (auto* sensor = m_geometrySensors.take(screen)) {
+    auto sensor = m_geometrySensors.take(screen);
+    if (sensor) {
         sensor->disconnect();
         sensor->hide();
         sensor->deleteLater();
@@ -249,7 +250,7 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
     // Sensor position is always (0,0) on Wayland, so it doesn't tell us where the available
     // area starts. Floating panels don't use exclusive zones, so the sensor can't detect
     // them; only D-Bus has that info.
-    auto* sensor = m_geometrySensors.value(screen);
+    auto sensor = m_geometrySensors.value(screen);
     QRect sensorGeom;
     bool hasSensorData = false;
     if (sensor && sensor->isVisible()) {
@@ -342,7 +343,7 @@ void ScreenManager::onSensorGeometryChanged(QScreen* screen)
         return;
     }
 
-    auto* sensor = m_geometrySensors.value(screen);
+    auto sensor = m_geometrySensors.value(screen);
     if (!sensor) {
         return;
     }

@@ -9,6 +9,7 @@
 #include <QVector>
 #include <QHash>
 #include <QMap>
+#include <QPointer>
 #include <QTimer>
 
 class QWindow;
@@ -218,7 +219,7 @@ private:
 
     // Persistent geometry sensor windows (one per screen)
     // These invisible layer-shell windows track available geometry
-    QHash<QScreen*, QWindow*> m_geometrySensors;
+    QHash<QScreen*, QPointer<QWindow>> m_geometrySensors;
 
     // Delayed panel re-query (e.g. after panel editor close) to pick up settled state
     QTimer m_delayedPanelRequeryTimer;

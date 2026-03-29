@@ -140,5 +140,17 @@ int main(int argc, char* argv[])
     daemon.stop();
     g_daemon = nullptr;
 
+    // Close all remaining windows before QGuiApplication teardown.
+    // The NVIDIA Vulkan ICD (driver 595.x+) crashes in vkDestroyInstance during
+    // dlclose when GPU worker threads are still running. Explicitly closing windows
+    // here lets the Wayland platform plugin tear down EGL/Vulkan surfaces while the
+    // event loop is still partially intact, before ~QGuiApplication triggers the
+    // problematic dlclose path. This is an NVIDIA driver bug — this workaround
+    // reduces (but may not eliminate) the crash window.
+    const auto topLevels = QGuiApplication::topLevelWindows();
+    for (QWindow* w : topLevels) {
+        w->destroy();
+    }
+
     return result;
 }
