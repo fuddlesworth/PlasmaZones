@@ -304,7 +304,23 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     m_shaderPreviewShaderId = shaderId;
 
     auto* layerSurface = LayerSurface::find(m_shaderPreviewWindow);
-    if (layerSurface) {
+    if (!layerSurface) {
+        qCWarning(lcOverlay) << "showShaderPreview: no LayerSurface for preview window"
+                             << "— layer-shell may have been lost (compositor restart?)."
+                             << "Destroying and recreating the window.";
+        destroyShaderPreviewWindow();
+        createShaderPreviewWindow(screen);
+        if (!m_shaderPreviewWindow) {
+            return;
+        }
+        layerSurface = LayerSurface::find(m_shaderPreviewWindow);
+        if (!layerSurface) {
+            qCWarning(lcOverlay) << "showShaderPreview: recreated window still has no LayerSurface — aborting";
+            return;
+        }
+    }
+
+    {
         const QRect screenGeom = screen->geometry();
         const int localX = x - screenGeom.x();
         const int localY = y - screenGeom.y();
@@ -312,9 +328,6 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
         LayerSurface::BatchGuard batch(layerSurface);
         layerSurface->setAnchors(LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft));
         layerSurface->setMargins(QMargins(localX, localY, 0, 0));
-    } else {
-        qCWarning(lcOverlay) << "showShaderPreview: no LayerSurface for preview window"
-                             << "— layer-shell may have been lost (compositor restart?)";
     }
 
     // Set window size — position is controlled by layer-surface anchors + margins,
