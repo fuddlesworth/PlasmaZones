@@ -220,34 +220,45 @@ Window {
 
         editorController: editorWindow._editorController
         zoneId: ""
+        // Defer model-mutating operations to the next event loop iteration.
+        // Qt 6 Menu.dismiss() tears down the popup in the same tick as
+        // onTriggered; if the handler modifies the Repeater model
+        // synchronously, finalizeExitTransition walks stale child pointers
+        // and crashes in derefWindow (QTBUG-white-paper popup UAF).
         onSplitHorizontalRequested: {
-            if (editorWindow._editorController && zoneId)
-                editorWindow._editorController.splitZone(zoneId, true);
+            let id = zoneId;
+            if (editorWindow._editorController && id)
+                Qt.callLater(editorWindow._editorController.splitZone, id, true);
 
         }
         onSplitVerticalRequested: {
-            if (editorWindow._editorController && zoneId)
-                editorWindow._editorController.splitZone(zoneId, false);
+            let id = zoneId;
+            if (editorWindow._editorController && id)
+                Qt.callLater(editorWindow._editorController.splitZone, id, false);
 
         }
         onDuplicateRequested: {
-            if (editorWindow._editorController && zoneId)
-                editorWindow._editorController.duplicateZone(zoneId);
+            let id = zoneId;
+            if (editorWindow._editorController && id)
+                Qt.callLater(editorWindow._editorController.duplicateZone, id);
 
         }
         onDeleteRequested: {
-            if (editorWindow._editorController && zoneId)
-                editorWindow._editorController.deleteZone(zoneId);
+            let id = zoneId;
+            if (editorWindow._editorController && id)
+                Qt.callLater(editorWindow._editorController.deleteZone, id);
 
         }
         onDeleteWithFillRequested: {
-            if (editorWindow._editorController && zoneId)
-                zoneOps.deleteWithFillAnimation(zoneId, editorWindow._editorController, editorWindow._zonesRepeater, drawingArea.width, drawingArea.height);
+            let id = zoneId;
+            if (editorWindow._editorController && id)
+                Qt.callLater(zoneOps.deleteWithFillAnimation, id, editorWindow._editorController, editorWindow._zonesRepeater, drawingArea.width, drawingArea.height);
 
         }
         onFillRequested: {
-            if (editorWindow._editorController && zoneId)
-                editorWindow._editorController.expandToFillSpace(zoneId);
+            let id = zoneId;
+            if (editorWindow._editorController && id)
+                Qt.callLater(editorWindow._editorController.expandToFillSpace, id);
 
         }
         onBringToFrontRequested: {

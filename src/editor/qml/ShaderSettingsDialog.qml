@@ -684,6 +684,21 @@ Kirigami.Dialog {
                     Menu {
                         id: shaderCategoryMenu
 
+                        // Workaround for Qt 6 use-after-free in QQuickPopupPrivate::finalizeExitTransition.
+                        // Neither empty transitions, Qt.callLater, nor Timer+dismiss prevent the crash
+                        // because Qt's internal popup machinery calls dismiss() on submenus during
+                        // teardown, which still runs finalizeExitTransition on stale Instantiator items.
+                        // Fix: force-hide the popup (bypasses transition system entirely), then set
+                        // the shader on the next event loop tick.
+                        function selectShader(id) {
+                            // Force-hide bypasses QQuickPopup's transition machinery entirely.
+                            // Setting visible=false on a Popup skips prepareExitTransition/finalizeExitTransition.
+                            shaderCategoryMenu.visible = false;
+                            Qt.callLater(function() {
+                                root.pendingShaderId = id;
+                            });
+                        }
+
                         // Category submenus (with support for nested subcategories via "/")
                         Instantiator {
                             id: categoryInstantiator
@@ -720,7 +735,7 @@ Kirigami.Dialog {
                                         checkable: true
                                         checked: modelData.id === root.pendingShaderId
                                         ActionGroup.group: shaderActionGroup
-                                        onTriggered: root.pendingShaderId = modelData.id
+                                        onTriggered: shaderCategoryMenu.selectShader(modelData.id)
                                     }
 
                                 }
@@ -758,7 +773,7 @@ Kirigami.Dialog {
                                                 checkable: true
                                                 checked: modelData.id === root.pendingShaderId
                                                 ActionGroup.group: shaderActionGroup
-                                                onTriggered: root.pendingShaderId = modelData.id
+                                                onTriggered: shaderCategoryMenu.selectShader(modelData.id)
                                             }
 
                                         }
@@ -805,7 +820,7 @@ Kirigami.Dialog {
                                 checkable: true
                                 checked: modelData.id === root.pendingShaderId
                                 ActionGroup.group: shaderActionGroup
-                                onTriggered: root.pendingShaderId = modelData.id
+                                onTriggered: shaderCategoryMenu.selectShader(modelData.id)
                             }
 
                         }
