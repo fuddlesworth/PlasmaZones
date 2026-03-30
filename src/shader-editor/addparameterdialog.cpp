@@ -23,23 +23,21 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
-#include <KLocalizedString>
+#include "../pz_i18n.h"
 
 Q_LOGGING_CATEGORY(lcAddParam, "plasmazones.shadereditor.addparam")
 
 namespace PlasmaZones {
 
-AddParameterDialog::AddParameterDialog(const QSet<int>& usedScalarSlots,
-                                       const QSet<int>& usedColorSlots,
-                                       const QSet<int>& usedImageSlots,
-                                       QWidget* parent)
+AddParameterDialog::AddParameterDialog(const QSet<int>& usedScalarSlots, const QSet<int>& usedColorSlots,
+                                       const QSet<int>& usedImageSlots, QWidget* parent)
     : QDialog(parent)
     , m_selectedColor(Qt::white)
     , m_usedScalarSlots(usedScalarSlots)
     , m_usedColorSlots(usedColorSlots)
     , m_usedImageSlots(usedImageSlots)
 {
-    setWindowTitle(i18n("Add Parameter"));
+    setWindowTitle(PzI18n::tr("Add Parameter"));
     setMinimumWidth(420);
     setupUi();
     onTypeChanged();
@@ -56,8 +54,8 @@ void AddParameterDialog::setupUi()
 
     // Name
     m_nameEdit = new QLineEdit(this);
-    m_nameEdit->setPlaceholderText(i18n("e.g. Animation Speed"));
-    formLayout->addRow(i18n("Name:"), m_nameEdit);
+    m_nameEdit->setPlaceholderText(PzI18n::tr("e.g. Animation Speed"));
+    formLayout->addRow(PzI18n::tr("Name:"), m_nameEdit);
 
     // Type
     m_typeCombo = new QComboBox(this);
@@ -68,37 +66,37 @@ void AddParameterDialog::setupUi()
         QStringLiteral("color"),
         QStringLiteral("image"),
     });
-    formLayout->addRow(i18n("Type:"), m_typeCombo);
+    formLayout->addRow(PzI18n::tr("Type:"), m_typeCombo);
 
     // Group
     m_groupCombo = new QComboBox(this);
     m_groupCombo->setEditable(true);
     m_groupCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    m_groupCombo->addItem(i18n("Animation"), QStringLiteral("Animation"));
-    m_groupCombo->addItem(i18n("Colors"), QStringLiteral("Colors"));
-    m_groupCombo->addItem(i18n("Pattern"), QStringLiteral("Pattern"));
-    m_groupCombo->addItem(i18n("Appearance"), QStringLiteral("Appearance"));
-    m_groupCombo->addItem(i18n("Zone"), QStringLiteral("Zone"));
-    m_groupCombo->addItem(i18n("Audio"), QStringLiteral("Audio"));
-    m_groupCombo->addItem(i18n("Labels"), QStringLiteral("Labels"));
-    formLayout->addRow(i18n("Group:"), m_groupCombo);
+    m_groupCombo->addItem(PzI18n::tr("Animation"), QStringLiteral("Animation"));
+    m_groupCombo->addItem(PzI18n::tr("Colors"), QStringLiteral("Colors"));
+    m_groupCombo->addItem(PzI18n::tr("Pattern"), QStringLiteral("Pattern"));
+    m_groupCombo->addItem(PzI18n::tr("Appearance"), QStringLiteral("Appearance"));
+    m_groupCombo->addItem(PzI18n::tr("Zone"), QStringLiteral("Zone"));
+    m_groupCombo->addItem(PzI18n::tr("Audio"), QStringLiteral("Audio"));
+    m_groupCombo->addItem(PzI18n::tr("Labels"), QStringLiteral("Labels"));
+    formLayout->addRow(PzI18n::tr("Group:"), m_groupCombo);
 
     // Default value — one widget per type, shown/hidden by onTypeChanged()
     m_defaultFloat = new QDoubleSpinBox(this);
     m_defaultFloat->setRange(-9999.0, 9999.0);
     m_defaultFloat->setDecimals(2);
     m_defaultFloat->setValue(0.0);
-    m_defaultFloatLabel = new QLabel(i18n("Default:"), this);
+    m_defaultFloatLabel = new QLabel(PzI18n::tr("Default:"), this);
     formLayout->addRow(m_defaultFloatLabel, m_defaultFloat);
 
     m_defaultInt = new QSpinBox(this);
     m_defaultInt->setRange(-9999, 9999);
     m_defaultInt->setValue(0);
-    m_defaultIntLabel = new QLabel(i18n("Default:"), this);
+    m_defaultIntLabel = new QLabel(PzI18n::tr("Default:"), this);
     formLayout->addRow(m_defaultIntLabel, m_defaultInt);
 
-    m_defaultBool = new QCheckBox(i18n("Enabled"), this);
-    m_defaultBoolLabel = new QLabel(i18n("Default:"), this);
+    m_defaultBool = new QCheckBox(PzI18n::tr("Enabled"), this);
+    m_defaultBoolLabel = new QLabel(PzI18n::tr("Default:"), this);
     formLayout->addRow(m_defaultBoolLabel, m_defaultBool);
 
     m_defaultColorBtn = new QPushButton(this);
@@ -110,24 +108,24 @@ void AddParameterDialog::setupUi()
         colorPal.setColor(QPalette::ButtonText, Qt::black);
         m_defaultColorBtn->setPalette(colorPal);
     }
-    m_defaultColorLabel = new QLabel(i18n("Default:"), this);
+    m_defaultColorLabel = new QLabel(PzI18n::tr("Default:"), this);
     formLayout->addRow(m_defaultColorLabel, m_defaultColorBtn);
 
     m_defaultImageRow = new QWidget(this);
     auto* imageLayout = new QHBoxLayout(m_defaultImageRow);
     imageLayout->setContentsMargins(0, 0, 0, 0);
-    m_imagePathLabel = new QLabel(i18n("(none)"), m_defaultImageRow);
+    m_imagePathLabel = new QLabel(PzI18n::tr("(none)"), m_defaultImageRow);
     m_imagePathLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
-    m_defaultImageBtn = new QPushButton(i18n("Browse..."), m_defaultImageRow);
+    m_defaultImageBtn = new QPushButton(PzI18n::tr("Browse..."), m_defaultImageRow);
     m_defaultImageBtn->setFixedWidth(80);
     m_imageClearBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-clear")), QString(), m_defaultImageRow);
     m_imageClearBtn->setFixedSize(22, 22);
-    m_imageClearBtn->setToolTip(i18n("Clear"));
+    m_imageClearBtn->setToolTip(PzI18n::tr("Clear"));
     m_imageClearBtn->setVisible(false);
     imageLayout->addWidget(m_defaultImageBtn);
     imageLayout->addWidget(m_imagePathLabel, 1);
     imageLayout->addWidget(m_imageClearBtn);
-    m_defaultImageLabel = new QLabel(i18n("Default:"), this);
+    m_defaultImageLabel = new QLabel(PzI18n::tr("Default:"), this);
     formLayout->addRow(m_defaultImageLabel, m_defaultImageRow);
 
     // Range row — float uses QDoubleSpinBox, int uses QSpinBox
@@ -163,12 +161,12 @@ void AddParameterDialog::setupUi()
     rangeLayout->addWidget(m_intDash);
     rangeLayout->addWidget(m_maxInt, 1);
 
-    m_rangeLabel = new QLabel(i18n("Range:"), this);
+    m_rangeLabel = new QLabel(PzI18n::tr("Range:"), this);
     formLayout->addRow(m_rangeLabel, m_rangeRow);
 
     // Slot (read-only, auto-assigned)
     m_slotLabel = new QLabel(this);
-    formLayout->addRow(i18n("Slot:"), m_slotLabel);
+    formLayout->addRow(PzI18n::tr("Slot:"), m_slotLabel);
 
     mainLayout->addLayout(formLayout);
 
@@ -192,8 +190,8 @@ void AddParameterDialog::setupUi()
     connect(m_defaultColorBtn, &QPushButton::clicked, this, &AddParameterDialog::onColorButtonClicked);
     connect(m_defaultImageBtn, &QPushButton::clicked, this, [this]() {
         const QString path = QFileDialog::getOpenFileName(
-            this, i18n("Select Default Image"), QString(),
-            i18n("Images") + QStringLiteral(" (*.png *.jpg *.jpeg *.bmp *.webp *.tga)"));
+            this, PzI18n::tr("Select Default Image"), QString(),
+            PzI18n::tr("Images") + QStringLiteral(" (*.png *.jpg *.jpeg *.bmp *.webp *.tga)"));
         if (!path.isEmpty()) {
             m_selectedImagePath = path;
             m_imagePathLabel->setText(QFileInfo(path).fileName());
@@ -204,7 +202,7 @@ void AddParameterDialog::setupUi()
     });
     connect(m_imageClearBtn, &QPushButton::clicked, this, [this]() {
         m_selectedImagePath.clear();
-        m_imagePathLabel->setText(i18n("(none)"));
+        m_imagePathLabel->setText(PzI18n::tr("(none)"));
         m_imagePathLabel->setToolTip(QString());
         m_imagePathLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
         m_imageClearBtn->setVisible(false);
@@ -251,7 +249,7 @@ void AddParameterDialog::onNameChanged(const QString& name)
 
 void AddParameterDialog::onColorButtonClicked()
 {
-    const QColor color = QColorDialog::getColor(m_selectedColor, this, i18n("Select Default Color"));
+    const QColor color = QColorDialog::getColor(m_selectedColor, this, PzI18n::tr("Select Default Color"));
     if (color.isValid()) {
         m_selectedColor = color;
         m_defaultColorBtn->setText(color.name());
@@ -281,7 +279,7 @@ void AddParameterDialog::updateAutoSlot()
     }
 
     const QString uniformName = ShaderPackageIO::computeUniformName(type, m_autoSlot);
-    m_slotLabel->setText(i18n("%1 (%2)", m_autoSlot, uniformName));
+    m_slotLabel->setText(PzI18n::tr("%1 (%2)").arg(m_autoSlot).arg(uniformName));
 }
 
 QJsonObject AddParameterDialog::parameterJson() const

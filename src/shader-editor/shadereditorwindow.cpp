@@ -12,6 +12,9 @@
 #include "previewcontroller.h"
 #include "shaderpackageio.h"
 
+#include "../pz_i18n.h"
+#include "../pz_qml_i18n.h"
+
 #include <QAction>
 #include <QComboBox>
 #include <QDir>
@@ -38,10 +41,7 @@
 #include <QToolBar>
 #include <QToolTip>
 
-#include <KAboutData>
 #include <KActionCollection>
-#include <KLocalizedContext>
-#include <KLocalizedString>
 #include <KTar>
 #include <KConfigGroup>
 #include <KRecentFilesAction>
@@ -76,9 +76,8 @@ ShaderEditorWindow::ShaderEditorWindow(QWidget* parent)
 
         if (doc && doc->isModified()) {
             const int result = QMessageBox::question(
-                this,
-                i18n("Save Changes"),
-                i18n("The file \"%1\" has been modified. Save changes?", m_tabWidget->tabText(index)),
+                this, PzI18n::tr("Save Changes"),
+                PzI18n::tr("The file \"%1\" has been modified. Save changes?").arg(m_tabWidget->tabText(index)),
                 QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
 
             if (result == QMessageBox::Cancel) {
@@ -116,7 +115,8 @@ ShaderEditorWindow::ShaderEditorWindow(QWidget* parent)
     auto* prevTab = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab), this);
     connect(prevTab, &QShortcut::activated, this, [this]() {
         if (m_tabWidget->count() > 1) {
-            m_tabWidget->setCurrentIndex((m_tabWidget->currentIndex() - 1 + m_tabWidget->count()) % m_tabWidget->count());
+            m_tabWidget->setCurrentIndex((m_tabWidget->currentIndex() - 1 + m_tabWidget->count())
+                                         % m_tabWidget->count());
         }
     });
 
@@ -138,10 +138,8 @@ KTextEditor::View* ShaderEditorWindow::activeView() const
 
 void ShaderEditorWindow::openShaderPackageDialog()
 {
-    const QString dir = QFileDialog::getExistingDirectory(
-        this,
-        i18n("Open Shader Package Directory"),
-        ShaderPackageIO::userShaderDirectory());
+    const QString dir = QFileDialog::getExistingDirectory(this, PzI18n::tr("Open Shader Package Directory"),
+                                                          ShaderPackageIO::userShaderDirectory());
     if (!dir.isEmpty()) {
         openShaderPackage(dir);
     }
@@ -149,18 +147,20 @@ void ShaderEditorWindow::openShaderPackageDialog()
 
 void ShaderEditorWindow::createActions()
 {
-    m_newAction = new QAction(QIcon::fromTheme(QStringLiteral("document-new")), i18n("&New Shader Package"), this);
+    m_newAction =
+        new QAction(QIcon::fromTheme(QStringLiteral("document-new")), PzI18n::tr("&New Shader Package"), this);
     m_newAction->setShortcut(QKeySequence::New);
-    m_newAction->setToolTip(i18n("New Shader Package"));
+    m_newAction->setToolTip(PzI18n::tr("New Shader Package"));
     connect(m_newAction, &QAction::triggered, this, &ShaderEditorWindow::newShaderPackage);
 
-    m_openAction = new QAction(QIcon::fromTheme(QStringLiteral("document-open")), i18n("&Open Shader Package..."), this);
+    m_openAction =
+        new QAction(QIcon::fromTheme(QStringLiteral("document-open")), PzI18n::tr("&Open Shader Package..."), this);
     m_openAction->setShortcut(QKeySequence::Open);
-    m_openAction->setToolTip(i18n("Open Shader Package"));
+    m_openAction->setToolTip(PzI18n::tr("Open Shader Package"));
     connect(m_openAction, &QAction::triggered, this, &ShaderEditorWindow::openShaderPackageDialog);
 
     m_recentAction = new KRecentFilesAction(QIcon::fromTheme(QStringLiteral("document-open-recent")),
-                                            i18n("Open &Recent"), this);
+                                            PzI18n::tr("Open &Recent"), this);
     m_recentAction->setMaxItems(10);
     connect(m_recentAction, &KRecentFilesAction::urlSelected, this, [this](const QUrl& url) {
         if (url.isLocalFile()) {
@@ -171,33 +171,35 @@ void ShaderEditorWindow::createActions()
     const KSharedConfig::Ptr config = KSharedConfig::openConfig();
     m_recentAction->loadEntries(config->group(QStringLiteral("RecentPackages")));
 
-    m_saveAction = new QAction(QIcon::fromTheme(QStringLiteral("document-save")), i18n("&Save"), this);
+    m_saveAction = new QAction(QIcon::fromTheme(QStringLiteral("document-save")), PzI18n::tr("&Save"), this);
     m_saveAction->setShortcut(QKeySequence::Save);
-    m_saveAction->setToolTip(i18n("Save Shader Package"));
+    m_saveAction->setToolTip(PzI18n::tr("Save Shader Package"));
     connect(m_saveAction, &QAction::triggered, this, &ShaderEditorWindow::saveShaderPackage);
 
-    m_saveAsAction = new QAction(QIcon::fromTheme(QStringLiteral("document-save-as")), i18n("Save &As..."), this);
+    m_saveAsAction = new QAction(QIcon::fromTheme(QStringLiteral("document-save-as")), PzI18n::tr("Save &As..."), this);
     m_saveAsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S));
     connect(m_saveAsAction, &QAction::triggered, this, &ShaderEditorWindow::saveShaderPackageAs);
 
-    m_exportAction = new QAction(QIcon::fromTheme(QStringLiteral("package-x-generic")), i18n("&Export Package..."), this);
+    m_exportAction =
+        new QAction(QIcon::fromTheme(QStringLiteral("package-x-generic")), PzI18n::tr("&Export Package..."), this);
     m_exportAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_E));
     connect(m_exportAction, &QAction::triggered, this, &ShaderEditorWindow::exportShaderPackage);
 
-    m_compileAction = new QAction(QIcon::fromTheme(QStringLiteral("run-build")), i18n("&Compile"), this);
+    m_compileAction = new QAction(QIcon::fromTheme(QStringLiteral("run-build")), PzI18n::tr("&Compile"), this);
     m_compileAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_B));
-    m_compileAction->setToolTip(i18n("Compile shader (Ctrl+B)"));
+    m_compileAction->setToolTip(PzI18n::tr("Compile shader (Ctrl+B)"));
     connect(m_compileAction, &QAction::triggered, this, [this]() {
         m_previewController->recompile();
     });
 
-    m_validateAction = new QAction(QIcon::fromTheme(QStringLiteral("dialog-ok-apply")), i18n("&Validate"), this);
-    m_validateAction->setToolTip(i18n("Validate shader for errors"));
+    m_validateAction = new QAction(QIcon::fromTheme(QStringLiteral("dialog-ok-apply")), PzI18n::tr("&Validate"), this);
+    m_validateAction->setToolTip(PzI18n::tr("Validate shader for errors"));
     connect(m_validateAction, &QAction::triggered, this, [this]() {
         m_previewController->recompile();
     });
 
-    m_resetParamsAction = new QAction(QIcon::fromTheme(QStringLiteral("edit-reset")), i18n("&Reset Parameters"), this);
+    m_resetParamsAction =
+        new QAction(QIcon::fromTheme(QStringLiteral("edit-reset")), PzI18n::tr("&Reset Parameters"), this);
     connect(m_resetParamsAction, &QAction::triggered, this, [this]() {
         if (m_parameterPanel && m_metadataEditor) {
             m_parameterPanel->loadFromMetadata(m_metadataEditor->toJson());
@@ -214,7 +216,7 @@ void ShaderEditorWindow::populateEditMenu()
 
     auto* view = activeView();
     if (!view) {
-        auto* noEditorAction = m_editMenu->addAction(i18n("No editor active"));
+        auto* noEditorAction = m_editMenu->addAction(PzI18n::tr("No editor active"));
         noEditorAction->setEnabled(false);
         return;
     }
@@ -222,10 +224,8 @@ void ShaderEditorWindow::populateEditMenu()
     // Pull standard editing actions from the active KTextEditor::View
     auto* ac = view->actionCollection();
     static const char* const editActions[] = {
-        "edit_undo", "edit_redo", nullptr,
-        "edit_cut", "edit_copy", "edit_paste", nullptr,
-        "edit_select_all", nullptr,
-        "edit_find", "edit_find_next", "edit_replace",
+        "edit_undo", "edit_redo",       nullptr, "edit_cut",  "edit_copy",      "edit_paste",
+        nullptr,     "edit_select_all", nullptr, "edit_find", "edit_find_next", "edit_replace",
     };
 
     for (const char* const* p = editActions; p < editActions + sizeof(editActions) / sizeof(*editActions); ++p) {
@@ -240,7 +240,7 @@ void ShaderEditorWindow::populateEditMenu()
 void ShaderEditorWindow::setupMenuBar()
 {
     // ── File ──
-    auto* fileMenu = menuBar()->addMenu(i18n("&File"));
+    auto* fileMenu = menuBar()->addMenu(PzI18n::tr("&File"));
     fileMenu->addAction(m_newAction);
     fileMenu->addAction(m_openAction);
     fileMenu->addAction(m_recentAction);
@@ -251,33 +251,37 @@ void ShaderEditorWindow::setupMenuBar()
     fileMenu->addAction(m_exportAction);
     fileMenu->addSeparator();
 
-    auto* quitAction = fileMenu->addAction(i18n("&Quit"));
+    auto* quitAction = fileMenu->addAction(PzI18n::tr("&Quit"));
     quitAction->setShortcut(QKeySequence::Quit);
     connect(quitAction, &QAction::triggered, this, &QMainWindow::close);
 
     // ── Edit (populated dynamically from active KTextEditor::View) ──
-    m_editMenu = menuBar()->addMenu(i18n("&Edit"));
+    m_editMenu = menuBar()->addMenu(PzI18n::tr("&Edit"));
     connect(m_editMenu, &QMenu::aboutToShow, this, &ShaderEditorWindow::populateEditMenu);
 
     // ── Shader ──
-    auto* shaderMenu = menuBar()->addMenu(i18n("&Shader"));
+    auto* shaderMenu = menuBar()->addMenu(PzI18n::tr("&Shader"));
     shaderMenu->addAction(m_compileAction);
     shaderMenu->addAction(m_validateAction);
     shaderMenu->addAction(m_resetParamsAction);
 
     // ── View ──
-    auto* viewMenu = menuBar()->addMenu(i18n("&View"));
+    auto* viewMenu = menuBar()->addMenu(PzI18n::tr("&View"));
     viewMenu->addAction(m_previewDock->toggleViewAction());
     viewMenu->addAction(m_outputDock->toggleViewAction());
-    if (m_paramsDock) viewMenu->addAction(m_paramsDock->toggleViewAction());
-    if (m_metadataDock) viewMenu->addAction(m_metadataDock->toggleViewAction());
-    if (m_presetsDock) viewMenu->addAction(m_presetsDock->toggleViewAction());
+    if (m_paramsDock)
+        viewMenu->addAction(m_paramsDock->toggleViewAction());
+    if (m_metadataDock)
+        viewMenu->addAction(m_metadataDock->toggleViewAction());
+    if (m_presetsDock)
+        viewMenu->addAction(m_presetsDock->toggleViewAction());
 
     viewMenu->addSeparator();
 
     // Font size actions — proxy to active KTextEditor::View's built-in zoom.
     // No shortcut set here: KTextEditor already owns Ctrl+Plus/Ctrl+Minus.
-    auto* incFontAction = viewMenu->addAction(QIcon::fromTheme(QStringLiteral("zoom-in")), i18n("Increase Font Size"));
+    auto* incFontAction =
+        viewMenu->addAction(QIcon::fromTheme(QStringLiteral("zoom-in")), PzI18n::tr("Increase Font Size"));
     connect(incFontAction, &QAction::triggered, this, [this]() {
         if (auto* view = activeView()) {
             if (auto* action = view->actionCollection()->action(QStringLiteral("view_inc_font_sizes"))) {
@@ -286,7 +290,8 @@ void ShaderEditorWindow::setupMenuBar()
         }
     });
 
-    auto* decFontAction = viewMenu->addAction(QIcon::fromTheme(QStringLiteral("zoom-out")), i18n("Decrease Font Size"));
+    auto* decFontAction =
+        viewMenu->addAction(QIcon::fromTheme(QStringLiteral("zoom-out")), PzI18n::tr("Decrease Font Size"));
     connect(decFontAction, &QAction::triggered, this, [this]() {
         if (auto* view = activeView()) {
             if (auto* action = view->actionCollection()->action(QStringLiteral("view_dec_font_sizes"))) {
@@ -296,22 +301,23 @@ void ShaderEditorWindow::setupMenuBar()
     });
 
     // ── Help ──
-    auto* helpMenu = menuBar()->addMenu(i18n("&Help"));
+    auto* helpMenu = menuBar()->addMenu(PzI18n::tr("&Help"));
 
-    auto* aboutAction = helpMenu->addAction(QIcon::fromTheme(QStringLiteral("help-about")), i18n("&About PlasmaZones Shader Editor"));
+    auto* aboutAction = helpMenu->addAction(QIcon::fromTheme(QStringLiteral("help-about")),
+                                            PzI18n::tr("&About PlasmaZones Shader Editor"));
     connect(aboutAction, &QAction::triggered, this, [this]() {
-        const auto about = KAboutData::applicationData();
-        QMessageBox::about(this, i18n("About PlasmaZones Shader Editor"),
-            i18n("<h3>PlasmaZones Shader Editor</h3>"
-                 "<p>%1</p>"
-                 "<p>A visual editor for creating and testing GLSL shader packages "
-                 "for PlasmaZones window tiling effects.</p>", about.version()));
+        QMessageBox::about(this, PzI18n::tr("About PlasmaZones Shader Editor"),
+                           PzI18n::tr("<h3>PlasmaZones Shader Editor</h3>"
+                                      "<p>%1</p>"
+                                      "<p>A visual editor for creating and testing GLSL shader packages "
+                                      "for PlasmaZones window tiling effects.</p>")
+                               .arg(QCoreApplication::applicationVersion()));
     });
 }
 
 void ShaderEditorWindow::setupToolBar()
 {
-    auto* toolbar = addToolBar(i18n("Main"));
+    auto* toolbar = addToolBar(PzI18n::tr("Main"));
     toolbar->setObjectName(QStringLiteral("mainToolBar"));
     toolbar->setMovable(false);
     toolbar->setIconSize(QSize(22, 22));
@@ -325,7 +331,7 @@ void ShaderEditorWindow::setupToolBar()
     toolbar->addSeparator();
 
     // Test layout dropdown
-    auto* layoutLabel = new QLabel(i18n("Test Layout:"), toolbar);
+    auto* layoutLabel = new QLabel(PzI18n::tr("Test Layout:"), toolbar);
     layoutLabel->setContentsMargins(4, 0, 4, 0);
     toolbar->addWidget(layoutLabel);
 
@@ -370,7 +376,7 @@ void ShaderEditorWindow::setupStatusBar()
     statusBar()->addWidget(m_shaderInfoLabel, 1);
     statusBar()->addPermanentWidget(m_compileStatusLabel);
 
-    m_fileLabel->setText(i18n("No file open"));
+    m_fileLabel->setText(PzI18n::tr("No file open"));
     m_cursorLabel->setText(QString());
 }
 
@@ -390,7 +396,7 @@ void ShaderEditorWindow::setupLayout()
     m_dockManager = new ads::CDockManager(this);
 
     // ── Central widget: code editor tabs ──
-    auto* centralDock = new ads::CDockWidget(m_dockManager, i18n("Editor"));
+    auto* centralDock = new ads::CDockWidget(m_dockManager, PzI18n::tr("Editor"));
     centralDock->setObjectName(QStringLiteral("centralDock"));
     centralDock->setWidget(m_tabWidget);
     centralDock->setFeature(ads::CDockWidget::NoTab, true);
@@ -403,10 +409,9 @@ void ShaderEditorWindow::setupLayout()
     m_previewView = new QQuickView;
     m_previewView->setColor(QColor(30, 30, 30));
     m_previewView->setResizeMode(QQuickView::SizeRootObjectToView);
-    m_previewView->engine()->rootContext()->setContextObject(
-        new KLocalizedContext(m_previewView->engine()));
-    m_previewView->engine()->rootContext()->setContextProperty(
-        QStringLiteral("previewController"), m_previewController);
+    m_previewView->engine()->rootContext()->setContextObject(new PzLocalizedContext(m_previewView->engine()));
+    m_previewView->engine()->rootContext()->setContextProperty(QStringLiteral("previewController"),
+                                                               m_previewController);
     connect(m_previewView, &QQuickView::statusChanged, this, [this](QQuickView::Status status) {
         if (status == QQuickView::Error) {
             const auto errors = m_previewView->errors();
@@ -419,7 +424,7 @@ void ShaderEditorWindow::setupLayout()
 
     m_previewWidget = QWidget::createWindowContainer(m_previewView, this);
 
-    m_previewDock = new ads::CDockWidget(m_dockManager, i18n("Preview"));
+    m_previewDock = new ads::CDockWidget(m_dockManager, PzI18n::tr("Preview"));
     m_previewDock->setObjectName(QStringLiteral("previewDock"));
     m_previewDock->setWidget(m_previewWidget);
     m_previewDock->setMinimumSizeHintMode(ads::CDockWidget::MinimumSizeHintFromContent);
@@ -435,7 +440,7 @@ void ShaderEditorWindow::setupLayout()
         }
     });
 
-    m_outputDock = new ads::CDockWidget(m_dockManager, i18n("Problems"));
+    m_outputDock = new ads::CDockWidget(m_dockManager, PzI18n::tr("Problems"));
     m_outputDock->setObjectName(QStringLiteral("outputDock"));
     m_outputDock->setWidget(m_outputPanel);
     m_dockManager->addDockWidget(ads::BottomDockWidgetArea, m_outputDock, centralArea);
@@ -466,7 +471,8 @@ void ShaderEditorWindow::setupLayout()
 
     // Status bar: compile status + FPS
     auto updateCompileStatus = [this]() {
-        if (!m_compileStatusLabel) return;
+        if (!m_compileStatusLabel)
+            return;
         const int status = m_previewController->status();
         const int fps = m_previewController->fps();
         QString text;
@@ -503,8 +509,7 @@ void ShaderEditorWindow::connectDocumentToPreview(const QString& filename, KText
     }
 }
 
-void ShaderEditorWindow::addDocumentTab(const QString& filename, const QString& content,
-                                        const QString& highlightMode)
+void ShaderEditorWindow::addDocumentTab(const QString& filename, const QString& content, const QString& highlightMode)
 {
     auto* doc = m_editor->createDocument(this);
     doc->setText(content);
@@ -512,17 +517,17 @@ void ShaderEditorWindow::addDocumentTab(const QString& filename, const QString& 
     doc->setHighlightingMode(highlightMode);
 
     // Configure mark types for error highlighting (before creating view)
-    doc->setMarkDescription(KTextEditor::Document::Error, i18n("Error"));
-    doc->setMarkDescription(KTextEditor::Document::Warning, i18n("Warning"));
+    doc->setMarkDescription(KTextEditor::Document::Error, PzI18n::tr("Error"));
+    doc->setMarkDescription(KTextEditor::Document::Warning, PzI18n::tr("Warning"));
     doc->setMarkIcon(KTextEditor::Document::Error, QIcon::fromTheme(QStringLiteral("dialog-error")));
     doc->setMarkIcon(KTextEditor::Document::Warning, QIcon::fromTheme(QStringLiteral("dialog-warning")));
 
     auto* view = doc->createView(m_tabWidget);
 
     // ── Editor configuration ──
-    view->setConfigValue(QStringLiteral("icon-bar"), true);         // gutter marks
-    view->setConfigValue(QStringLiteral("line-numbers"), true);     // line numbers
-    view->setConfigValue(QStringLiteral("auto-brackets"), true);    // auto-close (){}[]
+    view->setConfigValue(QStringLiteral("icon-bar"), true); // gutter marks
+    view->setConfigValue(QStringLiteral("line-numbers"), true); // line numbers
+    view->setConfigValue(QStringLiteral("auto-brackets"), true); // auto-close (){}[]
 
     // Register GLSL completion model for shader files
     if (filename.endsWith(QLatin1String(".frag")) || filename.endsWith(QLatin1String(".vert"))
@@ -541,22 +546,23 @@ void ShaderEditorWindow::addDocumentTab(const QString& filename, const QString& 
     m_tabWidget->addTab(view, filename);
     m_ownedDocuments.append(doc);
 
-    connect(view, &KTextEditor::View::cursorPositionChanged, this, [this](KTextEditor::View*, KTextEditor::Cursor cursor) {
-        m_cursorLabel->setText(i18n("Line %1, Col %2", cursor.line() + 1, cursor.column() + 1));
-    });
+    connect(view, &KTextEditor::View::cursorPositionChanged, this,
+            [this](KTextEditor::View*, KTextEditor::Cursor cursor) {
+                m_cursorLabel->setText(PzI18n::tr("Line %1, Col %2").arg(cursor.line() + 1).arg(cursor.column() + 1));
+            });
     connect(doc, &KTextEditor::Document::modifiedChanged, this, [this](KTextEditor::Document*) {
         updateWindowTitle();
     });
 
     // Error mark tooltip: show error message when hovering gutter marks
     connect(doc, &KTextEditor::Document::markToolTipRequested, this,
-        [this](KTextEditor::Document*, KTextEditor::Mark mark, QPoint, bool& handled) {
-            constexpr uint errorWarningMask = KTextEditor::Document::Error | KTextEditor::Document::Warning;
-            if ((mark.type & errorWarningMask) && m_errorMessages.contains(mark.line)) {
-                QToolTip::showText(QCursor::pos(), m_errorMessages.value(mark.line));
-                handled = true;
-            }
-        });
+            [this](KTextEditor::Document*, KTextEditor::Mark mark, QPoint, bool& handled) {
+                constexpr uint errorWarningMask = KTextEditor::Document::Error | KTextEditor::Document::Warning;
+                if ((mark.type & errorWarningMask) && m_errorMessages.contains(mark.line)) {
+                    QToolTip::showText(QCursor::pos(), m_errorMessages.value(mark.line));
+                    handled = true;
+                }
+            });
 
     connectDocumentToPreview(filename, doc);
 }
@@ -581,7 +587,7 @@ void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
     m_parameterPanel = new ParameterPanel(this);
     m_parameterPanel->loadFromMetadata(metadataJson);
     if (!m_paramsDock) {
-        m_paramsDock = new ads::CDockWidget(m_dockManager, i18n("Parameters"));
+        m_paramsDock = new ads::CDockWidget(m_dockManager, PzI18n::tr("Parameters"));
         m_paramsDock->setObjectName(QStringLiteral("paramsDock"));
     }
     m_paramsDock->setWidget(m_parameterPanel);
@@ -590,7 +596,7 @@ void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
     m_metadataEditor = new MetadataEditorWidget(this);
     m_metadataEditor->loadFromJson(metadataJson);
     if (!m_metadataDock) {
-        m_metadataDock = new ads::CDockWidget(m_dockManager, i18n("Metadata"));
+        m_metadataDock = new ads::CDockWidget(m_dockManager, PzI18n::tr("Metadata"));
         m_metadataDock->setObjectName(QStringLiteral("metadataDock"));
     }
     m_metadataDock->setWidget(m_metadataEditor);
@@ -599,7 +605,7 @@ void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
     m_presetPanel = new PresetPanel(this);
     m_presetPanel->loadFromMetadata(metadataJson);
     if (!m_presetsDock) {
-        m_presetsDock = new ads::CDockWidget(m_dockManager, i18n("Presets"));
+        m_presetsDock = new ads::CDockWidget(m_dockManager, PzI18n::tr("Presets"));
         m_presetsDock->setObjectName(QStringLiteral("presetsDock"));
     }
     m_presetsDock->setWidget(m_presetPanel);
@@ -616,14 +622,14 @@ void ShaderEditorWindow::setupRightPanel(const QString& metadataJson)
     });
 
     // Connect insert uniform from both panels
-    connect(m_parameterPanel, &ParameterPanel::insertUniformRequested,
-            this, &ShaderEditorWindow::insertTextAtCursor);
-    connect(m_metadataEditor, &MetadataEditorWidget::insertUniformRequested,
-            this, &ShaderEditorWindow::insertTextAtCursor);
+    connect(m_parameterPanel, &ParameterPanel::insertUniformRequested, this, &ShaderEditorWindow::insertTextAtCursor);
+    connect(m_metadataEditor, &MetadataEditorWidget::insertUniformRequested, this,
+            &ShaderEditorWindow::insertTextAtCursor);
 
     // Copy as Defaults -> write current param values back into metadata defaults
     connect(m_parameterPanel, &ParameterPanel::copyDefaultsRequested, this, [this]() {
-        if (!m_metadataEditor) return;
+        if (!m_metadataEditor)
+            return;
         const QVariantMap values = m_parameterPanel->currentUniformValues();
         m_metadataEditor->updateParameterDefaults(values);
     });
@@ -714,8 +720,7 @@ void ShaderEditorWindow::newShaderPackage()
 
     closeAllTabs();
 
-    ShaderPackageContents contents = ShaderPackageIO::createTemplate(
-        shaderId, shaderName, dialog.selectedFeatures());
+    ShaderPackageContents contents = ShaderPackageIO::createTemplate(shaderId, shaderName, dialog.selectedFeatures());
 
     // Apply metadata overrides from the dialog (category, description, author)
     {
@@ -774,8 +779,8 @@ void ShaderEditorWindow::openShaderPackage(const QString& path)
 
     const ShaderPackageContents contents = ShaderPackageIO::loadPackage(absPath);
     if (contents.metadataJson.isEmpty() && contents.files.isEmpty()) {
-        QMessageBox::warning(this, i18n("Error"),
-                             i18n("Failed to load shader package from:\n%1", absPath));
+        QMessageBox::warning(this, PzI18n::tr("Error"),
+                             PzI18n::tr("Failed to load shader package from:\n%1").arg(absPath));
         return;
     }
 
@@ -817,8 +822,7 @@ void ShaderEditorWindow::openShaderById(const QString& shaderId)
 {
     const QString path = resolveShaderPath(shaderId);
     if (path.isEmpty()) {
-        QMessageBox::warning(this, i18n("Error"),
-                             i18n("Could not find shader with ID: %1", shaderId));
+        QMessageBox::warning(this, PzI18n::tr("Error"), PzI18n::tr("Could not find shader with ID: %1").arg(shaderId));
         return;
     }
     openShaderPackage(path);
@@ -838,9 +842,11 @@ void ShaderEditorWindow::saveShaderPackage()
 
     for (int i = 0; i < m_tabWidget->count(); ++i) {
         auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->widget(i));
-        if (!view) continue;
+        if (!view)
+            continue;
         auto* doc = view->document();
-        if (!doc) continue;
+        if (!doc)
+            continue;
 
         ShaderFile sf;
         sf.filename = m_tabWidget->tabText(i);
@@ -855,11 +861,11 @@ void ShaderEditorWindow::saveShaderPackage()
         if (m_metadataEditor) {
             m_metadataEditor->setModified(false);
         }
-        statusBar()->showMessage(i18n("Shader package saved to %1", m_packagePath), 3000);
+        statusBar()->showMessage(PzI18n::tr("Shader package saved to %1").arg(m_packagePath), 3000);
         qCInfo(lcShaderEditor) << "Saved shader package to=" << m_packagePath;
     } else {
-        QMessageBox::warning(this, i18n("Error"),
-                             i18n("Failed to save shader package to:\n%1", m_packagePath));
+        QMessageBox::warning(this, PzI18n::tr("Error"),
+                             PzI18n::tr("Failed to save shader package to:\n%1").arg(m_packagePath));
     }
 }
 
@@ -879,8 +885,8 @@ void ShaderEditorWindow::saveShaderPackageAs()
         }
     }
 
-    const QString dir = QFileDialog::getExistingDirectory(
-        this, i18n("Save Shader Package To Directory"), startDir);
+    const QString dir =
+        QFileDialog::getExistingDirectory(this, PzI18n::tr("Save Shader Package To Directory"), startDir);
     if (dir.isEmpty()) {
         return;
     }
@@ -893,7 +899,8 @@ void ShaderEditorWindow::saveShaderPackageAs()
 
     for (int i = 0; i < m_tabWidget->count(); ++i) {
         auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->widget(i));
-        if (!view || !view->document()) continue;
+        if (!view || !view->document())
+            continue;
         ShaderFile sf;
         sf.filename = m_tabWidget->tabText(i);
         sf.content = view->document()->text();
@@ -910,11 +917,10 @@ void ShaderEditorWindow::saveShaderPackageAs()
             m_metadataEditor->setModified(false);
         }
         m_previewController->setShaderDirectory(dir);
-        statusBar()->showMessage(i18n("Shader package saved to %1", dir), 3000);
+        statusBar()->showMessage(PzI18n::tr("Shader package saved to %1").arg(dir), 3000);
         qCInfo(lcShaderEditor) << "Saved shader package to=" << dir;
     } else {
-        QMessageBox::warning(this, i18n("Error"),
-                             i18n("Failed to save shader package to:\n%1", dir));
+        QMessageBox::warning(this, PzI18n::tr("Error"), PzI18n::tr("Failed to save shader package to:\n%1").arg(dir));
     }
 
     updateWindowTitle();
@@ -924,17 +930,19 @@ void ShaderEditorWindow::exportShaderPackage()
 {
     // Ensure package is saved to disk first
     if (m_packagePath.isEmpty()) {
-        QMessageBox::information(this, i18n("Export"),
-            i18n("Save the shader package first before exporting."));
+        QMessageBox::information(this, PzI18n::tr("Export"),
+                                 PzI18n::tr("Save the shader package first before exporting."));
         return;
     }
     if (hasUnsavedChanges()) {
-        const int result = QMessageBox::question(this, i18n("Export"),
-            i18n("Save changes before exporting?"),
-            QMessageBox::Save | QMessageBox::Cancel);
-        if (result == QMessageBox::Cancel) return;
+        const int result =
+            QMessageBox::question(this, PzI18n::tr("Export"), PzI18n::tr("Save changes before exporting?"),
+                                  QMessageBox::Save | QMessageBox::Cancel);
+        if (result == QMessageBox::Cancel)
+            return;
         saveShaderPackage();
-        if (hasUnsavedChanges()) return;
+        if (hasUnsavedChanges())
+            return;
     }
 
     // Derive default filename from the package directory name
@@ -942,15 +950,17 @@ void ShaderEditorWindow::exportShaderPackage()
     const QString defaultName = packageDir.dirName() + QStringLiteral(".tar.gz");
     const QString defaultPath = QDir::homePath() + QStringLiteral("/") + defaultName;
 
-    const QString outPath = QFileDialog::getSaveFileName(this, i18n("Export Shader Package"),
-        defaultPath, i18n("Compressed Archive") + QStringLiteral(" (*.tar.gz)"));
-    if (outPath.isEmpty()) return;
+    const QString outPath =
+        QFileDialog::getSaveFileName(this, PzI18n::tr("Export Shader Package"), defaultPath,
+                                     PzI18n::tr("Compressed Archive") + QStringLiteral(" (*.tar.gz)"));
+    if (outPath.isEmpty())
+        return;
 
     // Create tar.gz archive using KArchive (no external process needed)
     KTar archive(outPath, QStringLiteral("application/x-gzip"));
     if (!archive.open(QIODevice::WriteOnly)) {
-        QMessageBox::warning(this, i18n("Export Failed"),
-            i18n("Failed to create archive:\n%1", outPath));
+        QMessageBox::warning(this, PzI18n::tr("Export Failed"),
+                             PzI18n::tr("Failed to create archive:\n%1").arg(outPath));
         return;
     }
 
@@ -967,7 +977,7 @@ void ShaderEditorWindow::exportShaderPackage()
 
     const QFileInfo outInfo(outPath);
     const QString sizeStr = QLocale().formattedDataSize(outInfo.size());
-    statusBar()->showMessage(i18n("Exported to %1 (%2)", outPath, sizeStr), 5000);
+    statusBar()->showMessage(PzI18n::tr("Exported to %1 (%2)").arg(outPath, sizeStr), 5000);
     qCInfo(lcShaderEditor) << "Exported shader package to=" << outPath << "size=" << outInfo.size();
 }
 
@@ -975,12 +985,12 @@ void ShaderEditorWindow::updateWindowTitle()
 {
     QString title;
     if (m_packagePath.isEmpty() && !m_isNewPackage) {
-        title = i18n("PlasmaZones Shader Editor");
+        title = PzI18n::tr("PlasmaZones Shader Editor");
     } else if (m_isNewPackage) {
-        title = i18n("New Shader Package — PlasmaZones Shader Editor");
+        title = PzI18n::tr("New Shader Package — PlasmaZones Shader Editor");
     } else {
         const QDir dir(m_packagePath);
-        title = i18n("%1 — PlasmaZones Shader Editor", dir.dirName());
+        title = PzI18n::tr("%1 — PlasmaZones Shader Editor").arg(dir.dirName());
     }
 
     if (hasUnsavedChanges()) {
@@ -994,7 +1004,7 @@ void ShaderEditorWindow::updateStatusBar()
 {
     const int idx = m_tabWidget->currentIndex();
     if (idx < 0) {
-        m_fileLabel->setText(i18n("No file open"));
+        m_fileLabel->setText(PzI18n::tr("No file open"));
         m_cursorLabel->setText(QString());
         m_shaderInfoLabel->setText(QString());
         return;
@@ -1003,7 +1013,7 @@ void ShaderEditorWindow::updateStatusBar()
     auto* view = qobject_cast<KTextEditor::View*>(m_tabWidget->widget(idx));
     if (view) {
         auto cursor = view->cursorPosition();
-        m_cursorLabel->setText(i18n("Ln %1, Col %2", cursor.line() + 1, cursor.column() + 1));
+        m_cursorLabel->setText(PzI18n::tr("Ln %1, Col %2").arg(cursor.line() + 1).arg(cursor.column() + 1));
     } else {
         m_cursorLabel->setText(QString());
     }
@@ -1016,9 +1026,12 @@ void ShaderEditorWindow::updateStatusBar()
         const QString version = obj.value(QStringLiteral("version")).toString();
         const QString category = obj.value(QStringLiteral("category")).toString();
         QStringList parts;
-        if (!name.isEmpty()) parts << name;
-        if (!version.isEmpty()) parts << QStringLiteral("v%1").arg(version);
-        if (!category.isEmpty()) parts << category;
+        if (!name.isEmpty())
+            parts << name;
+        if (!version.isEmpty())
+            parts << QStringLiteral("v%1").arg(version);
+        if (!category.isEmpty())
+            parts << category;
         m_shaderInfoLabel->setText(parts.join(QStringLiteral("  |  ")));
     }
 }
@@ -1029,18 +1042,18 @@ bool ShaderEditorWindow::promptSaveIfModified()
         return true;
     }
 
-    const int result = QMessageBox::question(
-        this,
-        i18n("Save Changes"),
-        i18n("The current shader package has unsaved changes. Save before continuing?"),
-        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+    const int result =
+        QMessageBox::question(this, PzI18n::tr("Save Changes"),
+                              PzI18n::tr("The current shader package has unsaved changes. Save before continuing?"),
+                              QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
 
     if (result == QMessageBox::Cancel) {
         return false;
     }
     if (result == QMessageBox::Save) {
         saveShaderPackage();
-        if (hasUnsavedChanges()) return false;
+        if (hasUnsavedChanges())
+            return false;
     }
     return true;
 }
@@ -1051,7 +1064,8 @@ bool ShaderEditorWindow::hasUnsavedChanges() const
         return true;
     }
     for (auto* doc : m_ownedDocuments) {
-        if (doc->isModified()) return true;
+        if (doc->isModified())
+            return true;
     }
     return false;
 }
@@ -1068,9 +1082,18 @@ void ShaderEditorWindow::closeAllTabs()
     m_ownedDocuments.clear();
 
     // Clear panel contents (dock widgets persist, panels are recreated on next open)
-    if (m_parameterPanel) { delete m_parameterPanel; m_parameterPanel = nullptr; }
-    if (m_metadataEditor) { delete m_metadataEditor; m_metadataEditor = nullptr; }
-    if (m_presetPanel) { delete m_presetPanel; m_presetPanel = nullptr; }
+    if (m_parameterPanel) {
+        delete m_parameterPanel;
+        m_parameterPanel = nullptr;
+    }
+    if (m_metadataEditor) {
+        delete m_metadataEditor;
+        m_metadataEditor = nullptr;
+    }
+    if (m_presetPanel) {
+        delete m_presetPanel;
+        m_presetPanel = nullptr;
+    }
 }
 
 void ShaderEditorWindow::closeEvent(QCloseEvent* event)
@@ -1116,7 +1139,8 @@ QString ShaderEditorWindow::resolveShaderPath(const QString& shaderId) const
 
 QString ShaderEditorWindow::buildMetadataJsonForSave() const
 {
-    if (!m_metadataEditor) return {};
+    if (!m_metadataEditor)
+        return {};
     QJsonDocument doc = QJsonDocument::fromJson(m_metadataEditor->toJson().toUtf8());
     QJsonObject obj = doc.object();
     if (m_presetPanel) {
@@ -1210,9 +1234,7 @@ void ShaderEditorWindow::updateErrorMarks()
                     const bool isError = errLine.contains(QLatin1String("ERROR"), Qt::CaseInsensitive);
 
                     // Gutter mark
-                    const auto markType = isError
-                        ? KTextEditor::Document::Error
-                        : KTextEditor::Document::Warning;
+                    const auto markType = isError ? KTextEditor::Document::Error : KTextEditor::Document::Warning;
                     doc->addMark(line0, markType);
 
                     // Store error message for tooltip
@@ -1224,8 +1246,7 @@ void ShaderEditorWindow::updateErrorMarks()
                     // Red underline on the entire error line
                     const int lineLength = doc->lineLength(line0);
                     if (lineLength > 0) {
-                        auto* range = doc->newMovingRange(
-                            KTextEditor::Range(line0, 0, line0, lineLength));
+                        auto* range = doc->newMovingRange(KTextEditor::Range(line0, 0, line0, lineLength));
                         KTextEditor::Attribute::Ptr attr(new KTextEditor::Attribute());
                         attr->setUnderlineStyle(QTextCharFormat::WaveUnderline);
                         attr->setUnderlineColor(isError ? QColor(255, 80, 80) : QColor(255, 180, 50));

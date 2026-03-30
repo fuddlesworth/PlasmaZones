@@ -15,7 +15,7 @@
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
-#include <KLocalizedString>
+#include "../pz_i18n.h"
 
 namespace PlasmaZones {
 
@@ -32,7 +32,7 @@ OutputPanel::OutputPanel(QWidget* parent)
 
     // ── Problems tab ──
     m_problemsTree = new QTreeWidget;
-    m_problemsTree->setHeaderLabels({i18n("Severity"), i18n("Line"), i18n("Message")});
+    m_problemsTree->setHeaderLabels({PzI18n::tr("Severity"), PzI18n::tr("Line"), PzI18n::tr("Message")});
     m_problemsTree->setRootIsDecorated(false);
     m_problemsTree->setAlternatingRowColors(true);
     m_problemsTree->header()->setStretchLastSection(true);
@@ -40,14 +40,15 @@ OutputPanel::OutputPanel(QWidget* parent)
     m_problemsTree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
 
     connect(m_problemsTree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) {
-        if (!item) return;
+        if (!item)
+            return;
         const int line = item->text(1).toInt();
         if (line > 0) {
             Q_EMIT problemDoubleClicked(line);
         }
     });
 
-    m_tabWidget->addTab(m_problemsTree, i18n("Problems"));
+    m_tabWidget->addTab(m_problemsTree, PzI18n::tr("Problems"));
 
     // ── Output tab ──
     QFont monoFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
@@ -56,13 +57,13 @@ OutputPanel::OutputPanel(QWidget* parent)
     m_outputText = new QTextEdit;
     m_outputText->setReadOnly(true);
     m_outputText->setFont(monoFont);
-    m_tabWidget->addTab(m_outputText, i18n("Output"));
+    m_tabWidget->addTab(m_outputText, PzI18n::tr("Output"));
 
     // ── Compiler tab ──
     m_compilerText = new QTextEdit;
     m_compilerText->setReadOnly(true);
     m_compilerText->setFont(monoFont);
-    m_tabWidget->addTab(m_compilerText, i18n("Compiler"));
+    m_tabWidget->addTab(m_compilerText, PzI18n::tr("Compiler"));
 
     layout->addWidget(m_tabWidget);
 }
@@ -71,13 +72,14 @@ void OutputPanel::setCompilationSuccess(int lineCount, const QStringList& unifor
 {
     // Problems: clear, show success
     m_problemsTree->clear();
-    m_tabWidget->setTabText(0, i18n("Problems"));
+    m_tabWidget->setTabText(0, PzI18n::tr("Problems"));
 
     // Output: compilation summary
     const QColor successColor = palette().color(QPalette::Active, QPalette::Link);
     m_outputText->clear();
-    m_outputText->append(QStringLiteral("<span style='color:%1'>&#10003; Shader compiled successfully (GLSL 450, %2 lines)</span>")
-        .arg(successColor.name(), QString::number(lineCount)));
+    m_outputText->append(
+        QStringLiteral("<span style='color:%1'>&#10003; Shader compiled successfully (GLSL 450, %2 lines)</span>")
+            .arg(successColor.name(), QString::number(lineCount)));
     if (!uniforms.isEmpty()) {
         m_outputText->append(QStringLiteral("  Uniforms: %1").arg(uniforms.join(QStringLiteral(", "))));
     }
@@ -87,7 +89,7 @@ void OutputPanel::setCompilationSuccess(int lineCount, const QStringList& unifor
 
     // Compiler: raw success
     m_compilerText->clear();
-    m_compilerText->append(i18n("Compilation successful."));
+    m_compilerText->append(PzI18n::tr("Compilation successful."));
 }
 
 void OutputPanel::setCompilationError(const QString& errorLog)
@@ -96,7 +98,7 @@ void OutputPanel::setCompilationError(const QString& errorLog)
     m_problemsTree->clear();
 
     if (errorLog.isEmpty()) {
-        m_tabWidget->setTabText(0, i18n("Problems"));
+        m_tabWidget->setTabText(0, PzI18n::tr("Problems"));
         return;
     }
 
@@ -121,20 +123,20 @@ void OutputPanel::setCompilationError(const QString& errorLog)
         }
 
         const bool isError = line.contains(QLatin1String("ERROR"), Qt::CaseInsensitive)
-                          || line.contains(QLatin1String("error"), Qt::CaseSensitive);
+            || line.contains(QLatin1String("error"), Qt::CaseSensitive);
         const bool isWarning = line.contains(QLatin1String("WARNING"), Qt::CaseInsensitive)
-                            || line.contains(QLatin1String("warning"), Qt::CaseSensitive);
+            || line.contains(QLatin1String("warning"), Qt::CaseSensitive);
 
         if (isError) {
-            item->setText(0, i18n("Error"));
+            item->setText(0, PzI18n::tr("Error"));
             item->setForeground(0, QGuiApplication::palette().color(QPalette::Active, QPalette::ToolTipText));
             item->setBackground(0, QColor(255, 68, 68, 40));
             errorCount++;
         } else if (isWarning) {
-            item->setText(0, i18n("Warning"));
+            item->setText(0, PzI18n::tr("Warning"));
             item->setForeground(0, QGuiApplication::palette().color(QPalette::Active, QPalette::Link));
         } else {
-            item->setText(0, i18n("Info"));
+            item->setText(0, PzI18n::tr("Info"));
             errorCount++;
         }
 
@@ -146,19 +148,19 @@ void OutputPanel::setCompilationError(const QString& errorLog)
         errorCount = lines.size();
     }
 
-    m_tabWidget->setTabText(0, i18n("Problems (%1)", errorCount));
+    m_tabWidget->setTabText(0, PzI18n::tr("Problems (%1)").arg(errorCount));
     m_tabWidget->setCurrentIndex(0);
 
     // Compiler: raw error output
     const QColor errorColor = QGuiApplication::palette().color(QPalette::Active, QPalette::ToolTipText);
     m_compilerText->clear();
-    m_compilerText->append(QStringLiteral("<span style='color:%1'>%2</span>")
-        .arg(errorColor.name(), errorLog.toHtmlEscaped()));
+    m_compilerText->append(
+        QStringLiteral("<span style='color:%1'>%2</span>").arg(errorColor.name(), errorLog.toHtmlEscaped()));
 
     // Output
     m_outputText->clear();
-    m_outputText->append(QStringLiteral("<span style='color:%1'>&#10007; Shader compilation failed</span>")
-        .arg(errorColor.name()));
+    m_outputText->append(
+        QStringLiteral("<span style='color:%1'>&#10007; Shader compilation failed</span>").arg(errorColor.name()));
 }
 
 void OutputPanel::clearOutput()
@@ -166,7 +168,7 @@ void OutputPanel::clearOutput()
     m_problemsTree->clear();
     m_outputText->clear();
     m_compilerText->clear();
-    m_tabWidget->setTabText(0, i18n("Problems"));
+    m_tabWidget->setTabText(0, PzI18n::tr("Problems"));
 }
 
 void OutputPanel::appendOutput(const QString& text)

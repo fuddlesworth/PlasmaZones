@@ -23,7 +23,7 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
-#include <KLocalizedString>
+#include "../pz_i18n.h"
 
 Q_LOGGING_CATEGORY(lcParameterPanel, "plasmazones.shadereditor.parameters")
 
@@ -52,9 +52,9 @@ ParameterPanel::ParameterPanel(QWidget* parent)
     auto* buttonBar = new QHBoxLayout;
     buttonBar->setContentsMargins(4, 2, 4, 4);
 
-    auto* copyDefaultsBtn = new QPushButton(i18n("Copy as Defaults"), this);
-    auto* resetAllBtn = new QPushButton(i18n("Reset All"), this);
-    auto* applyBtn = new QPushButton(i18n("Apply"), this);
+    auto* copyDefaultsBtn = new QPushButton(PzI18n::tr("Copy as Defaults"), this);
+    auto* resetAllBtn = new QPushButton(PzI18n::tr("Reset All"), this);
+    auto* applyBtn = new QPushButton(PzI18n::tr("Apply"), this);
 
     buttonBar->addWidget(copyDefaultsBtn);
     buttonBar->addWidget(resetAllBtn);
@@ -77,19 +77,21 @@ void ParameterPanel::addLockButton(QHBoxLayout* layout, QWidget* parent, int con
     lockBtn->setCheckable(true);
     lockBtn->setFlat(true);
     lockBtn->setFixedSize(24, 22);
-    lockBtn->setToolTip(i18n("Lock parameter"));
+    lockBtn->setToolTip(PzI18n::tr("Lock parameter"));
     layout->addWidget(lockBtn);
 
     m_controls[controlIndex].lockBtn = lockBtn;
 
     // Connect before restoring state so setChecked triggers the handler
     connect(lockBtn, &QPushButton::toggled, this, [this, controlIndex](bool locked) {
-        if (controlIndex >= m_controls.size()) return;
+        if (controlIndex >= m_controls.size())
+            return;
         ParamControl& c = m_controls[controlIndex];
         c.locked = locked;
         setControlEnabled(c, !locked);
-        c.lockBtn->setIcon(QIcon::fromTheme(locked ? QStringLiteral("object-locked") : QStringLiteral("object-unlocked")));
-        c.lockBtn->setToolTip(locked ? i18n("Unlock parameter") : i18n("Lock parameter"));
+        c.lockBtn->setIcon(
+            QIcon::fromTheme(locked ? QStringLiteral("object-locked") : QStringLiteral("object-unlocked")));
+        c.lockBtn->setToolTip(locked ? PzI18n::tr("Unlock parameter") : PzI18n::tr("Lock parameter"));
         if (locked) {
             m_lockedUniforms.insert(c.uniformName);
         } else {
@@ -105,10 +107,14 @@ void ParameterPanel::addLockButton(QHBoxLayout* layout, QWidget* parent, int con
 
 void ParameterPanel::setControlEnabled(ParamControl& ctrl, bool enabled)
 {
-    if (ctrl.slider) ctrl.slider->setEnabled(enabled);
-    if (ctrl.spinBox) ctrl.spinBox->setEnabled(enabled);
-    if (ctrl.checkBox) ctrl.checkBox->setEnabled(enabled);
-    if (ctrl.colorBtn) ctrl.colorBtn->setEnabled(enabled);
+    if (ctrl.slider)
+        ctrl.slider->setEnabled(enabled);
+    if (ctrl.spinBox)
+        ctrl.spinBox->setEnabled(enabled);
+    if (ctrl.checkBox)
+        ctrl.checkBox->setEnabled(enabled);
+    if (ctrl.colorBtn)
+        ctrl.colorBtn->setEnabled(enabled);
 }
 
 void ParameterPanel::clearControls()
@@ -165,7 +171,7 @@ void ParameterPanel::loadFromMetadata(const QString& metadataJson)
         const QJsonObject param = paramVal.toObject();
         QString group = param.value(QStringLiteral("group")).toString().trimmed();
         if (group.isEmpty()) {
-            group = i18n("General");
+            group = PzI18n::tr("General");
         }
 
         if (!groupedParams.contains(group)) {
@@ -206,8 +212,10 @@ void ParameterPanel::loadFromMetadata(const QString& metadataJson)
 
         const int paramCount = groupParams.size();
         const QString expandedText = QStringLiteral("\u25BE %1").arg(groupName);
-        const QString collapsedText = QStringLiteral("\u25B8 %1 (%2)").arg(groupName).arg(
-            i18np("%1 parameter", "%1 parameters", paramCount));
+        const QString collapsedText = QStringLiteral("\u25B8 %1 (%2)")
+                                          .arg(groupName)
+                                          .arg((paramCount == 1) ? PzI18n::tr("%1 parameter").arg(paramCount)
+                                                                 : PzI18n::tr("%1 parameters").arg(paramCount));
 
         headerBtn->setText(isFirstGroup ? expandedText : collapsedText);
 
@@ -261,10 +269,11 @@ void ParameterPanel::loadFromMetadata(const QString& metadataJson)
         groupLayout->addWidget(content);
 
         // Connect header toggle
-        connect(headerBtn, &QPushButton::toggled, this, [headerBtn, content, expandedText, collapsedText](bool checked) {
-            content->setVisible(checked);
-            headerBtn->setText(checked ? expandedText : collapsedText);
-        });
+        connect(headerBtn, &QPushButton::toggled, this,
+                [headerBtn, content, expandedText, collapsedText](bool checked) {
+                    content->setVisible(checked);
+                    headerBtn->setText(checked ? expandedText : collapsedText);
+                });
 
         m_groupsLayout->insertWidget(currentInsert, groupContainer);
         m_groupWidgets.append(groupContainer);
@@ -286,9 +295,11 @@ void ParameterPanel::loadFromMetadata(const QString& metadataJson)
         if (ctrl.type == QLatin1String("float") && ctrl.slider) {
             const double val = it->toDouble();
             const int pos = (ctrl.floatMax > ctrl.floatMin)
-                ? qRound((val - ctrl.floatMin) / (ctrl.floatMax - ctrl.floatMin) * 10000.0) : 0;
+                ? qRound((val - ctrl.floatMin) / (ctrl.floatMax - ctrl.floatMin) * 10000.0)
+                : 0;
             ctrl.slider->setValue(pos);
-            if (ctrl.valueLabel) ctrl.valueLabel->setText(QString::number(val, 'f', 2));
+            if (ctrl.valueLabel)
+                ctrl.valueLabel->setText(QString::number(val, 'f', 2));
         } else if (ctrl.type == QLatin1String("int") && ctrl.spinBox) {
             ctrl.spinBox->setValue(it->toInt());
         } else if (ctrl.type == QLatin1String("bool") && ctrl.checkBox) {
@@ -300,13 +311,14 @@ void ParameterPanel::loadFromMetadata(const QString& metadataJson)
                 swatchPal.setColor(QPalette::Button, ctrl.currentColor);
                 ctrl.colorBtn->setPalette(swatchPal);
             }
-            if (ctrl.valueLabel) ctrl.valueLabel->setText(ctrl.currentColor.name().toUpper());
+            if (ctrl.valueLabel)
+                ctrl.valueLabel->setText(ctrl.currentColor.name().toUpper());
         }
     }
 }
 
-QWidget* ParameterPanel::createFloatControl(const QString& name, const QString& uniformName,
-                                            double defaultVal, double min, double max, int slot)
+QWidget* ParameterPanel::createFloatControl(const QString& name, const QString& uniformName, double defaultVal,
+                                            double min, double max, int slot)
 {
     auto* row = new QWidget;
     auto* layout = new QHBoxLayout(row);
@@ -325,7 +337,7 @@ QWidget* ParameterPanel::createFloatControl(const QString& name, const QString& 
     valueLabel->setFixedWidth(50);
     valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
-    auto* insertBtn = new QPushButton(i18n("Insert \u2192"), row);
+    auto* insertBtn = new QPushButton(PzI18n::tr("Insert \u2192"), row);
     insertBtn->setMinimumWidth(60);
 
     layout->addWidget(label);
@@ -361,8 +373,8 @@ QWidget* ParameterPanel::createFloatControl(const QString& name, const QString& 
     return row;
 }
 
-QWidget* ParameterPanel::createIntControl(const QString& name, const QString& uniformName,
-                                          int defaultVal, int min, int max, int slot)
+QWidget* ParameterPanel::createIntControl(const QString& name, const QString& uniformName, int defaultVal, int min,
+                                          int max, int slot)
 {
     auto* row = new QWidget;
     auto* layout = new QHBoxLayout(row);
@@ -375,7 +387,7 @@ QWidget* ParameterPanel::createIntControl(const QString& name, const QString& un
     spinBox->setRange(min, max);
     spinBox->setValue(defaultVal);
 
-    auto* insertBtn = new QPushButton(i18n("Insert \u2192"), row);
+    auto* insertBtn = new QPushButton(PzI18n::tr("Insert \u2192"), row);
     insertBtn->setMinimumWidth(60);
 
     layout->addWidget(label);
@@ -402,8 +414,7 @@ QWidget* ParameterPanel::createIntControl(const QString& name, const QString& un
     return row;
 }
 
-QWidget* ParameterPanel::createBoolControl(const QString& name, const QString& uniformName,
-                                           bool defaultVal, int slot)
+QWidget* ParameterPanel::createBoolControl(const QString& name, const QString& uniformName, bool defaultVal, int slot)
 {
     auto* row = new QWidget;
     auto* layout = new QHBoxLayout(row);
@@ -415,7 +426,7 @@ QWidget* ParameterPanel::createBoolControl(const QString& name, const QString& u
     auto* checkBox = new QCheckBox(row);
     checkBox->setChecked(defaultVal);
 
-    auto* insertBtn = new QPushButton(i18n("Insert \u2192"), row);
+    auto* insertBtn = new QPushButton(PzI18n::tr("Insert \u2192"), row);
     insertBtn->setMinimumWidth(60);
 
     layout->addWidget(label);
@@ -469,7 +480,7 @@ QWidget* ParameterPanel::createColorControl(const QString& name, const QString& 
     auto* hexLabel = new QLabel(color.name().toUpper(), row);
     hexLabel->setFixedWidth(70);
 
-    auto* insertBtn = new QPushButton(i18n("Insert \u2192"), row);
+    auto* insertBtn = new QPushButton(PzI18n::tr("Insert \u2192"), row);
     insertBtn->setMinimumWidth(60);
 
     layout->addWidget(label);
@@ -490,10 +501,12 @@ QWidget* ParameterPanel::createColorControl(const QString& name, const QString& 
     layout->addWidget(insertBtn);
 
     connect(colorBtn, &QPushButton::clicked, this, [this, controlIndex]() {
-        if (controlIndex >= m_controls.size()) return;
+        if (controlIndex >= m_controls.size())
+            return;
         ParamControl& c = m_controls[controlIndex];
-        const QColor chosen = QColorDialog::getColor(c.currentColor, this, i18n("Choose Color"));
-        if (!chosen.isValid() || controlIndex >= m_controls.size()) return;
+        const QColor chosen = QColorDialog::getColor(c.currentColor, this, PzI18n::tr("Choose Color"));
+        if (!chosen.isValid() || controlIndex >= m_controls.size())
+            return;
         ParamControl& c2 = m_controls[controlIndex];
         c2.currentColor = chosen;
         {
@@ -512,8 +525,8 @@ QWidget* ParameterPanel::createColorControl(const QString& name, const QString& 
     return row;
 }
 
-QWidget* ParameterPanel::createImageControl(const QString& name, const QString& uniformName,
-                                            int slot, const QString& defaultPath)
+QWidget* ParameterPanel::createImageControl(const QString& name, const QString& uniformName, int slot,
+                                            const QString& defaultPath)
 {
     auto* row = new QWidget;
     auto* layout = new QHBoxLayout(row);
@@ -524,22 +537,22 @@ QWidget* ParameterPanel::createImageControl(const QString& name, const QString& 
 
     const bool hasDefault = !defaultPath.isEmpty() && QFileInfo::exists(defaultPath);
 
-    auto* pathLabel = new QLabel(hasDefault ? QFileInfo(defaultPath).fileName() : i18n("(none)"), row);
+    auto* pathLabel = new QLabel(hasDefault ? QFileInfo(defaultPath).fileName() : PzI18n::tr("(none)"), row);
     if (hasDefault) {
         pathLabel->setToolTip(defaultPath);
     } else {
         pathLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
     }
 
-    auto* browseBtn = new QPushButton(i18n("Browse..."), row);
+    auto* browseBtn = new QPushButton(PzI18n::tr("Browse..."), row);
     browseBtn->setFixedWidth(80);
 
     auto* clearBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-clear")), QString(), row);
     clearBtn->setFixedSize(22, 22);
-    clearBtn->setToolTip(i18n("Clear texture"));
+    clearBtn->setToolTip(PzI18n::tr("Clear texture"));
     clearBtn->setVisible(hasDefault);
 
-    auto* insertBtn = new QPushButton(i18n("Insert \u2192"), row);
+    auto* insertBtn = new QPushButton(PzI18n::tr("Insert \u2192"), row);
     insertBtn->setMinimumWidth(60);
 
     layout->addWidget(label);
@@ -561,12 +574,13 @@ QWidget* ParameterPanel::createImageControl(const QString& name, const QString& 
     layout->addWidget(insertBtn);
 
     connect(browseBtn, &QPushButton::clicked, this, [this, controlIndex, pathLabel, clearBtn]() {
-        if (controlIndex >= m_controls.size()) return;
+        if (controlIndex >= m_controls.size())
+            return;
         const QString path = QFileDialog::getOpenFileName(
-            this, i18n("Select Image"),
-            QString(),
-            i18n("Images") + QStringLiteral(" (*.png *.jpg *.jpeg *.bmp *.webp *.tga)"));
-        if (path.isEmpty() || controlIndex >= m_controls.size()) return;
+            this, PzI18n::tr("Select Image"), QString(),
+            PzI18n::tr("Images") + QStringLiteral(" (*.png *.jpg *.jpeg *.bmp *.webp *.tga)"));
+        if (path.isEmpty() || controlIndex >= m_controls.size())
+            return;
         ParamControl& c = m_controls[controlIndex];
         c.imagePath = path;
         pathLabel->setText(QFileInfo(path).fileName());
@@ -577,10 +591,11 @@ QWidget* ParameterPanel::createImageControl(const QString& name, const QString& 
     });
 
     connect(clearBtn, &QPushButton::clicked, this, [this, controlIndex, pathLabel, clearBtn]() {
-        if (controlIndex >= m_controls.size()) return;
+        if (controlIndex >= m_controls.size())
+            return;
         ParamControl& c = m_controls[controlIndex];
         c.imagePath.clear();
-        pathLabel->setText(i18n("(none)"));
+        pathLabel->setText(PzI18n::tr("(none)"));
         pathLabel->setToolTip(QString());
         pathLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
         clearBtn->setVisible(false);

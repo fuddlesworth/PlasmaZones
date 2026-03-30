@@ -10,13 +10,14 @@
 #include <QQuickWidget>
 #include <QVBoxLayout>
 
-#include <KLocalizedContext>
-#include <KLocalizedString>
+#include "../pz_i18n.h"
+#include "../pz_qml_i18n.h"
 
 namespace PlasmaZones {
 
 // Preset definitions with gradient colors for the template cards.
-struct PresetDef {
+struct PresetDef
+{
     const char* title;
     const char* subtitle;
     const char* iconName;
@@ -26,47 +27,26 @@ struct PresetDef {
 };
 
 static const PresetDef s_presets[] = {
-    {"Minimal",
-     "Clean gradient with zone masking",
-     "color-gradient",
-     "#818cf8", "#6366f1",
-     0},
-    {"Audio Visualizer",
-     "Spectrum-reactive colors and bars",
-     "audio-volume-high",
-     "#34d399", "#10b981",
+    {"Minimal", "Clean gradient with zone masking", "color-gradient", "#818cf8", "#6366f1", 0},
+    {"Audio Visualizer", "Spectrum-reactive colors and bars", "audio-volume-high", "#34d399", "#10b981",
      static_cast<int>(ShaderFeature::AudioReactive)},
-    {"Multipass Feedback",
-     "Flow field + distortion bloom (2 buffer passes)",
-     "view-split-left-right",
-     "#fb923c", "#f97316",
-     static_cast<int>(ShaderFeature::Multipass)},
-    {"Wallpaper Overlay",
-     "Blend the desktop wallpaper with FX",
-     "preferences-desktop-wallpaper",
-     "#fb7185", "#f43f5e",
+    {"Multipass Feedback", "Flow field + distortion bloom (2 buffer passes)", "view-split-left-right", "#fb923c",
+     "#f97316", static_cast<int>(ShaderFeature::Multipass)},
+    {"Wallpaper Overlay", "Blend the desktop wallpaper with FX", "preferences-desktop-wallpaper", "#fb7185", "#f43f5e",
      static_cast<int>(ShaderFeature::Wallpaper)},
-    {"Interactive",
-     "Mouse-reactive glow, ripples, and warping",
-     "input-mouse",
-     "#38bdf8", "#0ea5e9",
+    {"Interactive", "Mouse-reactive glow, ripples, and warping", "input-mouse", "#38bdf8", "#0ea5e9",
      static_cast<int>(ShaderFeature::MouseReactive)},
-    {"Multipass + Audio",
-     "Feedback loops driven by audio input",
-     "media-playlist-shuffle",
-     "#a78bfa", "#8b5cf6",
+    {"Multipass + Audio", "Feedback loops driven by audio input", "media-playlist-shuffle", "#a78bfa", "#8b5cf6",
      static_cast<int>(ShaderFeature::Multipass | ShaderFeature::AudioReactive)},
-    {"Kitchen Sink",
-     "Every feature enabled \u2014 maximum freedom",
-     "applications-all",
-     "#f472b6", "#ec4899",
-     static_cast<int>(ShaderFeature::Multipass | ShaderFeature::AudioReactive | ShaderFeature::Wallpaper | ShaderFeature::MouseReactive)},
+    {"Kitchen Sink", "Every feature enabled \u2014 maximum freedom", "applications-all", "#f472b6", "#ec4899",
+     static_cast<int>(ShaderFeature::Multipass | ShaderFeature::AudioReactive | ShaderFeature::Wallpaper
+                      | ShaderFeature::MouseReactive)},
 };
 
 NewPackageDialog::NewPackageDialog(QWidget* parent)
     : QDialog(parent)
 {
-    setWindowTitle(i18n("New Shader Package"));
+    setWindowTitle(PzI18n::tr("New Shader Package"));
     setMinimumSize(760, 540);
     resize(780, 580);
     setupUi();
@@ -134,8 +114,8 @@ void NewPackageDialog::setupUi()
     QVariantList presetList;
     for (const auto& p : s_presets) {
         QVariantMap map;
-        map[QStringLiteral("title")] = i18n(p.title);
-        map[QStringLiteral("subtitle")] = i18n(p.subtitle);
+        map[QStringLiteral("title")] = PzI18n::tr(p.title);
+        map[QStringLiteral("subtitle")] = PzI18n::tr(p.subtitle);
         map[QStringLiteral("iconName")] = QString::fromLatin1(p.iconName);
         map[QStringLiteral("color1")] = QString::fromLatin1(p.color1);
         map[QStringLiteral("color2")] = QString::fromLatin1(p.color2);
@@ -148,15 +128,12 @@ void NewPackageDialog::setupUi()
     m_quickWidget->setClearColor(Qt::transparent);
 
     // Enable i18n() in QML
-    m_quickWidget->engine()->rootContext()->setContextObject(
-        new KLocalizedContext(m_quickWidget->engine()));
+    m_quickWidget->engine()->rootContext()->setContextObject(new PzLocalizedContext(m_quickWidget->engine()));
 
     // Set context properties BEFORE loading QML so presets are
     // available during initial binding (avoids undefined color errors)
-    m_quickWidget->engine()->rootContext()->setContextProperty(
-        QStringLiteral("wizard"), this);
-    m_quickWidget->engine()->rootContext()->setContextProperty(
-        QStringLiteral("initialPresets"), presetList);
+    m_quickWidget->engine()->rootContext()->setContextProperty(QStringLiteral("wizard"), this);
+    m_quickWidget->engine()->rootContext()->setContextProperty(QStringLiteral("initialPresets"), presetList);
 
     // Expose feature flag values so QML doesn't hardcode magic numbers
     const int fMultipass = static_cast<int>(ShaderFeature::Multipass);
@@ -178,26 +155,26 @@ void NewPackageDialog::setupUi()
         p[QStringLiteral("range")] = range;
         featureParams.append(p);
     };
-    addParam(fMultipass, i18n("Speed"), QStringLiteral("float"), QStringLiteral("0 .. 5"));
-    addParam(fAudio, i18n("Reactivity"), QStringLiteral("float"), QStringLiteral("0 .. 3"));
-    addParam(fAudio, i18n("Bass Boost"), QStringLiteral("float"), QStringLiteral("0 .. 5"));
-    addParam(fAudio, i18n("Color Shift"), QStringLiteral("color"), QString());
-    addParam(fWallpaper, i18n("Blend"), QStringLiteral("float"), QStringLiteral("0 .. 1"));
-    addParam(fWallpaper, i18n("Tint"), QStringLiteral("color"), QString());
-    addParam(fMouse, i18n("Mouse Influence"), QStringLiteral("float"), QStringLiteral("0 .. 5"));
-    addParam(fMouse, i18n("Cursor Glow"), QStringLiteral("float"), QStringLiteral("0 .. 0.5"));
-    addParam(fMouse, i18n("Cursor Color"), QStringLiteral("color"), QString());
+    addParam(fMultipass, PzI18n::tr("Speed"), QStringLiteral("float"), QStringLiteral("0 .. 5"));
+    addParam(fAudio, PzI18n::tr("Reactivity"), QStringLiteral("float"), QStringLiteral("0 .. 3"));
+    addParam(fAudio, PzI18n::tr("Bass Boost"), QStringLiteral("float"), QStringLiteral("0 .. 5"));
+    addParam(fAudio, PzI18n::tr("Color Shift"), QStringLiteral("color"), QString());
+    addParam(fWallpaper, PzI18n::tr("Blend"), QStringLiteral("float"), QStringLiteral("0 .. 1"));
+    addParam(fWallpaper, PzI18n::tr("Tint"), QStringLiteral("color"), QString());
+    addParam(fMouse, PzI18n::tr("Mouse Influence"), QStringLiteral("float"), QStringLiteral("0 .. 5"));
+    addParam(fMouse, PzI18n::tr("Cursor Glow"), QStringLiteral("float"), QStringLiteral("0 .. 0.5"));
+    addParam(fMouse, PzI18n::tr("Cursor Color"), QStringLiteral("color"), QString());
     m_quickWidget->engine()->rootContext()->setContextProperty(QStringLiteral("featureParamDefs"), featureParams);
-    m_quickWidget->engine()->rootContext()->setContextProperty(
-        QStringLiteral("categoryList"), QStringList{
-            QStringLiteral("Custom"),
-            QStringLiteral("Audio Visualizer"),
-            QStringLiteral("3D"),
-            QStringLiteral("Cyberpunk"),
-            QStringLiteral("Energy"),
-            QStringLiteral("Organic"),
-            QStringLiteral("Branded"),
-        });
+    m_quickWidget->engine()->rootContext()->setContextProperty(QStringLiteral("categoryList"),
+                                                               QStringList{
+                                                                   QStringLiteral("Custom"),
+                                                                   QStringLiteral("Audio Visualizer"),
+                                                                   QStringLiteral("3D"),
+                                                                   QStringLiteral("Cyberpunk"),
+                                                                   QStringLiteral("Energy"),
+                                                                   QStringLiteral("Organic"),
+                                                                   QStringLiteral("Branded"),
+                                                               });
 
     m_quickWidget->setSource(QUrl(QStringLiteral("qrc:/qml/NewPackageWizard.qml")));
 

@@ -21,7 +21,7 @@
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
-#include <KLocalizedString>
+#include "../pz_i18n.h"
 
 Q_LOGGING_CATEGORY(lcMetadataEditor, "plasmazones.shadereditor.metadata")
 
@@ -57,7 +57,7 @@ void MetadataEditorWidget::setupUi()
     m_idLabel->setTextFormat(Qt::PlainText);
     m_idLabel->setVisible(false);
     m_idEdit = new QLineEdit(this);
-    m_idEdit->setPlaceholderText(i18nc("@info:placeholder example shader ID", "my-custom-shader"));
+    m_idEdit->setPlaceholderText(PzI18n::tr("my-custom-shader"));
     m_idEdit->setVisible(false);
     // Stack both in a container — only one is visible at a time
     auto* idContainer = new QWidget(this);
@@ -65,45 +65,45 @@ void MetadataEditorWidget::setupUi()
     idLayout->setContentsMargins(0, 0, 0, 0);
     idLayout->addWidget(m_idLabel);
     idLayout->addWidget(m_idEdit);
-    infoLayout->addRow(i18n("ID:"), idContainer);
+    infoLayout->addRow(PzI18n::tr("ID:"), idContainer);
 
     m_nameEdit = new QLineEdit(this);
-    m_nameEdit->setPlaceholderText(i18n("Shader display name"));
-    infoLayout->addRow(i18n("Name:"), m_nameEdit);
+    m_nameEdit->setPlaceholderText(PzI18n::tr("Shader display name"));
+    infoLayout->addRow(PzI18n::tr("Name:"), m_nameEdit);
 
     m_categoryEdit = new QLineEdit(this);
-    m_categoryEdit->setPlaceholderText(i18n("e.g. Organic, Energy, Audio Visualizer"));
-    infoLayout->addRow(i18n("Category:"), m_categoryEdit);
+    m_categoryEdit->setPlaceholderText(PzI18n::tr("e.g. Organic, Energy, Audio Visualizer"));
+    infoLayout->addRow(PzI18n::tr("Category:"), m_categoryEdit);
 
     auto* authorVersionRow = new QHBoxLayout;
     m_authorEdit = new QLineEdit(this);
-    m_authorEdit->setPlaceholderText(i18n("Author name"));
+    m_authorEdit->setPlaceholderText(PzI18n::tr("Author name"));
     m_versionEdit = new QLineEdit(this);
     m_versionEdit->setPlaceholderText(QStringLiteral("1.0"));
     m_versionEdit->setMaximumWidth(60);
     authorVersionRow->addWidget(m_authorEdit, 1);
-    authorVersionRow->addWidget(new QLabel(i18n("Version:"), this));
+    authorVersionRow->addWidget(new QLabel(PzI18n::tr("Version:"), this));
     authorVersionRow->addWidget(m_versionEdit);
-    infoLayout->addRow(i18n("Author:"), authorVersionRow);
+    infoLayout->addRow(PzI18n::tr("Author:"), authorVersionRow);
 
     m_descriptionEdit = new QLineEdit(this);
-    m_descriptionEdit->setPlaceholderText(i18n("Short description of the shader effect"));
-    infoLayout->addRow(i18n("Description:"), m_descriptionEdit);
+    m_descriptionEdit->setPlaceholderText(PzI18n::tr("Short description of the shader effect"));
+    infoLayout->addRow(PzI18n::tr("Description:"), m_descriptionEdit);
 
-    m_multipassCheck = new QCheckBox(i18n("Enable multipass rendering"), this);
+    m_multipassCheck = new QCheckBox(PzI18n::tr("Enable multipass rendering"), this);
     infoLayout->addRow(QString(), m_multipassCheck);
 
-    m_wallpaperCheck = new QCheckBox(i18n("Enable wallpaper texture (uWallpaper, binding 11)"), this);
+    m_wallpaperCheck = new QCheckBox(PzI18n::tr("Enable wallpaper texture (uWallpaper, binding 11)"), this);
     infoLayout->addRow(QString(), m_wallpaperCheck);
 
     mainLayout->addLayout(infoLayout);
 
     // ── Parameters ──
     auto* paramHeader = new QHBoxLayout;
-    paramHeader->addWidget(new QLabel(QStringLiteral("<b>%1</b>").arg(i18n("Parameters")), this));
+    paramHeader->addWidget(new QLabel(QStringLiteral("<b>%1</b>").arg(PzI18n::tr("Parameters")), this));
     paramHeader->addStretch();
 
-    auto* addBtn = new QPushButton(i18n("Add..."), this);
+    auto* addBtn = new QPushButton(PzI18n::tr("Add..."), this);
     addBtn->setIcon(QIcon::fromTheme(QStringLiteral("list-add")));
     paramHeader->addWidget(addBtn);
 
@@ -112,11 +112,11 @@ void MetadataEditorWidget::setupUi()
     // QTreeWidget — cleaner than QTableWidget, supports variable row height
     m_paramTree = new QTreeWidget(this);
     m_paramTree->setHeaderLabels({
-        i18n("Name"),
-        i18n("Type"),
-        i18n("Slot"),
-        i18n("Default"),
-        i18n("Group"),
+        PzI18n::tr("Name"),
+        PzI18n::tr("Type"),
+        PzI18n::tr("Slot"),
+        PzI18n::tr("Default"),
+        PzI18n::tr("Group"),
     });
     m_paramTree->setRootIsDecorated(false);
     m_paramTree->setAlternatingRowColors(true);
@@ -137,19 +137,20 @@ void MetadataEditorWidget::setupUi()
 
     // Context menu for parameter tree
     m_paramContextMenu = new QMenu(this);
-    m_paramContextMenu->addAction(QIcon::fromTheme(QStringLiteral("insert-text")),
-                                  i18n("Insert Uniform"), this, &MetadataEditorWidget::onInsertUniform);
+    m_paramContextMenu->addAction(QIcon::fromTheme(QStringLiteral("insert-text")), PzI18n::tr("Insert Uniform"), this,
+                                  &MetadataEditorWidget::onInsertUniform);
     m_paramContextMenu->addSeparator();
-    m_paramContextMenu->addAction(QIcon::fromTheme(QStringLiteral("go-up")),
-                                  i18n("Move Up"), this, &MetadataEditorWidget::onMoveParameterUp);
-    m_paramContextMenu->addAction(QIcon::fromTheme(QStringLiteral("go-down")),
-                                  i18n("Move Down"), this, &MetadataEditorWidget::onMoveParameterDown);
+    m_paramContextMenu->addAction(QIcon::fromTheme(QStringLiteral("go-up")), PzI18n::tr("Move Up"), this,
+                                  &MetadataEditorWidget::onMoveParameterUp);
+    m_paramContextMenu->addAction(QIcon::fromTheme(QStringLiteral("go-down")), PzI18n::tr("Move Down"), this,
+                                  &MetadataEditorWidget::onMoveParameterDown);
     m_paramContextMenu->addSeparator();
-    m_paramContextMenu->addAction(QIcon::fromTheme(QStringLiteral("edit-delete")),
-                                  i18n("Remove"), this, &MetadataEditorWidget::onRemoveParameter);
+    m_paramContextMenu->addAction(QIcon::fromTheme(QStringLiteral("edit-delete")), PzI18n::tr("Remove"), this,
+                                  &MetadataEditorWidget::onRemoveParameter);
 
     connect(addBtn, &QPushButton::clicked, this, &MetadataEditorWidget::onAddParameter);
-    connect(m_paramTree, &QTreeWidget::customContextMenuRequested, this, &MetadataEditorWidget::showParameterContextMenu);
+    connect(m_paramTree, &QTreeWidget::customContextMenuRequested, this,
+            &MetadataEditorWidget::showParameterContextMenu);
 }
 
 void MetadataEditorWidget::connectSignals()
@@ -316,7 +317,8 @@ void MetadataEditorWidget::setModified(bool modified)
 
 void MetadataEditorWidget::markModified()
 {
-    if (m_loading) return;
+    if (m_loading)
+        return;
     m_modified = true;
     Q_EMIT this->modified();
 }
@@ -420,16 +422,19 @@ void MetadataEditorWidget::updateParameterDefaults(const QVariantMap& uniformVal
         auto* item = m_paramTree->topLevelItem(i);
         const QByteArray storedJson = item->data(0, Qt::UserRole).toByteArray();
         QJsonDocument paramDoc = QJsonDocument::fromJson(storedJson);
-        if (!paramDoc.isObject()) continue;
+        if (!paramDoc.isObject())
+            continue;
 
         QJsonObject param = paramDoc.object();
         const QString type = param.value(QStringLiteral("type")).toString();
         const int slot = param.value(QStringLiteral("slot")).toInt(-1);
         const QString uniformName = ShaderPackageIO::computeUniformName(type, slot);
-        if (uniformName.isEmpty()) continue;
+        if (uniformName.isEmpty())
+            continue;
 
         auto it = uniformValues.find(uniformName);
-        if (it == uniformValues.end()) continue;
+        if (it == uniformValues.end())
+            continue;
 
         if (type == QLatin1String("float") || type == QLatin1String("int")) {
             param[QStringLiteral("default")] = it->toDouble();

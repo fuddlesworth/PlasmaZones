@@ -15,7 +15,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-#include <KLocalizedString>
+#include "../pz_i18n.h"
 
 namespace PlasmaZones {
 
@@ -33,10 +33,10 @@ void PresetPanel::setupUi()
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(8);
 
-    auto* header = new QLabel(QStringLiteral("<b>%1</b>").arg(i18n("Parameter Presets")), this);
+    auto* header = new QLabel(QStringLiteral("<b>%1</b>").arg(PzI18n::tr("Parameter Presets")), this);
     layout->addWidget(header);
 
-    auto* desc = new QLabel(i18n("Save and load named parameter configurations."), this);
+    auto* desc = new QLabel(PzI18n::tr("Save and load named parameter configurations."), this);
     desc->setWordWrap(true);
     QPalette descPal = desc->palette();
     descPal.setColor(QPalette::WindowText, palette().color(QPalette::PlaceholderText));
@@ -48,16 +48,18 @@ void PresetPanel::setupUi()
     layout->addWidget(m_listWidget, 1);
 
     connect(m_listWidget, &QListWidget::itemDoubleClicked, this, &PresetPanel::onPresetClicked);
-    connect(m_listWidget, &QListWidget::currentRowChanged, this, [this]() { updateButtons(); });
+    connect(m_listWidget, &QListWidget::currentRowChanged, this, [this]() {
+        updateButtons();
+    });
 
     // Buttons
     auto* buttonRow = new QHBoxLayout;
     buttonRow->setSpacing(4);
 
-    m_applyBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("dialog-ok-apply")), i18n("Apply"), this);
-    m_saveBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")), i18n("Save Current"), this);
-    m_deleteBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("list-remove")), i18n("Delete"), this);
-    m_renameBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-rename")), i18n("Rename"), this);
+    m_applyBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("dialog-ok-apply")), PzI18n::tr("Apply"), this);
+    m_saveBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")), PzI18n::tr("Save Current"), this);
+    m_deleteBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("list-remove")), PzI18n::tr("Delete"), this);
+    m_renameBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-rename")), PzI18n::tr("Rename"), this);
 
     buttonRow->addWidget(m_saveBtn);
     buttonRow->addWidget(m_renameBtn);
@@ -125,8 +127,8 @@ void PresetPanel::onSavePreset()
 void PresetPanel::saveCurrentValues(const QVariantMap& uniformValues)
 {
     QInputDialog dlg(this);
-    dlg.setWindowTitle(i18n("Save Preset"));
-    dlg.setLabelText(i18n("Preset name:"));
+    dlg.setWindowTitle(PzI18n::tr("Save Preset"));
+    dlg.setLabelText(PzI18n::tr("Preset name:"));
     dlg.setInputMode(QInputDialog::TextInput);
     dlg.resize(320, 120);
     if (dlg.exec() != QDialog::Accepted) {
@@ -139,8 +141,9 @@ void PresetPanel::saveCurrentValues(const QVariantMap& uniformValues)
     name = name.trimmed();
 
     if (m_presets.contains(name)) {
-        const int result = QMessageBox::question(this, i18n("Overwrite Preset"),
-            i18n("A preset named \"%1\" already exists. Overwrite?", name));
+        const int result =
+            QMessageBox::question(this, PzI18n::tr("Overwrite Preset"),
+                                  PzI18n::tr("A preset named \"%1\" already exists. Overwrite?").arg(name));
         if (result != QMessageBox::Yes) {
             return;
         }
@@ -155,12 +158,14 @@ void PresetPanel::saveCurrentValues(const QVariantMap& uniformValues)
 void PresetPanel::onDeletePreset()
 {
     auto* item = m_listWidget->currentItem();
-    if (!item) return;
+    if (!item)
+        return;
 
     const QString name = item->text();
-    const int result = QMessageBox::question(this, i18n("Delete Preset"),
-        i18n("Delete preset \"%1\"?", name));
-    if (result != QMessageBox::Yes) return;
+    const int result =
+        QMessageBox::question(this, PzI18n::tr("Delete Preset"), PzI18n::tr("Delete preset \"%1\"?").arg(name));
+    if (result != QMessageBox::Yes)
+        return;
 
     m_presets.remove(name);
     delete m_listWidget->takeItem(m_listWidget->row(item));
@@ -170,12 +175,13 @@ void PresetPanel::onDeletePreset()
 void PresetPanel::onRenamePreset()
 {
     auto* item = m_listWidget->currentItem();
-    if (!item) return;
+    if (!item)
+        return;
 
     const QString oldName = item->text();
     QInputDialog dlg(this);
-    dlg.setWindowTitle(i18n("Rename Preset"));
-    dlg.setLabelText(i18n("New name:"));
+    dlg.setWindowTitle(PzI18n::tr("Rename Preset"));
+    dlg.setLabelText(PzI18n::tr("New name:"));
     dlg.setTextValue(oldName);
     dlg.resize(320, 120);
     if (dlg.exec() != QDialog::Accepted) {
@@ -188,8 +194,8 @@ void PresetPanel::onRenamePreset()
     newName = newName.trimmed();
 
     if (m_presets.contains(newName)) {
-        QMessageBox::warning(this, i18n("Rename Preset"),
-            i18n("A preset named \"%1\" already exists.", newName));
+        QMessageBox::warning(this, PzI18n::tr("Rename Preset"),
+                             PzI18n::tr("A preset named \"%1\" already exists.").arg(newName));
         return;
     }
 
@@ -200,7 +206,8 @@ void PresetPanel::onRenamePreset()
 
 void PresetPanel::onPresetClicked(QListWidgetItem* item)
 {
-    if (!item) return;
+    if (!item)
+        return;
     const QString name = item->text();
     if (m_presets.contains(name)) {
         Q_EMIT presetSelected(m_presets[name]);
