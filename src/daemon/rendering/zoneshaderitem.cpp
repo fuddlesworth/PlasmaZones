@@ -290,6 +290,9 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     node->setBufferFeedback(m_bufferFeedback);
     node->setBufferScale(m_bufferScale);
     node->setBufferWrap(m_bufferWrap);
+    if (!m_bufferWraps.isEmpty()) {
+        node->setBufferWraps(m_bufferWraps);
+    }
 
     // Sync shader source FIRST (must compile before zone data can be used)
     // Load when: item's m_shaderDirty, OR node not ready (e.g. after releaseResources)

@@ -364,17 +364,31 @@ void ZoneShaderNodeRhi::setBufferScale(qreal scale)
 void ZoneShaderNodeRhi::setBufferWrap(const QString& wrap)
 {
     const QString use = (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
-    if (m_bufferWrap == use) {
+    if (m_bufferWrapDefault == use) {
         return;
     }
-    m_bufferWrap = use;
-    m_bufferSampler.reset();
-    m_bufferSrb.reset();
-    m_bufferSrbB.reset();
-    m_srb.reset();
-    m_srbB.reset();
+    m_bufferWrapDefault = use;
     for (int i = 0; i < kMaxBufferPasses; ++i) {
-        m_multiBufferSrbs[i].reset();
+        m_bufferWraps[i] = use;
+        m_bufferSamplers[i].reset();
+    }
+    resetAllSrbs();
+}
+
+void ZoneShaderNodeRhi::setBufferWraps(const QStringList& wraps)
+{
+    bool changed = false;
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        const QString use = (i < wraps.size() && wraps.at(i) == QLatin1String("repeat")) ? QStringLiteral("repeat")
+                                                                                         : m_bufferWrapDefault;
+        if (m_bufferWraps[i] != use) {
+            m_bufferWraps[i] = use;
+            m_bufferSamplers[i].reset();
+            changed = true;
+        }
+    }
+    if (changed) {
+        resetAllSrbs();
     }
 }
 

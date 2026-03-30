@@ -77,6 +77,7 @@ public:
         bool bufferFeedback = false; ///< True to enable ping-pong (buffer pass samples its own previous frame)
         qreal bufferScale = 1.0; ///< Buffer resolution scale (e.g. 0.5 = half size); clamped 0.125–1.0
         QString bufferWrap = QStringLiteral("clamp"); ///< "clamp" or "repeat" for iChannel0 sampler
+        QStringList bufferWraps; ///< Per-channel wrap modes (up to 4); empty = all use bufferWrap
 
         bool isValid() const
         {

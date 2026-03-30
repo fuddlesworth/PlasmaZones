@@ -506,6 +506,22 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
     const QString wrap = root.value(QLatin1String("bufferWrap")).toString(QStringLiteral("clamp"));
     info.bufferWrap = (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
 
+    const QJsonArray bufferWrapsArray = root.value(QLatin1String("bufferWraps")).toArray();
+    if (!bufferWrapsArray.isEmpty()) {
+        for (const QJsonValue& v : bufferWrapsArray) {
+            const QString w = v.toString();
+            info.bufferWraps.append((w == QLatin1String("repeat")) ? QStringLiteral("repeat")
+                                                                   : QStringLiteral("clamp"));
+        }
+        const int needed = info.bufferShaderPaths.size();
+        while (info.bufferWraps.size() < needed) {
+            info.bufferWraps.append(info.bufferWrap);
+        }
+        while (info.bufferWraps.size() > needed) {
+            info.bufferWraps.removeLast();
+        }
+    }
+
     // Parse parameters
     const QJsonArray paramsArray = root.value(QLatin1String("parameters")).toArray();
     for (const QJsonValue& paramValue : paramsArray) {

@@ -94,6 +94,7 @@ public:
     void setBufferFeedback(bool enable) override;
     void setBufferScale(qreal scale) override;
     void setBufferWrap(const QString& wrap) override;
+    void setBufferWraps(const QStringList& wraps) override;
     bool loadVertexShader(const QString& path) override;
     bool loadFragmentShader(const QString& path) override;
     void setVertexShaderSource(const QString& source) override;
@@ -127,11 +128,14 @@ private:
     QVector<quint32> m_renderPassFormat;
 
     // Multi-pass: buffer pass(es) (optional). Up to 4 paths; when size==1 feedback may use ping-pong.
+    static constexpr int kMaxBufferPasses = 4;
     QString m_bufferPath;
     QStringList m_bufferPaths;
     bool m_bufferFeedback = false;
     qreal m_bufferScale = 1.0;
-    QString m_bufferWrap = QStringLiteral("clamp");
+    std::array<QString, kMaxBufferPasses> m_bufferWraps = {QStringLiteral("clamp"), QStringLiteral("clamp"),
+                                                           QStringLiteral("clamp"), QStringLiteral("clamp")};
+    QString m_bufferWrapDefault = QStringLiteral("clamp");
     QString m_bufferFragmentShaderSource;
     QShader m_bufferFragmentShader;
     qint64 m_bufferMtime = 0;
@@ -140,7 +144,7 @@ private:
     std::unique_ptr<QRhiTexture> m_bufferTexture;
     std::unique_ptr<QRhiRenderPassDescriptor> m_bufferRenderPassDescriptor;
     std::unique_ptr<QRhiTextureRenderTarget> m_bufferRenderTarget;
-    std::unique_ptr<QRhiSampler> m_bufferSampler;
+    std::array<std::unique_ptr<QRhiSampler>, kMaxBufferPasses> m_bufferSamplers;
     std::unique_ptr<QRhiShaderResourceBindings> m_bufferSrb;
     std::unique_ptr<QRhiGraphicsPipeline> m_bufferPipeline;
     QVector<quint32> m_bufferRenderPassFormat;
@@ -153,7 +157,6 @@ private:
     bool m_bufferFeedbackCleared = false; // one-time clear of both buffers when feedback starts
 
     // Multi-buffer mode (2–4 passes): per-pass resources; only used when m_bufferPaths.size() > 1
-    static constexpr int kMaxBufferPasses = 4;
     std::array<std::unique_ptr<QRhiTexture>, kMaxBufferPasses> m_multiBufferTextures = {};
     std::array<std::unique_ptr<QRhiTextureRenderTarget>, kMaxBufferPasses> m_multiBufferRenderTargets = {};
     std::array<std::unique_ptr<QRhiRenderPassDescriptor>, kMaxBufferPasses> m_multiBufferRenderPassDescriptors = {};

@@ -126,6 +126,11 @@ public:
     {
         Q_UNUSED(wrap)
     }
+    /** Per-channel buffer wraps (up to 4). Empty = all use setBufferWrap value. Default no-op. */
+    virtual void setBufferWraps(const QStringList& wraps)
+    {
+        Q_UNUSED(wraps)
+    }
 
     // Shader loading (paths; RHI node bakes GLSL 330 at runtime)
     virtual bool loadVertexShader(const QString& path) = 0;

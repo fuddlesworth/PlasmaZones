@@ -46,6 +46,9 @@ QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo& info) const
     map[QStringLiteral("bufferFeedback")] = info.bufferFeedback;
     map[QStringLiteral("bufferScale")] = info.bufferScale;
     map[QStringLiteral("bufferWrap")] = info.bufferWrap;
+    if (!info.bufferWraps.isEmpty()) {
+        map[QStringLiteral("bufferWraps")] = QVariant::fromValue(info.bufferWraps);
+    }
     map[QStringLiteral("wallpaper")] = info.useWallpaper;
 
     // Parameters list (empty list is OK for D-Bus)

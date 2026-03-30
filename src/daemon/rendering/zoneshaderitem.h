@@ -88,6 +88,8 @@ class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public QQuickItem
     Q_PROPERTY(qreal bufferScale READ bufferScale WRITE setBufferScale NOTIFY bufferScaleChanged FINAL)
     /** Buffer channel wrap: "clamp" or "repeat". */
     Q_PROPERTY(QString bufferWrap READ bufferWrap WRITE setBufferWrap NOTIFY bufferWrapChanged FINAL)
+    /** Per-channel buffer wraps (up to 4). Empty = all use bufferWrap. */
+    Q_PROPERTY(QStringList bufferWraps READ bufferWraps WRITE setBufferWraps NOTIFY bufferWrapsChanged FINAL)
     Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged FINAL)
 
     // Custom parameters (32 floats in 8 vec4s, slots 0-31)
@@ -244,6 +246,12 @@ public:
         return m_bufferWrap;
     }
     void setBufferWrap(const QString& wrap);
+
+    QStringList bufferWraps() const
+    {
+        return m_bufferWraps;
+    }
+    void setBufferWraps(const QStringList& wraps);
 
     QVariantMap shaderParams() const
     {
@@ -474,6 +482,7 @@ Q_SIGNALS:
     void bufferFeedbackChanged();
     void bufferScaleChanged();
     void bufferWrapChanged();
+    void bufferWrapsChanged();
     void shaderParamsChanged();
     void customParamsChanged(); // Emitted when any customParams1-8 changes
     void customColorsChanged(); // Emitted when any customColor1-16 changes
@@ -562,6 +571,7 @@ private:
     bool m_bufferFeedback = false;
     qreal m_bufferScale = 1.0;
     QString m_bufferWrap = QStringLiteral("clamp");
+    QStringList m_bufferWraps;
     QVariantMap m_shaderParams;
 
     // Custom shader parameters

@@ -387,7 +387,9 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_bufferRenderTargetB.reset();
     m_bufferRenderPassDescriptor.reset();
     m_bufferRenderPassDescriptorB.reset();
-    m_bufferSampler.reset();
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        m_bufferSamplers[i].reset();
+    }
     m_bufferRenderPassFormat.clear();
     m_bufferFeedbackCleared = false;
     m_srbB.reset();

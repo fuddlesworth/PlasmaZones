@@ -201,6 +201,16 @@ void ZoneShaderItem::setBufferWrap(const QString& wrap)
     update();
 }
 
+void ZoneShaderItem::setBufferWraps(const QStringList& wraps)
+{
+    if (m_bufferWraps == wraps) {
+        return;
+    }
+    m_bufferWraps = wraps;
+    Q_EMIT bufferWrapsChanged();
+    update();
+}
+
 // ============================================================================
 // Shader Params (complex logic — kept verbatim, not macro-able)
 // ============================================================================
@@ -341,7 +351,7 @@ void ZoneShaderItem::setShaderParams(const QVariantMap& params)
         if (needsReload) {
             if (!path.isEmpty() && QFile::exists(path)) {
                 const bool isSvg = path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)
-                                || path.endsWith(QLatin1String(".svgz"), Qt::CaseInsensitive);
+                    || path.endsWith(QLatin1String(".svgz"), Qt::CaseInsensitive);
                 if (isSvg) {
                     QSvgRenderer renderer(path);
                     if (renderer.isValid()) {
