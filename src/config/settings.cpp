@@ -176,8 +176,8 @@ void Settings::load()
 
     // Rendering backend lives in [General] (affects whole graphics pipeline, not just shaders).
     {
-        auto general = m_configBackend->group(QStringLiteral("General"));
-        const QString raw = general->readString(QStringLiteral("RenderingBackend"));
+        auto general = m_configBackend->group(ConfigDefaults::generalGroup());
+        const QString raw = general->readString(ConfigDefaults::renderingBackendKey());
         m_renderingBackend =
             ConfigDefaults::normalizeRenderingBackend(raw.isEmpty() ? ConfigDefaults::renderingBackend() : raw);
     }
@@ -272,8 +272,8 @@ void Settings::save()
 
     // Rendering backend in [General]
     {
-        auto general = m_configBackend->group(QStringLiteral("General"));
-        general->writeString(QStringLiteral("RenderingBackend"), m_renderingBackend);
+        auto general = m_configBackend->group(ConfigDefaults::generalGroup());
+        general->writeString(ConfigDefaults::renderingBackendKey(), m_renderingBackend);
     }
 
     // Shader Effects
@@ -292,14 +292,14 @@ void Settings::save()
 
 void Settings::reset()
 {
-    const QStringList groups = {QStringLiteral("General"),    QStringLiteral("Activation"),
-                                QStringLiteral("Display"),    QStringLiteral("Appearance"),
-                                QStringLiteral("Zones"),      QStringLiteral("Behavior"),
-                                QStringLiteral("Exclusions"), QStringLiteral("ZoneSelector"),
-                                QStringLiteral("Shaders"),    QStringLiteral("GlobalShortcuts"),
-                                QStringLiteral("Autotiling"), QStringLiteral("AutotileShortcuts"),
-                                QStringLiteral("Animations"), QStringLiteral("Updates"),
-                                QStringLiteral("Editor"),     QStringLiteral("TilingQuickLayoutSlots")};
+    const QStringList groups = {ConfigDefaults::generalGroup(), QStringLiteral("Activation"),
+                                QStringLiteral("Display"),      QStringLiteral("Appearance"),
+                                QStringLiteral("Zones"),        QStringLiteral("Behavior"),
+                                QStringLiteral("Exclusions"),   QStringLiteral("ZoneSelector"),
+                                QStringLiteral("Shaders"),      QStringLiteral("GlobalShortcuts"),
+                                QStringLiteral("Autotiling"),   QStringLiteral("AutotileShortcuts"),
+                                QStringLiteral("Animations"),   QStringLiteral("Updates"),
+                                QStringLiteral("Editor"),       QStringLiteral("TilingQuickLayoutSlots")};
     for (const QString& groupName : groups) {
         m_configBackend->deleteGroup(groupName);
     }

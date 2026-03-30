@@ -175,7 +175,7 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* scree
         // Create a QVulkanInstance on-the-fly so overlays still work.
         if (!m_fallbackVulkanInstance) {
             m_fallbackVulkanInstance = std::make_unique<QVulkanInstance>();
-            m_fallbackVulkanInstance->setApiVersion(QVersionNumber(1, 1));
+            m_fallbackVulkanInstance->setApiVersion(PlasmaZones::PzVulkanApiVersion);
             if (m_fallbackVulkanInstance->create()) {
                 qCInfo(lcOverlay) << "Created fallback QVulkanInstance for 'auto' backend (Qt chose Vulkan).";
                 qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty,

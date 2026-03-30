@@ -62,9 +62,11 @@ int main(int argc, char* argv[])
         // The custom kconfigIniFormat cannot be used here because it requires the
         // QCoreApplication event loop for QConfFile caching, which doesn't exist yet.
         QSettings cfg(PlasmaZones::ConfigDefaults::configFilePath(), QSettings::IniFormat);
-        cfg.beginGroup(QStringLiteral("General"));
+        cfg.beginGroup(PlasmaZones::ConfigDefaults::generalGroup());
         const QString backend = PlasmaZones::ConfigDefaults::normalizeRenderingBackend(
-            cfg.value(QStringLiteral("RenderingBackend"), PlasmaZones::ConfigDefaults::renderingBackend()).toString());
+            cfg.value(PlasmaZones::ConfigDefaults::renderingBackendKey(),
+                      PlasmaZones::ConfigDefaults::renderingBackend())
+                .toString());
         cfg.endGroup();
 
         if (backend == QLatin1String("vulkan")) {
@@ -84,7 +86,7 @@ int main(int argc, char* argv[])
             }
 
             if (vulkanLibAvailable) {
-                vulkanInstance.setApiVersion(QVersionNumber(1, 1));
+                vulkanInstance.setApiVersion(PlasmaZones::PzVulkanApiVersion);
                 if (vulkanInstance.create()) {
                     QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
                     useVulkan = true;

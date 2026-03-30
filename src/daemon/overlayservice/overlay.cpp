@@ -357,9 +357,9 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
         if (!isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
                                m_currentActivity)) {
             createOverlayWindow(screen);
-            updateOverlayWindow(screen);
-            if (wasVisible) {
-                if (auto* w = m_overlayWindows.value(screen))
+            if (auto* w = m_overlayWindows.value(screen)) {
+                updateOverlayWindow(screen);
+                if (wasVisible)
                     w->show();
             }
         }
