@@ -28,9 +28,9 @@ Flickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // ═══════════════════════════════════════════════════════════════════════
+        // =====================================================================
         // ANIMATIONS CARD
-        // ═══════════════════════════════════════════════════════════════════════
+        // =====================================================================
         Item {
             Layout.fillWidth: true
             implicitHeight: animationsCard.implicitHeight
@@ -40,22 +40,14 @@ Flickable {
 
                 anchors.fill: parent
                 headerText: i18n("Animations")
+                showAccent: true
+                showToggle: true
+                toggleChecked: appSettings.animationsEnabled
+                onToggleChanged: appSettings.animationsEnabled = toggleChecked
                 collapsible: true
 
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.largeSpacing
-
-                    // Enable toggle
-                    CheckBox {
-                        id: animationsEnabledCheck
-
-                        Layout.fillWidth: true
-                        text: i18n("Smooth window geometry transitions")
-                        checked: appSettings.animationsEnabled
-                        onToggled: appSettings.animationsEnabled = checked
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("Animate windows when snapping to zones or tiling. Applies to both manual snapping and autotiling.")
-                    }
 
                     // Easing curve editor with animated preview
                     EasingPreview {
@@ -66,8 +58,8 @@ Flickable {
                         Layout.alignment: Qt.AlignHCenter
                         curve: appSettings.animationEasingCurve
                         animationDuration: appSettings.animationDuration
-                        previewEnabled: animationsEnabledCheck.checked
-                        opacity: animationsEnabledCheck.checked ? 1 : 0.4
+                        previewEnabled: animationsCard.toggleChecked
+                        opacity: animationsCard.toggleChecked ? 1 : 0.4
                         onCurveEdited: function(newCurve) {
                             appSettings.animationEasingCurve = newCurve;
                         }
@@ -82,7 +74,7 @@ Flickable {
                         Layout.fillWidth: true
                         appSettings: root.settingsBridge
                         constants: root
-                        animationsEnabled: animationsEnabledCheck.checked
+                        animationsEnabled: animationsCard.toggleChecked
                         easingPreview: easingPreview
                     }
 
@@ -92,25 +84,29 @@ Flickable {
 
         }
 
-        // ═══════════════════════════════════════════════════════════════════════
-        // ON-SCREEN DISPLAY CARD (extracted component)
-        // ═══════════════════════════════════════════════════════════════════════
+        // =====================================================================
+        // ON-SCREEN DISPLAY CARD
+        // =====================================================================
         OsdCard {
             Layout.fillWidth: true
             appSettings: root.settingsBridge
         }
 
-        // ═══════════════════════════════════════════════════════════════════════
+        // =====================================================================
         // RENDERING CARD
-        // ═══════════════════════════════════════════════════════════════════════
+        // =====================================================================
         SettingsCard {
             headerText: i18n("Rendering")
+            showAccent: true
             collapsible: true
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
-                Kirigami.FormLayout {
+                SettingsRow {
+                    title: i18n("Rendering backend")
+                    description: i18n("Graphics API used for overlay rendering")
+
                     ComboBox {
                         id: renderingBackendCombo
 
@@ -118,7 +114,6 @@ Flickable {
                             currentIndex = Math.max(0, settingsController.renderingBackendOptions.indexOf(appSettings.renderingBackend));
                         }
 
-                        Kirigami.FormData.label: i18n("Rendering backend:")
                         Accessible.name: i18n("Rendering backend")
                         model: settingsController.renderingBackendDisplayNames
                         currentIndex: Math.max(0, settingsController.renderingBackendOptions.indexOf(appSettings.renderingBackend))
@@ -151,26 +146,44 @@ Flickable {
 
         }
 
-        // ═══════════════════════════════════════════════════════════════════════
+        // =====================================================================
         // CONFIGURATION CARD
-        // ═══════════════════════════════════════════════════════════════════════
+        // =====================================================================
         SettingsCard {
             headerText: i18n("Configuration")
             collapsible: true
 
-            contentItem: Kirigami.FormLayout {
-                Button {
-                    Kirigami.FormData.label: i18n("Backup:")
-                    text: i18n("Export Settings")
-                    icon.name: "document-export"
-                    onClicked: exportConfigDialog.open()
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Backup")
+                    description: i18n("Export all settings to a file")
+
+                    Button {
+                        text: i18n("Export Settings")
+                        icon.name: "document-export"
+                        onClicked: exportConfigDialog.open()
+                    }
+
                 }
 
-                Button {
-                    Kirigami.FormData.label: i18n("Restore:")
-                    text: i18n("Import Settings")
-                    icon.name: "document-import"
-                    onClicked: importConfigDialog.open()
+                Kirigami.Separator {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                }
+
+                SettingsRow {
+                    title: i18n("Restore")
+                    description: i18n("Import settings from a previously exported file")
+
+                    Button {
+                        text: i18n("Import Settings")
+                        icon.name: "document-import"
+                        onClicked: importConfigDialog.open()
+                    }
+
                 }
 
             }

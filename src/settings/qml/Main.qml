@@ -706,6 +706,21 @@ ApplicationWindow {
 
                             }
 
+                            // Unsaved changes badge
+                            Rectangle {
+                                width: Kirigami.Units.smallSpacing * 1.5
+                                height: Kirigami.Units.smallSpacing * 1.5
+                                radius: width / 2
+                                color: Kirigami.Theme.neutralTextColor
+                                visible: navDelegate.isActive && settingsController.needsSave && !navDelegate.isDivider && !navDelegate.isBackButton
+                                Layout.alignment: Qt.AlignVCenter
+
+                                Behavior on visible {
+                                    enabled: false
+                                }
+
+                            }
+
                             // Enable/disable toggle for snapping and tiling
                             SettingsSwitch {
                                 visible: (navDelegate.name === "snapping" || navDelegate.name === "tiling") && !window.sidebarCompact
@@ -1440,23 +1455,6 @@ ApplicationWindow {
                     anchors.fill: parent
 
                     Button {
-                        text: i18n("Reset")
-                        icon.name: "edit-undo"
-                        enabled: settingsController.needsSave
-                        flat: true
-                        onClicked: resetConfirmDialog.open()
-                        opacity: enabled ? 1 : 0.4
-
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 150
-                            }
-
-                        }
-
-                    }
-
-                    Button {
                         text: i18n("Defaults")
                         icon.name: "document-revert"
                         flat: true
@@ -1517,6 +1515,85 @@ ApplicationWindow {
 
                         }
 
+                    }
+
+                }
+
+            }
+
+            // -- Unsaved changes notification bar -------------------------
+            Item {
+                id: unsavedBar
+
+                Layout.fillWidth: true
+                implicitHeight: settingsController.needsSave ? unsavedBarContent.implicitHeight : 0
+                clip: true
+
+                Rectangle {
+                    id: unsavedBarContent
+
+                    width: parent.width
+                    implicitHeight: unsavedBarRow.implicitHeight + Kirigami.Units.smallSpacing * 3
+                    anchors.bottom: parent.bottom
+                    color: Qt.rgba(Kirigami.Theme.neutralTextColor.r, Kirigami.Theme.neutralTextColor.g, Kirigami.Theme.neutralTextColor.b, 0.12)
+
+                    // Top accent line
+                    Rectangle {
+                        anchors.top: parent.top
+                        width: parent.width
+                        height: Math.round(Kirigami.Units.devicePixelRatio)
+                        color: Kirigami.Theme.neutralTextColor
+                        opacity: 0.4
+                    }
+
+                    RowLayout {
+                        id: unsavedBarRow
+
+                        anchors.fill: parent
+                        anchors.leftMargin: Kirigami.Units.largeSpacing
+                        anchors.rightMargin: Kirigami.Units.largeSpacing
+                        anchors.topMargin: Kirigami.Units.smallSpacing * 1.5
+                        anchors.bottomMargin: Kirigami.Units.smallSpacing * 1.5
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Kirigami.Icon {
+                            source: "dialog-information"
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            color: Kirigami.Theme.neutralTextColor
+                        }
+
+                        Label {
+                            text: i18n("Unsaved changes")
+                            color: Kirigami.Theme.neutralTextColor
+                            Layout.fillWidth: true
+                        }
+
+                        Button {
+                            text: i18n("Discard")
+                            icon.name: "edit-undo"
+                            flat: true
+                            onClicked: resetConfirmDialog.open()
+                        }
+
+                        Button {
+                            text: i18n("Save")
+                            icon.name: "document-save"
+                            highlighted: true
+                            onClicked: {
+                                settingsController.save();
+                                toast.show(i18n("Settings saved"));
+                            }
+                        }
+
+                    }
+
+                }
+
+                Behavior on implicitHeight {
+                    NumberAnimation {
+                        duration: 250
+                        easing.type: Easing.OutCubic
                     }
 
                 }

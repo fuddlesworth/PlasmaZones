@@ -18,7 +18,7 @@ import org.kde.kirigami as Kirigami
  *   - animationsEnabled: whether animations are currently enabled
  *   - easingPreview: the EasingPreview component (for curveType, elasticAmplitude, etc.)
  */
-Kirigami.FormLayout {
+ColumnLayout {
     id: easingRoot
 
     required property var appSettings
@@ -26,12 +26,12 @@ Kirigami.FormLayout {
     required property bool animationsEnabled
     required property var easingPreview
 
-    // Easing style + direction selector (two dropdowns)
+    spacing: Kirigami.Units.smallSpacing
+
     // Curve lookup table: styles x directions -> bezier/named curve strings
     QtObject {
         id: easingData
 
-        // Style definitions: user-friendly name, technical name, curves per direction
         readonly property var styles: [{
             "label": i18n("Custom"),
             "key": "custom"
@@ -79,7 +79,6 @@ Kirigami.FormLayout {
             "label": i18n("Ease In-Out"),
             "key": "in-out"
         }]
-        // Bezier curves: style -> { in, out, in-out }
         readonly property var curves: ({
             "linear": {
                 "in": "0.00,0.00,1.00,1.00",
@@ -138,7 +137,6 @@ Kirigami.FormLayout {
             }
         })
 
-        // Normalize curve for comparison (2 decimal bezier, canonical named)
         function normalizeCurve(curve) {
             if (!curve || curve === "")
                 return "";
@@ -200,7 +198,6 @@ Kirigami.FormLayout {
             return x1.toFixed(2) + "," + y1.toFixed(2) + "," + x2.toFixed(2) + "," + y2.toFixed(2);
         }
 
-        // Reverse-lookup: curve string -> { styleIndex, dirIndex }
         function findIndices(curve) {
             var norm = normalizeCurve(curve);
             if (norm === "")
@@ -209,7 +206,6 @@ Kirigami.FormLayout {
                 "dirIndex": 1
             };
 
-            // Custom, Ease Out
             for (var si = 1; si < styles.length; si++) {
                 var key = styles[si].key;
                 if (!curves[key])
@@ -228,10 +224,9 @@ Kirigami.FormLayout {
             return {
                 "styleIndex": 0,
                 "dirIndex": 1
-            }; // Custom
+            };
         }
 
-        // Build curve string from style + direction indices
         function curveForSelection(styleIndex, dirIndex) {
             if (styleIndex <= 0 || styleIndex >= styles.length)
                 return "";
@@ -243,220 +238,268 @@ Kirigami.FormLayout {
 
     }
 
-    // Style selector
-    WideComboBox {
-        id: easingStyleCombo
-
-        property bool updating: false
-
-        Kirigami.FormData.label: i18n("Style:")
-        enabled: easingRoot.animationsEnabled
-        model: easingData.styles.map((s) => {
-            return s.label;
-        })
-        currentIndex: easingData.findIndices(easingRoot.appSettings.animationEasingCurve).styleIndex
-        onActivated: (index) => {
-            if (updating)
-                return ;
-
-            if (index <= 0)
-                return ;
-
-            // Custom -- don't change curve
-            var curve = easingData.curveForSelection(index, easingDirectionCombo.currentIndex);
-            if (curve)
-                easingRoot.appSettings.animationEasingCurve = curve;
-
-        }
-        ToolTip.visible: hovered
-        ToolTip.text: i18n("Animation curve style -- controls how acceleration feels")
-
-        Connections {
-            function onAnimationEasingCurveChanged() {
-                easingStyleCombo.updating = true;
-                var idx = easingData.findIndices(easingRoot.appSettings.animationEasingCurve);
-                easingStyleCombo.currentIndex = idx.styleIndex;
-                easingStyleCombo.updating = false;
-            }
-
-            target: easingRoot.appSettings
-        }
-
-    }
-
-    // Direction selector
-    WideComboBox {
-        id: easingDirectionCombo
-
-        property bool updating: false
-
-        Kirigami.FormData.label: i18n("Direction:")
-        enabled: easingRoot.animationsEnabled && easingStyleCombo.currentIndex > 0
-        opacity: easingStyleCombo.currentIndex > 0 ? 1 : 0.4
-        model: easingData.directions.map((d) => {
-            return d.label;
-        })
-        currentIndex: easingData.findIndices(easingRoot.appSettings.animationEasingCurve).dirIndex
-        onActivated: (index) => {
-            if (updating)
-                return ;
-
-            var styleIdx = easingStyleCombo.currentIndex;
-            if (styleIdx <= 0)
-                return ;
-
-            var curve = easingData.curveForSelection(styleIdx, index);
-            if (curve)
-                easingRoot.appSettings.animationEasingCurve = curve;
-
-        }
-        ToolTip.visible: hovered
-        ToolTip.text: i18n("Ease In accelerates from rest, Ease Out decelerates to rest, In-Out does both")
-
-        Connections {
-            function onAnimationEasingCurveChanged() {
-                easingDirectionCombo.updating = true;
-                var idx = easingData.findIndices(easingRoot.appSettings.animationEasingCurve);
-                easingDirectionCombo.currentIndex = idx.dirIndex;
-                easingDirectionCombo.updating = false;
-            }
-
-            target: easingRoot.appSettings
-        }
-
-    }
-
-    // Amplitude slider (visible for elastic and bounce presets)
+    // Amplitude/bounce/elastic visibility helper
     QtObject {
-        id: amplitudeRow
+        id: curveInfo
 
         readonly property bool isElastic: easingRoot.easingPreview.curveType === "elastic-in" || easingRoot.easingPreview.curveType === "elastic-out" || easingRoot.easingPreview.curveType === "elastic-in-out"
         readonly property bool isBounce: easingRoot.easingPreview.curveType === "bounce-in" || easingRoot.easingPreview.curveType === "bounce-out" || easingRoot.easingPreview.curveType === "bounce-in-out"
     }
 
-    SettingsSlider {
-        formLabel: i18n("Amplitude:")
-        visible: amplitudeRow.isElastic || amplitudeRow.isBounce
-        enabled: easingRoot.animationsEnabled
-        from: amplitudeRow.isElastic ? 1 : 0.5
-        to: 3
-        stepSize: 0.1
-        value: easingRoot.easingPreview.elasticAmplitude
-        formatValue: function(v) {
-            return v.toFixed(1);
+    // ── Style ───────────────────────────────────────────────────────────────
+    SettingsRow {
+        title: i18n("Style")
+        description: i18n("Animation curve style — controls how acceleration feels")
+
+        WideComboBox {
+            id: easingStyleCombo
+
+            property bool updating: false
+
+            enabled: easingRoot.animationsEnabled
+            model: easingData.styles.map((s) => {
+                return s.label;
+            })
+            currentIndex: easingData.findIndices(easingRoot.appSettings.animationEasingCurve).styleIndex
+            onActivated: (index) => {
+                if (updating || index <= 0)
+                    return ;
+
+                var curve = easingData.curveForSelection(index, easingDirectionCombo.currentIndex);
+                if (curve)
+                    easingRoot.appSettings.animationEasingCurve = curve;
+
+            }
+
+            Connections {
+                function onAnimationEasingCurveChanged() {
+                    easingStyleCombo.updating = true;
+                    easingStyleCombo.currentIndex = easingData.findIndices(easingRoot.appSettings.animationEasingCurve).styleIndex;
+                    easingStyleCombo.updating = false;
+                }
+
+                target: easingRoot.appSettings
+            }
+
         }
-        onMoved: (value) => {
-            var ct = easingRoot.easingPreview.curveType;
-            var amp = value.toFixed(2);
-            if (amplitudeRow.isElastic) {
-                var per = easingRoot.easingPreview.elasticPeriod.toFixed(2);
-                easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + per;
-            } else {
-                easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + easingRoot.easingPreview.bouncesCount;
+
+    }
+
+    Kirigami.Separator {
+        Layout.fillWidth: true
+        Layout.leftMargin: Kirigami.Units.largeSpacing
+        Layout.rightMargin: Kirigami.Units.largeSpacing
+    }
+
+    // ── Direction ───────────────────────────────────────────────────────────
+    SettingsRow {
+        title: i18n("Direction")
+        description: i18n("Ease In accelerates, Ease Out decelerates, In-Out does both")
+        opacity: easingStyleCombo.currentIndex > 0 ? 1 : 0.4
+
+        WideComboBox {
+            id: easingDirectionCombo
+
+            property bool updating: false
+
+            enabled: easingRoot.animationsEnabled && easingStyleCombo.currentIndex > 0
+            model: easingData.directions.map((d) => {
+                return d.label;
+            })
+            currentIndex: easingData.findIndices(easingRoot.appSettings.animationEasingCurve).dirIndex
+            onActivated: (index) => {
+                if (updating)
+                    return ;
+
+                var styleIdx = easingStyleCombo.currentIndex;
+                if (styleIdx <= 0)
+                    return ;
+
+                var curve = easingData.curveForSelection(styleIdx, index);
+                if (curve)
+                    easingRoot.appSettings.animationEasingCurve = curve;
+
+            }
+
+            Connections {
+                function onAnimationEasingCurveChanged() {
+                    easingDirectionCombo.updating = true;
+                    easingDirectionCombo.currentIndex = easingData.findIndices(easingRoot.appSettings.animationEasingCurve).dirIndex;
+                    easingDirectionCombo.updating = false;
+                }
+
+                target: easingRoot.appSettings
+            }
+
+        }
+
+    }
+
+    // ── Amplitude (elastic + bounce) ────────────────────────────────────────
+    SettingsRow {
+        visible: curveInfo.isElastic || curveInfo.isBounce
+        title: i18n("Amplitude")
+        description: curveInfo.isElastic ? i18n("Strength of elastic overshoot") : i18n("Height of bounce peaks")
+
+        SettingsSlider {
+            enabled: easingRoot.animationsEnabled
+            from: curveInfo.isElastic ? 1 : 0.5
+            to: 3
+            stepSize: 0.1
+            value: easingRoot.easingPreview.elasticAmplitude
+            formatValue: function(v) {
+                return v.toFixed(1);
+            }
+            onMoved: (value) => {
+                var ct = easingRoot.easingPreview.curveType;
+                var amp = value.toFixed(2);
+                if (curveInfo.isElastic) {
+                    var per = easingRoot.easingPreview.elasticPeriod.toFixed(2);
+                    easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + per;
+                } else {
+                    easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + easingRoot.easingPreview.bouncesCount;
+                }
             }
         }
+
     }
 
-    // Bounce count slider (visible for bounce presets)
-    SettingsSlider {
-        formLabel: i18n("Bounces:")
-        visible: amplitudeRow.isBounce
-        enabled: easingRoot.animationsEnabled
-        from: 1
-        to: 8
-        value: easingRoot.easingPreview.bouncesCount
-        valueSuffix: ""
-        onMoved: (value) => {
-            var ct = easingRoot.easingPreview.curveType;
-            var amp = easingRoot.easingPreview.elasticAmplitude.toFixed(2);
-            easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + Math.round(value);
+    // ── Bounces (bounce only) ───────────────────────────────────────────────
+    SettingsRow {
+        visible: curveInfo.isBounce
+        title: i18n("Bounces")
+        description: i18n("Number of bounce repetitions")
+
+        SettingsSlider {
+            enabled: easingRoot.animationsEnabled
+            from: 1
+            to: 8
+            value: easingRoot.easingPreview.bouncesCount
+            valueSuffix: ""
+            onMoved: (value) => {
+                var ct = easingRoot.easingPreview.curveType;
+                var amp = easingRoot.easingPreview.elasticAmplitude.toFixed(2);
+                easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + Math.round(value);
+            }
         }
+
     }
 
-    // Elastic period slider
-    SettingsSlider {
-        formLabel: i18n("Period:")
-        visible: easingRoot.easingPreview.curveType === "elastic-in" || easingRoot.easingPreview.curveType === "elastic-out" || easingRoot.easingPreview.curveType === "elastic-in-out"
-        enabled: easingRoot.animationsEnabled
-        from: 0.1
-        to: 1
-        stepSize: 0.05
-        value: easingRoot.easingPreview.elasticPeriod
-        formatValue: function(v) {
-            return v.toFixed(2);
+    // ── Period (elastic only) ───────────────────────────────────────────────
+    SettingsRow {
+        visible: curveInfo.isElastic
+        title: i18n("Period")
+        description: i18n("Oscillation speed — lower is faster wobble")
+
+        SettingsSlider {
+            enabled: easingRoot.animationsEnabled
+            from: 0.1
+            to: 1
+            stepSize: 0.05
+            value: easingRoot.easingPreview.elasticPeriod
+            formatValue: function(v) {
+                return v.toFixed(2);
+            }
+            onMoved: (value) => {
+                var ct = easingRoot.easingPreview.curveType;
+                var amp = easingRoot.easingPreview.elasticAmplitude.toFixed(2);
+                easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + value.toFixed(2);
+            }
         }
-        onMoved: (value) => {
-            var ct = easingRoot.easingPreview.curveType;
-            var amp = easingRoot.easingPreview.elasticAmplitude.toFixed(2);
-            var per = value.toFixed(2);
-            easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + per;
-        }
+
     }
 
-    // Duration slider
-    SettingsSlider {
-        formLabel: i18n("Duration:")
-        enabled: easingRoot.animationsEnabled
-        from: settingsController.animationDurationMin
-        to: settingsController.animationDurationMax
-        stepSize: 10
-        value: easingRoot.appSettings.animationDuration
-        valueSuffix: " ms"
-        labelWidth: 55
-        onMoved: (value) => {
-            return easingRoot.appSettings.animationDuration = Math.round(value);
-        }
+    Kirigami.Separator {
+        Layout.fillWidth: true
+        Layout.leftMargin: Kirigami.Units.largeSpacing
+        Layout.rightMargin: Kirigami.Units.largeSpacing
     }
 
-    // Sequence mode (all at once vs one by one)
-    WideComboBox {
-        Kirigami.FormData.label: i18n("Multiple windows:")
-        enabled: easingRoot.animationsEnabled
-        model: [i18n("Animate all at once"), i18n("Animate one by one (zone order)")]
-        currentIndex: easingRoot.appSettings.animationSequenceMode
-        onActivated: (index) => {
-            return easingRoot.appSettings.animationSequenceMode = index;
+    // ── Duration ────────────────────────────────────────────────────────────
+    SettingsRow {
+        title: i18n("Duration")
+        description: i18n("Total animation time in milliseconds")
+
+        SettingsSlider {
+            enabled: easingRoot.animationsEnabled
+            from: settingsController.animationDurationMin
+            to: settingsController.animationDurationMax
+            stepSize: 10
+            value: easingRoot.appSettings.animationDuration
+            valueSuffix: " ms"
+            labelWidth: 55
+            onMoved: (value) => {
+                return easingRoot.appSettings.animationDuration = Math.round(value);
+            }
         }
-        ToolTip.visible: hovered
-        ToolTip.text: i18n("When moving multiple windows (resnap, snap all, autotile, etc.), animate them all together or one after another in zone order.")
+
     }
 
-    // Stagger interval (only relevant when one by one)
-    SettingsSlider {
-        formLabel: i18n("Delay between windows:")
+    Kirigami.Separator {
+        Layout.fillWidth: true
+        Layout.leftMargin: Kirigami.Units.largeSpacing
+        Layout.rightMargin: Kirigami.Units.largeSpacing
+    }
+
+    // ── Multiple windows ────────────────────────────────────────────────────
+    SettingsRow {
+        title: i18n("Multiple windows")
+        description: i18n("How to animate when moving several windows at once")
+
+        WideComboBox {
+            enabled: easingRoot.animationsEnabled
+            model: [i18n("All at once"), i18n("One by one")]
+            currentIndex: easingRoot.appSettings.animationSequenceMode
+            onActivated: (index) => {
+                return easingRoot.appSettings.animationSequenceMode = index;
+            }
+        }
+
+    }
+
+    // ── Stagger interval (one by one only) ──────────────────────────────────
+    SettingsRow {
         visible: easingRoot.appSettings.animationSequenceMode === 1
-        enabled: easingRoot.animationsEnabled
-        from: settingsController.animationStaggerIntervalMin
-        to: settingsController.animationStaggerIntervalMax
-        stepSize: 10
-        value: easingRoot.appSettings.animationStaggerInterval
-        valueSuffix: " ms"
-        labelWidth: 55
-        onMoved: (value) => {
-            return easingRoot.appSettings.animationStaggerInterval = Math.round(value);
+        title: i18n("Stagger delay")
+        description: i18n("Pause between each window's animation start")
+
+        SettingsSlider {
+            enabled: easingRoot.animationsEnabled
+            from: settingsController.animationStaggerIntervalMin
+            to: settingsController.animationStaggerIntervalMax
+            stepSize: 10
+            value: easingRoot.appSettings.animationStaggerInterval
+            valueSuffix: " ms"
+            labelWidth: 55
+            onMoved: (value) => {
+                return easingRoot.appSettings.animationStaggerInterval = Math.round(value);
+            }
         }
+
     }
 
-    // Minimum distance threshold
-    SettingsSpinBox {
-        formLabel: i18n("Minimum distance:")
-        enabled: easingRoot.animationsEnabled
-        from: settingsController.animationMinDistanceMin
-        to: settingsController.animationMinDistanceMax
-        stepSize: 5
-        value: easingRoot.appSettings.animationMinDistance
-        tooltipText: i18n("Skip animation when the geometry change is smaller than this many pixels. Prevents jittery micro-animations.")
-        onValueModified: (value) => {
-            return easingRoot.appSettings.animationMinDistance = value;
-        }
+    Kirigami.Separator {
+        Layout.fillWidth: true
+        Layout.leftMargin: Kirigami.Units.largeSpacing
+        Layout.rightMargin: Kirigami.Units.largeSpacing
     }
 
-    Label {
-        Kirigami.FormData.label: " "
-        text: easingRoot.appSettings.animationMinDistance === 0 ? i18n("(always animate)") : ""
-        visible: easingRoot.appSettings.animationMinDistance === 0
-        opacity: 0.7
-        font.italic: true
+    // ── Minimum distance ────────────────────────────────────────────────────
+    SettingsRow {
+        title: i18n("Minimum distance")
+        description: easingRoot.appSettings.animationMinDistance === 0 ? i18n("Currently: always animate, no threshold") : i18n("Skip animation when geometry changes less than this")
+
+        SettingsSpinBox {
+            enabled: easingRoot.animationsEnabled
+            from: settingsController.animationMinDistanceMin
+            to: settingsController.animationMinDistanceMax
+            stepSize: 5
+            value: easingRoot.appSettings.animationMinDistance
+            onValueModified: (value) => {
+                return easingRoot.appSettings.animationMinDistance = value;
+            }
+        }
+
     }
 
 }

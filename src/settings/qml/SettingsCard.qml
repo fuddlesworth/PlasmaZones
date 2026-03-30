@@ -41,6 +41,14 @@ Item {
     // Collapse
     property bool collapsible: false
     property bool collapsed: false
+    // Left accent stripe
+    property bool showAccent: false
+    property color accentColor: Kirigami.Theme.highlightColor
+    // Header enable toggle
+    property bool showToggle: false
+    property bool toggleChecked: false
+
+    signal toggleChanged()
 
     onCollapsedChanged: {
         if (collapsed) {
@@ -96,6 +104,32 @@ Item {
                 return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4);
 
             return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08);
+        }
+
+        // ── Left accent stripe ─────────────────────────────────────────
+        // Uses two rectangles: a full-radius one clipped to the left edge
+        Item {
+            id: accentStripe
+
+            readonly property int stripeWidth: Math.round(3 * Kirigami.Units.devicePixelRatio)
+
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: stripeWidth
+            visible: root.showAccent
+            clip: true
+            z: 1
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: accentStripe.stripeWidth + cardBg.radius
+                radius: cardBg.radius
+                color: root.accentColor
+            }
+
         }
 
         // ── Header ─────────────────────────────────────────────────────
@@ -157,7 +191,20 @@ Item {
                         text: root.headerText
                         level: 3
                         padding: Kirigami.Units.smallSpacing
+                        leftPadding: root.showAccent ? Kirigami.Units.smallSpacing + accentStripe.width : Kirigami.Units.smallSpacing
                         Layout.fillWidth: true
+                    }
+
+                    // Header enable toggle
+                    SettingsSwitch {
+                        visible: root.showToggle
+                        checked: root.toggleChecked
+                        accessibleName: root.headerText
+                        Layout.rightMargin: Kirigami.Units.smallSpacing
+                        onToggled: {
+                            root.toggleChecked = checked;
+                            root.toggleChanged();
+                        }
                     }
 
                     // Collapse chevron
@@ -204,12 +251,16 @@ Item {
             width: parent.width
             height: contentColumn.implicitHeight
             clip: true
-            opacity: 1
+            opacity: root.showToggle && !root.toggleChecked ? 0.5 : 1
+            enabled: root.showToggle ? root.toggleChecked : true
 
             Item {
                 id: contentColumn
 
-                width: parent.width
+                readonly property int accentOffset: root.showAccent ? accentStripe.width : 0
+
+                width: parent.width - accentOffset
+                x: accentOffset
                 implicitHeight: root.contentItem ? root.contentItem.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
                 // Reparent contentItem here
                 onWidthChanged: {
@@ -263,6 +314,14 @@ Item {
                     script: contentClip.height = Qt.binding(function() {
                         return contentColumn.implicitHeight;
                     })
+                }
+
+            }
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 200
+                    easing.type: Easing.OutCubic
                 }
 
             }
