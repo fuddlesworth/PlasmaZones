@@ -358,9 +358,9 @@ Flickable {
                     SpinBox {
                         id: splitCountSpinBox
 
-                        from: 1
+                        from: 2
                         to: 5
-                        value: root._pendingScreens.length > 0 ? root._pendingScreens.length : 1
+                        value: root._pendingScreens.length > 1 ? root._pendingScreens.length : 2
                         editable: true
                         enabled: root._selectedScreen !== ""
                         onValueModified: {
@@ -410,6 +410,7 @@ Flickable {
                             Layout.fillWidth: true
                             text: modelData.displayName || ""
                             placeholderText: i18n("Screen %1", index + 1)
+                            Accessible.name: i18n("Display name for virtual screen %1", index + 1)
                             onEditingFinished: {
                                 var screens = root._deepCopy(root._pendingScreens);
                                 if (index >= 0 && index < screens.length) {

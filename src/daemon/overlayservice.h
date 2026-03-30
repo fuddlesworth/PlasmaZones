@@ -296,6 +296,10 @@ private:
     void createShaderPreviewWindow(QScreen* screen, const QString& screenId = QString());
     void destroyShaderPreviewWindow();
 
+    /// Destroy all overlay, OSD, zone selector, snap assist, and layout picker windows
+    /// backed by the given physical screen. Used by both virtualScreensChanged and handleScreenRemoved.
+    void destroyAllWindowsForPhysicalScreen(QScreen* screen);
+
     void createSnapAssistWindow(const QString& screenId, QScreen* physScreen, const QRect& geom);
     void destroySnapAssistWindow();
 
@@ -389,6 +393,9 @@ private:
 
     // Screens excluded from overlay display (autotile-managed screens)
     QSet<QString> m_excludedScreens;
+
+    // Pipeline cache: only configure on the first window (all windows share the cache file)
+    bool m_pipelineCacheConfigured = false;
 
     // Fallback QVulkanInstance for when 'auto' backend resolves to Vulkan
 #if QT_CONFIG(vulkan)

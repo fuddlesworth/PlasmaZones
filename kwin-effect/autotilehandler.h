@@ -89,6 +89,12 @@ public:
         return m_autotileScreens;
     }
 
+    /// Check if a window is tracked by the autotile handler (in m_notifiedWindows).
+    bool isTrackedWindow(const QString& windowId) const
+    {
+        return m_notifiedWindows.contains(windowId);
+    }
+
     // Border rendering accessors
     bool isBorderlessWindow(const QString& windowId) const
     {

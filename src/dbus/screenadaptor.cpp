@@ -12,6 +12,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
 
 namespace PlasmaZones {
 
@@ -21,19 +22,22 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
     // Connect to screen change signals
     connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
         const QString physId = Utils::screenIdentifier(screen);
-        Q_EMIT screenAdded(physId);
 
-        // Also emit screenAdded for each virtual screen on this physical screen
+        // When virtual screens exist for this physical screen, emit only the
+        // virtual screen IDs — not the physical ID — to avoid phantom entries.
         auto* mgr = ScreenManager::instance();
         if (mgr) {
             QStringList vsIds = mgr->virtualScreenIdsFor(physId);
-            // virtualScreenIdsFor returns [physId] when no subdivisions — skip duplicate emit
-            if (vsIds.size() > 1 || (vsIds.size() == 1 && vsIds.first() != physId)) {
+            if (vsIds.size() > 1 || (!vsIds.isEmpty() && vsIds.first() != physId)) {
                 for (const QString& vsId : vsIds) {
                     Q_EMIT screenAdded(vsId);
                 }
                 Q_EMIT virtualScreensChanged(physId);
+            } else {
+                Q_EMIT screenAdded(physId);
             }
+        } else {
+            Q_EMIT screenAdded(physId);
         }
 
         connect(screen, &QScreen::geometryChanged, this, [this, screen]() {
@@ -245,6 +249,7 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
 
     VirtualScreenConfig config;
     config.physicalScreenId = physicalScreenId;
+    QSet<int> seenIndices;
 
     for (const auto& entry : screensArr) {
         QJsonObject screenObj = entry.toObject();
@@ -271,6 +276,15 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
                               << "(must be within [0.0, 1.0])";
             continue;
         }
+
+        // Reject duplicate indices — two entries with the same index would
+        // generate the same virtual screen ID, silently clobbering one.
+        if (seenIndices.contains(def.index)) {
+            qCWarning(lcDbus) << "setVirtualScreenConfig: duplicate virtual screen index" << def.index << "for"
+                              << physicalScreenId;
+            return;
+        }
+        seenIndices.insert(def.index);
 
         config.screens.append(def);
     }

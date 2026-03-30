@@ -144,7 +144,7 @@ public:
      * @param physicalScreenId Stable EDID-based physical screen identifier
      * @param config Virtual screen configuration (regions + names)
      */
-    void setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config);
+    bool setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config);
 
     /**
      * @brief Get virtual screen configuration for a physical screen

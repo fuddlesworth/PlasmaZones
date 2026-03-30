@@ -549,6 +549,13 @@ public:
         return screenId.indexOf(QLatin1String("/vs:")) > 0;
     }
 
+    /// Check if two screen IDs share the same physical screen.
+    /// For virtual screens (containing "/vs:"), strips the suffix before comparing.
+    static bool samePhysicalScreen(const QString& idA, const QString& idB)
+    {
+        return extractPhysicalScreenId(idA) == extractPhysicalScreenId(idB);
+    }
+
 private:
     /**
      * @brief A single virtual screen subdivision within a physical monitor.

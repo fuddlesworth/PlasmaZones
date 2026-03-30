@@ -760,9 +760,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             if (!isVirtualScreenId(oldScreenId) && !isVirtualScreenId(newScreenId)) {
                 return; // Both physical — outputChanged will handle it
             }
-            const QString physOld = extractPhysicalScreenId(oldScreenId);
-            const QString physNew = extractPhysicalScreenId(newScreenId);
-            if (physOld != physNew) {
+            if (!samePhysicalScreen(oldScreenId, newScreenId)) {
                 return; // Different physical monitors — outputChanged will handle it
             }
             m_trackedScreenPerWindow[safeW] = newScreenId;
@@ -774,18 +772,23 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 return;
             }
 
-            // Delegate autotile handling for ALL cross-VS transitions
-            // (snapping→autotile, autotile→snapping, autotile→autotile).
-            // The autotile handler's own slotWindowFrameGeometryChanged only
-            // detects VS changes for windows it already tracks (m_notifiedWindows).
-            // A snapping-mode window entering an autotile VS wouldn't be caught
-            // without this explicit delegation.
+            // Skip VS detection for autotile-tracked windows — the autotile
+            // handler's slotWindowFrameGeometryChanged owns VS crossing for
+            // windows it already tracks (m_notifiedWindows). Only untracked
+            // windows (snapping-mode entering an autotile VS) need delegation.
+            const QString windowId = getWindowId(safeW);
+            if (m_autotileHandler->isTrackedWindow(windowId)) {
+                return;
+            }
+
+            // Delegate autotile handling for untracked cross-VS transitions
+            // (snapping→autotile). The autotile handler's own detection only
+            // covers windows it already tracks.
             m_autotileHandler->handleWindowOutputChanged(safeW);
 
             // For snapping→snapping cross-VS moves: notify the daemon
             if (!m_autotileHandler->isAutotileScreen(oldScreenId) && !m_autotileHandler->isAutotileScreen(newScreenId)
                 && !m_screenChangeHandler->isScreenChangeInProgress()) {
-                const QString windowId = getWindowId(safeW);
                 fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("windowScreenChanged"),
                                       {windowId, newScreenId}, QStringLiteral("virtual screen crossing"));
             }
@@ -2890,11 +2893,16 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
                 }
 
                 // Cross-VS autotile transfer: if the window was dropped on an autotile
-                // virtual screen (from a snapping VS on the same physical monitor),
+                // virtual screen from a different VS on the SAME physical monitor,
                 // add it to autotile. KWin's outputChanged won't fire (same physical
                 // monitor), so the autotile handler doesn't see the transfer.
+                // Only trigger for same-physical-monitor drops (the actual cross-VS case)
+                // or when the previous screen is unknown (first drag on a new window).
                 if (safeWindow && !releaseScreenId.isEmpty() && m_autotileHandler->isAutotileScreen(releaseScreenId)) {
-                    m_autotileHandler->notifyWindowAdded(safeWindow);
+                    const QString oldScreenId = m_dragBypassScreenId;
+                    if (oldScreenId.isEmpty() || samePhysicalScreen(releaseScreenId, oldScreenId)) {
+                        m_autotileHandler->notifyWindowAdded(safeWindow);
+                    }
                 }
             });
 }

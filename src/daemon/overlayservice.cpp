@@ -83,60 +83,8 @@ OverlayService::OverlayService(QObject* parent)
             // zone geometry from the old virtual screen config and would be stale.
             clearSelectedZone();
 
-            // Remove existing overlays for this physical screen
-            QStringList toRemove;
-            for (auto it = m_overlayPhysScreens.constBegin(); it != m_overlayPhysScreens.constEnd(); ++it) {
-                if (it.value() == physScreen) {
-                    toRemove.append(it.key());
-                }
-            }
-            for (const QString& id : toRemove) {
-                destroyOverlayWindow(id);
-            }
-
-            // Remove existing layout OSD windows for this physical screen
-            QStringList layoutOsdToRemove;
-            for (auto it = m_layoutOsdPhysScreens.constBegin(); it != m_layoutOsdPhysScreens.constEnd(); ++it) {
-                if (it.value() == physScreen) {
-                    layoutOsdToRemove.append(it.key());
-                }
-            }
-            for (const QString& id : layoutOsdToRemove) {
-                destroyLayoutOsdWindow(id);
-            }
-
-            // Remove existing navigation OSD windows for this physical screen
-            QStringList navOsdToRemove;
-            for (auto it = m_navigationOsdPhysScreens.constBegin(); it != m_navigationOsdPhysScreens.constEnd(); ++it) {
-                if (it.value() == physScreen) {
-                    navOsdToRemove.append(it.key());
-                }
-            }
-            for (const QString& id : navOsdToRemove) {
-                destroyNavigationOsdWindow(id);
-            }
-
-            // Clean up zone selector windows for this physical screen
-            const QStringList selectorIds = m_zoneSelectorWindows.keys();
-            for (const QString& id : selectorIds) {
-                if (id == physicalScreenId || id.startsWith(physicalScreenId + QStringLiteral("/vs:"))) {
-                    destroyZoneSelectorWindow(id);
-                }
-            }
-
-            // Check if snap assist or layout picker is on the affected physical screen
-            if (m_snapAssistWindow) {
-                auto* snapScreen = m_snapAssistWindow->screen();
-                if (snapScreen && Utils::screenIdentifier(snapScreen) == physicalScreenId) {
-                    destroySnapAssistWindow();
-                }
-            }
-            if (m_layoutPickerWindow) {
-                auto* pickerScreen = m_layoutPickerWindow->screen();
-                if (pickerScreen && Utils::screenIdentifier(pickerScreen) == physicalScreenId) {
-                    destroyLayoutPickerWindow();
-                }
-            }
+            // Destroy all window types (overlays, selectors, OSDs, snap assist, layout picker)
+            destroyAllWindowsForPhysicalScreen(physScreen);
 
             // Recreate with new virtual screen config if visible
             if (isVisible()) {
@@ -251,12 +199,17 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* scree
     // Enable persistent RHI pipeline cache — compiled GPU programs survive across sessions.
     // This eliminates shader recompilation on subsequent daemon starts.
     // Must be called before the window is shown (before scene graph initialization).
-    const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-    if (!cacheDir.isEmpty()) {
-        QDir().mkpath(cacheDir);
-        QQuickGraphicsConfiguration config = window->graphicsConfiguration();
-        config.setPipelineCacheSaveFile(cacheDir + QStringLiteral("/plasmazones-pipeline.cache"));
-        window->setGraphicsConfiguration(config);
+    // All windows share the same cache file — the RHI pipeline cache format is window-agnostic
+    // and Qt serializes writes, so a single shared file is both correct and efficient.
+    if (!m_pipelineCacheConfigured) {
+        const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        if (!cacheDir.isEmpty()) {
+            QDir().mkpath(cacheDir);
+            QQuickGraphicsConfiguration config = window->graphicsConfiguration();
+            config.setPipelineCacheSaveFile(cacheDir + QStringLiteral("/plasmazones-pipeline.cache"));
+            window->setGraphicsConfiguration(config);
+            m_pipelineCacheConfigured = true;
+        }
     }
 
     // When the Vulkan backend is active, each QQuickWindow needs a QVulkanInstance
@@ -598,16 +551,17 @@ void OverlayService::handleScreenAdded(QScreen* screen)
     }
 }
 
-void OverlayService::handleScreenRemoved(QScreen* screen)
+void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
 {
     // Remove all overlay windows associated with this physical screen
     // (includes any virtual screens on this physical screen)
-    const QStringList screenIds = m_overlayWindows.keys();
-    for (const QString& screenId : screenIds) {
-        if (m_overlayPhysScreens.value(screenId) == screen) {
-            destroyOverlayWindow(screenId);
+    const QStringList overlayIds = m_overlayWindows.keys();
+    for (const QString& id : overlayIds) {
+        if (m_overlayPhysScreens.value(id) == screen) {
+            destroyOverlayWindow(id);
         }
     }
+
     // Remove zone selector windows for this physical screen
     const QStringList selectorIds = m_zoneSelectorWindows.keys();
     for (const QString& id : selectorIds) {
@@ -632,13 +586,18 @@ void OverlayService::handleScreenRemoved(QScreen* screen)
         }
     }
 
-    // Clean up snap assist and layout picker if on the removed screen
+    // Clean up snap assist and layout picker if on this physical screen
     if (m_snapAssistScreen == screen) {
         destroySnapAssistWindow();
     }
     if (m_layoutPickerScreen == screen) {
         destroyLayoutPickerWindow();
     }
+}
+
+void OverlayService::handleScreenRemoved(QScreen* screen)
+{
+    destroyAllWindowsForPhysicalScreen(screen);
 }
 
 QVariantList OverlayService::buildLayoutsList(const QString& screenId) const

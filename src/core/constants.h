@@ -411,7 +411,7 @@ constexpr int MaxBars = 256;
  * not real zone UUIDs. They must be excluded from persistence and
  * occupancy checks.
  */
-inline const QString ZoneSelectorIdPrefix = QStringLiteral("zoneselector-");
+inline constexpr QLatin1String ZoneSelectorIdPrefix{"zoneselector-"};
 
 /**
  * @brief D-Bus service constants

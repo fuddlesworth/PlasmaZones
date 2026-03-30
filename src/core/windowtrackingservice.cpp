@@ -160,9 +160,15 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
         }
     }
 
-    // Sweep tracking hashes that can have entries without a zone assignment.
+    // Sweep tracking hashes/sets that can have entries without a zone assignment.
     // windowClosed() cleans all of these per-window; prune must do the same
     // for windows that disappeared without a close event.
+    //
+    // The first loop already removed stale entries from:
+    //   m_windowScreenAssignments, m_windowDesktopAssignments, m_preTileGeometries,
+    //   m_preFloatZoneAssignments, m_preFloatScreenAssignments, m_floatingWindows,
+    //   m_autotileFloatedWindows
+    // Only sweep maps/sets NOT already cleaned above to avoid double-counting.
     auto removeIfNotAlive = [&](auto& hash) {
         for (auto hashIt = hash.begin(); hashIt != hash.end();) {
             if (!aliveWindowIds.contains(hashIt.key())) {
@@ -174,10 +180,6 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
         }
     };
 
-    removeIfNotAlive(m_preTileGeometries);
-    removeIfNotAlive(m_preFloatZoneAssignments);
-    removeIfNotAlive(m_preFloatScreenAssignments);
-    removeIfNotAlive(m_windowScreenAssignments);
     removeIfNotAlive(m_windowStickyStates);
 
     // Sweep QSet members (different iterator API)
@@ -192,8 +194,6 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
         }
     };
 
-    removeSetIfNotAlive(m_floatingWindows);
-    removeSetIfNotAlive(m_autotileFloatedWindows);
     removeSetIfNotAlive(m_savedSnapFloatingWindows);
     removeSetIfNotAlive(m_autoSnappedWindows);
     removeSetIfNotAlive(m_effectReportedWindows);

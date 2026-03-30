@@ -54,6 +54,7 @@ Rectangle {
             border.color: Kirigami.Theme.highlightColor
             border.width: 2
             radius: Kirigami.Units.smallSpacing / 2
+            Accessible.name: i18n("Virtual screen region %1", modelData.displayName || (index + 1))
 
             ColumnLayout {
                 anchors.centerIn: parent

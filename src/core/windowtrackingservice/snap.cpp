@@ -116,49 +116,35 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
         checkedLayouts.insert(currentLayout->id());
     }
 
-    // Use effective screen IDs (includes virtual screens) when available,
-    // falling back to physical screens when ScreenManager is not initialized
+    // Build a unified list of screen IDs from either effective screens (includes
+    // virtual screens) or physical screens as fallback, then use a single loop.
+    QStringList screenIds;
     auto* smgr = ScreenManager::instance();
-    const QStringList effectiveIds = smgr ? smgr->effectiveScreenIds() : QStringList();
-    if (!effectiveIds.isEmpty()) {
-        for (const QString& screenId : effectiveIds) {
-            if (Utils::screensMatch(screenId, windowScreenName)) {
-                continue;
-            }
-
-            Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
-            if (!layout || checkedLayouts.contains(layout->id())) {
-                continue;
-            }
-            checkedLayouts.insert(layout->id());
-
-            AppRuleMatch match = layout->matchAppRule(windowClass);
-            if (match.matched() && !match.targetScreen.isEmpty()) {
-                SnapResult result = buildResult(match, screenId);
-                if (result.isValid()) {
-                    return result;
-                }
-            }
-        }
+    if (smgr) {
+        screenIds = smgr->effectiveScreenIds();
     } else {
-        for (QScreen* screen : Utils::allScreens()) {
-            QString screenId = Utils::screenIdentifier(screen);
-            if (Utils::screensMatch(screenId, windowScreenName)) {
-                continue;
-            }
+        const auto screens = Utils::allScreens();
+        for (auto* s : screens) {
+            screenIds.append(Utils::screenIdentifier(s));
+        }
+    }
 
-            Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
-            if (!layout || checkedLayouts.contains(layout->id())) {
-                continue;
-            }
-            checkedLayouts.insert(layout->id());
+    for (const QString& screenId : std::as_const(screenIds)) {
+        if (Utils::screensMatch(screenId, windowScreenName)) {
+            continue;
+        }
 
-            AppRuleMatch match = layout->matchAppRule(windowClass);
-            if (match.matched() && !match.targetScreen.isEmpty()) {
-                SnapResult result = buildResult(match, screenId);
-                if (result.isValid()) {
-                    return result;
-                }
+        Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+        if (!layout || checkedLayouts.contains(layout->id())) {
+            continue;
+        }
+        checkedLayouts.insert(layout->id());
+
+        AppRuleMatch match = layout->matchAppRule(windowClass);
+        if (match.matched() && !match.targetScreen.isEmpty()) {
+            SnapResult result = buildResult(match, screenId);
+            if (result.isValid()) {
+                return result;
             }
         }
     }

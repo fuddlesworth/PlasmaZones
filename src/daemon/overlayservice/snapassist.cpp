@@ -461,6 +461,8 @@ void OverlayService::destroyLayoutPickerWindow()
         m_layoutPickerWindow->deleteLater();
         m_layoutPickerWindow = nullptr;
     }
+    m_layoutPickerScreen = nullptr;
+    m_layoutPickerScreenId.clear();
 }
 
 void OverlayService::onLayoutPickerSelected(const QString& layoutId)

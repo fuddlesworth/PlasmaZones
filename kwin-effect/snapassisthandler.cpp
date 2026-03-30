@@ -17,15 +17,6 @@ Q_LOGGING_CATEGORY(lcSnapAssist, "kwin.effect.plasmazones.snapassist", QtWarning
 
 namespace PlasmaZones {
 
-namespace {
-/// Check if two screen IDs share the same physical screen.
-/// For virtual screens (containing "/vs:"), strip the suffix and compare physical IDs.
-bool samePhysicalScreen(const QString& idA, const QString& idB)
-{
-    return PlasmaZonesEffect::extractPhysicalScreenId(idA) == PlasmaZonesEffect::extractPhysicalScreenId(idB);
-}
-} // anonymous namespace
-
 SnapAssistHandler::SnapAssistHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)
     , m_effect(effect)
@@ -142,7 +133,7 @@ QJsonArray SnapAssistHandler::buildCandidates(const QString& excludeWindowId, co
         // snap a window from the other half of their ultrawide).
         if (!screenId.isEmpty()) {
             QString winScreen = m_effect->getWindowScreenId(w);
-            if (winScreen != screenId && !samePhysicalScreen(screenId, winScreen)) {
+            if (winScreen != screenId && !PlasmaZonesEffect::samePhysicalScreen(screenId, winScreen)) {
                 continue;
             }
         }

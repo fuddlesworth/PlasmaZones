@@ -173,9 +173,11 @@ inline void applyLayerShellScreenPosition(QWindow* window, QScreen* physScreen, 
     if (isVirtualScreen) {
         layerSurface->setAnchors(LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft));
         const QRect physGeom = physScreen->geometry();
-        layerSurface->setMargins(QMargins(screenGeom.x() - physGeom.x(), screenGeom.y() - physGeom.y(), 0, 0));
+        // Clamp virtual screen geometry to physical screen bounds to prevent overlay escape
+        const QRect clampedGeom = screenGeom.intersected(physGeom);
+        layerSurface->setMargins(QMargins(clampedGeom.x() - physGeom.x(), clampedGeom.y() - physGeom.y(), 0, 0));
         // Explicit resize required — with only two anchors, LayerSurface won't auto-size
-        window->resize(screenGeom.size());
+        window->resize(clampedGeom.size());
     } else {
         layerSurface->setAnchors(LayerSurface::AnchorAll);
     }

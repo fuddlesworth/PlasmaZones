@@ -59,8 +59,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         }
 
         // Get physical screen geometry to compute absolute zone position
-        QScreen* physScreen =
-            ScreenManager::instance() ? ScreenManager::instance()->physicalQScreenFor(physicalScreenId) : nullptr;
+        QScreen* physScreen = mgr->physicalQScreenFor(physicalScreenId);
         if (!physScreen) {
             return virtualScreenIds.first();
         }
@@ -76,8 +75,11 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     };
 
     int migrated = 0;
+    // Match both the physical screen ID and any existing virtual screen IDs on it,
+    // so re-configuration (VS config changed) re-migrates windows from old virtual IDs to new ones.
+    const QString prefix = physicalScreenId + VirtualScreenId::separator();
     for (auto it = m_windowScreenAssignments.begin(); it != m_windowScreenAssignments.end(); ++it) {
-        if (it.value() != physicalScreenId) {
+        if (it.value() != physicalScreenId && !it.value().startsWith(prefix)) {
             continue;
         }
 
@@ -89,7 +91,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
 
     // Also migrate pre-float screen assignments
     for (auto it = m_preFloatScreenAssignments.begin(); it != m_preFloatScreenAssignments.end(); ++it) {
-        if (it.value() != physicalScreenId) {
+        if (it.value() != physicalScreenId && !it.value().startsWith(prefix)) {
             continue;
         }
 
@@ -101,22 +103,23 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     // Also migrate pending restore queues — these have screenId per entry
     for (auto queueIt = m_pendingRestoreQueues.begin(); queueIt != m_pendingRestoreQueues.end(); ++queueIt) {
         for (PendingRestore& entry : queueIt.value()) {
-            if (entry.screenId != physicalScreenId) {
+            if (entry.screenId != physicalScreenId && !entry.screenId.startsWith(prefix)) {
                 continue;
             }
             entry.screenId = resolveVirtualScreen(entry.zoneIds);
         }
     }
 
-    // Migrate m_lastUsedScreenId: if it matches the physical screen being subdivided,
-    // update it to the first virtual screen so that last-zone-snap resolves correctly.
-    if (m_lastUsedScreenId == physicalScreenId && !virtualScreenIds.isEmpty()) {
+    // Migrate m_lastUsedScreenId: if it matches the physical screen or an old virtual
+    // screen on it, update to the first virtual screen so last-zone-snap resolves correctly.
+    if ((m_lastUsedScreenId == physicalScreenId || m_lastUsedScreenId.startsWith(prefix))
+        && !virtualScreenIds.isEmpty()) {
         m_lastUsedScreenId = virtualScreenIds.first();
     }
 
-    // Migrate pre-tile geometry connectorName fields from physical to virtual
+    // Migrate pre-tile geometry connectorName fields from physical (or old virtual) to new virtual
     for (auto it = m_preTileGeometries.begin(); it != m_preTileGeometries.end(); ++it) {
-        if (it->connectorName == physicalScreenId) {
+        if (it->connectorName == physicalScreenId || it->connectorName.startsWith(prefix)) {
             // Use resolveVirtualScreen if the window has zone info, otherwise default to first
             QStringList zoneIds = m_windowZoneAssignments.value(it.key());
             it->connectorName = resolveVirtualScreen(zoneIds);
@@ -600,14 +603,19 @@ void WindowTrackingService::setLastUsedZone(const QString& zoneId, const QString
 
 bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
 {
-    // Check virtual screens first (covers both virtual and non-subdivided physical screens)
+    // Check virtual screens first (covers both virtual and non-subdivided physical screens).
+    // Use area-overlap semantics (not center-point containment) so windows on virtual
+    // screen boundaries are handled consistently with the physical-screen fallback path.
     auto* mgr = ScreenManager::instance();
     if (mgr) {
-        const QPoint center = geometry.center();
         const QStringList ids = mgr->effectiveScreenIds();
         for (const QString& id : ids) {
             QRect screenGeo = mgr->screenGeometry(id);
-            if (screenGeo.isValid() && screenGeo.contains(center)) {
+            if (!screenGeo.isValid()) {
+                continue;
+            }
+            const QRect intersection = geometry.intersected(screenGeo);
+            if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
                 return true;
             }
         }

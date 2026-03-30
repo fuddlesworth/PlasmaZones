@@ -7,11 +7,8 @@
 #include "../core/layout.h"
 #include "../core/zone.h"
 #include "../core/geometryutils.h"
-#include "../core/screenmanager.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
-#include "../core/virtualscreen.h"
-#include <QCursor>
 #include <QGuiApplication>
 #include <QScreen>
 #include <limits>
@@ -52,10 +49,7 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
 
     // Use the layout's geometry preference (full screen or available area)
     // Prefer virtual screen geometry when the effective screen ID is a virtual screen
-    auto* mgr = ScreenManager::instance();
-    QRect vsRefGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
-    QRectF refGeom = vsRefGeom.isValid() ? GeometryUtils::effectiveScreenGeometry(layout, screenId)
-                                         : GeometryUtils::effectiveScreenGeometry(layout, screen);
+    QRectF refGeom = DbusHelpers::resolveScreenGeometry(layout, screenId);
 
     // Guard against zero-size geometry (disconnected or degenerate screen)
     if (refGeom.width() <= 0 || refGeom.height() <= 0) {
@@ -120,8 +114,7 @@ QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenId)
     QStringList zoneIds;
 
     // Use per-screen layout (falls back to activeLayout if no assignment)
-    // If the screenId is already a virtual screen ID, pass it through directly.
-    QString resolvedId = VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId);
+    QString resolvedId = DbusHelpers::resolveScreenId(screenId);
     auto* layout = m_layoutManager->resolveLayoutForScreen(resolvedId);
     if (!layout) {
         return zoneIds;
@@ -159,10 +152,7 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
 
     // Use the layout's geometry preference (full screen or available area)
     // Prefer virtual screen geometry when the effective screen ID is a virtual screen
-    auto* mgr = ScreenManager::instance();
-    QRect vsRefGeom = mgr ? mgr->screenGeometry(effectiveId) : QRect();
-    QRectF refGeom = vsRefGeom.isValid() ? GeometryUtils::effectiveScreenGeometry(layout, effectiveId)
-                                         : GeometryUtils::effectiveScreenGeometry(layout, screen);
+    QRectF refGeom = DbusHelpers::resolveScreenGeometry(layout, effectiveId);
     if (refGeom.width() <= 0 || refGeom.height() <= 0) {
         return zoneIds;
     }
@@ -217,33 +207,11 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
 
     // Get reference geometry for normalizedGeometry() (needed for fixed-mode zones)
     // Use virtual-screen-aware resolution: prefer caller-supplied screenId,
-    // then ScreenManager geometry, then fall back to QScreen.
-    // If the screenId is already a virtual screen ID, pass it through directly.
-    // When screenId is empty, resolve to the cursor's current effective screen.
-    QString resolvedId;
-    if (screenId.isEmpty()) {
-        auto* mgrResolve = ScreenManager::instance();
-        if (mgrResolve) {
-            resolvedId = mgrResolve->effectiveScreenAt(QCursor::pos());
-        }
-        if (resolvedId.isEmpty()) {
-            QScreen* primary = QGuiApplication::primaryScreen();
-            resolvedId = primary ? Utils::screenIdentifier(primary) : QString();
-        }
-    } else {
-        resolvedId = VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId);
-    }
-    auto* mgr = ScreenManager::instance();
-    QRect vsGeom = mgr ? mgr->screenGeometry(resolvedId) : QRect();
-    QRectF refGeom;
-    if (vsGeom.isValid()) {
-        refGeom = GeometryUtils::effectiveScreenGeometry(layout, resolvedId);
-    } else {
-        QScreen* refScreen = ScreenManager::resolvePhysicalScreen(resolvedId);
-        if (!refScreen) {
-            return QString();
-        }
-        refGeom = GeometryUtils::effectiveScreenGeometry(layout, refScreen);
+    // then cursor position, then primary screen fallback.
+    QString resolvedId = DbusHelpers::resolveScreenId(screenId);
+    QRectF refGeom = DbusHelpers::resolveScreenGeometry(layout, resolvedId);
+    if (!refGeom.isValid()) {
+        return QString();
     }
 
     QRectF currentGeom = currentZone->normalizedGeometry(refGeom);
@@ -308,42 +276,16 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
     }
 
     // Use per-screen layout (falls back to activeLayout via resolveLayoutForScreen)
-    // If the screenId is already a virtual screen ID, pass it through directly.
-    // When screenId is empty, resolve to the cursor's current effective screen.
-    QString resolvedId;
-    if (screenId.isEmpty()) {
-        auto* mgrResolve = ScreenManager::instance();
-        if (mgrResolve) {
-            resolvedId = mgrResolve->effectiveScreenAt(QCursor::pos());
-        }
-        if (resolvedId.isEmpty()) {
-            QScreen* primary = QGuiApplication::primaryScreen();
-            resolvedId = primary ? Utils::screenIdentifier(primary) : QString();
-        }
-    } else {
-        resolvedId = VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId);
-    }
+    QString resolvedId = DbusHelpers::resolveScreenId(screenId);
     Layout* layout = m_layoutManager->resolveLayoutForScreen(resolvedId);
     if (!layout || layout->zones().isEmpty()) {
         return QString();
     }
 
     // Get reference geometry for normalizedGeometry() (needed for fixed-mode zones)
-    // Use virtual-screen-aware resolution: prefer ScreenManager geometry, then fall back to QScreen.
-    auto* mgr = ScreenManager::instance();
-    QRect vsGeom = mgr ? mgr->screenGeometry(resolvedId) : QRect();
-    QRectF refGeom;
-    if (vsGeom.isValid()) {
-        refGeom = GeometryUtils::effectiveScreenGeometry(layout, resolvedId);
-    } else {
-        QScreen* refScreen = ScreenManager::resolvePhysicalScreen(resolvedId);
-        if (!refScreen) {
-            refScreen = Utils::primaryScreen();
-        }
-        if (!refScreen) {
-            return QString();
-        }
-        refGeom = GeometryUtils::effectiveScreenGeometry(layout, refScreen);
+    QRectF refGeom = DbusHelpers::resolveScreenGeometry(layout, resolvedId);
+    if (!refGeom.isValid()) {
+        return QString();
     }
 
     Zone* bestZone = nullptr;
@@ -402,8 +344,7 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
 
 QString ZoneDetectionAdaptor::getZoneByNumber(int zoneNumber, const QString& screenId)
 {
-    // If the screenId is already a virtual screen ID, pass it through directly.
-    QString resolvedId = VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId);
+    QString resolvedId = DbusHelpers::resolveScreenId(screenId);
     auto* layout = m_layoutManager->resolveLayoutForScreen(resolvedId);
     if (!layout) {
         return QString();
@@ -421,8 +362,7 @@ QStringList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& screenId)
 {
     QStringList result;
 
-    // If the screenId is already a virtual screen ID, pass it through directly.
-    QString resolvedScreenId = VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId);
+    QString resolvedScreenId = DbusHelpers::resolveScreenId(screenId);
     auto* layout = m_layoutManager->resolveLayoutForScreen(resolvedScreenId);
     if (!layout) {
         return result;

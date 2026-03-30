@@ -19,6 +19,7 @@
 #include "../../autotile/AutotileConfig.h"
 #include "../../autotile/AlgorithmRegistry.h"
 #include "../../autotile/TilingAlgorithm.h"
+#include <QGuiApplication>
 #include <QScreen>
 
 namespace PlasmaZones {
@@ -169,13 +170,13 @@ void Daemon::handleAutotileDisabled()
     // Assign per-screen (not just globally) so layoutForScreen() finds explicit
     // assignments instead of falling through to the default layout.
     if (m_layoutManager && m_screenManager) {
+        const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
         // Resolve a manual layout to restore. Use the first screen's snappingLayout
         // from AssignmentEntry (preserved when mode flips to Snapping).
         QString lastLayoutId;
-        const QStringList effectiveIds2 = m_screenManager->effectiveScreenIds();
-        if (!effectiveIds2.isEmpty()) {
+        if (!effectiveIds.isEmpty()) {
             lastLayoutId =
-                m_layoutManager->snappingLayoutForScreen(effectiveIds2.first(), currentDesktop(), currentActivity());
+                m_layoutManager->snappingLayoutForScreen(effectiveIds.first(), currentDesktop(), currentActivity());
         } else if (!m_screenManager->screens().isEmpty()) {
             QString screenId = Utils::screenIdentifier(m_screenManager->screens().first());
             lastLayoutId = m_layoutManager->snappingLayoutForScreen(screenId, currentDesktop(), currentActivity());
@@ -197,8 +198,7 @@ void Daemon::handleAutotileDisabled()
             // Write with empty activity so entries are visible to D-Bus/KCM queries.
             {
                 QSignalBlocker blocker(m_layoutManager.get());
-                const QStringList ids = m_screenManager->effectiveScreenIds();
-                for (const QString& screenId : ids) {
+                for (const QString& screenId : effectiveIds) {
                     if (!activity.isEmpty()) {
                         m_layoutManager->clearAssignment(screenId, desktop, activity);
                     }
@@ -417,10 +417,26 @@ void Daemon::processPendingGeometryUpdates()
     const QString activity =
         m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
     const QStringList screenIds = m_screenManager->effectiveScreenIds();
+    QSet<QUuid> processedLayouts;
     for (const QString& screenId : screenIds) {
         Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
         if (layout) {
             layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screenId));
+            processedLayouts.insert(layout->id());
+        }
+    }
+
+    // Also recalculate layouts not currently assigned to any screen
+    // to prevent stale geometries when the user switches layouts.
+    // Use primary screen geometry as fallback reference.
+    const QVector<Layout*> allLayouts = m_layoutManager->layouts();
+    for (auto* layout : allLayouts) {
+        if (!processedLayouts.contains(layout->id())) {
+            const QScreen* primaryScreen = QGuiApplication::primaryScreen();
+            if (primaryScreen) {
+                layout->recalculateZoneGeometries(
+                    GeometryUtils::effectiveScreenGeometry(layout, Utils::screenIdentifier(primaryScreen)));
+            }
         }
     }
 

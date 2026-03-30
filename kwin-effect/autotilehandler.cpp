@@ -75,8 +75,10 @@ bool AutotileHandler::transferPreAutotileGeometry(const QString& windowId, const
     if (!geo.isValid()) {
         return false;
     }
-    // Inject into target screen (caller must ensure target is an autotile screen)
-    m_preAutotileGeometries[toScreenId][windowId] = geo;
+    // Inject into target screen using savedKey (which equals windowId for exact
+    // matches, but using savedKey consistently ensures correctness if
+    // findSavedGeometryKey ever adds fuzzy/app-id matching in the future).
+    m_preAutotileGeometries[toScreenId][savedKey] = geo;
     return true;
 }
 

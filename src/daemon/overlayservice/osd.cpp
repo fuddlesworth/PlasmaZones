@@ -492,6 +492,10 @@ void OverlayService::hideNavigationOsd()
             QMetaObject::invokeMethod(window, "hide");
         }
     }
+    // Clear dedup state so the next show isn't spuriously suppressed within 200ms
+    m_lastNavigationAction.clear();
+    m_lastNavigationReason.clear();
+    m_lastNavigationScreenId.clear();
 }
 
 void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen* physScreen)

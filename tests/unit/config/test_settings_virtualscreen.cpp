@@ -17,6 +17,7 @@
 #include <QTest>
 #include <QSignalSpy>
 
+#include "../../../src/config/configdefaults.h"
 #include "../../../src/config/settings.h"
 #include "../../../src/core/virtualscreen.h"
 #include "../helpers/IsolatedConfigGuard.h"
@@ -184,7 +185,7 @@ private Q_SLOTS:
         // Manually write an invalid config to the backend
         {
             auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
-            auto group = backend->group(QStringLiteral("VirtualScreen:") + physId);
+            auto group = backend->group(ConfigDefaults::virtualScreenGroupPrefix() + physId);
             group->writeInt(ConfigDefaults::virtualScreenCountKey(), 2);
 
             // Screen 0: valid
@@ -222,7 +223,7 @@ private Q_SLOTS:
 
         {
             auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
-            auto group = backend->group(QStringLiteral("VirtualScreen:") + physId);
+            auto group = backend->group(ConfigDefaults::virtualScreenGroupPrefix() + physId);
             group->writeInt(ConfigDefaults::virtualScreenCountKey(), 1);
             group->writeString(QStringLiteral("0/") + ConfigDefaults::virtualScreenNameKey(), QStringLiteral("Bad"));
             group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenXKey(), -0.1);
@@ -249,7 +250,7 @@ private Q_SLOTS:
 
         {
             auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
-            auto group = backend->group(QStringLiteral("VirtualScreen:") + physId);
+            auto group = backend->group(ConfigDefaults::virtualScreenGroupPrefix() + physId);
             group->writeInt(ConfigDefaults::virtualScreenCountKey(), 0);
             group.reset();
             backend->sync();
@@ -450,7 +451,7 @@ private Q_SLOTS:
         // Write a 3-screen config directly to the backend: 2 valid + 1 invalid
         {
             auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
-            auto group = backend->group(QStringLiteral("VirtualScreen:") + physId);
+            auto group = backend->group(ConfigDefaults::virtualScreenGroupPrefix() + physId);
             group->writeInt(ConfigDefaults::virtualScreenCountKey(), 3);
 
             // Screen 0: valid (left third)
@@ -503,7 +504,7 @@ private Q_SLOTS:
 
         {
             auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
-            auto group = backend->group(QStringLiteral("VirtualScreen:") + physId);
+            auto group = backend->group(ConfigDefaults::virtualScreenGroupPrefix() + physId);
             group->writeInt(ConfigDefaults::virtualScreenCountKey(), 11);
 
             // Write 11 equal-width screens
@@ -525,6 +526,41 @@ private Q_SLOTS:
         VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
         QVERIFY2(!loaded.isEmpty(), "Config with capped count must still load");
         QCOMPARE(loaded.screens.size(), 10);
+    }
+
+    // =========================================================================
+    // P1: Single-screen config is not persisted (requires >= 2)
+    // =========================================================================
+
+    /**
+     * A config with only one screen is not a meaningful subdivision and must
+     * be discarded on save/load. The loader requires >= 2 valid screens.
+     */
+    void testSaveLoad_singleScreen_discarded()
+    {
+        IsolatedConfigGuard guard;
+
+        const QString physId = QStringLiteral("EDID-TEST-001");
+
+        {
+            Settings settings;
+            VirtualScreenConfig config;
+            config.physicalScreenId = physId;
+            VirtualScreenDef def;
+            def.id = VirtualScreenId::make(physId, 0);
+            def.physicalScreenId = physId;
+            def.index = 0;
+            def.region = QRectF(0, 0, 1, 1);
+            def.displayName = QStringLiteral("Full");
+            config.screens.append(def);
+            settings.setVirtualScreenConfig(physId, config);
+            settings.save();
+        }
+
+        // Reload and verify single-screen config was discarded
+        Settings settings;
+        VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
+        QVERIFY2(loaded.isEmpty(), "Single-screen config must be discarded on load (requires >= 2)");
     }
 
     // =========================================================================

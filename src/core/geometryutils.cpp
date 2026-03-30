@@ -106,19 +106,19 @@ static EdgeBoundaries detectEdgeBoundaries(Zone* zone, const QRectF& screenGeom)
  * Shared helper used by both QScreen* and QRect overloads of getZoneGeometryWithGaps.
  */
 static QRectF applyGapsToZoneGeometry(const QRectF& zoneGeom, Zone* zone, const QRectF& referenceGeom, int innerGap,
-                                      const EdgeGaps& outerGaps, bool isVirtualScreen = false, bool physEdgeLeft = true,
-                                      bool physEdgeTop = true, bool physEdgeRight = true, bool physEdgeBottom = true)
+                                      const EdgeGaps& outerGaps,
+                                      const VirtualScreenDef::PhysicalEdges& physEdges = {true, true, true, true})
 {
     // Detect which edges are at screen boundaries
     EdgeBoundaries edges = detectEdgeBoundaries(zone, referenceGeom);
 
-    // For virtual screens, only apply outer gaps on edges that are at the PHYSICAL
-    // screen boundary. Internal edges (shared with another virtual screen) get inner
-    // gap to avoid double gaps.
-    qreal leftAdj = (edges.left && (!isVirtualScreen || physEdgeLeft)) ? outerGaps.left : (innerGap / 2.0);
-    qreal topAdj = (edges.top && (!isVirtualScreen || physEdgeTop)) ? outerGaps.top : (innerGap / 2.0);
-    qreal rightAdj = (edges.right && (!isVirtualScreen || physEdgeRight)) ? outerGaps.right : (innerGap / 2.0);
-    qreal bottomAdj = (edges.bottom && (!isVirtualScreen || physEdgeBottom)) ? outerGaps.bottom : (innerGap / 2.0);
+    // Only apply outer gaps on edges that are at the PHYSICAL screen boundary.
+    // Internal edges (shared with another virtual screen) get inner gap to avoid
+    // double gaps.
+    qreal leftAdj = (edges.left && physEdges.left) ? outerGaps.left : (innerGap / 2.0);
+    qreal topAdj = (edges.top && physEdges.top) ? outerGaps.top : (innerGap / 2.0);
+    qreal rightAdj = (edges.right && physEdges.right) ? outerGaps.right : (innerGap / 2.0);
+    qreal bottomAdj = (edges.bottom && physEdges.bottom) ? outerGaps.bottom : (innerGap / 2.0);
 
     // Apply the adjustments (positive inset from edges)
     return zoneGeom.adjusted(leftAdj, topAdj, -rightAdj, -bottomAdj);
@@ -165,13 +165,11 @@ QRectF getZoneGeometryWithGaps(Zone* zone, const QRect& screenGeometry, const QR
     // For virtual screens, determine which edges are at the physical screen boundary.
     // Internal edges (shared with another virtual screen) get inner gap instead of
     // outer gap to avoid double gaps at virtual screen boundaries.
-    bool isVirtual = !screenId.isEmpty() && VirtualScreenId::isVirtual(screenId);
-    if (isVirtual) {
+    if (!screenId.isEmpty() && VirtualScreenId::isVirtual(screenId)) {
         auto* mgr = ScreenManager::instance();
         if (mgr) {
             auto pe = mgr->physicalEdgesFor(screenId);
-            return applyGapsToZoneGeometry(geom, zone, referenceGeom, innerGap, outerGaps, true, pe.left, pe.top,
-                                           pe.right, pe.bottom);
+            return applyGapsToZoneGeometry(geom, zone, referenceGeom, innerGap, outerGaps, pe);
         }
     }
 
@@ -402,6 +400,7 @@ static QString buildEmptyZonesJsonImpl(Layout* layout, const std::optional<QRect
                                        const QRect& overlayOriginRect, QScreen* physScreen,
                                        const std::function<bool(const Zone*)>& isZoneEmpty)
 {
+    Q_ASSERT(physScreen || screenGeometry.has_value());
     QJsonArray arr;
     for (Zone* zone : layout->zones()) {
         if (!isZoneEmpty(zone)) {

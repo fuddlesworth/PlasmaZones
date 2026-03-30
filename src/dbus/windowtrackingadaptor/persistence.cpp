@@ -276,7 +276,12 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
             if (!effGeom.isValid()) {
                 continue;
             }
-            QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
+            // Use string-based overload for virtual screens so the reference
+            // geometry matches the virtual bounds, not the full physical monitor
+            QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, sid);
+            if (!refGeom.isValid()) {
+                refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
+            }
             QRectF normGeom = zone->normalizedGeometry(refGeom);
             QPoint zoneCenter(refGeom.x() + static_cast<int>(normGeom.center().x() * refGeom.width()),
                               refGeom.y() + static_cast<int>(normGeom.center().y() * refGeom.height()));

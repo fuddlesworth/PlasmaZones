@@ -5,6 +5,7 @@
 // Part of AutotileHandler — split from autotilehandler.cpp for SRP.
 
 #include "../autotilehandler.h"
+#include "../dragtracker.h"
 #include "../plasmazoneseffect.h"
 #include "../windowanimator.h"
 #include "../dbus_constants.h"
@@ -354,6 +355,12 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // window. Only check windows we're already tracking (m_notifiedWindowScreens)
     // and only when the physical screen has virtual subdivisions.
     if (m_notifiedWindows.contains(windowId) && !m_effect->m_virtualScreenDefs.isEmpty()) {
+        // Don't detect VS crossings during an active drag — the drop handler
+        // (callDragStopped / autotile drag end) owns state transitions.
+        // Detecting mid-drag would transfer the window before the user drops it.
+        if (m_effect->m_dragTracker->isDragging()) {
+            return;
+        }
         const QString newScreenId = m_effect->getWindowScreenId(w);
         const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
         if (!oldScreenId.isEmpty() && oldScreenId != newScreenId) {
