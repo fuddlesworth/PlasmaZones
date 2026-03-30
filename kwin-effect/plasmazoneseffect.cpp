@@ -332,10 +332,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // timer re-adds one between windowClosed and windowDeleted, the Item tree
     // will be torn down while an animation entry still references the window.
     // Purge here to prevent SIGSEGV in animationBounds → expandedGeometry.
+    // Also clean up caches that slotWindowClosed may have already cleared —
+    // QHash::take/remove on missing keys is a no-op, so this is safe.
     connect(KWin::effects, &KWin::EffectsHandler::windowDeleted, this, [this](KWin::EffectWindow* w) {
         m_windowAnimator->removeAnimation(w);
-        const QString cachedId = m_windowIdCache.take(w);
-        if (!cachedId.isEmpty()) {
+        if (m_windowIdCache.contains(w)) {
+            const QString cachedId = m_windowIdCache.take(w);
             m_windowIdReverse.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
@@ -1919,7 +1921,8 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 // Helper lambda: decrement pending counter and fire deferred processing when all done.
                 // Only participates in the startup gate if generation >= 0 (issued by fetchAllVirtualScreenConfigs)
                 // and the generation matches the current one (not stale from a prior fetch cycle).
-                auto countdownVsGate = [&self, generation]() {
+                // Captures self by value (QPointer copy) to avoid dangling reference.
+                auto countdownVsGate = [self, generation]() {
                     if (generation < 0 || !self || self->m_vsConfigGeneration != generation) {
                         return;
                     }

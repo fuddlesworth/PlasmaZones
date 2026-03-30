@@ -77,6 +77,24 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, const QRect& scree
                                                   const QString& screenId = {});
 
 /**
+ * @brief Get zone geometry with gaps, auto-resolving virtual screen geometry
+ *
+ * Unified helper that resolves virtual screen geometry via ScreenManager when
+ * available, falling back to the physical QScreen* geometry. Eliminates the
+ * repeated pattern of querying ScreenManager + branching on vsGeom.isValid()
+ * that appears in navigation, resnap, snap-all, rotation, and overlay code.
+ *
+ * @param zone Zone to get geometry for
+ * @param screen Physical QScreen* (used as fallback)
+ * @param screenId Screen identifier (physical or virtual)
+ * @param layout Layout for gap overrides
+ * @param settings Global settings for gap fallbacks
+ * @return Snapped integer geometry with appropriate gaps applied
+ */
+PLASMAZONES_EXPORT QRect getZoneGeometryForScreen(Zone* zone, QScreen* screen, const QString& screenId, Layout* layout,
+                                                  ISettings* settings);
+
+/**
  * @brief Get effective zone padding for a layout
  * @param layout Layout to get padding for (may have per-layout override)
  * @param settings Global settings (used if layout has no override)

@@ -178,6 +178,34 @@ QRectF getZoneGeometryWithGaps(Zone* zone, const QRect& screenGeometry, const QR
     return applyGapsToZoneGeometry(geom, zone, referenceGeom, innerGap, outerGaps);
 }
 
+QRect getZoneGeometryForScreen(Zone* zone, QScreen* screen, const QString& screenId, Layout* layout,
+                               ISettings* settings)
+{
+    if (!zone) {
+        return QRect();
+    }
+
+    int zonePadding = getEffectiveZonePadding(layout, settings, screenId);
+    EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, screenId);
+    bool useAvail = !(layout && layout->useFullScreenGeometry());
+
+    auto* mgr = ScreenManager::instance();
+    QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
+    QRect vsAvailGeom = mgr ? mgr->screenAvailableGeometry(screenId) : QRect();
+
+    QRectF geoF;
+    if (vsGeom.isValid()) {
+        QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
+        geoF = getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding, outerGaps, useAvail, screenId);
+    } else if (screen) {
+        geoF = getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
+    } else {
+        return QRect();
+    }
+
+    return snapToRect(geoF);
+}
+
 int getEffectiveZonePadding(Layout* layout, ISettings* settings, const QString& screenId)
 {
     // Per-screen snapping override (highest priority)

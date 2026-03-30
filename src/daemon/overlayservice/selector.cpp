@@ -155,7 +155,6 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         const QPoint localPos = window->mapFromGlobal(QPoint(cursorX, cursorY));
         int localX = localPos.x();
         int localY = localPos.y();
-        QRect vsGeom; // for later use
 
         window->setProperty("cursorX", localX);
         window->setProperty("cursorY", localY);
@@ -169,10 +168,8 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         const int layoutCount = layouts.size();
         const ZoneSelectorConfig selectorConfig =
             m_settings ? m_settings->resolvedZoneSelectorConfig(cursorScreenId) : defaultZoneSelectorConfig();
-        // Use virtual screen geometry for layout computation (reuse vsGeom from cursor resolution above)
-        if (!vsGeom.isValid()) {
-            vsGeom = mgr ? mgr->screenGeometry(cursorScreenId) : QRect();
-        }
+        // Use virtual screen geometry for layout computation when available
+        const QRect vsGeom = mgr ? mgr->screenGeometry(cursorScreenId) : QRect();
         const QRect effectiveGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
         const ZoneSelectorLayout layout = computeZoneSelectorLayout(selectorConfig, effectiveGeom, layoutCount);
 

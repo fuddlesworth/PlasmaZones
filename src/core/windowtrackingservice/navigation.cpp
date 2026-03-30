@@ -130,25 +130,7 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
         return QRect();
     }
 
-    // Use the zone's own layout for per-layout gap overrides
-    auto* smgr = ScreenManager::instance();
-    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
-    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
-    bool useAvail = !(layout && layout->useFullScreenGeometry());
-
-    // Use virtual screen geometry when available
-    QRect vsGeom = smgr ? smgr->screenGeometry(screenId) : QRect();
-    QRect vsAvailGeom = smgr ? smgr->screenAvailableGeometry(screenId) : QRect();
-    QRectF geoF;
-    if (vsGeom.isValid()) {
-        QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
-        geoF =
-            GeometryUtils::getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding, outerGaps, useAvail, screenId);
-    } else {
-        geoF = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
-    }
-
-    return GeometryUtils::snapToRect(geoF);
+    return GeometryUtils::getZoneGeometryForScreen(zone, screen, screenId, layout, m_settings);
 }
 
 QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const QString& screenId) const
@@ -247,19 +229,11 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateRotation(bool clock
             }
         }
 
-        // Get screen and gap settings for geometry calculation
+        // Resolve physical screen for zone geometry calculation
         QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
         if (!screen) {
             continue;
         }
-        auto* smgr = ScreenManager::instance();
-
-        int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
-        EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
-
-        // Virtual screen geometry for zone calculation
-        QRect vsGeom = smgr ? smgr->screenGeometry(screenId) : QRect();
-        QRect vsAvailGeom = smgr ? smgr->screenAvailableGeometry(screenId) : QRect();
 
         // Calculate rotated positions within this screen's zones
         for (const auto& pair : windowZoneIndices) {
@@ -269,16 +243,7 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateRotation(bool clock
 
             Zone* sourceZone = zones[currentIdx];
             Zone* targetZone = zones[targetIdx];
-            bool useAvail = !(layout && layout->useFullScreenGeometry());
-            QRectF geoF;
-            if (vsGeom.isValid()) {
-                QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
-                geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, vsGeom, availGeom, zonePadding, outerGaps,
-                                                              useAvail, screenId);
-            } else {
-                geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
-            }
-            QRect geo = GeometryUtils::snapToRect(geoF);
+            QRect geo = GeometryUtils::getZoneGeometryForScreen(targetZone, screen, screenId, layout, m_settings);
 
             if (geo.isValid()) {
                 ZoneAssignmentEntry entry;

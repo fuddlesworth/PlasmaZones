@@ -212,10 +212,8 @@ bool OverlayService::isSnapAssistVisible() const
     return m_snapAssistWindow && m_snapAssistWindow->isVisible();
 }
 
-void OverlayService::createSnapAssistWindow(const QString& screenId, QScreen* physScreen, const QRect& geom)
+void OverlayService::createSnapAssistWindow(const QString& /* screenId */, QScreen* physScreen, const QRect& /* geom */)
 {
-    Q_UNUSED(screenId)
-    Q_UNUSED(geom)
     if (m_snapAssistWindow) {
         return;
     }
@@ -405,10 +403,9 @@ bool OverlayService::isLayoutPickerVisible() const
     return m_layoutPickerWindow && m_layoutPickerWindow->isVisible();
 }
 
-void OverlayService::createLayoutPickerWindow(const QString& screenId, QScreen* physScreen, const QRect& geom)
+void OverlayService::createLayoutPickerWindow(const QString& /* screenId */, QScreen* physScreen,
+                                              const QRect& /* geom */)
 {
-    Q_UNUSED(screenId)
-    Q_UNUSED(geom)
     if (m_layoutPickerWindow) {
         return;
     }
