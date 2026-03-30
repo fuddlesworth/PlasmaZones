@@ -78,6 +78,8 @@ public:
         qreal bufferScale = 1.0; ///< Buffer resolution scale (e.g. 0.5 = half size); clamped 0.125–1.0
         QString bufferWrap = QStringLiteral("clamp"); ///< "clamp" or "repeat" for iChannel0 sampler
         QStringList bufferWraps; ///< Per-channel wrap modes (up to 4); empty = all use bufferWrap
+        QString bufferFilter = QStringLiteral("linear"); ///< "nearest", "linear", or "mipmap"
+        QStringList bufferFilters; ///< Per-channel filter modes (up to 4); empty = all use bufferFilter
         bool useDepthBuffer = false; ///< True if shader writes to a depth (R32F) attachment at location 1
 
         QString computeShaderPath; ///< Optional compute shader (.comp) for particle systems

@@ -211,6 +211,32 @@ void ZoneShaderItem::setBufferWraps(const QStringList& wraps)
     update();
 }
 
+void ZoneShaderItem::setBufferFilter(const QString& filter)
+{
+    QString use;
+    if (filter == QLatin1String("nearest") || filter == QLatin1String("mipmap")) {
+        use = filter;
+    } else {
+        use = QStringLiteral("linear");
+    }
+    if (m_bufferFilter == use) {
+        return;
+    }
+    m_bufferFilter = use;
+    Q_EMIT bufferFilterChanged();
+    update();
+}
+
+void ZoneShaderItem::setBufferFilters(const QStringList& filters)
+{
+    if (m_bufferFilters == filters) {
+        return;
+    }
+    m_bufferFilters = filters;
+    Q_EMIT bufferFiltersChanged();
+    update();
+}
+
 // ============================================================================
 // Shader Params (complex logic — kept verbatim, not macro-able)
 // ============================================================================

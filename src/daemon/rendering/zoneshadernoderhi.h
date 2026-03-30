@@ -95,6 +95,8 @@ public:
     void setBufferScale(qreal scale) override;
     void setBufferWrap(const QString& wrap) override;
     void setBufferWraps(const QStringList& wraps) override;
+    void setBufferFilter(const QString& filter) override;
+    void setBufferFilters(const QStringList& filters) override;
     void setUseDepthBuffer(bool use) override;
     void setComputeShaderPath(const QString& path) override;
     void setParticleCount(int count) override;
@@ -144,6 +146,9 @@ private:
     std::array<QString, kMaxBufferPasses> m_bufferWraps = {QStringLiteral("clamp"), QStringLiteral("clamp"),
                                                            QStringLiteral("clamp"), QStringLiteral("clamp")};
     QString m_bufferWrapDefault = QStringLiteral("clamp");
+    std::array<QString, kMaxBufferPasses> m_bufferFilters = {QStringLiteral("linear"), QStringLiteral("linear"),
+                                                             QStringLiteral("linear"), QStringLiteral("linear")};
+    QString m_bufferFilterDefault = QStringLiteral("linear");
     QString m_bufferFragmentShaderSource;
     QShader m_bufferFragmentShader;
     qint64 m_bufferMtime = 0;

@@ -534,6 +534,33 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
         }
     }
 
+    // Per-channel filter modes: "nearest", "linear", or "mipmap"
+    const QString filter = root.value(QLatin1String("bufferFilter")).toString(QStringLiteral("linear"));
+    if (filter == QLatin1String("nearest") || filter == QLatin1String("mipmap")) {
+        info.bufferFilter = filter;
+    } else {
+        info.bufferFilter = QStringLiteral("linear");
+    }
+
+    const QJsonArray bufferFiltersArray = root.value(QLatin1String("bufferFilters")).toArray();
+    if (!bufferFiltersArray.isEmpty()) {
+        for (const QJsonValue& v : bufferFiltersArray) {
+            const QString f = v.toString();
+            if (f == QLatin1String("nearest") || f == QLatin1String("mipmap")) {
+                info.bufferFilters.append(f);
+            } else {
+                info.bufferFilters.append(QStringLiteral("linear"));
+            }
+        }
+        const int needed = info.bufferShaderPaths.size();
+        while (info.bufferFilters.size() < needed) {
+            info.bufferFilters.append(info.bufferFilter);
+        }
+        while (info.bufferFilters.size() > needed) {
+            info.bufferFilters.removeLast();
+        }
+    }
+
     // Parse parameters
     const QJsonArray paramsArray = root.value(QLatin1String("parameters")).toArray();
     for (const QJsonValue& paramValue : paramsArray) {

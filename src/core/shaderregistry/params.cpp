@@ -49,6 +49,10 @@ QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo& info) const
     if (!info.bufferWraps.isEmpty()) {
         map[QStringLiteral("bufferWraps")] = QVariant::fromValue(info.bufferWraps);
     }
+    map[QStringLiteral("bufferFilter")] = info.bufferFilter;
+    if (!info.bufferFilters.isEmpty()) {
+        map[QStringLiteral("bufferFilters")] = QVariant::fromValue(info.bufferFilters);
+    }
     map[QStringLiteral("wallpaper")] = info.useWallpaper;
     map[QStringLiteral("depthBuffer")] = info.useDepthBuffer;
 

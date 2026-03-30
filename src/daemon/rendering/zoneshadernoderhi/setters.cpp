@@ -449,6 +449,51 @@ void ZoneShaderNodeRhi::setBufferWraps(const QStringList& wraps)
     }
 }
 
+void ZoneShaderNodeRhi::setBufferFilter(const QString& filter)
+{
+    QString use;
+    if (filter == QLatin1String("nearest") || filter == QLatin1String("mipmap")) {
+        use = filter;
+    } else {
+        use = QStringLiteral("linear");
+    }
+    if (m_bufferFilterDefault == use) {
+        return;
+    }
+    m_bufferFilterDefault = use;
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        m_bufferFilters[i] = use;
+        m_bufferSamplers[i].reset();
+    }
+    resetAllSrbs();
+}
+
+void ZoneShaderNodeRhi::setBufferFilters(const QStringList& filters)
+{
+    bool changed = false;
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        QString use;
+        if (i < filters.size()) {
+            const QString& f = filters.at(i);
+            if (f == QLatin1String("nearest") || f == QLatin1String("mipmap")) {
+                use = f;
+            } else {
+                use = QStringLiteral("linear");
+            }
+        } else {
+            use = m_bufferFilterDefault;
+        }
+        if (m_bufferFilters[i] != use) {
+            m_bufferFilters[i] = use;
+            m_bufferSamplers[i].reset();
+            changed = true;
+        }
+    }
+    if (changed) {
+        resetAllSrbs();
+    }
+}
+
 // ============================================================================
 // Shader Loading (Vertex / Fragment)
 // ============================================================================

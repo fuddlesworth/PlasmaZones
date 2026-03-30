@@ -145,6 +145,16 @@ public:
     {
         Q_UNUSED(wraps)
     }
+    /** Buffer channel filter: "nearest", "linear", or "mipmap". Default no-op. */
+    virtual void setBufferFilter(const QString& filter)
+    {
+        Q_UNUSED(filter)
+    }
+    /** Per-channel buffer filters (up to 4). Empty = all use setBufferFilter value. Default no-op. */
+    virtual void setBufferFilters(const QStringList& filters)
+    {
+        Q_UNUSED(filters)
+    }
 
     // Shader loading (paths; RHI node bakes GLSL 330 at runtime)
     virtual bool loadVertexShader(const QString& path) = 0;

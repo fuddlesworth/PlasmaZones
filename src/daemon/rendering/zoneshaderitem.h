@@ -90,6 +90,10 @@ class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public QQuickItem
     Q_PROPERTY(QString bufferWrap READ bufferWrap WRITE setBufferWrap NOTIFY bufferWrapChanged FINAL)
     /** Per-channel buffer wraps (up to 4). Empty = all use bufferWrap. */
     Q_PROPERTY(QStringList bufferWraps READ bufferWraps WRITE setBufferWraps NOTIFY bufferWrapsChanged FINAL)
+    /** Buffer channel filter: "nearest", "linear", or "mipmap". */
+    Q_PROPERTY(QString bufferFilter READ bufferFilter WRITE setBufferFilter NOTIFY bufferFilterChanged FINAL)
+    /** Per-channel buffer filters (up to 4). Empty = all use bufferFilter. */
+    Q_PROPERTY(QStringList bufferFilters READ bufferFilters WRITE setBufferFilters NOTIFY bufferFiltersChanged FINAL)
     Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged FINAL)
 
     // Custom parameters (32 floats in 8 vec4s, slots 0-31)
@@ -261,6 +265,18 @@ public:
         return m_bufferWraps;
     }
     void setBufferWraps(const QStringList& wraps);
+
+    QString bufferFilter() const
+    {
+        return m_bufferFilter;
+    }
+    void setBufferFilter(const QString& filter);
+
+    QStringList bufferFilters() const
+    {
+        return m_bufferFilters;
+    }
+    void setBufferFilters(const QStringList& filters);
 
     QVariantMap shaderParams() const
     {
@@ -510,6 +526,8 @@ Q_SIGNALS:
     void bufferScaleChanged();
     void bufferWrapChanged();
     void bufferWrapsChanged();
+    void bufferFilterChanged();
+    void bufferFiltersChanged();
     void shaderParamsChanged();
     void customParamsChanged(); // Emitted when any customParams1-8 changes
     void customColorsChanged(); // Emitted when any customColor1-16 changes
@@ -602,6 +620,8 @@ private:
     qreal m_bufferScale = 1.0;
     QString m_bufferWrap = QStringLiteral("clamp");
     QStringList m_bufferWraps;
+    QString m_bufferFilter = QStringLiteral("linear");
+    QStringList m_bufferFilters;
     QVariantMap m_shaderParams;
 
     // Custom shader parameters
