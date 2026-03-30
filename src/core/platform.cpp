@@ -33,12 +33,6 @@ bool isWayland()
     return false;
 }
 
-bool isSupported()
-{
-    // PlasmaZones requires Wayland - X11 is not supported
-    return isWayland();
-}
-
 } // namespace Platform
 
 } // namespace PlasmaZones

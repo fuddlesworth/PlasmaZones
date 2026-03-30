@@ -5,7 +5,7 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <cmath>
-#include <KGlobalAccel>
+#include "../../config/configdefaults.h"
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
 #include "../../core/layoutmanager.h"
@@ -115,7 +115,9 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
 Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScreen)
 {
     outScreen = screenAtPoint(x, y);
-    if (!outScreen || (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(outScreen)))) {
+    if (!outScreen
+        || isContextDisabled(m_settings, Utils::screenIdentifier(outScreen), m_layoutManager->currentVirtualDesktop(),
+                             m_layoutManager->currentActivity())) {
         return nullptr;
     }
 
@@ -396,14 +398,14 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         m_modifierConflictWarned = true;
         for (const auto& at : triggers) {
             const auto aMap = at.toMap();
-            const int aMod = aMap.value(QStringLiteral("modifier"), 0).toInt();
-            const int aBtn = aMap.value(QStringLiteral("mouseButton"), 0).toInt();
+            const int aMod = aMap.value(ConfigDefaults::triggerModifierField(), 0).toInt();
+            const int aBtn = aMap.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt();
             if (aMod == 0 && aBtn == 0)
                 continue;
             for (const auto& st : zoneSpanTriggers) {
                 const auto sMap = st.toMap();
-                if ((aMod != 0 && sMap.value(QStringLiteral("modifier"), 0).toInt() == aMod)
-                    || (aBtn != 0 && sMap.value(QStringLiteral("mouseButton"), 0).toInt() == aBtn)) {
+                if ((aMod != 0 && sMap.value(ConfigDefaults::triggerModifierField(), 0).toInt() == aMod)
+                    || (aBtn != 0 && sMap.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt() == aBtn)) {
                     qCWarning(lcDbusWindow) << "Trigger overlap: activation and zone span share trigger"
                                             << "(mod:" << aMod << "btn:" << aBtn << ");"
                                             << "zone span takes priority when both match";
@@ -462,6 +464,11 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             }
         }
     }
+}
+
+void WindowDragAdaptor::selectorScrollWheel(int angleDeltaY)
+{
+    m_overlayService->scrollZoneSelector(angleDeltaY);
 }
 
 } // namespace PlasmaZones

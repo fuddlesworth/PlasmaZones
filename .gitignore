@@ -305,7 +305,7 @@ coordination/
 claude-flow
 claude.*
 hive-mind-prompt-*.txt
-CLAUDE.md
+
 
 # -----------------------------------------------------------------------------
 # Local Configuration Files
@@ -323,3 +323,6 @@ local_settings.*
 *.log
 logs/
 *.log.*
+
+# RuVector (local development)
+ruvector/

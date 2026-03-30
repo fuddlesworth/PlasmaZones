@@ -1,0 +1,47 @@
+{
+    "id": "{a4db6f7a-3b8c-4eab-ca5f-7d9e1a3b5c7d}",
+    "name": "Super-Ultrawide 6-Grid",
+    "description": "3x2 grid optimized for 32:9 super-ultrawide monitors",
+    "type": 3,
+    "isBuiltIn": true,
+    "showZoneNumbers": true,
+    "aspectRatioClass": "super-ultrawide",
+    "zones": [
+        {
+            "id": "{a4b5c6d7-1111-4444-aaaa-111111111111}",
+            "name": "Top Left",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.333333, "height": 0.5 }
+        },
+        {
+            "id": "{a4b5c6d7-2222-4444-aaaa-222222222222}",
+            "name": "Top Center",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.333333, "y": 0, "width": 0.333334, "height": 0.5 }
+        },
+        {
+            "id": "{a4b5c6d7-3333-4444-aaaa-333333333333}",
+            "name": "Top Right",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.666667, "y": 0, "width": 0.333333, "height": 0.5 }
+        },
+        {
+            "id": "{a4b5c6d7-4444-4444-aaaa-444444444444}",
+            "name": "Bottom Left",
+            "zoneNumber": 4,
+            "relativeGeometry": { "x": 0, "y": 0.5, "width": 0.333333, "height": 0.5 }
+        },
+        {
+            "id": "{a4b5c6d7-5555-4444-aaaa-555555555555}",
+            "name": "Bottom Center",
+            "zoneNumber": 5,
+            "relativeGeometry": { "x": 0.333333, "y": 0.5, "width": 0.333334, "height": 0.5 }
+        },
+        {
+            "id": "{a4b5c6d7-6666-4444-aaaa-666666666666}",
+            "name": "Bottom Right",
+            "zoneNumber": 6,
+            "relativeGeometry": { "x": 0.666667, "y": 0.5, "width": 0.333333, "height": 0.5 }
+        }
+    ]
+}

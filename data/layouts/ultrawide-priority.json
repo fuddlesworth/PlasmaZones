@@ -1,0 +1,35 @@
+{
+    "id": "{f3ca5e6f-2a7b-4d9c-bf4e-6c8d0f2a4b6c}",
+    "name": "Ultrawide Priority",
+    "description": "Primary center column with narrow side panels for 21:9 monitors",
+    "type": 5,
+    "isBuiltIn": true,
+    "showZoneNumbers": true,
+    "aspectRatioClass": "ultrawide",
+    "zones": [
+        {
+            "id": "{f3c4d5e6-1111-4444-ffff-aaaaaaaaaaaa}",
+            "name": "Left Panel",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.15, "height": 1.0 }
+        },
+        {
+            "id": "{f3c4d5e6-2222-4444-ffff-bbbbbbbbbbbb}",
+            "name": "Main",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.15, "y": 0, "width": 0.45, "height": 1.0 }
+        },
+        {
+            "id": "{f3c4d5e6-3333-4444-ffff-cccccccccccc}",
+            "name": "Secondary",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.6, "y": 0, "width": 0.25, "height": 1.0 }
+        },
+        {
+            "id": "{f3c4d5e6-4444-4444-ffff-dddddddddddd}",
+            "name": "Right Panel",
+            "zoneNumber": 4,
+            "relativeGeometry": { "x": 0.85, "y": 0, "width": 0.15, "height": 1.0 }
+        }
+    ]
+}

@@ -3,7 +3,6 @@
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -18,10 +17,10 @@ Item {
     id: paramDelegate
 
     // Required parameter data from Repeater modelData
-    property var paramData: null
+    required property var paramData
     // Dialog reference - passed explicitly from ShaderSettingsDialog
     // This is more reliable than parent chain walking through Loaders/FormLayouts
-    property var dialogRoot: null
+    required property var dialogRoot
     // Fallback: Walk parent chain if dialogRoot not passed explicitly
     readonly property var resolvedDialogRoot: {
         if (dialogRoot)
@@ -41,6 +40,8 @@ Item {
     readonly property var _pendingRef: resolvedDialogRoot ? resolvedDialogRoot.pendingParams : null
     // Computed type for visibility switching
     readonly property string paramType: paramData ? (paramData.type || "") : ""
+    // Whether the currently selected image is an SVG (for showing resolution controls)
+    readonly property bool isSvgImage: paramType === "image" && imagePickerButton.currentPath.length > 0 && (imagePickerButton.currentPath.toLowerCase().endsWith(".svg") || imagePickerButton.currentPath.toLowerCase().endsWith(".svgz"))
 
     implicitHeight: contentLayout.implicitHeight
     implicitWidth: contentLayout.implicitWidth
@@ -59,19 +60,10 @@ Item {
 
             visible: paramDelegate.paramType === "float"
             Layout.fillWidth: true
+            Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
             from: paramDelegate.paramData && paramDelegate.paramData.min !== undefined ? paramDelegate.paramData.min : 0
             to: paramDelegate.paramData && paramDelegate.paramData.max !== undefined ? paramDelegate.paramData.max : 1
             stepSize: paramDelegate.paramData && paramDelegate.paramData.step !== undefined ? paramDelegate.paramData.step : 0.01
-            value: {
-                void (paramDelegate._pendingRef);
-                if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
-                    return 0.5;
-
-                var val = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : 0.5);
-                // Ensure number type for Slider
-                var num = Number(val);
-                return isNaN(num) ? 0.5 : num;
-            }
             ToolTip.text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
             ToolTip.visible: hovered && paramDelegate.paramData && paramDelegate.paramData.description !== undefined && paramDelegate.paramData.description !== ""
             ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -80,6 +72,21 @@ Item {
                     paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, value);
 
             }
+
+            Binding on value {
+                value: {
+                    void (paramDelegate._pendingRef);
+                    if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
+                        return 0.5;
+
+                    var val = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : 0.5);
+                    var num = Number(val);
+                    return isNaN(num) ? 0.5 : num;
+                }
+                when: !floatSlider.pressed
+                restoreMode: Binding.RestoreNone
+            }
+
         }
 
         Label {
@@ -97,18 +104,9 @@ Item {
             id: intSpinBox
 
             visible: paramDelegate.paramType === "int"
+            Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
             from: paramDelegate.paramData && paramDelegate.paramData.min !== undefined ? paramDelegate.paramData.min : 0
             to: paramDelegate.paramData && paramDelegate.paramData.max !== undefined ? paramDelegate.paramData.max : 100
-            value: {
-                void (paramDelegate._pendingRef);
-                if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
-                    return 0;
-
-                var val = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : 0);
-                // Ensure integer type for SpinBox
-                var num = parseInt(val, 10);
-                return isNaN(num) ? 0 : num;
-            }
             ToolTip.text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
             ToolTip.visible: hovered && paramDelegate.paramData && paramDelegate.paramData.description !== undefined && paramDelegate.paramData.description !== ""
             ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -117,6 +115,21 @@ Item {
                     paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, value);
 
             }
+
+            Binding on value {
+                value: {
+                    void (paramDelegate._pendingRef);
+                    if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
+                        return 0;
+
+                    var val = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : 0);
+                    var num = parseInt(val, 10);
+                    return isNaN(num) ? 0 : num;
+                }
+                when: !intSpinBox.activeFocus
+                restoreMode: Binding.RestoreNone
+            }
+
         }
 
         Item {
@@ -131,21 +144,27 @@ Item {
             id: boolCheckBox
 
             visible: paramDelegate.paramType === "bool"
+            Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
             text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
-            checked: {
-                void (paramDelegate._pendingRef);
-                if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
-                    return false;
-
-                var val = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : false);
-                // Ensure boolean type for CheckBox
-                return Boolean(val);
-            }
             onToggled: {
                 if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot)
                     paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, checked);
 
             }
+
+            Binding on checked {
+                value: {
+                    void (paramDelegate._pendingRef);
+                    if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
+                        return false;
+
+                    var val = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : false);
+                    return Boolean(val);
+                }
+                when: !boolCheckBox.activeFocus
+                restoreMode: Binding.RestoreNone
+            }
+
         }
 
         Item {
@@ -165,12 +184,17 @@ Item {
                     return "#ffffff";
 
                 var fallback = (typeof paramDelegate.paramData.default === "string" && paramDelegate.paramData.default.length > 0) ? paramDelegate.paramData.default : "#ffffff";
-                var colorStr = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, fallback);
-                if (typeof colorStr !== "string" || colorStr.length === 0)
+                if (paramDelegate.paramType !== "color")
                     return fallback;
 
-                var parsed = Qt.color(colorStr);
-                return parsed.valid ? colorStr : fallback;
+                var colorStr = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, fallback);
+                if (typeof colorStr !== "string" || colorStr.length === 0 || colorStr.charAt(0) !== "#")
+                    return fallback;
+
+                // Qt 6 does not guarantee .valid on Qt.color() results;
+                // validate hex format with a regex instead.
+                var hexRe = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
+                return hexRe.test(colorStr) ? colorStr : fallback;
             }
 
             visible: paramDelegate.paramType === "color"
@@ -233,10 +257,9 @@ Item {
                 return lastSlash >= 0 ? currentPath.substring(lastSlash + 1) : currentPath;
             }
             onClicked: {
-                if (paramDelegate.resolvedDialogRoot)
-                    paramDelegate.resolvedDialogRoot.hideShaderPreview();
+                if (paramDelegate.resolvedDialogRoot && paramDelegate.paramData)
+                    paramDelegate.resolvedDialogRoot.openImageDialog(paramDelegate.paramData.id);
 
-                imageFileDialog.open();
             }
         }
 
@@ -247,6 +270,41 @@ Item {
             onClicked: {
                 if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot)
                     paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, "");
+
+            }
+        }
+
+        // SVG render resolution (only visible when an SVG is selected)
+        Label {
+            visible: paramDelegate.isSvgImage
+            text: i18nc("@label:spinbox", "Size:")
+            opacity: 0.7
+        }
+
+        SpinBox {
+            id: svgSizeSpinBox
+
+            visible: paramDelegate.isSvgImage
+            Accessible.name: i18n("SVG size")
+            from: 64
+            to: 4096
+            stepSize: 128
+            value: {
+                void (paramDelegate._pendingRef);
+                if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
+                    return 1024;
+
+                var v = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id + "_svgSize", 1024);
+                return Number(v) || 1024;
+            }
+            editable: true
+            Layout.preferredWidth: 120
+            ToolTip.text: i18nc("@info:tooltip", "SVG render resolution (longest side in pixels)")
+            ToolTip.visible: hovered
+            ToolTip.delay: Kirigami.Units.toolTipDelay
+            onValueModified: {
+                if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot)
+                    paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id + "_svgSize", value);
 
             }
         }
@@ -282,28 +340,6 @@ Item {
             }
         }
 
-    }
-
-    FileDialog {
-        id: imageFileDialog
-
-        title: i18nc("@title:window", "Choose Image")
-        nameFilters: [i18nc("@item:inlistbox", "Image files (*.png *.jpg *.jpeg *.bmp *.webp)"), i18nc("@item:inlistbox", "All files (*)")]
-        fileMode: FileDialog.OpenFile
-        onAccepted: {
-            if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot) {
-                var path = decodeURIComponent(selectedFile.toString().replace(/^file:\/\/+/, "/"));
-                paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, path);
-            }
-            if (paramDelegate.resolvedDialogRoot)
-                paramDelegate.resolvedDialogRoot.restoreShaderPreview();
-
-        }
-        onRejected: function() {
-            if (paramDelegate.resolvedDialogRoot)
-                paramDelegate.resolvedDialogRoot.restoreShaderPreview();
-
-        }
     }
 
 }

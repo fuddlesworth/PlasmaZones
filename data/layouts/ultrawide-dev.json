@@ -1,0 +1,35 @@
+{
+    "id": "{d4e95f6a-af7c-4b1e-d9c3-6f8a0b2d4e6f}",
+    "name": "Ultrawide Dev",
+    "description": "Code + Preview + Terminal layout for developers on 21:9 monitors",
+    "type": 5,
+    "isBuiltIn": true,
+    "showZoneNumbers": true,
+    "aspectRatioClass": "ultrawide",
+    "zones": [
+        {
+            "id": "{d4e5f6a7-1111-4444-dddd-111111111111}",
+            "name": "Editor",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.4, "height": 1.0 }
+        },
+        {
+            "id": "{d4e5f6a7-2222-4444-dddd-222222222222}",
+            "name": "Preview",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.4, "y": 0, "width": 0.35, "height": 1.0 }
+        },
+        {
+            "id": "{d4e5f6a7-3333-4444-dddd-333333333333}",
+            "name": "Terminal",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.75, "y": 0, "width": 0.25, "height": 0.6 }
+        },
+        {
+            "id": "{d4e5f6a7-4444-4444-dddd-444444444444}",
+            "name": "Chat / Docs",
+            "zoneNumber": 4,
+            "relativeGeometry": { "x": 0.75, "y": 0.6, "width": 0.25, "height": 0.4 }
+        }
+    ]
+}

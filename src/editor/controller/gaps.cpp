@@ -13,7 +13,7 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <QGuiApplication>
 #include <QPointer>
 #include <QScreen>
@@ -320,7 +320,7 @@ void EditorController::clearOuterGapOverride()
 
     // Snapshot current state for undo, then push a macro command that resets all gap overrides.
     // Uses beginMacro/endMacro so the entire clear is one undo step.
-    m_undoController->beginMacro(i18nc("@action", "Clear Edge Gap Override"));
+    m_undoController->beginMacro(PzI18n::tr("Clear Edge Gap Override", "@action"));
     if (m_outerGap != -1) {
         m_undoController->push(
             new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGap, m_outerGap, -1));
@@ -367,6 +367,23 @@ void EditorController::setUseFullScreenGeometryDirect(bool enabled)
         m_useFullScreenGeometry = enabled;
         markUnsaved();
         Q_EMIT useFullScreenGeometryChanged();
+    }
+}
+
+int EditorController::aspectRatioClass() const
+{
+    return m_aspectRatioClass;
+}
+
+void EditorController::setAspectRatioClass(int cls)
+{
+    if (cls < 0 || cls > 4) {
+        return;
+    }
+    if (m_aspectRatioClass != cls) {
+        m_aspectRatioClass = cls;
+        markUnsaved();
+        Q_EMIT aspectRatioClassChanged();
     }
 }
 

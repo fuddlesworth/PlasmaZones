@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "config/configdefaults.h"
 #include "core/interfaces.h"
 
 namespace PlasmaZones {
@@ -39,13 +40,6 @@ public:
     }
 
     // IZoneActivationSettings
-    bool shiftDragToActivate() const override
-    {
-        return false;
-    }
-    void setShiftDragToActivate(bool) override
-    {
-    }
     bool snappingEnabled() const override
     {
         return true;
@@ -105,6 +99,28 @@ public:
     {
     }
     bool isMonitorDisabled(const QString&) const override
+    {
+        return false;
+    }
+    QStringList disabledDesktops() const override
+    {
+        return {};
+    }
+    void setDisabledDesktops(const QStringList&) override
+    {
+    }
+    bool isDesktopDisabled(const QString& /*screenIdOrName*/, int) const override
+    {
+        return false;
+    }
+    QStringList disabledActivities() const override
+    {
+        return {};
+    }
+    void setDisabledActivities(const QStringList&) override
+    {
+    }
+    bool isActivityDisabled(const QString& /*screenIdOrName*/, const QString&) const override
     {
         return false;
     }
@@ -208,7 +224,7 @@ public:
     }
     int borderRadius() const override
     {
-        return 0;
+        return 8;
     }
     void setBorderRadius(int) override
     {
@@ -350,21 +366,21 @@ public:
     }
     int pollIntervalMs() const override
     {
-        return 16;
+        return 50;
     }
     void setPollIntervalMs(int) override
     {
     }
     int minimumZoneSizePx() const override
     {
-        return 50;
+        return 100;
     }
     void setMinimumZoneSizePx(int) override
     {
     }
     int minimumZoneDisplaySizePx() const override
     {
-        return 100;
+        return 10;
     }
     void setMinimumZoneDisplaySizePx(int) override
     {
@@ -387,7 +403,7 @@ public:
     }
     bool excludeTransientWindows() const override
     {
-        return true;
+        return false;
     }
     void setExcludeTransientWindows(bool) override
     {
@@ -409,21 +425,21 @@ public:
     // IZoneSelectorSettings
     bool zoneSelectorEnabled() const override
     {
-        return false;
+        return true;
     }
     void setZoneSelectorEnabled(bool) override
     {
     }
     int zoneSelectorTriggerDistance() const override
     {
-        return 20;
+        return 50;
     }
     void setZoneSelectorTriggerDistance(int) override
     {
     }
     ZoneSelectorPosition zoneSelectorPosition() const override
     {
-        return ZoneSelectorPosition::TopLeft;
+        return ZoneSelectorPosition::Top;
     }
     void setZoneSelectorPosition(ZoneSelectorPosition) override
     {
@@ -437,28 +453,28 @@ public:
     }
     int zoneSelectorPreviewWidth() const override
     {
-        return 200;
+        return 180;
     }
     void setZoneSelectorPreviewWidth(int) override
     {
     }
     int zoneSelectorPreviewHeight() const override
     {
-        return 150;
+        return 101;
     }
     void setZoneSelectorPreviewHeight(int) override
     {
     }
     bool zoneSelectorPreviewLockAspect() const override
     {
-        return false;
+        return true;
     }
     void setZoneSelectorPreviewLockAspect(bool) override
     {
     }
     int zoneSelectorGridColumns() const override
     {
-        return 3;
+        return 5;
     }
     void setZoneSelectorGridColumns(int) override
     {
@@ -472,7 +488,7 @@ public:
     }
     int zoneSelectorMaxRows() const override
     {
-        return 3;
+        return 4;
     }
     void setZoneSelectorMaxRows(int) override
     {
@@ -481,7 +497,7 @@ public:
     // IWindowBehaviorSettings
     bool keepWindowsInZonesOnResolutionChange() const override
     {
-        return false;
+        return true;
     }
     void setKeepWindowsInZonesOnResolutionChange(bool) override
     {
@@ -509,7 +525,7 @@ public:
     }
     bool restoreWindowsToZonesOnLogin() const override
     {
-        return false;
+        return true;
     }
     void setRestoreWindowsToZonesOnLogin(bool) override
     {
@@ -533,6 +549,13 @@ public:
         return {};
     }
     void setSnapAssistTriggers(const QVariantList&) override
+    {
+    }
+    bool filterLayoutsByAspectRatio() const override
+    {
+        return true;
+    }
+    void setFilterLayoutsByAspectRatio(bool) override
     {
     }
 
@@ -560,7 +583,7 @@ public:
     }
     int animationMinDistance() const override
     {
-        return 0;
+        return 10;
     }
     void setAnimationMinDistance(int) override
     {
@@ -574,7 +597,7 @@ public:
     }
     int animationStaggerInterval() const override
     {
-        return 0;
+        return 50;
     }
     void setAnimationStaggerInterval(int) override
     {
@@ -618,7 +641,7 @@ public:
     }
     QColor autotileBorderColor() const override
     {
-        return {};
+        return Qt::white;
     }
     void setAutotileBorderColor(const QColor&) override
     {
@@ -659,6 +682,21 @@ public:
     {
     }
 
+    // Rendering (ISettings)
+    QString renderingBackend() const override
+    {
+        return m_renderingBackend;
+    }
+    void setRenderingBackend(const QString& backend) override
+    {
+        const QString value = ConfigDefaults::normalizeRenderingBackend(backend);
+        if (m_renderingBackend != value) {
+            m_renderingBackend = value;
+            Q_EMIT renderingBackendChanged();
+            Q_EMIT settingsChanged();
+        }
+    }
+
     // Persistence (ISettings)
     void load() override
     {
@@ -672,6 +710,7 @@ public:
 
 private:
     QString m_defaultLayoutId;
+    QString m_renderingBackend = ConfigDefaults::renderingBackend();
 };
 
 } // namespace PlasmaZones

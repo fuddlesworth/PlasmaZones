@@ -14,6 +14,9 @@
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/types.h"
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -175,6 +178,15 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
     }
 
     qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to zone" << zoneId << "on screen" << resolvedScreen;
+
+    // Emit unified state change
+    QJsonObject stateObj;
+    stateObj[QLatin1String("windowId")] = windowId;
+    stateObj[QLatin1String("zoneId")] = zoneId;
+    stateObj[QLatin1String("screenId")] = resolvedScreen;
+    stateObj[QLatin1String("isFloating")] = false;
+    stateObj[QLatin1String("changeType")] = QStringLiteral("snapped");
+    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
 void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds,
@@ -215,6 +227,14 @@ void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, cons
 
     qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to multi-zone:" << zoneIds << "on screen"
                          << resolvedScreen;
+
+    QJsonObject stateObj;
+    stateObj[QLatin1String("windowId")] = windowId;
+    stateObj[QLatin1String("zoneId")] = primaryZoneId;
+    stateObj[QLatin1String("screenId")] = resolvedScreen;
+    stateObj[QLatin1String("isFloating")] = false;
+    stateObj[QLatin1String("changeType")] = QStringLiteral("snapped");
+    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
 void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
@@ -236,6 +256,48 @@ void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
     m_service->unassignWindow(windowId);
 
     qCInfo(lcDbusWindow) << "Window" << windowId << "unsnapped from zone" << previousZoneId;
+
+    // Emit unified state change
+    QJsonObject stateObj;
+    stateObj[QLatin1String("windowId")] = windowId;
+    stateObj[QLatin1String("zoneId")] = QString();
+    stateObj[QLatin1String("screenId")] = QString();
+    stateObj[QLatin1String("isFloating")] = false;
+    stateObj[QLatin1String("changeType")] = QStringLiteral("unsnapped");
+    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
+}
+
+void WindowTrackingAdaptor::windowsSnappedBatch(const QString& batchJson)
+{
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(batchJson.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        qCWarning(lcDbusWindow) << "windowsSnappedBatch: invalid JSON:" << parseError.errorString();
+        return;
+    }
+
+    const QJsonArray entries = doc.array();
+    qCInfo(lcDbusWindow) << "windowsSnappedBatch: processing" << entries.size() << "entries";
+
+    for (const QJsonValue& val : entries) {
+        QJsonObject obj = val.toObject();
+        QString windowId = obj.value(QLatin1String("windowId")).toString();
+        bool isRestore = obj.value(QLatin1String("isRestore")).toBool(false);
+
+        if (windowId.isEmpty()) {
+            continue;
+        }
+
+        if (isRestore) {
+            // Window's zone exceeded the new layout — unsnap and clear pre-tile geometry
+            windowUnsnapped(windowId);
+            clearPreTileGeometry(windowId);
+        } else {
+            QString zoneId = obj.value(QLatin1String("zoneId")).toString();
+            QString screenId = obj.value(QLatin1String("screenId")).toString();
+            windowSnapped(windowId, zoneId, screenId);
+        }
+    }
 }
 
 void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const QString& newScreenId)
@@ -264,6 +326,15 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
                          << "- unsnapping";
     m_service->clearStalePendingAssignment(windowId);
     m_service->unassignWindow(windowId);
+
+    // Emit unified state change for screen-change-triggered unsnap
+    QJsonObject stateObj;
+    stateObj[QLatin1String("windowId")] = windowId;
+    stateObj[QLatin1String("zoneId")] = QString();
+    stateObj[QLatin1String("screenId")] = newScreenId;
+    stateObj[QLatin1String("isFloating")] = false;
+    stateObj[QLatin1String("changeType")] = QStringLiteral("screen_changed");
+    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
 void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky)
@@ -285,6 +356,13 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
         return;
     }
 
+    // Clear active window tracking if the closed window was the active one.
+    // Without this, navigation shortcuts after closing the active window would
+    // operate on a stale ID, producing confusing OSD failure messages.
+    if (m_lastActiveWindowId == windowId) {
+        m_lastActiveWindowId.clear();
+    }
+
     m_service->windowClosed(windowId);
     qCDebug(lcDbusWindow) << "Cleaned up tracking data for closed window" << windowId;
 }
@@ -303,6 +381,9 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     if (!validateWindowId(windowId, QStringLiteral("process windowActivated"))) {
         return;
     }
+
+    // Track the active window for daemon-driven navigation (move/focus/swap/etc.)
+    m_lastActiveWindowId = windowId;
 
     // Track the active window's screen as fallback for shortcut screen detection.
     // The primary source is now cursorScreenChanged (from KWin effect's mouseChanged).
@@ -352,9 +433,9 @@ QStringList WindowTrackingAdaptor::getSnappedWindows()
     return m_service->snappedWindows();
 }
 
-QString WindowTrackingAdaptor::getEmptyZonesJson(const QString& screenName)
+QString WindowTrackingAdaptor::getEmptyZonesJson(const QString& screenId)
 {
-    return m_service->getEmptyZonesJson(screenName);
+    return m_service->getEmptyZonesJson(screenId);
 }
 
 QStringList WindowTrackingAdaptor::getMultiZoneForWindow(const QString& windowId)
@@ -388,7 +469,7 @@ QString WindowTrackingAdaptor::getZoneGeometry(const QString& zoneId)
     return getZoneGeometryForScreen(zoneId, QString());
 }
 
-QString WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, const QString& screenName)
+QString WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, const QString& screenId)
 {
     if (zoneId.isEmpty()) {
         qCDebug(lcDbusWindow) << "getZoneGeometryForScreen: empty zone ID";
@@ -396,7 +477,7 @@ QString WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, c
     }
 
     // Delegate to service
-    QRect geo = m_service->zoneGeometry(zoneId, screenName);
+    QRect geo = m_service->zoneGeometry(zoneId, screenId);
     if (!geo.isValid()) {
         qCDebug(lcDbusWindow) << "getZoneGeometryForScreen: invalid geometry for zone:" << zoneId;
         return QString();

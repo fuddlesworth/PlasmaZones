@@ -1285,43 +1285,55 @@ vec4 compositeNixosLabels(vec4 color, vec2 fragCoord,
     }
 
     // =============================================================
-    //  TEXT BODY: gradient + checksum scanline + per-char pulse
+    //  TEXT BODY: hash-grid pattern + checksum scanline + bass pulse
     // =============================================================
     if (labels.a > 0.01) {
-        // Two-tone gradient matching snowflake arm colors
-        float gradY = clamp(uv.y, 0.0, 1.0);
-        vec3 textCol = mix(palPrimary, palAccent, gradY);
+        // Pixel-space hash grid — quantized noise creates discrete colored
+        // blocks inside text, like data cells in a verification readout.
+        vec2 hashCoord = floor(fragCoord / 6.0);  // 6px cells
+        float cellHash = hash21(hashCoord + floor(time * 0.5) * 0.1);
+        float cellBand = floor(cellHash * 3.0) / 2.0;  // 0.0, 0.5, 1.0
+        vec3 textCol = mix(palPrimary, palAccent, cellBand);
+        // Alternating cells get glow tint for contrast
+        float checker = mod(hashCoord.x + hashCoord.y, 2.0);
+        textCol = mix(textCol, palGlow * 0.8, checker * 0.35);
 
-        // Brighten at glyph center
-        textCol = mix(textCol, palGlow, smoothstep(0.4, 0.9, labels.a) * 0.35);
-
-        // -- CHECKSUM SCANLINE: crisp verification line sweeping L→R --
-        // A thin bright line scans across text like a hash verification
-        // pass. Behind the line, text glows "verified." Bass speeds it up.
-        // Distinct from neon/fedora's wide diagonal sweep band.
+        // CHECKSUM SCANLINE: crisp verification line sweeping L→R
         float scanSpeed = 0.2 + bassEnv * 0.4;
         float scanPos = fract(time * scanSpeed);
-        float scanDist = abs(uv.x - scanPos);
+        // Use fragCoord for scan position so it's visible per-character
+        float scanX = fragCoord.x / max(iResolution.x, 1.0);
+        float scanDist = abs(scanX - scanPos);
         scanDist = min(scanDist, 1.0 - scanDist);
         float scanLine = smoothstep(0.015, 0.0, scanDist);
-        // Scanline brightens to near-white
         textCol = mix(textCol, palGlow * 2.5, scanLine * 0.6);
         // Trailing verified glow
-        float verified = smoothstep(scanPos + 0.03, scanPos - 0.15, uv.x);
-        textCol *= 1.0 + verified * 0.2;
+        float verified = smoothstep(scanPos + 0.03, scanPos - 0.15, scanX);
+        textCol *= 1.0 + verified * 0.25;
+
+        // Stroke edge rim
+        float aL = texture(uZoneLabels, uv + vec2(-px.x, 0.0)).a;
+        float aR = texture(uZoneLabels, uv + vec2( px.x, 0.0)).a;
+        float aU = texture(uZoneLabels, uv + vec2(0.0, -px.y)).a;
+        float aD = texture(uZoneLabels, uv + vec2(0.0,  px.y)).a;
+        float rim = clamp((4.0 * labels.a - aL - aR - aU - aD) * 2.5, 0.0, 1.0);
+        textCol += palGlow * rim * 0.5;
 
         textCol *= labelBrightness;
 
-        // -- Per-character bass pulse with phase offset
-        float charPhase = floor(uv.x * 20.0) * 0.3;
+        // Per-character bass pulse with phase offset (pixel-space)
+        float charPhase = floor(fragCoord.x / 20.0) * 0.3;
         float charPulse = 1.0 + bassEnv * 0.5 * (0.5 + 0.5 * sin(time * 4.0 + charPhase));
         textCol *= charPulse;
 
-        // Treble: random character regions flash bright
-        float charHash = hash21(vec2(floor(uv.x * 20.0), floor(time * 5.0)));
-        if (trebleEnv > 0.1 && charHash > 0.65) {
+        // Treble: random hash cells flash bright
+        float cellFlash = hash21(hashCoord + floor(time * 5.0) * 0.1);
+        if (trebleEnv > 0.1 && cellFlash > 0.6) {
             textCol = mix(textCol, palGlow * 3.0, trebleEnv * 0.35);
         }
+
+        // Gentle tonemap
+        textCol = textCol / (0.6 + textCol);
 
         color.rgb = mix(color.rgb, textCol, labels.a);
         color.a = max(color.a, labels.a);

@@ -71,6 +71,12 @@ void LayoutAdaptor::onLayoutsChanged()
 
 void LayoutAdaptor::onLayoutAssigned(const QString& screen, int virtualDesktop, Layout* layout)
 {
+    // Don't echo back to the KCM during setAssignmentEntry — the KCM initiated the
+    // change and will reload from KConfig. The daemon's internal layoutAssigned signal
+    // still fires for geometry recalc, but the D-Bus screenLayoutChanged is suppressed.
+    if (m_suppressScreenLayoutSignal)
+        return;
+
     if (layout) {
         Q_EMIT screenLayoutChanged(screen, layout->id().toString(), virtualDesktop);
     } else {
@@ -214,10 +220,14 @@ QStringList LayoutAdaptor::getLayoutList()
             if (layout) {
                 json[JsonKeys::IsSystem] = layout->isSystemLayout();
                 json[JsonKeys::HasSystemOrigin] = layout->hasSystemOrigin();
-                json[JsonKeys::Type] = static_cast<int>(layout->type());
                 json[JsonKeys::HiddenFromSelector] = layout->hiddenFromSelector();
                 if (layout->defaultOrder() != 999) {
                     json[JsonKeys::DefaultOrder] = layout->defaultOrder();
+                }
+
+                // Include aspect ratio class so KCM can show the AR badge
+                if (layout->aspectRatioClass() != AspectRatioClass::Any) {
+                    json[JsonKeys::AspectRatioClassKey] = ScreenClassification::toString(layout->aspectRatioClass());
                 }
 
                 // Include allow-lists so KCM can show the filter badge
@@ -315,6 +325,20 @@ void LayoutAdaptor::setLayoutAutoAssign(const QString& layoutId, bool enabled)
     Q_EMIT layoutListChanged();
 }
 
+void LayoutAdaptor::setLayoutAspectRatioClass(const QString& layoutId, int aspectRatioClass)
+{
+    auto* layout = getValidatedLayout(layoutId, QStringLiteral("set layout aspect ratio"));
+    if (!layout) {
+        return;
+    }
+
+    layout->setAspectRatioClassInt(aspectRatioClass);
+
+    qCInfo(lcDbusLayout) << "Set layout" << layoutId << "aspectRatioClass:" << aspectRatioClass;
+    Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
+    Q_EMIT layoutListChanged();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Layout Management
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -329,9 +353,9 @@ void LayoutAdaptor::setActiveLayout(const QString& id)
     m_layoutManager->setActiveLayoutById(layout->id());
 }
 
-void LayoutAdaptor::applyQuickLayout(int number, const QString& screenName)
+void LayoutAdaptor::applyQuickLayout(int number, const QString& screenId)
 {
-    m_layoutManager->applyQuickLayout(number, Utils::screenIdForName(screenName));
+    m_layoutManager->applyQuickLayout(number, Utils::screenIdForName(screenId));
 }
 
 QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
@@ -347,6 +371,14 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
     }
 
     layout->setName(name);
+
+    // Auto-detect aspect ratio class from the primary screen
+    QScreen* screen = Utils::primaryScreen();
+    if (screen) {
+        QRect geo = screen->geometry();
+        layout->setAspectRatioClass(ScreenClassification::classify(geo.width(), geo.height()));
+    }
+
     m_layoutManager->addLayout(layout);
 
     qCInfo(lcDbusLayout) << "Created layout" << name << "of type" << type;
@@ -493,30 +525,30 @@ void LayoutAdaptor::setSettings(ISettings* settings)
 // Screen Layout Lock
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void LayoutAdaptor::toggleScreenLock(const QString& screenName)
+void LayoutAdaptor::toggleScreenLock(const QString& screenId)
 {
-    toggleContextLock(screenName, 0, QString());
+    toggleContextLock(screenId, 0, QString());
 }
 
-bool LayoutAdaptor::isScreenLocked(const QString& screenName)
+bool LayoutAdaptor::isScreenLocked(const QString& screenId)
 {
-    return isContextLocked(screenName, 0, QString());
+    return isContextLocked(screenId, 0, QString());
 }
 
-void LayoutAdaptor::toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity)
+void LayoutAdaptor::toggleContextLock(const QString& screenId, int virtualDesktop, const QString& activity)
 {
     if (!m_settings)
         return;
-    bool locked = m_settings->isContextLocked(screenName, virtualDesktop, activity);
-    m_settings->setContextLocked(screenName, virtualDesktop, activity, !locked);
+    bool locked = m_settings->isContextLocked(screenId, virtualDesktop, activity);
+    m_settings->setContextLocked(screenId, virtualDesktop, activity, !locked);
     m_settings->save();
 }
 
-bool LayoutAdaptor::isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity)
+bool LayoutAdaptor::isContextLocked(const QString& screenId, int virtualDesktop, const QString& activity)
 {
     if (!m_settings)
         return false;
-    return m_settings->isContextLocked(screenName, virtualDesktop, activity);
+    return m_settings->isContextLocked(screenId, virtualDesktop, activity);
 }
 
 } // namespace PlasmaZones

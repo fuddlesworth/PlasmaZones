@@ -15,7 +15,7 @@ Layout* Layout::createColumnsLayout(int columns, QObject* parent)
     if (columns < 1) {
         columns = 1;
     }
-    auto layout = new Layout(QStringLiteral("Columns (%1)").arg(columns), LayoutType::Columns, parent);
+    auto layout = new Layout(QStringLiteral("Columns (%1)").arg(columns), parent);
     layout->setDescription(QStringLiteral("Vertical columns layout"));
 
     qreal columnWidth = 1.0 / columns;
@@ -35,7 +35,7 @@ Layout* Layout::createRowsLayout(int rows, QObject* parent)
     if (rows < 1) {
         rows = 1;
     }
-    auto layout = new Layout(QStringLiteral("Rows (%1)").arg(rows), LayoutType::Rows, parent);
+    auto layout = new Layout(QStringLiteral("Rows (%1)").arg(rows), parent);
     layout->setDescription(QStringLiteral("Horizontal rows layout"));
 
     qreal rowHeight = 1.0 / rows;
@@ -58,7 +58,7 @@ Layout* Layout::createGridLayout(int columns, int rows, QObject* parent)
     if (rows < 1) {
         rows = 1;
     }
-    auto layout = new Layout(QStringLiteral("Grid (%1x%2)").arg(columns).arg(rows), LayoutType::Grid, parent);
+    auto layout = new Layout(QStringLiteral("Grid (%1x%2)").arg(columns).arg(rows), parent);
     layout->setDescription(QStringLiteral("Grid layout"));
 
     qreal columnWidth = 1.0 / columns;
@@ -80,7 +80,7 @@ Layout* Layout::createGridLayout(int columns, int rows, QObject* parent)
 
 Layout* Layout::createPriorityGridLayout(QObject* parent)
 {
-    auto layout = new Layout(QStringLiteral("Priority Grid"), LayoutType::PriorityGrid, parent);
+    auto layout = new Layout(QStringLiteral("Priority Grid"), parent);
     layout->setDescription(QStringLiteral("Large primary zone with smaller secondary zones"));
 
     // Main zone (left 2/3)
@@ -111,7 +111,7 @@ Layout* Layout::createPriorityGridLayout(QObject* parent)
 
 Layout* Layout::createFocusLayout(QObject* parent)
 {
-    auto layout = new Layout(QStringLiteral("Focus"), LayoutType::Focus, parent);
+    auto layout = new Layout(QStringLiteral("Focus"), parent);
     layout->setDescription(QStringLiteral("Large center zone with side panels"));
 
     // Left panel

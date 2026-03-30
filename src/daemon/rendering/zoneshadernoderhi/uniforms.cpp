@@ -24,7 +24,10 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
 {
     m_uniforms.iTime = m_time;
     m_uniforms.iTimeDelta = m_timeDelta;
-    m_uniforms.iFrame = m_frame;
+    // When feedback buffers haven't been cleared yet (new shader or re-creation),
+    // override iFrame to 0 so feedback shaders can seed their initial state.
+    // Shaders like ember-trace and neon-phantom check iFrame == 0 for seeding.
+    m_uniforms.iFrame = (m_bufferFeedback && !m_bufferFeedbackCleared) ? 0 : m_frame;
     m_uniforms.iResolution[0] = m_width;
     m_uniforms.iResolution[1] = m_height;
     m_uniforms.iMouse[0] = static_cast<float>(m_mousePosition.x());

@@ -1,0 +1,23 @@
+{
+    "id": "{f6ab7c8d-c19e-4d3a-fb5e-819c2d4f6a8b}",
+    "name": "Super-Ultrawide Dual",
+    "description": "Two virtual 16:9 halves for 32:9 super-ultrawide monitors",
+    "type": 5,
+    "isBuiltIn": true,
+    "showZoneNumbers": true,
+    "aspectRatioClass": "super-ultrawide",
+    "zones": [
+        {
+            "id": "{f6a7b8c9-1111-4444-ffff-111111111111}",
+            "name": "Left Half",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.5, "height": 1.0 }
+        },
+        {
+            "id": "{f6a7b8c9-2222-4444-ffff-222222222222}",
+            "name": "Right Half",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.5, "y": 0, "width": 0.5, "height": 1.0 }
+        }
+    ]
+}

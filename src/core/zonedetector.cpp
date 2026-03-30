@@ -58,8 +58,10 @@ ZoneDetectionResult ZoneDetector::detectZone(const QPointF& cursorPos) const
         return result;
     }
 
-    // First check if cursor is inside any zone
-    Zone* containingZone = zoneAtPoint(cursorPos);
+    // Use center-distance heuristic to resolve overlapping zones.
+    // Unlike zoneAtPoint() (smallest-area-wins), this lets the user reach
+    // background zones by dragging toward their center.
+    Zone* containingZone = resolveOverlappingZone(cursorPos);
     if (containingZone) {
         result.primaryZone = containingZone;
         result.snapGeometry = containingZone->geometry();
@@ -107,6 +109,15 @@ bool sharesEdge(const QRectF& r1, const QRectF& r2, qreal tolerance, qreal minOv
     return false;
 }
 
+// Minimum fraction of a zone's area that must lie within the bounding rect for
+// the zone to be included during expansion.  A gap-filler zone that sits entirely
+// between the seed zones has ratio 1.0; a large background zone that merely
+// overlaps has a much lower ratio (e.g. 0.3).  The threshold must be strictly
+// greater-than so that zones covering exactly half the bounding rect (a common
+// layout — two sub-zones tiling the top half of a full-screen background) are
+// excluded.
+constexpr qreal kExpansionOverlapThreshold = 0.5;
+
 // Expand seed zones to include all zones that intersect the bounding rectangle.
 // Used by paint-to-span to fill gaps between user-painted zones.
 // The bounding rect grows iteratively so transitive gaps get filled
@@ -153,10 +164,20 @@ QVector<Zone*> expandZonesByIntersection(Layout* layout, const QVector<Zone*>& s
             if (!zone || selectedZones.contains(zone)) {
                 continue;
             }
-            if (zone->geometry().intersects(currentRect)) {
-                selectedZones.insert(zone);
-                boundingRect = boundingRect.united(zone->geometry());
-                foundNew = true;
+            QRectF zoneGeom = zone->geometry();
+            if (zoneGeom.intersects(currentRect)) {
+                // Only include zones that are substantially within the bounding rect.
+                // This prevents large background/overlay zones from being pulled in
+                // when spanning adjacent sub-zones (e.g. zones 7 & 9 should not
+                // pull in a larger zone 2 underneath them).
+                QRectF intersection = zoneGeom.intersected(currentRect);
+                qreal intersectionArea = intersection.width() * intersection.height();
+                qreal zoneArea = zoneGeom.width() * zoneGeom.height();
+                if (zoneArea > 0 && intersectionArea / zoneArea > kExpansionOverlapThreshold) {
+                    selectedZones.insert(zone);
+                    boundingRect = boundingRect.united(zoneGeom);
+                    foundNew = true;
+                }
             }
         }
     }
@@ -176,6 +197,62 @@ QVector<Zone*> expandZonesByIntersection(Layout* layout, const QVector<Zone*>& s
 }
 
 } // namespace
+
+Zone* ZoneDetector::resolveOverlappingZone(const QPointF& point) const
+{
+    if (!m_layout) {
+        return nullptr;
+    }
+
+    // Collect all zones containing the point
+    QVector<Zone*> containing;
+    for (auto* zone : m_layout->zones()) {
+        if (zone && zone->containsPoint(point)) {
+            containing.append(zone);
+        }
+    }
+
+    if (containing.isEmpty()) {
+        return nullptr;
+    }
+    if (containing.size() == 1) {
+        return containing.first();
+    }
+
+    // Multiple overlapping zones: use normalized distance-to-center.
+    // For each zone, compute how far the cursor is from the zone's center
+    // as a proportion of the zone's half-dimensions (0.0 = at center, 1.0 = at edge).
+    // The zone with the lowest normalized distance wins, so the user can "reach"
+    // a background zone by dragging toward its center.
+    // Tiebreaker: when two zones have the same score (e.g. concentric zones with
+    // identical centers), prefer the smaller zone for deterministic behavior.
+    Zone* best = nullptr;
+    qreal bestScore = std::numeric_limits<qreal>::max();
+    qreal bestArea = std::numeric_limits<qreal>::max();
+
+    for (auto* zone : containing) {
+        const QRectF& geom = zone->geometry();
+        qreal halfW = geom.width() * 0.5;
+        qreal halfH = geom.height() * 0.5;
+        if (halfW <= 0 || halfH <= 0) {
+            continue;
+        }
+
+        QPointF center = geom.center();
+        qreal nx = (point.x() - center.x()) / halfW; // -1..+1
+        qreal ny = (point.y() - center.y()) / halfH; // -1..+1
+        qreal score = nx * nx + ny * ny; // Squared normalized distance, 0 at center
+
+        qreal area = geom.width() * geom.height();
+        if (score < bestScore || (score == bestScore && area < bestArea)) {
+            bestScore = score;
+            bestArea = area;
+            best = zone;
+        }
+    }
+
+    return best;
+}
 
 ZoneDetectionResult ZoneDetector::detectMultiZone(const QPointF& cursorPos) const
 {
@@ -223,12 +300,25 @@ ZoneDetectionResult ZoneDetector::detectMultiZone(const QPointF& cursorPos) cons
         // for paint-to-span mode where rectangular gap-filling is needed.)
         QVector<Zone*> seedZones = edgeAdjacentZones;
         if (primaryZone && !seedZones.contains(primaryZone)) {
-            seedZones.prepend(primaryZone);
+            // Don't include the primary zone if it's a large background zone
+            // that fully contains all edge-adjacent zones. Including it would
+            // expand the span to cover the entire background zone, making the
+            // window larger than the user intended (e.g. spanning sub-zones
+            // 7 & 9 should not pull in a larger zone 2 underneath them).
+            QRectF adjacentBounds;
+            for (auto* z : edgeAdjacentZones) {
+                adjacentBounds = adjacentBounds.isEmpty() ? z->geometry() : adjacentBounds.united(z->geometry());
+            }
+            if (!primaryZone->geometry().contains(adjacentBounds)) {
+                seedZones.prepend(primaryZone);
+            }
         }
 
         if (seedZones.size() > 1) {
-            if (!primaryZone) {
-                // No containing zone — pick closest edge-adjacent as primary
+            if (!primaryZone || !seedZones.contains(primaryZone)) {
+                // No containing zone, or primary was excluded as a background zone
+                // — pick closest edge-adjacent as primary
+                primaryZone = nullptr;
                 qreal minDistance = std::numeric_limits<qreal>::max();
                 for (auto* zone : edgeAdjacentZones) {
                     qreal distance = zone->distanceToPoint(cursorPos);

@@ -59,6 +59,28 @@ void LayoutManager::assignLayoutById(const QString& screenId, int virtualDesktop
     }
 }
 
+void LayoutManager::setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
+                                             const AssignmentEntry& entry)
+{
+    LayoutAssignmentKey key{screenId, virtualDesktop, activity};
+
+    // Store the entry unconditionally — mode-only entries (empty snapping + empty tiling)
+    // are valid when explicitly set by the KCM to preserve mode at a context level.
+    m_assignments[key] = entry;
+
+    qCDebug(lcLayout) << "setAssignmentEntryDirect: screen=" << screenId << "desktop=" << virtualDesktop
+                      << "activity=" << activity << "mode=" << entry.mode << "snapping=" << entry.snappingLayout
+                      << "tiling=" << entry.tilingAlgorithm;
+
+    // Resolve layout for signal emission
+    Layout* layout = nullptr;
+    if (entry.mode == AssignmentEntry::Snapping && !entry.snappingLayout.isEmpty()) {
+        layout = layoutById(QUuid::fromString(entry.snappingLayout));
+    }
+    Q_EMIT layoutAssigned(screenId, virtualDesktop, layout);
+    saveAssignments();
+}
+
 Layout* LayoutManager::layoutForScreen(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
     // Helper: resolve stored assignment to Layout* (returns nullptr for autotile mode)
@@ -70,22 +92,30 @@ Layout* LayoutManager::layoutForScreen(const QString& screenId, int virtualDeskt
         return layoutById(QUuid::fromString(entry.snappingLayout));
     };
 
-    // Try exact match first
+    // Try exact match first — continue cascading if resolveEntry returns nullptr
+    // (mode-only entries have empty snapping, so resolveEntry returns nullptr;
+    // the mode is preserved but the layout cascades to the parent scope)
     LayoutAssignmentKey exactKey{screenId, virtualDesktop, activity};
     if (m_assignments.contains(exactKey)) {
-        return resolveEntry(m_assignments[exactKey]);
+        Layout* layout = resolveEntry(m_assignments[exactKey]);
+        if (layout)
+            return layout;
     }
 
     // Try screen + desktop (any activity)
     LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
     if (m_assignments.contains(desktopKey)) {
-        return resolveEntry(m_assignments[desktopKey]);
+        Layout* layout = resolveEntry(m_assignments[desktopKey]);
+        if (layout)
+            return layout;
     }
 
     // Try screen only (any desktop, any activity) — the "display default"
     LayoutAssignmentKey screenKey{screenId, 0, QString()};
     if (m_assignments.contains(screenKey)) {
-        return resolveEntry(m_assignments[screenKey]);
+        Layout* layout = resolveEntry(m_assignments[screenKey]);
+        if (layout)
+            return layout;
     }
 
     // Fallback: if screenId looks like a connector name (no colons), try resolving

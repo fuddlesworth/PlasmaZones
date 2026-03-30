@@ -40,6 +40,20 @@ layout(binding = 1) uniform sampler2D uZoneLabels;
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
 
+// Resolution-independent pixel scale factor. Normalizes pixel-space values
+// (border width, glow radius, chromatic aberration, etc.) so they occupy the
+// same fraction of the screen at any resolution. Reference: 1080p.
+// Usage: multiply hardcoded pixel thresholds by pxScale().
+float pxScale() { return max(iResolution.y, 1.0) / 1080.0; }
+
+// Compute fragment coordinates from texture coords.
+// OpenGL framebuffers are Y-up, Vulkan framebuffers are Y-down.
+// iFlipBufferY is 1 for OpenGL, 0 for Vulkan — use it to flip only when needed.
+vec2 fragCoordFromTexCoord(vec2 uv) {
+    float y = (iFlipBufferY != 0) ? (1.0 - uv.y) : uv.y;
+    return vec2(uv.x, y) * iResolution;
+}
+
 // Clamp color and apply qt_Opacity for final output.
 vec4 clampFragColor(vec4 color) {
     return vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);

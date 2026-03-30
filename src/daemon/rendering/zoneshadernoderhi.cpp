@@ -62,6 +62,10 @@ static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, cons
 const QList<QShaderBaker::GeneratedShader>& detail::bakeTargets()
 {
     static const QList<QShaderBaker::GeneratedShader> targets = {
+        // SPIR-V 1.3 for Vulkan 1.1. QShaderVersion uses the same major*100 + minor*10
+        // encoding as GLSL versions, so SPIR-V 1.3 is represented as 130 (not 13).
+        // Vulkan 1.1 guarantees SPIR-V 1.3 support per the Vulkan spec appendix.
+        {QShader::SpirvShader, QShaderVersion(130)},
         {QShader::GlslShader, QShaderVersion(330)},
         {QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs)},
         {QShader::GlslShader, QShaderVersion(310, QShaderVersion::GlslEs)},
@@ -120,6 +124,11 @@ ZoneShaderNodeRhi::~ZoneShaderNodeRhi()
     releaseRhiResources();
 }
 
+void ZoneShaderNodeRhi::invalidateItem()
+{
+    m_itemValid.store(false, std::memory_order_release);
+}
+
 QSGRenderNode::StateFlags ZoneShaderNodeRhi::changedStates() const
 {
     return QSGRenderNode::ViewportState | QSGRenderNode::ScissorState;
@@ -133,7 +142,7 @@ QSGRenderNode::RenderingFlags ZoneShaderNodeRhi::flags() const
 
 QRectF ZoneShaderNodeRhi::rect() const
 {
-    if (m_item) {
+    if (m_itemValid.load(std::memory_order_acquire) && m_item) {
         return QRectF(0, 0, m_item->width(), m_item->height());
     }
     return QRectF();
@@ -145,7 +154,7 @@ QRectF ZoneShaderNodeRhi::rect() const
 
 void ZoneShaderNodeRhi::prepare()
 {
-    if (!m_item || !m_item->window()) {
+    if (!m_itemValid.load(std::memory_order_acquire) || !m_item || !m_item->window()) {
         return;
     }
     QRhi* rhi = m_item->window()->rhi();
@@ -160,6 +169,9 @@ void ZoneShaderNodeRhi::prepare()
 
     if (!m_initialized) {
         m_initialized = true;
+        qCInfo(lcOverlay) << "ZoneShaderNodeRhi initializing — RHI backend:" << rhi->backendName()
+                          << "driver:" << rhi->driverInfo().deviceName
+                          << "Y-up framebuffer:" << rhi->isYUpInFramebuffer();
         // Create VBO (fullscreen quad)
         m_vbo.reset(
             rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(RhiConstants::QuadVertices)));
@@ -311,6 +323,9 @@ void ZoneShaderNodeRhi::prepare()
 void ZoneShaderNodeRhi::render(const RenderState* state)
 {
     Q_UNUSED(state)
+    if (!m_itemValid.load(std::memory_order_acquire)) {
+        return;
+    }
     const bool multiBufferMode = m_bufferPaths.size() > 1;
     const bool bufferReady = multiBufferMode ? m_multiBufferShadersReady : m_bufferShaderReady;
     // Multi-buffer: create buffer targets and pipelines before the image pass SRB, so
@@ -366,6 +381,13 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
     const bool multipassActive = multipassSingle || multipassMulti;
 
     if (multipassActive) {
+        // The scene graph's batch renderer keeps its render pass active when calling
+        // render() on nodes with the NoExternalRendering flag. We must end that pass
+        // before beginning our own passes on buffer FBOs. After buffer passes complete,
+        // we re-begin a pass on rt for the image pass; the scene graph will endPass()
+        // after render() returns, balancing our beginPass(rt).
+        cb->endPass();
+
         const QColor clearColor(0, 0, 0, 0);
         if (multiBufferMode) {
             const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
@@ -425,7 +447,8 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
     int vpY = 0;
     int vpW = outputSize.width();
     int vpH = outputSize.height();
-    if (m_item && m_item->window() && m_item->width() > 0 && m_item->height() > 0) {
+    if (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window() && m_item->width() > 0
+        && m_item->height() > 0) {
         QQuickWindow* win = m_item->window();
         const qreal dpr = win->devicePixelRatio();
         const int itemPxW = qRound(m_item->width() * dpr);

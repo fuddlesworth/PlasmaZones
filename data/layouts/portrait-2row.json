@@ -1,0 +1,23 @@
+{
+    "id": "{b8cd9eaf-e3b0-4f5c-bd7a-a3be4f6b8c0d}",
+    "name": "Portrait 2-Row",
+    "description": "Two stacked rows optimized for vertical monitors",
+    "type": 5,
+    "isBuiltIn": true,
+    "showZoneNumbers": true,
+    "aspectRatioClass": "portrait",
+    "zones": [
+        {
+            "id": "{b8c9d0e1-1111-4444-bbbb-aaaaaaaaaaaa}",
+            "name": "Top",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 1.0, "height": 0.5 }
+        },
+        {
+            "id": "{b8c9d0e1-2222-4444-bbbb-bbbbbbbbbbbb}",
+            "name": "Bottom",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0, "y": 0.5, "width": 1.0, "height": 0.5 }
+        }
+    ]
+}

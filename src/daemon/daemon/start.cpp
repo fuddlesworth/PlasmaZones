@@ -14,10 +14,12 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../dbus/layoutadaptor.h"
+#include "../../dbus/settingsadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include "../../autotile/AutotileEngine.h"
 #include "../../autotile/AlgorithmRegistry.h"
 #include "../../autotile/TilingAlgorithm.h"
+#include <QProcess>
 #include "../config/settings.h"
 #include <QGuiApplication>
 #include <QScreen>
@@ -93,8 +95,8 @@ void Daemon::connectScreenSignals()
                 m_geometryUpdateTimer.start();
             });
 
-    // Don't pre-create overlay windows at startup. On Wayland with LayerShellQt
-    // this can cause visibility issues. Create on-demand in show() instead,
+    // Don't pre-create overlay windows at startup. On Wayland with the layer-shell
+    // QPA plugin this can cause visibility issues. Create on-demand in show() instead,
     // which also avoids the overlay flashing during login.
     qCInfo(lcDaemon) << "Overlay service: ready," << m_screenManager->screens().count()
                      << "screens available (windows created on-demand)";
@@ -116,6 +118,16 @@ void Daemon::connectDesktopActivity()
         if (m_unifiedLayoutController) {
             m_unifiedLayoutController->setCurrentVirtualDesktop(desktop);
         }
+        // Pin screens where all autotiled windows are sticky (on all desktops)
+        // BEFORE changing the desktop context. This ensures currentKeyForScreen()
+        // continues to resolve existing TilingStates for screens managed by the
+        // KWin "virtualdesktopsonlyonprimary" script.
+        if (m_autotileEngine && m_windowTrackingAdaptor) {
+            auto* service = m_windowTrackingAdaptor->service();
+            m_autotileEngine->updateStickyScreenPins([service](const QString& windowId) {
+                return service->isWindowSticky(windowId);
+            });
+        }
         // Set engine's desktop context BEFORE updateAutotileScreens() so it
         // resolves TilingStates for the correct desktop. Without this, the
         // engine would look up/create states under the OLD desktop's key.
@@ -135,23 +147,36 @@ void Daemon::connectDesktopActivity()
         showDesktopSwitchOsd(desktop, currentActivity());
     });
 
-    // Prune stale TilingState entries when desktops are removed
+    // Prune stale TilingState entries and disabled-desktop numbers when desktops are removed
     connect(m_virtualDesktopManager.get(), &VirtualDesktopManager::desktopCountChanged, this, [this](int newCount) {
-        if (!m_autotileEngine) {
-            return;
-        }
-        // Desktop numbers are 1-based. Any state with desktop > newCount is stale.
-        // Iterate the engine's own state map to find stale desktops (avoids
-        // the arbitrary upper bound of the old newCount+20 sweep).
-        QSet<int> staleDesktops;
-        for (auto it = m_autotileEngine->screenStates().constBegin(); it != m_autotileEngine->screenStates().constEnd();
-             ++it) {
-            if (it.key().desktop > newCount) {
-                staleDesktops.insert(it.key().desktop);
+        // Prune stale disabled-desktop entries (desktop numbers > newCount no longer exist).
+        // NOTE: KDE Plasma renumbers desktops when one in the middle is removed (e.g.
+        // removing desktop 2 of 4 shifts 3→2 and 4→3). We only prune out-of-range
+        // entries here; mid-range renumbering would require tracking which desktop was
+        // removed (not available from desktopCountChanged). A future improvement could
+        // use KDE's desktop UUIDs instead of 1-based numbers.
+        if (m_settings) {
+            QStringList disabled = m_settings->disabledDesktops();
+            if (pruneDisabledDesktopEntries(disabled, newCount)) {
+                m_settings->setDisabledDesktops(disabled);
+                m_settings->save();
             }
         }
-        for (int d : staleDesktops) {
-            m_autotileEngine->pruneStatesForDesktop(d);
+
+        if (m_autotileEngine) {
+            // Desktop numbers are 1-based. Any state with desktop > newCount is stale.
+            // Iterate the engine's own state map to find stale desktops (avoids
+            // the arbitrary upper bound of the old newCount+20 sweep).
+            QSet<int> staleDesktops;
+            for (auto it = m_autotileEngine->screenStates().constBegin();
+                 it != m_autotileEngine->screenStates().constEnd(); ++it) {
+                if (it.key().desktop > newCount) {
+                    staleDesktops.insert(it.key().desktop);
+                }
+            }
+            for (int d : staleDesktops) {
+                m_autotileEngine->pruneStatesForDesktop(d);
+            }
         }
         // Prune fallback assignment maps
         pruneContextMapsForDesktop(newCount);
@@ -173,14 +198,26 @@ void Daemon::connectDesktopActivity()
     if (ActivityManager::isAvailable()) {
         m_activityManager->start();
 
-        // Prune stale TilingState entries when activities are added/removed
+        // Prune stale TilingState entries and disabled-activity IDs when activities are added/removed
         connect(m_activityManager.get(), &ActivityManager::activitiesChanged, this, [this]() {
-            if (!m_autotileEngine || !m_activityManager) {
+            if (!m_activityManager) {
                 return;
             }
             const QStringList activities = m_activityManager->activities();
-            m_autotileEngine->pruneStatesForActivities(activities);
             const QSet<QString> validSet(activities.begin(), activities.end());
+
+            // Prune disabled-activity entries that reference removed activities
+            if (m_settings) {
+                QStringList disabled = m_settings->disabledActivities();
+                if (pruneDisabledActivityEntries(disabled, validSet)) {
+                    m_settings->setDisabledActivities(disabled);
+                    m_settings->save();
+                }
+            }
+
+            if (m_autotileEngine) {
+                m_autotileEngine->pruneStatesForActivities(activities);
+            }
             pruneContextMapsForActivities(validSet);
         });
 
@@ -199,6 +236,13 @@ void Daemon::connectDesktopActivity()
                     m_layoutManager->setCurrentActivity(activityId);
                     if (m_unifiedLayoutController) {
                         m_unifiedLayoutController->setCurrentActivity(activityId);
+                    }
+                    // Pin sticky screens before changing activity context
+                    if (m_autotileEngine && m_windowTrackingAdaptor) {
+                        auto* service = m_windowTrackingAdaptor->service();
+                        m_autotileEngine->updateStickyScreenPins([service](const QString& windowId) {
+                            return service->isWindowSticky(windowId);
+                        });
                     }
                     // Set engine's activity context BEFORE updateAutotileScreens()
                     if (m_autotileEngine) {
@@ -227,6 +271,16 @@ void Daemon::connectShortcutSignals()
     // Screen detection: On X11, QCursor::pos() works; on Wayland, background daemons
     // get stale cursor data. resolveShortcutScreen() handles both by falling back to
     // the screen reported by the KWin effect's windowActivated D-Bus call.
+    connect(m_shortcutManager.get(), &ShortcutManager::openSettingsRequested, this, []() {
+        // Launch in its own systemd scope so stopping the daemon service
+        // doesn't kill the settings app (they'd share a cgroup otherwise).
+        if (!QProcess::startDetached(
+                QStringLiteral("systemd-run"),
+                {QStringLiteral("--user"), QStringLiteral("--scope"), QStringLiteral("plasmazones-settings")})) {
+            // Fallback if systemd-run is unavailable
+            QProcess::startDetached(QStringLiteral("plasmazones-settings"), {});
+        }
+    });
     connect(m_shortcutManager.get(), &ShortcutManager::openEditorRequested, this, [this]() {
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
         if (!screen && m_unifiedLayoutController && !m_unifiedLayoutController->currentScreenName().isEmpty()) {
@@ -365,22 +419,21 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "LayoutPicker shortcut: no screen info";
             return;
         }
-        const QString screenName = Utils::screenIdentifier(screen);
-        m_unifiedLayoutController->setCurrentScreenName(screenName);
-        updateLayoutFilterForScreen(screenName);
-        m_overlayService->showLayoutPicker(screenName);
+        const QString screenId = Utils::screenIdentifier(screen);
+        m_unifiedLayoutController->setCurrentScreenName(screenId);
+        updateLayoutFilterForScreen(screenId);
+        m_overlayService->showLayoutPicker(screenId);
     });
     connect(m_overlayService.get(), &OverlayService::layoutPickerSelected, this, [this](const QString& layoutId) {
         if (!m_unifiedLayoutController) {
             return;
         }
         // Check if screen is locked for its current mode
-        QString screenName = m_unifiedLayoutController->currentScreenName();
-        if (!screenName.isEmpty() && m_layoutManager) {
-            int mode =
-                static_cast<int>(m_layoutManager->modeForScreen(screenName, currentDesktop(), currentActivity()));
-            if (isCurrentContextLockedForMode(screenName, mode)) {
-                showLockedPreviewOsd(screenName);
+        QString screenId = m_unifiedLayoutController->currentScreenName();
+        if (!screenId.isEmpty() && m_layoutManager) {
+            int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity()));
+            if (isCurrentContextLockedForMode(screenId, mode)) {
+                showLockedPreviewOsd(screenId);
                 return;
             }
         }
@@ -388,11 +441,7 @@ void Daemon::connectShortcutSignals()
         if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {
             return;
         }
-        // Suppress resnap OSD — the layout switch OSD already provides feedback
-        if (m_windowTrackingAdaptor) {
-            m_suppressResnapOsd = 1;
-            m_windowTrackingAdaptor->resnapToNewLayout();
-        }
+        resnapIfManualMode();
     });
 
     // Toggle layout lock shortcut — locks/unlocks current screen at screen-level for current mode
@@ -410,8 +459,18 @@ void Daemon::connectShortcutSignals()
         // Lock at screen-level (desktop=0, activity="") so it applies to all desktops/activities
         // and matches the KCM's screen-level lock button
         bool wasLocked = m_settings->isScreenLocked(key);
-        m_settings->setScreenLocked(key, !wasLocked);
+        // Block settingsChanged during mutation — the signal triggers a
+        // D-Bus relay, and external consumers (settings app) read from disk.
+        // If the signal fires before save(), they read stale data.
+        {
+            QSignalBlocker blocker(m_settings.get());
+            m_settings->setScreenLocked(key, !wasLocked);
+        }
         m_settings->save();
+        // Now that the file is written, notify external consumers
+        if (m_settingsAdaptor) {
+            Q_EMIT m_settingsAdaptor->settingsChanged();
+        }
 
         if (wasLocked) {
             Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);

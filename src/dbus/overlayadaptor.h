@@ -53,14 +53,14 @@ public Q_SLOTS:
     int getMinimumZoneDisplaySizePx();
 
     // Shader preview overlay (editor Shader Settings dialog)
-    void showShaderPreview(int x, int y, int width, int height, const QString& screenName, const QString& shaderId,
+    void showShaderPreview(int x, int y, int width, int height, const QString& screenId, const QString& shaderId,
                            const QString& shaderParamsJson, const QString& zonesJson);
     void updateShaderPreview(int x, int y, int width, int height, const QString& shaderParamsJson,
                              const QString& zonesJson);
     void hideShaderPreview();
 
     // Snap Assist overlay (window picker after snapping)
-    bool showSnapAssist(const QString& screenName, const QString& emptyZonesJson, const QString& candidatesJson);
+    bool showSnapAssist(const QString& screenId, const QString& emptyZonesJson, const QString& candidatesJson);
     void hideSnapAssist();
     bool isSnapAssistVisible();
     void setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl);
@@ -68,7 +68,7 @@ public Q_SLOTS:
 Q_SIGNALS:
     void overlayVisibilityChanged(bool visible);
     void zoneHighlightChanged(const QString& zoneId);
-    void snapAssistShown(const QString& screenName, const QString& emptyZonesJson, const QString& candidatesJson);
+    void snapAssistShown(const QString& screenId, const QString& emptyZonesJson, const QString& candidatesJson);
 
 private:
     IOverlayService* m_overlayService; // Interface type (DIP)

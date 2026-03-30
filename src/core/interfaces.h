@@ -93,6 +93,10 @@ public:
     virtual bool autotileUseSystemBorderColors() const = 0;
     virtual void setAutotileUseSystemBorderColors(bool use) = 0;
 
+    // Rendering backend (pipeline-level, not specific to any sub-interface)
+    virtual QString renderingBackend() const = 0;
+    virtual void setRenderingBackend(const QString& backend) = 0;
+
     // Persistence (unique to ISettings)
     virtual void load() = 0;
     virtual void save() = 0;
@@ -100,7 +104,6 @@ public:
 
 Q_SIGNALS:
     void settingsChanged();
-    void shiftDragToActivateChanged(); // Deprecated
     void dragActivationTriggersChanged();
     void zoneSpanEnabledChanged();
     void zoneSpanModifierChanged();
@@ -109,6 +112,8 @@ Q_SIGNALS:
     void snappingEnabledChanged();
     void showZonesOnAllMonitorsChanged();
     void disabledMonitorsChanged();
+    void disabledDesktopsChanged();
+    void disabledActivitiesChanged();
     void showZoneNumbersChanged();
     void flashZonesOnSwitchChanged();
     void showOsdOnLayoutSwitchChanged();
@@ -151,6 +156,7 @@ Q_SIGNALS:
     void snapAssistEnabledChanged();
     void snapAssistTriggersChanged();
     void defaultLayoutIdChanged();
+    void filterLayoutsByAspectRatioChanged();
     void excludedApplicationsChanged();
     void excludedWindowClassesChanged();
     void excludeTransientWindowsChanged();
@@ -169,6 +175,8 @@ Q_SIGNALS:
     void perScreenZoneSelectorSettingsChanged();
     void perScreenAutotileSettingsChanged();
     void perScreenSnappingSettingsChanged();
+    // Rendering
+    void renderingBackendChanged();
     // Shader effects
     void enableShaderEffectsChanged();
     void shaderFrameRateChanged();
@@ -176,6 +184,7 @@ Q_SIGNALS:
     void audioSpectrumBarCountChanged();
     // Global shortcuts
     void openEditorShortcutChanged();
+    void openSettingsShortcutChanged();
     void previousLayoutShortcutChanged();
     void nextLayoutShortcutChanged();
     void quickLayout1ShortcutChanged();
@@ -240,11 +249,10 @@ Q_SIGNALS:
 
     // Autotile settings
     void autotileEnabledChanged();
-    void autotileAlgorithmChanged();
+    void defaultAutotileAlgorithmChanged();
     void autotileSplitRatioChanged();
     void autotileMasterCountChanged();
-    void autotileCenteredMasterSplitRatioChanged();
-    void autotileCenteredMasterMasterCountChanged();
+    void autotilePerAlgorithmSettingsChanged();
     void autotileInnerGapChanged();
     void autotileOuterGapChanged();
     void autotileUsePerSideOuterGapChanged();
@@ -473,12 +481,13 @@ public:
     virtual void showZoneSelector(QScreen* screen = nullptr) = 0;
     virtual void hideZoneSelector() = 0;
     virtual void updateSelectorPosition(int cursorX, int cursorY) = 0;
+    virtual void scrollZoneSelector(int angleDeltaY) = 0;
 
     // Mouse position for shader effects (updated during window drag)
     virtual void updateMousePosition(int cursorX, int cursorY) = 0;
 
     // Filtered layout count (matches what the zone selector actually displays)
-    virtual int visibleLayoutCount(const QString& screenName) const = 0;
+    virtual int visibleLayoutCount(const QString& screenId) const = 0;
 
     // Zone selector selection tracking
     virtual bool hasSelectedZone() const = 0;
@@ -488,7 +497,7 @@ public:
     virtual void clearSelectedZone() = 0;
 
     // Shader preview overlay (editor dialog - dedicated window avoids multi-pass clear)
-    virtual void showShaderPreview(int x, int y, int width, int height, const QString& screenName,
+    virtual void showShaderPreview(int x, int y, int width, int height, const QString& screenId,
                                    const QString& shaderId, const QString& shaderParamsJson,
                                    const QString& zonesJson) = 0;
     virtual void updateShaderPreview(int x, int y, int width, int height, const QString& shaderParamsJson,
@@ -496,7 +505,7 @@ public:
     virtual void hideShaderPreview() = 0;
 
     // Snap Assist overlay (window picker after snapping)
-    virtual void showSnapAssist(const QString& screenName, const QString& emptyZonesJson,
+    virtual void showSnapAssist(const QString& screenId, const QString& emptyZonesJson,
                                 const QString& candidatesJson) = 0;
     virtual void hideSnapAssist() = 0;
     virtual bool isSnapAssistVisible() const = 0;
@@ -512,24 +521,24 @@ Q_SIGNALS:
     /**
      * @brief Emitted when a manual layout is selected from the zone selector
      * @param layoutId The UUID of the selected manual layout
-     * @param screenName The screen where the selection was made
+     * @param screenId The screen where the selection was made
      */
-    void manualLayoutSelected(const QString& layoutId, const QString& screenName);
+    void manualLayoutSelected(const QString& layoutId, const QString& screenId);
 
     /**
      * @brief Emitted when user selects a window from Snap Assist to snap to a zone
      * @param windowId Window identifier to snap
      * @param zoneId Target zone UUID
      * @param geometryJson JSON {x, y, width, height} - used for display only; daemon fetches authoritative geometry
-     * @param screenName Screen where the zone is (e.g. DP-1) for geometry lookup
+     * @param screenId Screen where the zone is for geometry lookup
      */
     void snapAssistWindowSelected(const QString& windowId, const QString& zoneId, const QString& geometryJson,
-                                  const QString& screenName);
+                                  const QString& screenId);
 
     /**
      * @brief Emitted when Snap Assist overlay is shown. KWin script subscribes to create thumbnails.
      */
-    void snapAssistShown(const QString& screenName, const QString& emptyZonesJson, const QString& candidatesJson);
+    void snapAssistShown(const QString& screenId, const QString& emptyZonesJson, const QString& candidatesJson);
 
     /**
      * @brief Emitted when Snap Assist overlay is dismissed (by selection, Escape, or any other means).
@@ -546,9 +555,9 @@ Q_SIGNALS:
     /**
      * @brief Emitted when an autotile algorithm layout is selected from the zone selector
      * @param algorithmId The algorithm identifier (e.g. "master-stack")
-     * @param screenName The screen where the selection was made
+     * @param screenId The screen where the selection was made
      */
-    void autotileLayoutSelected(const QString& algorithmId, const QString& screenName);
+    void autotileLayoutSelected(const QString& algorithmId, const QString& screenId);
 };
 
 } // namespace PlasmaZones

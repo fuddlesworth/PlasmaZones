@@ -4,6 +4,7 @@
 #include "settingsadaptor.h"
 #include "../core/interfaces.h"
 #include "../config/settings.h" // For concrete Settings type
+#include "../core/dbusvariantutils.h"
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
 #include <QJsonDocument>
@@ -67,7 +68,8 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
         m_settings->setter(v.toString());                                                                              \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("string");
 
 #define REGISTER_BOOL_SETTING(name, getter, setter)                                                                    \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
@@ -76,7 +78,8 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
         m_settings->setter(v.toBool());                                                                                \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("bool");
 
 #define REGISTER_INT_SETTING(name, getter, setter)                                                                     \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
@@ -85,7 +88,8 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
         m_settings->setter(v.toInt());                                                                                 \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("int");
 
 #define REGISTER_DOUBLE_SETTING(name, getter, setter)                                                                  \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
@@ -94,7 +98,8 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
         m_settings->setter(v.toDouble());                                                                              \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("double");
 
 #define REGISTER_COLOR_SETTING(keyName, getter, setter)                                                                \
     m_getters[QStringLiteral(keyName)] = [this]() {                                                                    \
@@ -104,7 +109,8 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(keyName)] = [this](const QVariant& v) {                                                   \
         m_settings->setter(QColor(v.toString()));                                                                      \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(keyName)] = QStringLiteral("color");
 
 #define REGISTER_STRINGLIST_SETTING(name, getter, setter)                                                              \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
@@ -113,9 +119,51 @@ void SettingsAdaptor::initializeRegistry()
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
         m_settings->setter(v.toStringList());                                                                          \
         return true;                                                                                                   \
-    };
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("stringlist");
 
-    // Drag activation triggers list (multi-bind)
+    // Concrete Settings pointer for properties not on ISettings interface
+    auto* concrete = qobject_cast<Settings*>(m_settings);
+
+// Macros for concrete Settings entries (same pattern as REGISTER_* but captures 'concrete')
+#define REGISTER_CONCRETE_BOOL(name, getter, setter)                                                                   \
+    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
+        return concrete->getter();                                                                                     \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
+        concrete->setter(v.toBool());                                                                                  \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("bool");
+#define REGISTER_CONCRETE_INT(name, getter, setter)                                                                    \
+    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
+        return concrete->getter();                                                                                     \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
+        concrete->setter(v.toInt());                                                                                   \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("int");
+#define REGISTER_CONCRETE_DOUBLE(name, getter, setter)                                                                 \
+    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
+        return concrete->getter();                                                                                     \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
+        concrete->setter(v.toDouble());                                                                                \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("double");
+#define REGISTER_CONCRETE_STRING(name, getter, setter)                                                                 \
+    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
+        return concrete->getter();                                                                                     \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
+        concrete->setter(v.toString());                                                                                \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("string");
+
+    // Activation settings — drag activation triggers list (multi-bind)
     m_getters[QStringLiteral("dragActivationTriggers")] = [this]() {
         return QVariant::fromValue(m_settings->dragActivationTriggers());
     };
@@ -123,6 +171,7 @@ void SettingsAdaptor::initializeRegistry()
         m_settings->setDragActivationTriggers(v.toList());
         return true;
     };
+    m_schemas[QStringLiteral("dragActivationTriggers")] = QStringLiteral("stringlist");
 
     REGISTER_BOOL_SETTING("zoneSpanEnabled", zoneSpanEnabled, setZoneSpanEnabled)
 
@@ -138,6 +187,7 @@ void SettingsAdaptor::initializeRegistry()
         }
         return false;
     };
+    m_schemas[QStringLiteral("zoneSpanModifier")] = QStringLiteral("int");
 
     // Zone span triggers list (multi-bind)
     m_getters[QStringLiteral("zoneSpanTriggers")] = [this]() {
@@ -147,6 +197,10 @@ void SettingsAdaptor::initializeRegistry()
         m_settings->setZoneSpanTriggers(v.toList());
         return true;
     };
+    m_schemas[QStringLiteral("zoneSpanTriggers")] = QStringLiteral("stringlist");
+
+    REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
+    REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
 
     // Display settings
     REGISTER_BOOL_SETTING("showZonesOnAllMonitors", showZonesOnAllMonitors, setShowZonesOnAllMonitors)
@@ -166,6 +220,7 @@ void SettingsAdaptor::initializeRegistry()
         }
         return false;
     };
+    m_schemas[QStringLiteral("osdStyle")] = QStringLiteral("int");
     // overlayDisplayMode: enum (0=ZoneRectangles, 1=LayoutPreview)
     m_getters[QStringLiteral("overlayDisplayMode")] = [this]() {
         return static_cast<int>(m_settings->overlayDisplayMode());
@@ -178,7 +233,10 @@ void SettingsAdaptor::initializeRegistry()
         }
         return false;
     };
+    m_schemas[QStringLiteral("overlayDisplayMode")] = QStringLiteral("int");
     REGISTER_STRINGLIST_SETTING("disabledMonitors", disabledMonitors, setDisabledMonitors)
+    REGISTER_STRINGLIST_SETTING("disabledDesktops", disabledDesktops, setDisabledDesktops)
+    REGISTER_STRINGLIST_SETTING("disabledActivities", disabledActivities, setDisabledActivities)
 
     // Appearance settings
     REGISTER_BOOL_SETTING("useSystemColors", useSystemColors, setUseSystemColors)
@@ -205,10 +263,12 @@ void SettingsAdaptor::initializeRegistry()
         m_settings->setLabelFontSizeScale(val);
         return true;
     };
+    m_schemas[QStringLiteral("labelFontSizeScale")] = QStringLiteral("double");
     REGISTER_INT_SETTING("labelFontWeight", labelFontWeight, setLabelFontWeight)
     REGISTER_BOOL_SETTING("labelFontItalic", labelFontItalic, setLabelFontItalic)
     REGISTER_BOOL_SETTING("labelFontUnderline", labelFontUnderline, setLabelFontUnderline)
     REGISTER_BOOL_SETTING("labelFontStrikeout", labelFontStrikeout, setLabelFontStrikeout)
+    REGISTER_STRING_SETTING("renderingBackend", renderingBackend, setRenderingBackend)
     REGISTER_BOOL_SETTING("enableShaderEffects", enableShaderEffects, setEnableShaderEffects)
     REGISTER_INT_SETTING("shaderFrameRate", shaderFrameRate, setShaderFrameRate)
     REGISTER_BOOL_SETTING("enableAudioVisualizer", enableAudioVisualizer, setEnableAudioVisualizer)
@@ -227,15 +287,25 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("minimumZoneSizePx", minimumZoneSizePx, setMinimumZoneSizePx)
     REGISTER_INT_SETTING("minimumZoneDisplaySizePx", minimumZoneDisplaySizePx, setMinimumZoneDisplaySizePx)
 
-    // Activation
-    REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
-    REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
-
     // Behavior settings
     REGISTER_BOOL_SETTING("keepWindowsInZonesOnResolutionChange", keepWindowsInZonesOnResolutionChange,
                           setKeepWindowsInZonesOnResolutionChange)
     REGISTER_BOOL_SETTING("moveNewWindowsToLastZone", moveNewWindowsToLastZone, setMoveNewWindowsToLastZone)
     REGISTER_BOOL_SETTING("restoreOriginalSizeOnUnsnap", restoreOriginalSizeOnUnsnap, setRestoreOriginalSizeOnUnsnap)
+    // stickyWindowHandling: enum (0=TreatAsNormal, 1=RestoreOnly, 2=IgnoreAll)
+    m_getters[QStringLiteral("stickyWindowHandling")] = [this]() {
+        return static_cast<int>(m_settings->stickyWindowHandling());
+    };
+    m_setters[QStringLiteral("stickyWindowHandling")] = [this](const QVariant& v) {
+        int val = v.toInt();
+        if (val >= 0 && val <= 2) {
+            m_settings->setStickyWindowHandling(static_cast<StickyWindowHandling>(val));
+            return true;
+        }
+        return false;
+    };
+    m_schemas[QStringLiteral("stickyWindowHandling")] = QStringLiteral("int");
+    REGISTER_BOOL_SETTING("restoreWindowsToZonesOnLogin", restoreWindowsToZonesOnLogin, setRestoreWindowsToZonesOnLogin)
     REGISTER_BOOL_SETTING("snapAssistFeatureEnabled", snapAssistFeatureEnabled, setSnapAssistFeatureEnabled)
     REGISTER_BOOL_SETTING("snapAssistEnabled", snapAssistEnabled, setSnapAssistEnabled)
 
@@ -247,18 +317,10 @@ void SettingsAdaptor::initializeRegistry()
         m_settings->setSnapAssistTriggers(v.toList());
         return true;
     };
+    m_schemas[QStringLiteral("snapAssistTriggers")] = QStringLiteral("stringlist");
 
-    // Zone selector
-    REGISTER_BOOL_SETTING("zoneSelectorEnabled", zoneSelectorEnabled, setZoneSelectorEnabled)
-
-    // Animation settings (global — applies to snapping and autotiling)
-    REGISTER_BOOL_SETTING("animationsEnabled", animationsEnabled, setAnimationsEnabled)
-    REGISTER_INT_SETTING("animationDuration", animationDuration, setAnimationDuration)
-    REGISTER_STRING_SETTING("animationEasingCurve", animationEasingCurve, setAnimationEasingCurve)
-
-    REGISTER_INT_SETTING("animationMinDistance", animationMinDistance, setAnimationMinDistance)
-    REGISTER_INT_SETTING("animationSequenceMode", animationSequenceMode, setAnimationSequenceMode)
-    REGISTER_INT_SETTING("animationStaggerInterval", animationStaggerInterval, setAnimationStaggerInterval)
+    // Default layout
+    REGISTER_STRING_SETTING("defaultLayoutId", defaultLayoutId, setDefaultLayoutId)
 
     // Exclusions
     REGISTER_STRINGLIST_SETTING("excludedApplications", excludedApplications, setExcludedApplications)
@@ -267,7 +329,105 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("minimumWindowWidth", minimumWindowWidth, setMinimumWindowWidth)
     REGISTER_INT_SETTING("minimumWindowHeight", minimumWindowHeight, setMinimumWindowHeight)
 
-    // Autotile decoration settings
+    // Zone selector settings
+    REGISTER_BOOL_SETTING("zoneSelectorEnabled", zoneSelectorEnabled, setZoneSelectorEnabled)
+    REGISTER_INT_SETTING("zoneSelectorTriggerDistance", zoneSelectorTriggerDistance, setZoneSelectorTriggerDistance)
+    // zoneSelectorPosition: enum (0=TopLeft .. 8=BottomRight)
+    m_getters[QStringLiteral("zoneSelectorPosition")] = [this]() {
+        return static_cast<int>(m_settings->zoneSelectorPosition());
+    };
+    m_setters[QStringLiteral("zoneSelectorPosition")] = [this](const QVariant& v) {
+        int val = v.toInt();
+        if (val >= 0 && val <= 8) {
+            m_settings->setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(val));
+            return true;
+        }
+        return false;
+    };
+    m_schemas[QStringLiteral("zoneSelectorPosition")] = QStringLiteral("int");
+    // zoneSelectorLayoutMode: enum (0=Grid, 1=Horizontal, 2=Vertical)
+    m_getters[QStringLiteral("zoneSelectorLayoutMode")] = [this]() {
+        return static_cast<int>(m_settings->zoneSelectorLayoutMode());
+    };
+    m_setters[QStringLiteral("zoneSelectorLayoutMode")] = [this](const QVariant& v) {
+        int val = v.toInt();
+        if (val >= 0 && val <= 2) {
+            m_settings->setZoneSelectorLayoutMode(static_cast<ZoneSelectorLayoutMode>(val));
+            return true;
+        }
+        return false;
+    };
+    m_schemas[QStringLiteral("zoneSelectorLayoutMode")] = QStringLiteral("int");
+    // zoneSelectorSizeMode: enum (0=Auto, 1=Manual)
+    m_getters[QStringLiteral("zoneSelectorSizeMode")] = [this]() {
+        return static_cast<int>(m_settings->zoneSelectorSizeMode());
+    };
+    m_setters[QStringLiteral("zoneSelectorSizeMode")] = [this](const QVariant& v) {
+        int val = v.toInt();
+        if (val >= 0 && val <= 1) {
+            m_settings->setZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(val));
+            return true;
+        }
+        return false;
+    };
+    m_schemas[QStringLiteral("zoneSelectorSizeMode")] = QStringLiteral("int");
+    REGISTER_INT_SETTING("zoneSelectorMaxRows", zoneSelectorMaxRows, setZoneSelectorMaxRows)
+    REGISTER_INT_SETTING("zoneSelectorPreviewWidth", zoneSelectorPreviewWidth, setZoneSelectorPreviewWidth)
+    REGISTER_INT_SETTING("zoneSelectorPreviewHeight", zoneSelectorPreviewHeight, setZoneSelectorPreviewHeight)
+    REGISTER_BOOL_SETTING("zoneSelectorPreviewLockAspect", zoneSelectorPreviewLockAspect,
+                          setZoneSelectorPreviewLockAspect)
+    REGISTER_INT_SETTING("zoneSelectorGridColumns", zoneSelectorGridColumns, setZoneSelectorGridColumns)
+
+    // Animation settings (global — applies to snapping and autotiling)
+    REGISTER_BOOL_SETTING("animationsEnabled", animationsEnabled, setAnimationsEnabled)
+    REGISTER_INT_SETTING("animationDuration", animationDuration, setAnimationDuration)
+    REGISTER_STRING_SETTING("animationEasingCurve", animationEasingCurve, setAnimationEasingCurve)
+    REGISTER_INT_SETTING("animationMinDistance", animationMinDistance, setAnimationMinDistance)
+    REGISTER_INT_SETTING("animationSequenceMode", animationSequenceMode, setAnimationSequenceMode)
+    REGISTER_INT_SETTING("animationStaggerInterval", animationStaggerInterval, setAnimationStaggerInterval)
+
+    // Autotile core settings (concrete Settings only)
+    if (concrete) {
+        REGISTER_CONCRETE_BOOL("autotileEnabled", autotileEnabled, setAutotileEnabled)
+        REGISTER_CONCRETE_STRING("defaultAutotileAlgorithm", defaultAutotileAlgorithm, setDefaultAutotileAlgorithm)
+        REGISTER_CONCRETE_DOUBLE("autotileSplitRatio", autotileSplitRatio, setAutotileSplitRatio)
+        REGISTER_CONCRETE_INT("autotileMasterCount", autotileMasterCount, setAutotileMasterCount)
+        // Per-algorithm settings map (QVariantMap)
+        m_getters[QStringLiteral("autotilePerAlgorithmSettings")] = [concrete]() {
+            return QVariant::fromValue(concrete->autotilePerAlgorithmSettings());
+        };
+        m_setters[QStringLiteral("autotilePerAlgorithmSettings")] = [concrete](const QVariant& v) {
+            concrete->setAutotilePerAlgorithmSettings(v.toMap());
+            return true;
+        };
+        m_schemas[QStringLiteral("autotilePerAlgorithmSettings")] = QStringLiteral("map");
+        REGISTER_CONCRETE_INT("autotileInnerGap", autotileInnerGap, setAutotileInnerGap)
+        REGISTER_CONCRETE_INT("autotileOuterGap", autotileOuterGap, setAutotileOuterGap)
+        REGISTER_CONCRETE_BOOL("autotileUsePerSideOuterGap", autotileUsePerSideOuterGap, setAutotileUsePerSideOuterGap)
+        REGISTER_CONCRETE_INT("autotileOuterGapTop", autotileOuterGapTop, setAutotileOuterGapTop)
+        REGISTER_CONCRETE_INT("autotileOuterGapBottom", autotileOuterGapBottom, setAutotileOuterGapBottom)
+        REGISTER_CONCRETE_INT("autotileOuterGapLeft", autotileOuterGapLeft, setAutotileOuterGapLeft)
+        REGISTER_CONCRETE_INT("autotileOuterGapRight", autotileOuterGapRight, setAutotileOuterGapRight)
+        REGISTER_CONCRETE_BOOL("autotileFocusNewWindows", autotileFocusNewWindows, setAutotileFocusNewWindows)
+        REGISTER_CONCRETE_BOOL("autotileSmartGaps", autotileSmartGaps, setAutotileSmartGaps)
+        REGISTER_CONCRETE_INT("autotileMaxWindows", autotileMaxWindows, setAutotileMaxWindows)
+        REGISTER_CONCRETE_BOOL("autotileRespectMinimumSize", autotileRespectMinimumSize, setAutotileRespectMinimumSize)
+        // autotileInsertPosition: enum (0=End, 1=AfterFocused, 2=AsMaster) — needs range validation
+        m_getters[QStringLiteral("autotileInsertPosition")] = [concrete]() {
+            return static_cast<int>(concrete->autotileInsertPosition());
+        };
+        m_setters[QStringLiteral("autotileInsertPosition")] = [concrete](const QVariant& v) {
+            int val = v.toInt();
+            if (val >= 0 && val <= 2) {
+                concrete->setAutotileInsertPosition(static_cast<Settings::AutotileInsertPosition>(val));
+                return true;
+            }
+            return false;
+        };
+        m_schemas[QStringLiteral("autotileInsertPosition")] = QStringLiteral("int");
+    }
+
+    // Autotile decoration settings (on ISettings interface)
     REGISTER_BOOL_SETTING("autotileHideTitleBars", autotileHideTitleBars, setAutotileHideTitleBars)
     REGISTER_BOOL_SETTING("autotileShowBorder", autotileShowBorder, setAutotileShowBorder)
     REGISTER_INT_SETTING("autotileBorderWidth", autotileBorderWidth, setAutotileBorderWidth)
@@ -279,6 +439,84 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("autotileFocusFollowsMouse", autotileFocusFollowsMouse, setAutotileFocusFollowsMouse)
     REGISTER_STRINGLIST_SETTING("lockedScreens", lockedScreens, setLockedScreens)
 
+    // Autotile shortcuts (concrete Settings only)
+    if (concrete) {
+        REGISTER_CONCRETE_STRING("autotileToggleShortcut", autotileToggleShortcut, setAutotileToggleShortcut)
+        REGISTER_CONCRETE_STRING("autotileFocusMasterShortcut", autotileFocusMasterShortcut,
+                                 setAutotileFocusMasterShortcut)
+        REGISTER_CONCRETE_STRING("autotileSwapMasterShortcut", autotileSwapMasterShortcut,
+                                 setAutotileSwapMasterShortcut)
+        REGISTER_CONCRETE_STRING("autotileIncMasterRatioShortcut", autotileIncMasterRatioShortcut,
+                                 setAutotileIncMasterRatioShortcut)
+        REGISTER_CONCRETE_STRING("autotileDecMasterRatioShortcut", autotileDecMasterRatioShortcut,
+                                 setAutotileDecMasterRatioShortcut)
+        REGISTER_CONCRETE_STRING("autotileIncMasterCountShortcut", autotileIncMasterCountShortcut,
+                                 setAutotileIncMasterCountShortcut)
+        REGISTER_CONCRETE_STRING("autotileDecMasterCountShortcut", autotileDecMasterCountShortcut,
+                                 setAutotileDecMasterCountShortcut)
+        REGISTER_CONCRETE_STRING("autotileRetileShortcut", autotileRetileShortcut, setAutotileRetileShortcut)
+    }
+
+    // Global shortcuts (concrete Settings only)
+    if (concrete) {
+        REGISTER_CONCRETE_STRING("openEditorShortcut", openEditorShortcut, setOpenEditorShortcut)
+        REGISTER_CONCRETE_STRING("previousLayoutShortcut", previousLayoutShortcut, setPreviousLayoutShortcut)
+        REGISTER_CONCRETE_STRING("nextLayoutShortcut", nextLayoutShortcut, setNextLayoutShortcut)
+        REGISTER_CONCRETE_STRING("quickLayout1Shortcut", quickLayout1Shortcut, setQuickLayout1Shortcut)
+        REGISTER_CONCRETE_STRING("quickLayout2Shortcut", quickLayout2Shortcut, setQuickLayout2Shortcut)
+        REGISTER_CONCRETE_STRING("quickLayout3Shortcut", quickLayout3Shortcut, setQuickLayout3Shortcut)
+        REGISTER_CONCRETE_STRING("quickLayout4Shortcut", quickLayout4Shortcut, setQuickLayout4Shortcut)
+        REGISTER_CONCRETE_STRING("quickLayout5Shortcut", quickLayout5Shortcut, setQuickLayout5Shortcut)
+        REGISTER_CONCRETE_STRING("quickLayout6Shortcut", quickLayout6Shortcut, setQuickLayout6Shortcut)
+        REGISTER_CONCRETE_STRING("quickLayout7Shortcut", quickLayout7Shortcut, setQuickLayout7Shortcut)
+        REGISTER_CONCRETE_STRING("quickLayout8Shortcut", quickLayout8Shortcut, setQuickLayout8Shortcut)
+        REGISTER_CONCRETE_STRING("quickLayout9Shortcut", quickLayout9Shortcut, setQuickLayout9Shortcut)
+
+        // Navigation shortcuts
+        REGISTER_CONCRETE_STRING("moveWindowLeftShortcut", moveWindowLeftShortcut, setMoveWindowLeftShortcut)
+        REGISTER_CONCRETE_STRING("moveWindowRightShortcut", moveWindowRightShortcut, setMoveWindowRightShortcut)
+        REGISTER_CONCRETE_STRING("moveWindowUpShortcut", moveWindowUpShortcut, setMoveWindowUpShortcut)
+        REGISTER_CONCRETE_STRING("moveWindowDownShortcut", moveWindowDownShortcut, setMoveWindowDownShortcut)
+        REGISTER_CONCRETE_STRING("focusZoneLeftShortcut", focusZoneLeftShortcut, setFocusZoneLeftShortcut)
+        REGISTER_CONCRETE_STRING("focusZoneRightShortcut", focusZoneRightShortcut, setFocusZoneRightShortcut)
+        REGISTER_CONCRETE_STRING("focusZoneUpShortcut", focusZoneUpShortcut, setFocusZoneUpShortcut)
+        REGISTER_CONCRETE_STRING("focusZoneDownShortcut", focusZoneDownShortcut, setFocusZoneDownShortcut)
+        REGISTER_CONCRETE_STRING("pushToEmptyZoneShortcut", pushToEmptyZoneShortcut, setPushToEmptyZoneShortcut)
+        REGISTER_CONCRETE_STRING("restoreWindowSizeShortcut", restoreWindowSizeShortcut, setRestoreWindowSizeShortcut)
+        REGISTER_CONCRETE_STRING("toggleWindowFloatShortcut", toggleWindowFloatShortcut, setToggleWindowFloatShortcut)
+
+        // Swap window shortcuts
+        REGISTER_CONCRETE_STRING("swapWindowLeftShortcut", swapWindowLeftShortcut, setSwapWindowLeftShortcut)
+        REGISTER_CONCRETE_STRING("swapWindowRightShortcut", swapWindowRightShortcut, setSwapWindowRightShortcut)
+        REGISTER_CONCRETE_STRING("swapWindowUpShortcut", swapWindowUpShortcut, setSwapWindowUpShortcut)
+        REGISTER_CONCRETE_STRING("swapWindowDownShortcut", swapWindowDownShortcut, setSwapWindowDownShortcut)
+
+        // Snap to zone by number shortcuts
+        REGISTER_CONCRETE_STRING("snapToZone1Shortcut", snapToZone1Shortcut, setSnapToZone1Shortcut)
+        REGISTER_CONCRETE_STRING("snapToZone2Shortcut", snapToZone2Shortcut, setSnapToZone2Shortcut)
+        REGISTER_CONCRETE_STRING("snapToZone3Shortcut", snapToZone3Shortcut, setSnapToZone3Shortcut)
+        REGISTER_CONCRETE_STRING("snapToZone4Shortcut", snapToZone4Shortcut, setSnapToZone4Shortcut)
+        REGISTER_CONCRETE_STRING("snapToZone5Shortcut", snapToZone5Shortcut, setSnapToZone5Shortcut)
+        REGISTER_CONCRETE_STRING("snapToZone6Shortcut", snapToZone6Shortcut, setSnapToZone6Shortcut)
+        REGISTER_CONCRETE_STRING("snapToZone7Shortcut", snapToZone7Shortcut, setSnapToZone7Shortcut)
+        REGISTER_CONCRETE_STRING("snapToZone8Shortcut", snapToZone8Shortcut, setSnapToZone8Shortcut)
+        REGISTER_CONCRETE_STRING("snapToZone9Shortcut", snapToZone9Shortcut, setSnapToZone9Shortcut)
+
+        // Other action shortcuts
+        REGISTER_CONCRETE_STRING("rotateWindowsClockwiseShortcut", rotateWindowsClockwiseShortcut,
+                                 setRotateWindowsClockwiseShortcut)
+        REGISTER_CONCRETE_STRING("rotateWindowsCounterclockwiseShortcut", rotateWindowsCounterclockwiseShortcut,
+                                 setRotateWindowsCounterclockwiseShortcut)
+        REGISTER_CONCRETE_STRING("cycleWindowForwardShortcut", cycleWindowForwardShortcut,
+                                 setCycleWindowForwardShortcut)
+        REGISTER_CONCRETE_STRING("cycleWindowBackwardShortcut", cycleWindowBackwardShortcut,
+                                 setCycleWindowBackwardShortcut)
+        REGISTER_CONCRETE_STRING("resnapToNewLayoutShortcut", resnapToNewLayoutShortcut, setResnapToNewLayoutShortcut)
+        REGISTER_CONCRETE_STRING("snapAllWindowsShortcut", snapAllWindowsShortcut, setSnapAllWindowsShortcut)
+        REGISTER_CONCRETE_STRING("layoutPickerShortcut", layoutPickerShortcut, setLayoutPickerShortcut)
+        REGISTER_CONCRETE_STRING("toggleLayoutLockShortcut", toggleLayoutLockShortcut, setToggleLayoutLockShortcut)
+    }
+
 // Clean up macros (local scope)
 #undef REGISTER_STRING_SETTING
 #undef REGISTER_BOOL_SETTING
@@ -286,6 +524,10 @@ void SettingsAdaptor::initializeRegistry()
 #undef REGISTER_DOUBLE_SETTING
 #undef REGISTER_COLOR_SETTING
 #undef REGISTER_STRINGLIST_SETTING
+#undef REGISTER_CONCRETE_BOOL
+#undef REGISTER_CONCRETE_INT
+#undef REGISTER_CONCRETE_DOUBLE
+#undef REGISTER_CONCRETE_STRING
 }
 
 void SettingsAdaptor::reloadSettings()
@@ -347,7 +589,8 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
 
     auto it = m_setters.find(key);
     if (it != m_setters.end()) {
-        bool result = it.value()(value.variant());
+        QVariant converted = DBusVariantUtils::convertDbusArgument(value.variant());
+        bool result = it.value()(converted);
         if (result) {
             // Use debounced save instead of immediate save (performance optimization)
             // This batches multiple rapid setting changes into a single disk write
@@ -363,9 +606,150 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
     return false;
 }
 
+bool SettingsAdaptor::setSettings(const QVariantMap& settings)
+{
+    if (settings.isEmpty()) {
+        qCWarning(lcDbusSettings) << "setSettings: empty map";
+        return false;
+    }
+
+    // Stop any pending debounced save — we will save synchronously below
+    m_saveTimer->stop();
+
+    // Block settingsChanged during the batch — each setter emits it individually,
+    // which would trigger N daemon handler invocations (autotile transitions, KWin
+    // effect reloads) mid-batch with partially-applied state. Block all signals
+    // during iteration, save once, then the KCM's notifyReload() triggers load()
+    // which emits settingsChanged once with all values committed.
+    bool allOk = true;
+    {
+        QSignalBlocker blocker(m_settings);
+        for (auto it = settings.constBegin(); it != settings.constEnd(); ++it) {
+            const QString& key = it.key();
+            auto setter = m_setters.find(key);
+            if (setter == m_setters.end()) {
+                qCWarning(lcDbusSettings) << "setSettings: unknown key" << key;
+                allOk = false;
+                continue;
+            }
+            // Convert QDBusArgument types to plain Qt types before passing to setters.
+            // Complex types (QVariantList of QVariantMaps, e.g. dragActivationTriggers)
+            // arrive from D-Bus as QDBusArgument objects; without conversion, toList()/toMap()
+            // return empty containers, silently zeroing trigger settings.
+            QVariant converted = DBusVariantUtils::convertDbusArgument(it.value());
+            if (!setter.value()(converted)) {
+                qCWarning(lcDbusSettings) << "setSettings: setter failed for key" << key;
+                allOk = false;
+            }
+        }
+    }
+
+    // Save once with all values applied
+    m_settings->save();
+    qCInfo(lcDbusSettings) << "setSettings: batch applied" << settings.size() << "keys, allOk:" << allOk;
+
+    return allOk;
+}
+
 QStringList SettingsAdaptor::getSettingKeys()
 {
     return m_getters.keys();
+}
+
+QString SettingsAdaptor::getSettingSchema(const QString& key)
+{
+    QJsonObject result;
+
+    if (key.isEmpty()) {
+        qCWarning(lcDbusSettings) << "getSettingSchema: empty key";
+        return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+    }
+
+    auto it = m_schemas.find(key);
+    if (it != m_schemas.end()) {
+        result[QLatin1String("key")] = key;
+        result[QLatin1String("type")] = it.value();
+    } else {
+        qCWarning(lcDbusSettings) << "getSettingSchema: unknown key" << key;
+    }
+
+    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+}
+
+QString SettingsAdaptor::getAllSettingSchemas()
+{
+    QJsonObject result;
+
+    for (auto it = m_schemas.constBegin(); it != m_schemas.constEnd(); ++it) {
+        QJsonObject entry;
+        entry[QLatin1String("type")] = it.value();
+        result[it.key()] = entry;
+    }
+
+    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Per-Screen Settings D-Bus Methods
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void SettingsAdaptor::setPerScreenSetting(const QString& screenId, const QString& category, const QString& key,
+                                          const QDBusVariant& value)
+{
+    auto* concrete = qobject_cast<Settings*>(m_settings);
+    if (!concrete) {
+        qCWarning(lcDbusSettings) << "setPerScreenSetting: concrete Settings not available";
+        return;
+    }
+    if (category == QLatin1String("autotile")) {
+        concrete->setPerScreenAutotileSetting(screenId, key, value.variant());
+    } else if (category == QLatin1String("snapping")) {
+        concrete->setPerScreenSnappingSetting(screenId, key, value.variant());
+    } else if (category == QLatin1String("zoneSelector")) {
+        concrete->setPerScreenZoneSelectorSetting(screenId, key, value.variant());
+    } else {
+        qCWarning(lcDbusSettings) << "setPerScreenSetting: unknown category" << category;
+        return;
+    }
+    scheduleSave();
+}
+
+void SettingsAdaptor::clearPerScreenSettings(const QString& screenId, const QString& category)
+{
+    auto* concrete = qobject_cast<Settings*>(m_settings);
+    if (!concrete) {
+        qCWarning(lcDbusSettings) << "clearPerScreenSettings: concrete Settings not available";
+        return;
+    }
+    if (category == QLatin1String("autotile")) {
+        concrete->clearPerScreenAutotileSettings(screenId);
+    } else if (category == QLatin1String("snapping")) {
+        concrete->clearPerScreenSnappingSettings(screenId);
+    } else if (category == QLatin1String("zoneSelector")) {
+        concrete->clearPerScreenZoneSelectorSettings(screenId);
+    } else {
+        qCWarning(lcDbusSettings) << "clearPerScreenSettings: unknown category" << category;
+        return;
+    }
+    scheduleSave();
+}
+
+QVariantMap SettingsAdaptor::getPerScreenSettings(const QString& screenId, const QString& category)
+{
+    auto* concrete = qobject_cast<Settings*>(m_settings);
+    if (!concrete) {
+        qCWarning(lcDbusSettings) << "getPerScreenSettings: concrete Settings not available";
+        return {};
+    }
+    if (category == QLatin1String("autotile")) {
+        return concrete->getPerScreenAutotileSettings(screenId);
+    } else if (category == QLatin1String("snapping")) {
+        return concrete->getPerScreenSnappingSettings(screenId);
+    } else if (category == QLatin1String("zoneSelector")) {
+        return concrete->getPerScreenZoneSelectorSettings(screenId);
+    }
+    qCWarning(lcDbusSettings) << "getPerScreenSettings: unknown category" << category;
+    return {};
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

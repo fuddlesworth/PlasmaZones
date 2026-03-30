@@ -267,6 +267,12 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Map of slot number (as string) to layoutId."/>
             </arg>
         </method>
+        <method name="getCurrentVirtualDesktop">
+            <annotation name="org.gtk.GDBus.DocString" value="Get the current virtual desktop number (1-indexed). Returns 0 if unavailable."/>
+            <arg name="desktop" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Current virtual desktop number (1-based), or 0 if unavailable."/>
+            </arg>
+        </method>
         <!-- KDE Activities Support -->
         <method name="isActivitiesAvailable">
             <annotation name="org.gtk.GDBus.DocString" value="True if KDE Activities are available."/>

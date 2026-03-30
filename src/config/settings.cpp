@@ -4,13 +4,12 @@
 #include "settings.h"
 #include "colorimporter.h"
 #include "configdefaults.h"
+#include "configbackend_qsettings.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
-#include <KConfig>
-#include <KConfigGroup>
-#include <KSharedConfig>
-#include <KColorScheme>
+#include <QGuiApplication>
+#include <QPalette>
 #include <QFile>
 #include <QTextStream>
 #include <QRegularExpression>
@@ -27,6 +26,7 @@ namespace PlasmaZones {
 
 Settings::Settings(QObject* parent)
     : ISettings(parent)
+    , m_configBackend(QSettingsConfigBackend::createDefault())
 {
     load();
 }
@@ -46,10 +46,10 @@ QString Settings::normalizeUuidString(const QString& uuidStr)
     return uuid.toString();
 }
 
-int Settings::readValidatedInt(const KConfigGroup& group, const char* key, int defaultValue, int min, int max,
+int Settings::readValidatedInt(QSettingsConfigGroup& group, const QString& key, int defaultValue, int min, int max,
                                const char* settingName)
 {
-    int value = group.readEntry(QLatin1String(key), defaultValue);
+    int value = group.readInt(key, defaultValue);
     if (value < min || value > max) {
         qCWarning(lcConfig) << settingName << ":" << value << "invalid, using default (must be" << min << "-" << max
                             << ")";
@@ -58,10 +58,10 @@ int Settings::readValidatedInt(const KConfigGroup& group, const char* key, int d
     return value;
 }
 
-QColor Settings::readValidatedColor(const KConfigGroup& group, const char* key, const QColor& defaultValue,
+QColor Settings::readValidatedColor(QSettingsConfigGroup& group, const QString& key, const QColor& defaultValue,
                                     const char* settingName)
 {
-    QColor color = group.readEntry(QLatin1String(key), defaultValue);
+    QColor color = group.readColor(key, defaultValue);
     if (!color.isValid()) {
         qCWarning(lcConfig) << settingName << "color: invalid, using default";
         color = defaultValue;
@@ -69,12 +69,12 @@ QColor Settings::readValidatedColor(const KConfigGroup& group, const char* key, 
     return color;
 }
 
-void Settings::loadIndexedShortcuts(const KConfigGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
+void Settings::loadIndexedShortcuts(QSettingsConfigGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
                                     const QString (&defaults)[9])
 {
     for (int i = 0; i < 9; ++i) {
         QString key = keyPattern.arg(i + 1);
-        shortcuts[i] = group.readEntry(key, defaults[i]);
+        shortcuts[i] = group.readString(key, defaults[i]);
     }
 }
 
@@ -95,8 +95,8 @@ std::optional<QVariantList> Settings::parseTriggerListJson(const QString& json)
         if (val.isObject()) {
             QJsonObject obj = val.toObject();
             QVariantMap trigger;
-            trigger[QStringLiteral("modifier")] = obj.value(QLatin1String("modifier")).toInt(0);
-            trigger[QStringLiteral("mouseButton")] = obj.value(QLatin1String("mouseButton")).toInt(0);
+            trigger[ConfigDefaults::triggerModifierField()] = obj.value(QLatin1String("modifier")).toInt(0);
+            trigger[ConfigDefaults::triggerMouseButtonField()] = obj.value(QLatin1String("mouseButton")).toInt(0);
             result.append(trigger);
         } else {
             qCWarning(lcConfig) << "Trigger array: non-object element at index" << result.size() << ", skipping";
@@ -108,73 +108,90 @@ std::optional<QVariantList> Settings::parseTriggerListJson(const QString& json)
     return result; // May be empty (valid [] means no triggers)
 }
 
-QVariantList Settings::loadTriggerList(const KConfigGroup& group, const QString& key, int legacyModifier,
-                                       int legacyMouseButton)
-{
-    QString json = group.readEntry(key, QString());
-    std::optional<QVariantList> parsed = parseTriggerListJson(json);
-    if (parsed.has_value()) {
-        qCDebug(lcConfig) << "Loaded" << key << ":" << parsed->size() << "triggers";
-        return *parsed;
-    }
-    // No valid JSON: construct single-element trigger list from legacy values
-    QVariantMap trigger;
-    trigger[QStringLiteral("modifier")] = legacyModifier;
-    trigger[QStringLiteral("mouseButton")] = legacyMouseButton;
-    return {trigger};
-}
-
-void Settings::saveTriggerList(KConfigGroup& group, const QString& key, const QVariantList& triggers)
+void Settings::saveTriggerList(QSettingsConfigGroup& group, const QString& key, const QVariantList& triggers)
 {
     QJsonArray arr;
     for (const QVariant& t : triggers) {
         auto map = t.toMap();
         QJsonObject obj;
-        obj[QLatin1String("modifier")] = map.value(QStringLiteral("modifier"), 0).toInt();
-        obj[QLatin1String("mouseButton")] = map.value(QStringLiteral("mouseButton"), 0).toInt();
+        obj[QLatin1String("modifier")] = map.value(ConfigDefaults::triggerModifierField(), 0).toInt();
+        obj[QLatin1String("mouseButton")] = map.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt();
         arr.append(obj);
     }
-    group.writeEntry(key, QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
+    group.writeString(key, QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
 }
 
 // ── load() dispatcher ────────────────────────────────────────────────────────
 
 void Settings::load()
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    config->reparseConfiguration();
+    m_configBackend->reparseConfiguration();
 
     // Capture old values for post-load signal emission
     const QString oldDefaultLayoutId = m_defaultLayoutId;
+    const QString oldRenderingBackend = m_renderingBackend;
     const bool oldEnableShaders = m_enableShaderEffects;
     const int oldShaderFrameRate = m_shaderFrameRate;
     const bool oldEnableAudioViz = m_enableAudioVisualizer;
     const int oldBarCount = m_audioSpectrumBarCount;
 
-    KConfigGroup activation = config->group(QStringLiteral("Activation"));
-    loadActivationConfig(activation);
-    loadDisplayConfig(config->group(QStringLiteral("Display")));
-    loadAppearanceConfig(config->group(QStringLiteral("Appearance")));
-    loadZoneGeometryConfig(config->group(QStringLiteral("Zones")));
-    loadBehaviorConfig(config->group(QStringLiteral("Behavior")), config->group(QStringLiteral("Exclusions")),
-                       activation);
-    loadZoneSelectorConfig(config->group(QStringLiteral("ZoneSelector")));
-    loadPerScreenOverrides(config);
+    {
+        auto activation = m_configBackend->group(ConfigDefaults::activationGroup());
+        loadActivationConfig(*activation);
+    }
+    {
+        auto display = m_configBackend->group(ConfigDefaults::displayGroup());
+        loadDisplayConfig(*display);
+    }
+    {
+        auto appearance = m_configBackend->group(ConfigDefaults::appearanceGroup());
+        loadAppearanceConfig(*appearance);
+    }
+    {
+        auto zones = m_configBackend->group(ConfigDefaults::zonesGroup());
+        loadZoneGeometryConfig(*zones);
+    }
+    loadBehaviorConfig(m_configBackend.get());
+    {
+        auto zoneSelector = m_configBackend->group(ConfigDefaults::zoneSelectorGroup());
+        loadZoneSelectorConfig(*zoneSelector);
+    }
+    loadPerScreenOverrides(m_configBackend.get());
+
+    // Rendering backend lives in [General] (affects whole graphics pipeline, not just shaders).
+    {
+        auto general = m_configBackend->group(ConfigDefaults::generalGroup());
+        const QString raw = general->readString(ConfigDefaults::renderingBackendKey());
+        m_renderingBackend =
+            ConfigDefaults::normalizeRenderingBackend(raw.isEmpty() ? ConfigDefaults::renderingBackend() : raw);
+    }
 
     // Shaders (small enough to stay inline)
-    KConfigGroup shaders = config->group(QStringLiteral("Shaders"));
-    m_enableShaderEffects =
-        shaders.readEntry(QLatin1String("EnableShaderEffects"), ConfigDefaults::enableShaderEffects());
-    m_shaderFrameRate =
-        qBound(30, shaders.readEntry(QLatin1String("ShaderFrameRate"), ConfigDefaults::shaderFrameRate()), 144);
-    m_enableAudioVisualizer =
-        shaders.readEntry(QLatin1String("EnableAudioVisualizer"), ConfigDefaults::enableAudioVisualizer());
-    m_audioSpectrumBarCount = qBound(
-        16, shaders.readEntry(QLatin1String("AudioSpectrumBarCount"), ConfigDefaults::audioSpectrumBarCount()), 256);
+    {
+        auto shaders = m_configBackend->group(ConfigDefaults::shadersGroup());
+        m_enableShaderEffects =
+            shaders->readBool(ConfigDefaults::enableShaderEffectsKey(), ConfigDefaults::enableShaderEffects());
+        m_shaderFrameRate =
+            qBound(ConfigDefaults::shaderFrameRateMin(),
+                   shaders->readInt(ConfigDefaults::shaderFrameRateKey(), ConfigDefaults::shaderFrameRate()),
+                   ConfigDefaults::shaderFrameRateMax());
+        m_enableAudioVisualizer =
+            shaders->readBool(ConfigDefaults::enableAudioVisualizerKey(), ConfigDefaults::enableAudioVisualizer());
+        m_audioSpectrumBarCount = qBound(
+            ConfigDefaults::audioSpectrumBarCountMin(),
+            shaders->readInt(ConfigDefaults::audioSpectrumBarCountKey(), ConfigDefaults::audioSpectrumBarCount()),
+            ConfigDefaults::audioSpectrumBarCountMax());
+    }
 
-    loadShortcutConfig(config->group(QStringLiteral("GlobalShortcuts")));
-    loadAutotilingConfig(config->group(QStringLiteral("Autotiling")), config->group(QStringLiteral("Animations")),
-                         config->group(QStringLiteral("AutotileShortcuts")));
+    {
+        auto globalShortcuts = m_configBackend->group(ConfigDefaults::globalShortcutsGroup());
+        loadShortcutConfig(*globalShortcuts);
+    }
+    loadAutotilingConfig(m_configBackend.get());
+    {
+        auto editor = m_configBackend->group(ConfigDefaults::editorGroup());
+        loadEditorConfig(*editor);
+    }
 
     if (m_useSystemColors) {
         applySystemColorScheme();
@@ -187,6 +204,8 @@ void Settings::load()
     Q_EMIT settingsChanged();
 
     // Emit specific signals for settings with runtime side-effects
+    if (m_renderingBackend != oldRenderingBackend)
+        Q_EMIT renderingBackendChanged();
     if (m_enableShaderEffects != oldEnableShaders)
         Q_EMIT enableShaderEffectsChanged();
     if (m_shaderFrameRate != oldShaderFrameRate)
@@ -203,66 +222,203 @@ void Settings::load()
 
 void Settings::save()
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup activation = config->group(QStringLiteral("Activation"));
-    KConfigGroup display = config->group(QStringLiteral("Display"));
-    KConfigGroup appearance = config->group(QStringLiteral("Appearance"));
-    KConfigGroup zones = config->group(QStringLiteral("Zones"));
-    KConfigGroup behavior = config->group(QStringLiteral("Behavior"));
-    KConfigGroup exclusions = config->group(QStringLiteral("Exclusions"));
-    KConfigGroup zoneSelector = config->group(QStringLiteral("ZoneSelector"));
-    KConfigGroup globalShortcuts = config->group(QStringLiteral("GlobalShortcuts"));
-    KConfigGroup autotiling = config->group(QStringLiteral("Autotiling"));
-    KConfigGroup animations = config->group(QStringLiteral("Animations"));
-    KConfigGroup autotileShortcuts = config->group(QStringLiteral("AutotileShortcuts"));
+    {
+        auto activation = m_configBackend->group(ConfigDefaults::activationGroup());
+        saveActivationConfig(*activation);
+    }
+    {
+        auto display = m_configBackend->group(ConfigDefaults::displayGroup());
+        saveDisplayConfig(*display);
+    }
+    {
+        auto appearance = m_configBackend->group(ConfigDefaults::appearanceGroup());
+        saveAppearanceConfig(*appearance);
+    }
+    {
+        auto zones = m_configBackend->group(ConfigDefaults::zonesGroup());
+        saveZoneGeometryConfig(*zones);
+    }
+    saveBehaviorConfig(m_configBackend.get());
+    {
+        auto zoneSelector = m_configBackend->group(ConfigDefaults::zoneSelectorGroup());
+        saveZoneSelectorConfig(*zoneSelector);
+    }
+    saveAllPerScreenOverrides(m_configBackend.get());
+    {
+        auto globalShortcuts = m_configBackend->group(ConfigDefaults::globalShortcutsGroup());
+        saveShortcutConfig(*globalShortcuts);
+    }
+    saveAutotilingConfig(m_configBackend.get());
+    {
+        auto editor = m_configBackend->group(ConfigDefaults::editorGroup());
+        saveEditorConfig(*editor);
+    }
 
-    saveActivationConfig(activation);
-    saveDisplayConfig(display);
-    saveAppearanceConfig(appearance);
-    saveZoneGeometryConfig(zones);
-    saveBehaviorConfig(behavior, exclusions, activation);
-    saveZoneSelectorConfig(zoneSelector);
-    saveAllPerScreenOverrides(config);
-    saveShortcutConfig(globalShortcuts);
-    saveAutotilingConfig(autotiling, animations, autotileShortcuts);
+    // Rendering backend in [General]
+    {
+        auto general = m_configBackend->group(ConfigDefaults::generalGroup());
+        general->writeString(ConfigDefaults::renderingBackendKey(), m_renderingBackend);
+    }
 
-    // Shader Effects (4 entries, not worth a separate helper)
-    KConfigGroup shaders = config->group(QStringLiteral("Shaders"));
-    shaders.writeEntry(QLatin1String("EnableShaderEffects"), m_enableShaderEffects);
-    shaders.writeEntry(QLatin1String("ShaderFrameRate"), m_shaderFrameRate);
-    shaders.writeEntry(QLatin1String("EnableAudioVisualizer"), m_enableAudioVisualizer);
-    shaders.writeEntry(QLatin1String("AudioSpectrumBarCount"), m_audioSpectrumBarCount);
+    // Shader Effects
+    {
+        auto shaders = m_configBackend->group(ConfigDefaults::shadersGroup());
+        shaders->writeBool(ConfigDefaults::enableShaderEffectsKey(), m_enableShaderEffects);
+        shaders->writeInt(ConfigDefaults::shaderFrameRateKey(), m_shaderFrameRate);
+        shaders->writeBool(ConfigDefaults::enableAudioVisualizerKey(), m_enableAudioVisualizer);
+        shaders->writeInt(ConfigDefaults::audioSpectrumBarCountKey(), m_audioSpectrumBarCount);
+    }
 
-    config->sync();
+    m_configBackend->sync();
 }
 
 // ── reset / color helpers ────────────────────────────────────────────────────
 
 void Settings::reset()
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    const QStringList groups = {
-        QStringLiteral("Activation"),   QStringLiteral("Display"),           QStringLiteral("Appearance"),
-        QStringLiteral("Zones"),        QStringLiteral("Behavior"),          QStringLiteral("Exclusions"),
-        QStringLiteral("ZoneSelector"), QStringLiteral("Shaders"),           QStringLiteral("GlobalShortcuts"),
-        QStringLiteral("Autotiling"),   QStringLiteral("AutotileShortcuts"), QStringLiteral("Animations"),
-        QStringLiteral("Updates")};
+    const QStringList groups = {ConfigDefaults::generalGroup(),    ConfigDefaults::activationGroup(),
+                                ConfigDefaults::displayGroup(),    ConfigDefaults::appearanceGroup(),
+                                ConfigDefaults::zonesGroup(),      ConfigDefaults::behaviorGroup(),
+                                ConfigDefaults::exclusionsGroup(), ConfigDefaults::zoneSelectorGroup(),
+                                ConfigDefaults::shadersGroup(),    ConfigDefaults::globalShortcutsGroup(),
+                                ConfigDefaults::autotilingGroup(), ConfigDefaults::autotileShortcutsGroup(),
+                                ConfigDefaults::animationsGroup(), ConfigDefaults::updatesGroup(),
+                                ConfigDefaults::editorGroup(),     ConfigDefaults::tilingQuickLayoutSlotsGroup()};
     for (const QString& groupName : groups) {
-        config->deleteGroup(groupName);
+        m_configBackend->deleteGroup(groupName);
     }
     // Also delete per-screen override groups
-    const QStringList allGroups = config->groupList();
+    const QStringList allGroups = m_configBackend->groupList();
     for (const QString& groupName : allGroups) {
         if (groupName.startsWith(QLatin1String("ZoneSelector:"))
             || groupName.startsWith(QLatin1String("AutotileScreen:"))
             || groupName.startsWith(QLatin1String("SnappingScreen:"))) {
-            config->deleteGroup(groupName);
+            m_configBackend->deleteGroup(groupName);
         }
     }
-    config->sync();
+    m_configBackend->sync();
     load();
     qCInfo(lcConfig) << "Settings reset to defaults";
 }
+
+// ── Editor setters ────────────────────────────────────────────────────────────
+
+void Settings::setEditorDuplicateShortcut(const QString& shortcut)
+{
+    if (m_editorDuplicateShortcut != shortcut) {
+        m_editorDuplicateShortcut = shortcut;
+        Q_EMIT editorDuplicateShortcutChanged();
+    }
+}
+
+void Settings::setEditorSplitHorizontalShortcut(const QString& shortcut)
+{
+    if (m_editorSplitHorizontalShortcut != shortcut) {
+        m_editorSplitHorizontalShortcut = shortcut;
+        Q_EMIT editorSplitHorizontalShortcutChanged();
+    }
+}
+
+void Settings::setEditorSplitVerticalShortcut(const QString& shortcut)
+{
+    if (m_editorSplitVerticalShortcut != shortcut) {
+        m_editorSplitVerticalShortcut = shortcut;
+        Q_EMIT editorSplitVerticalShortcutChanged();
+    }
+}
+
+void Settings::setEditorFillShortcut(const QString& shortcut)
+{
+    if (m_editorFillShortcut != shortcut) {
+        m_editorFillShortcut = shortcut;
+        Q_EMIT editorFillShortcutChanged();
+    }
+}
+
+void Settings::setEditorGridSnappingEnabled(bool enabled)
+{
+    if (m_editorGridSnappingEnabled != enabled) {
+        m_editorGridSnappingEnabled = enabled;
+        Q_EMIT editorGridSnappingEnabledChanged();
+    }
+}
+
+void Settings::setEditorEdgeSnappingEnabled(bool enabled)
+{
+    if (m_editorEdgeSnappingEnabled != enabled) {
+        m_editorEdgeSnappingEnabled = enabled;
+        Q_EMIT editorEdgeSnappingEnabledChanged();
+    }
+}
+
+void Settings::setEditorSnapIntervalX(qreal interval)
+{
+    interval = qBound(0.01, interval, 1.0);
+    if (!qFuzzyCompare(m_editorSnapIntervalX, interval)) {
+        m_editorSnapIntervalX = interval;
+        Q_EMIT editorSnapIntervalXChanged();
+    }
+}
+
+void Settings::setEditorSnapIntervalY(qreal interval)
+{
+    interval = qBound(0.01, interval, 1.0);
+    if (!qFuzzyCompare(m_editorSnapIntervalY, interval)) {
+        m_editorSnapIntervalY = interval;
+        Q_EMIT editorSnapIntervalYChanged();
+    }
+}
+
+void Settings::setEditorSnapOverrideModifier(int mod)
+{
+    if (m_editorSnapOverrideModifier != mod) {
+        m_editorSnapOverrideModifier = mod;
+        Q_EMIT editorSnapOverrideModifierChanged();
+    }
+}
+
+void Settings::setFillOnDropEnabled(bool enabled)
+{
+    if (m_fillOnDropEnabled != enabled) {
+        m_fillOnDropEnabled = enabled;
+        Q_EMIT fillOnDropEnabledChanged();
+    }
+}
+
+void Settings::setFillOnDropModifier(int mod)
+{
+    if (m_fillOnDropModifier != mod) {
+        m_fillOnDropModifier = mod;
+        Q_EMIT fillOnDropModifierChanged();
+    }
+}
+
+// ── TilingQuickLayoutSlots helpers ───────────────────────────────────────────
+
+QString Settings::readTilingQuickLayoutSlot(int slotNumber) const
+{
+    if (slotNumber < 1 || slotNumber > 9)
+        return {};
+    // Config is already current from load() — no reparse needed per read.
+    // The staged value check in getTilingQuickLayoutSlot() handles unsaved changes.
+    auto group = m_configBackend->group(ConfigDefaults::tilingQuickLayoutSlotsGroup());
+    return group->readString(QString::number(slotNumber));
+}
+
+void Settings::writeTilingQuickLayoutSlot(int slotNumber, const QString& layoutId)
+{
+    if (slotNumber < 1 || slotNumber > 9)
+        return;
+    auto group = m_configBackend->group(ConfigDefaults::tilingQuickLayoutSlotsGroup());
+    group->writeString(QString::number(slotNumber), layoutId);
+}
+
+void Settings::syncConfig()
+{
+    m_configBackend->sync();
+}
+
+// ── Color helpers ────────────────────────────────────────────────────────────
 
 QString Settings::loadColorsFromFile(const QString& filePath)
 {
@@ -281,24 +437,23 @@ QString Settings::loadColorsFromFile(const QString& filePath)
 
 void Settings::applySystemColorScheme()
 {
-    // Selection set for highlight color (accent/selection background)
-    KColorScheme selectionScheme(QPalette::Active, KColorScheme::Selection);
-    QColor highlight = selectionScheme.background(KColorScheme::NormalBackground).color();
+    // QPalette respects QT_QPA_PLATFORMTHEME — on non-KDE desktops, Qt reads
+    // the platform theme (qt6ct, gnome, lxqt) to populate the palette.
+    const QPalette pal = QGuiApplication::palette();
+
+    QColor highlight = pal.color(QPalette::Active, QPalette::Highlight);
     highlight.setAlpha(Defaults::HighlightAlpha);
     m_highlightColor = highlight;
 
-    // View set for inactive/border/text (neutral non-accent colors)
-    // This matches QML defaults: highlightColor → Theme.highlightColor, inactiveColor → Theme.textColor
-    KColorScheme viewScheme(QPalette::Active, KColorScheme::View);
-    QColor inactive = viewScheme.foreground(KColorScheme::NormalText).color();
+    QColor inactive = pal.color(QPalette::Active, QPalette::Text);
     inactive.setAlpha(Defaults::InactiveAlpha);
     m_inactiveColor = inactive;
 
-    QColor border = viewScheme.foreground(KColorScheme::NormalText).color();
+    QColor border = pal.color(QPalette::Active, QPalette::Text);
     border.setAlpha(Defaults::BorderAlpha);
     m_borderColor = border;
 
-    m_labelFontColor = viewScheme.foreground(KColorScheme::NormalText).color();
+    m_labelFontColor = pal.color(QPalette::Active, QPalette::Text);
 
     Q_EMIT highlightColorChanged();
     Q_EMIT inactiveColorChanged();

@@ -1,7 +1,7 @@
 # Maintainer: fuddlesworth <fuddlesworth at users dot noreply dot github dot com>
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6).
+# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, KWin 6.6).
 
 pkgname=plasmazones
 pkgver=0.0.0
@@ -14,17 +14,13 @@ depends=(
     'qt6-base'
     'qt6-declarative'
     'qt6-shadertools'
+    'qt6-svg'
     'kconfig'
     'kconfigwidgets'
-    'kcoreaddons'
-    'kdbusaddons'
-    'ki18n'
+    'kirigami'
     'kcmutils'
-    'kwindowsystem'
     'kglobalaccel'
-    'knotifications'
-    'kcolorscheme'
-    'layer-shell-qt'
+    'qt6-wayland'
 )
 makedepends=(
     'cmake'
@@ -32,6 +28,9 @@ makedepends=(
     'ninja'
     'qt6-tools'
     'kwin'
+    'wayland'
+    'vulkan-headers'
+    'vulkan-icd-loader'
 )
 optdepends=(
     'plasma-activities: activity-based layouts'
@@ -53,4 +52,10 @@ build() {
 
 package() {
     DESTDIR="$pkgdir" cmake --install build
+
+    # Install pacman hook to auto-refresh sycoca cache
+    install -Dm644 kbuildsycoca.hook \
+        "$pkgdir/usr/share/libalpm/hooks/plasmazones-kbuildsycoca.hook"
+    install -Dm755 plasmazones-refresh-sycoca \
+        "$pkgdir/usr/share/libalpm/scripts/plasmazones-refresh-sycoca"
 }

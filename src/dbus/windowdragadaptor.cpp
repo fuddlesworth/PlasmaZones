@@ -7,8 +7,9 @@
 #include <QKeySequence>
 #include <QScreen>
 #include <cmath>
-#include <KGlobalAccel>
-#include <KLocalizedString>
+#include "pz_i18n.h"
+#include "../config/configdefaults.h"
+#include "../daemon/shortcutbackend.h"
 #include "windowtrackingadaptor.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
@@ -58,7 +59,7 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* de
     });
 
     // Escape shortcut to cancel overlay during drag (registered when drag starts, unregistered when drag ends)
-    m_cancelOverlayAction = new QAction(i18n("Cancel Zone Overlay"), this);
+    m_cancelOverlayAction = new QAction(PzI18n::tr("Cancel Zone Overlay"), this);
     m_cancelOverlayAction->setObjectName(QStringLiteral("cancel_overlay_during_drag"));
     connect(m_cancelOverlayAction, &QAction::triggered, this, &WindowDragAdaptor::cancelSnap);
 
@@ -111,8 +112,8 @@ bool WindowDragAdaptor::anyTriggerHeld(const QVariantList& triggers, Qt::Keyboar
 {
     for (const auto& t : triggers) {
         const auto map = t.toMap();
-        const int mod = map.value(QStringLiteral("modifier"), 0).toInt();
-        const int btn = map.value(QStringLiteral("mouseButton"), 0).toInt();
+        const int mod = map.value(ConfigDefaults::triggerModifierField(), 0).toInt();
+        const int btn = map.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt();
         // AND semantics: both modifier and mouse button must match when both are set.
         // A zero field means "don't care" (always matches). At least one must be non-zero.
         const bool modMatch = (mod == 0) || checkModifier(mod, mods);
@@ -210,19 +211,19 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
 
 void WindowDragAdaptor::registerCancelOverlayShortcut()
 {
-    if (m_cancelOverlayAction) {
-        KGlobalAccel::setGlobalShortcut(m_cancelOverlayAction, QKeySequence(Qt::Key_Escape));
+    if (m_cancelOverlayAction && m_shortcutBackend) {
+        m_shortcutBackend->setGlobalShortcut(m_cancelOverlayAction, QKeySequence(Qt::Key_Escape));
     }
 }
 
 void WindowDragAdaptor::unregisterCancelOverlayShortcut()
 {
-    if (m_cancelOverlayAction) {
-        // removeAllShortcuts() fully deregisters the action from the kglobalaccel daemon,
+    if (m_cancelOverlayAction && m_shortcutBackend) {
+        // removeAllShortcuts() fully deregisters the action from the backend,
         // releasing the compositor-level key grab. The previous approach of setting an empty
         // QKeySequence left the action registered with a stale grab on Wayland, causing Escape
         // to remain intercepted system-wide after every window drag (see discussion #155).
-        KGlobalAccel::self()->removeAllShortcuts(m_cancelOverlayAction);
+        m_shortcutBackend->removeAllShortcuts(m_cancelOverlayAction);
     }
 }
 
@@ -234,7 +235,9 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     }
 
     QScreen* screen = screenAtPoint(cursorX, cursorY);
-    if (screen && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
+    if (screen
+        && isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_layoutManager->currentVirtualDesktop(),
+                             m_layoutManager->currentActivity())) {
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;
             m_overlayService->hideZoneSelector();

@@ -43,6 +43,22 @@ public:
     // ═══════════════════════════════════════════════════════════════════
 
     void notifyWindowAdded(KWin::EffectWindow* w);
+
+    /**
+     * @brief Batch-notify windows added to autotile screens
+     *
+     * Filters windows the same way as notifyWindowAdded, then sends one
+     * windowsOpenedBatch D-Bus call instead of per-window windowOpened calls.
+     * Used on daemon startup/restart and autotile toggle-on.
+     *
+     * @param windows List of candidate windows to process
+     * @param screenFilter If non-empty, only process windows on these screens
+     * @param resetNotified If true, remove windowId from m_notifiedWindows before processing
+     *        (for re-announce on daemon restart / screen change)
+     */
+    void notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows, const QSet<QString>& screenFilter = {},
+                                 bool resetNotified = false);
+
     void onWindowClosed(const QString& windowId, const QString& screenId);
     void onDaemonReady();
     void savePreAutotileForDesktopMove(const QString& windowId, const QString& screenId);
@@ -67,7 +83,7 @@ public:
     void handleCursorMoved(const QPointF& pos, const QString& screenId);
 
     // Screen accessors (for gating drag/snap/overlay behavior per-screen)
-    bool isAutotileScreen(const QString& screenName) const;
+    bool isAutotileScreen(const QString& screenId) const;
     const QSet<QString>& autotileScreens() const
     {
         return m_autotileScreens;
@@ -84,7 +100,11 @@ public:
     }
     bool shouldShowBorderForWindow(const QString& windowId) const
     {
-        return isBorderlessWindow(windowId) || (m_border.showBorder && isTiledWindow(windowId));
+        // showBorder and hideTitleBars are independent toggles.
+        // showBorder=false means no borders, regardless of title bar state.
+        if (!m_border.showBorder)
+            return false;
+        return isBorderlessWindow(windowId) || isTiledWindow(windowId);
     }
     int borderWidth() const
     {
@@ -149,8 +169,8 @@ public Q_SLOTS:
     void slotWindowsTileRequested(const QString& tileRequestsJson);
     void slotFocusWindowRequested(const QString& windowId);
     void slotEnabledChanged(bool enabled);
-    void slotScreensChanged(const QStringList& screenNames, bool isDesktopSwitch);
-    void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenName);
+    void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
+    void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
 
     // Window state change handlers (connected per-window in setupWindowConnections)
     void slotWindowMinimizedChanged(KWin::EffectWindow* w);
@@ -165,7 +185,26 @@ private:
 
     void setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless);
     void unmaximizeMonocleWindow(const QString& windowId);
-    bool saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenName, const QRectF& frame);
+
+    /**
+     * @brief Shared float-state cleanup for a window being floated
+     *
+     * Updates float cache, removes from tiled/borderless sets, restores title bars,
+     * removes border, and unmaximizes monocle. Used by both slotWindowFloatingChanged
+     * (per-window D-Bus signal path) and slotWindowsTileRequested (batch float path).
+     */
+    void applyFloatCleanup(const QString& windowId);
+
+    /**
+     * @brief Check if a window is eligible for autotile notification
+     *
+     * Shared predicate used by both notifyWindowAdded and notifyWindowsAddedBatch
+     * to keep filtering logic in sync.
+     *
+     * @return true if the window should be notified to the autotile daemon
+     */
+    bool isEligibleForAutotileNotify(KWin::EffectWindow* w) const;
+    bool saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId, const QRectF& frame);
     bool shouldApplyBorderInset(const QString& windowId) const;
     void reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight);
 
@@ -190,7 +229,7 @@ private:
     QHash<QString, QStringList> m_savedSnapStackingOrder; ///< snap-mode stacking order, restored on autotile→snap
     QHash<QString, QStringList> m_savedAutotileStackingOrder; ///< autotile stacking order, restored on snap→autotile
     QSet<QString> m_notifiedWindows;
-    QHash<QString, QString> m_notifiedWindowScreens; ///< windowId → screen name at time of notification
+    QHash<QString, QString> m_notifiedWindowScreens; ///< windowId → screen ID at time of notification
     QSet<QString> m_savedNotifiedForDesktopReturn; ///< windows removed from m_notifiedWindows on desktop switch
     QHash<QString, QRectF>
         m_savedPreAutotileForDesktopMove; ///< pre-autotile geometries for windows moved to another desktop

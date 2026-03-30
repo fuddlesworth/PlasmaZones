@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "AutotileConfig.h"
+#include "AlgorithmRegistry.h"
 #include "core/constants.h"
+#include "core/logging.h"
+#include <QRegularExpression>
 #include <QtMath>
 
 namespace PlasmaZones {
@@ -38,14 +41,51 @@ AutotileConfig::InsertPosition stringToInsertPosition(const QString& str)
 }
 } // anonymous namespace
 
+QHash<QString, AlgorithmSettings> AutotileConfig::perAlgoFromVariantMap(const QVariantMap& map)
+{
+    static const QRegularExpression validAlgoId(QStringLiteral("^[a-zA-Z0-9_:/-]+$"));
+    static constexpr int MaxEntries = 100;
+
+    QHash<QString, AlgorithmSettings> result;
+    int count = 0;
+    for (auto it = map.constBegin(); it != map.constEnd(); ++it, ++count) {
+        if (count >= MaxEntries) {
+            qCWarning(lcAutotile) << "perAlgoFromVariantMap: max entries reached (" << MaxEntries
+                                  << "), dropping remaining" << (map.size() - MaxEntries) << "entries";
+            break;
+        }
+        if (!validAlgoId.match(it.key()).hasMatch())
+            continue;
+        const QVariantMap entry = it.value().toMap();
+        const QVariant ratioVar = entry.value(PerAlgoKeys::SplitRatio);
+        const qreal ratio =
+            std::clamp(ratioVar.isValid() ? ratioVar.toDouble() : DefaultSplitRatio, MinSplitRatio, MaxSplitRatio);
+        const QVariant mcVar = entry.value(PerAlgoKeys::MasterCount);
+        const int masterCount =
+            std::clamp(mcVar.isValid() ? mcVar.toInt() : DefaultMasterCount, MinMasterCount, MaxMasterCount);
+        result[it.key()] = {ratio, masterCount};
+    }
+    return result;
+}
+
+QVariantMap AutotileConfig::perAlgoToVariantMap(const QHash<QString, AlgorithmSettings>& hash)
+{
+    QVariantMap result;
+    for (auto it = hash.constBegin(); it != hash.constEnd(); ++it) {
+        QVariantMap entry;
+        entry[PerAlgoKeys::SplitRatio] = it.value().splitRatio;
+        entry[PerAlgoKeys::MasterCount] = it.value().masterCount;
+        result[it.key()] = entry;
+    }
+    return result;
+}
+
 bool AutotileConfig::operator==(const AutotileConfig& other) const
 {
     // Use qFuzzyCompare properly (add 1.0 for values that could be near zero)
     return algorithmId == other.algorithmId && qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio)
-        && masterCount == other.masterCount
-        && qFuzzyCompare(1.0 + centeredMasterSplitRatio, 1.0 + other.centeredMasterSplitRatio)
-        && centeredMasterMasterCount == other.centeredMasterMasterCount && innerGap == other.innerGap
-        && outerGap == other.outerGap && usePerSideOuterGap == other.usePerSideOuterGap
+        && masterCount == other.masterCount && savedAlgorithmSettings == other.savedAlgorithmSettings
+        && innerGap == other.innerGap && outerGap == other.outerGap && usePerSideOuterGap == other.usePerSideOuterGap
         && outerGapTop == other.outerGapTop && outerGapBottom == other.outerGapBottom
         && outerGapLeft == other.outerGapLeft && outerGapRight == other.outerGapRight
         && insertPosition == other.insertPosition && focusFollowsMouse == other.focusFollowsMouse
@@ -64,8 +104,10 @@ QJsonObject AutotileConfig::toJson() const
     json[AlgorithmId] = algorithmId;
     json[SplitRatio] = splitRatio;
     json[MasterCount] = masterCount;
-    json[QStringLiteral("centeredMasterSplitRatio")] = centeredMasterSplitRatio;
-    json[QStringLiteral("centeredMasterMasterCount")] = centeredMasterMasterCount;
+    if (!savedAlgorithmSettings.isEmpty()) {
+        const auto varMap = perAlgoToVariantMap(savedAlgorithmSettings);
+        json[PerAlgorithmSettings] = QJsonObject::fromVariantMap(varMap);
+    }
     json[InnerGap] = innerGap;
     json[OuterGap] = outerGap;
     json[AutotileJsonKeys::UsePerSideOuterGap] = usePerSideOuterGap;
@@ -97,15 +139,23 @@ AutotileConfig AutotileConfig::fromJson(const QJsonObject& json)
         config.masterCount = json[MasterCount].toInt(config.masterCount);
         config.masterCount = std::clamp(config.masterCount, MinMasterCount, MaxMasterCount);
     }
-    if (json.contains(QStringLiteral("centeredMasterSplitRatio"))) {
-        config.centeredMasterSplitRatio =
-            json[QStringLiteral("centeredMasterSplitRatio")].toDouble(config.centeredMasterSplitRatio);
-        config.centeredMasterSplitRatio = std::clamp(config.centeredMasterSplitRatio, MinSplitRatio, MaxSplitRatio);
-    }
-    if (json.contains(QStringLiteral("centeredMasterMasterCount"))) {
-        config.centeredMasterMasterCount =
-            json[QStringLiteral("centeredMasterMasterCount")].toInt(config.centeredMasterMasterCount);
-        config.centeredMasterMasterCount = std::clamp(config.centeredMasterMasterCount, MinMasterCount, MaxMasterCount);
+    // Try new camelCase key first, fall back to legacy PascalCase for backwards compat
+    const QLatin1String legacyPerAlgoKey("PerAlgorithmSettings");
+    const bool hasNewKey = json.contains(PerAlgorithmSettings);
+    const bool hasLegacyKey = !hasNewKey && json.contains(legacyPerAlgoKey);
+    if (hasNewKey || hasLegacyKey) {
+        const QLatin1String& activeKey = hasNewKey ? PerAlgorithmSettings : legacyPerAlgoKey;
+        const QJsonObject perAlgo = json[activeKey].toObject();
+        config.savedAlgorithmSettings = perAlgoFromVariantMap(perAlgo.toVariantMap());
+    } else {
+        // Backwards compat: migrate centered-master fields
+        if (json.contains(CenteredMasterSplitRatio) || json.contains(CenteredMasterMasterCount)) {
+            qreal cmRatio = json[CenteredMasterSplitRatio].toDouble(0.5);
+            int cmCount = json[CenteredMasterMasterCount].toInt(1);
+            cmRatio = std::clamp(cmRatio, MinSplitRatio, MaxSplitRatio);
+            cmCount = std::clamp(cmCount, MinMasterCount, MaxMasterCount);
+            config.savedAlgorithmSettings[QLatin1String("centered-master")] = {cmRatio, cmCount};
+        }
     }
     if (json.contains(InnerGap)) {
         config.innerGap = json[InnerGap].toInt(config.innerGap);

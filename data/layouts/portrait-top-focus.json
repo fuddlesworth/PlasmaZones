@@ -1,0 +1,29 @@
+{
+    "id": "{c9de0fb1-f4c1-4a6d-ce8b-b4cf5a7c9d1e}",
+    "name": "Portrait Top Focus",
+    "description": "Large top area with two side-by-side panels below for vertical monitors",
+    "type": 5,
+    "isBuiltIn": true,
+    "showZoneNumbers": true,
+    "aspectRatioClass": "portrait",
+    "zones": [
+        {
+            "id": "{c9d0e1f2-1111-4444-cccc-aaaaaaaaaaaa}",
+            "name": "Main",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 1.0, "height": 0.6 }
+        },
+        {
+            "id": "{c9d0e1f2-2222-4444-cccc-bbbbbbbbbbbb}",
+            "name": "Bottom Left",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0, "y": 0.6, "width": 0.5, "height": 0.4 }
+        },
+        {
+            "id": "{c9d0e1f2-3333-4444-cccc-cccccccccccc}",
+            "name": "Bottom Right",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.5, "y": 0.6, "width": 0.5, "height": 0.4 }
+        }
+    ]
+}

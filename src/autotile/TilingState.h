@@ -12,7 +12,13 @@
 #include <QStringList>
 #include <QVector>
 
+#include <functional>
+#include <memory>
+
 namespace PlasmaZones {
+
+class SplitTree;
+struct SplitNode;
 
 /**
  * @brief Tracks tiling state for a single screen
@@ -45,7 +51,7 @@ public:
      * @param parent Parent QObject
      */
     explicit TilingState(const QString& screenId, QObject* parent = nullptr);
-    ~TilingState() override = default;
+    ~TilingState() override;
 
     // Prevent copying (QObject rule)
     TilingState(const TilingState&) = delete;
@@ -315,6 +321,8 @@ public:
      * @param json Serialized state
      * @param parent Parent QObject
      * @return New TilingState or nullptr on error
+     *
+     * Ownership: caller takes ownership (Qt parent set if provided)
      */
     static TilingState* fromJson(const QJsonObject& json, QObject* parent = nullptr);
 
@@ -343,6 +351,39 @@ public:
      */
     QVector<QRect> calculatedZones() const;
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // Split Tree (persistent BSP tree for memory-based algorithms)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Get the persistent split tree (may be null)
+     *
+     * Used by DwindleMemoryAlgorithm to read the tree structure.
+     * Returns nullptr if no split tree has been created for this state.
+     */
+    SplitTree* splitTree() const;
+
+    /**
+     * @brief Set or replace the split tree
+     * @param tree Ownership transferred to TilingState
+     */
+    void setSplitTree(std::unique_ptr<SplitTree> tree);
+
+    /**
+     * @brief Clear the split tree (e.g., on algorithm switch)
+     */
+    void clearSplitTree();
+
+    /**
+     * @brief Rebuild the split tree from the current tiled window order
+     *
+     * Used after operations that reorder windows (move, promote, rotate)
+     * to preserve the tree's existence while matching the new order.
+     * Split ratios are preserved positionally where possible, so
+     * DwindleMemoryAlgorithm doesn't fall back to stateless mode.
+     */
+    void rebuildSplitTree();
+
 Q_SIGNALS:
     /**
      * @brief Emitted when window count changes (add/remove)
@@ -368,6 +409,9 @@ Q_SIGNALS:
      * @brief Emitted when a window's floating state changes
      * @param windowId Affected window
      * @param floating New floating state
+     *
+     * @note Also emitted with floating=false when a floating window is removed via removeWindow(),
+     * to ensure listeners clean up any floating-specific state. Check containsWindow() if needed.
      */
     void floatingChanged(const QString& windowId, bool floating);
 
@@ -389,9 +433,27 @@ private:
     int m_masterCount = 1;
     qreal m_splitRatio = 0.6;
     QVector<QRect> m_calculatedZones;
+    std::unique_ptr<SplitTree> m_splitTree;
 
     // Helper to emit stateChanged after other signals
     void notifyStateChanged();
+
+    /**
+     * @brief Iterate over tiled (non-floating) windows in order
+     * @param func Called with (windowId, tiledIndex) for each tiled window.
+     *             Return false to stop iteration early.
+     */
+    void forEachTiledWindow(const std::function<bool(const QString& windowId, int tiledIndex)>& func) const;
+
+    // ── Clamping helpers (DRY: shared by setters and fromJson) ──
+    static int clampMasterCount(int value);
+    static qreal clampSplitRatio(qreal value);
+
+    // ── Tree synchronization helpers (SRP/DRY: single place for null-check + op) ──
+    void syncTreeInsert(const QString& windowId, int position = -1);
+    void syncTreeRemove(const QString& windowId);
+    void syncTreeSwap(const QString& idA, const QString& idB);
+    void syncTreeLazyCreate();
 };
 
 } // namespace PlasmaZones

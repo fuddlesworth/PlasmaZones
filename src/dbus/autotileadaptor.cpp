@@ -9,6 +9,7 @@
 
 #include "core/logging.h"
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -87,13 +88,13 @@ void AutotileAdaptor::setAlgorithm(const QString& algorithmId)
 // Tiling Operations
 // ═══════════════════════════════════════════════════════════════════════════
 
-void AutotileAdaptor::retile(const QString& screenName)
+void AutotileAdaptor::retile(const QString& screenId)
 {
     if (!ensureEngine("retile")) {
         return;
     }
-    qCDebug(lcDbusAutotile) << "retile: screen=" << (screenName.isEmpty() ? QStringLiteral("all") : screenName);
-    m_engine->retile(screenName);
+    qCDebug(lcDbusAutotile) << "retile: screen=" << (screenId.isEmpty() ? QStringLiteral("all") : screenId);
+    m_engine->retile(screenId);
 }
 
 void AutotileAdaptor::retileAllScreens()
@@ -176,7 +177,7 @@ void AutotileAdaptor::focusPrevious()
     m_engine->focusPrevious();
 }
 
-void AutotileAdaptor::windowOpened(const QString& windowId, const QString& screenName, int minWidth, int minHeight)
+void AutotileAdaptor::windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
 {
     if (!ensureEngine("windowOpened")) {
         return;
@@ -185,13 +186,44 @@ void AutotileAdaptor::windowOpened(const QString& windowId, const QString& scree
         qCDebug(lcDbusAutotile) << "windowOpened: empty window ID";
         return;
     }
-    if (screenName.isEmpty()) {
-        qCDebug(lcDbusAutotile) << "windowOpened: empty screen name for window" << windowId;
+    if (screenId.isEmpty()) {
+        qCDebug(lcDbusAutotile) << "windowOpened: empty screen ID for window" << windowId;
         return;
     }
-    qCDebug(lcDbusAutotile) << "windowOpened: windowId=" << windowId << "screen=" << screenName
-                            << "minSize=" << minWidth << "x" << minHeight;
-    m_engine->windowOpened(windowId, screenName, qMax(0, minWidth), qMax(0, minHeight));
+    qCDebug(lcDbusAutotile) << "windowOpened: windowId=" << windowId << "screen=" << screenId << "minSize=" << minWidth
+                            << "x" << minHeight;
+    m_engine->windowOpened(windowId, screenId, qMax(0, minWidth), qMax(0, minHeight));
+}
+
+void AutotileAdaptor::windowsOpenedBatch(const QString& batchJson)
+{
+    if (!ensureEngine("windowsOpenedBatch")) {
+        return;
+    }
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(batchJson.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        qCWarning(lcDbusAutotile) << "windowsOpenedBatch: invalid JSON:" << parseError.errorString();
+        return;
+    }
+
+    const QJsonArray entries = doc.array();
+    qCInfo(lcDbusAutotile) << "windowsOpenedBatch: processing" << entries.size() << "windows";
+
+    for (const QJsonValue& val : entries) {
+        QJsonObject obj = val.toObject();
+        QString windowId = obj.value(QLatin1String("windowId")).toString();
+        QString screenId = obj.value(QLatin1String("screenId")).toString();
+        int minWidth = obj.value(QLatin1String("minWidth")).toInt(0);
+        int minHeight = obj.value(QLatin1String("minHeight")).toInt(0);
+
+        if (windowId.isEmpty() || screenId.isEmpty()) {
+            continue;
+        }
+
+        m_engine->windowOpened(windowId, screenId, qMax(0, minWidth), qMax(0, minHeight));
+    }
 }
 
 void AutotileAdaptor::windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight)
@@ -221,7 +253,7 @@ void AutotileAdaptor::windowClosed(const QString& windowId)
     m_engine->windowClosed(windowId);
 }
 
-void AutotileAdaptor::notifyWindowFocused(const QString& windowId, const QString& screenName)
+void AutotileAdaptor::notifyWindowFocused(const QString& windowId, const QString& screenId)
 {
     if (!ensureEngine("notifyWindowFocused")) {
         return;
@@ -230,15 +262,15 @@ void AutotileAdaptor::notifyWindowFocused(const QString& windowId, const QString
         qCDebug(lcDbusAutotile) << "notifyWindowFocused: empty window ID (focus cleared)";
         return;
     }
-    if (screenName.isEmpty()) {
-        qCDebug(lcDbusAutotile) << "notifyWindowFocused: empty screenName";
+    if (screenId.isEmpty()) {
+        qCDebug(lcDbusAutotile) << "notifyWindowFocused: empty screenId";
         return;
     }
-    qCDebug(lcDbusAutotile) << "notifyWindowFocused: windowId=" << windowId << "screen=" << screenName;
-    // R2 fix: Pass screen name to engine so m_windowToScreen is updated on focus
+    qCDebug(lcDbusAutotile) << "notifyWindowFocused: windowId=" << windowId << "screen=" << screenId;
+    // R2 fix: Pass screen ID to engine so m_windowToScreen is updated on focus
     // change. This also addresses R5 (cross-screen window movement detection) since
     // focus events carry the current screen, updating stale m_windowToScreen entries.
-    m_engine->windowFocused(windowId, screenName);
+    m_engine->windowFocused(windowId, screenId);
 }
 
 // floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
@@ -266,9 +298,16 @@ QString AutotileAdaptor::algorithmInfo(const QString& algorithmId)
     info[QLatin1String("id")] = algorithmId; // Validated by successful lookup above
     info[QLatin1String("name")] = algo->name();
     info[QLatin1String("description")] = algo->description();
-    info[QLatin1String("icon")] = algo->icon();
     info[QLatin1String("supportsMasterCount")] = algo->supportsMasterCount();
     info[QLatin1String("supportsSplitRatio")] = algo->supportsSplitRatio();
+    info[QLatin1String("centerLayout")] = algo->centerLayout();
+    info[QLatin1String("defaultSplitRatio")] = algo->defaultSplitRatio();
+    info[QLatin1String("defaultMaxWindows")] = algo->defaultMaxWindows();
+    info[QLatin1String("producesOverlappingZones")] = algo->producesOverlappingZones();
+    info[QLatin1String("zoneNumberDisplay")] = algo->zoneNumberDisplay();
+    info[QLatin1String("isScripted")] = algo->isScripted();
+    info[QLatin1String("isUserScript")] = algo->isUserScript();
+    info[QLatin1String("supportsMemory")] = algo->supportsMemory();
 
     return QString::fromUtf8(QJsonDocument(info).toJson(QJsonDocument::Compact));
 }
@@ -293,6 +332,11 @@ void AutotileAdaptor::onWindowsTiled(const QString& tileRequestsJson)
     QJsonArray outArr;
     for (const QJsonValue& val : doc.array()) {
         QJsonObject obj = val.toObject();
+        // Float entries (overflow windows) have no geometry — pass through as-is
+        if (obj.value(QLatin1String("floating")).toBool(false)) {
+            outArr.append(obj);
+            continue;
+        }
         QString windowId = obj.value(QLatin1String("windowId")).toString();
         QRect geo(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
                   obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());

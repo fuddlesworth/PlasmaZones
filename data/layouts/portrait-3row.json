@@ -1,0 +1,29 @@
+{
+    "id": "{d0ef1ac2-a5d2-4b7e-df9c-c5da6b8d0e2f}",
+    "name": "Portrait 3-Row",
+    "description": "Three stacked rows with larger center for vertical monitors",
+    "type": 5,
+    "isBuiltIn": true,
+    "showZoneNumbers": true,
+    "aspectRatioClass": "portrait",
+    "zones": [
+        {
+            "id": "{d0e1f2a3-1111-4444-dddd-aaaaaaaaaaaa}",
+            "name": "Top",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 1.0, "height": 0.25 }
+        },
+        {
+            "id": "{d0e1f2a3-2222-4444-dddd-bbbbbbbbbbbb}",
+            "name": "Center",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0, "y": 0.25, "width": 1.0, "height": 0.5 }
+        },
+        {
+            "id": "{d0e1f2a3-3333-4444-dddd-cccccccccccc}",
+            "name": "Bottom",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0, "y": 0.75, "width": 1.0, "height": 0.25 }
+        }
+    ]
+}

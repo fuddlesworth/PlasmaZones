@@ -13,7 +13,7 @@
 #include <QQuickWindow>
 #include <QSize>
 #include <QVector>
-#include <KConfigGroup>
+#include "../config/configbackend_qsettings.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "undo/UndoController.h"
@@ -112,6 +112,9 @@ class EditorController : public QObject
     // Full screen geometry mode
     Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY
                    useFullScreenGeometryChanged)
+
+    // Aspect ratio classification (0=Any, 1=Standard, 2=Ultrawide, 3=SuperUltrawide, 4=Portrait)
+    Q_PROPERTY(int aspectRatioClass READ aspectRatioClass WRITE setAspectRatioClass NOTIFY aspectRatioClassChanged)
 
     // Target screen size (for fixed geometry coordinate conversion)
     Q_PROPERTY(QSize targetScreenSize READ targetScreenSize NOTIFY targetScreenSizeChanged)
@@ -213,6 +216,7 @@ public:
     bool hasOverlayDisplayModeOverride() const;
     int globalOverlayDisplayMode() const;
     bool useFullScreenGeometry() const;
+    int aspectRatioClass() const;
     QSize targetScreenSize() const;
     bool canPaste() const;
     UndoController* undoController() const;
@@ -336,6 +340,7 @@ public:
     Q_INVOKABLE void refreshGlobalOverlayDisplayMode();
     void setOverlayDisplayMode(int mode);
     void setUseFullScreenGeometry(bool enabled);
+    void setAspectRatioClass(int cls);
 
     // Shader setters (create undo commands)
     void setCurrentShaderId(const QString& id);
@@ -663,6 +668,7 @@ Q_SIGNALS:
     void overlayDisplayModeChanged();
     void globalOverlayDisplayModeChanged();
     void useFullScreenGeometryChanged();
+    void aspectRatioClassChanged();
     void targetScreenSizeChanged();
 
     // Shader signals
@@ -764,10 +770,10 @@ private:
      * @param emitSignal Lambda to emit the changed signal
      */
     template<typename F>
-    void loadShortcutSetting(KConfigGroup& group, const QString& key, const QString& defaultValue, QString& member,
-                             F emitSignal)
+    void loadShortcutSetting(QSettingsConfigGroup& group, const QString& key, const QString& defaultValue,
+                             QString& member, F emitSignal)
     {
-        QString value = group.readEntry(key, defaultValue);
+        QString value = group.readString(key, defaultValue);
         if (value.isEmpty()) {
             qCWarning(lcEditor) << "Invalid editor shortcut" << key << "(empty), using default";
             value = defaultValue;
@@ -846,6 +852,7 @@ private:
     int m_outerGapRight = -1;
     int m_overlayDisplayMode = -1; // -1 = use global setting
     bool m_useFullScreenGeometry = false;
+    int m_aspectRatioClass = 0; // 0 = Any (AspectRatioClass::Any)
     int m_cachedGlobalZonePadding = PlasmaZones::Defaults::ZonePadding; // Cached to avoid D-Bus calls
     int m_cachedGlobalOuterGap = PlasmaZones::Defaults::OuterGap; // Cached to avoid D-Bus calls
     int m_cachedGlobalOverlayDisplayMode = 0; // Cached global overlay display mode

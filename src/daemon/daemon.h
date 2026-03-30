@@ -13,6 +13,7 @@
 #include <memory>
 
 #include "shortcutmanager.h"
+#include "../core/types.h"
 
 namespace PlasmaZones {
 
@@ -38,6 +39,7 @@ class UnifiedLayoutController;
 class AutotileAdaptor;
 class AutotileEngine;
 class IWindowEngine;
+class ScriptedAlgorithmLoader;
 class SnapAdaptor;
 class SnapEngine;
 
@@ -102,9 +104,9 @@ public:
     Q_INVOKABLE bool isOverlayVisible() const;
 
     // OSD notifications
-    void showLayoutOsd(Layout* layout, const QString& screenName = QString());
-    void showLockedOsd(const QString& screenName);
-    void showLockedPreviewOsd(const QString& screenName);
+    void showLayoutOsd(Layout* layout, const QString& screenId = QString());
+    void showLockedOsd(const QString& screenId);
+    void showLockedPreviewOsd(const QString& screenId);
 
 private:
     /**
@@ -112,7 +114,7 @@ private:
      *
      * Uses showOsdOnLayoutSwitch and osdStyle settings, same as manual layout switch.
      */
-    void showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenName);
+    void showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId);
     void clearHighlight();
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -121,7 +123,7 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /** @brief Return the active IWindowEngine for a screen (autotile or snap) */
-    IWindowEngine* engineForScreen(const QString& screenName) const;
+    IWindowEngine* engineForScreen(const QString& screenId) const;
 
     void handleRotate(bool clockwise);
     void handleFloat();
@@ -160,9 +162,9 @@ private:
      * engine's setInitialWindowOrder(). Used by both per-screen toggle and global
      * snapping→autotile transition.
      *
-     * @param screenName Screen connector name
+     * @param screenId Screen identifier
      */
-    void seedAutotileOrderForScreen(const QString& screenName);
+    void seedAutotileOrderForScreen(const QString& screenId);
 
     /**
      * @brief Handle autotile feature being disabled (clear assignments, restore manual mode)
@@ -221,11 +223,13 @@ private:
      */
     void restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows = {}, int desktop = -1,
                                        const QString& activity = QString());
+    QVector<RotationEntry> buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
+                                                       const QString& activity);
 
     /** @brief Show layout OSD deferred (avoids blocking on first-time QML compilation) */
-    void showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenName);
+    void showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenId);
     /** @brief Show algorithm OSD deferred (avoids blocking on first-time QML compilation) */
-    void showAlgorithmOsdDeferred(const QString& algorithmId, const QString& algorithmName, const QString& screenName);
+    void showAlgorithmOsdDeferred(const QString& algorithmId, const QString& algorithmName, const QString& screenId);
 
     /**
      * @brief Show OSD for the current desktop's layout/algorithm on desktop or activity switch
@@ -294,6 +298,9 @@ private:
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
 
+    // Scripted algorithm loader (file watcher for user-defined JS algorithms)
+    std::unique_ptr<ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;
+
     // Window engines
     std::unique_ptr<AutotileEngine> m_autotileEngine;
     std::unique_ptr<SnapEngine> m_snapEngine;
@@ -303,8 +310,8 @@ private:
     // Desktop/activity resolution helpers (DRY — used by multiple handlers)
     int currentDesktop() const;
     QString currentActivity() const;
-    bool isCurrentContextLocked(const QString& screenName) const;
-    bool isCurrentContextLockedForMode(const QString& screenName, int mode) const;
+    bool isCurrentContextLocked(const QString& screenId) const;
+    bool isCurrentContextLockedForMode(const QString& screenId, int mode) const;
 
     /** @brief Prune m_lastAutotileOrders for stale desktops */
     void pruneContextMapsForDesktop(int maxDesktop);
@@ -320,6 +327,10 @@ private:
     // Keyed by DesktopContextKey (not plain screen name) so cross-desktop toggles
     // don't overwrite each other's ordering.
     QHash<DesktopContextKey, QStringList> m_lastAutotileOrders;
+
+    // Snap-float restore entries collected during windowsReleasedFromTiling.
+    // Consumed by the toggle handler to batch geometry restores into the resnap signal.
+    QVector<RotationEntry> m_pendingSnapFloatRestores;
 
     // State tracking for settingsChanged delta detection (replaces individual signal handlers)
     // Initialized from m_settings in init() before settingsChanged is connected.

@@ -1,0 +1,29 @@
+{
+    "id": "{a7bc8d9e-d2af-4e4b-ac6f-92ad3e5a7b9c}",
+    "name": "Super-Ultrawide Triple",
+    "description": "Three virtual sections with master center for 32:9 monitors",
+    "type": 5,
+    "isBuiltIn": true,
+    "showZoneNumbers": true,
+    "aspectRatioClass": "super-ultrawide",
+    "zones": [
+        {
+            "id": "{a7b8c9d0-1111-4444-aaaa-aaaaaaaaaaaa}",
+            "name": "Left",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.25, "height": 1.0 }
+        },
+        {
+            "id": "{a7b8c9d0-2222-4444-aaaa-bbbbbbbbbbbb}",
+            "name": "Center",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.25, "y": 0, "width": 0.5, "height": 1.0 }
+        },
+        {
+            "id": "{a7b8c9d0-3333-4444-aaaa-cccccccccccc}",
+            "name": "Right",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.75, "y": 0, "width": 0.25, "height": 1.0 }
+        }
+    ]
+}

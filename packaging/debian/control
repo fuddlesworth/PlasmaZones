@@ -1,4 +1,4 @@
-# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6). Built on KDE Neon.
+# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, KWin 6.6). Built on KDE Neon.
 Source: plasmazones
 Section: kde
 Priority: optional
@@ -8,26 +8,22 @@ Build-Depends:
  cmake (>= 3.16),
  ninja-build,
  extra-cmake-modules (>= 6.6.0),
- gettext,
  pkg-kde-tools,
  qt6-base-dev (>= 6.6.0),
  qt6-base-private-dev,
  qt6-declarative-dev,
  qt6-tools-dev,
  qt6-shadertools-dev,
- libkf6config-dev (>= 6.6.0),
- libkf6configwidgets-dev (>= 6.6.0),
- libkf6coreaddons-dev (>= 6.6.0),
- libkf6dbusaddons-dev (>= 6.6.0),
- libkf6i18n-dev (>= 6.6.0),
+ qt6-svg-dev,
  libkf6kcmutils-dev (>= 6.6.0),
- libkf6windowsystem-dev (>= 6.6.0),
  libkf6globalaccel-dev (>= 6.6.0),
- libkf6notifications-dev (>= 6.6.0),
- kf6-kcolorscheme-dev (>= 6.6.0),
+ libkf6kirigami-dev (>= 6.6.0) | kf6-kirigami-dev (>= 6.6.0),
  kwin-dev (>= 6.6.0),
  libxkbcommon-dev,
- liblayershellqtinterface-dev (>= 6.4.0),
+ libwayland-dev,
+ libvulkan-dev,
+ qt6-wayland-dev (>= 6.6.0),
+ qt6-wayland-private-dev (>= 6.6.0),
  plasma-activities-dev,
 Standards-Version: 4.6.2
 Homepage: https://github.com/fuddlesworth/PlasmaZones
@@ -41,7 +37,7 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  kwin-common (>= 4:6.6.0),
- layer-shell-qt (>= 6.4.0),
+ qt6-wayland (>= 6.6.0),
  libqt6shadertools6 (>= 6.6.0),
 Recommends:
  systemd,

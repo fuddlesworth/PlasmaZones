@@ -5,6 +5,7 @@
 #include "constants.h"
 #include "interfaces.h"
 #include "layout.h"
+#include "pz_i18n.h"
 #include "utils.h"
 #include "zone.h"
 #include "../autotile/AlgorithmRegistry.h"
@@ -131,11 +132,19 @@ QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields)
     map[Id] = layout->id().toString();
     map[Name] = layout->name();
     map[Description] = layout->description();
-    map[Type] = static_cast<int>(layout->type());
     map[ZoneCount] = layout->zoneCount();
     map[Zones] = zonesToVariantList(layout, zoneFields);
     map[Category] = static_cast<int>(LayoutCategory::Manual);
     map[AutoAssign] = layout->autoAssign();
+
+    // Include reference aspect ratio for fixed-geometry layouts so previews
+    // render at the correct proportions even when aspectRatioClass is "any"
+    if (layout->hasFixedGeometryZones()) {
+        QRectF refGeo = layout->lastRecalcGeometry();
+        if (refGeo.height() > 0) {
+            map[QLatin1String("referenceAspectRatio")] = refGeo.width() / refGeo.height();
+        }
+    }
 
     return map;
 }
@@ -143,6 +152,37 @@ QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields)
 // ═══════════════════════════════════════════════════════════════════════════
 // Unified layout list building
 // ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Map aspect ratio class to section label and order for manual layouts
+ */
+static void setAspectRatioSection(UnifiedLayoutEntry& entry)
+{
+    const auto cls = static_cast<AspectRatioClass>(entry.aspectRatioClass);
+    entry.sectionKey = ScreenClassification::toString(cls);
+    switch (cls) {
+    case AspectRatioClass::Any:
+        entry.sectionLabel = PzI18n::tr("All Monitors");
+        entry.sectionOrder = 0;
+        break;
+    case AspectRatioClass::Standard:
+        entry.sectionLabel = PzI18n::tr("Standard (16:9)");
+        entry.sectionOrder = 1;
+        break;
+    case AspectRatioClass::Ultrawide:
+        entry.sectionLabel = PzI18n::tr("Ultrawide (21:9)");
+        entry.sectionOrder = 2;
+        break;
+    case AspectRatioClass::SuperUltrawide:
+        entry.sectionLabel = PzI18n::tr("Super-Ultrawide (32:9)");
+        entry.sectionOrder = 3;
+        break;
+    case AspectRatioClass::Portrait:
+        entry.sectionLabel = PzI18n::tr("Portrait (9:16)");
+        entry.sectionOrder = 4;
+        break;
+    }
+}
 
 static UnifiedLayoutEntry entryFromLayout(Layout* layout)
 {
@@ -153,6 +193,13 @@ static UnifiedLayoutEntry entryFromLayout(Layout* layout)
     entry.zoneCount = layout->zoneCount();
     entry.zones = zonesToVariantList(layout, ZoneField::Minimal);
     entry.autoAssign = layout->autoAssign();
+    entry.aspectRatioClass = static_cast<int>(layout->aspectRatioClass());
+    if (layout->hasFixedGeometryZones()) {
+        QRectF refGeo = layout->lastRecalcGeometry();
+        if (refGeo.height() > 0)
+            entry.referenceAspectRatio = refGeo.width() / refGeo.height();
+    }
+    setAspectRatioSection(entry);
     return entry;
 }
 
@@ -176,14 +223,26 @@ static void appendAutotileEntries(QVector<UnifiedLayoutEntry>& list)
         entry.previewZones = AlgorithmRegistry::generatePreviewZones(algo);
         entry.zones = entry.previewZones;
         entry.zoneCount = AlgorithmRegistry::effectiveMaxWindows(algo);
+        entry.zoneNumberDisplay = algo->zoneNumberDisplay();
+        entry.memory = algo->supportsMemory();
+        entry.supportsMasterCount = algo->supportsMasterCount();
+        entry.supportsSplitRatio = algo->supportsSplitRatio();
+        entry.producesOverlappingZones = algo->producesOverlappingZones();
+        entry.isScripted = algo->isScripted();
+        entry.isUserScript = algo->isUserScript();
+
         list.append(entry);
     }
 }
 
 static void sortUnifiedEntries(QVector<UnifiedLayoutEntry>& list)
 {
-    // Sort: manual layouts first (alphabetical), then autotile entries (alphabetical)
+    // Sort: recommended before non-recommended, manual before autotile, then alphabetical
     std::sort(list.begin(), list.end(), [](const UnifiedLayoutEntry& a, const UnifiedLayoutEntry& b) {
+        // Recommended layouts come first
+        if (a.recommended != b.recommended) {
+            return a.recommended; // recommended (true) before non-recommended (false)
+        }
         if (a.isAutotile != b.isAutotile) {
             return !a.isAutotile; // manual (false) before autotile (true)
         }
@@ -214,9 +273,10 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
     return list;
 }
 
-QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenName,
+QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenId,
                                                    int virtualDesktop, const QString& activity, bool includeManual,
-                                                   bool includeAutotile)
+                                                   bool includeAutotile, qreal screenAspectRatio,
+                                                   bool filterByAspectRatio)
 {
     QVector<UnifiedLayoutEntry> list;
 
@@ -225,9 +285,9 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
     }
 
     // Translate connector name to screen ID for allowedScreens matching
-    QString screenId;
-    if (!screenName.isEmpty()) {
-        screenId = Utils::isConnectorName(screenName) ? Utils::screenIdForName(screenName) : screenName;
+    QString resolvedScreenId;
+    if (!screenId.isEmpty()) {
+        resolvedScreenId = Utils::isConnectorName(screenId) ? Utils::screenIdForName(screenId) : screenId;
     }
 
     // Track the active layout so we can guarantee it appears in the list
@@ -249,8 +309,8 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
             }
 
             // Tier 2: screen filter (unless active)
-            if (!isActive && !screenId.isEmpty() && !layout->allowedScreens().isEmpty()) {
-                if (!layout->allowedScreens().contains(screenId)) {
+            if (!isActive && !resolvedScreenId.isEmpty() && !layout->allowedScreens().isEmpty()) {
+                if (!layout->allowedScreens().contains(resolvedScreenId)) {
                     continue;
                 }
             }
@@ -269,7 +329,20 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
                 }
             }
 
-            list.append(entryFromLayout(layout));
+            auto entry = entryFromLayout(layout);
+
+            // Tag whether layout is recommended for this screen's aspect ratio
+            if (screenAspectRatio > 0.0) {
+                entry.recommended = layout->matchesAspectRatio(screenAspectRatio);
+            }
+
+            // When filterByAspectRatio is on, skip non-recommended layouts
+            // (unless this is the active layout, which always passes)
+            if (filterByAspectRatio && screenAspectRatio > 0.0 && !entry.recommended && !isActive) {
+                continue;
+            }
+
+            list.append(entry);
         }
     }
 
@@ -290,13 +363,35 @@ QVariantMap toVariantMap(const UnifiedLayoutEntry& entry)
     map[Id] = entry.id;
     map[Name] = entry.name;
     map[Description] = entry.description;
-    map[Type] = 0;
     map[ZoneCount] = entry.zoneCount;
     map[Zones] = entry.zones;
     map[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
     map[AutoAssign] = entry.autoAssign;
     map[QLatin1String("isAutotile")] = entry.isAutotile;
-    map[IsSystem] = false;
+    map[IsSystem] = entry.isSystemEntry();
+    map[AspectRatioClassKey] = ScreenClassification::toString(static_cast<AspectRatioClass>(entry.aspectRatioClass));
+    map[QLatin1String("recommended")] = entry.recommended;
+    if (!entry.zoneNumberDisplay.isEmpty()) {
+        map[QLatin1String("zoneNumberDisplay")] = entry.zoneNumberDisplay;
+    }
+    if (entry.memory) {
+        map[QLatin1String("memory")] = true;
+    }
+    if (entry.isAutotile) {
+        map[QLatin1String("supportsMasterCount")] = entry.supportsMasterCount;
+        map[QLatin1String("supportsSplitRatio")] = entry.supportsSplitRatio;
+        map[QLatin1String("producesOverlappingZones")] = entry.producesOverlappingZones;
+    }
+    if (entry.referenceAspectRatio > 0.0) {
+        map[QLatin1String("referenceAspectRatio")] = entry.referenceAspectRatio;
+    }
+
+    // Generic section grouping
+    if (!entry.sectionKey.isEmpty()) {
+        map[QLatin1String("sectionKey")] = entry.sectionKey;
+        map[QLatin1String("sectionLabel")] = entry.sectionLabel;
+        map[QLatin1String("sectionOrder")] = entry.sectionOrder;
+    }
 
     return map;
 }
@@ -322,13 +417,35 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
     json[Name] = entry.name;
     json[Description] = entry.description;
     json[ZoneCount] = entry.zoneCount;
-    json[IsSystem] = false;
-    json[Type] = 0;
+    json[IsSystem] = entry.isSystemEntry();
     json[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
     json[QLatin1String("isAutotile")] = entry.isAutotile;
+    if (entry.aspectRatioClass != 0) {
+        json[AspectRatioClassKey] =
+            ScreenClassification::toString(static_cast<AspectRatioClass>(entry.aspectRatioClass));
+    }
     if (entry.autoAssign) {
         json[AutoAssign] = true;
     }
+    // Generic section grouping
+    if (!entry.sectionKey.isEmpty()) {
+        json[QLatin1String("sectionKey")] = entry.sectionKey;
+        json[QLatin1String("sectionLabel")] = entry.sectionLabel;
+        json[QLatin1String("sectionOrder")] = entry.sectionOrder;
+    }
+
+    if (!entry.zoneNumberDisplay.isEmpty()) {
+        json[QLatin1String("zoneNumberDisplay")] = entry.zoneNumberDisplay;
+    }
+    if (entry.memory) {
+        json[QLatin1String("memory")] = true;
+    }
+    if (entry.isAutotile) {
+        json[QLatin1String("supportsMasterCount")] = entry.supportsMasterCount;
+        json[QLatin1String("supportsSplitRatio")] = entry.supportsSplitRatio;
+        json[QLatin1String("producesOverlappingZones")] = entry.producesOverlappingZones;
+    }
+
     // hiddenFromSelector is added by callers that have access to the Layout*
 
     // Convert zones to JSON array

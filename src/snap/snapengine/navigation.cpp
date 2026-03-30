@@ -14,96 +14,63 @@
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// IWindowEngine navigation methods
+// IWindowEngine navigation stubs
+//
+// These methods are part of the IWindowEngine interface (shared with AutotileEngine)
+// but are no longer called for snap-mode screens. The Daemon routes snap-mode
+// navigation through the WTA's daemon-driven methods instead. These stubs exist
+// only to satisfy the pure virtual interface.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void SnapEngine::moveInDirection(const QString& direction)
 {
+    // Snap navigation is daemon-driven (WTA computes geometry, emits applyGeometryRequested).
+    // This stub only validates the direction for tests that check navigationFeedback emission.
     if (direction.isEmpty()) {
-        qCWarning(lcCore) << "SnapEngine::moveInDirection: empty direction";
         Q_EMIT navigationFeedback(false, QStringLiteral("move"), QStringLiteral("invalid_direction"), QString(),
-                                  QString(), m_lastActiveScreenName);
+                                  QString(), m_lastActiveScreenId);
         return;
     }
-
-    Q_EMIT moveWindowToZoneRequested(QStringLiteral("navigate:") + direction, QString());
+    qCWarning(lcCore) << "SnapEngine::moveInDirection called but snap navigation is daemon-driven; use WTA";
 }
 
 void SnapEngine::pushToEmptyZone(const QString& screenId)
 {
-    qCInfo(lcCore) << "SnapEngine::pushToEmptyZone on screen=" << screenId;
-    Q_EMIT moveWindowToZoneRequested(QStringLiteral("push"), screenId);
+    Q_UNUSED(screenId)
+    qCWarning(lcCore) << "SnapEngine::pushToEmptyZone called but snap navigation is daemon-driven; use WTA";
 }
 
 void SnapEngine::focusInDirection(const QString& direction, const QString& action)
 {
+    Q_UNUSED(direction)
     Q_UNUSED(action)
-
-    if (direction.isEmpty()) {
-        qCWarning(lcCore) << "SnapEngine::focusInDirection: empty direction";
-        Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("invalid_direction"), QString(),
-                                  QString(), m_lastActiveScreenName);
-        return;
-    }
-
-    Q_EMIT focusWindowInZoneRequested(QStringLiteral("navigate:") + direction, QString());
+    qCWarning(lcCore) << "SnapEngine::focusInDirection called but snap navigation is daemon-driven; use WTA";
 }
 
 void SnapEngine::swapInDirection(const QString& direction, const QString& action)
 {
+    Q_UNUSED(direction)
     Q_UNUSED(action)
-
-    if (direction.isEmpty()) {
-        qCWarning(lcCore) << "SnapEngine::swapInDirection: empty direction";
-        Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("invalid_direction"), QString(),
-                                  QString(), m_lastActiveScreenName);
-        return;
-    }
-
-    Q_EMIT swapWindowsRequested(QStringLiteral("swap:") + direction, QString(), QString());
+    qCWarning(lcCore) << "SnapEngine::swapInDirection called but snap navigation is daemon-driven; use WTA";
 }
 
 void SnapEngine::rotateWindows(bool clockwise, const QString& screenId)
 {
-    QVector<RotationEntry> rotationEntries = m_windowTracker->calculateRotation(clockwise, screenId);
-
-    if (rotationEntries.isEmpty()) {
-        Layout* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdForName(screenId));
-        if (!layout) {
-            Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_active_layout"), QString(),
-                                      QString(), screenId);
-        } else if (layout->zoneCount() < 2) {
-            Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("single_zone"), QString(),
-                                      QString(), screenId);
-        } else {
-            Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_snapped_windows"), QString(),
-                                      QString(), screenId);
-        }
-        return;
-    }
-
-    QString rotationData = GeometryUtils::serializeRotationEntries(rotationEntries);
-    qCInfo(lcCore) << "Rotating" << rotationEntries.size() << "windows"
-                   << (clockwise ? "clockwise" : "counterclockwise");
-    Q_EMIT rotateWindowsRequested(clockwise, rotationData);
+    Q_UNUSED(clockwise)
+    Q_UNUSED(screenId)
+    qCWarning(lcCore) << "SnapEngine::rotateWindows called but snap navigation is daemon-driven; use WTA";
 }
 
 void SnapEngine::moveToPosition(const QString& windowId, int position, const QString& screenId)
 {
     Q_UNUSED(windowId)
-
-    if (position < 1 || position > 9) {
-        qCWarning(lcCore) << "SnapEngine::moveToPosition: invalid zone number=" << position;
-        Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("invalid_zone_number"), QString(),
-                                  QString(), screenId);
-        return;
-    }
-
-    Q_EMIT moveWindowToZoneRequested(QStringLiteral("snap:") + QString::number(position), screenId);
+    Q_UNUSED(position)
+    Q_UNUSED(screenId)
+    qCWarning(lcCore) << "SnapEngine::moveToPosition called but snap navigation is daemon-driven; use WTA";
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Snap-specific navigation methods
+// Snap-specific methods (still active)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void SnapEngine::resnapToNewLayout()
@@ -116,12 +83,12 @@ void SnapEngine::resnapToNewLayout()
         if (!layout) {
             qCWarning(lcCore) << "resnapToNewLayout: no active layout";
             Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_active_layout"), QString(),
-                                      QString(), m_lastActiveScreenName);
+                                      QString(), m_lastActiveScreenId);
         } else {
             qCWarning(lcCore) << "resnapToNewLayout: buffer empty, activeLayout=" << layout->name()
                               << "zones=" << layout->zoneCount();
             Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"),
-                                      QString(), QString(), m_lastActiveScreenName);
+                                      QString(), QString(), m_lastActiveScreenId);
         }
         return;
     }
@@ -138,7 +105,7 @@ void SnapEngine::resnapCurrentAssignments(const QString& screenFilter)
     if (entries.isEmpty()) {
         qCDebug(lcCore) << "No windows to resnap from current assignments";
         Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"), QString(),
-                                  QString(), screenFilter.isEmpty() ? m_lastActiveScreenName : screenFilter);
+                                  QString(), screenFilter.isEmpty() ? m_lastActiveScreenId : screenFilter);
         return;
     }
 
@@ -200,9 +167,8 @@ void SnapEngine::snapAllWindows(const QString& screenId)
 
 void SnapEngine::cycleWindowsInZone(bool forward)
 {
-    qCDebug(lcCore) << "cycleWindowsInZone called, forward=" << forward;
-    QString directive = forward ? QStringLiteral("cycle:forward") : QStringLiteral("cycle:backward");
-    Q_EMIT cycleWindowsInZoneRequested(directive, QString());
+    Q_UNUSED(forward)
+    qCWarning(lcCore) << "SnapEngine::cycleWindowsInZone called but snap navigation is daemon-driven; use WTA";
 }
 
 } // namespace PlasmaZones

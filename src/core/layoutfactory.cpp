@@ -45,7 +45,7 @@ void LayoutFactory::ensureDefaults()
     };
 
     c[QStringLiteral("custom")] = [](LayoutManager* manager) {
-        return new Layout(QString(), LayoutType::Custom, manager);
+        return new Layout(QString(), manager);
     };
 }
 
@@ -60,7 +60,7 @@ Layout* LayoutFactory::create(const QString& type, LayoutManager* manager)
     }
 
     // Unknown type - create empty custom layout
-    return new Layout(QString(), LayoutType::Custom, manager);
+    return new Layout(QString(), manager);
 }
 
 void LayoutFactory::registerType(const QString& type, CreatorFunc creator)

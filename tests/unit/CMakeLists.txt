@@ -3,12 +3,6 @@
 #
 # PlasmaZones Unit Tests
 
-# KConfigXT generated sources (needed by tests that use ConfigDefaults/PlasmaZonesConfig)
-kconfig_add_kcfg_files(test_kcfg_SRCS
-    ${CMAKE_SOURCE_DIR}/src/config/plasmazones.kcfgc
-    GENERATE_MOC
-)
-
 # Helper macro for simple tests (Qt6::Test + Qt6::Core + plasmazones_core)
 macro(pz_add_test _name _src)
     add_executable(${_name} ${_src})
@@ -63,21 +57,44 @@ add_test(NAME test_snap_engine COMMAND test_snap_engine)
 # autotile/ — Tiling Algorithm Tests (split by algorithm family)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_tiling_algo_masterstack autotile/test_tiling_algo_masterstack.cpp)
+target_compile_definitions(test_tiling_algo_masterstack PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_tiling_algo_spiral_monocle autotile/test_tiling_algo_spiral_monocle.cpp)
+target_compile_definitions(test_tiling_algo_spiral_monocle PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_tiling_algo_grid_threecolumn autotile/test_tiling_algo_grid_threecolumn.cpp)
+target_compile_definitions(test_tiling_algo_grid_threecolumn PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_tiling_algo_wide_centered autotile/test_tiling_algo_wide_centered.cpp)
+target_compile_definitions(test_tiling_algo_wide_centered PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_tiling_algo_cascade_stair_spread autotile/test_tiling_algo_cascade_stair_spread.cpp)
+target_compile_definitions(test_tiling_algo_cascade_stair_spread PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_tiling_algo_lshape autotile/test_tiling_algo_lshape.cpp)
+target_compile_definitions(test_tiling_algo_lshape PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_tiling_algo_deck_zen autotile/test_tiling_algo_deck_zen.cpp)
+target_compile_definitions(test_tiling_algo_deck_zen PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_tiling_algo_edge_cases autotile/test_tiling_algo_edge_cases.cpp)
+target_compile_definitions(test_tiling_algo_edge_cases PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_tiling_algo_bsp autotile/test_tiling_algo_bsp.cpp)
+target_compile_definitions(test_tiling_algo_bsp PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Algorithm Registry Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_algorithm_registry autotile/test_algorithm_registry.cpp)
+target_compile_definitions(test_algorithm_registry PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_algorithm_registry_custom autotile/test_algorithm_registry_custom.cpp)
+target_compile_definitions(test_algorithm_registry_custom PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_scripted_algorithm autotile/test_scripted_algorithm.cpp)
+target_compile_definitions(test_scripted_algorithm PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_split_tree autotile/test_split_tree.cpp)
+target_compile_definitions(test_split_tree PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_scripted_algorithm_loader autotile/test_scripted_algorithm_loader.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Autotile Engine Tests (core, master, minsize, overflow)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_autotile_engine_core autotile/test_autotile_engine_core.cpp)
+target_compile_definitions(test_autotile_engine_core PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_autotile_engine_master autotile/test_autotile_engine_master.cpp)
+target_compile_definitions(test_autotile_engine_master PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_autotile_engine_minsize autotile/test_autotile_engine_minsize.cpp)
 pz_add_test(test_autotile_engine_overflow autotile/test_autotile_engine_overflow.cpp)
 
@@ -86,6 +103,7 @@ pz_add_test(test_autotile_engine_overflow autotile/test_autotile_engine_overflow
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_autotile_ext_startup_float autotile/test_autotile_ext_startup_float.cpp)
 pz_add_test(test_autotile_ext_algoswitch autotile/test_autotile_ext_algoswitch.cpp)
+target_compile_definitions(test_autotile_ext_algoswitch PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_autotile_ext_overflow autotile/test_autotile_ext_overflow.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -109,25 +127,25 @@ pz_add_test(test_geometry_utils_bsp core/test_geometry_utils_bsp.cpp)
 pz_add_test(test_geometry_utils_serialization core/test_geometry_utils_serialization.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# config/ — Settings Tests (core, validation, per-screen) — need kcfg + KF6::ConfigCore
+# config/ — Settings Tests (core, validation, per-screen)
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_settings_core config/test_settings_core.cpp ${test_kcfg_SRCS})
-target_link_libraries(test_settings_core PRIVATE Qt6::Test Qt6::Core KF6::ConfigCore plasmazones_core)
+add_executable(test_settings_core config/test_settings_core.cpp)
+target_link_libraries(test_settings_core PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_settings_core COMMAND test_settings_core)
 
-add_executable(test_settings_validation config/test_settings_validation.cpp ${test_kcfg_SRCS})
-target_link_libraries(test_settings_validation PRIVATE Qt6::Test Qt6::Core KF6::ConfigCore plasmazones_core)
+add_executable(test_settings_validation config/test_settings_validation.cpp)
+target_link_libraries(test_settings_validation PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_settings_validation COMMAND test_settings_validation)
 
-add_executable(test_settings_perscreen config/test_settings_perscreen.cpp ${test_kcfg_SRCS})
-target_link_libraries(test_settings_perscreen PRIVATE Qt6::Test Qt6::Core KF6::ConfigCore plasmazones_core)
+add_executable(test_settings_perscreen config/test_settings_perscreen.cpp)
+target_link_libraries(test_settings_perscreen PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_settings_perscreen COMMAND test_settings_perscreen)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# config/ — ConfigDefaults Tests — need kcfg + KF6::ConfigCore
+# config/ — ConfigDefaults Tests (standalone, no external dependency)
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_configdefaults config/test_configdefaults.cpp ${test_kcfg_SRCS})
-target_link_libraries(test_configdefaults PRIVATE Qt6::Test Qt6::Core KF6::ConfigCore plasmazones_core)
+add_executable(test_configdefaults config/test_configdefaults.cpp)
+target_link_libraries(test_configdefaults PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_configdefaults COMMAND test_configdefaults)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -144,9 +162,22 @@ pz_add_test(test_layoutmanager_cycling core/test_layoutmanager_cycling.cpp)
 pz_add_test(test_layoutmanager_assignment core/test_layoutmanager_assignment.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# core/ — LayerSurface + computeLayerSize Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_layersurface core/test_layersurface.cpp)
+target_link_libraries(test_layersurface PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::WaylandClientPrivate Wayland::Client plasmazones_core)
+# QPA integration header includes generated protocol headers and the export header
+target_include_directories(test_layersurface PRIVATE
+    ${CMAKE_BINARY_DIR}/src            # plasmazones_export.h
+    ${CMAKE_BINARY_DIR}/src/generated-protocols  # wlr-layer-shell protocol header
+)
+add_test(NAME test_layersurface COMMAND test_layersurface)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # core/ — Zone Detection Tests (layout, service)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_zone_detection_layout core/test_zone_detection_layout.cpp)
+pz_add_test(test_zone_detector_overlap core/test_zone_detector_overlap.cpp)
 
 add_executable(test_zone_detection_service core/test_zone_detection_service.cpp)
 target_link_libraries(test_zone_detection_service PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
@@ -156,6 +187,7 @@ add_test(NAME test_zone_detection_service COMMAND test_zone_detection_service)
 # autotile/ — Per-Screen Config Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_per_screen_config autotile/test_per_screen_config.cpp)
+target_compile_definitions(test_per_screen_config PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Navigation Controller Tests
@@ -166,6 +198,7 @@ pz_add_test(test_navigation_controller autotile/test_navigation_controller.cpp)
 # autotile/ — Settings Bridge Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_settings_bridge autotile/test_settings_bridge.cpp)
+target_compile_definitions(test_settings_bridge PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ui/ — Zone Shader Item Tests — need Qt6::Quick + plasmazones_rendering
@@ -175,11 +208,26 @@ target_link_libraries(test_zone_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Qui
 add_test(NAME test_zone_shader_item COMMAND test_zone_shader_item)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ui/ — Overlay Helpers Tests — need Qt6::Quick + LayerShellQt + QGuiApplication
+# ui/ — Overlay Helpers Tests — need Qt6::Quick + QGuiApplication
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_overlay_helpers ui/test_overlay_helpers.cpp)
-target_link_libraries(test_overlay_helpers PRIVATE Qt6::Test Qt6::Core Qt6::Quick LayerShellQt::Interface plasmazones_core)
+target_link_libraries(test_overlay_helpers PRIVATE Qt6::Test Qt6::Core Qt6::Quick plasmazones_core)
 add_test(NAME test_overlay_helpers COMMAND test_overlay_helpers)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# dbus/ — D-Bus API Tests (convenience, schema, compositor bridge)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_wta_convenience dbus/test_wta_convenience.cpp)
+target_link_libraries(test_wta_convenience PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_convenience COMMAND test_wta_convenience)
+
+add_executable(test_settings_schema dbus/test_settings_schema.cpp)
+target_link_libraries(test_settings_schema PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_settings_schema COMMAND test_settings_schema)
+
+add_executable(test_compositor_bridge dbus/test_compositor_bridge.cpp)
+target_link_libraries(test_compositor_bridge PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_compositor_bridge COMMAND test_compositor_bridge)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment support
@@ -192,7 +240,11 @@ set(_all_tests
     test_wts_lifecycle test_wts_session test_wts_queries
     test_tiling_algo_masterstack test_tiling_algo_spiral_monocle
     test_tiling_algo_grid_threecolumn test_tiling_algo_wide_centered
+    test_tiling_algo_cascade_stair_spread
+    test_tiling_algo_lshape test_tiling_algo_deck_zen test_tiling_algo_edge_cases
+    test_tiling_algo_bsp
     test_algorithm_registry test_algorithm_registry_custom
+    test_scripted_algorithm test_split_tree test_scripted_algorithm_loader
     test_autotile_engine_core test_autotile_engine_master
     test_autotile_engine_minsize test_autotile_engine_overflow
     test_autotile_ext_startup_float test_autotile_ext_algoswitch
@@ -205,8 +257,10 @@ set(_all_tests
     test_configdefaults
     test_layout_core test_layout_zones
     test_layoutmanager_persistence test_layoutmanager_cycling test_layoutmanager_assignment
-    test_zone_detection_layout test_zone_detection_service
+    test_layersurface
+    test_zone_detection_layout test_zone_detector_overlap test_zone_detection_service
     test_per_screen_config test_navigation_controller test_settings_bridge
     test_zone_shader_item test_overlay_helpers
+    test_wta_convenience test_settings_schema test_compositor_bridge
 )
 set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

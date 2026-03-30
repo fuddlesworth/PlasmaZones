@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "layoutmanager.h"
+#include "../config/configbackend_qsettings.h"
 #include "constants.h"
 #include "logging.h"
 #include "utils.h"
@@ -17,6 +18,7 @@ namespace PlasmaZones {
 LayoutManager::LayoutManager(QObject* parent)
     : QObject(parent)
     , ILayoutManager()
+    , m_configBackend(QSettingsConfigBackend::createDefault())
 {
     // Default layout directory
     m_layoutDirectory =
@@ -160,11 +162,8 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenId, int direction)
     int newIndex = (currentIndex + direction + visible.size()) % visible.size();
     Layout* newLayout = visible.at(newIndex);
 
-    // Per-screen assignment + update global active layout.
-    // setActiveLayout MUST be called to update m_previousLayout and fire
-    // activeLayoutChanged (needed for resnap buffer population, stale assignment
-    // cleanup, OSD, etc.). Per-screen assignments are still respected by
-    // resolveLayoutForScreen() since they take priority over the global active.
+    // Per-screen assignment: write per-desktop assignment first so the
+    // layoutAssigned handler recalculates zone geometry for this screen.
     if (!resolvedScreenId.isEmpty()) {
         // Write per-desktop assignment with empty activity so it applies
         // regardless of which activity is active.  Activity-specific
@@ -175,7 +174,14 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenId, int direction)
         }
         assignLayout(resolvedScreenId, m_currentVirtualDesktop, QString(), newLayout);
     }
-    setActiveLayout(newLayout);
+    // Update the global active layout pointer (for overlay/zone detector
+    // queries) but suppress activeLayoutChanged to prevent resnap buffer
+    // population and zone recalculation on ALL screens. The per-screen
+    // assignment above already handles the target screen via layoutAssigned.
+    {
+        const QSignalBlocker blocker(this);
+        setActiveLayout(newLayout);
+    }
     return newLayout;
 }
 
@@ -349,7 +355,13 @@ void LayoutManager::applyQuickLayout(int number, const QString& screenId)
             clearAssignment(screenId, m_currentVirtualDesktop, m_currentActivity);
         }
         assignLayout(screenId, m_currentVirtualDesktop, QString(), layout);
-        setActiveLayout(layout);
+        // Update active layout pointer but suppress activeLayoutChanged to
+        // avoid resnap/recalculation on all screens. The per-screen assignment
+        // above handles the target screen via layoutAssigned.
+        {
+            const QSignalBlocker blocker(this);
+            setActiveLayout(layout);
+        }
     } else {
         // No layout assigned to this quick slot - try to use layout at index (number-1) as fallback
         qCInfo(lcLayout) << "No layout assigned to quick slot" << number << "- using layout index" << (number - 1);
@@ -361,7 +373,10 @@ void LayoutManager::applyQuickLayout(int number, const QString& screenId)
                     clearAssignment(screenId, m_currentVirtualDesktop, m_currentActivity);
                 }
                 assignLayout(screenId, m_currentVirtualDesktop, QString(), layout);
-                setActiveLayout(layout);
+                {
+                    const QSignalBlocker blocker(this);
+                    setActiveLayout(layout);
+                }
             }
         } else {
             qCWarning(lcLayout) << "No layout available for quick slot" << number << "(have" << m_layouts.size()

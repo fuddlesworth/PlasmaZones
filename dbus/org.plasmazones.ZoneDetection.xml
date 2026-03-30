@@ -1,0 +1,146 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <!-- Zone Detection Interface -->
+    <interface name="org.plasmazones.ZoneDetection">
+        <annotation name="org.gtk.GDBus.DocString" value="Zone detection at cursor coordinates, adjacency navigation, zone enumeration, and keyboard modifier state."/>
+
+        <method name="detectZoneAtPosition">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the zone UUID at the given screen coordinates, or empty string if none."/>
+            <arg name="x" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen X coordinate."/>
+            </arg>
+            <arg name="y" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen Y coordinate."/>
+            </arg>
+            <arg name="zoneId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID at position, or empty string."/>
+            </arg>
+        </method>
+
+        <method name="detectMultiZoneAtPosition">
+            <annotation name="org.gtk.GDBus.DocString" value="Return zone UUIDs at the given position (for multi-zone snap at overlapping boundaries)."/>
+            <arg name="x" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen X coordinate."/>
+            </arg>
+            <arg name="y" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen Y coordinate."/>
+            </arg>
+            <arg name="zoneIds" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUIDs at position."/>
+            </arg>
+        </method>
+
+        <method name="getZoneGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Return zone geometry as JSON ({x, y, width, height}) for the primary screen."/>
+            <arg name="zoneId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
+            </arg>
+            <arg name="geometry" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {x, y, width, height}."/>
+            </arg>
+        </method>
+
+        <method name="getZoneGeometryForScreen">
+            <annotation name="org.gtk.GDBus.DocString" value="Return zone geometry as JSON for a specific screen."/>
+            <arg name="zoneId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
+            </arg>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen ID (empty = primary screen)."/>
+            </arg>
+            <arg name="geometry" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {x, y, width, height}."/>
+            </arg>
+        </method>
+
+        <method name="getZonesForScreen">
+            <annotation name="org.gtk.GDBus.DocString" value="Return all zone UUIDs on the given screen."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen ID."/>
+            </arg>
+            <arg name="zoneIds" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUIDs on the screen."/>
+            </arg>
+        </method>
+
+        <method name="getAdjacentZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the adjacent zone in the given direction."/>
+            <arg name="currentZoneId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Starting zone UUID."/>
+            </arg>
+            <arg name="direction" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Direction: left, right, up, down."/>
+            </arg>
+            <arg name="zoneId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Adjacent zone UUID, or empty string."/>
+            </arg>
+        </method>
+
+        <method name="getFirstZoneInDirection">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the edge zone in the given direction. Used when a window is not yet snapped and the user presses a navigation key: returns the leftmost, rightmost, topmost, or bottommost zone."/>
+            <arg name="direction" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Direction: left, right, up, down."/>
+            </arg>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen ID (optional, empty = current screen)."/>
+            </arg>
+            <arg name="zoneId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Edge zone UUID, or empty string."/>
+            </arg>
+        </method>
+
+        <method name="getZoneByNumber">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the zone UUID for a given zone number (1-indexed)."/>
+            <arg name="zoneNumber" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone number (1-based)."/>
+            </arg>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen ID (optional, empty = current screen)."/>
+            </arg>
+            <arg name="zoneId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID, or empty string."/>
+            </arg>
+        </method>
+
+        <method name="getAllZoneGeometries">
+            <annotation name="org.gtk.GDBus.DocString" value="Return all zone geometries as a list of JSON strings, optionally for a specific screen."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen ID (optional, empty = all screens)."/>
+            </arg>
+            <arg name="geometries" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="List of zone geometry JSON strings."/>
+            </arg>
+        </method>
+
+        <method name="getKeyboardModifiers">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the current keyboard modifier state as a Qt::KeyboardModifiers bitmask. Values: 0x02000000=Shift, 0x04000000=Control, 0x08000000=Alt, 0x10000000=Meta."/>
+            <arg name="modifiers" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Modifier bitmask (0 if no modifiers pressed)."/>
+            </arg>
+        </method>
+
+        <method name="detectZoneWithModifiers">
+            <annotation name="org.gtk.GDBus.DocString" value="Detect zone at position and return modifier state in a single D-Bus call. Returns zoneId;modifiers (e.g. uuid-here;33554432 for Shift). Empty zone ID if no zone found; modifiers still appended after semicolon."/>
+            <arg name="x" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen X coordinate."/>
+            </arg>
+            <arg name="y" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen Y coordinate."/>
+            </arg>
+            <arg name="result" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="String: zoneId;modifiers."/>
+            </arg>
+        </method>
+
+        <signal name="zoneDetected">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a zone is detected at a position."/>
+            <arg name="zoneId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
+            </arg>
+            <arg name="geometry" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone geometry as JSON."/>
+            </arg>
+        </signal>
+    </interface>
+</node>

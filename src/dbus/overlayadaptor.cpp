@@ -38,8 +38,8 @@ OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, IZoneDetector* detector
     });
 
     connect(m_overlayService, &IOverlayService::snapAssistShown, this,
-            [this](const QString& screenName, const QString& emptyZonesJson, const QString& candidatesJson) {
-                Q_EMIT snapAssistShown(screenName, emptyZonesJson, candidatesJson);
+            [this](const QString& screenId, const QString& emptyZonesJson, const QString& candidatesJson) {
+                Q_EMIT snapAssistShown(screenId, emptyZonesJson, candidatesJson);
             });
 }
 
@@ -121,11 +121,11 @@ int OverlayAdaptor::getMinimumZoneDisplaySizePx()
     return m_settings ? m_settings->minimumZoneDisplaySizePx() : Defaults::MinimumZoneDisplaySizePx;
 }
 
-void OverlayAdaptor::showShaderPreview(int x, int y, int width, int height, const QString& screenName,
+void OverlayAdaptor::showShaderPreview(int x, int y, int width, int height, const QString& screenId,
                                        const QString& shaderId, const QString& shaderParamsJson,
                                        const QString& zonesJson)
 {
-    m_overlayService->showShaderPreview(x, y, width, height, screenName, shaderId, shaderParamsJson, zonesJson);
+    m_overlayService->showShaderPreview(x, y, width, height, screenId, shaderId, shaderParamsJson, zonesJson);
 }
 
 void OverlayAdaptor::updateShaderPreview(int x, int y, int width, int height, const QString& shaderParamsJson,
@@ -139,7 +139,7 @@ void OverlayAdaptor::hideShaderPreview()
     m_overlayService->hideShaderPreview();
 }
 
-bool OverlayAdaptor::showSnapAssist(const QString& screenName, const QString& emptyZonesJson,
+bool OverlayAdaptor::showSnapAssist(const QString& screenId, const QString& emptyZonesJson,
                                     const QString& candidatesJson)
 {
     // Respect master toggle — don't show snap assist when the feature is disabled
@@ -154,8 +154,8 @@ bool OverlayAdaptor::showSnapAssist(const QString& screenName, const QString& em
     // Defer actual work so we return immediately — the KWin effect blocks on this D-Bus
     // call; returning quickly prevents compositor freeze during overlay creation.
     // Note: Return value means "request accepted for deferred processing", not "overlay shown".
-    QTimer::singleShot(0, m_overlayService, [this, screenName, emptyZonesJson, candidatesJson]() {
-        m_overlayService->showSnapAssist(screenName, emptyZonesJson, candidatesJson);
+    QTimer::singleShot(0, m_overlayService, [this, screenId, emptyZonesJson, candidatesJson]() {
+        m_overlayService->showSnapAssist(screenId, emptyZonesJson, candidatesJson);
     });
     return true;
 }

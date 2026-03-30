@@ -14,10 +14,23 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalBlocker>
-#include <KSharedConfig>
-#include <KConfigGroup>
+#include "config/configbackend_qsettings.h"
 
 namespace PlasmaZones {
+
+namespace {
+/// DRY helper: populate PreviewParams::savedAlgorithmSettings from AutotileConfig
+void populatePreviewSavedSettings(AlgorithmRegistry::PreviewParams& params,
+                                  const QHash<QString, AlgorithmSettings>& savedSettings)
+{
+    for (auto it = savedSettings.constBegin(); it != savedSettings.constEnd(); ++it) {
+        params.savedAlgorithmSettings[it.key()] = QVariantMap{
+            {PerAlgoKeys::MasterCount, it.value().masterCount},
+            {PerAlgoKeys::SplitRatio, it.value().splitRatio},
+        };
+    }
+}
+} // anonymous namespace
 
 SettingsBridge::SettingsBridge(AutotileEngine* engine)
     : m_engine(engine)
@@ -67,7 +80,6 @@ void SettingsBridge::syncFromSettings(Settings* settings)
     } while (0)
 
     SYNC_FIELD(masterCount, autotileMasterCount);
-    SYNC_FIELD(centeredMasterMasterCount, autotileCenteredMasterMasterCount);
     SYNC_FIELD(innerGap, autotileInnerGap);
     SYNC_FIELD(outerGap, autotileOuterGap);
     SYNC_FIELD(usePerSideOuterGap, autotileUsePerSideOuterGap);
@@ -88,11 +100,11 @@ void SettingsBridge::syncFromSettings(Settings* settings)
             configChanged = true;
         }
     }
-    // centeredMasterSplitRatio: same fuzzy comparison
+    // Sync per-algorithm settings map from Settings
     {
-        const qreal newRatio = settings->autotileCenteredMasterSplitRatio();
-        if (!qFuzzyCompare(1.0 + cfg->centeredMasterSplitRatio, 1.0 + newRatio)) {
-            cfg->centeredMasterSplitRatio = newRatio;
+        const auto newSaved = AutotileConfig::perAlgoFromVariantMap(settings->autotilePerAlgorithmSettings());
+        if (cfg->savedAlgorithmSettings != newSaved) {
+            cfg->savedAlgorithmSettings = newSaved;
             configChanged = true;
         }
     }
@@ -110,18 +122,20 @@ void SettingsBridge::syncFromSettings(Settings* settings)
 
     // Sync algorithm via setAlgorithm (handles validation + fallback + m_config sync)
     const QString oldAlgorithmId = m_engine->m_algorithmId;
-    m_engine->setAlgorithm(settings->autotileAlgorithm());
+    m_engine->setAlgorithm(settings->defaultAutotileAlgorithm());
     if (m_engine->m_algorithmId != oldAlgorithmId) {
         configChanged = true;
     }
 
-    // When the active algorithm is centered-master and setAlgorithm() early-returned
-    // (no algorithm change), the generic SYNC_FIELD above wrote cfg->splitRatio from
-    // the shared autotileSplitRatio (master-stack's value). Correct that by applying
-    // the centered-master-specific values, which were already synced above.
-    if (m_engine->m_algorithmId == QLatin1String("centered-master")) {
-        cfg->splitRatio = cfg->centeredMasterSplitRatio;
-        cfg->masterCount = cfg->centeredMasterMasterCount;
+    // When the active algorithm is in the saved map and setAlgorithm() early-returned
+    // (no algorithm change), restore the saved values for the active algorithm so
+    // the generic SYNC_FIELD splitRatio doesn't clobber the per-algorithm value.
+    if (m_engine->m_algorithmId == oldAlgorithmId) {
+        auto savedIt = cfg->savedAlgorithmSettings.constFind(m_engine->m_algorithmId);
+        if (savedIt != cfg->savedAlgorithmSettings.constEnd()) {
+            cfg->splitRatio = savedIt->splitRatio;
+            cfg->masterCount = savedIt->masterCount;
+        }
     }
 
     // Propagate split ratio and master count to screens WITHOUT per-screen overrides.
@@ -137,12 +151,15 @@ void SettingsBridge::syncFromSettings(Settings* settings)
     }
 
     // Update AlgorithmRegistry so preview generation uses the configured values.
-    // Use the settings getters for generic params (not cfg-> fields which may have
-    // been overwritten by the centered-master correction above). The centered-master
-    // fields in cfg are always the original values from their dedicated settings.
-    AlgorithmRegistry::setConfiguredPreviewParams({m_engine->m_algorithmId, cfg->maxWindows,
-                                                   settings->autotileMasterCount(), settings->autotileSplitRatio(),
-                                                   cfg->centeredMasterMasterCount, cfg->centeredMasterSplitRatio});
+    // Per-algorithm settings are stored in the savedAlgorithmSettings map so
+    // generatePreviewZones() can look up any algorithm's saved params generically.
+    AlgorithmRegistry::PreviewParams previewParams;
+    previewParams.algorithmId = m_engine->m_algorithmId;
+    previewParams.maxWindows = cfg->maxWindows;
+    previewParams.masterCount = cfg->masterCount;
+    previewParams.splitRatio = cfg->splitRatio;
+    populatePreviewSavedSettings(previewParams, cfg->savedAlgorithmSettings);
+    AlgorithmRegistry::setConfiguredPreviewParams(previewParams);
 
     if (configChanged && m_engine->isEnabled()) {
         // Cancel any pending debounced retile — we are doing a full resync
@@ -169,6 +186,7 @@ void SettingsBridge::connectToSettings(Settings* settings)
     // Disconnect from previous settings if any (handles the case where
     // syncFromSettings was called first, which sets m_settings)
     if (m_settings) {
+        // SettingsBridge owns all m_settings → m_engine connections; disconnect all of them.
         QObject::disconnect(m_settings, nullptr, m_engine, nullptr);
         qCDebug(lcAutotile) << "Disconnected from previous settings";
     }
@@ -208,10 +226,10 @@ void SettingsBridge::connectToSettings(Settings* settings)
     // as a feature gate — engine enabled state is driven by layout selection
     // (applyEntry) and mode toggle in the daemon.
 
-    QObject::connect(settings, &Settings::autotileAlgorithmChanged, m_engine, [this]() {
+    QObject::connect(settings, &Settings::defaultAutotileAlgorithmChanged, m_engine, [this]() {
         if (!m_settings)
             return;
-        m_engine->setAlgorithm(m_settings->autotileAlgorithm());
+        m_engine->setAlgorithm(m_settings->defaultAutotileAlgorithm());
     });
 
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -234,26 +252,28 @@ void SettingsBridge::connectToSettings(Settings* settings)
         scheduleSettingsRetile();
     });
 
-    QObject::connect(settings, &Settings::autotileCenteredMasterSplitRatioChanged, m_engine, [this]() {
+    QObject::connect(settings, &Settings::autotilePerAlgorithmSettingsChanged, m_engine, [this]() {
         if (!m_settings)
             return;
-        m_engine->config()->centeredMasterSplitRatio = m_settings->autotileCenteredMasterSplitRatio();
-        if (m_engine->m_algorithmId == QLatin1String("centered-master")) {
-            m_engine->config()->splitRatio = m_engine->config()->centeredMasterSplitRatio;
+        auto newSaved = AutotileConfig::perAlgoFromVariantMap(m_settings->autotilePerAlgorithmSettings());
+        m_engine->config()->savedAlgorithmSettings = newSaved;
+        // If the active algorithm's settings changed, apply them and retile
+        auto it = newSaved.constFind(m_engine->m_algorithmId);
+        if (it != newSaved.constEnd()) {
+            m_engine->config()->splitRatio = it->splitRatio;
+            m_engine->config()->masterCount = it->masterCount;
             m_engine->propagateGlobalSplitRatio();
-            scheduleSettingsRetile();
-        }
-    });
-
-    QObject::connect(settings, &Settings::autotileCenteredMasterMasterCountChanged, m_engine, [this]() {
-        if (!m_settings)
-            return;
-        m_engine->config()->centeredMasterMasterCount = m_settings->autotileCenteredMasterMasterCount();
-        if (m_engine->m_algorithmId == QLatin1String("centered-master")) {
-            m_engine->config()->masterCount = m_engine->config()->centeredMasterMasterCount;
             m_engine->propagateGlobalMasterCount();
             scheduleSettingsRetile();
         }
+        // Update AlgorithmRegistry preview params so previews reflect the new values
+        AlgorithmRegistry::PreviewParams previewParams;
+        previewParams.algorithmId = m_engine->m_algorithmId;
+        previewParams.maxWindows = m_engine->config()->maxWindows;
+        previewParams.masterCount = m_engine->config()->masterCount;
+        previewParams.splitRatio = m_engine->config()->splitRatio;
+        populatePreviewSavedSettings(previewParams, newSaved);
+        AlgorithmRegistry::setConfiguredPreviewParams(previewParams);
     });
 
     CONNECT_SETTING_RETILE(autotileInnerGapChanged, innerGap, autotileInnerGap);
@@ -311,12 +331,12 @@ void SettingsBridge::syncAlgorithmToSettings(const QString& algoId, qreal splitR
     if (maxWindows != oldMaxWindows) {
         m_settings->setAutotileMaxWindows(maxWindows);
     }
-    m_settings->setAutotileAlgorithm(algoId);
+    m_settings->setDefaultAutotileAlgorithm(algoId);
     m_settings->setAutotileSplitRatio(splitRatio);
     m_settings->setAutotileMasterCount(m_engine->config()->masterCount);
-    // Persist centered-master per-algorithm values so they survive save/reload
-    m_settings->setAutotileCenteredMasterSplitRatio(m_engine->config()->centeredMasterSplitRatio);
-    m_settings->setAutotileCenteredMasterMasterCount(m_engine->config()->centeredMasterMasterCount);
+    // Sync per-algorithm map so saved settings survive save/reload
+    m_settings->setAutotilePerAlgorithmSettings(
+        AutotileConfig::perAlgoToVariantMap(m_engine->config()->savedAlgorithmSettings));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -325,13 +345,13 @@ void SettingsBridge::syncAlgorithmToSettings(const QString& algoId, qreal splitR
 
 void SettingsBridge::saveState()
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup group = config->group(QStringLiteral("AutoTileState"));
+    auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+    auto group = backend->group(QStringLiteral("AutoTileState"));
 
     // Save global state (algorithm only — autotile screens are derived from
     // layout assignments at startup by updateAutotileScreens(), not persisted
     // here, to avoid stale data overriding the authoritative layout assignments)
-    group.writeEntry(QStringLiteral("algorithm"), m_engine->m_algorithmId);
+    group->writeString(QStringLiteral("algorithm"), m_engine->m_algorithmId);
 
     // Save per-screen state as JSON array, including desktop/activity key
     QJsonArray screensArray;
@@ -343,49 +363,42 @@ void SettingsBridge::saveState()
 
         const TilingStateKey& key = it.key();
         QJsonObject screenObj;
-        screenObj[QStringLiteral("screen")] = key.screenId;
-        screenObj[QStringLiteral("desktop")] = key.desktop;
-        screenObj[QStringLiteral("activity")] = key.activity;
-        screenObj[QStringLiteral("masterCount")] = state->masterCount();
-        screenObj[QStringLiteral("splitRatio")] = state->splitRatio();
-
-        // Note: Window order and floating state are NOT saved because window IDs
-        // (stableIds) may not match across sessions. Only per-screen parameters
-        // (masterCount, splitRatio) are persisted and restored by loadState().
+        screenObj[QLatin1String("screen")] = key.screenId;
+        screenObj[QLatin1String("desktop")] = key.desktop;
+        screenObj[QLatin1String("activity")] = key.activity;
+        screenObj[QLatin1String("masterCount")] = state->masterCount();
+        screenObj[QLatin1String("splitRatio")] = state->splitRatio();
 
         screensArray.append(screenObj);
     }
 
-    group.writeEntry("screenStates", QString::fromUtf8(QJsonDocument(screensArray).toJson(QJsonDocument::Compact)));
-    config->sync();
+    group->writeString(QStringLiteral("screenStates"),
+                       QString::fromUtf8(QJsonDocument(screensArray).toJson(QJsonDocument::Compact)));
+    group.reset(); // release group before sync
+    backend->sync();
 
     qCInfo(lcAutotile) << "Autotile state: saved," << m_engine->m_screenStates.size() << "states";
 }
 
 void SettingsBridge::loadState()
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup group = config->group(QStringLiteral("AutoTileState"));
+    auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+    auto group = backend->group(QStringLiteral("AutoTileState"));
 
-    if (!group.exists()) {
+    if (!group->hasKey(QStringLiteral("algorithm")) && !group->hasKey(QStringLiteral("screenStates"))) {
         qCDebug(lcAutotile) << "No saved autotile state found";
         return;
     }
 
     // Restore algorithm silently — do NOT emit algorithmChanged here.
-    // loadState() is called during Daemon::start() before the event loop runs.
-    // Emitting algorithmChanged triggers navigation OSD which creates a
-    // QML/LayerShellQt window. On Wayland, that surface creation can deadlock
-    // with the compositor if it's simultaneously performing synchronous D-Bus
-    // introspection against this daemon (QDBusInterface constructor blocks the
-    // compositor thread). See also: "Don't pre-create overlay windows at startup."
-    const QString savedAlgorithm = group.readEntry(QStringLiteral("algorithm"), m_engine->m_algorithmId);
+    const QString savedAlgorithm = group->readString(QStringLiteral("algorithm"), m_engine->m_algorithmId);
     if (AlgorithmRegistry::instance()->hasAlgorithm(savedAlgorithm)) {
         m_engine->m_algorithmId = savedAlgorithm;
+        m_engine->m_config->algorithmId = savedAlgorithm;
     }
 
     // Parse per-screen state
-    const QString statesJson = group.readEntry(QStringLiteral("screenStates"), QString());
+    const QString statesJson = group->readString(QStringLiteral("screenStates"));
     if (statesJson.isEmpty()) {
         return;
     }
@@ -398,17 +411,18 @@ void SettingsBridge::loadState()
     }
 
     const QJsonArray screensArray = doc.array();
+    QSet<QString> processedKeys;
     for (const QJsonValue& val : screensArray) {
         const QJsonObject screenObj = val.toObject();
-        const QString screenId = screenObj[QStringLiteral("screen")].toString();
+        const QString screenId = screenObj[QLatin1String("screen")].toString();
         if (screenId.isEmpty()) {
             continue;
         }
 
         // Restore desktop/activity context from saved state (defaults to 0/"" for
         // backward compatibility with pre-per-desktop save format).
-        const int desktop = screenObj[QStringLiteral("desktop")].toInt(0);
-        const QString activity = screenObj[QStringLiteral("activity")].toString();
+        const int desktop = screenObj[QLatin1String("desktop")].toInt(0);
+        const QString activity = screenObj[QLatin1String("activity")].toString();
 
         // Use stateForKey() to create the state under the exact saved key
         // without mutating the engine's current desktop/activity context.
@@ -416,6 +430,15 @@ void SettingsBridge::loadState()
         loadKey.screenId = screenId;
         loadKey.desktop = (desktop > 0) ? desktop : m_engine->m_currentDesktop;
         loadKey.activity = !activity.isEmpty() ? activity : m_engine->m_currentActivity;
+
+        // Skip duplicate resolved keys (desktop=0 backward compat can map
+        // multiple entries to the same key).
+        const QString compositeKey =
+            QStringLiteral("%1/%2/%3").arg(loadKey.screenId).arg(loadKey.desktop).arg(loadKey.activity);
+        if (processedKeys.contains(compositeKey)) {
+            continue;
+        }
+        processedKeys.insert(compositeKey);
 
         TilingState* state = m_engine->stateForKey(loadKey);
 
@@ -425,8 +448,8 @@ void SettingsBridge::loadState()
 
         // Restore per-screen parameters (not window order — windows haven't been
         // announced yet and stableIds may not match across sessions)
-        state->setMasterCount(screenObj[QStringLiteral("masterCount")].toInt(m_engine->config()->masterCount));
-        state->setSplitRatio(screenObj[QStringLiteral("splitRatio")].toDouble(m_engine->config()->splitRatio));
+        state->setMasterCount(screenObj[QLatin1String("masterCount")].toInt(m_engine->config()->masterCount));
+        state->setSplitRatio(screenObj[QLatin1String("splitRatio")].toDouble(m_engine->config()->splitRatio));
     }
 
     // Note: autotile screens are NOT restored here. The authoritative source is

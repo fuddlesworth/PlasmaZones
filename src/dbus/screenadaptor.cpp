@@ -45,36 +45,35 @@ QStringList ScreenAdaptor::getScreens()
     return result;
 }
 
-QString ScreenAdaptor::getScreenInfo(const QString& screenName)
+QString ScreenAdaptor::getScreenInfo(const QString& screenId)
 {
-    if (screenName.isEmpty()) {
+    if (screenId.isEmpty()) {
         qCWarning(lcDbus) << "getScreenInfo: empty screen name";
         return QString();
     }
 
-    for (const auto* screen : Utils::allScreens()) {
-        if (screen->name() == screenName) {
-            QJsonObject info;
-            info[JsonKeys::Name] = screen->name();
-            info[JsonKeys::Manufacturer] = screen->manufacturer();
-            info[JsonKeys::Model] = screen->model();
-            info[JsonKeys::Geometry] = QJsonObject{{JsonKeys::X, screen->geometry().x()},
-                                                   {JsonKeys::Y, screen->geometry().y()},
-                                                   {JsonKeys::Width, screen->geometry().width()},
-                                                   {JsonKeys::Height, screen->geometry().height()}};
-            info[JsonKeys::PhysicalSize] = QJsonObject{{JsonKeys::Width, screen->physicalSize().width()},
-                                                       {JsonKeys::Height, screen->physicalSize().height()}};
-            info[JsonKeys::DevicePixelRatio] = screen->devicePixelRatio();
-            info[JsonKeys::RefreshRate] = screen->refreshRate();
-            info[JsonKeys::Depth] = screen->depth();
-            info[JsonKeys::ScreenId] = Utils::screenIdentifier(screen);
-            info[QLatin1String("serialNumber")] = screen->serialNumber();
+    const QScreen* screen = Utils::findScreenByIdOrName(screenId);
+    if (screen) {
+        QJsonObject info;
+        info[JsonKeys::Name] = screen->name();
+        info[JsonKeys::Manufacturer] = screen->manufacturer();
+        info[JsonKeys::Model] = screen->model();
+        info[JsonKeys::Geometry] = QJsonObject{{JsonKeys::X, screen->geometry().x()},
+                                               {JsonKeys::Y, screen->geometry().y()},
+                                               {JsonKeys::Width, screen->geometry().width()},
+                                               {JsonKeys::Height, screen->geometry().height()}};
+        info[JsonKeys::PhysicalSize] = QJsonObject{{JsonKeys::Width, screen->physicalSize().width()},
+                                                   {JsonKeys::Height, screen->physicalSize().height()}};
+        info[JsonKeys::DevicePixelRatio] = screen->devicePixelRatio();
+        info[JsonKeys::RefreshRate] = screen->refreshRate();
+        info[JsonKeys::Depth] = screen->depth();
+        info[JsonKeys::ScreenId] = Utils::screenIdentifier(screen);
+        info[QLatin1String("serialNumber")] = screen->serialNumber();
 
-            return QString::fromUtf8(QJsonDocument(info).toJson());
-        }
+        return QString::fromUtf8(QJsonDocument(info).toJson());
     }
 
-    qCWarning(lcDbus) << "Screen not found:" << screenName;
+    qCWarning(lcDbus) << "Screen not found:" << screenId;
     return QString();
 }
 
@@ -93,18 +92,18 @@ QString ScreenAdaptor::getPrimaryScreen()
     return primary ? Utils::screenIdentifier(primary) : QString();
 }
 
-void ScreenAdaptor::setPrimaryScreenFromKWin(const QString& screenName)
+void ScreenAdaptor::setPrimaryScreenFromKWin(const QString& connectorName)
 {
-    m_primaryScreenOverride = screenName;
-    qCInfo(lcDbus) << "Primary screen override set from KWin:" << screenName;
+    m_primaryScreenOverride = connectorName;
+    qCInfo(lcDbus) << "Primary screen override set from KWin:" << connectorName;
 }
 
-QString ScreenAdaptor::getScreenId(const QString& screenName)
+QString ScreenAdaptor::getScreenId(const QString& connectorName)
 {
-    if (screenName.isEmpty()) {
+    if (connectorName.isEmpty()) {
         return QString();
     }
-    return Utils::screenIdForName(screenName);
+    return Utils::screenIdForName(connectorName);
 }
 
 } // namespace PlasmaZones

@@ -62,20 +62,20 @@ public:
      * @brief Assign a window to a zone
      * @param windowId Full window ID
      * @param zoneId Zone UUID string
-     * @param screenName Screen where the zone is located
+     * @param screenId Screen where the zone is located
      * @param virtualDesktop Virtual desktop number (1-based, 0 = all)
      */
-    void assignWindowToZone(const QString& windowId, const QString& zoneId, const QString& screenName,
+    void assignWindowToZone(const QString& windowId, const QString& zoneId, const QString& screenId,
                             int virtualDesktop);
 
     /**
      * @brief Assign a window to multiple zones (multi-zone snap)
      * @param windowId Full window ID
      * @param zoneIds List of zone UUID strings (first is primary)
-     * @param screenName Screen where the zones are located
+     * @param screenId Screen where the zones are located
      * @param virtualDesktop Virtual desktop number (1-based, 0 = all)
      */
-    void assignWindowToZones(const QString& windowId, const QStringList& zoneIds, const QString& screenName,
+    void assignWindowToZones(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                              int virtualDesktop);
 
     /**
@@ -129,18 +129,18 @@ public:
     struct PreTileGeometry
     {
         QRect geometry;
-        QString screenName; ///< connector name at time of save (may be empty for legacy entries)
+        QString connectorName; ///< connector name at time of save (may be empty for legacy entries)
     };
 
     /**
      * @brief Store geometry before tiling (snap or autotile)
      * @param windowId Full window ID
      * @param geometry Window geometry before tiling
-     * @param screenName Screen connector name where the window currently is
+     * @param connectorName Screen connector name where the window currently is
      * @param overwrite If false (snap mode), skip if entry already exists (first-only).
      *                  If true (autotile mode), always overwrite.
      */
-    void storePreTileGeometry(const QString& windowId, const QRect& geometry, const QString& screenName = QString(),
+    void storePreTileGeometry(const QString& windowId, const QRect& geometry, const QString& connectorName = QString(),
                               bool overwrite = false);
 
     /**
@@ -358,7 +358,7 @@ public:
     /**
      * @brief Update last used zone tracking
      */
-    void updateLastUsedZone(const QString& zoneId, const QString& screenName, const QString& windowClass,
+    void updateLastUsedZone(const QString& zoneId, const QString& screenId, const QString& windowClass,
                             int virtualDesktop);
 
     /**
@@ -485,6 +485,21 @@ public:
     QVector<RotationEntry> calculateResnapFromPreviousLayout();
 
     /**
+     * @brief Populate the resnap buffer for all screens independently.
+     *
+     * For each window, looks up its current zone assignment and determines
+     * the zone position using a global zoneId→position map built from all
+     * loaded layouts. This avoids relying on the global activeLayout/previousLayout
+     * which only tracks one layout at a time.
+     *
+     * Used by the KCM save path where multiple screens can have different
+     * layout assignments changed simultaneously.
+     *
+     * @param excludeScreens Screens to skip (e.g. autotile screens handled separately)
+     */
+    void populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens = {});
+
+    /**
      * @brief Calculate resnap data from current zone assignments
      *
      * Used when restoring windows after autotile toggle-off: the autotile engine
@@ -597,7 +612,7 @@ public:
     struct PendingRestore
     {
         QStringList zoneIds;
-        QString screenName;
+        QString screenId;
         int virtualDesktop = 0;
         QString layoutId;
         QList<int> zoneNumbers;
@@ -661,7 +676,7 @@ public:
     /**
      * @brief Set last used zone info (loaded from KConfig by adaptor)
      */
-    void setLastUsedZone(const QString& zoneId, const QString& screenName, const QString& zoneClass, int desktop);
+    void setLastUsedZone(const QString& zoneId, const QString& screenId, const QString& zoneClass, int desktop);
 
     /**
      * @brief Set floating windows (loaded from KConfig by adaptor)
@@ -732,7 +747,7 @@ private:
 
     // Zone assignments: windowId -> zoneIds (supports multi-zone snap)
     QHash<QString, QStringList> m_windowZoneAssignments;
-    // Screen tracking: windowId -> screenName
+    // Screen tracking: windowId -> screenId
     QHash<QString, QString> m_windowScreenAssignments;
     // Desktop tracking: windowId -> virtual desktop
     QHash<QString, int> m_windowDesktopAssignments;
@@ -745,7 +760,7 @@ private:
 
     // Last used zone tracking
     QString m_lastUsedZoneId;
-    QString m_lastUsedScreenName;
+    QString m_lastUsedScreenId;
     QString m_lastUsedZoneClass;
     int m_lastUsedDesktop = 0;
 

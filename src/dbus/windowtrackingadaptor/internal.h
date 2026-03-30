@@ -39,8 +39,8 @@ inline QString serializeGeometryMap(const QHash<QString, WindowTrackingService::
     QJsonObject result;
     for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
         QJsonObject obj = rectToJsonObject(it.value().geometry);
-        if (!it.value().screenName.isEmpty()) {
-            obj[QLatin1String("screen")] = Utils::screenIdForName(it.value().screenName);
+        if (!it.value().connectorName.isEmpty()) {
+            obj[QLatin1String("screen")] = Utils::screenIdForName(it.value().connectorName);
         }
         result[Utils::extractAppId(it.key())] = obj;
     }
@@ -67,8 +67,8 @@ inline QString serializeGeometryMapFull(const QHash<QString, WindowTrackingServi
         obj[QLatin1String("y")] = it.value().geometry.y();
         obj[QLatin1String("width")] = it.value().geometry.width();
         obj[QLatin1String("height")] = it.value().geometry.height();
-        if (!it.value().screenName.isEmpty()) {
-            obj[QLatin1String("screen")] = Utils::screenIdForName(it.value().screenName);
+        if (!it.value().connectorName.isEmpty()) {
+            obj[QLatin1String("screen")] = Utils::screenIdForName(it.value().connectorName);
         }
         result.append(obj);
     }

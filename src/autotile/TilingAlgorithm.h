@@ -25,7 +25,10 @@ struct TilingParams
 {
     int windowCount = 0; ///< Number of windows to tile
     QRect screenGeometry; ///< Available screen area in absolute pixels
-    const TilingState* state = nullptr; ///< Current tiling state (must be non-null)
+    /// Current tiling state. Must be non-null for all algorithm calls —
+    /// algorithms may dereference without checking. The engine guarantees
+    /// this by constructing TilingState before calling calculateZones().
+    const TilingState* state = nullptr;
     int innerGap = 0; ///< Gap between adjacent zones in pixels
     EdgeGaps outerGaps; ///< Gaps at screen edges in pixels (per-side)
     QVector<QSize> minSizes = {}; ///< Per-window minimum sizes (may be empty)
@@ -43,7 +46,7 @@ struct TilingParams
  * the provided screen geometry. This matches KWin's setFrameGeometry() API.
  *
  * Subclasses must implement:
- * - name(), description(), icon() for UI display
+ * - name(), description() for UI display
  * - calculateZones() for the actual algorithm
  *
  * Optionally override capability methods to indicate support for:
@@ -60,7 +63,6 @@ class PLASMAZONES_EXPORT TilingAlgorithm : public QObject
 
     Q_PROPERTY(QString name READ name CONSTANT)
     Q_PROPERTY(QString description READ description CONSTANT)
-    Q_PROPERTY(QString icon READ icon CONSTANT)
     Q_PROPERTY(bool supportsMasterCount READ supportsMasterCount CONSTANT)
     Q_PROPERTY(bool supportsSplitRatio READ supportsSplitRatio CONSTANT)
 
@@ -85,12 +87,6 @@ public:
     virtual QString description() const = 0;
 
     /**
-     * @brief Icon name for UI display
-     * @return KDE icon name (e.g., "view-grid-symbolic")
-     */
-    virtual QString icon() const noexcept = 0;
-
-    /**
      * @brief Calculate zone geometries for N windows
      *
      * This is the core algorithm method. Given tiling parameters (window count,
@@ -113,7 +109,7 @@ public:
      *
      * @return Master zone index (0-based), or -1 if no master concept
      */
-    virtual int masterZoneIndex() const noexcept;
+    virtual int masterZoneIndex() const;
 
     /**
      * @brief Check if algorithm supports variable master count
@@ -122,7 +118,7 @@ public:
      *
      * @return true if master count can be adjusted
      */
-    virtual bool supportsMasterCount() const noexcept;
+    virtual bool supportsMasterCount() const;
 
     /**
      * @brief Check if algorithm supports split ratio adjustment
@@ -131,7 +127,7 @@ public:
      *
      * @return true if split ratio can be adjusted
      */
-    virtual bool supportsSplitRatio() const noexcept;
+    virtual bool supportsSplitRatio() const;
 
     /**
      * @brief Get default split ratio for this algorithm
@@ -140,7 +136,7 @@ public:
      *
      * @return Default ratio (0.0-1.0), typically 0.5-0.6
      */
-    virtual qreal defaultSplitRatio() const noexcept;
+    virtual qreal defaultSplitRatio() const;
 
     /**
      * @brief Get minimum number of windows for meaningful tiling
@@ -150,7 +146,7 @@ public:
      *
      * @return Minimum window count (typically 1)
      */
-    virtual int minimumWindows() const noexcept;
+    virtual int minimumWindows() const;
 
     /**
      * @brief Get default maximum number of windows for this algorithm
@@ -161,7 +157,7 @@ public:
      *
      * @return Default max window count for this algorithm (typically 4-10)
      */
-    virtual int defaultMaxWindows() const noexcept;
+    virtual int defaultMaxWindows() const;
 
     /**
      * @brief Whether this algorithm intentionally produces overlapping zones
@@ -172,7 +168,91 @@ public:
      *
      * @return true if zones intentionally overlap (default: false)
      */
-    virtual bool producesOverlappingZones() const noexcept;
+    virtual bool producesOverlappingZones() const;
+
+    // ── noexcept convention for virtual methods ──────────────────────────
+    // Methods below are noexcept because they only read cached POD fields.
+    // Methods above (supportsMasterCount, supportsSplitRatio, etc.) are NOT
+    // noexcept because ScriptedAlgorithm overrides may allocate QStrings or
+    // invoke cached JS values. When adding new virtuals, use noexcept only
+    // if the implementation is guaranteed to never allocate or throw.
+
+    /**
+     * @brief How zone numbers should be displayed in previews
+     *
+     * Controls which zones show their number label in layout cards and previews.
+     * Values: "all" (default), "last", "first", "firstAndLast", "none"
+     *
+     * @return Display mode string
+     */
+    virtual QString zoneNumberDisplay() const noexcept;
+
+    /**
+     * @brief Whether this algorithm uses a center layout
+     *
+     * Center layout algorithms (e.g., ThreeColumn, CenteredMaster) have a
+     * center column whose width is controlled by the split ratio. The UI
+     * labels the ratio/count controls as "Center" instead of "Master".
+     *
+     * @return true if this is a center layout algorithm (default: false)
+     */
+    virtual bool centerLayout() const;
+
+    /**
+     * @brief Whether this algorithm is a user-provided scripted algorithm
+     *
+     * Scripted algorithms are loaded from JavaScript files at runtime.
+     * Used by the UI to group algorithms into "Built-in" vs "Custom" sections.
+     *
+     * @return true if this is a ScriptedAlgorithm (default: false)
+     */
+    virtual bool isScripted() const noexcept;
+
+    /**
+     * @brief Whether this algorithm supports per-window minimum size constraints
+     *
+     * Most algorithms respect the minSizes parameter. Algorithms that ignore
+     * it (e.g., Floating Center, Tatami) return false so the settings UI can
+     * disable min-size controls for them.
+     *
+     * @return true if the algorithm honors minSizes (default: true)
+     */
+    virtual bool supportsMinSizes() const noexcept;
+
+    /**
+     * @brief Whether this algorithm maintains persistent state across retiles
+     *
+     * Memory algorithms (like DwindleMemory) remember per-split ratios and
+     * tree structure. The UI shows an indicator for memory-enabled algorithms.
+     *
+     * @return true if the algorithm uses a persistent SplitTree (default: false)
+     */
+    virtual bool supportsMemory() const noexcept;
+
+    /**
+     * @brief Prepare the TilingState before calculateZones() is called
+     *
+     * Memory-based algorithms override this to lazily create their SplitTree.
+     * The engine calls this unconditionally before calculateZones(), removing
+     * the need for concrete algorithm casts in the engine.
+     *
+     * The method is const on the algorithm (it doesn't mutate algorithm state)
+     * but mutates the TilingState argument — the engine owns that mutation.
+     *
+     * @param state TilingState to prepare (may be nullptr, implementations must check)
+     */
+    virtual void prepareTilingState(TilingState* state) const;
+
+    /**
+     * @brief Whether this scripted algorithm was loaded from a user directory
+     *
+     * System-installed scripts (shipped with PlasmaZones) return false.
+     * User-created scripts in ~/.local/share/plasmazones/algorithms/ return true.
+     * Non-scripted algorithms always return false.
+     *
+     * @return true if loaded from user's writable data directory (default: false)
+     */
+    virtual bool isUserScript() const noexcept;
 
 protected:
     /**
@@ -247,6 +327,33 @@ protected:
      * @return The minimum height (>= 0), or 0 if index is out of range
      */
     static int minHeightAt(const QVector<QSize>& minSizes, int index);
+
+    /**
+     * @brief Solve two-column/two-row dimension distribution with min-size constraints
+     *
+     * When both minimums fit, clamps each to its minimum.
+     * When they don't fit, distributes proportionally by minimum weight.
+     *
+     * @param contentDim Total available dimension (width or height minus gap)
+     * @param firstDim Initial first dimension (modified in place)
+     * @param secondDim Initial second dimension (modified in place)
+     * @param minFirst Minimum for first dimension (0 = unconstrained)
+     * @param minSecond Minimum for second dimension (0 = unconstrained)
+     */
+    static void solveTwoPartMinSizes(int contentDim, int& firstDim, int& secondDim, int minFirst, int minSecond);
+
+    /**
+     * @brief Apply per-window minimum size constraints (used by overlapping algorithms)
+     *
+     * Clamps width and height upward to the minimum from minSizes[index].
+     * No-op if index is out of range or mins are zero.
+     *
+     * @param width Current width (modified in place)
+     * @param height Current height (modified in place)
+     * @param minSizes Per-window minimum sizes vector
+     * @param index Window index into minSizes
+     */
+    static void applyPerWindowMinSize(int& width, int& height, const QVector<QSize>& minSizes, int index);
 
     /**
      * @brief Result of solving three-column width distribution

@@ -33,7 +33,16 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
     setFlag(ItemHasContents, true);
 }
 
-ZoneShaderItem::~ZoneShaderItem() = default;
+ZoneShaderItem::~ZoneShaderItem()
+{
+    // Invalidate the render node's back-pointer to this item BEFORE our QObject
+    // members are torn down.  The scene graph render thread may still call
+    // prepare()/render() on the node between now and the node's eventual
+    // deletion; without this, m_item would be a dangling pointer.
+    if (m_renderNode) {
+        m_renderNode->invalidateItem();
+    }
+}
 
 // ============================================================================
 // Zone Data Parsing
@@ -193,13 +202,25 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     Q_UNUSED(data)
 
     if (width() <= 0 || height() <= 0) {
-        delete oldNode;
+        if (oldNode) {
+            // Invalidate the old node's back-pointer before deleting it
+            if (m_renderNode) {
+                m_renderNode->invalidateItem();
+                m_renderNode = nullptr;
+            }
+            delete oldNode;
+        }
         return nullptr;
     }
 
     ZoneShaderNodeBase* node = static_cast<ZoneShaderNodeBase*>(oldNode);
     if (!node) {
-        node = new ZoneShaderNodeRhi(this);
+        // Scene graph deleted the previous node (e.g. releaseResources), or first call.
+        // Clear stale pointer — the old node no longer exists.
+        m_renderNode = nullptr;
+        auto* rhiNode = new ZoneShaderNodeRhi(this);
+        m_renderNode = rhiNode;
+        node = rhiNode;
     }
 
     // Sync shader timing uniforms

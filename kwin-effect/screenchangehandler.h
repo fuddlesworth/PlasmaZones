@@ -36,6 +36,14 @@ public:
     /// Stop the debounce timer (called from effect destructor)
     void stop();
 
+    /// True while a screen geometry change is pending (debounce timer running
+    /// or reapply in progress). Used to suppress false windowScreenChanged
+    /// D-Bus calls during monitor connect/disconnect/standby transitions.
+    bool isScreenChangeInProgress() const
+    {
+        return m_pendingScreenChange || m_reapplyInProgress;
+    }
+
 public Q_SLOTS:
     void slotScreenGeometryChanged();
     void slotReapplyWindowGeometriesRequested();

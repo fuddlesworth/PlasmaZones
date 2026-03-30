@@ -49,9 +49,10 @@ QVector<UnifiedLayoutEntry> UnifiedLayoutController::layouts() const
     if (!m_cacheValid) {
         // Use filtered overload to respect visibility settings (hiddenFromSelector, allowed lists)
         // and mode-based filtering (manual-only vs autotile-only)
-        m_cachedLayouts =
-            LayoutUtils::buildUnifiedLayoutList(m_layoutManager, m_currentScreenName, m_currentVirtualDesktop,
-                                                m_currentActivity, m_includeManualLayouts, m_includeAutotileLayouts);
+        m_cachedLayouts = LayoutUtils::buildUnifiedLayoutList(
+            m_layoutManager, m_currentScreenName, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
+            m_includeAutotileLayouts, Utils::screenAspectRatio(m_currentScreenName),
+            m_settings && m_settings->filterLayoutsByAspectRatio());
 
         m_cacheValid = true;
     }
@@ -140,17 +141,17 @@ void UnifiedLayoutController::syncFromExternalState(const QString& overrideId)
     }
 }
 
-void UnifiedLayoutController::setCurrentScreenName(const QString& screenName)
+void UnifiedLayoutController::setCurrentScreenName(const QString& screenId)
 {
-    if (m_currentScreenName != screenName) {
-        m_currentScreenName = screenName;
+    if (m_currentScreenName != screenId) {
+        m_currentScreenName = screenId;
         m_cacheValid = false;
 
         // Sync current layout ID to what's actually assigned to this screen
         // (not the global active layout, which may belong to a different screen)
-        if (m_layoutManager && !screenName.isEmpty()) {
+        if (m_layoutManager && !screenId.isEmpty()) {
             Layout* screenLayout =
-                m_layoutManager->layoutForScreen(screenName, m_currentVirtualDesktop, m_currentActivity);
+                m_layoutManager->layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
             if (screenLayout) {
                 m_currentLayoutId = screenLayout->id().toString();
             }
@@ -197,13 +198,12 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
             // Without this ordering, setAlgorithm's retile uses stale per-screen
             // overrides (old algorithm), producing wrong zone geometries.
             if (!m_currentScreenName.isEmpty()) {
-                // Write per-desktop assignment with empty activity so it applies
-                // regardless of which activity is active.  Activity-specific
-                // overrides are a separate KCM-only feature.
-                if (!m_currentActivity.isEmpty()) {
-                    m_layoutManager->clearAssignment(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity);
-                }
-                m_layoutManager->assignLayoutById(m_currentScreenName, m_currentVirtualDesktop, QString(), entry.id);
+                // Write to the current context (screen, desktop, activity).
+                // Most specific context wins — an activity-keyed entry takes
+                // priority over a desktop-only entry in the cascade, and a
+                // different activity falls through to the broader entry.
+                m_layoutManager->assignLayoutById(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity,
+                                                  entry.id);
             }
             m_autotileEngine->setAlgorithm(algoId);
             setCurrentLayoutId(entry.id);
@@ -223,24 +223,27 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
         Layout* layout = m_layoutManager->layoutById(*uuidOpt);
         if (layout) {
             if (!m_currentScreenName.isEmpty()) {
-                // Write per-desktop assignment with empty activity so it applies
-                // regardless of which activity is active.  Activity-specific
-                // overrides are a separate KCM-only feature.
-                // Clear any stale activity-keyed entry that would shadow this one
-                // in the cascade (exact match takes priority over desktop-only).
-                if (!m_currentActivity.isEmpty()) {
-                    m_layoutManager->clearAssignment(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity);
-                }
-                // assignLayout FIRST so the per-desktop assignment is stored
-                // before setActiveLayout fires activeLayoutChanged →
-                // onLayoutChanged(). That handler calls resolveLayoutForScreen()
-                // which reads per-desktop assignments — it must see the new
-                // assignment to correctly populate the resnap buffer.
-                m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop, QString(), layout);
+                // Write to the current context (screen, desktop, activity).
+                // Most specific context wins — assignLayout FIRST so the
+                // per-context assignment is stored before setActiveLayout fires
+                // activeLayoutChanged → onLayoutChanged(). That handler calls
+                // resolveLayoutForScreen() which reads per-context assignments —
+                // it must see the new assignment to correctly populate the
+                // resnap buffer.
+                m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity, layout);
             }
-            // Always update global active layout (fires activeLayoutChanged →
-            // onLayoutChanged → resnap buffer population)
-            m_layoutManager->setActiveLayout(layout);
+            // Update global active layout pointer so overlay/zone detector
+            // queries see the new layout, but suppress activeLayoutChanged
+            // to prevent resnap buffer population and zone recalculation on
+            // ALL screens. The per-screen assignment (assignLayout above)
+            // already fired layoutAssigned which handles per-screen zone
+            // recalculation. Without blocking, setActiveLayout fires
+            // activeLayoutChanged → onLayoutChanged → resnap/recalc on
+            // every screen, not just the target.
+            {
+                const QSignalBlocker blocker(m_layoutManager);
+                m_layoutManager->setActiveLayout(layout);
+            }
             setCurrentLayoutId(entry.id);
             qCInfo(lcDaemon) << "Applied unified layout=" << entry.name << "screen=" << m_currentScreenName;
             Q_EMIT layoutApplied(layout);

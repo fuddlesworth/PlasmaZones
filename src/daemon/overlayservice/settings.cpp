@@ -7,6 +7,7 @@
 #include "../../core/logging.h"
 #include "../../core/layout.h"
 #include "../../core/layoutmanager.h"
+#include "../../core/shaderregistry.h"
 #include "../../core/utils.h"
 #include <QQuickWindow>
 #include <QScreen>
@@ -19,10 +20,15 @@ void OverlayService::setSettings(ISettings* settings)
         // Disconnect from old settings signals
         if (m_settings) {
             disconnect(m_settings, &ISettings::settingsChanged, this, nullptr);
+            disconnect(m_settings, &ISettings::overlayDisplayModeChanged, this, nullptr);
             disconnect(m_settings, &ISettings::enableShaderEffectsChanged, this, nullptr);
             disconnect(m_settings, &ISettings::enableAudioVisualizerChanged, this, nullptr);
             disconnect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, nullptr);
             disconnect(m_settings, &ISettings::shaderFrameRateChanged, this, nullptr);
+        }
+        // Disconnect old ShaderRegistry connection (if any) to prevent duplicates
+        if (auto* registry = ShaderRegistry::instance()) {
+            disconnect(registry, &ShaderRegistry::shadersChanged, this, nullptr);
         }
 
         m_settings = settings;
@@ -35,6 +41,12 @@ void OverlayService::setSettings(ISettings* settings)
                 }
             };
             connect(m_settings, &ISettings::settingsChanged, this, refreshZoneSelectors);
+
+            // Recreate overlay windows when the overlay display mode changes
+            // (e.g. compact mode can't use shader overlays). Connected to the
+            // specific signal instead of settingsChanged to avoid redundant work.
+            connect(m_settings, &ISettings::overlayDisplayModeChanged, this,
+                    &OverlayService::recreateOverlayWindowsOnTypeMismatch);
 
             connect(m_settings, &ISettings::enableShaderEffectsChanged, this, [this]() {
                 // When shader effects setting changes, recreate overlay windows if visible
@@ -66,7 +78,8 @@ void OverlayService::setSettings(ISettings* settings)
 
                         // Recreate windows with correct type per-screen
                         for (QScreen* screen : screens) {
-                            if (!m_settings || !m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
+                            if (!isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                                                   m_currentActivity)) {
                                 createOverlayWindow(screen);
                                 updateOverlayWindow(screen);
                                 if (wasVisible && m_overlayWindows.value(screen)) {
@@ -84,48 +97,33 @@ void OverlayService::setSettings(ISettings* settings)
                 }
             });
 
-            connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, [this]() {
-                // Start/stop CAVA regardless of overlay visibility so it's warm when needed
-                if (m_settings->enableAudioVisualizer()) {
-                    if (m_cavaService) {
-                        m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
-                        m_cavaService->setFramerate(m_settings->shaderFrameRate());
-                        m_cavaService->start();
-                    }
-                } else {
-                    if (m_cavaService) {
-                        m_cavaService->stop();
-                        for (auto* window : std::as_const(m_overlayWindows)) {
-                            if (window) {
-                                writeQmlProperty(window, QStringLiteral("audioSpectrum"), QVariantList());
-                            }
-                        }
-                        if (m_shaderPreviewWindow) {
-                            writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), QVariantList());
-                        }
-                    }
-                }
-            });
+            connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::shaderFrameRateChanged, this, &OverlayService::syncCavaState);
 
-            connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, [this]() {
-                if (m_cavaService) {
-                    m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
-                }
-            });
-
-            connect(m_settings, &ISettings::shaderFrameRateChanged, this, [this]() {
-                if (m_cavaService && m_settings) {
-                    m_cavaService->setFramerate(m_settings->shaderFrameRate());
-                }
-            });
+            // Hot-reload shaders when files change on disk.
+            // ShaderRegistry detects file changes via QFileSystemWatcher and emits
+            // shadersChanged(). We tell each overlay window's ZoneShaderItem to
+            // re-read its source from disk by invoking loadShader().
+            if (auto* registry = ShaderRegistry::instance()) {
+                connect(registry, &ShaderRegistry::shadersChanged, this, [this]() {
+                    if (!m_settings || !m_settings->enableShaderEffects()) {
+                        return;
+                    }
+                    qCInfo(lcOverlay) << "Shader files changed on disk, triggering hot-reload";
+                    for (auto* window : std::as_const(m_overlayWindows)) {
+                        if (window && window->property("isShaderOverlay").toBool()) {
+                            QMetaObject::invokeMethod(window, "loadShader");
+                        }
+                    }
+                    if (m_shaderPreviewWindow && m_shaderPreviewWindow->property("isShaderOverlay").toBool()) {
+                        QMetaObject::invokeMethod(m_shaderPreviewWindow, "loadShader");
+                    }
+                });
+            }
 
             // Eagerly start CAVA at daemon boot so spectrum data is warm when overlay shows
-            if (m_settings->enableAudioVisualizer() && m_cavaService) {
-                m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
-                m_cavaService->setFramerate(m_settings->shaderFrameRate());
-                m_cavaService->start();
-                qCInfo(lcOverlay) << "CAVA started eagerly (audio visualization enabled)";
-            }
+            syncCavaState();
         }
     }
 }
@@ -154,7 +152,7 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
                 refreshVisibleWindows();
             });
             connect(manager, &LayoutManager::layoutAssigned, this,
-                    [this](const QString& /*screenName*/, int /*virtualDesktop*/, Layout* /*layout*/) {
+                    [this](const QString& /*screenId*/, int /*virtualDesktop*/, Layout* /*layout*/) {
                         refreshVisibleWindows();
                     });
         }
@@ -171,6 +169,32 @@ void OverlayService::refreshVisibleWindows()
     if (m_visible) {
         for (QScreen* screen : m_overlayWindows.keys()) {
             updateOverlayWindow(screen);
+        }
+    }
+}
+
+void OverlayService::syncCavaState()
+{
+    if (!m_cavaService || !m_settings) {
+        return;
+    }
+    if (m_settings->enableAudioVisualizer()) {
+        m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
+        m_cavaService->setFramerate(m_settings->shaderFrameRate());
+        if (!m_cavaService->isRunning()) {
+            m_cavaService->start();
+        }
+    } else {
+        if (m_cavaService->isRunning()) {
+            m_cavaService->stop();
+            for (auto* window : std::as_const(m_overlayWindows)) {
+                if (window) {
+                    writeQmlProperty(window, QStringLiteral("audioSpectrum"), QVariantList());
+                }
+            }
+            if (m_shaderPreviewWindow) {
+                writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), QVariantList());
+            }
         }
     }
 }

@@ -257,12 +257,19 @@ void CavaService::onProcessStateChanged(QProcess::ProcessState state)
     }
 }
 
-void CavaService::onProcessFinished(int exitCode, QProcess::ExitStatus /*exitStatus*/)
+void CavaService::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
     const bool wasStopping = m_stopping;
     m_stopping = false;
     m_pendingRestart = false;
     if (wasStopping) {
+        return;
+    }
+    // CrashExit means "terminated by signal". The exit code is the signal number.
+    // SIGTERM (15): expected during daemon shutdown — systemd sends SIGTERM to the
+    // entire process group, so CAVA dies before CavaService::stop() sets m_stopping.
+    // SIGKILL (9): also expected from our own kill() fallback in stop().
+    if (exitStatus == QProcess::CrashExit && (exitCode == 15 || exitCode == 9)) {
         return;
     }
     if (exitCode != 0) {
@@ -273,8 +280,15 @@ void CavaService::onProcessFinished(int exitCode, QProcess::ExitStatus /*exitSta
 
 void CavaService::onProcessError(QProcess::ProcessError error)
 {
-    // Suppress errors from intentional stop() or restartAsync() — SIGTERM causes QProcess::Crashed
     if (m_stopping || m_pendingRestart) {
+        return;
+    }
+    // QProcess::Crashed means "terminated by signal" — redundant with onProcessFinished
+    // which has the actual signal number. Suppress here; real crashes (SIGSEGV etc.)
+    // are still reported via onProcessFinished with the non-SIGTERM exit code.
+    // This also covers the daemon shutdown case where systemd SIGTERM hits the process
+    // group before CavaService::stop() has a chance to set m_stopping.
+    if (error == QProcess::Crashed) {
         return;
     }
     const QString msg = m_process ? m_process->errorString() : QStringLiteral("Unknown error");

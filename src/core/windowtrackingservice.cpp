@@ -50,14 +50,14 @@ WindowTrackingService::~WindowTrackingService()
 // Zone Assignment Management
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingService::assignWindowToZone(const QString& windowId, const QString& zoneId,
-                                               const QString& screenName, int virtualDesktop)
+void WindowTrackingService::assignWindowToZone(const QString& windowId, const QString& zoneId, const QString& screenId,
+                                               int virtualDesktop)
 {
-    assignWindowToZones(windowId, QStringList{zoneId}, screenName, virtualDesktop);
+    assignWindowToZones(windowId, QStringList{zoneId}, screenId, virtualDesktop);
 }
 
 void WindowTrackingService::assignWindowToZones(const QString& windowId, const QStringList& zoneIds,
-                                                const QString& screenName, int virtualDesktop)
+                                                const QString& screenId, int virtualDesktop)
 {
     if (windowId.isEmpty() || zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
         return;
@@ -68,7 +68,7 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     bool zoneChanged = (previousZones != zoneIds);
 
     m_windowZoneAssignments[windowId] = zoneIds;
-    m_windowScreenAssignments[windowId] = screenName;
+    m_windowScreenAssignments[windowId] = screenId;
     m_windowDesktopAssignments[windowId] = virtualDesktop;
 
     // NOTE: Do NOT store to m_pendingRestoreQueues here!
@@ -97,7 +97,7 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
     // This preserves last-used zone when unsnapping a different window
     if (!m_lastUsedZoneId.isEmpty() && previousZoneIds.contains(m_lastUsedZoneId)) {
         m_lastUsedZoneId.clear();
-        m_lastUsedScreenName.clear();
+        m_lastUsedScreenId.clear();
         m_lastUsedZoneClass.clear();
         m_lastUsedDesktop = 0;
     }
@@ -147,7 +147,7 @@ bool WindowTrackingService::isWindowSnapped(const QString& windowId) const
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void WindowTrackingService::storePreTileGeometry(const QString& windowId, const QRect& geometry,
-                                                 const QString& screenName, bool overwrite)
+                                                 const QString& connectorName, bool overwrite)
 {
     if (windowId.isEmpty()) {
         qCWarning(lcCore) << "Cannot store pre-tile geometry: empty windowId";
@@ -173,8 +173,8 @@ void WindowTrackingService::storePreTileGeometry(const QString& windowId, const 
         }
     }
 
-    PreTileGeometry entry{geometry, screenName};
-    qCDebug(lcCore) << "storePreTileGeometry:" << windowId << "=" << geometry << "screen:" << screenName
+    PreTileGeometry entry{geometry, connectorName};
+    qCDebug(lcCore) << "storePreTileGeometry:" << windowId << "=" << geometry << "screen:" << connectorName
                     << "overwrite:" << overwrite;
     m_preTileGeometries[windowId] = entry;
     if (appId != windowId) {
@@ -210,14 +210,14 @@ std::optional<QRect> WindowTrackingService::preTileGeometry(const QString& windo
     if (m_preTileGeometries.contains(windowId)) {
         const auto& entry = m_preTileGeometries.value(windowId);
         qCDebug(lcCore) << "preTileGeometry: found by windowId" << windowId << "=" << entry.geometry
-                        << "screen:" << entry.screenName;
+                        << "screen:" << entry.connectorName;
         return entry.geometry;
     }
     QString appId = Utils::extractAppId(windowId);
     if (appId != windowId && m_preTileGeometries.contains(appId)) {
         const auto& entry = m_preTileGeometries.value(appId);
         qCDebug(lcCore) << "preTileGeometry: found by appId" << appId << "=" << entry.geometry
-                        << "screen:" << entry.screenName;
+                        << "screen:" << entry.connectorName;
         return entry.geometry;
     }
     qCDebug(lcCore) << "preTileGeometry: not found for" << windowId;
@@ -268,7 +268,7 @@ std::optional<QRect> WindowTrackingService::validatedPreTileGeometry(const QStri
             return false;
         }
         rect = it->geometry;
-        storedScreen = it->screenName;
+        storedScreen = it->connectorName;
         return true;
     };
     if (!lookupEntry(windowId)) {
@@ -387,12 +387,18 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
         QStringList zoneIds = m_windowZoneAssignments.value(windowId);
         m_preFloatZoneAssignments[windowId] = zoneIds;
         // Save the screen where the window was snapped so unfloat restores to the correct monitor
-        QString screenName = m_windowScreenAssignments.value(windowId);
-        if (!screenName.isEmpty()) {
-            m_preFloatScreenAssignments[windowId] = screenName;
+        QString screenId = m_windowScreenAssignments.value(windowId);
+        if (!screenId.isEmpty()) {
+            m_preFloatScreenAssignments[windowId] = screenId;
         }
-        qCInfo(lcCore) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenName;
+        qCInfo(lcCore) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenId;
         unassignWindow(windowId);
+
+        // Consume one pending restore entry so this window doesn't get re-snapped
+        // to the old zone when closed and reopened. Uses consumePendingAssignment
+        // (not clearStalePendingAssignment) to preserve entries for other instances
+        // of the same app — e.g. unsnapping one Konsole shouldn't affect the other two.
+        consumePendingAssignment(windowId);
     }
     // Note: If window not in assignments, it's already unsnapped - no action needed
 }
@@ -488,7 +494,7 @@ UnfloatResult WindowTrackingService::resolveUnfloatGeometry(const QString& windo
     result.found = true;
     result.zoneIds = zoneIds;
     result.geometry = geo;
-    result.screenName = restoreScreen;
+    result.screenId = restoreScreen;
     return result;
 }
 

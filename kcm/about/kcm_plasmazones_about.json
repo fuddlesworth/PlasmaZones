@@ -1,7 +1,7 @@
 {
     "KPlugin": {
         "Name": "PlasmaZones",
-        "Description": "Enable/disable daemon, version information, and credits",
+        "Description": "Version information, update checks, and settings launcher",
         "Icon": "plasmazones",
         "Authors": [
             {
@@ -13,6 +13,6 @@
     },
     "X-KDE-ParentApp": "systemsettings",
     "X-KDE-System-Settings-Parent-Category": "plasmazones",
-    "X-KDE-System-Settings-Uses-ModuleData": true,
+    "X-KDE-System-Settings-Uses-ModuleData": false,
     "X-KDE-Weight": 10
 }

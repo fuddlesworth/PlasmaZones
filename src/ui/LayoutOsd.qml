@@ -15,8 +15,8 @@ import org.plasmazones.common as QFZCommon
  */
 Window {
     // contentWrapper
-    // Note: Escape shortcut removed - window uses BypassWindowManagerHint
-    // and doesn't receive keyboard focus on Wayland
+    // Note: Escape shortcut removed - layer-shell overlay windows do not
+    // receive keyboard focus on Wayland (KeyboardInteractivityNone)
 
     id: root
 
@@ -30,6 +30,23 @@ Window {
     // Screen info for aspect ratio (bounded to prevent layout issues)
     property real screenAspectRatio: 16 / 9
     readonly property real safeAspectRatio: Math.max(0.5, Math.min(4, screenAspectRatio))
+    // Layout's intended aspect ratio class (set from C++)
+    property string aspectRatioClass: "any"
+    // Resolved preview AR: use layout's class if set, fall back to screen's AR
+    readonly property real previewAspectRatio: {
+        switch (aspectRatioClass) {
+        case "standard":
+            return 16 / 9;
+        case "ultrawide":
+            return 21 / 9;
+        case "super-ultrawide":
+            return 32 / 9;
+        case "portrait":
+            return 9 / 16;
+        default:
+            return safeAspectRatio;
+        }
+    }
     // Timing
     property int displayDuration: 1500
     // ms before auto-hide
@@ -76,12 +93,12 @@ Window {
 
     }
 
-    // Window configuration - LayerShellQt handles overlay behavior on Wayland
+    // Window configuration - QPA layer-shell plugin handles overlay behavior on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
     // Size based on container (which is inside contentWrapper)
-    width: container.width + 40
-    height: container.height + 40
+    width: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
+    height: container.height + Math.round(Kirigami.Units.gridUnit * 2.5)
     // Start hidden, will be shown with animation
     // Note: Don't set Window.opacity - use contentWrapper.opacity instead
     // QWaylandWindow::setOpacity() is not implemented and logs warnings
@@ -157,6 +174,7 @@ Window {
     Item {
         id: contentWrapper
 
+        Accessible.name: i18n("Layout indicator")
         anchors.fill: parent
         opacity: 0
 
@@ -191,7 +209,7 @@ Window {
                 anchors.topMargin: Kirigami.Units.gridUnit * 1.5
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Kirigami.Units.gridUnit * 11
-                height: Math.round(Kirigami.Units.gridUnit * 11 / root.safeAspectRatio)
+                height: Math.round(Kirigami.Units.gridUnit * 11 / root.previewAspectRatio)
 
                 // Background for preview area
                 Rectangle {
@@ -236,7 +254,7 @@ Window {
                     source: "object-locked"
                     width: Kirigami.Units.iconSizes.large
                     height: Kirigami.Units.iconSizes.large
-                    color: "white"
+                    color: Kirigami.Theme.highlightedTextColor
                 }
 
             }

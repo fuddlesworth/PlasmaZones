@@ -198,6 +198,210 @@ private Q_SLOTS:
 
         QVERIFY(copy.sourcePath().isEmpty());
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // P1: Aspect ratio classification
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testScreenClassification_standardMonitor()
+    {
+        // 16:9 = 1.778
+        QCOMPARE(ScreenClassification::classify(1920, 1080), AspectRatioClass::Standard);
+        // 16:10 = 1.6
+        QCOMPARE(ScreenClassification::classify(1920, 1200), AspectRatioClass::Standard);
+    }
+
+    void testScreenClassification_ultrawideMonitor()
+    {
+        // 21:9 = 2.333
+        QCOMPARE(ScreenClassification::classify(3440, 1440), AspectRatioClass::Ultrawide);
+        // 2560x1080 = 2.37
+        QCOMPARE(ScreenClassification::classify(2560, 1080), AspectRatioClass::Ultrawide);
+    }
+
+    void testScreenClassification_superUltrawideMonitor()
+    {
+        // 32:9 = 3.556
+        QCOMPARE(ScreenClassification::classify(5120, 1440), AspectRatioClass::SuperUltrawide);
+    }
+
+    void testScreenClassification_portraitMonitor()
+    {
+        // 9:16 = 0.5625
+        QCOMPARE(ScreenClassification::classify(1080, 1920), AspectRatioClass::Portrait);
+        // 10:16 = 0.625
+        QCOMPARE(ScreenClassification::classify(1200, 1920), AspectRatioClass::Portrait);
+    }
+
+    void testScreenClassification_toString_roundtrip()
+    {
+        QCOMPARE(ScreenClassification::fromString(ScreenClassification::toString(AspectRatioClass::Any)),
+                 AspectRatioClass::Any);
+        QCOMPARE(ScreenClassification::fromString(ScreenClassification::toString(AspectRatioClass::Standard)),
+                 AspectRatioClass::Standard);
+        QCOMPARE(ScreenClassification::fromString(ScreenClassification::toString(AspectRatioClass::Ultrawide)),
+                 AspectRatioClass::Ultrawide);
+        QCOMPARE(ScreenClassification::fromString(ScreenClassification::toString(AspectRatioClass::SuperUltrawide)),
+                 AspectRatioClass::SuperUltrawide);
+        QCOMPARE(ScreenClassification::fromString(ScreenClassification::toString(AspectRatioClass::Portrait)),
+                 AspectRatioClass::Portrait);
+    }
+
+    void testLayout_aspectRatioClass_defaultIsAny()
+    {
+        Layout layout;
+        QCOMPARE(layout.aspectRatioClass(), AspectRatioClass::Any);
+        QCOMPARE(layout.minAspectRatio(), 0.0);
+        QCOMPARE(layout.maxAspectRatio(), 0.0);
+    }
+
+    void testLayout_matchesAspectRatio_anyMatchesAll()
+    {
+        Layout layout;
+        // Any matches everything
+        QVERIFY(layout.matchesAspectRatio(0.5)); // portrait
+        QVERIFY(layout.matchesAspectRatio(1.78)); // standard
+        QVERIFY(layout.matchesAspectRatio(2.33)); // ultrawide
+        QVERIFY(layout.matchesAspectRatio(3.56)); // super-ultrawide
+    }
+
+    void testLayout_matchesAspectRatio_classMatching()
+    {
+        Layout layout;
+        layout.setAspectRatioClass(AspectRatioClass::Ultrawide);
+
+        QVERIFY(!layout.matchesAspectRatio(1.78)); // standard — no match
+        QVERIFY(layout.matchesAspectRatio(2.33)); // ultrawide — match
+        QVERIFY(!layout.matchesAspectRatio(3.56)); // super-ultrawide — no match
+        QVERIFY(!layout.matchesAspectRatio(0.56)); // portrait — no match
+    }
+
+    void testLayout_matchesAspectRatio_explicitBoundsOverrideClass()
+    {
+        Layout layout;
+        layout.setAspectRatioClass(AspectRatioClass::Ultrawide);
+        layout.setMinAspectRatio(2.0);
+        layout.setMaxAspectRatio(3.0);
+
+        // Explicit bounds: 2.0 - 3.0
+        QVERIFY(!layout.matchesAspectRatio(1.78)); // below min
+        QVERIFY(layout.matchesAspectRatio(2.33)); // in range
+        QVERIFY(layout.matchesAspectRatio(2.0)); // at min
+        QVERIFY(layout.matchesAspectRatio(3.0)); // at max
+        QVERIFY(!layout.matchesAspectRatio(3.56)); // above max
+    }
+
+    void testLayout_aspectRatio_serialization_roundtrip()
+    {
+        Layout original(QStringLiteral("Test"));
+        original.setAspectRatioClass(AspectRatioClass::Ultrawide);
+        original.setMinAspectRatio(1.9);
+        original.setMaxAspectRatio(2.8);
+
+        QJsonObject json = original.toJson();
+
+        QCOMPARE(json[QStringLiteral("aspectRatioClass")].toString(), QStringLiteral("ultrawide"));
+        QCOMPARE(json[QStringLiteral("minAspectRatio")].toDouble(), 1.9);
+        QCOMPARE(json[QStringLiteral("maxAspectRatio")].toDouble(), 2.8);
+
+        auto* restored = Layout::fromJson(json);
+        QCOMPARE(restored->aspectRatioClass(), AspectRatioClass::Ultrawide);
+        QCOMPARE(restored->minAspectRatio(), 1.9);
+        QCOMPARE(restored->maxAspectRatio(), 2.8);
+        QVERIFY(restored->matchesAspectRatio(2.33)); // ultrawide
+        QVERIFY(!restored->matchesAspectRatio(1.78)); // standard
+
+        delete restored;
+    }
+
+    void testLayout_aspectRatio_omittedInJson_meansAny()
+    {
+        QJsonObject json;
+        json[QStringLiteral("id")] = QStringLiteral("{00000000-0000-0000-0000-000000000001}");
+        json[QStringLiteral("name")] = QStringLiteral("NoAR");
+        json[QStringLiteral("showZoneNumbers")] = true;
+        json[QStringLiteral("zones")] = QJsonArray();
+
+        auto* layout = Layout::fromJson(json);
+        QCOMPARE(layout->aspectRatioClass(), AspectRatioClass::Any);
+        QCOMPARE(layout->minAspectRatio(), 0.0);
+        QCOMPARE(layout->maxAspectRatio(), 0.0);
+        QVERIFY(layout->matchesAspectRatio(2.33)); // matches everything
+
+        delete layout;
+    }
+
+    void testScreenClassification_boundaryValues()
+    {
+        // Exactly 1.0 (square) → Standard
+        QCOMPARE(ScreenClassification::classify(1.0), AspectRatioClass::Standard);
+        // Just below 1.0 → Portrait
+        QCOMPARE(ScreenClassification::classify(0.999), AspectRatioClass::Portrait);
+
+        // Exactly 1.9 → Ultrawide (>= UltrawideMin)
+        QCOMPARE(ScreenClassification::classify(1.9), AspectRatioClass::Ultrawide);
+        // Just below 1.9 → Standard
+        QCOMPARE(ScreenClassification::classify(1.899), AspectRatioClass::Standard);
+
+        // Exactly 2.8 → SuperUltrawide (>= SuperUltrawideMin)
+        QCOMPARE(ScreenClassification::classify(2.8), AspectRatioClass::SuperUltrawide);
+        // Just below 2.8 → Ultrawide
+        QCOMPARE(ScreenClassification::classify(2.799), AspectRatioClass::Ultrawide);
+    }
+
+    void testScreenClassification_degenerateInputs()
+    {
+        // Zero height → Any (not Standard)
+        QCOMPARE(ScreenClassification::classify(1920, 0), AspectRatioClass::Any);
+        // Zero width → Any
+        QCOMPARE(ScreenClassification::classify(0, 1080), AspectRatioClass::Any);
+        // Negative height → Any
+        QCOMPARE(ScreenClassification::classify(1920, -1), AspectRatioClass::Any);
+    }
+
+    void testLayout_matchesAspectRatio_onlyMinBoundSet()
+    {
+        Layout layout;
+        layout.setMinAspectRatio(2.0);
+        // No max set — should match anything >= 2.0
+        QVERIFY(!layout.matchesAspectRatio(1.78)); // below min
+        QVERIFY(layout.matchesAspectRatio(2.0)); // at min
+        QVERIFY(layout.matchesAspectRatio(2.33)); // above min
+        QVERIFY(layout.matchesAspectRatio(5.0)); // way above min — still matches
+    }
+
+    void testLayout_matchesAspectRatio_onlyMaxBoundSet()
+    {
+        Layout layout;
+        layout.setMaxAspectRatio(1.0);
+        // No min set — should match anything <= 1.0
+        QVERIFY(layout.matchesAspectRatio(0.56)); // below max
+        QVERIFY(layout.matchesAspectRatio(1.0)); // at max
+        QVERIFY(!layout.matchesAspectRatio(1.78)); // above max
+    }
+
+    void testLayout_matchesAspectRatio_epsilonBoundaries()
+    {
+        Layout layout;
+        layout.setMinAspectRatio(2.0);
+        layout.setMaxAspectRatio(3.0);
+
+        QVERIFY(!layout.matchesAspectRatio(1.999)); // just below min
+        QVERIFY(!layout.matchesAspectRatio(3.001)); // just above max
+    }
+
+    void testLayout_copyConstructor_copiesAspectRatio()
+    {
+        Layout original(QStringLiteral("Original"));
+        original.setAspectRatioClass(AspectRatioClass::Portrait);
+        original.setMinAspectRatio(0.3);
+        original.setMaxAspectRatio(0.9);
+
+        Layout copy(original);
+        QCOMPARE(copy.aspectRatioClass(), AspectRatioClass::Portrait);
+        QCOMPARE(copy.minAspectRatio(), 0.3);
+        QCOMPARE(copy.maxAspectRatio(), 0.9);
+    }
 };
 
 QTEST_MAIN(TestLayoutCore)

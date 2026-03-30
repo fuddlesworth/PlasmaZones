@@ -5,9 +5,8 @@
  * @file test_configdefaults.cpp
  * @brief Unit tests for the ConfigDefaults class (config/configdefaults.h)
  *
- * Tests verify that ConfigDefaults accessors return the expected values from
- * the .kcfg schema and that all numeric defaults fall within their declared
- * min/max bounds.
+ * Tests verify that ConfigDefaults accessors return the expected values and
+ * that all numeric defaults fall within their declared min/max bounds.
  *
  * CMake target (not yet added to CMakeLists.txt):
  *   add_executable(test_configdefaults test_configdefaults.cpp)
@@ -58,126 +57,127 @@ private Q_SLOTS:
     }
 
     /**
-     * Every numeric default must fall within the min/max bounds declared in the
-     * .kcfg schema. This prevents drift between ConfigDefaults and plasmazones.kcfg.
-     *
-     * The bounds are taken directly from the .kcfg <min>/<max> elements.
+     * Every numeric default must fall within the min/max bounds declared in
+     * ConfigDefaults. This prevents drift between default values and their bounds.
      */
     void testAllDefaults_withinKcfgBounds()
     {
         // Activation
-        QVERIFY(ConfigDefaults::dragActivationModifier() >= 0);
-        QVERIFY(ConfigDefaults::dragActivationModifier() <= 10);
-        QVERIFY(ConfigDefaults::dragActivationMouseButton() >= 0);
-        QVERIFY(ConfigDefaults::dragActivationMouseButton() <= 128);
         QVERIFY(ConfigDefaults::zoneSpanModifier() >= 0);
         QVERIFY(ConfigDefaults::zoneSpanModifier() <= 10);
 
         // Display
-        QVERIFY(ConfigDefaults::osdStyle() >= 0);
-        QVERIFY(ConfigDefaults::osdStyle() <= 2);
+        QVERIFY(ConfigDefaults::osdStyle() >= ConfigDefaults::osdStyleMin());
+        QVERIFY(ConfigDefaults::osdStyle() <= ConfigDefaults::osdStyleMax());
 
         // Appearance
-        QVERIFY(ConfigDefaults::activeOpacity() >= 0.0);
-        QVERIFY(ConfigDefaults::activeOpacity() <= 1.0);
-        QVERIFY(ConfigDefaults::inactiveOpacity() >= 0.0);
-        QVERIFY(ConfigDefaults::inactiveOpacity() <= 1.0);
-        QVERIFY(ConfigDefaults::borderWidth() >= 0);
-        QVERIFY(ConfigDefaults::borderWidth() <= 10);
-        QVERIFY(ConfigDefaults::borderRadius() >= 0);
-        QVERIFY(ConfigDefaults::borderRadius() <= 50);
-        QVERIFY(ConfigDefaults::labelFontSizeScale() >= 0.25);
-        QVERIFY(ConfigDefaults::labelFontSizeScale() <= 3.0);
-        QVERIFY(ConfigDefaults::labelFontWeight() >= 100);
-        QVERIFY(ConfigDefaults::labelFontWeight() <= 900);
+        QVERIFY(ConfigDefaults::activeOpacity() >= ConfigDefaults::activeOpacityMin());
+        QVERIFY(ConfigDefaults::activeOpacity() <= ConfigDefaults::activeOpacityMax());
+        QVERIFY(ConfigDefaults::inactiveOpacity() >= ConfigDefaults::inactiveOpacityMin());
+        QVERIFY(ConfigDefaults::inactiveOpacity() <= ConfigDefaults::inactiveOpacityMax());
+        QVERIFY(ConfigDefaults::borderWidth() >= ConfigDefaults::borderWidthMin());
+        QVERIFY(ConfigDefaults::borderWidth() <= ConfigDefaults::borderWidthMax());
+        QVERIFY(ConfigDefaults::borderRadius() >= ConfigDefaults::borderRadiusMin());
+        QVERIFY(ConfigDefaults::borderRadius() <= ConfigDefaults::borderRadiusMax());
+        QVERIFY(ConfigDefaults::labelFontSizeScale() >= ConfigDefaults::labelFontSizeScaleMin());
+        QVERIFY(ConfigDefaults::labelFontSizeScale() <= ConfigDefaults::labelFontSizeScaleMax());
+        QVERIFY(ConfigDefaults::labelFontWeight() >= ConfigDefaults::labelFontWeightMin());
+        QVERIFY(ConfigDefaults::labelFontWeight() <= ConfigDefaults::labelFontWeightMax());
 
         // Zones
-        QVERIFY(ConfigDefaults::zonePadding() >= 0);
-        QVERIFY(ConfigDefaults::zonePadding() <= 50);
-        QVERIFY(ConfigDefaults::outerGap() >= 0);
-        QVERIFY(ConfigDefaults::outerGap() <= 50);
-        QVERIFY(ConfigDefaults::outerGapTop() >= 0);
-        QVERIFY(ConfigDefaults::outerGapTop() <= 50);
-        QVERIFY(ConfigDefaults::outerGapBottom() >= 0);
-        QVERIFY(ConfigDefaults::outerGapBottom() <= 50);
-        QVERIFY(ConfigDefaults::outerGapLeft() >= 0);
-        QVERIFY(ConfigDefaults::outerGapLeft() <= 50);
-        QVERIFY(ConfigDefaults::outerGapRight() >= 0);
-        QVERIFY(ConfigDefaults::outerGapRight() <= 50);
-        QVERIFY(ConfigDefaults::adjacentThreshold() >= 5);
-        QVERIFY(ConfigDefaults::adjacentThreshold() <= 100);
-        QVERIFY(ConfigDefaults::pollIntervalMs() >= 10);
-        QVERIFY(ConfigDefaults::pollIntervalMs() <= 1000);
-        QVERIFY(ConfigDefaults::minimumZoneSizePx() >= 50);
-        QVERIFY(ConfigDefaults::minimumZoneSizePx() <= 500);
-        QVERIFY(ConfigDefaults::minimumZoneDisplaySizePx() >= 1);
-        QVERIFY(ConfigDefaults::minimumZoneDisplaySizePx() <= 50);
+        QVERIFY(ConfigDefaults::zonePadding() >= ConfigDefaults::zonePaddingMin());
+        QVERIFY(ConfigDefaults::zonePadding() <= ConfigDefaults::zonePaddingMax());
+        QVERIFY(ConfigDefaults::outerGap() >= ConfigDefaults::outerGapMin());
+        QVERIFY(ConfigDefaults::outerGap() <= ConfigDefaults::outerGapMax());
+        QVERIFY(ConfigDefaults::outerGapTop() >= ConfigDefaults::outerGapTopMin());
+        QVERIFY(ConfigDefaults::outerGapTop() <= ConfigDefaults::outerGapTopMax());
+        QVERIFY(ConfigDefaults::outerGapBottom() >= ConfigDefaults::outerGapBottomMin());
+        QVERIFY(ConfigDefaults::outerGapBottom() <= ConfigDefaults::outerGapBottomMax());
+        QVERIFY(ConfigDefaults::outerGapLeft() >= ConfigDefaults::outerGapLeftMin());
+        QVERIFY(ConfigDefaults::outerGapLeft() <= ConfigDefaults::outerGapLeftMax());
+        QVERIFY(ConfigDefaults::outerGapRight() >= ConfigDefaults::outerGapRightMin());
+        QVERIFY(ConfigDefaults::outerGapRight() <= ConfigDefaults::outerGapRightMax());
+        QVERIFY(ConfigDefaults::adjacentThreshold() >= ConfigDefaults::adjacentThresholdMin());
+        QVERIFY(ConfigDefaults::adjacentThreshold() <= ConfigDefaults::adjacentThresholdMax());
+        QVERIFY(ConfigDefaults::pollIntervalMs() >= ConfigDefaults::pollIntervalMsMin());
+        QVERIFY(ConfigDefaults::pollIntervalMs() <= ConfigDefaults::pollIntervalMsMax());
+        QVERIFY(ConfigDefaults::minimumZoneSizePx() >= ConfigDefaults::minimumZoneSizePxMin());
+        QVERIFY(ConfigDefaults::minimumZoneSizePx() <= ConfigDefaults::minimumZoneSizePxMax());
+        QVERIFY(ConfigDefaults::minimumZoneDisplaySizePx() >= ConfigDefaults::minimumZoneDisplaySizePxMin());
+        QVERIFY(ConfigDefaults::minimumZoneDisplaySizePx() <= ConfigDefaults::minimumZoneDisplaySizePxMax());
 
         // Behavior
         QVERIFY(ConfigDefaults::stickyWindowHandling() >= 0);
         QVERIFY(ConfigDefaults::stickyWindowHandling() <= 2);
-        QVERIFY(ConfigDefaults::minimumWindowWidth() >= 0);
-        QVERIFY(ConfigDefaults::minimumWindowWidth() <= 2000);
-        QVERIFY(ConfigDefaults::minimumWindowHeight() >= 0);
-        QVERIFY(ConfigDefaults::minimumWindowHeight() <= 2000);
+        QVERIFY(ConfigDefaults::minimumWindowWidth() >= ConfigDefaults::minimumWindowWidthMin());
+        QVERIFY(ConfigDefaults::minimumWindowWidth() <= ConfigDefaults::minimumWindowWidthMax());
+        QVERIFY(ConfigDefaults::minimumWindowHeight() >= ConfigDefaults::minimumWindowHeightMin());
+        QVERIFY(ConfigDefaults::minimumWindowHeight() <= ConfigDefaults::minimumWindowHeightMax());
 
         // Zone Selector
-        QVERIFY(ConfigDefaults::triggerDistance() >= 10);
-        QVERIFY(ConfigDefaults::triggerDistance() <= 200);
+        QVERIFY(ConfigDefaults::triggerDistance() >= ConfigDefaults::triggerDistanceMin());
+        QVERIFY(ConfigDefaults::triggerDistance() <= ConfigDefaults::triggerDistanceMax());
         QVERIFY(ConfigDefaults::position() >= 0);
         QVERIFY(ConfigDefaults::position() <= 8);
         QVERIFY(ConfigDefaults::layoutMode() >= 0);
         QVERIFY(ConfigDefaults::layoutMode() <= 2);
         QVERIFY(ConfigDefaults::sizeMode() >= 0);
         QVERIFY(ConfigDefaults::sizeMode() <= 1);
-        QVERIFY(ConfigDefaults::maxRows() >= 1);
-        QVERIFY(ConfigDefaults::maxRows() <= 10);
-        QVERIFY(ConfigDefaults::previewWidth() >= 80);
-        QVERIFY(ConfigDefaults::previewWidth() <= 400);
-        QVERIFY(ConfigDefaults::previewHeight() >= 60);
-        QVERIFY(ConfigDefaults::previewHeight() <= 300);
-        QVERIFY(ConfigDefaults::gridColumns() >= 1);
-        QVERIFY(ConfigDefaults::gridColumns() <= 10);
+        QVERIFY(ConfigDefaults::maxRows() >= ConfigDefaults::maxRowsMin());
+        QVERIFY(ConfigDefaults::maxRows() <= ConfigDefaults::maxRowsMax());
+        QVERIFY(ConfigDefaults::previewWidth() >= ConfigDefaults::previewWidthMin());
+        QVERIFY(ConfigDefaults::previewWidth() <= ConfigDefaults::previewWidthMax());
+        QVERIFY(ConfigDefaults::previewHeight() >= ConfigDefaults::previewHeightMin());
+        QVERIFY(ConfigDefaults::previewHeight() <= ConfigDefaults::previewHeightMax());
+        QVERIFY(ConfigDefaults::gridColumns() >= ConfigDefaults::gridColumnsMin());
+        QVERIFY(ConfigDefaults::gridColumns() <= ConfigDefaults::gridColumnsMax());
 
         // Shaders
-        QVERIFY(ConfigDefaults::shaderFrameRate() >= 30);
-        QVERIFY(ConfigDefaults::shaderFrameRate() <= 144);
-        QVERIFY(ConfigDefaults::audioSpectrumBarCount() >= 16);
-        QVERIFY(ConfigDefaults::audioSpectrumBarCount() <= 256);
+        QVERIFY(ConfigDefaults::shaderFrameRate() >= ConfigDefaults::shaderFrameRateMin());
+        QVERIFY(ConfigDefaults::shaderFrameRate() <= ConfigDefaults::shaderFrameRateMax());
+        QVERIFY(ConfigDefaults::audioSpectrumBarCount() >= ConfigDefaults::audioSpectrumBarCountMin());
+        QVERIFY(ConfigDefaults::audioSpectrumBarCount() <= ConfigDefaults::audioSpectrumBarCountMax());
 
         // Autotiling
-        QVERIFY(ConfigDefaults::autotileSplitRatio() >= 0.1);
-        QVERIFY(ConfigDefaults::autotileSplitRatio() <= 0.9);
-        QVERIFY(ConfigDefaults::autotileMasterCount() >= 1);
-        QVERIFY(ConfigDefaults::autotileMasterCount() <= 5);
-        QVERIFY(ConfigDefaults::autotileCenteredMasterSplitRatio() >= 0.1);
-        QVERIFY(ConfigDefaults::autotileCenteredMasterSplitRatio() <= 0.9);
-        QVERIFY(ConfigDefaults::autotileCenteredMasterMasterCount() >= 1);
-        QVERIFY(ConfigDefaults::autotileCenteredMasterMasterCount() <= 5);
-        QVERIFY(ConfigDefaults::autotileInnerGap() >= 0);
-        QVERIFY(ConfigDefaults::autotileInnerGap() <= 50);
-        QVERIFY(ConfigDefaults::autotileOuterGap() >= 0);
-        QVERIFY(ConfigDefaults::autotileOuterGap() <= 50);
-        QVERIFY(ConfigDefaults::autotileMaxWindows() >= 1);
-        QVERIFY(ConfigDefaults::autotileMaxWindows() <= 12);
-        QVERIFY(ConfigDefaults::autotileInsertPosition() >= 0);
-        QVERIFY(ConfigDefaults::autotileInsertPosition() <= 2);
-        QVERIFY(ConfigDefaults::autotileBorderWidth() >= 0);
-        QVERIFY(ConfigDefaults::autotileBorderWidth() <= 10);
+        QVERIFY(ConfigDefaults::autotileSplitRatio() >= ConfigDefaults::autotileSplitRatioMin());
+        QVERIFY(ConfigDefaults::autotileSplitRatio() <= ConfigDefaults::autotileSplitRatioMax());
+        QVERIFY(ConfigDefaults::autotileMasterCount() >= ConfigDefaults::autotileMasterCountMin());
+        QVERIFY(ConfigDefaults::autotileMasterCount() <= ConfigDefaults::autotileMasterCountMax());
+
+        QVERIFY(ConfigDefaults::autotileInnerGap() >= ConfigDefaults::autotileInnerGapMin());
+        QVERIFY(ConfigDefaults::autotileInnerGap() <= ConfigDefaults::autotileInnerGapMax());
+        QVERIFY(ConfigDefaults::autotileOuterGap() >= ConfigDefaults::autotileOuterGapMin());
+        QVERIFY(ConfigDefaults::autotileOuterGap() <= ConfigDefaults::autotileOuterGapMax());
+        QVERIFY(ConfigDefaults::autotileMaxWindows() >= ConfigDefaults::autotileMaxWindowsMin());
+        QVERIFY(ConfigDefaults::autotileMaxWindows() <= ConfigDefaults::autotileMaxWindowsMax());
+        QVERIFY(ConfigDefaults::autotileInsertPosition() >= ConfigDefaults::autotileInsertPositionMin());
+        QVERIFY(ConfigDefaults::autotileInsertPosition() <= ConfigDefaults::autotileInsertPositionMax());
+        QVERIFY(ConfigDefaults::autotileBorderWidth() >= ConfigDefaults::autotileBorderWidthMin());
+        QVERIFY(ConfigDefaults::autotileBorderWidth() <= ConfigDefaults::autotileBorderWidthMax());
+        QVERIFY(ConfigDefaults::autotileBorderRadius() >= ConfigDefaults::autotileBorderRadiusMin());
+        QVERIFY(ConfigDefaults::autotileBorderRadius() <= ConfigDefaults::autotileBorderRadiusMax());
+        QVERIFY(ConfigDefaults::autotileOuterGapTop() >= ConfigDefaults::autotileOuterGapTopMin());
+        QVERIFY(ConfigDefaults::autotileOuterGapTop() <= ConfigDefaults::autotileOuterGapTopMax());
+        QVERIFY(ConfigDefaults::autotileOuterGapBottom() >= ConfigDefaults::autotileOuterGapBottomMin());
+        QVERIFY(ConfigDefaults::autotileOuterGapBottom() <= ConfigDefaults::autotileOuterGapBottomMax());
+        QVERIFY(ConfigDefaults::autotileOuterGapLeft() >= ConfigDefaults::autotileOuterGapLeftMin());
+        QVERIFY(ConfigDefaults::autotileOuterGapLeft() <= ConfigDefaults::autotileOuterGapLeftMax());
+        QVERIFY(ConfigDefaults::autotileOuterGapRight() >= ConfigDefaults::autotileOuterGapRightMin());
+        QVERIFY(ConfigDefaults::autotileOuterGapRight() <= ConfigDefaults::autotileOuterGapRightMax());
 
         // Animations
-        QVERIFY(ConfigDefaults::animationDuration() >= 50);
-        QVERIFY(ConfigDefaults::animationDuration() <= 500);
-        QVERIFY(ConfigDefaults::animationMinDistance() >= 0);
-        QVERIFY(ConfigDefaults::animationMinDistance() <= 200);
-        QVERIFY(ConfigDefaults::animationSequenceMode() >= 0);
-        QVERIFY(ConfigDefaults::animationSequenceMode() <= 1);
-        QVERIFY(ConfigDefaults::animationStaggerInterval() >= 10);
-        QVERIFY(ConfigDefaults::animationStaggerInterval() <= 200);
+        QVERIFY(ConfigDefaults::animationDuration() >= ConfigDefaults::animationDurationMin());
+        QVERIFY(ConfigDefaults::animationDuration() <= ConfigDefaults::animationDurationMax());
+        QVERIFY(ConfigDefaults::animationMinDistance() >= ConfigDefaults::animationMinDistanceMin());
+        QVERIFY(ConfigDefaults::animationMinDistance() <= ConfigDefaults::animationMinDistanceMax());
+        QVERIFY(ConfigDefaults::animationSequenceMode() >= ConfigDefaults::animationSequenceModeMin());
+        QVERIFY(ConfigDefaults::animationSequenceMode() <= ConfigDefaults::animationSequenceModeMax());
+        QVERIFY(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::animationStaggerIntervalMin());
+        QVERIFY(ConfigDefaults::animationStaggerInterval() <= ConfigDefaults::animationStaggerIntervalMax());
     }
 
     /**
-     * autotileSplitRatio default must be 0.5 (matching the .kcfg <default>0.5</default>).
+     * autotileSplitRatio default must be 0.5.
      */
     void testAutotileSplitRatio_default_is0point5()
     {
@@ -185,7 +185,7 @@ private Q_SLOTS:
     }
 
     /**
-     * autotileMasterCount default must be 1 (matching the .kcfg <default>1</default>).
+     * autotileMasterCount default must be 1.
      */
     void testAutotileMasterCount_default_is1()
     {

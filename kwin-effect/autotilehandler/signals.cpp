@@ -44,7 +44,7 @@ void AutotileHandler::slotEnabledChanged(bool enabled)
     }
 }
 
-void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool isDesktopSwitch)
+void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch)
 {
     // Invalidate in-flight stagger timers from prior autotile/restore operations.
     // Without this, a desktop switch can race with a pending stagger from the
@@ -52,7 +52,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
     ++m_autotileStaggerGeneration;
     ++m_restoreStaggerGeneration;
 
-    const QSet<QString> newScreens(screenNames.begin(), screenNames.end());
+    const QSet<QString> newScreens(screenIds.begin(), screenIds.end());
     const QSet<QString> removed = m_autotileScreens - newScreens;
     const QSet<QString> added = newScreens - m_autotileScreens;
 
@@ -300,12 +300,10 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
                 }
             }
 
-            // Save current frame geometries and notify windows IMMEDIATELY (non-blocking).
+            // Save pre-autotile geometry for ALL eligible windows (including minimized).
             // The window's current position IS the pre-autotile geometry we want to save.
-            // slotWindowsTileRequested also saves pre-autotile geometry (before tiling), so
-            // this is a belt-and-suspenders save for windows on newly-added autotile screens.
-            // Only process windows on the current desktop/activity — prevents cross-desktop
-            // pollution when desktop switch triggers autotile screen set changes.
+            // For floating windows, also update daemon's pre-tile geometry to current
+            // position with overwrite=true (user may have moved the window while floating).
             for (KWin::EffectWindow* w : windows) {
                 if (!w || !m_effect->shouldHandleWindow(w)) {
                     continue;
@@ -318,10 +316,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
                     continue;
                 }
                 const QString windowId = m_effect->getWindowId(w);
-                // For floating windows, update daemon's pre-tile geometry to current position
-                // with overwrite=true. The user may have moved the window while floating, and
-                // the daemon's stored geometry (from the original snap) is stale.
-                // saveAndRecordPreAutotileGeometry uses overwrite=false which won't update it.
+                saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry());
                 if (m_effect->isWindowFloating(windowId) && m_effect->m_daemonServiceRegistered) {
                     QRectF frame = w->frameGeometry();
                     m_effect->fireAndForgetDBusCall(
@@ -330,13 +325,12 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
                          static_cast<int>(frame.width()), static_cast<int>(frame.height()), screenId, true},
                         QStringLiteral("storePreTileGeometry"));
                 }
-                saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry());
-
-                if (!w->isMinimized()) {
-                    m_notifiedWindows.remove(windowId);
-                    notifyWindowAdded(w);
-                }
             }
+
+            // Batch-notify all windows on newly-added autotile screens in one D-Bus
+            // call (windowsOpenedBatch) instead of per-window windowOpened round-trips.
+            // saveAndRecordPreAutotileGeometry is called inside notifyWindowsAddedBatch.
+            notifyWindowsAddedBatch(windows, added, /*resetNotified=*/true);
             qCInfo(lcEffect) << "Saved pre-autotile geometries for screens:" << added;
 
             // Async fetch of daemon's persisted pre-autotile geometries from previous session.
@@ -436,33 +430,23 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames, bool is
     qCInfo(lcEffect) << "Autotile screens changed:" << m_autotileScreens;
 }
 
-void AutotileHandler::slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenName)
+void AutotileHandler::slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId)
 {
-    Q_UNUSED(screenName)
+    Q_UNUSED(screenId)
     qCInfo(lcEffect) << "Autotile floating changed:" << windowId << "isFloating:" << isFloating
-                     << "screen:" << screenName;
-
-    m_effect->m_navigationHandler->setWindowFloating(windowId, isFloating);
+                     << "screen:" << screenId;
 
     if (!isFloating) {
+        m_effect->m_navigationHandler->setWindowFloating(windowId, false);
         KWin::EffectWindow* unfloatWin = m_effect->findWindowById(windowId);
         if (unfloatWin && unfloatWin == KWin::effects->activeWindow()) {
             m_pendingAutotileFocusWindowId = windowId;
             KWin::effects->activateWindow(unfloatWin);
         }
-    }
+    } else {
+        applyFloatCleanup(windowId);
 
-    if (isFloating) {
-        m_border.tiledWindows.remove(windowId);
-        if (m_border.borderlessWindows.contains(windowId)) {
-            KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-            if (w) {
-                setWindowBorderless(w, windowId, false);
-            }
-        }
-        m_effect->removeWindowBorder(windowId);
-        unmaximizeMonocleWindow(windowId);
-
+        // Raise the floated window if it's the active window (user-initiated float)
         KWin::EffectWindow* floatWin = m_effect->findWindowById(windowId);
         if (!floatWin) {
             qCDebug(lcEffect) << "Autotile: window not found for float raise:" << windowId;

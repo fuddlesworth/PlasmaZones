@@ -3,13 +3,13 @@
 
 #include "ClearAllZonesCommand.h"
 #include "../../services/ZoneManager.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 using namespace PlasmaZones;
 
 ClearAllZonesCommand::ClearAllZonesCommand(QPointer<ZoneManager> zoneManager, const QVariantList& oldZones,
                                            const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? i18nc("@action", "Clear All Zones") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Clear All Zones", "@action") : text, parent)
     , m_oldZones(oldZones)
 {
 }

@@ -20,16 +20,16 @@ namespace Utils {
 
 /**
  * @brief Find a screen by its connector name
- * @param screenName Connector name to find (e.g., "DP-2")
+ * @param connectorName Connector name to find (e.g., "DP-2")
  * @return Pointer to QScreen if found, nullptr otherwise
  */
-inline QScreen* findScreenByName(const QString& screenName)
+inline QScreen* findScreenByName(const QString& connectorName)
 {
-    if (screenName.isEmpty()) {
+    if (connectorName.isEmpty()) {
         return QGuiApplication::primaryScreen();
     }
     for (QScreen* screen : QGuiApplication::screens()) {
-        if (screen->name() == screenName) {
+        if (screen->name() == connectorName) {
             return screen;
         }
     }
@@ -38,6 +38,31 @@ inline QScreen* findScreenByName(const QString& screenName)
 
 // Defined in utils.cpp (EDID-based lookup)
 PLASMAZONES_EXPORT QScreen* findScreenByIdOrName(const QString& identifier);
+
+/**
+ * @brief Get the aspect ratio of a screen
+ * @param screen QScreen pointer (returns 0.0 if null or degenerate geometry)
+ * @return width/height ratio, or 0.0 if unavailable
+ */
+inline qreal screenAspectRatio(QScreen* screen)
+{
+    if (!screen)
+        return 0.0;
+    const QRect geom = screen->geometry();
+    if (geom.height() <= 0)
+        return 0.0;
+    return static_cast<qreal>(geom.width()) / geom.height();
+}
+
+/**
+ * @brief Get the aspect ratio of a screen by name/ID
+ * @param screenNameOrId Screen connector name or EDID-based ID
+ * @return width/height ratio, or 0.0 if screen not found
+ */
+inline qreal screenAspectRatio(const QString& screenNameOrId)
+{
+    return screenAspectRatio(findScreenByIdOrName(screenNameOrId));
+}
 
 /**
  * @brief Get the primary screen
@@ -177,15 +202,6 @@ inline QString extractAppId(const QString& windowId)
 }
 
 /**
- * @deprecated Use extractAppId() instead
- */
-[[deprecated("Use extractAppId() instead")]]
-inline QString extractStableId(const QString& windowId)
-{
-    return extractAppId(windowId);
-}
-
-/**
  * @brief Extract window class from a window ID
  *
  * With the new "appId|internalId" format, the app ID is the window class.
@@ -199,6 +215,63 @@ inline QString extractStableId(const QString& windowId)
 inline QString extractWindowClass(const QString& windowId)
 {
     return extractAppId(windowId);
+}
+
+/**
+ * @brief Segment-aware app ID matching.
+ *
+ * Returns true if @p pattern matches @p appId using dot-segment-boundary rules.
+ * Handles both directions and partial last-segment prefixes.
+ *
+ * Match rules (all case-insensitive):
+ *   - Exact: "firefox" == "firefox"
+ *   - Trailing dot-segment: "firefox" matches "org.mozilla.firefox"
+ *   - Reverse trailing: "org.mozilla.firefox" matches appId "firefox"
+ *   - Last-segment prefix: "systemsettings" matches "org.kde.systemsettings5"
+ *     (pattern matches start of appId's last dot-segment)
+ *
+ * Does NOT match arbitrary substrings: "fire" does NOT match "firefox"
+ * because "fire" is not a complete segment and the last segment "firefox"
+ * does not start with "fire" (length 4 < 5 threshold to prevent short matches).
+ */
+inline bool appIdMatches(const QString& appId, const QString& pattern)
+{
+    if (appId.isEmpty() || pattern.isEmpty()) {
+        return false;
+    }
+    if (appId.compare(pattern, Qt::CaseInsensitive) == 0) {
+        return true;
+    }
+    // Trailing dot-segment: "org.mozilla.firefox" ends with ".firefox"
+    if (appId.length() > pattern.length() + 1 && appId[appId.length() - pattern.length() - 1] == QLatin1Char('.')
+        && appId.endsWith(pattern, Qt::CaseInsensitive)) {
+        return true;
+    }
+    // Reverse: appId is a trailing dot-segment of pattern
+    if (pattern.length() > appId.length() + 1 && pattern[pattern.length() - appId.length() - 1] == QLatin1Char('.')
+        && pattern.endsWith(appId, Qt::CaseInsensitive)) {
+        return true;
+    }
+    // Last-segment prefix: "systemsettings" matches start of last segment "systemsettings5"
+    // Only for patterns >= 5 chars to prevent short false positives like "fire" → "firefox"
+    if (pattern.length() >= 5) {
+        int lastDot = appId.lastIndexOf(QLatin1Char('.'));
+        if (lastDot >= 0) {
+            QStringView lastSeg = QStringView(appId).mid(lastDot + 1);
+            if (lastSeg.startsWith(pattern, Qt::CaseInsensitive) && lastSeg.length() != pattern.length()) {
+                return true;
+            }
+        }
+        // Reverse: appId matches start of pattern's last segment
+        lastDot = pattern.lastIndexOf(QLatin1Char('.'));
+        if (lastDot >= 0 && appId.length() >= 5) {
+            QStringView lastSeg = QStringView(pattern).mid(lastDot + 1);
+            if (lastSeg.startsWith(appId, Qt::CaseInsensitive) && lastSeg.length() != appId.length()) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,47 @@
+{
+    "id": "{c6fd8b9c-5dae-4acd-ec7b-9fb03c5d7e9f}",
+    "name": "Super-Ultrawide Dev",
+    "description": "Dual-workspace dev layout for 32:9 — left half for code, right half for reference/tools",
+    "type": 5,
+    "isBuiltIn": true,
+    "showZoneNumbers": true,
+    "aspectRatioClass": "super-ultrawide",
+    "zones": [
+        {
+            "id": "{c6d7e8f9-1111-4444-cccc-111111111111}",
+            "name": "File Tree",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.08, "height": 1.0 }
+        },
+        {
+            "id": "{c6d7e8f9-2222-4444-cccc-222222222222}",
+            "name": "Editor",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.08, "y": 0, "width": 0.3, "height": 1.0 }
+        },
+        {
+            "id": "{c6d7e8f9-3333-4444-cccc-333333333333}",
+            "name": "Terminal",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.38, "y": 0, "width": 0.14, "height": 1.0 }
+        },
+        {
+            "id": "{c6d7e8f9-4444-4444-cccc-444444444444}",
+            "name": "Browser / Preview",
+            "zoneNumber": 4,
+            "relativeGeometry": { "x": 0.52, "y": 0, "width": 0.3, "height": 1.0 }
+        },
+        {
+            "id": "{c6d7e8f9-5555-4444-cccc-555555555555}",
+            "name": "Chat / Docs",
+            "zoneNumber": 5,
+            "relativeGeometry": { "x": 0.82, "y": 0, "width": 0.18, "height": 0.55 }
+        },
+        {
+            "id": "{c6d7e8f9-6666-4444-cccc-666666666666}",
+            "name": "Music / Logs",
+            "zoneNumber": 6,
+            "relativeGeometry": { "x": 0.82, "y": 0.55, "width": 0.18, "height": 0.45 }
+        }
+    ]
+}

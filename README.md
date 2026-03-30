@@ -4,7 +4,7 @@
 
 <img src="icons/hicolor/scalable/apps/plasmazones.svg" alt="PlasmaZones" width="96">
 
-**Window zone management for KDE Plasma 6**
+**Window zone management for Wayland compositors**
 
 Define zones on your screen. Drag windows into them. Done.
 
@@ -14,7 +14,7 @@ Define zones on your screen. Drag windows into them. Done.
 [![COPR](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fcopr.fedorainfracloud.org%2Fapi_3%2Fpackage%3Fownername%3Dfuddlesworth%26projectname%3DPlasmaZones%26packagename%3Dplasmazones%26with_latest_succeeded_build%3Dtrue&query=%24.builds.latest_succeeded.source_package.version&label=COPR&color=blue)](https://copr.fedorainfracloud.org/coprs/fuddlesworth/PlasmaZones/package/plasmazones/)
 <br>
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-blue.svg)](LICENSE)
-[![KDE Plasma 6](https://img.shields.io/badge/KDE%20Plasma-6-blue.svg)](https://kde.org/plasma-desktop/)
+[![Wayland](https://img.shields.io/badge/Wayland-native-blue.svg)](https://wayland.freedesktop.org/)
 
 </div>
 
@@ -25,8 +25,14 @@ Define zones on your screen. Drag windows into them. Done.
 - [How It Works](#how-it-works)
 - [Features](#features)
   - [Window Snapping](#window-snapping)
+  - [Layout Editor](#layout-editor)
   - [Autotiling](#autotiling)
   - [Shader Effects](#shader-effects)
+  - [Snap Assist](#snap-assist)
+  - [Zone Selector](#zone-selector)
+  - [Layout Picker](#layout-picker)
+  - [Multi-Monitor & Virtual Desktops](#multi-monitor--virtual-desktops)
+  - [Settings App](#settings-app)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
@@ -82,7 +88,7 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 ### Layout Editor
 
 - Visual canvas for drawing and resizing zones
-- 12 built-in templates (columns, grids, fibonacci, master-stack, focus+stack, and more)
+- 26 built-in templates (columns, grids, fibonacci, master-stack, focus+stack, and more)
 - Undo/redo, copy/paste, cut, duplicate
 - Split zones horizontally or vertically
 - Grid and edge snapping
@@ -97,21 +103,7 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 
 ### Autotiling
 
-Enable autotiling per-screen and windows arrange themselves using one of 11 algorithms:
-
-| Algorithm | Description |
-|-----------|-------------|
-| Master+Stack | Main window with a stack beside it |
-| Centered Master | Main window centered, stacks on both sides |
-| Three Column | Even three-column split |
-| Columns | Equal vertical columns |
-| Rows | Equal horizontal rows |
-| Grid | Automatic grid arrangement |
-| Dwindle | Recursive halving, alternating direction |
-| Spiral | Recursive halving in a spiral |
-| BSP | Binary space partitioning |
-| Wide | Horizontal main area with stacked columns below |
-| Monocle | One window at a time, cycle between them |
+24 built-in JavaScript tiling algorithms including master+stack, dwindle, BSP, spiral, grid, monocle, and more. All algorithms run in a sandboxed engine and support hot-reload. You can create your own custom algorithms — see the full list and authoring guide on the [Tiling Algorithms](https://github.com/fuddlesworth/PlasmaZones/wiki/Tiling-Algorithms) wiki page.
 
 - Per-screen algorithm selection with independent settings
 - Configurable master ratio and master count (separate settings for Centered Master vs Master+Stack)
@@ -135,32 +127,13 @@ Enable autotiling per-screen and windows arrange themselves using one of 11 algo
 
 ### Shader Effects
 
-14 built-in GLSL shader effects for zone overlays, including audio-reactive visuals:
-
-| Effect | Description |
-|--------|-------------|
-| Aretha Shell | Cyberpunk hex grid with data streams |
-| Berry Drift | Metaball blobs in berry and violet tones |
-| CachyOS Drift | Crystalline drift with domain-warped FBM and iridescent glow |
-| Cosmic Flow | Fractal noise with animated colors |
-| Liquid Canvas | Wallpaper as a liquid painting with flow distortion |
-| Magnetic Field | Mouse-reactive field with orbiting particles |
-| Mosaic Pulse | Audio-reactive stained glass mosaic |
-| Nexus Cascade | Plasma with distortion, bloom, and chromatic aberration |
-| Prismata | Prismatic facets with audio-reactive chromatic fracture |
-| Sonic Ripple | Audio-reactive concentric rings with bass shockwaves |
-| Spectrum Bloom | Polar contour with frequency-driven shape morphing |
-| Spectrum Pulse | Audio-reactive neon energy with CAVA integration |
-| Toxic Circuit | Glowing circuit traces with digital corruption |
-| Voxel Terrain | Infinite 3D voxel world with neon edges and audio-reactive glow |
-
-Up to 4 custom image textures per shader, plus desktop wallpaper sampling.
+23 built-in GLSL shader effects for zone overlays, including audio-reactive visuals, distro-themed drifts, and procedural effects. Supports up to 4 custom image textures per shader plus desktop wallpaper sampling.
 
 <p align="center">
   <img src="docs/media/videos/shaders.gif" alt="Shader effects showcase" />
 </p>
 
-Custom shaders supported — see the [Shader Guide](https://github.com/fuddlesworth/PlasmaZones/wiki/Shaders) on the wiki.
+Custom shaders supported — see the full effect list and authoring guide in the [Shader Guide](https://github.com/fuddlesworth/PlasmaZones/wiki/Shaders) on the wiki.
 
 ### Snap Assist
 
@@ -211,18 +184,21 @@ Move, focus, swap, rotate, and push actions show a brief overlay with the affect
 - Per-screen shader selection
 - Screen-targeted app-to-zone rules
 
-### System Settings Integration
+### Settings App
 
-Full KCM module with 8 tabs:
+Standalone settings app (`plasmazones-settings`) with sidebar navigation:
 
-- **Layouts** — Create, duplicate, import/export zone layouts with 12 built-in templates
-- **Editor** — Keyboard shortcuts for zone operations, grid/edge snapping, snap modifier keys
-- **Assignments** — Per-monitor, virtual desktop, and activity layout assignments; quick-switch slots; app-to-zone rules
-- **Snapping** — Zone appearance (colors, opacity, borders, blur, shaders), activation behavior, animations, zone selector
-- **Tiling** — Per-screen algorithm selection, master ratio/count, gaps, title bar hiding, insertion order, focus behavior
-- **General** — OSD style, layout switch notifications, global behavior settings
+- **Overview** — Per-screen mode (snapping/tiling) with live context display
+- **Layouts** — Create, duplicate, import/export zone layouts with 26 templates
+- **Snapping** — Activation, zone appearance (colors, opacity, borders, blur, shaders), animations, zone selector, per-monitor/desktop/activity assignments
+- **Tiling** — Per-screen algorithm selection, master ratio/count, gaps, title bar hiding, insertion order, focus behavior, per-monitor/desktop/activity assignments
+- **App Rules** — Per-app zone assignment rules with interactive window picker
 - **Exclusions** — Window class exclusion lists with interactive picker, minimum size thresholds
-- **About** — Version info, update checker with GitHub release notifications, links, credits
+- **Editor** — Layout editor preferences and shortcut configuration
+- **General** — OSD style, layout switch notifications, global behavior
+- **About** — Version info, update checker, daemon status
+
+On KDE Plasma, a System Settings entry provides version info and a launcher to the settings app.
 
 <p align="center">
   <img src="docs/media/videos/settings.gif" alt="PlasmaZones Settings" width="800">
@@ -234,15 +210,16 @@ Full KCM module with 8 tabs:
 
 ### Requirements
 
-- KDE Plasma 6 (Wayland)
+- Any Wayland compositor with layer-shell support
 - Qt 6.6+
-- KDE Frameworks 6.6+
-- LayerShellQt (required for Wayland overlays)
+- qt6-wayland / Wayland::Client
 - CMake 3.16+
 - C++20 compiler
+- wayland-scanner (build-time only)
 
-Optional:
-- PlasmaActivities for activity-based layouts
+Optional (for full KDE integration):
+- KDE Frameworks 6.6+ (KWin effect, System Settings, KGlobalAccel shortcuts)
+- PlasmaActivities (activity-based layouts)
 
 ### Arch Linux (AUR)
 
@@ -286,20 +263,43 @@ Or add to your flake inputs. A `flake.nix` is included in the repository.
 ```bash
 git clone https://github.com/fuddlesworth/PlasmaZones.git
 cd PlasmaZones
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
-cmake --build . -j$(nproc)
-sudo cmake --install .
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build -j$(nproc)
+sudo cmake --install build
 ```
 
-After installation, refresh the KDE service cache and enable the daemon:
+**Portable build (no KDE dependencies):**
 
 ```bash
-kbuildsycoca6 --noincremental
+cmake -B build -DUSE_KDE_FRAMEWORKS=OFF \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build -j$(nproc)
+sudo cmake --install build
+```
+
+This builds only the daemon and editor — no KWin effect or KCM.
+See [Compositor Integration](https://github.com/fuddlesworth/PlasmaZones/wiki/Compositor-Integration) for
+shortcut and config setup on non-KDE compositors.
+
+After installation, enable the daemon:
+
+```bash
 systemctl --user enable --now plasmazones.service
 ```
 
-Or log out and back in. Settings appear in **System Settings → Window Management → PlasmaZones**.
+On KDE Plasma, also refresh the service cache for KCM:
+
+```bash
+kbuildsycoca6 --noincremental
+```
+
+Open the settings app:
+
+```bash
+plasmazones-settings
+```
+
+On KDE Plasma, PlasmaZones also appears in **System Settings → Window Management → PlasmaZones** with a launcher to the settings app.
 
 <details>
 <summary>Local install (no root)</summary>
@@ -374,14 +374,14 @@ Run the installer again with a newer tarball. It will detect the existing instal
 
 ## Quick Start
 
-1. Open **System Settings → Window Management → PlasmaZones**
-2. Enable the daemon (or run `systemctl --user enable --now plasmazones.service`)
+1. Enable the daemon: `systemctl --user enable --now plasmazones.service`
+2. Open settings: `plasmazones-settings` (or **System Settings → PlasmaZones** on KDE)
 3. Click **Open Editor** to create a layout
 4. Draw zones or pick a template
 5. Save with **Ctrl+S**
 6. **Drag any window while holding Alt** — zones appear, drop to snap
 
-> **Can't find PlasmaZones in System Settings?** See [Troubleshooting](#troubleshooting) below.
+> **Tip:** The settings app works on any compositor. On KDE, it also appears in System Settings.
 
 ---
 
@@ -389,7 +389,7 @@ Run the installer again with a newer tarball. It will detect the existing instal
 
 ### Global Shortcuts
 
-All configurable in **System Settings → Shortcuts → PlasmaZones**.
+All configurable in **System Settings → Shortcuts → PlasmaZones** (KDE) or in the PlasmaZones settings app.
 
 <details>
 <summary>Layout switching</summary>
@@ -455,6 +455,8 @@ All configurable in **System Settings → Shortcuts → PlasmaZones**.
 | Action | Default Shortcut |
 |--------|------------------|
 | Open editor | `Meta+Shift+E` |
+| Open settings | `Meta+Shift+P` |
+| Toggle layout lock | `Meta+Ctrl+L` |
 
 </details>
 
@@ -487,19 +489,23 @@ All configurable in **System Settings → Shortcuts → PlasmaZones**.
 
 ## Configuration
 
-Settings available in **System Settings → Window Management → PlasmaZones** or directly via:
+Open the settings app:
 
 ```bash
-systemsettings kcm_plasmazones
+plasmazones-settings                    # opens on overview page
+plasmazones-settings -p layouts         # opens directly to layouts page
+plasmazones-settings --page tiling-behavior  # opens to tiling behavior page
 ```
 
-Layouts stored as JSON in `~/.local/share/plasmazones/layouts/`.
+The app is single-instance — launching it again while running raises the existing window and switches to the requested page.
+
+Settings stored in `~/.config/plasmazonesrc`. Layouts stored as JSON in `~/.local/share/plasmazones/layouts/`.
 
 ---
 
 ## Troubleshooting
 
-### PlasmaZones not appearing in System Settings
+### PlasmaZones not appearing in System Settings (KDE only)
 
 Refresh the KDE service cache after installing from source:
 
@@ -507,14 +513,10 @@ Refresh the KDE service cache after installing from source:
 kbuildsycoca6 --noincremental
 ```
 
-Or log out and back in. To verify and open directly:
+Or log out and back in. The standalone settings app is always available:
 
 ```bash
-# Check if KCM is registered
-kcmshell6 --list | grep plasmazones
-
-# Open directly
-systemsettings kcm_plasmazones
+plasmazones-settings
 ```
 
 ### Daemon not starting
@@ -541,89 +543,21 @@ systemctl --user restart plasmazones.service
 
 ## D-Bus API
 
-PlasmaZones exposes 7 D-Bus interfaces for scripting and integration:
-
-| Interface | Purpose |
-|-----------|---------|
-| `Autotile` | Autotiling engine control, algorithm selection, window float/unfloat |
-| `LayoutManager` | Layout CRUD, screen/desktop/activity assignment, quick slots |
-| `Overlay` | Zone overlay visibility, highlighting, zone detection, Zone Selector |
-| `Screen` | Screen enumeration, geometry, scale, add/remove notifications |
-| `Settings` | Configuration load/save/reset, get/set by key |
-| `WindowDrag` | Window drag lifecycle from KWin, snap geometry response |
-| `WindowTracking` | Window-to-zone tracking, pre-snap geometry, floating state |
+PlasmaZones exposes 10 D-Bus interfaces on `org.plasmazones` for scripting and integration — Autotile, Control, LayoutManager, Overlay, Screen, Settings, Shader, and more.
 
 ```bash
-# List all layouts
-qdbus org.plasmazones /PlasmaZones org.plasmazones.LayoutManager.getLayoutList
-
-# Get active layout (returns JSON)
-qdbus org.plasmazones /PlasmaZones org.plasmazones.LayoutManager.getActiveLayout
-
-# Switch layout
-qdbus org.plasmazones /PlasmaZones org.plasmazones.LayoutManager.setActiveLayout "{uuid}"
-
-# Show/hide overlay
-qdbus org.plasmazones /PlasmaZones org.plasmazones.Overlay.showOverlay
-qdbus org.plasmazones /PlasmaZones org.plasmazones.Overlay.hideOverlay
-
-# Get all screens
-qdbus org.plasmazones /PlasmaZones org.plasmazones.Screen.getScreens
+# Quick examples
+qdbus6 org.plasmazones /PlasmaZones org.plasmazones.LayoutManager.getLayoutList
+qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Overlay.showOverlay
 ```
 
-Full API documentation: [wiki — D-Bus API](https://github.com/fuddlesworth/PlasmaZones/wiki/D-Bus-API)
+Full API reference, scripting examples, and per-interface documentation: [D-Bus API](https://github.com/fuddlesworth/PlasmaZones/wiki/D-Bus-API) on the wiki.
 
 ---
 
 ## Project Structure
 
-```
-src/
-├── autotile/           # Autotiling engine, per-screen config
-│   └── algorithms/     # 14 tiling algorithms (master-stack, dwindle, bsp, etc.)
-├── snap/               # Snap engine (zone matching, multi-zone selection)
-├── core/               # Zone, Layout, LayoutManager, ShaderRegistry
-│   ├── geometryutils/  # Geometry math helpers
-│   ├── layout/         # Layout model and serialization
-│   ├── layoutmanager/  # Layout lifecycle and assignment
-│   ├── screenmanager/  # Screen tracking and resolution
-│   ├── shaderregistry/ # Shader discovery and loading
-│   └── windowtrackingservice/  # Window-to-zone tracking
-├── daemon/             # Background service, overlay windows
-│   ├── daemon/         # Startup, signals, navigation handlers
-│   ├── overlayservice/ # Overlay window lifecycle
-│   ├── rendering/      # GPU rendering (QRhi), label textures
-│   └── shortcutmanager/  # Global shortcut handlers
-├── editor/             # Visual layout editor
-│   ├── qml/            # Editor QML UI
-│   ├── controller/     # Editor operations (gaps, layout, selection, etc.)
-│   ├── helpers/        # D-Bus queries, serialization, batch operations
-│   ├── services/       # Snapping, templates, zone manager
-│   └── undo/           # Undo/redo command system
-├── dbus/               # D-Bus adaptors (7 interfaces)
-├── config/             # Settings (KConfig), update checker
-├── ui/                 # QML components (OSD, overlays, zone selector)
-└── shared/             # Shared QML components and plugins
-kcm/                    # System Settings module (KCM)
-└── ui/tabs/            # 8 tab components
-kwin-effect/            # KWin effect plugin
-└── autotilehandler/    # Autotile event handling from KWin
-data/
-├── layouts/            # Default layout templates (12)
-└── shaders/            # Built-in GLSL shader effects (13) + shared utilities
-packaging/
-├── arch/               # AUR PKGBUILD (source, binary, git)
-├── debian/             # Debian packaging
-├── local-install/      # Portable tarball installer
-├── nix/                # Nix flake package
-└── rpm/                # RPM spec
-cmake/                  # CMake helpers (extract-pot, format-qml, uninstall)
-tests/unit/             # Unit tests (autotile, config, core, helpers, ui)
-dbus/                   # D-Bus XML interface definitions (7 interfaces)
-icons/                  # Application icons (hicolor + hicolor-light)
-po/                     # Translations (KI18n/Gettext)
-docs/                   # Documentation and media
-```
+See the full directory tree and data locations on the [Project Structure](https://github.com/fuddlesworth/PlasmaZones/wiki/Project-Structure) wiki page.
 
 ---
 
@@ -654,6 +588,6 @@ GPL-3.0-or-later
 
 Inspired by [FancyZones](https://learn.microsoft.com/en-us/windows/powertoys/fancyzones) from PowerToys.
 
-**Made for KDE Plasma 6**
+**Works on KDE Plasma, Hyprland, Sway, GNOME, and any Wayland compositor with layer-shell support.**
 
 </div>

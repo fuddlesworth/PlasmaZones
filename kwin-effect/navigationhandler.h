@@ -4,31 +4,24 @@
 #pragma once
 
 #include <QObject>
-#include <QPointer>
-#include <QRect>
-#include <QRectF>
 #include <QSet>
 #include <QString>
-#include <functional>
 
-class QDBusInterface;
 class QDBusPendingCallWatcher;
-
-namespace KWin {
-class EffectWindow;
-}
 
 namespace PlasmaZones {
 
 class PlasmaZonesEffect;
 
 /**
- * @brief Handles keyboard navigation operations for PlasmaZones
+ * @brief Manages floating window state cache for PlasmaZones
  *
- * Processes keyboard navigation
- * commands (move, focus, swap, rotate, cycle, restore, float toggle).
+ * Navigation operations (move, focus, swap, restore, cycle, rotate, resnap) are now
+ * daemon-driven: the daemon computes geometry/targets and emits applyGeometryRequested,
+ * activateWindowRequested, or applyGeometriesBatch. The effect applies them directly.
  *
- * It delegates window lookups and geometry application back to the effect.
+ * This handler retains floating window state tracking (synced from daemon via D-Bus
+ * signals, queried locally for fast checks in shouldHandleWindow/isWindowFloating).
  */
 class NavigationHandler : public QObject
 {
@@ -36,17 +29,6 @@ class NavigationHandler : public QObject
 
 public:
     explicit NavigationHandler(PlasmaZonesEffect* effect, QObject* parent = nullptr);
-
-    // Navigation operations (called from effect's D-Bus signal handlers)
-    void handleMoveWindowToZone(const QString& targetZoneId, const QString& zoneGeometry);
-    void handleFocusWindowInZone(const QString& targetZoneId, const QString& windowId);
-    void handleRestoreWindow();
-    void handleToggleWindowFloat(bool shouldFloat);
-    void handleSwapWindows(const QString& targetZoneId, const QString& targetWindowId, const QString& zoneGeometry);
-    void handleRotateWindows(bool clockwise, const QString& rotationData);
-    void handleResnapToNewLayout(const QString& resnapData);
-    void handleSnapAllWindows(const QString& snapData, const QString& screenId);
-    void handleCycleWindowsInZone(const QString& directive, const QString& unused);
 
     // Floating window tracking (uses full windowId, with appId fallback)
     bool isWindowFloating(const QString& windowId) const;
@@ -59,79 +41,8 @@ public:
     void syncFloatingStateForWindow(const QString& windowId);
 
 private:
-    /**
-     * @brief Result from batch snap/rotate/resnap operations
-     */
-    struct BatchSnapResult
-    {
-        enum Status {
-            Success,
-            ParseError,
-            EmptyData,
-            DbusError
-        };
-        Status status = Success;
-        int successCount = 0;
-        QString firstSourceZoneId;
-        QString firstTargetZoneId;
-        QString firstScreenId;
-        QSet<QString> snappedWindowIds; ///< window IDs that were actually snapped
-    };
-
-    /**
-     * @brief Shared core for batch snap operations (rotate, resnap, snap-all)
-     *
-     * Parses JSON array of snap entries, validates D-Bus interface, builds window map,
-     * and applies geometry + windowSnapped for each valid entry.
-     *
-     * @param jsonData JSON array of {windowId, targetZoneId, sourceZoneId, x, y, width, height}
-     * @param filterCurrentDesktop If true, skip windows not on current desktop/activity (resnap)
-     * @param resolveFullWindowId If true, resolve full windowId via getWindowId() (resnap)
-     */
-    BatchSnapResult applyBatchSnapFromJson(const QString& jsonData, bool filterCurrentDesktop = false,
-                                           bool resolveFullWindowId = false,
-                                           const std::function<void()>& onComplete = nullptr);
-
-    // Move-to-zone directive handlers (decomposed from handleMoveWindowToZone)
-    void handleNavigateMove(KWin::EffectWindow* activeWindow, const QString& windowId, const QString& screenId,
-                            const QString& direction);
-    void handlePushMove(KWin::EffectWindow* activeWindow, const QString& windowId, const QString& screenId,
-                        const QString& pushScreenId);
-    void handleSnapByNumber(KWin::EffectWindow* activeWindow, const QString& windowId, const QString& screenId,
-                            int zoneNumber, const QString& snapScreenId);
-    void handleDirectZoneSnap(KWin::EffectWindow* activeWindow, const QString& windowId, const QString& screenId,
-                              const QString& targetZoneId, const QString& zoneGeometry);
-
-    // Float toggle helpers (decomposed from executeFloatToggle)
-    void executeFloatToggle(KWin::EffectWindow* activeWindow, const QString& windowId, const QString& screenId,
-                            bool newFloatState);
-    void executeFloatOn(KWin::EffectWindow* activeWindow, const QString& windowId, const QString& screenId);
-    void executeFloatOff(KWin::EffectWindow* activeWindow, const QString& windowId, const QString& screenId);
-
-    /**
-     * @brief Get valid WindowTracking interface or emit navigation feedback on failure.
-     * @return Valid QDBusInterface* or nullptr (feedback already emitted)
-     */
-    QDBusInterface* requireInterface(const QString& action, const QString& screenId);
-
-    /**
-     * @brief Shared callback body for daemon-driven snap replies (navigate/push/snap).
-     *
-     * Parses the JSON reply, validates geometry, stores pre-snap geometry if needed,
-     * applies snap, and calls windowSnapped + recordSnapIntent.
-     */
-    void applyDaemonSnapReply(QDBusPendingCallWatcher* watcher, QPointer<KWin::EffectWindow> safeWindow,
-                              const QString& windowId, const QString& screenId, const QRectF& preSnapGeom,
-                              const QString& action);
-
-    /**
-     * @brief Emit navigation feedback for a BatchSnapResult.
-     */
-    void emitBatchFeedback(const BatchSnapResult& result, const QString& action, const QString& screenId);
-
     PlasmaZonesEffect* m_effect;
     QSet<QString> m_floatingWindows;
-    uint64_t m_resnapGeneration = 0; ///< Invalidates stale stagger callbacks on rapid layout cycling
 };
 
 } // namespace PlasmaZones

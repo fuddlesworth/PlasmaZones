@@ -206,17 +206,17 @@ inline Zone* findZoneInAnyLayout(ILayoutManager* mgr, const QString& zoneId, con
 
 /**
  * @brief Get a screen by name with null check and warning
- * @param screenName Screen name to find (empty = primary screen)
+ * @param screenId Screen ID to find (empty = primary screen)
  * @param operation Description for error logging
  * @param category Logging category to use
  * @return Screen pointer or nullptr (logs warning if not found)
  */
 template<typename LogCategory>
-QScreen* getScreenOrWarn(const QString& screenName, const QString& operation, LogCategory category)
+QScreen* getScreenOrWarn(const QString& screenId, const QString& operation, LogCategory category)
 {
-    QScreen* screen = Utils::findScreenByIdOrName(screenName);
+    QScreen* screen = Utils::findScreenByIdOrName(screenId);
     if (!screen) {
-        qCWarning(category) << operation << ": screen not found:" << screenName;
+        qCWarning(category) << operation << ": screen not found:" << screenId;
         return nullptr;
     }
     return screen;
@@ -225,9 +225,9 @@ QScreen* getScreenOrWarn(const QString& screenName, const QString& operation, Lo
 /**
  * @brief Overload using default lcDbus category
  */
-inline QScreen* getScreenOrWarn(const QString& screenName, const QString& operation)
+inline QScreen* getScreenOrWarn(const QString& screenId, const QString& operation)
 {
-    return getScreenOrWarn(screenName, operation, lcDbus);
+    return getScreenOrWarn(screenId, operation, lcDbus);
 }
 
 /**

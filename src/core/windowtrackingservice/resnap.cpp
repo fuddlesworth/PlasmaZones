@@ -142,6 +142,82 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
     return result;
 }
 
+void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens)
+{
+    QVector<ResnapEntry> newBuffer;
+    QSet<QString> addedIds;
+
+    // Build per-screen zone position maps: for each screen, resolve the CURRENT
+    // layout and build zoneId → position mapping. This captures the OLD state
+    // before the KCM's new assignments take effect on the daemon.
+    // (At this point, LayoutManager already has the new assignments from the KCM's
+    // D-Bus calls, so resolveLayoutForScreen returns the NEW layout. But the
+    // window zone assignments in WTS still reference zone IDs from the OLD layout.)
+    //
+    // Since zone IDs from the old layout may not exist in the new layout,
+    // we need to find each window's POSITION in the old layout. The old layout
+    // is the one whose zone IDs match the window's zone assignments.
+    // We look up each zone ID in ALL loaded layouts to find the position.
+
+    // Build a global zoneId → (layoutId, position) map from all layouts
+    QHash<QString, int> globalZoneIdToPosition;
+    for (Layout* layout : m_layoutManager->layouts()) {
+        QVector<Zone*> zones = layout->zones();
+        std::sort(zones.begin(), zones.end(), [](Zone* a, Zone* b) {
+            return a->zoneNumber() < b->zoneNumber();
+        });
+        for (int i = 0; i < zones.size(); ++i) {
+            globalZoneIdToPosition[zones[i]->id().toString()] = i + 1; // 1-based
+        }
+    }
+
+    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
+        const QString& windowId = it.key();
+        const QStringList& zoneIds = it.value();
+        if (zoneIds.isEmpty() || isWindowFloating(windowId))
+            continue;
+
+        const QString screenId = m_windowScreenAssignments.value(windowId);
+        if (screenId.isEmpty())
+            continue;
+
+        // Skip windows on excluded screens (e.g. autotile screens)
+        if (excludeScreens.contains(screenId))
+            continue;
+
+        if (addedIds.contains(windowId))
+            continue;
+        addedIds.insert(windowId);
+
+        // Look up the zone position from the global map
+        const QString& primaryZoneId = zoneIds.first();
+        int position = globalZoneIdToPosition.value(primaryZoneId, 0);
+        if (position <= 0)
+            continue;
+
+        ResnapEntry entry;
+        entry.windowId = windowId;
+        entry.zonePosition = position;
+        entry.screenId = screenId;
+
+        // Multi-zone: collect all positions
+        if (zoneIds.size() > 1) {
+            for (const QString& zid : zoneIds) {
+                int p = globalZoneIdToPosition.value(zid, 0);
+                if (p > 0)
+                    entry.allZonePositions.append(p);
+            }
+        }
+
+        newBuffer.append(entry);
+    }
+
+    if (!newBuffer.isEmpty()) {
+        m_resnapBuffer = std::move(newBuffer);
+        qCInfo(lcCore) << "Resnap buffer (all screens):" << m_resnapBuffer.size() << "windows";
+    }
+}
+
 QVector<RotationEntry> WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& screenFilter) const
 {
     QVector<RotationEntry> result;

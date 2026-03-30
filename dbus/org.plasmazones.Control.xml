@@ -1,0 +1,32 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <interface name="org.plasmazones.Control">
+        <annotation name="org.gtk.GDBus.DocString" value="High-level convenience API for third-party integrations and scripts."/>
+
+        <method name="snapWindowToZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Snap a window to a zone by number on a screen."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to snap."/>
+            </arg>
+            <arg name="zoneNumber" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone number (1-indexed)."/>
+            </arg>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen for layout resolution (empty = primary)."/>
+            </arg>
+        </method>
+        <method name="toggleAutotileForScreen">
+            <annotation name="org.gtk.GDBus.DocString" value="Toggle between snapping and autotile mode for a screen."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen to toggle."/>
+            </arg>
+        </method>
+        <method name="getFullState">
+            <annotation name="org.gtk.GDBus.DocString" value="Get complete daemon state snapshot as JSON."/>
+            <arg name="state" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON with layouts, windows, autotile state."/>
+            </arg>
+        </method>
+    </interface>
+</node>

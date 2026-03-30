@@ -84,7 +84,6 @@ QJsonObject Layout::toJson() const
     QJsonObject json;
     json[JsonKeys::Id] = m_id.toString();
     json[JsonKeys::Name] = m_name;
-    json[JsonKeys::Type] = static_cast<int>(m_type);
     if (!m_description.isEmpty()) {
         json[JsonKeys::Description] = m_description;
     }
@@ -158,6 +157,17 @@ QJsonObject Layout::toJson() const
         json[JsonKeys::UseFullScreenGeometry] = true;
     }
 
+    // Aspect ratio classification - only serialize non-default values
+    if (m_aspectRatioClass != AspectRatioClass::Any) {
+        json[JsonKeys::AspectRatioClassKey] = ScreenClassification::toString(m_aspectRatioClass);
+    }
+    if (m_minAspectRatio > 0.0) {
+        json[JsonKeys::MinAspectRatio] = m_minAspectRatio;
+    }
+    if (m_maxAspectRatio > 0.0) {
+        json[JsonKeys::MaxAspectRatio] = m_maxAspectRatio;
+    }
+
     // Visibility filtering - only serialize non-default values
     if (m_hiddenFromSelector) {
         json[JsonKeys::HiddenFromSelector] = true;
@@ -183,7 +193,7 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     }
 
     layout->m_name = json[JsonKeys::Name].toString();
-    layout->m_type = static_cast<LayoutType>(json[JsonKeys::Type].toInt());
+    // Note: "type" key is silently ignored for backward compatibility
     layout->m_description = json[JsonKeys::Description].toString();
     // Gap overrides: -1 means use global setting (key absent = no override)
     layout->m_zonePadding = json.contains(JsonKeys::ZonePadding) ? json[JsonKeys::ZonePadding].toInt(-1) : -1;
@@ -218,6 +228,11 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
 
     // Full screen geometry mode
     layout->m_useFullScreenGeometry = json[JsonKeys::UseFullScreenGeometry].toBool(false);
+
+    // Aspect ratio classification
+    layout->m_aspectRatioClass = ScreenClassification::fromString(json[JsonKeys::AspectRatioClassKey].toString());
+    layout->m_minAspectRatio = json[JsonKeys::MinAspectRatio].toDouble(0.0);
+    layout->m_maxAspectRatio = json[JsonKeys::MaxAspectRatio].toDouble(0.0);
 
     // Visibility filtering
     layout->m_hiddenFromSelector = json[JsonKeys::HiddenFromSelector].toBool(false);

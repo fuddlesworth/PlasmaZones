@@ -47,8 +47,11 @@ void Daemon::handleRotate(bool clockwise)
         return;
     }
     QString screenId = Utils::screenIdentifier(screen);
-    if (auto* engine = engineForScreen(screenId)) {
-        engine->rotateWindows(clockwise, screenId);
+    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+        m_autotileEngine->rotateWindows(clockwise, screenId);
+    } else if (m_windowTrackingAdaptor) {
+        // Route through WTA for daemon-driven geometry computation + applyGeometriesBatch
+        m_windowTrackingAdaptor->rotateWindowsInLayout(clockwise, screenId);
     }
 }
 
@@ -78,8 +81,9 @@ void Daemon::handleMove(NavigationDirection direction)
     QString screenId = Utils::screenIdentifier(screen);
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
         m_autotileEngine->swapFocusedInDirection(dirStr);
-    } else if (m_snapEngine) {
-        m_snapEngine->moveInDirection(dirStr);
+    } else if (m_windowTrackingAdaptor) {
+        // Route through WTA for daemon-driven geometry computation + applyGeometryRequested
+        m_windowTrackingAdaptor->moveWindowToAdjacentZone(dirStr);
     }
 }
 
@@ -95,8 +99,10 @@ void Daemon::handleFocus(NavigationDirection direction)
         return;
     }
     QString screenId = Utils::screenIdentifier(screen);
-    if (auto* engine = engineForScreen(screenId)) {
-        engine->focusInDirection(dirStr, QStringLiteral("focus"));
+    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+        m_autotileEngine->focusInDirection(dirStr, QStringLiteral("focus"));
+    } else if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->focusAdjacentZone(dirStr);
     }
 }
 
@@ -111,8 +117,8 @@ void Daemon::handlePush()
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
         return;
     }
-    if (m_snapEngine) {
-        m_snapEngine->pushToEmptyZone(screenId);
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->pushToEmptyZone(screenId);
     }
 }
 
@@ -143,8 +149,10 @@ void Daemon::handleSwap(NavigationDirection direction)
         return;
     }
     QString screenId = Utils::screenIdentifier(screen);
-    if (auto* engine = engineForScreen(screenId)) {
-        engine->swapInDirection(dirStr, QStringLiteral("swap"));
+    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+        m_autotileEngine->swapInDirection(dirStr, QStringLiteral("swap"));
+    } else if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->swapWindowWithAdjacentZone(dirStr);
     }
 }
 
@@ -156,8 +164,10 @@ void Daemon::handleSnap(int zoneNumber)
         return;
     }
     QString screenId = Utils::screenIdentifier(screen);
-    if (auto* engine = engineForScreen(screenId)) {
-        engine->moveToPosition(QString(), zoneNumber, screenId);
+    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+        m_autotileEngine->moveToPosition(QString(), zoneNumber, screenId);
+    } else if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->snapToZoneByNumber(zoneNumber, screenId);
     }
 }
 
@@ -171,8 +181,8 @@ void Daemon::handleCycle(bool forward)
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
         QString dirStr = forward ? QStringLiteral("right") : QStringLiteral("left");
         m_autotileEngine->focusInDirection(dirStr, QStringLiteral("cycle"));
-    } else if (m_snapEngine) {
-        m_snapEngine->cycleWindowsInZone(forward);
+    } else if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->cycleWindowsInZone(forward);
     }
 }
 
@@ -185,8 +195,8 @@ void Daemon::handleResnap()
     QString screenId = Utils::screenIdentifier(screen);
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
         m_autotileEngine->retile(screenId);
-    } else if (m_snapEngine) {
-        m_snapEngine->resnapToNewLayout();
+    } else if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->resnapToNewLayout();
     }
 }
 
@@ -200,8 +210,8 @@ void Daemon::handleSnapAll()
     QString screenId = Utils::screenIdentifier(screen);
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
         m_autotileEngine->retile(screenId);
-    } else if (m_snapEngine) {
-        m_snapEngine->snapAllWindows(screenId);
+    } else if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->snapAllWindows(screenId);
     }
 }
 
@@ -247,8 +257,23 @@ void Daemon::resnapIfManualMode()
             return; // This screen is autotile — engine handles retile
         }
     }
+    // Populate the resnap buffer before resnapping. UnifiedLayoutController::applyEntry()
+    // blocks activeLayoutChanged (QSignalBlocker) to prevent whole-screen recalculation,
+    // which also prevents onLayoutChanged() from populating the resnap buffer.
+    // Additionally, when the global active layout is already the target (e.g. second
+    // screen cycling to the same layout), setActiveLayout is a no-op and no signal fires.
+    // Explicitly populating here mirrors the KCM's assignmentChangesApplied path.
+    if (m_windowTrackingAdaptor) {
+        QSet<QString> autotileScreens;
+        if (m_autotileEngine) {
+            autotileScreens = m_autotileEngine->autotileScreens();
+        }
+        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens);
+    }
     m_suppressResnapOsd = 1;
-    m_snapEngine->resnapToNewLayout();
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->resnapToNewLayout();
+    }
 }
 
 } // namespace PlasmaZones

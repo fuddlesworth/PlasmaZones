@@ -1,0 +1,41 @@
+{
+    "id": "{f2b83d4e-9e5c-4a0f-c7b2-4d6e8f0b1c3d}",
+    "name": "Ultrawide Center Focus",
+    "description": "Wide center panel with stacked side columns for 21:9 monitors",
+    "type": 5,
+    "isBuiltIn": true,
+    "showZoneNumbers": true,
+    "aspectRatioClass": "ultrawide",
+    "zones": [
+        {
+            "id": "{b2c3d4e5-1111-4444-bbbb-111111111111}",
+            "name": "Left Top",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.2, "height": 0.5 }
+        },
+        {
+            "id": "{b2c3d4e5-2222-4444-bbbb-222222222222}",
+            "name": "Left Bottom",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0, "y": 0.5, "width": 0.2, "height": 0.5 }
+        },
+        {
+            "id": "{b2c3d4e5-3333-4444-bbbb-333333333333}",
+            "name": "Center",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.2, "y": 0, "width": 0.6, "height": 1.0 }
+        },
+        {
+            "id": "{b2c3d4e5-4444-4444-bbbb-444444444444}",
+            "name": "Right Top",
+            "zoneNumber": 4,
+            "relativeGeometry": { "x": 0.8, "y": 0, "width": 0.2, "height": 0.5 }
+        },
+        {
+            "id": "{b2c3d4e5-5555-4444-bbbb-555555555555}",
+            "name": "Right Bottom",
+            "zoneNumber": 5,
+            "relativeGeometry": { "x": 0.8, "y": 0.5, "width": 0.2, "height": 0.5 }
+        }
+    ]
+}

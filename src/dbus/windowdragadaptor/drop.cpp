@@ -64,9 +64,11 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     const int capturedLastCursorX = m_lastCursorX;
     const int capturedLastCursorY = m_lastCursorY;
 
-    // Release on a disabled monitor: do not snap to overlay zone (avoids snapping to a zone on another screen)
+    // Release on a disabled context: do not snap to overlay zone
     bool useOverlayZone = true;
-    if (releaseScreen && m_settings && m_settings->isMonitorDisabled(releaseScreenId)) {
+    int curDesktopDrop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
+    QString curActivityDrop = m_layoutManager ? m_layoutManager->currentActivity() : QString();
+    if (releaseScreen && isContextDisabled(m_settings, releaseScreenId, curDesktopDrop, curActivityDrop)) {
         useOverlayZone = false;
     }
 
@@ -110,7 +112,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 m_settings->isContextLocked(prefix + Utils::screenIdentifier(screen), curDesktop, curActivity);
         }
         if (screen && !selectorScreenLocked
-            && (!m_settings || !m_settings->isMonitorDisabled(Utils::screenIdentifier(screen)))) {
+            && !isContextDisabled(m_settings, Utils::screenIdentifier(screen), curDesktopDrop, curActivityDrop)) {
             QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(screen);
             if (zoneGeom.isValid()) {
                 snapX = zoneGeom.x();
@@ -231,28 +233,36 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
 
     // Handle unsnap - window was snapped but dropped outside any zone
     // Use same state as float shortcut: save zone for restore and mark floating, so unfloat/snap-back works.
+    // Call unconditionally when capturedWasSnapped: windowUnsnappedForFloat handles the
+    // no-zone case internally, and setWindowFloating ensures windowClosed won't persist
+    // the zone (floating windows are excluded from persistence).
     if (!shouldApplyGeometry && capturedWasSnapped) {
-        if (m_windowTracking && !m_windowTracking->getZoneForWindow(windowId).isEmpty()) {
+        qCInfo(lcDbusWindow) << "Drag-out unsnap for" << windowId << "releaseScreen:" << releaseScreenId;
+        if (m_windowTracking) {
             m_windowTracking->windowUnsnappedForFloat(windowId);
             m_windowTracking->setWindowFloating(windowId, true);
         }
 
-        // On drag-to-unsnap: apply only pre-snap width/height; window keeps drop position.
+        // On drag-to-unsnap: restore pre-snap width/height; window keeps drop position.
         // Float-toggle shortcut uses calculateUnfloatRestore and restores full x/y/w/h.
-        if (m_settings && m_settings->restoreOriginalSizeOnUnsnap()) {
-            int origX, origY, origW, origH;
-            if (m_windowTracking
-                && m_windowTracking->getValidatedPreTileGeometry(windowId, origX, origY, origW, origH)) {
-                snapWidth = origW;
-                snapHeight = origH;
+        // Pass the release screen for proper cross-screen geometry validation (the float
+        // toggle path passes screenId to validatedPreTileGeometry; without it, coordinates
+        // captured on another screen may fail isGeometryOnScreen and not restore).
+        if (m_settings && m_settings->restoreOriginalSizeOnUnsnap() && m_windowTracking) {
+            auto geo = m_windowTracking->service()->validatedPreTileGeometry(windowId, releaseScreenId);
+            if (geo) {
+                snapWidth = geo->width();
+                snapHeight = geo->height();
                 shouldApplyGeometry = true;
                 restoreSizeOnlyOut = true;
+                // Only clear pre-tile geometry after successful restore.
+                // If not cleared, it remains available for a subsequent float
+                // toggle (applyGeometryForFloat) if the user re-floats later.
+                m_windowTracking->clearPreTileGeometry(windowId);
+                qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
+            } else {
+                qCInfo(lcDbusWindow) << "Drag-out unsnap: no pre-tile geometry found for" << windowId;
             }
-        }
-
-        // Clear pre-tile geometry to prevent memory accumulation
-        if (m_windowTracking) {
-            m_windowTracking->clearPreTileGeometry(windowId);
         }
     }
 

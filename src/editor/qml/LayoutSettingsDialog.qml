@@ -37,6 +37,7 @@ Kirigami.Dialog {
         perSideLeftSpin.value = root.editorController.outerGapLeft >= 0 ? root.editorController.outerGapLeft : root.editorController.globalOuterGapLeft;
         perSideRightSpin.value = root.editorController.outerGapRight >= 0 ? root.editorController.outerGapRight : root.editorController.globalOuterGapRight;
         fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry;
+        aspectRatioCombo.currentIndex = root.editorController.aspectRatioClass;
         overlayDisplayModeOverrideCheck.checked = root.editorController.hasOverlayDisplayModeOverride;
         overlayDisplayModeCombo.currentIndex = Math.max(0, Math.min(root.editorController.hasOverlayDisplayModeOverride ? root.editorController.overlayDisplayMode : root.editorController.globalOverlayDisplayMode, 1));
     }
@@ -89,6 +90,10 @@ Kirigami.Dialog {
 
         function onUseFullScreenGeometryChanged() {
             fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry;
+        }
+
+        function onAspectRatioClassChanged() {
+            aspectRatioCombo.currentIndex = root.editorController.aspectRatioClass;
         }
 
         target: root.editorController
@@ -416,6 +421,57 @@ Kirigami.Dialog {
                     onActivated: (index) => {
                         if (root.editorController && overlayDisplayModeOverrideCheck.checked)
                             root.editorController.overlayDisplayMode = index;
+
+                    }
+                }
+
+            }
+
+        }
+
+        Kirigami.Separator {
+            Layout.fillWidth: true
+        }
+
+        // ─── Aspect Ratio section ────────────────────────────────
+        ColumnLayout {
+            spacing: Kirigami.Units.smallSpacing
+            Layout.fillWidth: true
+
+            SectionHeader {
+                title: i18nc("@title:group", "Aspect Ratio")
+                icon: "transform-crop"
+            }
+
+            Label {
+                text: i18nc("@info", "Tag this layout for a specific monitor type. Layouts tagged with an aspect ratio class are suggested only on matching screens.")
+                wrapMode: Text.WordWrap
+                opacity: 0.7
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.maximumWidth: root.preferredWidth - root.padding * 2 - Kirigami.Units.largeSpacing
+            }
+
+            RowLayout {
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                Label {
+                    text: i18nc("@label", "Target:")
+                }
+
+                ComboBox {
+                    id: aspectRatioCombo
+
+                    model: [i18nc("@item:inlistbox aspect ratio class", "Any"), i18nc("@item:inlistbox aspect ratio class", "Standard (16:9)"), i18nc("@item:inlistbox aspect ratio class", "Ultrawide (21:9)"), i18nc("@item:inlistbox aspect ratio class", "Super-Ultrawide (32:9)"), i18nc("@item:inlistbox aspect ratio class", "Portrait (9:16)")]
+                    currentIndex: root.editorController ? root.editorController.aspectRatioClass : 0
+                    Layout.fillWidth: true
+                    Accessible.name: i18nc("@label", "Aspect ratio class")
+                    Accessible.description: i18nc("@info:accessibility", "Set which screen aspect ratio this layout is designed for")
+                    onActivated: (index) => {
+                        if (root.editorController)
+                            root.editorController.aspectRatioClass = index;
 
                     }
                 }

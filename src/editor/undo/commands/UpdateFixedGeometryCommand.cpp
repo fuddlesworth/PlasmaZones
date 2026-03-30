@@ -4,7 +4,7 @@
 #include "UpdateFixedGeometryCommand.h"
 #include "../../services/ZoneManager.h"
 #include "../../../core/constants.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 using namespace PlasmaZones;
 
@@ -12,7 +12,7 @@ UpdateFixedGeometryCommand::UpdateFixedGeometryCommand(QPointer<ZoneManager> zon
                                                        const QRectF& oldFixed, const QRectF& newFixed,
                                                        const QRectF& oldRelative, const QRectF& newRelative,
                                                        QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, i18nc("@action", "Change Zone Dimensions"), parent)
+    : BaseZoneCommand(zoneManager, PzI18n::tr("Change Zone Dimensions", "@action"), parent)
     , m_zoneId(zoneId)
     , m_oldFixed(oldFixed)
     , m_newFixed(newFixed)

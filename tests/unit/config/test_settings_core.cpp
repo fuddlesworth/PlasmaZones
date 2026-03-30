@@ -15,9 +15,7 @@
 
 #include <QTest>
 #include <QSignalSpy>
-#include <KConfig>
-#include <KConfigGroup>
-#include <KSharedConfig>
+#include "config/configbackend_qsettings.h"
 
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
@@ -38,7 +36,7 @@ private Q_SLOTS:
     // =========================================================================
 
     /**
-     * reset() must delete the "Updates" KConfig group so that the dismissed
+     * reset() must delete the "Updates" config group so that the dismissed
      * update version is cleared. Regression: if Updates group survives reset,
      * the user can never see update notifications again.
      */
@@ -48,10 +46,11 @@ private Q_SLOTS:
 
         // Write a value into the Updates group
         {
-            auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-            KConfigGroup updates = config->group(QStringLiteral("Updates"));
-            updates.writeEntry(QLatin1String("DismissedUpdateVersion"), QStringLiteral("99.0.0"));
-            config->sync();
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto updates = backend->group(QStringLiteral("Updates"));
+            updates->writeString(QStringLiteral("DismissedUpdateVersion"), QStringLiteral("99.0.0"));
+            updates.reset();
+            backend->sync();
         }
 
         // Create Settings and reset
@@ -59,9 +58,8 @@ private Q_SLOTS:
         settings.reset();
 
         // Verify the Updates group is gone
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        config->reparseConfiguration();
-        QVERIFY2(!config->hasGroup(QStringLiteral("Updates")), "reset() must delete the Updates KConfig group");
+        auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+        QVERIFY2(!backend->groupList().contains(QStringLiteral("Updates")), "reset() must delete the Updates group");
     }
 
     /**
@@ -74,19 +72,27 @@ private Q_SLOTS:
 
         // Write per-screen overrides
         {
-            auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-            config->group(QStringLiteral("ZoneSelector:eDP-1")).writeEntry("Position", 3);
-            config->group(QStringLiteral("AutotileScreen:HDMI-A-1")).writeEntry("AutotileMasterCount", 2);
-            config->group(QStringLiteral("SnappingScreen:DP-1")).writeEntry("SnapAssistEnabled", true);
-            config->sync();
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            {
+                auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
+                g->writeInt(QStringLiteral("Position"), 3);
+            }
+            {
+                auto g = backend->group(QStringLiteral("AutotileScreen:HDMI-A-1"));
+                g->writeInt(QStringLiteral("AutotileMasterCount"), 2);
+            }
+            {
+                auto g = backend->group(QStringLiteral("SnappingScreen:DP-1"));
+                g->writeBool(QStringLiteral("SnapAssistEnabled"), true);
+            }
+            backend->sync();
         }
 
         Settings settings;
         settings.reset();
 
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        config->reparseConfiguration();
-        const QStringList groups = config->groupList();
+        auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+        const QStringList groups = backend->groupList();
         for (const QString& g : groups) {
             QVERIFY2(!g.startsWith(QLatin1String("ZoneSelector:")),
                      qPrintable(QStringLiteral("Per-screen ZoneSelector group survived reset: %1").arg(g)));
@@ -102,17 +108,9 @@ private Q_SLOTS:
      * This validates the full round-trip for a representative subset of settings
      * across all config groups.
      *
-     * KSharedConfig::openConfig("plasmazonesrc") caches the config object by
-     * name (per-thread singleton). When multiple test slots each create a fresh
-     * IsolatedConfigGuard, the cached KSharedConfig still points to the file
-     * path established by the FIRST test slot that opened it -- even though
-     * subsequent guards change XDG_CONFIG_HOME to different temp dirs. This
-     * means save()/load() operate on the stale path, making the round-trip
-     * appear to fail (load reads defaults from a non-existent file).
-     *
-     * To work around this, we verify the round-trip by reading the on-disk
-     * config file directly with a path-based KConfig (bypassing the shared
-     * cache), which faithfully reflects what save() wrote.
+     * QSettingsConfigBackend::createDefault() reads from
+     * $XDG_CONFIG_HOME/plasmazonesrc. The IsolatedConfigGuard redirects
+     * XDG_CONFIG_HOME to a temp directory, so each test gets a fresh file.
      */
     void testSave_load_roundtrip_allGroups()
     {
@@ -141,43 +139,56 @@ private Q_SLOTS:
 
         settings.save();
 
-        // Verify the round-trip by reading from the KSharedConfig's in-memory
-        // state (which save() populated). Using KSharedConfig::openConfig()
-        // returns the same cached instance that save() wrote to, so its
-        // group entries reflect the saved values regardless of whether the
-        // underlying temp directory still exists on disk.
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
+        // Verify the round-trip by reading from a fresh config backend
+        // (re-reads from disk after save() flushed).
+        auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
 
-        KConfigGroup zones = config->group(QStringLiteral("Zones"));
-        QCOMPARE(zones.readEntry(QLatin1String("Padding"), 0), 15);
-        QCOMPARE(zones.readEntry(QLatin1String("OuterGap"), 0), 20);
+        {
+            auto zones = backend->group(QStringLiteral("Zones"));
+            QCOMPARE(zones->readInt(QStringLiteral("Padding"), 0), 15);
+            QCOMPARE(zones->readInt(QStringLiteral("OuterGap"), 0), 20);
+        }
 
-        KConfigGroup appearance = config->group(QStringLiteral("Appearance"));
-        QCOMPARE(appearance.readEntry(QLatin1String("BorderWidth"), 0), 5);
-        QCOMPARE(appearance.readEntry(QLatin1String("BorderRadius"), 0), 25);
-        QVERIFY(qFuzzyCompare(appearance.readEntry(QLatin1String("ActiveOpacity"), 0.0), 0.8));
-        QVERIFY(qFuzzyCompare(appearance.readEntry(QLatin1String("InactiveOpacity"), 0.0), 0.2));
+        {
+            auto appearance = backend->group(QStringLiteral("Appearance"));
+            QCOMPARE(appearance->readInt(QStringLiteral("BorderWidth"), 0), 5);
+            QCOMPARE(appearance->readInt(QStringLiteral("BorderRadius"), 0), 25);
+            QVERIFY(qFuzzyCompare(appearance->readDouble(QStringLiteral("ActiveOpacity"), 0.0), 0.8));
+            QVERIFY(qFuzzyCompare(appearance->readDouble(QStringLiteral("InactiveOpacity"), 0.0), 0.2));
+            QCOMPARE(appearance->readInt(QStringLiteral("LabelFontWeight"), 0), 400);
+        }
 
-        KConfigGroup display = config->group(QStringLiteral("Display"));
-        QCOMPARE(display.readEntry(QLatin1String("ShowNumbers"), true), false);
+        {
+            auto display = backend->group(QStringLiteral("Display"));
+            QCOMPARE(display->readBool(QStringLiteral("ShowNumbers"), true), false);
+        }
 
-        KConfigGroup activation = config->group(QStringLiteral("Activation"));
-        QCOMPARE(activation.readEntry(QLatin1String("ToggleActivation"), false), true);
+        {
+            auto activation = backend->group(QStringLiteral("Activation"));
+            QCOMPARE(activation->readBool(QStringLiteral("ToggleActivation"), false), true);
+        }
 
-        KConfigGroup zoneSelector = config->group(QStringLiteral("ZoneSelector"));
-        QCOMPARE(zoneSelector.readEntry(QLatin1String("Enabled"), true), false);
-        QCOMPARE(zoneSelector.readEntry(QLatin1String("TriggerDistance"), 0), 100);
-        QCOMPARE(zoneSelector.readEntry(QLatin1String("GridColumns"), 0), 3);
+        {
+            auto zoneSelector = backend->group(QStringLiteral("ZoneSelector"));
+            QCOMPARE(zoneSelector->readBool(QStringLiteral("Enabled"), true), false);
+            QCOMPARE(zoneSelector->readInt(QStringLiteral("TriggerDistance"), 0), 100);
+            QCOMPARE(zoneSelector->readInt(QStringLiteral("GridColumns"), 0), 3);
+        }
 
-        KConfigGroup autotiling = config->group(QStringLiteral("Autotiling"));
-        QVERIFY(qFuzzyCompare(autotiling.readEntry(QLatin1String("AutotileSplitRatio"), 0.0), 0.7));
-        QCOMPARE(autotiling.readEntry(QLatin1String("AutotileMasterCount"), 0), 3);
-        QCOMPARE(autotiling.readEntry(QLatin1String("AutotileInnerGap"), 0), 12);
+        {
+            auto autotiling = backend->group(QStringLiteral("Autotiling"));
+            double readRatio = autotiling->readDouble(QStringLiteral("AutotileSplitRatio"), 0.0);
+            QVERIFY2(qAbs(readRatio - 0.7) < 0.001,
+                     qPrintable(QStringLiteral("AutotileSplitRatio: expected 0.7, got %1").arg(readRatio)));
+            QCOMPARE(autotiling->readInt(QStringLiteral("AutotileMasterCount"), 0), 3);
+            QCOMPARE(autotiling->readInt(QStringLiteral("AutotileInnerGap"), 0), 12);
+        }
 
-        KConfigGroup animations = config->group(QStringLiteral("Animations"));
-        QCOMPARE(animations.readEntry(QLatin1String("AnimationDuration"), 0), 300);
-        QCOMPARE(animations.readEntry(QLatin1String("AnimationSequenceMode"), -1), 0);
-        QCOMPARE(appearance.readEntry(QLatin1String("LabelFontWeight"), 0), 400);
+        {
+            auto animations = backend->group(QStringLiteral("Animations"));
+            QCOMPARE(animations->readInt(QStringLiteral("AnimationDuration"), 0), 300);
+            QCOMPARE(animations->readInt(QStringLiteral("AnimationSequenceMode"), -1), 0);
+        }
     }
 
     // =========================================================================
@@ -256,33 +267,82 @@ private Q_SLOTS:
     }
 
     /**
-     * When config has a legacy DragActivationModifier int but no DragActivationTriggers
-     * JSON, load should migrate the legacy value into the trigger list format.
+     * When config has no DragActivationTriggers JSON, load should use the
+     * default trigger list (Alt modifier, no mouse button).
      */
-    void testLoadActivation_migrationFromLegacyFormat()
+    void testLoadActivation_missingTriggersUsesDefault()
     {
         IsolatedConfigGuard guard;
 
-        // Write legacy format: DragActivationModifier=1 (Shift), no DragActivationTriggers key
+        // Write activation config without DragActivationTriggers
         {
-            auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-            KConfigGroup activation = config->group(QStringLiteral("Activation"));
-            activation.writeEntry(QLatin1String("DragActivationModifier"), 1); // Shift
-            activation.writeEntry(QLatin1String("DragActivationMouseButton"), 0);
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto activation = backend->group(QStringLiteral("Activation"));
+            activation->writeBool(QStringLiteral("SnappingEnabled"), true);
             // Deliberately do NOT write DragActivationTriggers
-            config->sync();
+            activation.reset();
+            backend->sync();
         }
 
         Settings settings;
 
         QVariantList triggers = settings.dragActivationTriggers();
-        QVERIFY2(!triggers.isEmpty(), "Legacy DragActivationModifier must be migrated to trigger list");
+        QVERIFY2(!triggers.isEmpty(), "Missing DragActivationTriggers must fall back to defaults");
         QVariantMap first = triggers.first().toMap();
-        // KSharedConfig caching across test slots means the pre-written legacy
-        // DragActivationModifier=1 may not be visible to Settings::load().
-        // The migration falls back to ConfigDefaults::dragActivationModifier()
-        // which is Alt (DragModifier::Alt = 3).
-        QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3); // Alt (default fallback)
+        // Default: Alt modifier (3), no mouse button (0)
+        QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3);
+        QCOMPARE(first.value(QStringLiteral("mouseButton")).toInt(), 0);
+    }
+
+    /**
+     * When DragActivationTriggers contains corrupt/malformed JSON, load should
+     * fall back to the default trigger list rather than crashing.
+     */
+    void testLoadActivation_corruptJsonUsesDefault()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto activation = backend->group(QStringLiteral("Activation"));
+            activation->writeString(QStringLiteral("DragActivationTriggers"), QStringLiteral("{not valid json!}"));
+            activation.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+
+        QVariantList triggers = settings.dragActivationTriggers();
+        QVERIFY2(!triggers.isEmpty(), "Corrupt JSON must fall back to defaults");
+        QVariantMap first = triggers.first().toMap();
+        QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3);
+        QCOMPARE(first.value(QStringLiteral("mouseButton")).toInt(), 0);
+    }
+
+    /**
+     * When ZoneSpanModifier is set but ZoneSpanTriggers JSON is absent,
+     * the fallback trigger should use the actual ZoneSpanModifier value,
+     * not the static default.
+     */
+    void testLoadActivation_zoneSpanTriggersUsesActualModifier()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto activation = backend->group(QStringLiteral("Activation"));
+            activation->writeInt(QStringLiteral("ZoneSpanModifier"), 3); // Alt
+            // Deliberately do NOT write ZoneSpanTriggers
+            activation.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+
+        QVariantList triggers = settings.zoneSpanTriggers();
+        QVERIFY2(!triggers.isEmpty(), "Missing ZoneSpanTriggers must create trigger from ZoneSpanModifier value");
+        QVariantMap first = triggers.first().toMap();
+        QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3);
     }
 };
 

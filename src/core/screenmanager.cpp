@@ -19,8 +19,7 @@
 #include <QDBusServiceWatcher>
 #include <QRegularExpression>
 
-#include <LayerShellQt/Window>
-#include <LayerShellQt/Shell>
+#include "layersurface.h"
 
 namespace PlasmaZones {
 
@@ -156,23 +155,24 @@ void ScreenManager::createGeometrySensor(QScreen* screen)
     sensor->setScreen(screen);
     sensor->setFlag(Qt::FramelessWindowHint);
     sensor->setFlag(Qt::BypassWindowManagerHint);
-    sensor->setObjectName(QStringLiteral("GeometrySensor-%1").arg(screen->name()));
+    sensor->setObjectName(QStringLiteral("GeometrySensor-%1").arg(Utils::screenIdentifier(screen)));
 
-    auto* layerWindow = LayerShellQt::Window::get(sensor);
-    if (!layerWindow) {
-        qCWarning(lcScreen) << "Failed to get LayerShellQt window handle for sensor";
+    auto* layerSurface = LayerSurface::get(sensor);
+    if (!layerSurface) {
+        qCWarning(lcScreen) << "Failed to create layer surface for sensor";
         delete sensor;
         return;
     }
 
-    layerWindow->setScreen(screen);
-    layerWindow->setLayer(LayerShellQt::Window::LayerBackground);
-    layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-    layerWindow->setAnchors(
-        LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                      | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
-    layerWindow->setExclusiveZone(0);
-    layerWindow->setScope(QStringLiteral("plasmazones-sensor-%1").arg(screen->name()));
+    // Batch all property changes into a single propertiesChanged() emission
+    // so the QPA plugin only does one applyProperties()+commit round-trip.
+    LayerSurface::BatchGuard guard(layerSurface);
+    layerSurface->setScreen(screen);
+    layerSurface->setLayer(LayerSurface::LayerBackground);
+    layerSurface->setKeyboardInteractivity(LayerSurface::KeyboardInteractivityNone);
+    layerSurface->setAnchors(LayerSurface::AnchorAll);
+    layerSurface->setExclusiveZone(0);
+    layerSurface->setScope(QStringLiteral("plasmazones-sensor-%1").arg(Utils::screenIdentifier(screen)));
     // Do NOT call sensor->setOpacity(0.0): on Wayland, Qt's QWaylandWindow does not implement
     // QWindow::setOpacity(), so it logs "This plugin does not support setting window opacity".
     // The sensor is in LayerBackground with no content; it does not need explicit transparency.
@@ -207,7 +207,8 @@ void ScreenManager::createGeometrySensor(QScreen* screen)
 
 void ScreenManager::destroyGeometrySensor(QScreen* screen)
 {
-    if (auto* sensor = m_geometrySensors.take(screen)) {
+    auto sensor = m_geometrySensors.take(screen);
+    if (sensor) {
         sensor->disconnect();
         sensor->hide();
         sensor->deleteLater();
@@ -225,9 +226,9 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
     }
 
     QRect screenGeom = screen->geometry();
-    QString screenName = screen->name();
+    QString connectorName = screen->name();
 
-    qCDebug(lcScreen) << "calculateAvailableGeometry: screen=" << screenName << "geometry=" << screenGeom;
+    qCDebug(lcScreen) << "calculateAvailableGeometry: screen=" << connectorName << "geometry=" << screenGeom;
 
     int topOffset = 0;
     int bottomOffset = 0;
@@ -236,8 +237,8 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
     bool hasDbusData = false;
 
     // Look up panel offsets by screen name (populated by D-Bus query with geometry matching)
-    if (m_panelOffsets.contains(screenName)) {
-        const ScreenPanelOffsets& offsets = m_panelOffsets.value(screenName);
+    if (m_panelOffsets.contains(connectorName)) {
+        const ScreenPanelOffsets& offsets = m_panelOffsets.value(connectorName);
         topOffset = offsets.top;
         bottomOffset = offsets.bottom;
         leftOffset = offsets.left;
@@ -249,7 +250,7 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
     // Sensor position is always (0,0) on Wayland, so it doesn't tell us where the available
     // area starts. Floating panels don't use exclusive zones, so the sensor can't detect
     // them; only D-Bus has that info.
-    auto* sensor = m_geometrySensors.value(screen);
+    auto sensor = m_geometrySensors.value(screen);
     QRect sensorGeom;
     bool hasSensorData = false;
     if (sensor && sensor->isVisible()) {
@@ -294,7 +295,7 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
             // D-Bus query succeeded but found no panels on this screen,
             // yet sensor reports less than full screen. The sensor likely
             // landed on a different output (Wayland screen binding issue).
-            qCDebug(lcScreen) << "Sensor for" << screenName << "reports" << sensorGeom.size()
+            qCDebug(lcScreen) << "Sensor for" << connectorName << "reports" << sensorGeom.size()
                               << "but D-Bus found no panels on this screen."
                               << "Using full screen geometry instead.";
             finalWidth = screenGeom.width();
@@ -342,7 +343,7 @@ void ScreenManager::onSensorGeometryChanged(QScreen* screen)
         return;
     }
 
-    auto* sensor = m_geometrySensors.value(screen);
+    auto sensor = m_geometrySensors.value(screen);
     if (!sensor) {
         return;
     }

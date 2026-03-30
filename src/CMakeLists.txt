@@ -13,17 +13,43 @@ qt_policy(SET QTP0004 NEW)
 # ═══════════════════════════════════════════════════════════════════════════════
 add_subdirectory(shared)
 
-# KConfigXT for settings (GENERATE_MOC ensures Q_OBJECT is processed)
-kconfig_add_kcfg_files(plasmazones_settings_SRCS
-    config/plasmazones.kcfgc
-    GENERATE_MOC
+# Generate wlr-layer-shell Wayland protocol client code
+set(_pz_proto_dir ${CMAKE_CURRENT_SOURCE_DIR}/core/protocols)
+set(_pz_gen_dir ${CMAKE_CURRENT_BINARY_DIR}/generated-protocols)
+file(MAKE_DIRECTORY ${_pz_gen_dir})
+
+add_custom_command(
+    OUTPUT ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-client-protocol.h
+           ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
+    COMMAND ${WAYLAND_SCANNER} client-header
+            ${_pz_proto_dir}/wlr-layer-shell-unstable-v1.xml
+            ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-client-protocol.h
+    COMMAND ${WAYLAND_SCANNER} private-code
+            ${_pz_proto_dir}/wlr-layer-shell-unstable-v1.xml
+            ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
+    DEPENDS ${_pz_proto_dir}/wlr-layer-shell-unstable-v1.xml
+    COMMENT "Generating wlr-layer-shell Wayland protocol code"
+)
+
+# Generated protocol C code: skip PCH and unity build since it's plain C
+set_source_files_properties(
+    ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/qpa/xdg_popup_stub.c
+    PROPERTIES
+        SKIP_PRECOMPILE_HEADERS ON
+        SKIP_UNITY_BUILD_INCLUSION ON
 )
 
 # Core library sources
 set(plasmazones_core_SRCS
+    pz_qml_i18n.h
     core/constants.h
     core/logging.h
     core/logging.cpp
+    core/translationloader.h
+    core/translationloader.cpp
+    core/wallpaperprovider.h
+    core/wallpaperprovider.cpp
     core/enums.h
     core/interfaces.h
     core/interfaces.cpp
@@ -61,6 +87,8 @@ set(plasmazones_core_SRCS
     core/layoututils.cpp
     core/layoututils.h
     core/shaderregistry/params.cpp
+    core/layersurface.cpp
+    core/layersurface.h
     core/screenmanager.cpp
     core/screenmanager/panels.cpp
     core/screenmanager.h
@@ -83,6 +111,9 @@ set(plasmazones_core_SRCS
     config/settings/setters.cpp
     config/settings/perscreen.cpp
     config/settings.h
+    config/configdefaults.cpp
+    config/configbackend_qsettings.h
+    config/configbackend_qsettings.cpp
     config/colorimporter.cpp
     config/colorimporter.h
     config/updatechecker.cpp
@@ -93,6 +124,12 @@ set(plasmazones_core_SRCS
     dbus/layoutadaptor.h
     dbus/settingsadaptor.cpp
     dbus/settingsadaptor.h
+    dbus/shaderadaptor.cpp
+    dbus/shaderadaptor.h
+    dbus/compositorbridgeadaptor.cpp
+    dbus/compositorbridgeadaptor.h
+    dbus/controladaptor.cpp
+    dbus/controladaptor.h
     dbus/overlayadaptor.cpp
     dbus/overlayadaptor.h
     dbus/zonedetectionadaptor.cpp
@@ -104,6 +141,7 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/persistence.cpp
     dbus/windowtrackingadaptor/saveload.cpp
     dbus/windowtrackingadaptor/snaprestore.cpp
+    dbus/windowtrackingadaptor/convenience.cpp
     dbus/windowtrackingadaptor.h
     dbus/windowtrackingadaptor/internal.h
     dbus/screenadaptor.cpp
@@ -112,6 +150,8 @@ set(plasmazones_core_SRCS
     dbus/windowdragadaptor/drag.cpp
     dbus/windowdragadaptor/drop.cpp
     dbus/windowdragadaptor.h
+    daemon/shortcutbackend.h
+    daemon/shortcutbackend.cpp
     dbus/autotileadaptor.cpp
     dbus/autotileadaptor/config.cpp
     dbus/autotileadaptor.h
@@ -120,7 +160,12 @@ set(plasmazones_core_SRCS
     autotile/TilingAlgorithm.cpp
     autotile/TilingAlgorithm.h
     autotile/TilingState.cpp
+    autotile/TilingStateSerialization.cpp
     autotile/TilingState.h
+    autotile/SplitTree.cpp
+    autotile/SplitTreeRebuild.cpp
+    autotile/SplitTreeSerializer.cpp
+    autotile/SplitTree.h
     autotile/AlgorithmRegistry.cpp
     autotile/AlgorithmRegistry.h
     autotile/AutotileConfig.cpp
@@ -135,44 +180,29 @@ set(plasmazones_core_SRCS
     autotile/SettingsBridge.h
     autotile/OverflowManager.cpp
     autotile/OverflowManager.h
-    autotile/algorithms/MasterStackAlgorithm.cpp
-    autotile/algorithms/MasterStackAlgorithm.h
-    autotile/algorithms/ColumnsAlgorithm.cpp
-    autotile/algorithms/ColumnsAlgorithm.h
-    autotile/algorithms/RowsAlgorithm.cpp
-    autotile/algorithms/RowsAlgorithm.h
-    autotile/algorithms/BSPAlgorithm.cpp
-    autotile/algorithms/BSPAlgorithm.h
-    autotile/algorithms/DwindleAlgorithm.cpp
-    autotile/algorithms/DwindleAlgorithm.h
-    autotile/algorithms/SpiralAlgorithm.cpp
-    autotile/algorithms/SpiralAlgorithm.h
-    autotile/algorithms/ThreeColumnAlgorithm.cpp
-    autotile/algorithms/ThreeColumnAlgorithm.h
-    autotile/algorithms/MonocleAlgorithm.cpp
-    autotile/algorithms/MonocleAlgorithm.h
-    autotile/algorithms/GridAlgorithm.cpp
-    autotile/algorithms/GridAlgorithm.h
-    autotile/algorithms/WideAlgorithm.cpp
-    autotile/algorithms/WideAlgorithm.h
-    autotile/algorithms/CenteredMasterAlgorithm.cpp
-    autotile/algorithms/CenteredMasterAlgorithm.h
-    autotile/algorithms/CascadeAlgorithm.cpp
-    autotile/algorithms/CascadeAlgorithm.h
-    autotile/algorithms/StairAlgorithm.cpp
-    autotile/algorithms/StairAlgorithm.h
-    autotile/algorithms/SpreadAlgorithm.cpp
-    autotile/algorithms/SpreadAlgorithm.h
+    autotile/algorithms/ScriptedAlgorithm.cpp
+    autotile/algorithms/ScriptedAlgorithm.h
+    autotile/algorithms/ScriptedAlgorithmHelpers.cpp
+    autotile/algorithms/ScriptedAlgorithmHelpers.h
+    autotile/algorithms/ScriptedAlgorithmJsBuiltins.cpp
+    autotile/algorithms/ScriptedAlgorithmJsBuiltins.h
+    autotile/algorithms/ScriptedAlgorithmLoader.cpp
+    # Builtin JS helpers compiled into the binary as Qt resources
+    autotile/algorithms/builtins.qrc
+    autotile/algorithms/ScriptedAlgorithmLoader.h
+    autotile/algorithms/ScriptedAlgorithmSandbox.cpp
+    autotile/algorithms/ScriptedAlgorithmSandbox.h
     snap/SnapEngine.cpp
     snap/SnapEngine.h
     snap/snapengine/float.cpp
     snap/snapengine/lifecycle.cpp
     snap/snapengine/navigation.cpp
-    ${plasmazones_settings_SRCS}
 )
 
 # Create core library
 add_library(plasmazones_core SHARED ${plasmazones_core_SRCS})
+
+target_sources(plasmazones_core PRIVATE pz_qml_i18n.cpp)
 
 # Generate export header
 generate_export_header(plasmazones_core
@@ -180,25 +210,44 @@ generate_export_header(plasmazones_core
     EXPORT_MACRO_NAME PLASMAZONES_EXPORT
 )
 
-# LayerShellQt is required - no conditional needed
+# Layer-shell: our QPA plugin (no LayerShellQt)
+# QPA files are excluded from unity build to avoid include conflicts
+# with Qt Wayland private headers and the wayland-scanner-generated protocol header.
+target_sources(plasmazones_core PRIVATE
+    core/qpa/layershellintegration.cpp
+    core/qpa/layershellintegration.h
+    core/qpa/layershellwindow.cpp
+    core/qpa/layershellwindow.h
+    core/qpa/xdg_popup_stub.c
+    ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
+)
+set_source_files_properties(
+    core/qpa/layershellintegration.cpp
+    core/qpa/layershellwindow.cpp
+    config/configdefaults.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
+)
+target_include_directories(plasmazones_core PRIVATE ${_pz_gen_dir})
 
 target_link_libraries(plasmazones_core
     PUBLIC
         Qt6::Core
+        # Qt6::Qml is PUBLIC because ScriptedAlgorithm.h exposes QJSEngine/QJSValue types
+        Qt6::Qml
         Qt6::Quick
         Qt6::Gui
         Qt6::DBus
-        KF6::ConfigCore
-        KF6::ConfigGui
-        KF6::CoreAddons
-        KF6::GlobalAccel
-        KF6::WindowSystem
-        KF6::I18n
-        KF6::ColorScheme
+    PRIVATE
+        Wayland::Client
+        Qt6::WaylandClientPrivate
 )
 
+# KDE-specific link dependencies (only when building with KDE Frameworks)
+if(USE_KDE_FRAMEWORKS)
+    target_link_libraries(plasmazones_core PUBLIC KF6::GlobalAccel)
+endif()
+
 # Conditionally link PlasmaActivities/KActivities if available
-# Plasma 6 uses Plasma::Activities, KF6 uses KF6::Activities, KF5 uses KActivities
 if(PlasmaActivities_FOUND)
     # Check for Plasma 6 target first
     if(TARGET Plasma::Activities)
@@ -230,12 +279,6 @@ if(PlasmaActivities_FOUND)
         endif()
     endif()
 endif()
-
-# Link LayerShellQt (required for overlay and geometry sensor windows)
-target_link_libraries(plasmazones_core
-    PUBLIC
-        LayerShellQt::Interface
-)
 
 target_include_directories(plasmazones_core
     PUBLIC
@@ -277,6 +320,35 @@ install(TARGETS plasmazones_core
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Layer Shell Qt Plugin (installed to Qt's wayland-shell-integration plugin dir)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_library(pz-layer-shell MODULE core/qpa/pzlayershellplugin.cpp)
+target_link_libraries(pz-layer-shell PRIVATE
+    plasmazones_core
+    Qt6::WaylandClientPrivate
+    Wayland::Client
+)
+target_include_directories(pz-layer-shell PRIVATE ${_pz_gen_dir})
+set_target_properties(pz-layer-shell PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins/wayland-shell-integration
+    INSTALL_RPATH "$ORIGIN/../../${CMAKE_INSTALL_LIBDIR}"
+)
+# Install to Qt's plugin dir (query via QT6_INSTALL_PLUGINS or fallback)
+if(NOT DEFINED QT6_INSTALL_PLUGINS)
+    get_target_property(QT6_INSTALL_PLUGINS Qt6::Core QT_INSTALL_PLUGINS)
+    if(NOT QT6_INSTALL_PLUGINS)
+        set(QT6_INSTALL_PLUGINS "${KDE_INSTALL_QTPLUGINDIR}")
+    endif()
+    if(NOT QT6_INSTALL_PLUGINS)
+        message(FATAL_ERROR "Cannot determine Qt plugin install directory. "
+            "Set QT6_INSTALL_PLUGINS or ensure ECM/KDE_INSTALL_QTPLUGINDIR is available.")
+    endif()
+endif()
+install(TARGETS pz-layer-shell
+    DESTINATION ${QT6_INSTALL_PLUGINS}/wayland-shell-integration
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Rendering Library (ZoneShaderItem, shared between daemon and editor)
 # ═══════════════════════════════════════════════════════════════════════════════
 set(plasmazones_rendering_SRCS
@@ -310,6 +382,7 @@ target_link_libraries(plasmazones_rendering
     PRIVATE
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
+        Qt6::Svg
 )
 
 target_include_directories(plasmazones_rendering
@@ -326,13 +399,6 @@ install(TARGETS plasmazones_rendering
 )
 
 # Daemon executable
-# Note: We need to add kcfg files here too because KConfigXT generates local symbols
-# that can't be exported from plasmazones_core shared library.
-kconfig_add_kcfg_files(plasmazones_daemon_kcfg_SRCS
-    config/plasmazones.kcfgc
-    GENERATE_MOC
-)
-
 set(plasmazones_daemon_SRCS
     daemon/main.cpp
     daemon/daemon.cpp
@@ -370,16 +436,12 @@ set(plasmazones_daemon_SRCS
     daemon/unifiedlayoutcontroller.cpp
     daemon/unifiedlayoutcontroller.h
     # Shader rendering: ZoneShaderItem from plasmazones_rendering
-    # KConfigXT-generated config class (for ConfigDefaults)
-    ${plasmazones_daemon_kcfg_SRCS}
 )
 
 # QML resources for the daemon overlay
 qt_add_resources(plasmazones_daemon_SRCS daemon/resources.qrc)
 
 add_executable(plasmazonesd ${plasmazones_daemon_SRCS})
-
-# LayerShellQt is required - no conditional needed
 
 target_link_libraries(plasmazonesd
     PRIVATE
@@ -392,19 +454,10 @@ target_link_libraries(plasmazonesd
         Qt6::QuickControls2
         Qt6::Concurrent  # Pre-load shader bake cache on registry refresh
         Qt6::ShaderTools  # QShaderBaker for ZoneShaderNodeRhi (runtime GLSL bake)
-        KF6::DBusAddons
-        KF6::GlobalAccel
-        KF6::Notifications
 )
 
 # Qt6::GuiPrivate (QRhi) for daemon's include of zoneshadernoderhi.h (warmShaderBakeCacheForPaths)
 target_link_libraries(plasmazonesd PRIVATE Qt6::GuiPrivate Qt6::ShaderToolsPrivate)
-
-# Link LayerShellQt (required)
-target_link_libraries(plasmazonesd
-    PRIVATE
-        LayerShellQt::Interface
-)
 
 install(TARGETS plasmazonesd DESTINATION ${KDE_INSTALL_BINDIR})
 
@@ -434,11 +487,6 @@ install(FILES
     DESTINATION ${KDE_INSTALL_SYSTEMDUSERUNITDIR}
 )
 
-# Install KConfig settings file
-install(FILES
-    config/plasmazones.kcfg
-    DESTINATION ${KDE_INSTALL_KCFGDIR}
-)
 
 # Daemon desktop file: use full Exec path so KWin's fetchRestrictedDBusInterfacesFromPid
 # can match the process (it compares executable path to desktop Exec).
@@ -610,22 +658,15 @@ target_link_libraries(plasmazones-editor
         Qt6::QuickControls2
         Qt6::Widgets
         Qt6::DBus
-        KF6::I18n
-        KF6::I18nQml
-        KF6::CoreAddons
-        KF6::WindowSystem
 )
 
 # Qt6::GuiPrivate and Qt6::ShaderToolsPrivate for ZoneShaderItem (shader preview)
 target_link_libraries(plasmazones-editor PRIVATE Qt6::GuiPrivate Qt6::ShaderToolsPrivate)
 
-# Link LayerShellQt (required)
-target_link_libraries(plasmazones-editor
-    PRIVATE
-        LayerShellQt::Interface
-)
-
 install(TARGETS plasmazones-editor DESTINATION ${KDE_INSTALL_BINDIR})
+
+# Standalone settings app (no KDE Frameworks required)
+add_subdirectory(settings)
 
 # Separate precompiled headers for executables (different PIC/PIE settings than shared lib)
 if(ENABLE_PCH)
@@ -652,6 +693,13 @@ install(FILES
 install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/org.plasmazones.daemon.desktop
     DESTINATION ${KDE_INSTALL_APPDIR}
+)
+
+# KGlobalAccel component desktop file — provides display name + icon in
+# System Settings > Shortcuts.  Filename must match applicationName ("plasmazonesd").
+install(FILES
+    daemon/plasmazonesd.desktop
+    DESTINATION ${KDE_INSTALL_DATADIR}/kglobalaccel
 )
 
 # Snap Assist thumbnails: daemon captures via KWin ScreenShot2. When desktop matching fails

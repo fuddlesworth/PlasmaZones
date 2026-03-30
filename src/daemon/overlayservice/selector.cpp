@@ -17,7 +17,7 @@
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QQmlEngine>
-#include <LayerShellQt/Window>
+#include "../../core/layersurface.h"
 
 namespace PlasmaZones {
 
@@ -39,8 +39,9 @@ void OverlayService::showZoneSelector(QScreen* targetScreen)
         if (targetScreen && screen != targetScreen) {
             continue;
         }
-        // Skip monitors where PlasmaZones is disabled
-        if (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
+        // Skip monitors/desktops/activities where PlasmaZones is disabled
+        if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                              m_currentActivity)) {
             continue;
         }
         // Skip autotile-managed screens (zone selector is for manual zone selection)
@@ -240,15 +241,13 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
         : defaultZoneSelectorConfig();
     const auto pos = static_cast<ZoneSelectorPosition>(config.position);
 
-    // Configure LayerShellQt for zone selector (LayerTop for pointer input)
-    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        layerWindow->setScreen(screen);
-        layerWindow->setLayer(LayerShellQt::Window::LayerTop);
-        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-
-        layerWindow->setAnchors(getAnchorsForPosition(pos));
-        layerWindow->setExclusiveZone(-1);
-        layerWindow->setScope(QStringLiteral("plasmazones-selector-%1").arg(screen->name()));
+    // Configure layer surface for zone selector (LayerTop for pointer input)
+    if (!configureLayerSurface(window, screen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityNone,
+                               QStringLiteral("plasmazones-selector-%1").arg(Utils::screenIdentifier(screen)),
+                               getAnchorsForPosition(pos))) {
+        qCWarning(lcOverlay) << "Failed to configure layer surface for zone selector on" << screen->name();
+        delete window;
+        return;
     }
 
     // Set screen properties for layout preview scaling
@@ -287,6 +286,8 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
 void OverlayService::destroyZoneSelectorWindow(QScreen* screen)
 {
     if (auto* window = m_zoneSelectorWindows.take(screen)) {
+        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
+        disconnect(screen, nullptr, window, nullptr);
         window->close();
         window->deleteLater();
     }
@@ -379,6 +380,18 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
     } else {
         qCInfo(lcOverlay) << "Zone selector: layout selected, layoutId=" << layoutId << "screen=" << screenId;
         Q_EMIT manualLayoutSelected(layoutId, screenId);
+    }
+}
+
+void OverlayService::scrollZoneSelector(int angleDeltaY)
+{
+    if (!m_zoneSelectorVisible) {
+        return;
+    }
+    for (auto* window : std::as_const(m_zoneSelectorWindows)) {
+        if (window) {
+            QMetaObject::invokeMethod(window, "applyScrollDelta", Q_ARG(QVariant, angleDeltaY));
+        }
     }
 }
 

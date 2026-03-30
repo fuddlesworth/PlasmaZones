@@ -97,9 +97,9 @@ public Q_SLOTS:
 
     /**
      * @brief Force retiling of windows
-     * @param screenName Screen to retile, or empty for all screens
+     * @param screenId Screen to retile, or empty for all screens
      */
-    void retile(const QString& screenName);
+    void retile(const QString& screenId);
 
     /**
      * @brief Force retiling of all autotile screens
@@ -154,11 +154,23 @@ public Q_SLOTS:
      * to the autotile engine's tracking and triggers retiling.
      *
      * @param windowId Window identifier from KWin
-     * @param screenName Screen where the window appeared
+     * @param screenId Screen where the window appeared
      * @param minWidth Window minimum width in pixels (0 if unconstrained)
      * @param minHeight Window minimum height in pixels (0 if unconstrained)
      */
-    void windowOpened(const QString& windowId, const QString& screenName, int minWidth, int minHeight);
+    void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight);
+
+    /**
+     * @brief Batch window-opened notifications
+     *
+     * Processes multiple windowOpened in one D-Bus call. Used on daemon
+     * startup/restart and autotile toggle-on to avoid per-window D-Bus
+     * round-trips. Entries may include preTileGeometry to eliminate
+     * separate storePreTileGeometry calls.
+     *
+     * @param batchJson JSON array of {windowId, screenId, minWidth, minHeight, preTileGeometry?}
+     */
+    void windowsOpenedBatch(const QString& batchJson);
 
     /**
      * @brief Update a window's minimum size at runtime
@@ -190,9 +202,9 @@ public Q_SLOTS:
      * updates the window-to-screen mapping for correct per-screen tiling.
      *
      * @param windowId Window ID that gained focus
-     * @param screenName Screen where the window is located
+     * @param screenId Screen where the window is located
      */
-    void notifyWindowFocused(const QString& windowId, const QString& screenName);
+    void notifyWindowFocused(const QString& windowId, const QString& screenId);
 
     // floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
     // all float operations are now routed through the unified WTA methods
@@ -254,10 +266,10 @@ Q_SIGNALS:
 
     /**
      * @brief Emitted when the set of autotile screens changes
-     * @param screenNames List of screen names currently using autotile
+     * @param screenIds List of screen IDs currently using autotile
      * @param isDesktopSwitch True if the change is due to desktop/activity switch
      */
-    void autotileScreensChanged(const QStringList& screenNames, bool isDesktopSwitch);
+    void autotileScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
 
     /**
      * @brief Emitted when the tiling algorithm changes
@@ -267,9 +279,9 @@ Q_SIGNALS:
 
     /**
      * @brief Emitted when tiling layout changes for a screen
-     * @param screenName Screen that was retiled
+     * @param screenId Screen that was retiled
      */
-    void tilingChanged(const QString& screenName);
+    void tilingChanged(const QString& screenId);
 
     /**
      * @brief Emitted when windows should be moved to new geometries (batch)
@@ -310,9 +322,9 @@ Q_SIGNALS:
      *
      * @param windowId Window ID whose floating state changed
      * @param isFloating New floating state
-     * @param screenName Screen where the window is located
+     * @param screenId Screen where the window is located
      */
-    void windowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenName);
+    void windowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
 
     /**
      * @brief Emitted when any configuration property changes

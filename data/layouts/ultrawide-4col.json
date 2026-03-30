@@ -1,0 +1,35 @@
+{
+    "id": "{e5fa6b7c-b08d-4c2f-ea4d-708b1c3e5f7a}",
+    "name": "Ultrawide 4-Column",
+    "description": "Four equal columns for 21:9 monitors — each column is roughly 16:9 proportioned",
+    "type": 5,
+    "isBuiltIn": true,
+    "showZoneNumbers": true,
+    "aspectRatioClass": "ultrawide",
+    "zones": [
+        {
+            "id": "{e5f6a7b8-1111-4444-eeee-111111111111}",
+            "name": "Column 1",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.25, "height": 1.0 }
+        },
+        {
+            "id": "{e5f6a7b8-2222-4444-eeee-222222222222}",
+            "name": "Column 2",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.25, "y": 0, "width": 0.25, "height": 1.0 }
+        },
+        {
+            "id": "{e5f6a7b8-3333-4444-eeee-333333333333}",
+            "name": "Column 3",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.5, "y": 0, "width": 0.25, "height": 1.0 }
+        },
+        {
+            "id": "{e5f6a7b8-4444-4444-eeee-444444444444}",
+            "name": "Column 4",
+            "zoneNumber": 4,
+            "relativeGeometry": { "x": 0.75, "y": 0, "width": 0.25, "height": 1.0 }
+        }
+    ]
+}

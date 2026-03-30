@@ -1,0 +1,35 @@
+{
+    "id": "{e2b94d5e-1f6a-4c8b-ae3d-5b7c9e1f3a5b}",
+    "name": "Ultrawide Master + Stack",
+    "description": "40% master with 3 stacked zones, proportioned for 21:9 monitors",
+    "type": 5,
+    "isBuiltIn": true,
+    "showZoneNumbers": true,
+    "aspectRatioClass": "ultrawide",
+    "zones": [
+        {
+            "id": "{e2b3c4d5-1111-4444-eeee-aaaaaaaaaaaa}",
+            "name": "Master",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.4, "height": 1.0 }
+        },
+        {
+            "id": "{e2b3c4d5-2222-4444-eeee-bbbbbbbbbbbb}",
+            "name": "Stack 1",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.4, "y": 0, "width": 0.3, "height": 0.5 }
+        },
+        {
+            "id": "{e2b3c4d5-3333-4444-eeee-cccccccccccc}",
+            "name": "Stack 2",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.4, "y": 0.5, "width": 0.3, "height": 0.5 }
+        },
+        {
+            "id": "{e2b3c4d5-4444-4444-eeee-dddddddddddd}",
+            "name": "Side",
+            "zoneNumber": 4,
+            "relativeGeometry": { "x": 0.7, "y": 0, "width": 0.3, "height": 1.0 }
+        }
+    ]
+}

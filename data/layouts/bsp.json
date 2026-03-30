@@ -6,6 +6,7 @@
     "type": 5,
     "isBuiltIn": true,
     "showZoneNumbers": true,
+    "aspectRatioClass": "standard",
     "zones": [
         {
             "id": "{f8c77e53-3189-492e-bb6b-d8086f28f4bc}",

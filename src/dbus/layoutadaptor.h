@@ -48,7 +48,7 @@ public Q_SLOTS:
 
     // Layout management
     void setActiveLayout(const QString& id);
-    void applyQuickLayout(int number, const QString& screenName);
+    void applyQuickLayout(int number, const QString& screenId);
     QString createLayout(const QString& name, const QString& type);
     void deleteLayout(const QString& id);
     QString duplicateLayout(const QString& id);
@@ -63,31 +63,45 @@ public Q_SLOTS:
     // Auto-assign
     void setLayoutAutoAssign(const QString& layoutId, bool enabled);
 
+    // Aspect ratio classification
+    void setLayoutAspectRatioClass(const QString& layoutId, int aspectRatioClass);
+
     // Editor support
     bool updateLayout(const QString& layoutJson);
     QString createLayoutFromJson(const QString& layoutJson);
 
     // Editor launch
     void openEditor();
-    void openEditorForScreen(const QString& screenName);
+    void openEditorForScreen(const QString& screenId);
     void openEditorForLayout(const QString& layoutId);
-    void openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenName);
+    void openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenId);
 
     // Screen assignments
-    QString getLayoutForScreen(const QString& screenName);
-    void assignLayoutToScreen(const QString& screenName, const QString& layoutId);
-    void clearAssignment(const QString& screenName);
+    QString getLayoutForScreen(const QString& screenId);
+    void assignLayoutToScreen(const QString& screenId, const QString& layoutId);
+    void clearAssignment(const QString& screenId);
     void setAllScreenAssignments(const QVariantMap& assignments); // Batch set - saves once
 
     // Per-virtual-desktop screen assignments
-    QString getLayoutForScreenDesktop(const QString& screenName, int virtualDesktop);
-    void assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop, const QString& layoutId);
-    void clearAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop);
-    bool hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop);
-    int getModeForScreenDesktop(const QString& screenName, int virtualDesktop);
-    QString getSnappingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop);
-    QString getTilingAlgorithmForScreenDesktop(const QString& screenName, int virtualDesktop);
+    QString getLayoutForScreenDesktop(const QString& screenId, int virtualDesktop);
+    void assignLayoutToScreenDesktop(const QString& screenId, int virtualDesktop, const QString& layoutId);
+    void clearAssignmentForScreenDesktop(const QString& screenId, int virtualDesktop);
+    bool hasExplicitAssignmentForScreenDesktop(const QString& screenId, int virtualDesktop);
+    int getModeForScreenDesktop(const QString& screenId, int virtualDesktop);
+    QString getSnappingLayoutForScreenDesktop(const QString& screenId, int virtualDesktop);
+    QString getTilingAlgorithmForScreenDesktop(const QString& screenId, int virtualDesktop);
     void setAllDesktopAssignments(const QVariantMap& assignments); // Batch set - key: "screen:desktop", value: layoutId
+
+    // Individual full-entry assignment (KCM sends complete AssignmentEntry per context)
+    void setAssignmentEntry(const QString& screenId, int virtualDesktop, const QString& activity, int mode,
+                            const QString& snappingLayout, const QString& tilingAlgorithm);
+
+    // Suppress screenLayoutChanged D-Bus signals during KCM save batch.
+    void setSaveBatchMode(bool enabled);
+
+    // Trigger resnap/retile + OSD after KCM assignment changes.
+    // Called ONCE after all setAssignmentEntry/clear calls complete.
+    void applyAssignmentChanges();
 
     // Virtual desktop information
     int getVirtualDesktopCount();
@@ -105,6 +119,12 @@ public Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════════
     // KDE Activities Support
     // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Get the current virtual desktop number (1-indexed)
+     * @return Current desktop number, or 0 if unavailable
+     */
+    int getCurrentVirtualDesktop();
 
     /**
      * @brief Check if KDE Activities support is available
@@ -138,25 +158,36 @@ public Q_SLOTS:
     QString getAllActivitiesInfo();
 
     // Per-activity layout assignments (screen + activity, any desktop)
-    QString getLayoutForScreenActivity(const QString& screenName, const QString& activityId);
-    void assignLayoutToScreenActivity(const QString& screenName, const QString& activityId, const QString& layoutId);
-    void clearAssignmentForScreenActivity(const QString& screenName, const QString& activityId);
-    bool hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId);
+    QString getLayoutForScreenActivity(const QString& screenId, const QString& activityId);
+    void assignLayoutToScreenActivity(const QString& screenId, const QString& activityId, const QString& layoutId);
+    void clearAssignmentForScreenActivity(const QString& screenId, const QString& activityId);
+    bool hasExplicitAssignmentForScreenActivity(const QString& screenId, const QString& activityId);
     void
     setAllActivityAssignments(const QVariantMap& assignments); // Batch set - key: "screen:activity", value: layoutId
 
     // Full assignment (screen + desktop + activity)
-    QString getLayoutForScreenDesktopActivity(const QString& screenName, int virtualDesktop, const QString& activityId);
-    void assignLayoutToScreenDesktopActivity(const QString& screenName, int virtualDesktop, const QString& activityId,
+    QString getLayoutForScreenDesktopActivity(const QString& screenId, int virtualDesktop, const QString& activityId);
+    void assignLayoutToScreenDesktopActivity(const QString& screenId, int virtualDesktop, const QString& activityId,
                                              const QString& layoutId);
-    void clearAssignmentForScreenDesktopActivity(const QString& screenName, int virtualDesktop,
+    void clearAssignmentForScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                  const QString& activityId);
 
+    /**
+     * @brief Get current mode, layout, and algorithm for all screens
+     *
+     * Returns a JSON array with one object per screen:
+     *   screenName, mode (0=Snapping, 1=Autotile), layoutId, layoutName,
+     *   algorithmId, algorithmName.
+     *
+     * @return JSON string
+     */
+    QString getScreenStates();
+
     // Screen layout lock
-    void toggleScreenLock(const QString& screenName);
-    bool isScreenLocked(const QString& screenName);
-    void toggleContextLock(const QString& screenName, int virtualDesktop, const QString& activity);
-    bool isContextLocked(const QString& screenName, int virtualDesktop, const QString& activity);
+    void toggleScreenLock(const QString& screenId);
+    bool isScreenLocked(const QString& screenId);
+    void toggleContextLock(const QString& screenId, int virtualDesktop, const QString& activity);
+    bool isContextLocked(const QString& screenId, int virtualDesktop, const QString& activity);
 
 Q_SIGNALS:
     /**
@@ -167,7 +198,7 @@ Q_SIGNALS:
 
     void layoutChanged(const QString& layoutJson);
     void layoutListChanged();
-    void screenLayoutChanged(const QString& screenName, const QString& layoutId, int virtualDesktop);
+    void screenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
     void virtualDesktopCountChanged(int count);
 
     /**
@@ -195,6 +226,11 @@ Q_SIGNALS:
      * @brief Emitted when the list of KDE Activities changes (added/removed)
      */
     void activitiesChanged();
+
+    /**
+     * @brief Emitted when the KCM requests resnap/retile after assignment changes
+     */
+    void assignmentChangesApplied();
 
 private Q_SLOTS:
     // String-based connection slots for LayoutManager signals
@@ -276,6 +312,10 @@ private:
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     ActivityManager* m_activityManager = nullptr;
     ISettings* m_settings = nullptr;
+
+    // Suppress screenLayoutChanged D-Bus signal during setAssignmentEntry —
+    // the KCM initiated the change and doesn't need the echo back.
+    bool m_suppressScreenLayoutSignal = false;
 
     // JSON caching for performance
     QString m_cachedActiveLayoutJson;

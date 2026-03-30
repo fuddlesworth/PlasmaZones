@@ -54,12 +54,12 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, i
  * @brief Get effective zone padding for a layout
  * @param layout Layout to get padding for (may have per-layout override)
  * @param settings Global settings (used if layout has no override)
- * @param screenName Optional screen identifier for per-screen override lookup
+ * @param screenId Optional screen identifier for per-screen override lookup
  * @return Effective zone padding in pixels
  *
  * Resolution cascade: per-screen override → layout override → global settings → default (8px)
  */
-PLASMAZONES_EXPORT int getEffectiveZonePadding(Layout* layout, ISettings* settings, const QString& screenName = {});
+PLASMAZONES_EXPORT int getEffectiveZonePadding(Layout* layout, ISettings* settings, const QString& screenId = {});
 
 /**
  * @brief Convert QRectF to QRect with edge-consistent rounding
@@ -78,13 +78,13 @@ PLASMAZONES_EXPORT QRect snapToRect(const QRectF& rf);
  * @brief Get effective per-side outer gaps for a layout
  * @param layout Layout to get gaps for (may have per-layout overrides)
  * @param settings Global settings (used if layout has no override)
- * @param screenName Optional screen identifier for per-screen override lookup
+ * @param screenId Optional screen identifier for per-screen override lookup
  * @return Effective per-side edge gaps
  *
  * Resolution cascade: per-screen per-side → per-screen uniform → layout per-side →
  * layout uniform → global per-side → global uniform → default
  */
-PLASMAZONES_EXPORT EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QString& screenName = {});
+PLASMAZONES_EXPORT EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QString& screenId = {});
 
 /**
  * @brief Get the effective screen geometry for a layout

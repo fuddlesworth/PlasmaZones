@@ -37,8 +37,8 @@ public Q_SLOTS:
     QString detectZoneAtPosition(int x, int y);
     QStringList detectMultiZoneAtPosition(int x, int y);
     QString getZoneGeometry(const QString& zoneId);
-    QString getZoneGeometryForScreen(const QString& zoneId, const QString& screenName);
-    QStringList getZonesForScreen(const QString& screenName);
+    QString getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);
+    QStringList getZonesForScreen(const QString& screenId);
 
     // Zone navigation - get adjacent zone in a direction
     // direction: "left", "right", "up", "down"
@@ -57,13 +57,13 @@ public Q_SLOTS:
      * @param direction Direction string ("left", "right", "up", "down")
      * @return Zone ID of the edge zone, or empty string if no zones available
      */
-    QString getFirstZoneInDirection(const QString& direction, const QString& screenName = QString());
+    QString getFirstZoneInDirection(const QString& direction, const QString& screenId = QString());
 
     // Get zone info by zone number (1-indexed), optionally for a specific screen
-    QString getZoneByNumber(int zoneNumber, const QString& screenName = QString());
+    QString getZoneByNumber(int zoneNumber, const QString& screenId = QString());
 
     // Get all zone geometries, optionally for a specific screen
-    QStringList getAllZoneGeometries(const QString& screenName = QString());
+    QStringList getAllZoneGeometries(const QString& screenId = QString());
 
     /**
      * @brief Get current keyboard modifier state

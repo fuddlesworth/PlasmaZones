@@ -34,6 +34,18 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
         </method>
+        <method name="notifyDragOutUnsnap">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify that a snapped window was dragged without the activation trigger. Saves pre-float zone, marks floating, and clears zone assignment so the window does not auto-restore to the zone on close/reopen."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID from the effect."/>
+            </arg>
+        </method>
+        <method name="windowsSnappedBatch">
+            <annotation name="org.gtk.GDBus.DocString" value="Batch snap confirmations: process multiple windowSnapped/windowUnsnapped in one D-Bus call. Used by the KWin effect after resnap stagger completes. JSON array of {windowId, zoneId, screenId, isRestore}."/>
+            <arg name="batchJson" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of snap confirmations."/>
+            </arg>
+        </method>
         <method name="getZoneForWindow">
             <annotation name="org.gtk.GDBus.DocString" value="Return the zone UUID a window is snapped to, or empty string."/>
             <arg name="windowId" type="s" direction="in">
@@ -164,6 +176,12 @@
             <annotation name="org.gtk.GDBus.DocString" value="Return all window IDs that are floating."/>
             <arg name="windowIds" type="as" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Floating window IDs."/>
+            </arg>
+        </method>
+        <method name="notifyDragOutUnsnap">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify that a snapped window was dragged without activation trigger. If tracked as snapped, handles unsnap: saves zone for restore, marks floating, clears zone assignment."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
         </method>
         <method name="windowUnsnappedForFloat">
@@ -482,6 +500,27 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Screen for OSD placement."/>
             </arg>
         </signal>
+        <signal name="activateWindowRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to activate (focus) a window. Used by daemon-driven focus/cycle navigation."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to activate."/>
+            </arg>
+        </signal>
+        <signal name="applyGeometriesBatch">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to apply geometries for a batch of windows. Daemon handles zone bookkeeping internally — effect just applies geometries with stagger."/>
+            <arg name="batchJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of [{windowId, x, y, width, height, targetZoneId, sourceZoneId}]."/>
+            </arg>
+            <arg name="action" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Navigation action type (rotate, resnap, snap_all) for feedback."/>
+            </arg>
+        </signal>
+        <signal name="raiseWindowsRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to raise windows in order (z-order restoration)."/>
+            <arg name="windowIds" type="as">
+                <annotation name="org.gtk.GDBus.DocString" value="Ordered list of window IDs (bottom-to-top)."/>
+            </arg>
+        </signal>
         <method name="recordSnapIntent">
             <annotation name="org.gtk.GDBus.DocString" value="Record whether the last snap was user-initiated (for snap-to-last-zone filtering)."/>
             <arg name="windowId" type="s" direction="in">
@@ -609,57 +648,6 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Screen to operate on."/>
             </arg>
         </signal>
-        <signal name="rotateWindowsRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when rotate windows shortcut is triggered. JSON array of window moves for KWin to apply."/>
-            <arg name="clockwise" type="b">
-                <annotation name="org.gtk.GDBus.DocString" value="True for clockwise rotation, false for counterclockwise."/>
-            </arg>
-            <arg name="rotationData" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array [{windowId, sourceZoneId, targetZoneId, x, y, width, height}, ...]"/>
-            </arg>
-        </signal>
-        <signal name="moveWindowToZoneRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window should be moved to a specific zone."/>
-            <arg name="zoneId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Target zone UUID."/>
-            </arg>
-            <arg name="geometryJson" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON {x, y, width, height}."/>
-            </arg>
-        </signal>
-        <signal name="focusWindowInZoneRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when focus should move to a window in a specific zone."/>
-            <arg name="zoneId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Target zone UUID."/>
-            </arg>
-            <arg name="windowId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Window to focus (empty to pick topmost)."/>
-            </arg>
-        </signal>
-        <signal name="restoreWindowRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the active window should be restored to its pre-snap geometry."/>
-        </signal>
-        <signal name="swapWindowsRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when two windows should be swapped between zones."/>
-            <arg name="targetZoneId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Target zone UUID."/>
-            </arg>
-            <arg name="targetWindowId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Window in the target zone."/>
-            </arg>
-            <arg name="zoneGeometry" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON geometry for the target zone."/>
-            </arg>
-        </signal>
-        <signal name="cycleWindowsInZoneRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows in a zone should be cycled (forward/backward)."/>
-            <arg name="directive" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Cycle directive (e.g. cycle:forward, cycle:backward)."/>
-            </arg>
-            <arg name="unused" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Reserved for future use."/>
-            </arg>
-        </signal>
         <signal name="moveSpecificWindowToZoneRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when a specific window (e.g. from Snap Assist) should be moved to a zone."/>
             <arg name="windowId" type="s">
@@ -670,6 +658,49 @@
             </arg>
             <arg name="geometryJson" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON {x, y, width, height} for the zone."/>
+            </arg>
+        </signal>
+        <!-- Phase 1 Convenience Methods (TUI/CLI support) -->
+        <method name="moveWindowToZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Convenience: snap a window to a specific zone by ID. Resolves geometry, handles bookkeeping, emits applyGeometryRequested."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="zoneId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Target zone UUID."/>
+            </arg>
+        </method>
+        <method name="swapWindowsById">
+            <annotation name="org.gtk.GDBus.DocString" value="Convenience: swap two specific windows by their IDs. Resolves geometries, handles bookkeeping for both, emits applyGeometryRequested for each."/>
+            <arg name="windowId1" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="First window identifier."/>
+            </arg>
+            <arg name="windowId2" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Second window identifier."/>
+            </arg>
+        </method>
+        <method name="getWindowState">
+            <annotation name="org.gtk.GDBus.DocString" value="Get comprehensive state for a single window. Returns JSON with windowId, zoneId, screenId, isFloating, isSticky."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="stateJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {windowId, zoneId, screenId, isFloating, isSticky}."/>
+            </arg>
+        </method>
+        <method name="getAllWindowStates">
+            <annotation name="org.gtk.GDBus.DocString" value="Get state for all tracked windows (TUI dashboard). Returns JSON array of window state objects."/>
+            <arg name="statesJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of {windowId, zoneId, screenId, isFloating, isSticky}."/>
+            </arg>
+        </method>
+        <signal name="windowStateChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Unified window state change stream. Emitted on snap, unsnap, float, unfloat, and screen change events."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window whose state changed."/>
+            </arg>
+            <arg name="stateJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {windowId, zoneId, screenId, isFloating, changeType}. changeType: snapped, unsnapped, floated, unfloated, screen_changed."/>
             </arg>
         </signal>
     </interface>

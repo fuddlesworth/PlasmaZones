@@ -1,0 +1,29 @@
+{
+    "id": "{e1a72c3f-8d4b-4f9e-b6a1-3c5d7e9f0a2b}",
+    "name": "Ultrawide 3-Column",
+    "description": "Three balanced columns optimized for 21:9 monitors",
+    "type": 5,
+    "isBuiltIn": true,
+    "showZoneNumbers": true,
+    "aspectRatioClass": "ultrawide",
+    "zones": [
+        {
+            "id": "{a1b2c3d4-1111-4444-aaaa-111111111111}",
+            "name": "Left",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.333333, "height": 1.0 }
+        },
+        {
+            "id": "{a1b2c3d4-2222-4444-aaaa-222222222222}",
+            "name": "Center",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.333333, "y": 0, "width": 0.333334, "height": 1.0 }
+        },
+        {
+            "id": "{a1b2c3d4-3333-4444-aaaa-333333333333}",
+            "name": "Right",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.666667, "y": 0, "width": 0.333333, "height": 1.0 }
+        }
+    ]
+}

@@ -4,7 +4,9 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "core/constants.h"
 #include <QHash>
+#include <QLatin1String>
 #include <QList>
 #include <QObject>
 #include <QRect>
@@ -15,6 +17,18 @@
 #include <functional>
 
 namespace PlasmaZones {
+
+/**
+ * @brief Named constants for per-algorithm settings keys
+ *
+ * Used by AlgorithmRegistry, AutotileConfig, and Settings serialization
+ * to avoid key drift between serialization and deserialization sites.
+ * References AutotileJsonKeys from core/constants.h as the single source of truth.
+ */
+namespace PerAlgoKeys {
+inline constexpr auto SplitRatio = AutotileJsonKeys::SplitRatio;
+inline constexpr auto MasterCount = AutotileJsonKeys::MasterCount;
+} // namespace PerAlgoKeys
 
 class TilingAlgorithm;
 
@@ -29,8 +43,7 @@ class TilingAlgorithm;
  * - Master-Stack: Classic master/stack layout
  * - Columns: Equal-width vertical columns
  *
- * Future algorithms (Monocle, Dwindle, Spiral, Rows, ThreeColumn) can be
- * added by implementing TilingAlgorithm and calling registerAlgorithm().
+ * All built-in algorithms are registered via @c builtinId JS scripts.
  *
  * Usage:
  * @code
@@ -47,7 +60,7 @@ class TilingAlgorithm;
  *       or from the main thread.
  *
  * @see TilingAlgorithm for the algorithm interface
- * @see DBus::AutotileAlgorithm in constants.h for algorithm ID constants
+ * @see AlgorithmRegistry::availableAlgorithms() for discovering algorithm IDs
  */
 class PLASMAZONES_EXPORT AlgorithmRegistry : public QObject
 {
@@ -65,12 +78,22 @@ public:
     static AlgorithmRegistry* instance();
 
     /**
+     * @brief Early cleanup of all registered algorithms
+     *
+     * Connected to QCoreApplication::aboutToQuit() so that algorithm objects
+     * (especially ScriptedAlgorithm instances with QJSEngine internals) are
+     * destroyed while Qt is still fully alive, avoiding crashes during static
+     * destruction when the singleton outlives QCoreApplication.
+     */
+    void cleanup();
+
+    /**
      * @brief Register a tiling algorithm
      *
      * The registry takes ownership of the algorithm. If an algorithm with
      * the same ID already exists, the old one is deleted and replaced.
      *
-     * @param id Unique identifier for the algorithm (use DBus::AutotileAlgorithm constants)
+     * @param id Unique identifier for the algorithm (e.g. QLatin1String("bsp"))
      * @param algorithm Algorithm instance (ownership transferred)
      */
     void registerAlgorithm(const QString& id, TilingAlgorithm* algorithm);
@@ -132,11 +155,8 @@ public:
     // overlay service, daemon OSD, and KCM algorithm preview)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Monocle preview offset per zone (3% diagonal inset per stacked window)
-    static constexpr qreal MonoclePreviewOffset = 0.03;
-
     /**
-     * @brief Convert pixel zones to relative geometry with monocle offset handling
+     * @brief Convert pixel zones to relative geometry
      *
      * Shared utility for both generatePreviewZones() (layout cards/selector)
      * and KCMPlasmaZones::generateAlgorithmPreview() (live algorithm preview).
@@ -171,8 +191,15 @@ public:
         int maxWindows = -1; ///< -1 = use algorithm default
         int masterCount = -1; ///< -1 = use default (1)
         qreal splitRatio = -1.0; ///< -1 = use algorithm default
-        int centeredMasterMasterCount = -1; ///< centered-master override
-        qreal centeredMasterSplitRatio = -1.0; ///< centered-master override
+
+        /**
+         * @brief Per-algorithm saved settings (masterCount, splitRatio)
+         *
+         * Generalised replacement for hard-coded centered-master fields.
+         * Key = algorithm ID, value = QVariantMap with "masterCount" (int)
+         * and "splitRatio" (qreal).
+         */
+        QHash<QString, QVariantMap> savedAlgorithmSettings;
 
         bool operator==(const PreviewParams& other) const;
         bool operator!=(const PreviewParams& other) const
@@ -204,30 +231,28 @@ public:
      */
     static int configuredMaxWindows();
 
-    /**
-     * @brief Convert an algorithm to QVariantMap for QML consumption
-     *
-     * Creates a layout-compatible variant map including id (with autotile: prefix),
-     * name, description, zones preview, and category.
-     *
-     * @param algorithm The tiling algorithm
-     * @param algorithmId The algorithm's registry ID
-     * @return QVariantMap suitable for zone selector/OSD
-     */
-    static QVariantMap algorithmToVariantMap(TilingAlgorithm* algorithm, const QString& algorithmId);
-
 Q_SIGNALS:
     /**
      * @brief Emitted when an algorithm is registered
+     *
+     * On replacement (re-registration of an existing ID),
+     * algorithmUnregistered(id, true) is emitted first, then
+     * algorithmRegistered(id). The new algorithm is already queryable
+     * via algorithm(id) when either signal fires.
+     *
      * @param id The registered algorithm's ID
      */
     void algorithmRegistered(const QString& id);
 
     /**
-     * @brief Emitted when an algorithm is unregistered
-     * @param id The removed algorithm's ID
+     * @brief Emitted when an algorithm is unregistered or replaced
+     *
+     * @param id The algorithm's ID
+     * @param replacing true if a new algorithm has already been registered
+     *        under @p id (replacement case). false if the algorithm was
+     *        explicitly removed and @c algorithm(id) now returns nullptr.
      */
-    void algorithmUnregistered(const QString& id);
+    void algorithmUnregistered(const QString& id, bool replacing);
 
 private:
     explicit AlgorithmRegistry(QObject* parent = nullptr);
@@ -259,10 +284,20 @@ private:
      */
     TilingAlgorithm* removeAlgorithmInternal(const QString& id);
 
+    /**
+     * @brief Safely delete an algorithm via deleteLater()
+     *
+     * Detaches the algorithm from parent ownership and schedules deferred
+     * deletion to avoid re-entrancy issues during signal emission.
+     *
+     * @param algo Algorithm to delete (nullptr is a safe no-op)
+     */
+    void safeDeleteAlgorithm(TilingAlgorithm* algo);
+
     QHash<QString, TilingAlgorithm*> m_algorithms;
     QStringList m_registrationOrder; ///< Preserve order for UI
 
-    static PreviewParams s_previewParams; ///< User-configured tiling parameters for previews
+    PreviewParams m_previewParams; ///< User-configured tiling parameters for previews
 };
 
 /**
@@ -294,7 +329,7 @@ PLASMAZONES_EXPORT QList<PendingAlgorithmRegistration>& pendingAlgorithmRegistra
  * @code
  * namespace {
  * PlasmaZones::AlgorithmRegistrar<MyAlgorithm> registrar(
- *     DBus::AutotileAlgorithm::MyAlgo, 10);  // priority 10
+ *     QLatin1String("my-algo"), 10);  // priority 10
  * }
  * @endcode
  *
@@ -307,7 +342,7 @@ public:
     /**
      * @brief Register an algorithm at static initialization time
      *
-     * @param id Algorithm identifier (use DBus::AutotileAlgorithm constants)
+     * @param id Algorithm identifier (e.g. QLatin1String("master-stack"))
      * @param priority Registration order (lower = registered first, default 100)
      */
     explicit AlgorithmRegistrar(const QString& id, int priority = 100)

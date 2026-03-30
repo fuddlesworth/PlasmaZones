@@ -30,6 +30,9 @@
 #include "../config/settings.h"
 #include "../dbus/layoutadaptor.h"
 #include "../dbus/settingsadaptor.h"
+#include "../dbus/shaderadaptor.h"
+#include "../dbus/compositorbridgeadaptor.h"
+#include "../dbus/controladaptor.h"
 #include "../dbus/overlayadaptor.h"
 #include "../dbus/zonedetectionadaptor.h"
 #include "../dbus/windowtrackingadaptor.h"
@@ -38,6 +41,7 @@
 #include "../dbus/autotileadaptor.h"
 #include "../dbus/snapadaptor.h"
 #include "../autotile/AutotileEngine.h"
+#include "../autotile/algorithms/ScriptedAlgorithmLoader.h"
 #include "../autotile/AlgorithmRegistry.h"
 #include "../snap/SnapEngine.h"
 
@@ -181,7 +185,7 @@ bool Daemon::init()
     // Only update if this is a DIFFERENT layout than the active one
     // (to avoid double-processing when both signals fire for the same layout)
     connect(m_layoutManager.get(), &LayoutManager::layoutAssigned, this,
-            [this](const QString& screenName, int /*virtualDesktop*/, Layout* layout) {
+            [this](const QString& screenId, int /*virtualDesktop*/, Layout* layout) {
                 if (!layout) {
                     return;
                 }
@@ -192,7 +196,7 @@ bool Daemon::init()
                 }
                 // This is a screen-specific layout different from the active one
                 // Only recalculate for the specific screen
-                QScreen* screen = m_screenManager->screenByName(screenName);
+                QScreen* screen = m_screenManager->screenByName(screenId);
                 if (screen) {
                     layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screen));
                 }
@@ -242,11 +246,16 @@ bool Daemon::init()
             handleAutotileDisabled();
         }
 
-        // Handle snapping toggle → autotile activation.
+        // Handle activation of autotile mode.
+        // Fires when either:
+        //   (a) Snapping toggled OFF while autotile is already enabled, OR
+        //   (b) Autotile toggled ON (regardless of snapping state)
+        // Both paths need per-screen autotile assignments created.
         // Guard: skip if already in autotile mode to avoid resetting per-screen
         // algorithm customizations with the global algorithm.
-        if (snappingToggled && !snappingNow && autotileNow
-            && !(m_modeTracker && m_modeTracker->isAnyScreenAutotile())) {
+        const bool enteringAutotile =
+            (snappingToggled && !snappingNow && autotileNow) || (autotileToggled && autotileNow && !snappingNow);
+        if (enteringAutotile && !(m_modeTracker && m_modeTracker->isAnyScreenAutotile())) {
             handleSnappingToAutotile();
         }
 
@@ -263,6 +272,11 @@ bool Daemon::init()
             m_windowTrackingAdaptor->resnapCurrentAssignments();
             restoreAutotileOnlyGeometries();
         }
+
+        // Re-resolve the active layout from assignments for the current context.
+        // Resnap/retile/OSD is triggered separately by applyAssignmentChanges()
+        // after the KCM's batch save completes — NOT here in the settings handler.
+        syncModeFromAssignments();
     });
 
     // Initialize domain-specific D-Bus adaptors
@@ -274,6 +288,12 @@ bool Daemon::init()
     // Invalidate D-Bus getActiveLayout() cache when the default layout changes in settings
     connect(m_settings.get(), &Settings::defaultLayoutIdChanged, m_layoutAdaptor, &LayoutAdaptor::invalidateCache);
     m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), this);
+
+    // Shader adaptor - shader discovery, compilation lifecycle, file monitoring
+    new ShaderAdaptor(ShaderRegistry::instance(), this);
+
+    // Compositor bridge adaptor - compositor-agnostic window control protocol
+    new CompositorBridgeAdaptor(this);
 
     // Overlay adaptor - overlay visibility and highlighting
     m_overlayAdaptor =
@@ -305,9 +325,25 @@ bool Daemon::init()
     // Zone selector methods are called directly from WindowDragAdaptor; QDBusAbstractAdaptor
     // signals are for D-Bus, not Qt connections.
 
+    // Give the window drag adaptor access to the shortcut backend for
+    // registering/unregistering the Escape cancel shortcut during drags
+    m_windowDragAdaptor->setShortcutBackend(m_shortcutManager->shortcutBackend());
+
     // Initialize autotile engine
     m_autotileEngine = std::make_unique<AutotileEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(),
                                                         m_screenManager.get(), this);
+
+    // Initialize scripted algorithm loader BEFORE syncFromSettings so that
+    // user-defined algorithms are registered in AlgorithmRegistry before the
+    // engine resolves the configured algorithm ID.
+    m_scriptedAlgorithmLoader = std::make_unique<ScriptedAlgorithmLoader>();
+    // When scripted algorithms change (hot-reload), notify layout list consumers
+    connect(m_scriptedAlgorithmLoader.get(), &ScriptedAlgorithmLoader::algorithmsChanged, this, [this]() {
+        if (m_layoutAdaptor)
+            m_layoutAdaptor->notifyLayoutListChanged();
+    });
+    m_scriptedAlgorithmLoader->scanAndRegister();
+
     m_autotileEngine->syncFromSettings(m_settings.get());
     m_autotileEngine->connectToSettings(m_settings.get());
 
@@ -339,6 +375,64 @@ bool Daemon::init()
     // connects signals in its constructor (unified pattern for both engines)
     m_snapAdaptor = new SnapAdaptor(m_snapEngine.get(), m_windowTrackingAdaptor, this);
     m_autotileAdaptor = new AutotileAdaptor(m_autotileEngine.get(), this);
+
+    // Control adaptor - high-level convenience API for third-party integrations
+    new ControlAdaptor(m_windowTrackingAdaptor, m_layoutAdaptor, m_layoutManager.get(), m_autotileEngine.get(), this);
+
+    // Handle KCM assignment change resnap/OSD. This runs AFTER the KCM's batch
+    // save completes (all setAssignmentEntry + notifyReload finished), so all
+    // assignments and settings are fully committed. Separated from settingsChanged
+    // handler to avoid feedback loops with autotile/snapping transitions.
+    connect(m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this, [this]() {
+        if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager)
+            return;
+
+        const int desktop = currentDesktop();
+        const QString activity = currentActivity();
+
+        // Collect autotile screens and per-screen OSD data in one pass
+        QSet<QString> autotileScreens;
+        struct ScreenOsd
+        {
+            QString screenId;
+            bool isAutotile;
+            QString algoId;
+        };
+        QVector<ScreenOsd> osdEntries;
+        for (QScreen* screen : m_screenManager->screens()) {
+            const QString screenId = Utils::screenIdentifier(screen);
+            const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+            if (LayoutId::isAutotile(assignmentId)) {
+                autotileScreens.insert(screenId);
+                osdEntries.append({screenId, true, LayoutId::extractAlgorithmId(assignmentId)});
+            } else {
+                osdEntries.append({screenId, false, {}});
+            }
+        }
+
+        // Resnap snapping-mode screens (autotile screens excluded)
+        // Suppress all resnap/retile navigation OSD feedback from this batch.
+        // The counter is decremented per feedback event (one per screen that has
+        // resnapped windows). Set it to the screen count to cover all of them.
+        m_suppressResnapOsd = m_screenManager->screens().size();
+        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens);
+        m_snapEngine->resnapToNewLayout();
+
+        // Show OSD for all screens — use locked OSD variant when context is locked
+        for (const auto& osd : std::as_const(osdEntries)) {
+            int mode = osd.isAutotile ? 1 : 0;
+            if (isCurrentContextLockedForMode(osd.screenId, mode)) {
+                showLockedPreviewOsd(osd.screenId);
+            } else if (osd.isAutotile) {
+                if (!osd.algoId.isEmpty())
+                    showLayoutOsdForAlgorithm(osd.algoId, osd.algoId, osd.screenId);
+            } else {
+                Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
+                if (layout)
+                    showLayoutOsd(layout, osd.screenId);
+            }
+        }
+    });
 
     // Register D-Bus service and object with error handling and retry logic
     auto bus = QDBusConnection::sessionBus();
@@ -457,6 +551,11 @@ void Daemon::stop()
     m_geometryUpdateTimer.stop();
     m_pendingGeometryUpdates.clear();
 
+    // Disconnect scripted algorithm loader to prevent file watcher events during teardown
+    if (m_scriptedAlgorithmLoader) {
+        m_scriptedAlgorithmLoader->disconnect();
+    }
+
     // Hide overlay
     hideOverlay();
 
@@ -506,8 +605,10 @@ void Daemon::stop()
     m_snapEngine.reset();
     m_autotileEngine.reset();
 
-    // Unregister D-Bus service to prevent late calls during shutdown
-    QDBusConnection::sessionBus().unregisterService(QString(DBus::ServiceName));
+    // Unregister D-Bus object path and service to prevent late calls during shutdown
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    bus.unregisterObject(QString(DBus::ObjectPath));
+    bus.unregisterService(QString(DBus::ServiceName));
 
     m_running = false;
 }

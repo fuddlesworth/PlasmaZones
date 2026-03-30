@@ -1,0 +1,91 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <interface name="org.plasmazones.CompositorBridge">
+        <annotation name="org.gtk.GDBus.DocString" value="Compositor-agnostic bridge protocol. Compositor bridges register here and receive window manipulation commands via signals."/>
+
+        <!-- Bridge registration (compositor → daemon) -->
+        <method name="registerBridge">
+            <annotation name="org.gtk.GDBus.DocString" value="Register a compositor bridge. Returns session info."/>
+            <arg name="compositorName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Compositor name (e.g. kwin, hyprland, sway)."/>
+            </arg>
+            <arg name="version" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Compositor version string."/>
+            </arg>
+            <arg name="capabilities" type="as" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Supported capabilities: borderless, maximize, animation, borders, modifiers."/>
+            </arg>
+            <arg name="result" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON {apiVersion, bridgeName, sessionId}."/>
+            </arg>
+        </method>
+        <method name="reportModifierState">
+            <annotation name="org.gtk.GDBus.DocString" value="Report keyboard modifier and mouse button state from compositor."/>
+            <arg name="modifiers" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Qt::KeyboardModifiers bitmask."/>
+            </arg>
+            <arg name="mouseButtons" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Qt::MouseButtons bitmask."/>
+            </arg>
+        </method>
+
+        <!-- Window geometry commands (daemon → compositor) -->
+        <signal name="applyWindowGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Apply geometry to a single window."/>
+            <arg name="windowId" type="s"/>
+            <arg name="x" type="i"/>
+            <arg name="y" type="i"/>
+            <arg name="width" type="i"/>
+            <arg name="height" type="i"/>
+            <arg name="zoneId" type="s"/>
+            <arg name="skipAnimation" type="b"/>
+        </signal>
+        <signal name="applyWindowGeometriesBatch">
+            <annotation name="org.gtk.GDBus.DocString" value="Apply geometry to a batch of windows."/>
+            <arg name="batchJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of window geometry entries."/>
+            </arg>
+            <arg name="action" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Operation type: rotate, resnap, snap_all."/>
+            </arg>
+        </signal>
+
+        <!-- Focus and stacking commands (daemon → compositor) -->
+        <signal name="activateWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Activate (focus) a window."/>
+            <arg name="windowId" type="s"/>
+        </signal>
+        <signal name="raiseWindows">
+            <annotation name="org.gtk.GDBus.DocString" value="Raise windows in order (bottom-to-top)."/>
+            <arg name="windowIds" type="as"/>
+        </signal>
+
+        <!-- Decoration commands (daemon → compositor) -->
+        <signal name="setWindowBorderless">
+            <annotation name="org.gtk.GDBus.DocString" value="Set window borderless state (hide/show title bar)."/>
+            <arg name="windowId" type="s"/>
+            <arg name="borderless" type="b"/>
+        </signal>
+        <signal name="maximizeWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Maximize or restore a window."/>
+            <arg name="windowId" type="s"/>
+            <arg name="mode" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="0=restore, 3=full maximize."/>
+            </arg>
+        </signal>
+
+        <!-- Lifecycle signals -->
+        <signal name="bridgeRegistered">
+            <annotation name="org.gtk.GDBus.DocString" value="A compositor bridge registered."/>
+            <arg name="compositorName" type="s"/>
+            <arg name="version" type="s"/>
+            <arg name="capabilities" type="as"/>
+        </signal>
+        <signal name="modifierStateChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Modifier state reported by compositor."/>
+            <arg name="modifiers" type="i"/>
+            <arg name="mouseButtons" type="i"/>
+        </signal>
+    </interface>
+</node>

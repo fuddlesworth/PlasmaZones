@@ -69,7 +69,7 @@ Window {
         if (action === "rotate") {
             var arrow = (reason === "clockwise") ? "↻" : "↺";
             if (windowCount > 1)
-                return arrow + " " + i18np("Rotated %1 window", "Rotated %1 windows", windowCount);
+                return arrow + " " + i18np("Rotated %n window", "Rotated %n windows", windowCount);
             else
                 return arrow + " " + i18n("Rotated");
         } else if (action === "move") {
@@ -125,7 +125,7 @@ Window {
             return i18n("Layout refreshed");
         } else if (action === "resnap") {
             if (windowCount > 1)
-                return i18np("Rearranged %1 window", "Rearranged %1 windows", windowCount);
+                return i18np("Rearranged %n window", "Rearranged %n windows", windowCount);
 
             return i18n("Windows rearranged");
         } else if (action === "algorithm") {
@@ -210,12 +210,12 @@ Window {
 
     }
 
-    // Window configuration - LayerShellQt handles overlay behavior on Wayland
+    // Window configuration - QPA layer-shell plugin handles overlay behavior on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
     // Size based on container (which is inside contentWrapper)
-    width: container.width + 40
-    height: container.height + 40
+    width: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
+    height: container.height + Math.round(Kirigami.Units.gridUnit * 2.5)
     // Start hidden, will be shown with animation
     // Note: Don't set Window.opacity - use contentWrapper.opacity instead
     // QWaylandWindow::setOpacity() is not implemented and logs warnings

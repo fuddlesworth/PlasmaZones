@@ -23,7 +23,7 @@
 #include <QDBusPendingCall>
 #include <QScreen>
 #include <QTimer>
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 namespace PlasmaZones {
 
@@ -67,7 +67,7 @@ void Daemon::clearHighlight()
     m_zoneDetector->clearHighlights();
 }
 
-void Daemon::showLayoutOsd(Layout* layout, const QString& screenName)
+void Daemon::showLayoutOsd(Layout* layout, const QString& screenId)
 {
     if (!layout) {
         return;
@@ -91,7 +91,7 @@ void Daemon::showLayoutOsd(Layout* layout, const QString& screenName)
                 QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
                 QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
 
-            QString displayText = i18n("Layout: %1", layoutName);
+            QString displayText = PzI18n::tr("Layout: %1").arg(layoutName);
             msg << QStringLiteral("plasmazones") << displayText;
 
             QDBusConnection::sessionBus().asyncCall(msg);
@@ -102,8 +102,8 @@ void Daemon::showLayoutOsd(Layout* layout, const QString& screenName)
     case OsdStyle::Preview:
         // Use visual layout preview OSD
         if (m_overlayService) {
-            m_overlayService->showLayoutOsd(layout, screenName);
-            qCInfo(lcDaemon) << "Preview OSD: layout=" << layoutName << "screen=" << screenName;
+            m_overlayService->showLayoutOsd(layout, screenId);
+            qCInfo(lcDaemon) << "Preview OSD: layout=" << layoutName << "screen=" << screenId;
         } else {
             qCWarning(lcDaemon) << "Overlay service not available for preview OSD";
         }
@@ -111,7 +111,7 @@ void Daemon::showLayoutOsd(Layout* layout, const QString& screenName)
     }
 }
 
-void Daemon::showLockedOsd(const QString& screenName)
+void Daemon::showLockedOsd(const QString& screenId)
 {
     OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
     if (style == OsdStyle::None) {
@@ -122,12 +122,12 @@ void Daemon::showLockedOsd(const QString& screenName)
         QDBusMessage::createMethodCall(QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
                                        QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
 
-    msg << QStringLiteral("object-locked") << i18n("Layout Locked");
+    msg << QStringLiteral("object-locked") << PzI18n::tr("Layout Locked");
     QDBusConnection::sessionBus().asyncCall(msg);
-    qCInfo(lcDaemon) << "Showing locked text OSD for screen=" << screenName;
+    qCInfo(lcDaemon) << "Showing locked text OSD for screen=" << screenId;
 }
 
-void Daemon::showLockedPreviewOsd(const QString& screenName)
+void Daemon::showLockedPreviewOsd(const QString& screenId)
 {
     OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
     if (style == OsdStyle::None) {
@@ -136,20 +136,19 @@ void Daemon::showLockedPreviewOsd(const QString& screenName)
 
     // Show the visual preview OSD with lock overlay showing the current layout
     if (style == OsdStyle::Preview && m_overlayService && m_layoutManager) {
-        const QString screenId = Utils::screenIdForName(screenName);
-        Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId.isEmpty() ? screenName : screenId);
+        const QString resolvedId = Utils::screenIdForName(screenId);
+        Layout* layout = m_layoutManager->resolveLayoutForScreen(resolvedId.isEmpty() ? screenId : resolvedId);
         if (layout) {
-            m_overlayService->showLockedLayoutOsd(layout, screenName);
+            m_overlayService->showLockedLayoutOsd(layout, screenId);
             return;
         }
     }
 
     // Fall back to text OSD
-    showLockedOsd(screenName);
+    showLockedOsd(screenId);
 }
 
-void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName,
-                                       const QString& screenName)
+void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)
 {
     auto* algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
     if (!algo) {
@@ -169,7 +168,7 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             QDBusMessage::createMethodCall(QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
                                            QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
 
-        QString displayText = i18n("Tiling: %1", displayName);
+        QString displayText = PzI18n::tr("Tiling: %1").arg(displayName);
         msg << QStringLiteral("plasmazones") << displayText;
 
         QDBusConnection::sessionBus().asyncCall(msg);
@@ -180,13 +179,7 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
         if (m_overlayService) {
             int windowCount = 0;
             if (m_autotileEngine) {
-                // AutotileEngine uses connector names (e.g. "DP-2"), not screen
-                // IDs (e.g. "LG Electronics:LG Ultra HD:115107"). Convert if needed.
-                QString connectorName = Utils::screenNameForId(screenName);
-                if (connectorName.isEmpty()) {
-                    connectorName = screenName; // already a connector name
-                }
-                TilingState* state = m_autotileEngine->stateForScreen(connectorName);
+                TilingState* state = m_autotileEngine->stateForScreen(screenId);
                 if (state) {
                     windowCount = state->tiledWindowCount();
                 }
@@ -194,8 +187,8 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             QVariantList zones = AlgorithmRegistry::generatePreviewZones(algo, windowCount > 0 ? windowCount : -1);
             QString layoutId = LayoutId::makeAutotileId(algorithmId);
             m_overlayService->showLayoutOsd(layoutId, displayName, zones, static_cast<int>(LayoutCategory::Autotile),
-                                            false, screenName);
-            qCInfo(lcDaemon) << "Preview OSD: algorithm=" << displayName << "screen=" << screenName;
+                                            false, screenId);
+            qCInfo(lcDaemon) << "Preview OSD: algorithm=" << displayName << "screen=" << screenId;
         } else {
             qCWarning(lcDaemon) << "Overlay service not available for preview OSD";
         }
@@ -203,23 +196,22 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
     }
 }
 
-void Daemon::showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenName)
+void Daemon::showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenId)
 {
     // Defer OSD display so first-time QML compilation of LayoutOsd.qml (~100-300ms)
     // doesn't block the daemon event loop during layout switches.
-    QTimer::singleShot(0, this, [this, layoutId, screenName]() {
+    QTimer::singleShot(0, this, [this, layoutId, screenId]() {
         Layout* l = m_layoutManager ? m_layoutManager->layoutById(layoutId) : nullptr;
         if (l) {
-            showLayoutOsd(l, screenName);
+            showLayoutOsd(l, screenId);
         }
     });
 }
 
-void Daemon::showAlgorithmOsdDeferred(const QString& algorithmId, const QString& algorithmName,
-                                      const QString& screenName)
+void Daemon::showAlgorithmOsdDeferred(const QString& algorithmId, const QString& algorithmName, const QString& screenId)
 {
-    QTimer::singleShot(0, this, [this, algorithmId, algorithmName, screenName]() {
-        showLayoutOsdForAlgorithm(algorithmId, algorithmName, screenName);
+    QTimer::singleShot(0, this, [this, algorithmId, algorithmName, screenId]() {
+        showLayoutOsdForAlgorithm(algorithmId, algorithmName, screenId);
     });
 }
 
@@ -317,10 +309,11 @@ void Daemon::syncModeFromAssignments()
             // assignment. Without this, LayoutManager::activeLayout() returns the
             // previous desktop's layout, causing zone detection, overlay, and
             // onLayoutChanged to operate on the wrong zones.
-            // Use QSignalBlocker to prevent activeLayoutChanged from firing
-            // onLayoutChanged → resnap buffer population. Desktop switch is not
-            // a layout change — the resnap buffer entries would be stale and corrupt
-            // the next real manual layout switch.
+            // Block activeLayoutChanged to prevent resnap buffer corruption.
+            // Desktop switches and KCM saves both route through here — neither
+            // should trigger resnap via the global active layout signal. KCM saves
+            // use populateResnapBufferForAllScreens() + resnapToNewLayout()
+            // (per-screen, independent of global active layout) instead.
             if (!LayoutId::isAutotile(focusedAssignmentId)) {
                 Layout* desktopLayout = m_layoutManager->layoutForScreen(focusedScreenId, desktop, activity);
                 if (desktopLayout && desktopLayout != m_layoutManager->activeLayout()) {
@@ -350,24 +343,21 @@ void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
         || !m_screenManager) {
         return;
     }
-    QScreen* screen = m_windowTrackingAdaptor ? resolveShortcutScreen(m_windowTrackingAdaptor) : nullptr;
-    if (!screen && !m_screenManager->screens().isEmpty()) {
-        screen = m_screenManager->screens().first();
-    }
-    if (!screen) {
-        return;
-    }
-    const QString screenId = Utils::screenIdentifier(screen);
-    const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-    if (LayoutId::isAutotile(assignmentId)) {
-        const QString algoId = LayoutId::extractAlgorithmId(assignmentId);
-        auto* algo = AlgorithmRegistry::instance()->algorithm(algoId);
-        const QString displayName = algo ? algo->name() : algoId;
-        showAlgorithmOsdDeferred(algoId, displayName, screenId);
-    } else {
-        Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
-        if (layout) {
-            showLayoutOsdDeferred(layout->id(), screenId);
+    // Show OSD on ALL screens — each screen may have a different per-desktop
+    // assignment (autotile vs snapping, different layouts/algorithms).
+    for (QScreen* screen : m_screenManager->screens()) {
+        const QString screenId = Utils::screenIdentifier(screen);
+        const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+        if (LayoutId::isAutotile(assignmentId)) {
+            const QString algoId = LayoutId::extractAlgorithmId(assignmentId);
+            auto* algo = AlgorithmRegistry::instance()->algorithm(algoId);
+            const QString displayName = algo ? algo->name() : algoId;
+            showAlgorithmOsdDeferred(algoId, displayName, screenId);
+        } else {
+            Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
+            if (layout) {
+                showLayoutOsdDeferred(layout->id(), screenId);
+            }
         }
     }
 }
@@ -382,20 +372,20 @@ QString Daemon::currentActivity() const
     return (m_activityManager && ActivityManager::isAvailable()) ? m_activityManager->currentActivity() : QString();
 }
 
-bool Daemon::isCurrentContextLocked(const QString& screenName) const
+bool Daemon::isCurrentContextLocked(const QString& screenId) const
 {
     // Check both snapping and tiling locks (mode-agnostic check)
     return m_settings
-        && (m_settings->isContextLocked(QStringLiteral("0:") + screenName, currentDesktop(), currentActivity())
-            || m_settings->isContextLocked(QStringLiteral("1:") + screenName, currentDesktop(), currentActivity()));
+        && (m_settings->isContextLocked(QStringLiteral("0:") + screenId, currentDesktop(), currentActivity())
+            || m_settings->isContextLocked(QStringLiteral("1:") + screenId, currentDesktop(), currentActivity()));
 }
 
-bool Daemon::isCurrentContextLockedForMode(const QString& screenName, int mode) const
+bool Daemon::isCurrentContextLockedForMode(const QString& screenId, int mode) const
 {
     if (!m_settings)
         return false;
     QString prefix = QString::number(mode) + QStringLiteral(":");
-    return m_settings->isContextLocked(prefix + screenName, currentDesktop(), currentActivity());
+    return m_settings->isContextLocked(prefix + screenId, currentDesktop(), currentActivity());
 }
 
 } // namespace PlasmaZones

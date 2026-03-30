@@ -51,7 +51,10 @@ struct AssignmentEntry
     QString activeLayoutId() const
     {
         if (mode == Autotile) {
-            return !tilingAlgorithm.isEmpty() ? LayoutId::makeAutotileId(tilingAlgorithm) : QString();
+            // Return autotile prefix even with empty algorithm — signals "autotile mode,
+            // use default algorithm." Callers use LayoutId::isAutotile() to detect mode
+            // and extractAlgorithmId() to get the algorithm (empty = use default).
+            return LayoutId::makeAutotileId(tilingAlgorithm);
         }
         return snappingLayout;
     }
@@ -64,7 +67,11 @@ struct AssignmentEntry
         return mode == other.mode && snappingLayout == other.snappingLayout && tilingAlgorithm == other.tilingAlgorithm;
     }
 
-    /** @brief Create an AssignmentEntry from a layoutId string, preserving existing entry fields */
+    /** @brief Update an existing AssignmentEntry from a layoutId, preserving the "other" field.
+     *  Mode IS set from the layoutId type — batch operations from the KCM
+     *  send a single layout ID per context, and that ID determines the active mode.
+     *  The non-matching field is preserved for easy mode toggling.
+     */
     static AssignmentEntry fromLayoutId(const QString& layoutId, const AssignmentEntry& existing)
     {
         AssignmentEntry entry = existing;

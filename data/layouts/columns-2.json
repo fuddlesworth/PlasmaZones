@@ -6,6 +6,7 @@
     "defaultOrder": 1,
     "isBuiltIn": true,
     "showZoneNumbers": true,
+    "aspectRatioClass": "standard",
     "zones": [
         {
             "id": "{0a83c933-0470-4bd9-b956-82a3eae8b965}",

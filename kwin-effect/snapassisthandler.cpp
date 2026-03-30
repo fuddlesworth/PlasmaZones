@@ -3,10 +3,10 @@
 
 #include "snapassisthandler.h"
 #include "plasmazoneseffect.h"
+#include "dbus_constants.h"
 
 #include <effect/effecthandler.h>
 
-#include <QDBusInterface>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
@@ -33,12 +33,12 @@ void SnapAssistHandler::showContinuationIfNeeded(const QString& screenId)
         qCInfo(lcSnapAssist) << "Snap assist continuation skipped: snapAssistEnabled is false";
         return;
     }
-    if (!m_effect->ensureWindowTrackingReady("snap assist continuation")) {
+    if (!m_effect->isDaemonReady("snap assist continuation")) {
         return;
     }
     qCInfo(lcSnapAssist) << "Snap assist continuation: querying empty zones for screen" << screenId;
-    auto* iface = m_effect->windowTrackingInterface();
-    QDBusPendingCall emptyCall = iface->asyncCall(QStringLiteral("getEmptyZonesJson"), screenId);
+    QDBusPendingCall emptyCall = m_effect->asyncMethodCall(PlasmaZones::DBus::Interface::WindowTracking,
+                                                           QStringLiteral("getEmptyZonesJson"), {screenId});
     auto* watcher = new QDBusPendingCallWatcher(emptyCall, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, screenId](QDBusPendingCallWatcher* w) {
         w->deleteLater();
@@ -55,35 +55,37 @@ void SnapAssistHandler::showContinuationIfNeeded(const QString& screenId)
 void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString& screenId,
                                   const QString& emptyZonesJson)
 {
-    if (!m_effect->ensureWindowTrackingReady("snap assist snapped windows")) {
+    if (!m_effect->isDaemonReady("snap assist snapped windows")) {
         return;
     }
-    auto* iface = m_effect->windowTrackingInterface();
-    QDBusPendingCall snapCall = iface->asyncCall(QStringLiteral("getSnappedWindows"));
+    QDBusPendingCall snapCall =
+        m_effect->asyncMethodCall(PlasmaZones::DBus::Interface::WindowTracking, QStringLiteral("getSnappedWindows"));
     auto* snapWatcher = new QDBusPendingCallWatcher(snapCall, this);
-    connect(snapWatcher, &QDBusPendingCallWatcher::finished, this,
-            [this, excludeWindowId, screenId, emptyZonesJson](QDBusPendingCallWatcher* w) {
-                w->deleteLater();
-                QDBusPendingReply<QStringList> reply = *w;
-                QSet<QString> snappedWindowIds;
-                if (reply.isValid()) {
-                    for (const QString& id : reply.value()) {
-                        snappedWindowIds.insert(id);
-                    }
+    connect(
+        snapWatcher, &QDBusPendingCallWatcher::finished, this,
+        [this, excludeWindowId, screenId, emptyZonesJson](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            QDBusPendingReply<QStringList> reply = *w;
+            QSet<QString> snappedWindowIds;
+            if (reply.isValid()) {
+                for (const QString& id : reply.value()) {
+                    snappedWindowIds.insert(id);
                 }
-                QJsonArray candidates = buildCandidates(excludeWindowId, screenId, snappedWindowIds);
-                if (candidates.isEmpty()) {
-                    qCInfo(lcSnapAssist) << "Snap assist skipped: no unsnapped candidate windows on" << screenId;
-                    return;
-                }
-                if (!m_effect->ensureOverlayInterface("snap assist show")) {
-                    return;
-                }
-                m_effect->m_overlayInterface->asyncCall(
-                    QStringLiteral("showSnapAssist"), screenId, emptyZonesJson,
-                    QString::fromUtf8(QJsonDocument(candidates).toJson(QJsonDocument::Compact)));
-                qCInfo(lcSnapAssist) << "Snap Assist shown with" << candidates.size() << "candidates";
-            });
+            }
+            QJsonArray candidates = buildCandidates(excludeWindowId, screenId, snappedWindowIds);
+            if (candidates.isEmpty()) {
+                qCInfo(lcSnapAssist) << "Snap assist skipped: no unsnapped candidate windows on" << screenId;
+                return;
+            }
+            if (!m_effect->isDaemonReady("snap assist show")) {
+                return;
+            }
+            m_effect->fireAndForgetDBusCall(
+                PlasmaZones::DBus::Interface::Overlay, QStringLiteral("showSnapAssist"),
+                {screenId, emptyZonesJson, QString::fromUtf8(QJsonDocument(candidates).toJson(QJsonDocument::Compact))},
+                QStringLiteral("showSnapAssist"));
+            qCInfo(lcSnapAssist) << "Snap Assist shown with" << candidates.size() << "candidates";
+        });
 }
 
 QJsonArray SnapAssistHandler::buildCandidates(const QString& excludeWindowId, const QString& screenId,
@@ -91,10 +93,6 @@ QJsonArray SnapAssistHandler::buildCandidates(const QString& excludeWindowId, co
 {
     QJsonArray candidates;
     const auto windows = KWin::effects->stackingOrder();
-
-    // screenId may be a connector name ("DP-3") or a stable screen ID
-    // ("LG Electronics:LG Ultra HD:45071"). Detect format by checking for ':'.
-    const bool screenIsId = screenId.contains(QLatin1Char(':'));
 
     for (KWin::EffectWindow* w : windows) {
         if (!w || !m_effect->shouldHandleWindow(w) || w->isMinimized() || !w->isOnCurrentDesktop()
@@ -130,9 +128,9 @@ QJsonArray SnapAssistHandler::buildCandidates(const QString& excludeWindowId, co
             }
         }
 
-        // Compare using the same format as the input (screen ID or connector name)
+        // Always use EDID-based screen ID for comparison
         if (!screenId.isEmpty()) {
-            QString winScreen = screenIsId ? m_effect->getWindowScreenId(w) : m_effect->getWindowScreenName(w);
+            QString winScreen = m_effect->getWindowScreenId(w);
             if (winScreen != screenId) {
                 continue;
             }

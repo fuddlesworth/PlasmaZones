@@ -23,6 +23,7 @@ Item {
     property bool isActive: false
     property bool isSelected: false
     property bool isHovered: false
+    property bool isRecommended: layoutData.recommended !== undefined ? layoutData.recommended : true
     // Dimensions (set by parent, no defaults)
     property real previewWidth
     property real previewHeight
@@ -85,6 +86,8 @@ Item {
     // Signals
     signal zoneHovered(int zoneIndex)
 
+    // Dim non-recommended layouts (different aspect ratio class than current screen)
+    opacity: root.isRecommended ? 1 : 0.65
     // Accessibility
     Accessible.role: Accessible.Pane
     Accessible.name: root.layoutData.name || ""
@@ -143,9 +146,34 @@ Item {
 
     }
 
-    // Preview area
+    // Preview area — bounding box for the layout preview.
+    // The actual preview rect inside may be smaller to match the layout's
+    // intended aspect ratio (letterboxed/pillarboxed within the bounds).
     Item {
         id: previewArea
+
+        // Compute preview rect dimensions fitted to the layout's aspect ratio
+        // within the previewWidth × previewHeight bounding box.
+        readonly property real layoutAR: {
+            var cls = root.layoutData ? (root.layoutData.aspectRatioClass || "any") : "any";
+            switch (cls) {
+            case "standard":
+                return 16 / 9;
+            case "ultrawide":
+                return 21 / 9;
+            case "super-ultrawide":
+                return 32 / 9;
+            case "portrait":
+                return 9 / 16;
+            default:
+                // "any" — fill the bounding box (use bounding box AR)
+                return root.previewHeight > 0 ? root.previewWidth / root.previewHeight : 16 / 9;
+            }
+        }
+        readonly property real boundsAR: root.previewHeight > 0 ? root.previewWidth / root.previewHeight : 16 / 9
+        // Fit: if layout is wider than bounds, width-constrain; otherwise height-constrain
+        readonly property real fittedWidth: layoutAR > boundsAR ? root.previewWidth : Math.round(root.previewHeight * layoutAR)
+        readonly property real fittedHeight: layoutAR > boundsAR ? Math.round(root.previewWidth / layoutAR) : root.previewHeight
 
         anchors.top: parent.top
         anchors.topMargin: root.showCardBackground ? Kirigami.Units.gridUnit : 0
@@ -157,7 +185,9 @@ Item {
         Rectangle {
             id: previewBackground
 
-            anchors.fill: parent
+            anchors.centerIn: parent
+            width: previewArea.fittedWidth
+            height: previewArea.fittedHeight
             radius: style.previewRadius
             color: root.showCardBackground ? Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, style.fillNeutral) : root.stateHighlightFill
             border.color: root.showCardBackground ? "transparent" : root.stateBorderColor
@@ -193,9 +223,9 @@ Item {
             id: indicatorBar
 
             visible: root.showIndicatorBar
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
+            anchors.left: previewBackground.left
+            anchors.top: previewBackground.top
+            anchors.bottom: previewBackground.bottom
             anchors.leftMargin: -Math.round(Kirigami.Units.smallSpacing / 2)
             anchors.topMargin: Kirigami.Units.smallSpacing
             anchors.bottomMargin: Kirigami.Units.smallSpacing
@@ -228,8 +258,8 @@ Item {
 
             readonly property int badgeSize: root.showCardBackground ? Math.round(root.previewWidth * 0.14) : Math.round(Kirigami.Units.gridUnit * 2.5)
 
-            anchors.right: parent.right
-            anchors.top: parent.top
+            anchors.right: previewBackground.right
+            anchors.top: previewBackground.top
             anchors.rightMargin: Kirigami.Units.smallSpacing
             anchors.topMargin: Kirigami.Units.smallSpacing
             width: root.isActive ? badgeSize : 0
@@ -275,9 +305,9 @@ Item {
 
         }
 
-        // Zone rectangles
+        // Zone rectangles — fill the fitted preview background, not the bounding box
         ZonePreview {
-            anchors.fill: parent
+            anchors.fill: previewBackground
             anchors.margins: root.showCardBackground ? Kirigami.Units.smallSpacing : 0
             zones: root.layoutData.zones || []
             interactive: root.interactive
@@ -322,6 +352,11 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             category: root.layoutData.category !== undefined ? root.layoutData.category : 0
             autoAssign: root.layoutData.autoAssign === true
+        }
+
+        AspectRatioBadge {
+            anchors.verticalCenter: parent.verticalCenter
+            aspectRatioClass: root.layoutData.aspectRatioClass || "any"
         }
 
         Label {

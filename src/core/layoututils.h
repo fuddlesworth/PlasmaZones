@@ -58,6 +58,33 @@ struct PLASMAZONES_EXPORT UnifiedLayoutEntry
     QVariantList previewZones; ///< Preview zones (used for autotile algorithm previews)
     bool autoAssign = false; ///< Auto-assign: new windows fill first empty zone
     bool isAutotile = false; ///< True if this entry represents an autotile algorithm
+    int aspectRatioClass = 0; ///< AspectRatioClass enum value (0=Any, 1=Standard, etc.)
+    qreal referenceAspectRatio = 0.0; ///< For fixed-geometry layouts: the screen AR zones were designed for
+    bool recommended = true; ///< True if layout matches the current screen's aspect ratio
+    QString zoneNumberDisplay; ///< How zone numbers are displayed in previews ("all", "last", etc.)
+    bool memory = false; ///< True if algorithm maintains persistent state (SplitTree)
+    bool supportsMasterCount = false; ///< True if algorithm supports configurable master window count
+    bool supportsSplitRatio = false; ///< True if algorithm supports configurable split ratio
+    bool producesOverlappingZones = false; ///< True if algorithm can produce overlapping zones
+    bool isScripted = false; ///< True if algorithm is loaded from a .js script file
+    bool isUserScript = false; ///< True if script is from the user's local directory
+
+    // ── Generic section grouping (data-driven, consumed by LayoutsPage) ──
+    QString sectionKey; ///< Grouping key (e.g. "any", "standard", "built-in", "custom")
+    QString sectionLabel; ///< Display label for the section header (i18n'd)
+    int sectionOrder = 0; ///< Sort priority (lower = first)
+
+    /// Whether this autotile entry should show as a "system" (lock icon) item.
+    /// Built-in C++ algorithms are always system entries. Scripted algorithms
+    /// are system entries only if they are system-installed (not user scripts).
+    bool isSystemEntry() const
+    {
+        if (!isAutotile)
+            return false;
+        if (!isScripted)
+            return true; // Built-in C++ algorithm
+        return !isUserScript; // System-installed script = system, user script = not system
+    }
 
     /**
      * @brief Extract the algorithm ID from an autotile entry
@@ -100,23 +127,32 @@ PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutMan
  * Filters out layouts that are:
  * - hiddenFromSelector = true
  * - Not allowed on the given screen/desktop/activity (if allow lists are non-empty)
+ * - Not matching the screen's aspect ratio class (if layout has an aspectRatioClass tag)
+ *
+ * Layouts tagged with a non-matching aspect ratio class are not removed entirely;
+ * they are moved to the end of the list so the selector can show them in a
+ * collapsed "Other" section. The `recommended` field in the returned entry
+ * indicates whether the layout matches the current screen's aspect ratio.
  *
  * @param layoutManager Layout manager interface
- * @param screenName Current screen name (empty = skip screen filter)
+ * @param screenId Current screen ID (empty = skip screen filter)
  * @param virtualDesktop Current virtual desktop (0 = skip desktop filter)
  * @param activity Current activity ID (empty = skip activity filter)
  * @param includeManual Include manual zone-based layouts (default: true)
  * @param includeAutotile Include dynamic autotile algorithm layouts (default: true)
+ * @param screenAspectRatio Aspect ratio of the target screen (0 = skip AR filtering)
+ * @param filterByAspectRatio When true, exclude entries where recommended is false (default: false)
  */
 PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry>
-buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenName, int virtualDesktop,
-                       const QString& activity, bool includeManual = true, bool includeAutotile = true);
+buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenId, int virtualDesktop,
+                       const QString& activity, bool includeManual = true, bool includeAutotile = true,
+                       qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false);
 
 /**
  * @brief Convert a unified layout entry to QVariantMap for QML
  *
  * Creates a map with keys matching the zone selector's expectations:
- * - id, name, description, type, zoneCount, zones, category
+ * - id, name, description, zoneCount, zones, category
  *
  * @param entry The unified layout entry
  * @return QVariantMap suitable for QML consumption

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "wallpaperprovider.h"
 #include <QObject>
 #include <QHash>
 #include <QImage>
@@ -13,6 +14,7 @@
 #include <QFileSystemWatcher>
 #include <QMutex>
 #include <QTimer>
+#include <memory>
 
 namespace PlasmaZones {
 
@@ -188,11 +190,11 @@ public:
     void reportShaderBakeFinished(const QString& shaderId, bool success, const QString& error);
 
     /**
-     * Resolve the current KDE Plasma desktop wallpaper image path.
-     * Reads from plasma-org.kde.plasma.desktop-appletsrc config file.
-     * Result is cached; returns empty string if no wallpaper found.
+     * Resolve the current desktop wallpaper image path via the
+     * pluggable IWallpaperProvider.  Auto-detects KDE, Hyprland,
+     * Sway, GNOME.  Result is cached; returns empty on failure.
      */
-    static QString plasmaWallpaperPath();
+    static QString wallpaperPath();
 
     /**
      * Load the current Plasma wallpaper as an RGBA8888 QImage.
@@ -213,6 +215,7 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void onUserShaderDirChanged(const QString& path);
+    void onShaderFileChanged(const QString& path);
     void performDebouncedRefresh();
 
 private:
@@ -222,6 +225,8 @@ private:
     ShaderInfo loadShaderMetadata(const QString& shaderDir);
     bool validateParameterValue(const ParameterInfo& param, const QVariant& value) const;
     void setupFileWatcher();
+    void scheduleRefresh();
+    void reWatchShaderFiles();
     void ensureUserShaderDirExists() const;
     QVariantMap shaderInfoToVariantMap(const ShaderInfo& info) const;
     QVariantMap parameterInfoToVariantMap(const ParameterInfo& param) const;
@@ -234,6 +239,7 @@ private:
     static ShaderRegistry* s_instance;
     static QString systemShaderDir();
     static QString userShaderDir();
+    static std::unique_ptr<IWallpaperProvider> s_wallpaperProvider;
     static QString s_cachedWallpaperPath;
     static QImage s_cachedWallpaperImage;
     static qint64 s_cachedWallpaperMtime;

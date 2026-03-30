@@ -4,10 +4,10 @@
 #include "screenchangehandler.h"
 #include "autotilehandler.h"
 #include "plasmazoneseffect.h"
+#include "dbus_constants.h"
 
 #include <effect/effecthandler.h>
 
-#include <QDBusInterface>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
@@ -105,12 +105,12 @@ void ScreenChangeHandler::slotReapplyWindowGeometriesRequested()
 
 void ScreenChangeHandler::fetchAndApplyWindowGeometries()
 {
-    if (!m_effect->ensureWindowTrackingReady("get updated window geometries")) {
+    if (!m_effect->isDaemonReady("get updated window geometries")) {
         return;
     }
     m_reapplyInProgress = true;
-    auto* iface = m_effect->windowTrackingInterface();
-    QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("getUpdatedWindowGeometries"));
+    QDBusPendingCall pendingCall = m_effect->asyncMethodCall(PlasmaZones::DBus::Interface::WindowTracking,
+                                                             QStringLiteral("getUpdatedWindowGeometries"));
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
     QPointer<ScreenChangeHandler> self(this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [self](QDBusPendingCallWatcher* w) {

@@ -18,12 +18,10 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QVariantMap>
-#include <KConfig>
-#include <KConfigGroup>
-#include <KSharedConfig>
 
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
+#include "../../../src/config/configbackend_qsettings.h"
 #include "../../../src/core/constants.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
@@ -49,10 +47,11 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         {
-            auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-            KConfigGroup zones = config->group(QStringLiteral("Zones"));
-            zones.writeEntry(QLatin1String("Padding"), 999); // max is 50
-            config->sync();
+            auto backend = QSettingsConfigBackend::createDefault();
+            auto zones = backend->group(QStringLiteral("Zones"));
+            zones->writeInt(QStringLiteral("Padding"), 999); // max is 50
+            zones.reset();
+            backend->sync();
         }
 
         Settings settings;
@@ -72,10 +71,11 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         {
-            auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-            KConfigGroup appearance = config->group(QStringLiteral("Appearance"));
-            appearance.writeEntry(QLatin1String("HighlightColor"), QStringLiteral("not-a-color"));
-            config->sync();
+            auto backend = QSettingsConfigBackend::createDefault();
+            auto appearance = backend->group(QStringLiteral("Appearance"));
+            appearance->writeString(QStringLiteral("HighlightColor"), QStringLiteral("not-a-color"));
+            appearance.reset();
+            backend->sync();
         }
 
         Settings settings;
@@ -96,13 +96,14 @@ private Q_SLOTS:
 
         // parseTriggerListJson is a static method, test it through config
         {
-            auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-            KConfigGroup activation = config->group(QStringLiteral("Activation"));
+            auto backend = QSettingsConfigBackend::createDefault();
+            auto activation = backend->group(QStringLiteral("Activation"));
             // Write invalid JSON as the trigger list
-            activation.writeEntry(QLatin1String("DragActivationTriggers"), QStringLiteral("{broken json["));
+            activation->writeString(QStringLiteral("DragActivationTriggers"), QStringLiteral("{broken json["));
             // Provide a legacy fallback modifier
-            activation.writeEntry(QLatin1String("DragActivationModifier"), 3); // Alt
-            config->sync();
+            activation->writeInt(QStringLiteral("DragActivationModifier"), 3); // Alt
+            activation.reset();
+            backend->sync();
         }
 
         Settings settings;
@@ -132,10 +133,11 @@ private Q_SLOTS:
         QString json = QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
 
         {
-            auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-            KConfigGroup activation = config->group(QStringLiteral("Activation"));
-            activation.writeEntry(QLatin1String("DragActivationTriggers"), json);
-            config->sync();
+            auto backend = QSettingsConfigBackend::createDefault();
+            auto activation = backend->group(QStringLiteral("Activation"));
+            activation->writeString(QStringLiteral("DragActivationTriggers"), json);
+            activation.reset();
+            backend->sync();
         }
 
         Settings settings;

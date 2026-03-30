@@ -31,15 +31,15 @@ public:
 public Q_SLOTS:
     // Screen queries
     QStringList getScreens();
-    QString getScreenInfo(const QString& screenName);
+    QString getScreenInfo(const QString& screenId);
     QString getPrimaryScreen();
-    QString getScreenId(const QString& screenName);
-    void setPrimaryScreenFromKWin(const QString& screenName);
+    QString getScreenId(const QString& connectorName);
+    void setPrimaryScreenFromKWin(const QString& connectorName);
 
 Q_SIGNALS:
-    void screenAdded(const QString& screenName);
-    void screenRemoved(const QString& screenName);
-    void screenGeometryChanged(const QString& screenName);
+    void screenAdded(const QString& screenId);
+    void screenRemoved(const QString& screenId);
+    void screenGeometryChanged(const QString& screenId);
 
 private:
     QString m_primaryScreenOverride;

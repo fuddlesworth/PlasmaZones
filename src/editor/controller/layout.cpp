@@ -12,7 +12,7 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 
-#include <KLocalizedString>
+#include "pz_i18n.h"
 #include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusInterface>
@@ -141,7 +141,7 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
 void EditorController::createNewLayout()
 {
     m_layoutId = QUuid::createUuid().toString();
-    m_layoutName = i18n("New Layout");
+    m_layoutName = PzI18n::tr("New Layout");
     if (m_zoneManager) {
         m_zoneManager->clearAllZones();
     }
@@ -165,6 +165,7 @@ void EditorController::createNewLayout()
     m_outerGapRight = -1;
     m_overlayDisplayMode = -1;
     m_useFullScreenGeometry = false;
+    m_aspectRatioClass = 0;
 
     // Refresh available shaders from daemon
     refreshAvailableShaders();
@@ -183,17 +184,18 @@ void EditorController::createNewLayout()
     Q_EMIT outerGapChanged();
     Q_EMIT overlayDisplayModeChanged();
     Q_EMIT useFullScreenGeometryChanged();
+    Q_EMIT aspectRatioClassChanged();
 }
 
 void EditorController::loadLayout(const QString& layoutId)
 {
     if (layoutId.isEmpty()) {
-        Q_EMIT layoutLoadFailed(i18n("Layout ID cannot be empty"));
+        Q_EMIT layoutLoadFailed(PzI18n::tr("Layout ID cannot be empty"));
         return;
     }
 
     if (!m_layoutService) {
-        Q_EMIT layoutLoadFailed(i18n("Layout service not initialized"));
+        Q_EMIT layoutLoadFailed(PzI18n::tr("Layout service not initialized"));
         return;
     }
 
@@ -205,7 +207,7 @@ void EditorController::loadLayout(const QString& layoutId)
 
     QJsonDocument doc = QJsonDocument::fromJson(jsonLayout.toUtf8());
     if (doc.isNull() || !doc.isObject()) {
-        Q_EMIT layoutLoadFailed(i18n("Invalid layout data format"));
+        Q_EMIT layoutLoadFailed(PzI18n::tr("Invalid layout data format"));
         qCWarning(lcEditor) << "Invalid JSON for layout" << layoutId;
         return;
     }
@@ -373,6 +375,18 @@ void EditorController::loadLayout(const QString& layoutId)
         ? layoutObj[QLatin1String(JsonKeys::OuterGapRight)].toInt(-1)
         : -1;
     m_useFullScreenGeometry = layoutObj[QLatin1String(JsonKeys::UseFullScreenGeometry)].toBool(false);
+    if (layoutObj.contains(QLatin1String(JsonKeys::AspectRatioClassKey))) {
+        QJsonValue arVal = layoutObj[QLatin1String(JsonKeys::AspectRatioClassKey)];
+        if (arVal.isString()) {
+            // Canonical format from Layout::toJson() — string like "ultrawide"
+            m_aspectRatioClass = static_cast<int>(ScreenClassification::fromString(arVal.toString()));
+        } else {
+            // Int format (from editor save round-trip before daemon persists)
+            m_aspectRatioClass = arVal.toInt(0);
+        }
+    } else {
+        m_aspectRatioClass = 0;
+    }
     int oldOverlayDisplayMode = m_overlayDisplayMode;
     m_overlayDisplayMode = layoutObj.contains(QLatin1String(JsonKeys::OverlayDisplayMode))
         ? layoutObj[QLatin1String(JsonKeys::OverlayDisplayMode)].toInt(-1)
@@ -396,7 +410,11 @@ void EditorController::loadLayout(const QString& layoutId)
         m_cachedShaderParameters.clear();
     } else {
         QVariantMap info = getShaderInfo(m_currentShaderId);
-        m_cachedShaderParameters = info.value(QLatin1String("parameters")).toList();
+        if (info.contains(QLatin1String("parameters"))) {
+            m_cachedShaderParameters = info.value(QLatin1String("parameters")).toList();
+        } else {
+            m_cachedShaderParameters.clear();
+        }
     }
 
     // Strip stale params accumulated from previous shader selections
@@ -426,6 +444,7 @@ void EditorController::loadLayout(const QString& layoutId)
     if (m_useFullScreenGeometry != oldUseFullScreen) {
         Q_EMIT useFullScreenGeometryChanged();
     }
+    Q_EMIT aspectRatioClassChanged();
     if (m_overlayDisplayMode != oldOverlayDisplayMode) {
         Q_EMIT overlayDisplayModeChanged();
     }
@@ -451,7 +470,7 @@ void EditorController::loadLayout(const QString& layoutId)
 void EditorController::saveLayout()
 {
     if (!m_layoutService || !m_zoneManager) {
-        Q_EMIT layoutSaveFailed(i18n("Services not initialized"));
+        Q_EMIT layoutSaveFailed(PzI18n::tr("Services not initialized"));
         return;
     }
 
@@ -459,7 +478,6 @@ void EditorController::saveLayout()
     QJsonObject layoutObj;
     layoutObj[QLatin1String(JsonKeys::Id)] = m_layoutId;
     layoutObj[QLatin1String(JsonKeys::Name)] = m_layoutName;
-    layoutObj[QLatin1String(JsonKeys::Type)] = 0; // Custom type
     layoutObj[QLatin1String(JsonKeys::IsBuiltIn)] = false;
 
     QJsonArray zonesArray;
@@ -561,6 +579,12 @@ void EditorController::saveLayout()
     // Include full screen geometry mode (only if enabled)
     if (m_useFullScreenGeometry) {
         layoutObj[QLatin1String(JsonKeys::UseFullScreenGeometry)] = true;
+    }
+
+    // Include aspect ratio class (only if not Any) — serialize as int for updateLayout D-Bus,
+    // which converts to the canonical string format via Layout::setAspectRatioClassInt()
+    if (m_aspectRatioClass != 0) {
+        layoutObj[QLatin1String(JsonKeys::AspectRatioClassKey)] = m_aspectRatioClass;
     }
 
     // Include visibility filtering allow-lists (only if non-empty)

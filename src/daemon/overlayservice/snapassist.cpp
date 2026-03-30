@@ -17,13 +17,13 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <LayerShellQt/Window>
+#include "../../core/layersurface.h"
 
 namespace PlasmaZones {
 
 // parseZonesJson is defined in overlayservice_internal.h (shared inline)
 
-void OverlayService::showSnapAssist(const QString& screenName, const QString& emptyZonesJson,
+void OverlayService::showSnapAssist(const QString& screenId, const QString& emptyZonesJson,
                                     const QString& candidatesJson)
 {
     if (emptyZonesJson.isEmpty() || candidatesJson.isEmpty()) {
@@ -32,13 +32,7 @@ void OverlayService::showSnapAssist(const QString& screenName, const QString& em
         return;
     }
 
-    QScreen* screen = nullptr;
-    if (!screenName.isEmpty()) {
-        screen = Utils::findScreenByIdOrName(screenName);
-    }
-    if (!screen) {
-        screen = Utils::primaryScreen();
-    }
+    QScreen* screen = resolveTargetScreen(screenId);
     if (!screen) {
         qCWarning(lcOverlay) << "showSnapAssist: no screen available";
         Q_EMIT snapAssistDismissed();
@@ -54,7 +48,6 @@ void OverlayService::showSnapAssist(const QString& screenName, const QString& em
     }
 
     m_snapAssistScreen = screen;
-    m_snapAssistWindow->setScreen(screen);
 
     // Parse JSON using shared helper (same format: array of objects)
     const QVariantList zonesList = parseZonesJson(emptyZonesJson, "showSnapAssist:");
@@ -114,28 +107,31 @@ void OverlayService::showSnapAssist(const QString& screenName, const QString& em
     }
 
     // Match main overlay: full-screen anchors so zone coordinates (overlay-local) line up
-    if (auto* layerWindow = LayerShellQt::Window::get(m_snapAssistWindow)) {
-        layerWindow->setScreen(screen);
-        layerWindow->setLayer(LayerShellQt::Window::LayerTop);
-        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
-        layerWindow->setAnchors(
-            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
-        layerWindow->setExclusiveZone(-1);
-        layerWindow->setScope(QStringLiteral("plasmazones-snap-assist"));
+    if (!configureLayerSurface(m_snapAssistWindow, screen, LayerSurface::LayerTop,
+                               LayerSurface::KeyboardInteractivityExclusive,
+                               QStringLiteral("plasmazones-snap-assist-%1").arg(Utils::screenIdentifier(screen)),
+                               LayerSurface::AnchorAll)) {
+        qCWarning(lcOverlay) << "showSnapAssist: failed to configure layer surface";
+        destroySnapAssistWindow();
+        Q_EMIT snapAssistDismissed();
+        return;
     }
 
     assertWindowOnScreen(m_snapAssistWindow, screen);
-    m_snapAssistWindow->setGeometry(screen->geometry());
+    // Size only — position is controlled by layer-surface anchors (AnchorAll),
+    // setX/setY are no-ops on layer surfaces.
+    const QRect snapGeom = screen->geometry();
+    m_snapAssistWindow->setWidth(snapGeom.width());
+    m_snapAssistWindow->setHeight(snapGeom.height());
     m_snapAssistWindow->show();
     // Ensure the window receives keyboard focus for Escape handling on Wayland.
     // KeyboardInteractivityExclusive tells the compositor to send keyboard events,
     // but Qt may not set internal focus without an explicit activation request.
     m_snapAssistWindow->requestActivate();
-    qCInfo(lcOverlay) << "showSnapAssist: screen=" << screenName << "zones=" << zonesList.size()
+    qCInfo(lcOverlay) << "showSnapAssist: screen=" << screenId << "zones=" << zonesList.size()
                       << "candidates=" << candidatesList.size();
 
-    Q_EMIT snapAssistShown(screenName, emptyZonesJson, candidatesJson);
+    Q_EMIT snapAssistShown(screenId, emptyZonesJson, candidatesJson);
 }
 
 void OverlayService::setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl)
@@ -259,6 +255,10 @@ void OverlayService::destroySnapAssistWindow()
         // Disconnect visibleChanged before closing to prevent spurious snapAssistDismissed
         // when the window is being destroyed and recreated (e.g. showSnapAssist recreate cycle)
         disconnect(m_snapAssistWindow, &QWindow::visibleChanged, this, nullptr);
+        // Disconnect screen signals so no geometryChanged etc. are delivered during teardown
+        if (m_snapAssistScreen) {
+            disconnect(m_snapAssistScreen, nullptr, m_snapAssistWindow, nullptr);
+        }
         m_snapAssistWindow->close();
         m_snapAssistWindow->deleteLater();
         m_snapAssistWindow = nullptr;
@@ -280,7 +280,7 @@ void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const Q
 // Layout Picker Overlay
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void OverlayService::showLayoutPicker(const QString& screenName)
+void OverlayService::showLayoutPicker(const QString& screenId)
 {
     // Guard: if picker window already exists (visible or being set up), do nothing.
     // Prevents double-trigger when shortcut fires before KeyboardInteractivityExclusive
@@ -290,13 +290,7 @@ void OverlayService::showLayoutPicker(const QString& screenName)
     }
 
     // Resolve target screen
-    QScreen* screen = nullptr;
-    if (!screenName.isEmpty()) {
-        screen = Utils::findScreenByIdOrName(screenName);
-    }
-    if (!screen) {
-        screen = Utils::primaryScreen();
-    }
+    QScreen* screen = resolveTargetScreen(screenId);
     if (!screen) {
         qCWarning(lcOverlay) << "showLayoutPicker: no screen available";
         return;
@@ -309,11 +303,9 @@ void OverlayService::showLayoutPicker(const QString& screenName)
         return;
     }
 
-    m_layoutPickerWindow->setScreen(screen);
-
     // Build layouts list
-    const QString screenId = Utils::screenIdentifier(screen);
-    QVariantList layoutsList = buildLayoutsList(screenId);
+    const QString resolvedScreenId = Utils::screenIdentifier(screen);
+    QVariantList layoutsList = buildLayoutsList(resolvedScreenId);
     if (layoutsList.isEmpty()) {
         qCDebug(lcOverlay) << "showLayoutPicker: no layouts available";
         destroyLayoutPickerWindow();
@@ -364,19 +356,20 @@ void OverlayService::showLayoutPicker(const QString& screenName)
     }
 
     // Full-screen layer shell with keyboard interactivity
-    if (auto* layerWindow = LayerShellQt::Window::get(m_layoutPickerWindow)) {
-        layerWindow->setScreen(screen);
-        layerWindow->setLayer(LayerShellQt::Window::LayerTop);
-        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
-        layerWindow->setAnchors(
-            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
-        layerWindow->setExclusiveZone(-1);
-        layerWindow->setScope(QStringLiteral("plasmazones-layout-picker"));
+    if (!configureLayerSurface(m_layoutPickerWindow, screen, LayerSurface::LayerTop,
+                               LayerSurface::KeyboardInteractivityExclusive,
+                               QStringLiteral("plasmazones-layout-picker-%1").arg(Utils::screenIdentifier(screen)),
+                               LayerSurface::AnchorAll)) {
+        qCWarning(lcOverlay) << "showLayoutPicker: failed to configure layer surface";
+        destroyLayoutPickerWindow();
+        return;
     }
 
     assertWindowOnScreen(m_layoutPickerWindow, screen);
-    m_layoutPickerWindow->setGeometry(screenGeom);
+    // Size only — position is controlled by layer-surface anchors (AnchorAll),
+    // setX/setY are no-ops on layer surfaces.
+    m_layoutPickerWindow->setWidth(screenGeom.width());
+    m_layoutPickerWindow->setHeight(screenGeom.height());
     QMetaObject::invokeMethod(m_layoutPickerWindow, "show");
     m_layoutPickerWindow->requestActivate();
 
@@ -425,6 +418,10 @@ void OverlayService::destroyLayoutPickerWindow()
 {
     if (m_layoutPickerWindow) {
         disconnect(m_layoutPickerWindow, &QWindow::visibleChanged, this, nullptr);
+        // Disconnect screen signals so no geometryChanged etc. are delivered during teardown
+        if (auto* screen = m_layoutPickerWindow->screen()) {
+            disconnect(screen, nullptr, m_layoutPickerWindow, nullptr);
+        }
         m_layoutPickerWindow->close();
         m_layoutPickerWindow->deleteLater();
         m_layoutPickerWindow = nullptr;

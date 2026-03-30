@@ -4,7 +4,7 @@
 #include "UpdateZoneNumberCommand.h"
 #include "../../services/ZoneManager.h"
 #include "../../../core/logging.h"
-#include <KLocalizedString>
+#include "pz_i18n.h"
 
 using namespace PlasmaZones;
 
@@ -13,7 +13,7 @@ namespace PlasmaZones {
 UpdateZoneNumberCommand::UpdateZoneNumberCommand(QPointer<ZoneManager> zoneManager, const QString& zoneId,
                                                  int oldNumber, int newNumber, const QString& text,
                                                  QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? i18nc("@action", "Change Zone Number") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Change Zone Number", "@action") : text, parent)
     , m_zoneId(zoneId)
     , m_oldNumber(oldNumber)
     , m_newNumber(newNumber)

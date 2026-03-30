@@ -102,9 +102,9 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
     layout.cellWidth = layout.indicatorWidth + layout.cardSidePadding * 2;
     layout.cellHeight = layout.indicatorHeight + layout.labelSpace + layout.cardPadding;
 
-    // Step 1: Apply maxRows setting (Auto mode, Grid only)
+    // Step 1: Apply maxRows setting (Grid only, all size modes)
     int visibleRows = layout.rows;
-    if (sizeMode == ZoneSelectorSizeMode::Auto && layoutMode == ZoneSelectorLayoutMode::Grid && layout.rows > maxRows) {
+    if (layoutMode == ZoneSelectorLayoutMode::Grid && layout.rows > maxRows) {
         visibleRows = maxRows;
     }
 

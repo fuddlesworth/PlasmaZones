@@ -1,0 +1,29 @@
+{
+    "id": "{b5ec7a8b-4c9d-4fbc-db6a-8eaf2b4c6d8e}",
+    "name": "Portrait Master + Stack",
+    "description": "Top master with side-by-side stack below for vertical monitors",
+    "type": 5,
+    "isBuiltIn": true,
+    "showZoneNumbers": true,
+    "aspectRatioClass": "portrait",
+    "zones": [
+        {
+            "id": "{b5c6d7e8-1111-4444-bbbb-111111111111}",
+            "name": "Master",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 1.0, "height": 0.55 }
+        },
+        {
+            "id": "{b5c6d7e8-2222-4444-bbbb-222222222222}",
+            "name": "Stack Left",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0, "y": 0.55, "width": 0.5, "height": 0.45 }
+        },
+        {
+            "id": "{b5c6d7e8-3333-4444-bbbb-333333333333}",
+            "name": "Stack Right",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.5, "y": 0.55, "width": 0.5, "height": 0.45 }
+        }
+    ]
+}

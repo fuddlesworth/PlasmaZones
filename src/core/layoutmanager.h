@@ -10,8 +10,11 @@
 #include <QSet>
 #include <QUuid>
 #include <QString>
+#include <memory>
 
 namespace PlasmaZones {
+
+class QSettingsConfigBackend;
 
 /**
  * @brief Manages all layouts and their assignments to screens/desktops
@@ -81,6 +84,15 @@ public:
                                   Layout* layout) override;
     Q_INVOKABLE void assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
                                       const QString& layoutId) override;
+
+    /**
+     * @brief Set a full AssignmentEntry directly (from KCM via D-Bus)
+     *
+     * Stores the entry in m_assignments regardless of isValid() — mode-only
+     * entries are valid when explicitly set by the KCM.
+     */
+    void setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
+                                  const AssignmentEntry& entry);
     Q_INVOKABLE Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                         const QString& activity = QString()) const override;
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
@@ -247,6 +259,7 @@ private:
     QJsonObject loadAllAutotileOverrides() const;
     void saveAllAutotileOverrides(const QJsonObject& all);
     ISettings* m_settings = nullptr;
+    std::unique_ptr<QSettingsConfigBackend> m_configBackend;
     QString m_layoutDirectory;
     QVector<Layout*> m_layouts;
     Layout* m_activeLayout = nullptr;

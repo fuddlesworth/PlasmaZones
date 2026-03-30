@@ -71,12 +71,15 @@ private Q_SLOTS:
         engine.config()->maxWindows = 1;
         state->setCalculatedZones({QRect(0, 0, 1000, 1000)});
 
-        QSignalSpy floatSpy(&engine, &AutotileEngine::windowFloatingChanged);
+        // Overflow windows are now emitted via windowsBatchFloated (batched)
+        // instead of per-window windowFloatingChanged signals.
+        QSignalSpy batchFloatSpy(&engine, &AutotileEngine::windowsBatchFloated);
         engine.retile(screenName);
 
         bool foundOverflow = false;
-        for (int i = 0; i < floatSpy.count(); ++i) {
-            if (floatSpy.at(i).at(0).toString() == QStringLiteral("win-b") && floatSpy.at(i).at(1).toBool() == true) {
+        for (int i = 0; i < batchFloatSpy.count(); ++i) {
+            QStringList windowIds = batchFloatSpy.at(i).at(0).toStringList();
+            if (windowIds.contains(QStringLiteral("win-b"))) {
                 foundOverflow = true;
                 break;
             }

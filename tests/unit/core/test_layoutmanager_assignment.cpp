@@ -14,8 +14,7 @@
 #include <QJsonObject>
 #include <QScopedPointer>
 #include <QUuid>
-#include <KConfigGroup>
-#include <KSharedConfig>
+#include "config/configbackend_qsettings.h"
 #include <memory>
 #include <vector>
 
@@ -36,7 +35,7 @@ class TestLayoutManagerAssignment : public QObject
 private:
     Layout* createTestLayout(const QString& name, QObject* parent = nullptr)
     {
-        auto* layout = new Layout(name, LayoutType::Custom, parent);
+        auto* layout = new Layout(name, parent);
         auto* zone = new Zone();
         zone->setRelativeGeometry(QRectF(0, 0, 1, 1));
         layout->addZone(zone);
@@ -314,10 +313,10 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // P6: KConfig round-trip
+    // P6: Config round-trip
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testKConfigRoundTrip_saveAndLoad_preservesAllFields()
+    void testConfigRoundTrip_saveAndLoad_preservesAllFields()
     {
         QScopedPointer<LayoutManager> mgr(createManager());
 
@@ -347,7 +346,7 @@ private Q_SLOTS:
         // Save
         mgr->saveAssignments();
 
-        // Create a new manager and load — same KSharedConfig singleton sees the data
+        // Create a new manager and load — same config file sees the data
         QScopedPointer<LayoutManager> mgr2(new LayoutManager(nullptr));
         mgr2->addLayout(createTestLayout(QStringLiteral("LayoutA")));
         mgr2->addLayout(createTestLayout(QStringLiteral("LayoutB")));
@@ -436,7 +435,7 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // P6: Migration from old [ModeTracking] KConfig group
+    // P6: Migration from old [ModeTracking] config group
     // ═══════════════════════════════════════════════════════════════════════════
 
     void testMigration_modeTrackingGroup_fillsMissingFields()
@@ -447,22 +446,24 @@ private Q_SLOTS:
         mgr->addLayout(layout);
         QString layoutId = layout->id().toString();
 
-        // Pre-populate KConfig with an Assignment entry that has autotile but no snappingLayout
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
+        // Pre-populate config with an Assignment entry that has autotile but no snappingLayout
         {
-            KConfigGroup grp = config->group(QStringLiteral("Assignment:DP-1"));
-            grp.writeEntry(QStringLiteral("Mode"), 1); // Autotile
-            grp.writeEntry(QStringLiteral("TilingAlgorithm"), QStringLiteral("dwindle"));
-            // SnappingLayout intentionally empty
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            {
+                auto grp = backend->group(QStringLiteral("Assignment:DP-1"));
+                grp->writeInt(QStringLiteral("Mode"), 1); // Autotile
+                grp->writeString(QStringLiteral("TilingAlgorithm"), QStringLiteral("dwindle"));
+                // SnappingLayout intentionally empty
+            }
+            // Write old ModeTracking group with the manual layout ID
+            {
+                auto mt = backend->group(QStringLiteral("ModeTracking"));
+                mt->writeString(QStringLiteral("LastManualLayoutId"), layoutId);
+                mt->writeString(QStringLiteral("LastAutotileAlgorithm"), QStringLiteral("wide"));
+                mt->writeInt(QStringLiteral("LastTilingMode"), 1);
+            }
+            backend->sync();
         }
-        // Write old ModeTracking group with the manual layout ID
-        {
-            KConfigGroup mt = config->group(QStringLiteral("ModeTracking"));
-            mt.writeEntry(QStringLiteral("LastManualLayoutId"), layoutId);
-            mt.writeEntry(QStringLiteral("LastAutotileAlgorithm"), QStringLiteral("wide"));
-            mt.writeEntry(QStringLiteral("LastTilingMode"), 1);
-        }
-        config->sync();
 
         mgr->loadAssignments();
 
@@ -472,8 +473,8 @@ private Q_SLOTS:
         QCOMPARE(entry.snappingLayout, layoutId); // Filled from ModeTracking
 
         // ModeTracking group should be deleted
-        config->reparseConfiguration();
-        QVERIFY(!config->hasGroup(QStringLiteral("ModeTracking")));
+        auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+        QVERIFY(!backend->groupList().contains(QStringLiteral("ModeTracking")));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -497,18 +498,24 @@ private Q_SLOTS:
         QVERIFY(entry.tilingAlgorithm.isEmpty());
     }
 
-    void testAssignmentEntry_fromLayoutId_preservesExisting()
+    void testAssignmentEntry_fromLayoutId_setsModeSetsField_preservesOther()
     {
         AssignmentEntry existing;
         existing.mode = AssignmentEntry::Autotile;
         existing.tilingAlgorithm = QStringLiteral("dwindle");
         existing.snappingLayout = QStringLiteral("{some-uuid}");
 
-        // Flip to snapping — should preserve tilingAlgorithm
+        // Update snapping field — mode switches to Snapping, tiling preserved
         auto entry = AssignmentEntry::fromLayoutId(QStringLiteral("{new-uuid}"), existing);
         QCOMPARE(entry.mode, AssignmentEntry::Snapping);
         QCOMPARE(entry.snappingLayout, QStringLiteral("{new-uuid}"));
         QCOMPARE(entry.tilingAlgorithm, QStringLiteral("dwindle")); // preserved
+
+        // Update tiling field — mode switches to Autotile, snapping preserved
+        auto entry2 = AssignmentEntry::fromLayoutId(QStringLiteral("autotile:wide"), existing);
+        QCOMPARE(entry2.mode, AssignmentEntry::Autotile);
+        QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("wide"));
+        QCOMPARE(entry2.snappingLayout, QStringLiteral("{some-uuid}")); // preserved
     }
 };
 

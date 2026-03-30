@@ -24,10 +24,12 @@
 #include <QQuickWindow>
 #include <QTimer>
 #include <QMutexLocker>
-#include "../core/logging.h"
-#include <KLocalizedContext>
 
-#include <LayerShellQt/Window>
+#include "../core/logging.h"
+#include "pz_qml_i18n.h"
+#include "vulkan_support.h"
+
+#include "../core/layersurface.h"
 
 namespace PlasmaZones {
 
@@ -54,7 +56,7 @@ OverlayService::OverlayService(QObject* parent)
     , m_engine(std::make_unique<QQmlEngine>()) // No parent - unique_ptr manages lifetime
 {
     // Set up i18n for QML (makes i18n() available in QML)
-    KLocalizedContext* localizedContext = new KLocalizedContext(m_engine.get());
+    auto* localizedContext = new PzLocalizedContext(m_engine.get());
     m_engine->rootContext()->setContextObject(localizedContext);
 
     // Connect to screen changes (with safety check for early initialization)
@@ -91,6 +93,15 @@ bool OverlayService::isZoneSelectorVisible() const
 
 OverlayService::~OverlayService()
 {
+    // Clear the Vulkan instance app property before destruction to avoid dangling pointer.
+    // Only needed for the fallback instance we own — when main.cpp provided the instance,
+    // it outlives OverlayService (declared before QGuiApplication), so no cleanup needed.
+#if QT_CONFIG(vulkan)
+    if (m_fallbackVulkanInstance && qGuiApp) {
+        qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty, QVariant());
+    }
+#endif
+
     // Disconnect from QGuiApplication first so we don't get screen-related callbacks
     // while we're destroying windows.
     if (qGuiApp) {
@@ -149,7 +160,39 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* scree
     // Take C++ ownership so QML's GC doesn't delete the window
     QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
 
-    // Set the screen before configuring LayerShellQt
+    // When the Vulkan backend is active, each QQuickWindow needs a QVulkanInstance
+    // set before it can create a Vulkan surface. The instance is stored as a dynamic
+    // property on QGuiApplication by main.cpp.
+    // IMPORTANT: setVulkanInstance() must be called before the window is shown or
+    // the scene graph is initialized. This is safe here because the window starts
+    // with visible: false and show() is called separately after createQmlWindow().
+#if QT_CONFIG(vulkan)
+    auto* vulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
+    if (vulkanInstance) {
+        window->setVulkanInstance(vulkanInstance);
+    } else if (QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan) {
+        // This can happen when backend is 'auto' and Qt chose Vulkan at runtime.
+        // Create a QVulkanInstance on-the-fly so overlays still work.
+        if (!m_fallbackVulkanInstance) {
+            m_fallbackVulkanInstance = std::make_unique<QVulkanInstance>();
+            m_fallbackVulkanInstance->setApiVersion(PlasmaZones::PzVulkanApiVersion);
+            if (m_fallbackVulkanInstance->create()) {
+                qCInfo(lcOverlay) << "Created fallback QVulkanInstance for 'auto' backend (Qt chose Vulkan).";
+                qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty,
+                                  QVariant::fromValue(m_fallbackVulkanInstance.get()));
+            } else {
+                qCCritical(lcOverlay) << "Failed to create fallback QVulkanInstance."
+                                      << "Overlay windows will not render correctly.";
+                m_fallbackVulkanInstance.reset();
+                window->deleteLater();
+                return nullptr;
+            }
+        }
+        window->setVulkanInstance(m_fallbackVulkanInstance.get());
+    }
+#endif
+
+    // Set the screen before the QPA plugin creates the LayerSurface
     window->setScreen(screen);
 
     return window;
@@ -173,7 +216,9 @@ void OverlayService::show()
             cursorScreen = Utils::primaryScreen();
         }
         // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
-        if (cursorScreen && m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(cursorScreen))) {
+        if (cursorScreen
+            && isContextDisabled(m_settings, Utils::screenIdentifier(cursorScreen), m_currentVirtualDesktop,
+                                 m_currentActivity)) {
             return;
         }
     }
@@ -196,7 +241,9 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
             cursorScreen = Utils::primaryScreen();
         }
         // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
-        if (cursorScreen && m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(cursorScreen))) {
+        if (cursorScreen
+            && isContextDisabled(m_settings, Utils::screenIdentifier(cursorScreen), m_currentVirtualDesktop,
+                                 m_currentActivity)) {
             return;
         }
     }
@@ -251,27 +298,37 @@ void OverlayService::updateSettings(ISettings* settings)
 {
     setSettings(settings);
 
-    // Hide overlay and zone selector on monitors that are now disabled
-    if (m_settings) {
-        for (auto* screen : m_overlayWindows.keys()) {
-            if (m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
-                if (auto* window = m_overlayWindows.value(screen)) {
-                    window->hide();
-                }
+    // Sync CAVA state with current settings.  The signal-based handlers
+    // (enableAudioVisualizerChanged, etc.) connected in setSettings() only
+    // fire when load() detects a value change.  When the KCM uses batch
+    // setSettings + reloadSettings, the in-memory values are already updated
+    // by the batch setters before load() runs, so load() sees no change and
+    // the signals never fire.  Syncing here ensures CAVA always reflects
+    // the current configuration.
+    syncCavaState();
+
+    // Hide overlay and zone selector on screens/desktops/activities that are now disabled
+    for (auto* screen : m_overlayWindows.keys()) {
+        if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                              m_currentActivity)) {
+            if (auto* window = m_overlayWindows.value(screen)) {
+                window->hide();
             }
         }
-        for (auto* screen : m_zoneSelectorWindows.keys()) {
-            if (m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
-                if (auto* window = m_zoneSelectorWindows.value(screen)) {
-                    window->hide();
-                }
+    }
+    for (auto* screen : m_zoneSelectorWindows.keys()) {
+        if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                              m_currentActivity)) {
+            if (auto* window = m_zoneSelectorWindows.value(screen)) {
+                window->hide();
             }
         }
     }
 
     if (m_visible) {
         for (auto* screen : m_overlayWindows.keys()) {
-            if (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
+            if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                                  m_currentActivity)) {
                 continue;
             }
             updateOverlayWindow(screen);
@@ -281,10 +338,11 @@ void OverlayService::updateSettings(ISettings* settings)
     // Keep zone selector windows in sync with settings changes (position, layout, sizing).
     // Without this, changing settings while the selector is visible can leave stale geometry
     // and anchors, causing corrupted rendering or incorrect window sizing.
-    // Skip disabled monitors.
+    // Skip disabled screens/desktops/activities.
     if (!m_zoneSelectorWindows.isEmpty()) {
         for (auto* screen : m_zoneSelectorWindows.keys()) {
-            if (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
+            if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                                  m_currentActivity)) {
                 continue;
             }
             updateZoneSelectorWindow(screen);
@@ -322,24 +380,56 @@ Layout* OverlayService::resolveScreenLayout(QScreen* screen) const
     return screenLayout;
 }
 
+void OverlayService::hideDisabledAndRefresh()
+{
+    // Hide overlay/selector on screens where the current context is disabled
+    if (m_settings) {
+        for (auto* screen : m_zoneSelectorWindows.keys()) {
+            if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                                  m_currentActivity)) {
+                if (auto* window = m_zoneSelectorWindows.value(screen)) {
+                    window->hide();
+                }
+            }
+        }
+        if (m_visible) {
+            for (auto* screen : m_overlayWindows.keys()) {
+                if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                                      m_currentActivity)) {
+                    if (auto* window = m_overlayWindows.value(screen)) {
+                        window->hide();
+                    }
+                }
+            }
+        }
+    }
+
+    // Update remaining (non-disabled) zone selector windows
+    if (!m_zoneSelectorWindows.isEmpty()) {
+        for (auto* screen : m_zoneSelectorWindows.keys()) {
+            if (!isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                                   m_currentActivity)) {
+                updateZoneSelectorWindow(screen);
+            }
+        }
+    }
+    // Update remaining overlay windows when visible
+    if (m_visible && !m_overlayWindows.isEmpty()) {
+        for (auto* screen : m_overlayWindows.keys()) {
+            if (!isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                                   m_currentActivity)) {
+                updateOverlayWindow(screen);
+            }
+        }
+    }
+}
+
 void OverlayService::setCurrentVirtualDesktop(int desktop)
 {
     if (m_currentVirtualDesktop != desktop) {
         m_currentVirtualDesktop = desktop;
         qCInfo(lcOverlay) << "Virtual desktop changed to" << desktop;
-
-        // Update zone selector windows with the new active layout for this desktop
-        if (!m_zoneSelectorWindows.isEmpty()) {
-            for (auto* screen : m_zoneSelectorWindows.keys()) {
-                updateZoneSelectorWindow(screen);
-            }
-        }
-        // Also refresh overlay windows when visible (symmetry with activity; overlay shows per-desktop layout)
-        if (m_visible && !m_overlayWindows.isEmpty()) {
-            for (auto* screen : m_overlayWindows.keys()) {
-                updateOverlayWindow(screen);
-            }
-        }
+        hideDisabledAndRefresh();
     }
 }
 
@@ -348,19 +438,7 @@ void OverlayService::setCurrentActivity(const QString& activityId)
     if (m_currentActivity != activityId) {
         m_currentActivity = activityId;
         qCInfo(lcOverlay) << "Activity changed activity=" << activityId;
-
-        // Update zone selector windows with the new active layout for this activity
-        if (!m_zoneSelectorWindows.isEmpty()) {
-            for (auto* screen : m_zoneSelectorWindows.keys()) {
-                updateZoneSelectorWindow(screen);
-            }
-        }
-        // Also refresh overlay windows when visible (symmetry with desktop; overlay shows per-activity layout)
-        if (m_visible && !m_overlayWindows.isEmpty()) {
-            for (auto* screen : m_overlayWindows.keys()) {
-                updateOverlayWindow(screen);
-            }
-        }
+        hideDisabledAndRefresh();
     }
 }
 
@@ -389,7 +467,9 @@ void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen)
 
 void OverlayService::handleScreenAdded(QScreen* screen)
 {
-    if (m_visible && screen && (!m_settings || !m_settings->isMonitorDisabled(Utils::screenIdentifier(screen)))) {
+    if (m_visible && screen
+        && !isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                              m_currentActivity)) {
         createOverlayWindow(screen);
         updateOverlayWindow(screen);
         if (auto* window = m_overlayWindows.value(screen)) {
@@ -409,7 +489,7 @@ void OverlayService::handleScreenRemoved(QScreen* screen)
     m_navigationOsdCreationFailed.remove(screen);
 }
 
-QVariantList OverlayService::buildLayoutsList(const QString& screenName) const
+QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
 {
     // Determine filter per-screen: check this screen's assignment to decide
     // whether to show manual layouts, autotile algorithms, or both.
@@ -417,10 +497,10 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenName) const
     bool includeAutotile = m_includeAutotileLayouts;
     auto* layoutManager = dynamic_cast<LayoutManager*>(m_layoutManager);
     if (layoutManager) {
-        const QString screenId = Utils::isConnectorName(screenName) ? Utils::screenIdForName(screenName) : screenName;
-        if (!screenId.isEmpty()) {
+        const QString resolvedId = Utils::isConnectorName(screenId) ? Utils::screenIdForName(screenId) : screenId;
+        if (!resolvedId.isEmpty()) {
             const QString assignmentId =
-                layoutManager->assignmentIdForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
+                layoutManager->assignmentIdForScreen(resolvedId, m_currentVirtualDesktop, m_currentActivity);
             if (LayoutId::isAutotile(assignmentId)) {
                 includeManual = false;
                 includeAutotile = true;
@@ -430,8 +510,9 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenName) const
             }
         }
     }
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager, screenName, m_currentVirtualDesktop,
-                                                             m_currentActivity, includeManual, includeAutotile);
+    const auto entries = LayoutUtils::buildUnifiedLayoutList(
+        m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, includeManual, includeAutotile,
+        Utils::screenAspectRatio(screenId), m_settings && m_settings->filterLayoutsByAspectRatio());
     return LayoutUtils::toVariantList(entries);
 }
 
@@ -446,16 +527,17 @@ void OverlayService::setLayoutFilter(bool includeManual, bool includeAutotile)
     refreshVisibleWindows();
 }
 
-void OverlayService::setExcludedScreens(const QSet<QString>& screenNames)
+void OverlayService::setExcludedScreens(const QSet<QString>& screenIds)
 {
-    m_excludedScreens = screenNames;
+    m_excludedScreens = screenIds;
 }
 
-int OverlayService::visibleLayoutCount(const QString& screenName) const
+int OverlayService::visibleLayoutCount(const QString& screenId) const
 {
-    const auto entries =
-        LayoutUtils::buildUnifiedLayoutList(m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity,
-                                            m_includeManualLayouts, m_includeAutotileLayouts);
+    const auto entries = LayoutUtils::buildUnifiedLayoutList(
+        m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
+        m_includeAutotileLayouts, Utils::screenAspectRatio(screenId),
+        m_settings && m_settings->filterLayoutsByAspectRatio());
     return entries.size();
 }
 

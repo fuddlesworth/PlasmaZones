@@ -13,7 +13,7 @@
 #include <QVector>
 #include <QSet>
 #include <QTimer>
-#include <QDBusInterface>
+#include <QDBusPendingCall>
 #include <QHash>
 #include <QPointer>
 #include <QRect>
@@ -54,7 +54,7 @@ struct ParsedTrigger
  * then communicates with the PlasmaZones daemon via D-Bus.
  *
  * Unlike JavaScript effects, C++ effects have full access to:
- * - Qt D-Bus API (QDBusInterface)
+ * - Qt D-Bus API (QDBusMessage + async calls, no QDBusInterface)
  * - Keyboard modifier state via QGuiApplication
  * - Window move/resize state via isUserMove()
  */
@@ -95,24 +95,28 @@ private Q_SLOTS:
     void slotSettingsChanged();
 
     // Keyboard Navigation handlers
-    void slotMoveWindowToZoneRequested(const QString& targetZoneId, const QString& zoneGeometry);
-    void slotFocusWindowInZoneRequested(const QString& targetZoneId, const QString& windowId);
-    void slotRestoreWindowRequested();
-    void slotToggleWindowFloatRequested(bool shouldFloat);
+    // Daemon-driven navigation: daemon computes geometry/target and emits these signals
     void slotApplyGeometryRequested(const QString& windowId, const QString& geometryJson, const QString& zoneId,
                                     const QString& screenId);
-    void slotSwapWindowsRequested(const QString& targetZoneId, const QString& targetWindowId,
-                                  const QString& zoneGeometry);
-    void slotRotateWindowsRequested(bool clockwise, const QString& rotationData);
-    void slotResnapToNewLayoutRequested(const QString& resnapData);
+    void slotActivateWindowRequested(const QString& windowId);
+
+    // Float toggle: daemon handles full flow via toggleFloatForWindow
+    void slotToggleWindowFloatRequested(bool shouldFloat);
+
+    // Daemon-driven batch operations (rotate, resnap)
+    void slotApplyGeometriesBatch(const QString& batchJson, const QString& action);
+    void slotRaiseWindowsRequested(const QStringList& windowIds);
+
+    // Snap-all (effect collects candidates, daemon computes assignments)
     void slotSnapAllWindowsRequested(const QString& screenId);
-    void slotCycleWindowsInZoneRequested(const QString& directive, const QString& unused);
     void slotPendingRestoresAvailable();
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
     void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId,
                                                const QString& geometryJson);
+
+    // Snap-mode minimize/unminimize float tracking
     void slotWindowMinimizedChanged(KWin::EffectWindow* w);
 
     // Daemon lifecycle
@@ -126,7 +130,6 @@ private:
     QString getWindowId(KWin::EffectWindow* w) const;
     bool shouldHandleWindow(KWin::EffectWindow* w) const;
     bool isTileableWindow(KWin::EffectWindow* w) const;
-    bool shouldAutoSnapWindow(KWin::EffectWindow* w) const;
     bool hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow* w) const;
     bool isWindowSticky(KWin::EffectWindow* w) const;
     void updateWindowStickyState(KWin::EffectWindow* w);
@@ -152,18 +155,28 @@ private:
     void callDragStopped(KWin::EffectWindow* window, const QString& windowId);
     void callCancelSnap();
     void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr);
-    void ensureWindowTrackingInterface();
     void connectNavigationSignals();
     void syncFloatingWindowsFromDaemon();
 
     /**
-     * @brief Ensure WindowTracking D-Bus interface is ready for use
+     * @brief Check if daemon is registered and ready for D-Bus calls
      * @param methodName Name of the calling method (for debug logging)
-     * @return true if interface is valid and ready, false otherwise
-     * Consolidates interface validation pattern
+     * @return true if daemon is registered and ready
      */
-    bool ensureWindowTrackingReady(const char* methodName);
-    bool ensureOverlayInterface(const char* methodName);
+    bool isDaemonReady(const char* methodName) const;
+
+    /**
+     * @brief Create an async D-Bus method call and return the pending result.
+     *
+     * Uses QDBusMessage::createMethodCall (no QDBusInterface) to avoid
+     * synchronous D-Bus introspection that blocks the compositor thread.
+     *
+     * @param interface  D-Bus interface name
+     * @param method     D-Bus method name
+     * @param args       Method arguments
+     * @return QDBusPendingCall for attaching a watcher
+     */
+    QDBusPendingCall asyncMethodCall(const QString& interface, const QString& method, const QVariantList& args = {});
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
@@ -224,17 +237,19 @@ private:
 
     // Navigation helpers
     KWin::EffectWindow* getActiveWindow() const;
-    QString getWindowScreenName(KWin::EffectWindow* w) const;
 
     /**
      * @brief Build a stable EDID-based screen identifier from a KWin::Output.
      *
-     * Format: "manufacturer:model:serial" — matches Utils::screenIdentifier() on
-     * the daemon side.  Falls back to the connector name when EDID fields are empty.
-     * Prefer this over getWindowScreenName() for any value that crosses the D-Bus
-     * boundary into the daemon's layout/tracking system (which keys on screen IDs).
+     * Mirrors the daemon's Utils::screenIdentifier() exactly: tries
+     * QScreen::serialNumber(), normalizes hex, falls back to sysfs EDID
+     * header serial. This ensures both sides produce identical screen IDs
+     * regardless of which EDID field KWin's Output::serialNumber() returns.
+     *
+     * Format: "manufacturer:model:serial" — falls back to connector name
+     * when EDID fields are empty.
      */
-    static QString outputScreenId(const KWin::LogicalOutput* output);
+    QString outputScreenId(const KWin::LogicalOutput* output) const;
     QString getWindowScreenId(KWin::EffectWindow* w) const;
 
     /**
@@ -258,19 +273,16 @@ private:
     void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
-    // iface must remain valid for the duration of the async call (caller guarantees
-    // ownership via unique_ptr member; the reference is only used to initiate the call,
-    // not captured in the async lambda).
-    // onSnapSuccess: optional callback when snap is applied, receives (windowId, screenName)
-    void tryAsyncSnapCall(QDBusAbstractInterface& iface, const QString& method, const QList<QVariant>& args,
+    // Uses QDBusMessage::createMethodCall (no QDBusInterface) to avoid synchronous introspection.
+    // onSnapSuccess: optional callback when snap is applied, receives (windowId, screenId)
+    void tryAsyncSnapCall(const QString& interface, const QString& method, const QList<QVariant>& args,
                           QPointer<KWin::EffectWindow> window, const QString& windowId, bool storePreSnap,
                           std::function<void()> fallback,
                           std::function<void(const QString&, const QString&)> onSnapSuccess = nullptr,
                           bool skipAnimation = false, std::function<void()> onComplete = nullptr);
 
-    // Extract app identity from window ID (the portion before the '|' separator)
-    // New format: "appId|internalUuid" → returns "appId"
-    // Legacy format: "windowClass:resourceName:ptr" → returns everything before last ':'
+    // Extract app identity from window ID (portion before the '|' separator)
+    // Format: "appId|internalUuid" → returns "appId"
     static QString extractAppId(const QString& windowId);
 
     /**
@@ -294,12 +306,6 @@ public Q_SLOTS:
     // These methods are used by NavigationHandler, WindowAnimator, and DragTracker
     // ═══════════════════════════════════════════════════════════════════════════════
 public:
-    // D-Bus interface access for helpers
-    QDBusInterface* windowTrackingInterface() const
-    {
-        return m_windowTrackingInterface.get();
-    }
-
     // Animation sequence mode: 0=all at once, 1=one by one in zone order (for batch snaps)
     int cachedAnimationSequenceMode() const
     {
@@ -373,13 +379,9 @@ private:
     Qt::MouseButtons m_currentMouseButtons = Qt::NoButton;
     bool m_keyboardGrabbed = false;
 
-    // D-Bus interfaces (lazy initialization)
-    // Note: WindowDrag interface uses QDBusMessage::createMethodCall directly
-    // (no QDBusInterface) to avoid synchronous D-Bus introspection that could
-    // block the compositor thread during startup. See callDragMoved() etc.
-    std::unique_ptr<QDBusInterface> m_windowTrackingInterface; // WindowTracking interface
-    std::unique_ptr<QDBusInterface> m_overlayInterface; // Overlay interface (Snap Assist)
-    std::unique_ptr<QDBusInterface> m_settingsInterface; // Settings interface
+    // D-Bus communication uses QDBusMessage::createMethodCall exclusively
+    // (no QDBusInterface) to avoid synchronous D-Bus introspection that blocks
+    // the compositor thread. See asyncMethodCall() and fireAndForgetDBusCall().
 
     // Screen change debouncing and reapply handled by ScreenChangeHandler
 
@@ -433,10 +435,9 @@ private:
      */
     void sendDeferredDragStarted();
 
-    // Cached exclusion settings (loaded from daemon via D-Bus)
-    bool m_excludeTransientWindows = true;
-    int m_minimumWindowWidth = 200;
-    int m_minimumWindowHeight = 150;
+    // User-configured exclusion lists — cached from daemon for shouldHandleWindow() gating.
+    // The daemon also enforces these for keyboard navigation, but the effect needs them
+    // for drag operations and window lifecycle reporting (slotWindowAdded, dragTracker).
     QStringList m_excludedApplications;
     QStringList m_excludedWindowClasses;
 
@@ -497,10 +498,15 @@ private:
     bool m_daemonServiceRegistered = false;
     bool m_daemonReadyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
 
-    // Cursor screen tracking (for daemon shortcut screen detection on Wayland)
-    // Updated in slotMouseChanged() whenever the cursor crosses to a different monitor.
-    // Reported to daemon via cursorScreenChanged D-Bus call.
-    QString m_lastCursorConnector;
+    // Screen ID cache: connector name → EDID screen ID (manufacturer:model:serial).
+    // Avoids repeated QScreen iteration and sysfs reads during drag (~30Hz).
+    // Cleared on screen geometry changes (add/remove/reconfigure).
+    mutable QHash<QString, QString> m_screenIdCache;
+
+    // Cursor output tracking (for daemon shortcut screen detection on Wayland)
+    // Stores the connector name of the last output the cursor was on.
+    // Used for deduplication only — the actual D-Bus call sends the EDID screen ID.
+    QString m_lastCursorOutput;
 };
 
 } // namespace PlasmaZones

@@ -46,7 +46,26 @@ public Q_SLOTS:
     QString getAllSettings();
     QDBusVariant getSetting(const QString& key);
     bool setSetting(const QString& key, const QDBusVariant& value);
+
+    /**
+     * @brief Batch-set multiple settings in one D-Bus call.
+     *
+     * Applies all values via the setter registry, saves once (synchronously),
+     * and lets the KConfig change notification propagate settingsChanged.
+     * Unknown keys are logged as warnings but do not abort the batch.
+     *
+     * @param settings Map of setting key -> value
+     * @return true if every key was found in the registry and its setter succeeded
+     */
+    bool setSettings(const QVariantMap& settings);
+
     QStringList getSettingKeys();
+
+    // Per-screen settings (categories: "autotile", "snapping", "zoneSelector")
+    void setPerScreenSetting(const QString& screenId, const QString& category, const QString& key,
+                             const QDBusVariant& value);
+    void clearPerScreenSettings(const QString& screenId, const QString& category);
+    QVariantMap getPerScreenSettings(const QString& screenId, const QString& category);
 
     /**
      * @brief Get list of available shader effects
@@ -121,6 +140,19 @@ public Q_SLOTS:
      */
     void provideRunningWindows(const QString& json);
 
+    /**
+     * @brief Get metadata for a single setting
+     * @param key Setting key name
+     * @return JSON: {key, type} — type is "bool"|"int"|"double"|"string"|"color"|"stringlist"
+     */
+    QString getSettingSchema(const QString& key);
+
+    /**
+     * @brief Get metadata for all settings
+     * @return JSON object: {key: {type}, ...}
+     */
+    QString getAllSettingSchemas();
+
 Q_SIGNALS:
     void settingsChanged();
     void runningWindowsRequested();
@@ -148,6 +180,7 @@ private:
 
     QHash<QString, Getter> m_getters;
     QHash<QString, Setter> m_setters;
+    QHash<QString, QString> m_schemas; // key -> type ("bool"|"int"|"double"|"string"|"color"|"stringlist")
 
     // Debounced save timer (performance optimization)
     QTimer* m_saveTimer = nullptr;

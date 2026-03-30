@@ -63,6 +63,33 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
     for (const QJsonValue& val : arr) {
         QJsonObject obj = val.toObject();
         QString windowId = obj.value(QLatin1String("windowId")).toString();
+
+        // Float entries: overflow windows that should be restored to pre-autotile geometry.
+        // Process inline — same cleanup as slotWindowFloatingChanged(windowId, true, ...).
+        // Geometry is restored from the effect's local pre-autotile cache, avoiding
+        // the per-window D-Bus roundtrip through the daemon's applyGeometryForFloat.
+        if (obj.value(QLatin1String("floating")).toBool(false)) {
+            const QString screenId = obj.value(QLatin1String("screenId")).toString();
+            qCInfo(lcEffect) << "Autotile batch float:" << windowId << "screen:" << screenId;
+            applyFloatCleanup(windowId);
+
+            // Restore pre-autotile geometry from effect's local cache
+            KWin::EffectWindow* floatWin = m_effect->findWindowById(windowId);
+            if (floatWin && !screenId.isEmpty()) {
+                auto screenIt = m_preAutotileGeometries.constFind(screenId);
+                if (screenIt != m_preAutotileGeometries.constEnd()) {
+                    const QString geoKey = findSavedGeometryKey(screenIt.value(), windowId);
+                    if (!geoKey.isEmpty()) {
+                        const QRectF& savedGeo = screenIt.value().value(geoKey);
+                        m_effect->applySnapGeometry(floatWin, savedGeo.toRect());
+                        qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << windowId
+                                         << savedGeo.toRect();
+                    }
+                }
+            }
+            continue;
+        }
+
         QRect geo(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
                   obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
         QRect normalizedGeometry = geo.normalized();

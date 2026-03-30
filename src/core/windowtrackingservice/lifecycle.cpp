@@ -39,7 +39,7 @@ void WindowTrackingService::windowClosed(const QString& windowId)
             entry.zoneIds = zoneIds;
 
             QString screenId = m_windowScreenAssignments.value(windowId);
-            entry.screenName = screenId;
+            entry.screenId = screenId;
 
             int desktop = m_windowDesktopAssignments.value(windowId, 0);
             if (desktop <= 0 && m_virtualDesktopManager) {
@@ -253,7 +253,7 @@ void WindowTrackingService::onLayoutChanged()
             // 2. Pending assignments (session-restored windows)
             for (auto it = m_pendingRestoreQueues.constBegin(); it != m_pendingRestoreQueues.constEnd(); ++it) {
                 for (const PendingRestore& entry : it.value()) {
-                    if (!isAffectedByGlobalChange(entry.screenName)) {
+                    if (!isAffectedByGlobalChange(entry.screenId)) {
                         continue;
                     }
                     if (anyZoneInActiveLayout(entry.zoneIds)) {
@@ -265,7 +265,7 @@ void WindowTrackingService::onLayoutChanged()
                             continue; // pending is for a different layout
                         }
                     }
-                    addToBuffer(it.key(), entry.zoneIds, entry.screenName, entry.virtualDesktop);
+                    addToBuffer(it.key(), entry.zoneIds, entry.screenId, entry.virtualDesktop);
                 }
             }
         } else {
@@ -292,7 +292,7 @@ void WindowTrackingService::onLayoutChanged()
                             continue;
                         }
                     }
-                    addToBuffer(it.key(), entry.zoneIds, entry.screenName, entry.virtualDesktop);
+                    addToBuffer(it.key(), entry.zoneIds, entry.screenId, entry.virtualDesktop);
                 }
             }
         }
@@ -388,11 +388,11 @@ void WindowTrackingService::scheduleSaveState()
     Q_EMIT stateChanged();
 }
 
-void WindowTrackingService::setLastUsedZone(const QString& zoneId, const QString& screenName, const QString& zoneClass,
+void WindowTrackingService::setLastUsedZone(const QString& zoneId, const QString& screenId, const QString& zoneClass,
                                             int desktop)
 {
     m_lastUsedZoneId = zoneId;
-    m_lastUsedScreenName = screenName;
+    m_lastUsedScreenId = screenId;
     m_lastUsedZoneClass = zoneClass;
     m_lastUsedDesktop = desktop;
 }

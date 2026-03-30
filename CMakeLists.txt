@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 2.3.0 LANGUAGES CXX)
+project(PlasmaZones VERSION 2.5.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -69,7 +69,7 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qml_autoge
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qmlplugin_autogen/include)
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qmlplugin_init_autogen/include)
 
-# KDE/Qt requirements (Plasma 6.6 target: KF 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6)
+# KDE/Qt requirements (Plasma 6.6 target: KF 6.6, Qt 6.6, KWin 6.6)
 set(QT_MIN_VERSION "6.6.0")
 set(KF_MIN_VERSION "6.6.0")
 
@@ -86,6 +86,7 @@ include(FeatureSummary)
 find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
     Concurrent
     Core
+    Qml
     Quick
     QuickControls2
     QuickWidgets
@@ -93,6 +94,7 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
     DBus
     Widgets
     ShaderTools
+    Svg
 )
 # GuiPrivate (QRhi) and ShaderToolsPrivate (QShaderBaker) required for daemon zone overlay
 find_package(Qt6GuiPrivate CONFIG REQUIRED)
@@ -105,19 +107,12 @@ message(STATUS "RenderNode shaders ENABLED (raw GLSL, no qsb compilation)")
 set(PLASMAZONES_SHADERS_ENABLED ON)
 add_compile_definitions(PLASMAZONES_SHADERS_ENABLED)
 
-# Find KDE Frameworks
-find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
-    Config
-    ConfigWidgets
-    CoreAddons
-    DBusAddons
-    I18n
-    KCMUtils
-    WindowSystem
-    GlobalAccel
-    Notifications
-    ColorScheme
-)
+# KDE Frameworks integration.
+# ON (default): full KDE integration — KWin effect, KCM, KGlobalAccel shortcuts,
+#               PlasmaActivities, KConfigXT for KCM defaults.
+# OFF: portable Qt-only build — daemon + editor only, no KDE dependencies.
+#      Shortcuts use XDG Portal or D-Bus trigger fallback.
+option(USE_KDE_FRAMEWORKS "Build with KDE Frameworks integration" ON)
 
 # KTextEditor + KArchive for shader editor (optional)
 find_package(KF6TextEditor ${KF_MIN_VERSION} QUIET)
@@ -136,35 +131,45 @@ else()
     message(STATUS "Qt Advanced Docking System not found - shader editor will use basic QDockWidget")
 endif()
 
-# KActivities/PlasmaActivities is optional (for activity-based layouts)
-# Plasma 6 renamed KActivities to PlasmaActivities
-find_package(PlasmaActivities QUIET)
-if(NOT PlasmaActivities_FOUND)
-    # Try KF6 name (some distros)
-    find_package(KF6Activities QUIET COMPONENTS Activities)
-    if(KF6Activities_FOUND)
-        set(PlasmaActivities_FOUND TRUE)
-    endif()
-endif()
-if(NOT PlasmaActivities_FOUND)
-    # Try older KF5 package name
-    find_package(KActivities QUIET)
-    if(KActivities_FOUND)
-        set(PlasmaActivities_FOUND TRUE)
-    endif()
-endif()
+if(USE_KDE_FRAMEWORKS)
+    add_compile_definitions(USE_KDE_FRAMEWORKS)
 
-if(PlasmaActivities_FOUND)
-    message(STATUS "PlasmaActivities found - activity-based layouts enabled")
-    # Don't add global definitions here - set per-target instead
+    find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
+        KCMUtils
+        GlobalAccel   # KGlobalAccel shortcut backend + KCM
+    )
+
+    # KActivities/PlasmaActivities is optional (for activity-based layouts)
+    find_package(PlasmaActivities QUIET)
+    if(NOT PlasmaActivities_FOUND)
+        find_package(KF6Activities QUIET COMPONENTS Activities)
+        if(KF6Activities_FOUND)
+            set(PlasmaActivities_FOUND TRUE)
+        endif()
+    endif()
+    if(NOT PlasmaActivities_FOUND)
+        find_package(KActivities QUIET)
+        if(KActivities_FOUND)
+            set(PlasmaActivities_FOUND TRUE)
+        endif()
+    endif()
+
+    if(PlasmaActivities_FOUND)
+        message(STATUS "PlasmaActivities found - activity-based layouts enabled")
+    else()
+        message(STATUS "PlasmaActivities/KActivities not found - activity support disabled")
+    endif()
 else()
-    message(STATUS "PlasmaActivities/KActivities not found - activity support disabled")
+    message(STATUS "Building WITHOUT KDE Frameworks (portable Qt-only mode)")
 endif()
 
-# LayerShellQt for Wayland overlay support (REQUIRED, 6.6+ for setScreen/wantsToBeOnActiveScreen API)
-# PlasmaZones requires Wayland with LayerShellQt for proper overlay functionality.
+# Wayland layer-shell support (direct zwlr_layer_shell_v1 protocol, no KDE dependency)
+# PlasmaZones requires Wayland for proper overlay functionality.
 # X11 support has been removed as of v1.2.0 - Plasma 6 is Wayland-first.
-find_package(LayerShellQt 6.6 REQUIRED)
+find_package(Wayland REQUIRED COMPONENTS Client)
+find_package(Qt6 REQUIRED COMPONENTS WaylandClient)
+find_package(Qt6WaylandClientPrivate REQUIRED)
+find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
 
 # Systemd user unit directory (fallback if not provided by ECM)
 if(NOT DEFINED KDE_INSTALL_SYSTEMDUSERUNITDIR)
@@ -212,16 +217,19 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# Translations (KI18n / Gettext)
-#   make extract-pot   - extract translatable strings into po/*.pot
-#   po/<lang>/<domain>.po are compiled to .mo and installed by KI18N_INSTALL(po)
+# Translations (Qt Linguist)
+#
+# Daemon and editor use Qt Linguist (.ts/.qm).  lupdate scans source files
+# directly — i18n()/i18nc() are backed by Q_DECLARE_TR_FUNCTIONS(plasmazones)
+# in pz_i18n.h, so lupdate recognizes them as tr() calls.
+#
+#   make update-ts   - run lupdate to refresh .ts from source
+#   make (default)   - compiles translations/*/*.ts → .qm
 # ---------------------------------------------------------------------------
-find_package(KF6I18n REQUIRED)
-find_program(GETTEXT_XGETTEXT_EXECUTABLE NAMES xgettext)
-find_program(GETTEXT_MSGCAT_EXECUTABLE NAMES msgcat)
+find_package(Qt6LinguistTools QUIET)
 
-# Domains: plasmazonesd (daemon + overlay), plasmazones-editor (editor), kcm_plasmazones (KCM)
-set(PLASMAZONESD_CPP
+# Source files for lupdate string extraction (daemon + autotile + editor)
+set(PLASMAZONESD_I18N_SOURCES
     ${CMAKE_SOURCE_DIR}/src/daemon/main.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/daemon.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/daemon/osd.cpp
@@ -231,8 +239,13 @@ set(PLASMAZONESD_CPP
     ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor.cpp
     ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor/drag.cpp
 )
+file(GLOB PLASMAZONESD_AUTOTILE_SOURCES
+    "${CMAKE_SOURCE_DIR}/src/autotile/algorithms/*.cpp"
+)
+list(APPEND PLASMAZONESD_I18N_SOURCES ${PLASMAZONESD_AUTOTILE_SOURCES})
 file(GLOB PLASMAZONESD_QML "${CMAKE_SOURCE_DIR}/src/ui/*.qml")
-file(GLOB PLASMAZONES_EDITOR_CPP
+
+file(GLOB PLASMAZONES_EDITOR_I18N_SOURCES
     "${CMAKE_SOURCE_DIR}/src/editor/main.cpp"
     "${CMAKE_SOURCE_DIR}/src/editor/EditorController.cpp"
     "${CMAKE_SOURCE_DIR}/src/editor/controller/gaps.cpp"
@@ -248,7 +261,10 @@ file(GLOB PLASMAZONES_EDITOR_CPP
     "${CMAKE_SOURCE_DIR}/src/editor/undo/commands/*.cpp"
 )
 file(GLOB PLASMAZONES_EDITOR_QML "${CMAKE_SOURCE_DIR}/src/editor/qml/*.qml")
+
+# KCM QML sources (also covered by lupdate now)
 file(GLOB_RECURSE KCM_PLASMAZONES_QML "${CMAKE_SOURCE_DIR}/kcm/*.qml")
+list(APPEND KCM_PLASMAZONES_QML ${CMAKE_SOURCE_DIR}/src/shared/AspectRatioBadge.qml)
 list(APPEND KCM_PLASMAZONES_QML ${CMAKE_SOURCE_DIR}/src/shared/CategoryBadge.qml)
 
 file(GLOB PLASMAZONES_SHADER_EDITOR_CPP
@@ -257,58 +273,52 @@ file(GLOB PLASMAZONES_SHADER_EDITOR_CPP
     "${CMAKE_SOURCE_DIR}/src/shader-editor/shaderpackageio.cpp"
 )
 
-if(GETTEXT_XGETTEXT_EXECUTABLE)
-    add_custom_target(extract-pot
-        COMMENT "Extracting translatable strings into po/*.pot"
+# All sources for lupdate (daemon + editor + shader-editor + KCM — same translation context)
+set(_all_i18n_sources
+    ${PLASMAZONESD_I18N_SOURCES} ${PLASMAZONESD_QML}
+    ${PLASMAZONES_EDITOR_I18N_SOURCES} ${PLASMAZONES_EDITOR_QML}
+    ${PLASMAZONES_SHADER_EDITOR_CPP}
+    ${KCM_PLASMAZONES_QML}
+)
+
+# Collect per-language .ts files (plasmazones_de.ts, plasmazones_fr.ts, etc.)
+# Flat layout: translations/plasmazones_<lang>.ts → plasmazones_<lang>.qm
+file(GLOB TRANSLATION_TS_FILES "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.ts")
+# Exclude the English source template from compilation (it has no translations)
+list(FILTER TRANSLATION_TS_FILES EXCLUDE REGEX "plasmazones_en\\.ts$")
+
+# --- update-ts target: lupdate scans source directly ---
+# PzI18n::tr() uses Q_DECLARE_TR_FUNCTIONS(plasmazones) — lupdate
+# recognizes tr() natively.  No custom scripts or intermediate files.
+if(Qt6LinguistTools_FOUND)
+    # All .ts files to update (en template + per-language)
+    file(GLOB _all_ts_files "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.ts")
+
+    add_custom_target(update-ts
+        COMMENT "Updating .ts translation files from source (lupdate)"
+        COMMAND Qt6::lupdate
+            -I ${CMAKE_SOURCE_DIR}/src
+            ${_all_i18n_sources}
+            -ts ${_all_ts_files}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
-    foreach(_domain plasmazonesd plasmazones-editor kcm_plasmazones plasmazones-shader-editor)
-        if(_domain STREQUAL "plasmazonesd")
-            set(_cpp "${PLASMAZONESD_CPP}")
-            set(_qml "${PLASMAZONESD_QML}")
-        elseif(_domain STREQUAL "plasmazones-editor")
-            set(_cpp "${PLASMAZONES_EDITOR_CPP}")
-            set(_qml "${PLASMAZONES_EDITOR_QML}")
-        elseif(_domain STREQUAL "plasmazones-shader-editor")
-            set(_cpp "${PLASMAZONES_SHADER_EDITOR_CPP}")
-            set(_qml "")
-        else()
-            set(_cpp "")
-            set(_qml "${KCM_PLASMAZONES_QML}")
-        endif()
-        list(JOIN _cpp ";" _cstr)
-        list(JOIN _qml ";" _qstr)
-        # Write file lists and source dir to files so the script avoids shell splitting
-        set(_cpp_file "${CMAKE_BINARY_DIR}/po-extract-${_domain}-cpp.txt")
-        set(_qml_file "${CMAKE_BINARY_DIR}/po-extract-${_domain}-qml.txt")
-        set(_src_dir_file "${CMAKE_BINARY_DIR}/po-extract-src-dir.txt")
-        string(REPLACE ";" "\n" _cpp_lines "${_cpp}")
-        string(REPLACE ";" "\n" _qml_lines "${_qml}")
-        file(WRITE "${_cpp_file}" "${_cpp_lines}\n")
-        file(WRITE "${_qml_file}" "${_qml_lines}\n")
-        file(WRITE "${_src_dir_file}" "${CMAKE_SOURCE_DIR}\n")
-        add_custom_command(TARGET extract-pot POST_BUILD
-            COMMAND ${CMAKE_COMMAND}
-                -DCMAKE_SOURCE_DIR_FILE=${_src_dir_file}
-                -DBINARY_DIR=${CMAKE_BINARY_DIR}
-                -DCMAKE_CMD=${CMAKE_COMMAND}
-                -DDOMAIN=${_domain}
-                -DCPP_FILES_FILE=${_cpp_file}
-                -DQML_FILES_FILE=${_qml_file}
-                -DPOT_FILE=${CMAKE_SOURCE_DIR}/po/${_domain}.pot
-                -DGETTEXT_XGETTEXT_EXECUTABLE=${GETTEXT_XGETTEXT_EXECUTABLE}
-                -DGETTEXT_MSGCAT_EXECUTABLE=${GETTEXT_MSGCAT_EXECUTABLE}
-                -P ${CMAKE_SOURCE_DIR}/cmake/extract-pot.cmake
-        )
-    endforeach()
 else()
-    add_custom_target(extract-pot
-        COMMAND ${CMAKE_COMMAND} -E echo "xgettext not found; install gettext to extract translations"
+    add_custom_target(update-ts
+        COMMAND ${CMAKE_COMMAND} -E echo "Qt6LinguistTools not found; install qt6-tools-dev"
     )
 endif()
 
-# Install .po from po/<lang>/<domain>.po → share/locale/<lang>/LC_MESSAGES/<domain>.mo
-# Run extract-pot to create/update po/*.pot; translators add po/<lang>/*.po
-KI18N_INSTALL(po)
+# --- Compile .ts → .qm and install ---
+# Output: plasmazones_de.qm, plasmazones_fr.qm, etc.
+# QTranslator::load(locale, "plasmazones", "_", dir) finds these by name.
+if(Qt6LinguistTools_FOUND AND TRANSLATION_TS_FILES)
+    qt_add_lrelease(plasmazones_translations
+        TS_FILES ${TRANSLATION_TS_FILES}
+        QM_FILES_OUTPUT_VARIABLE QM_FILES
+    )
+    install(FILES ${QM_FILES} DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/translations)
+endif()
+
 
 # Generate version header with compile-time version info
 configure_file(
@@ -320,8 +330,10 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 
 # Source directories
 add_subdirectory(src)
-add_subdirectory(kwin-effect)  # KWin C++ Effect with modifier detection (uses effects.mouseChanged)
-add_subdirectory(kcm)
+if(USE_KDE_FRAMEWORKS)
+    add_subdirectory(kwin-effect)  # KWin C++ Effect (KDE-only)
+    add_subdirectory(kcm)          # KDE System Settings modules (KDE-only)
+endif()
 
 # Tests - enable with -DBUILD_TESTING=ON
 option(BUILD_TESTING "Build tests" OFF)
@@ -357,6 +369,14 @@ install(DIRECTORY data/shaders/
     PATTERN "*.vert"
     PATTERN "*.frag"
     PATTERN "*.png"
+    PATTERN "*.svg"
+)
+
+# Install bundled scripted tiling algorithms
+install(DIRECTORY data/algorithms/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/algorithms
+    FILES_MATCHING
+    PATTERN "*.js"
 )
 
 # Install icons (hicolor for dark themes, hicolor-light for light themes)
@@ -364,12 +384,14 @@ install(FILES
     icons/hicolor/scalable/apps/plasmazones.svg
     icons/hicolor/scalable/apps/plasmazones-editor.svg
     icons/hicolor/scalable/apps/plasmazones-shader-editor.svg
+    icons/hicolor/scalable/apps/plasmazones-settings.svg
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps
 )
 install(FILES
     icons/hicolor-light/scalable/apps/plasmazones.svg
     icons/hicolor-light/scalable/apps/plasmazones-editor.svg
     icons/hicolor-light/scalable/apps/plasmazones-shader-editor.svg
+    icons/hicolor-light/scalable/apps/plasmazones-settings.svg
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor-light/scalable/apps
 )
 
@@ -393,8 +415,13 @@ set_package_properties(KF6TextEditor PROPERTIES
     PURPOSE "Required for the shader package editor"
 )
 
-# Suppress transitive Qt6::Gui dependency from feature summary (not used by PlasmaZones)
-set_package_properties(WrapVulkanHeaders PROPERTIES TYPE RUNTIME)
+# Vulkan headers are needed at build time for QVulkanInstance (Vulkan backend support).
+# OPTIONAL so PlasmaZones builds silently on systems without Vulkan dev packages —
+# the Vulkan backend simply won't be available at runtime.
+# All Vulkan-specific C++ code is guarded with #if QT_CONFIG(vulkan).
+# Note: packaging specs (PKGBUILD, debian/control, rpm .spec, nix) list Vulkan as a
+# hard BuildRequires to ensure the backend is always available in distribution packages.
+set_package_properties(WrapVulkanHeaders PROPERTIES TYPE OPTIONAL)
 
 # Feature summary (REQUIRED + OPTIONAL only; RUNTIME hidden to reduce noise)
 feature_summary(WHAT REQUIRED_PACKAGES_FOUND REQUIRED_PACKAGES_NOT_FOUND

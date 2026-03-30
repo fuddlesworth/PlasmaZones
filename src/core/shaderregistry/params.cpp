@@ -12,8 +12,6 @@
 #include <QFileInfo>
 #include <QUrl>
 #include <QMutexLocker>
-#include <KSharedConfig>
-#include <KConfigGroup>
 
 namespace PlasmaZones {
 
@@ -174,81 +172,37 @@ QVariantMap ShaderRegistry::defaultParams(const QString& id) const
 // Plasma Wallpaper Path Resolution
 // ═══════════════════════════════════════════════════════════════════════════════
 
+std::unique_ptr<IWallpaperProvider> ShaderRegistry::s_wallpaperProvider;
 QString ShaderRegistry::s_cachedWallpaperPath;
 QImage ShaderRegistry::s_cachedWallpaperImage;
 qint64 ShaderRegistry::s_cachedWallpaperMtime = 0;
 QMutex ShaderRegistry::s_wallpaperCacheMutex;
 
-QString ShaderRegistry::plasmaWallpaperPath()
+QString ShaderRegistry::wallpaperPath()
 {
     QMutexLocker lock(&s_wallpaperCacheMutex);
 
-    // Read from Plasma desktop config: [Containments][N][Wallpaper][org.kde.image][General] Image=file:///...
-    // Each containment with formfactor=0 (desktop) has a wallpaper section.
-    // We look for the first desktop containment with a wallpaper image set.
     if (!s_cachedWallpaperPath.isEmpty() && QFile::exists(s_cachedWallpaperPath)) {
         return s_cachedWallpaperPath;
     }
 
-    auto config =
-        KSharedConfig::openConfig(QStringLiteral("plasma-org.kde.plasma.desktop-appletsrc"), KConfig::SimpleConfig);
-    // KConfig nested group format: [Containments][355] means group "355" inside "Containments".
-    // config->groupList() returns top-level groups like "Containments", not the numbered subgroups.
-    // We must iterate subgroups of the "Containments" group.
-    if (!config->hasGroup(QStringLiteral("Containments"))) {
-        qCDebug(lcCore) << "No Containments group in Plasma desktop config";
-        return {};
-    }
-    KConfigGroup containments = config->group(QStringLiteral("Containments"));
-    const QStringList containmentIds = containments.groupList();
-    for (const QString& id : containmentIds) {
-        KConfigGroup containment = containments.group(id);
-        // Desktop containments have formfactor=0
-        if (containment.readEntry("formfactor", -1) != 0) {
-            continue;
-        }
-        // Navigate to [Wallpaper][org.kde.image][General]
-        if (!containment.hasGroup(QStringLiteral("Wallpaper"))) {
-            continue;
-        }
-        KConfigGroup wallpaper = containment.group(QStringLiteral("Wallpaper"));
-        if (!wallpaper.hasGroup(QStringLiteral("org.kde.image"))) {
-            continue;
-        }
-        KConfigGroup imageGroup = wallpaper.group(QStringLiteral("org.kde.image"));
-        if (!imageGroup.hasGroup(QStringLiteral("General"))) {
-            continue;
-        }
-        KConfigGroup general = imageGroup.group(QStringLiteral("General"));
-        QString imagePath = general.readEntry("Image", QString());
-        if (imagePath.isEmpty()) {
-            continue;
-        }
-        // Strip file:// URL scheme if present
-        if (imagePath.startsWith(QLatin1String("file://"))) {
-            imagePath = QUrl(imagePath).toLocalFile();
-        }
-        if (QFile::exists(imagePath)) {
-            s_cachedWallpaperPath = imagePath;
-            qCDebug(lcCore) << "Resolved Plasma wallpaper:" << imagePath;
-            return imagePath;
-        }
+    if (!s_wallpaperProvider) {
+        s_wallpaperProvider = createWallpaperProvider();
     }
 
-    qCDebug(lcCore) << "No Plasma wallpaper found in desktop config";
-    return {};
+    s_cachedWallpaperPath = s_wallpaperProvider->wallpaperPath();
+    return s_cachedWallpaperPath;
 }
 
 QImage ShaderRegistry::loadWallpaperImage()
 {
     QMutexLocker lock(&s_wallpaperCacheMutex);
 
-    // Inline path resolution (avoid calling plasmaWallpaperPath which also locks)
+    // Inline path resolution (avoid calling wallpaperPath which also locks)
     QString path = s_cachedWallpaperPath;
     if (path.isEmpty() || !QFile::exists(path)) {
-        // Need to resolve — unlock is not needed since we hold the lock
         lock.unlock();
-        path = plasmaWallpaperPath(); // acquires lock internally
+        path = wallpaperPath(); // acquires lock internally
         lock.relock();
     }
     if (path.isEmpty()) {
@@ -277,6 +231,7 @@ void ShaderRegistry::invalidateWallpaperCache()
     s_cachedWallpaperPath.clear();
     s_cachedWallpaperImage = QImage();
     s_cachedWallpaperMtime = 0;
+    s_wallpaperProvider.reset(); // force re-detection on next call
 }
 
 QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, const QVariantMap& storedParams) const
@@ -350,6 +305,12 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
                 result[uniformName] = QString();
             }
             result[uniformName + QStringLiteral("_wrap")] = param.wrap.isEmpty() ? QStringLiteral("clamp") : param.wrap;
+
+            // Pass through SVG render size if present in stored params
+            const QString svgSizeKey = param.id + QStringLiteral("_svgSize");
+            if (storedParams.contains(svgSizeKey)) {
+                result[uniformName + QStringLiteral("_svgSize")] = storedParams.value(svgSizeKey);
+            }
         }
     }
 

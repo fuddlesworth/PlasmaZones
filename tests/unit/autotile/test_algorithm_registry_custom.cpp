@@ -9,6 +9,8 @@
 #include "autotile/TilingState.h"
 #include "core/constants.h"
 
+#include "../helpers/ScriptedAlgoTestSetup.h"
+
 using namespace PlasmaZones;
 
 /**
@@ -31,11 +33,6 @@ public:
     {
         return QStringLiteral("Test algorithm for unit tests");
     }
-    QString icon() const noexcept override
-    {
-        return QStringLiteral("test-icon");
-    }
-
     QVector<QRect> calculateZones(const TilingParams& params) const override
     {
         QVector<QRect> zones;
@@ -61,7 +58,15 @@ class TestAlgorithmRegistryCustom : public QObject
 {
     Q_OBJECT
 
+private:
+    PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
+
 private Q_SLOTS:
+
+    void initTestCase()
+    {
+        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
+    }
 
     void cleanupTestCase()
     {
@@ -89,6 +94,8 @@ private Q_SLOTS:
         int countBefore = registry->availableAlgorithms().size();
 
         QSignalSpy spy(registry, &AlgorithmRegistry::algorithmRegistered);
+        // Registry::registerAlgorithm takes ownership even on rejection
+        // (deletes the pointer when id is empty), so no manual delete needed.
         registry->registerAlgorithm(QString(), new CustomTestAlgorithm());
 
         QCOMPARE(registry->availableAlgorithms().size(), countBefore);
@@ -217,21 +224,25 @@ private Q_SLOTS:
         auto* registry = AlgorithmRegistry::instance();
         auto available = registry->availableAlgorithms();
 
-        QCOMPARE(available.size(), 14);
-        QCOMPARE(available[0], DBus::AutotileAlgorithm::BSP);
-        QCOMPARE(available[1], DBus::AutotileAlgorithm::CenteredMaster);
-        QCOMPARE(available[2], DBus::AutotileAlgorithm::Columns);
-        QCOMPARE(available[3], DBus::AutotileAlgorithm::Dwindle);
-        QCOMPARE(available[4], DBus::AutotileAlgorithm::Grid);
-        QCOMPARE(available[5], DBus::AutotileAlgorithm::MasterStack);
-        QCOMPARE(available[6], DBus::AutotileAlgorithm::Monocle);
-        QCOMPARE(available[7], DBus::AutotileAlgorithm::Rows);
-        QCOMPARE(available[8], DBus::AutotileAlgorithm::Spiral);
-        QCOMPARE(available[9], DBus::AutotileAlgorithm::ThreeColumn);
-        QCOMPARE(available[10], DBus::AutotileAlgorithm::Wide);
-        QCOMPARE(available[11], DBus::AutotileAlgorithm::Cascade);
-        QCOMPARE(available[12], DBus::AutotileAlgorithm::Stair);
-        QCOMPARE(available[13], DBus::AutotileAlgorithm::Spread);
+        // At least 15 built-in algorithms should be present (loaded from JS scripts)
+        QVERIFY(available.size() >= 15);
+
+        // Verify all core algorithms are registered (order depends on filesystem scan)
+        QVERIFY(available.contains(QLatin1String("bsp")));
+        QVERIFY(available.contains(QLatin1String("centered-master")));
+        QVERIFY(available.contains(QLatin1String("columns")));
+        QVERIFY(available.contains(QLatin1String("dwindle")));
+        QVERIFY(available.contains(QLatin1String("dwindle-memory")));
+        QVERIFY(available.contains(QLatin1String("grid")));
+        QVERIFY(available.contains(QLatin1String("master-stack")));
+        QVERIFY(available.contains(QLatin1String("monocle")));
+        QVERIFY(available.contains(QLatin1String("rows")));
+        QVERIFY(available.contains(QLatin1String("spiral")));
+        QVERIFY(available.contains(QLatin1String("three-column")));
+        QVERIFY(available.contains(QLatin1String("wide")));
+        QVERIFY(available.contains(QLatin1String("cascade")));
+        QVERIFY(available.contains(QLatin1String("stair")));
+        QVERIFY(available.contains(QLatin1String("spread")));
     }
 
     void testOrder_matchesAllAlgorithms()
@@ -263,7 +274,13 @@ private Q_SLOTS:
             QVERIFY(algo != nullptr);
 
             auto zones = algo->calculateZones({4, screen, &state, 0, EdgeGaps::uniform(0)});
-            QCOMPARE(zones.size(), 4);
+            if (algo->producesOverlappingZones()) {
+                QVERIFY2(zones.size() >= 1 && zones.size() <= 4,
+                         qPrintable(QStringLiteral("Expected 1-4 zones from overlapping algo: ") + id
+                                    + QStringLiteral(", got: ") + QString::number(zones.size())));
+            } else {
+                QCOMPARE(zones.size(), 4);
+            }
 
             for (const QRect& zone : zones) {
                 QVERIFY(zone.isValid());

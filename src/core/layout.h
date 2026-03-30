@@ -57,18 +57,6 @@ struct PLASMAZONES_EXPORT AppRuleMatch
 };
 
 /**
- * @brief Layout types for zone configurations
- */
-enum class LayoutType {
-    Custom, // User-defined canvas layout
-    Grid, // Grid-based layout
-    Columns, // Vertical columns
-    Rows, // Horizontal rows
-    PriorityGrid, // Primary zone with grid
-    Focus // Large center with sides
-};
-
-/**
  * @brief Category for layout type
  *
  * QML Note: Passed as int to QML. Values: 0 = Manual, 1 = Autotile
@@ -91,7 +79,6 @@ class PLASMAZONES_EXPORT Layout : public QObject
 
     Q_PROPERTY(QUuid id READ id CONSTANT)
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
-    Q_PROPERTY(LayoutType type READ type WRITE setType NOTIFY typeChanged)
     Q_PROPERTY(QString description READ description WRITE setDescription NOTIFY descriptionChanged)
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
     Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
@@ -123,6 +110,12 @@ class PLASMAZONES_EXPORT Layout : public QObject
     Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY
                    useFullScreenGeometryChanged)
 
+    // Aspect ratio classification
+    Q_PROPERTY(
+        int aspectRatioClass READ aspectRatioClassInt WRITE setAspectRatioClassInt NOTIFY aspectRatioClassChanged)
+    Q_PROPERTY(qreal minAspectRatio READ minAspectRatio WRITE setMinAspectRatio NOTIFY aspectRatioClassChanged)
+    Q_PROPERTY(qreal maxAspectRatio READ maxAspectRatio WRITE setMaxAspectRatio NOTIFY aspectRatioClassChanged)
+
     // Visibility filtering
     Q_PROPERTY(
         bool hiddenFromSelector READ hiddenFromSelector WRITE setHiddenFromSelector NOTIFY hiddenFromSelectorChanged)
@@ -133,7 +126,7 @@ class PLASMAZONES_EXPORT Layout : public QObject
 
 public:
     explicit Layout(QObject* parent = nullptr);
-    explicit Layout(const QString& name, LayoutType type = LayoutType::Custom, QObject* parent = nullptr);
+    explicit Layout(const QString& name, QObject* parent = nullptr);
     Layout(const Layout& other);
     ~Layout() override;
 
@@ -149,12 +142,6 @@ public:
         return m_name;
     }
     void setName(const QString& name);
-
-    LayoutType type() const
-    {
-        return m_type;
-    }
-    void setType(LayoutType type);
 
     QString description() const
     {
@@ -281,6 +268,35 @@ public:
     }
     void setShaderParams(const QVariantMap& params);
 
+    // Aspect ratio classification
+    PlasmaZones::AspectRatioClass aspectRatioClass() const
+    {
+        return m_aspectRatioClass;
+    }
+    void setAspectRatioClass(PlasmaZones::AspectRatioClass cls);
+    int aspectRatioClassInt() const
+    {
+        return static_cast<int>(m_aspectRatioClass);
+    }
+    void setAspectRatioClassInt(int cls);
+    qreal minAspectRatio() const
+    {
+        return m_minAspectRatio;
+    }
+    void setMinAspectRatio(qreal ratio);
+    qreal maxAspectRatio() const
+    {
+        return m_maxAspectRatio;
+    }
+    void setMaxAspectRatio(qreal ratio);
+
+    /**
+     * @brief Check if this layout is suitable for a screen with the given aspect ratio
+     *
+     * Uses explicit min/max bounds if set, otherwise falls back to class matching.
+     */
+    bool matchesAspectRatio(qreal screenAspectRatio) const;
+
     // Visibility filtering
     bool hiddenFromSelector() const
     {
@@ -326,6 +342,9 @@ public:
         return m_useFullScreenGeometry;
     }
     void setUseFullScreenGeometry(bool enabled);
+
+    /// Returns true if any zone uses fixed (pixel) geometry mode
+    bool hasFixedGeometryZones() const;
 
     // Optional load order for "default" layout when defaultLayoutId is not set (lower = first)
     int defaultOrder() const
@@ -399,7 +418,6 @@ public:
 
 Q_SIGNALS:
     void nameChanged();
-    void typeChanged();
     void descriptionChanged();
     void zonePaddingChanged();
     void outerGapChanged();
@@ -408,6 +426,7 @@ Q_SIGNALS:
     void sourcePathChanged();
     void shaderIdChanged();
     void shaderParamsChanged();
+    void aspectRatioClassChanged();
     void hiddenFromSelectorChanged();
     void allowedScreensChanged();
     void allowedDesktopsChanged();
@@ -425,7 +444,6 @@ private:
 
     QUuid m_id;
     QString m_name;
-    LayoutType m_type = LayoutType::Custom;
     QString m_description;
     int m_zonePadding = -1; // -1 = use global setting
     int m_outerGap = -1; // -1 = use global setting
@@ -454,6 +472,11 @@ private:
     QString m_shaderId; // Shader effect ID (empty = no shader)
     QVariantMap m_shaderParams; // Shader-specific parameters
 
+    // Aspect ratio classification
+    PlasmaZones::AspectRatioClass m_aspectRatioClass = PlasmaZones::AspectRatioClass::Any;
+    qreal m_minAspectRatio = 0.0; // 0 = not set (use class matching)
+    qreal m_maxAspectRatio = 0.0; // 0 = not set (use class matching)
+
     // Visibility filtering
     bool m_hiddenFromSelector = false;
     QStringList m_allowedScreens; // empty = all screens
@@ -470,5 +493,4 @@ private:
 
 } // namespace PlasmaZones
 
-Q_DECLARE_METATYPE(PlasmaZones::LayoutType)
 Q_DECLARE_METATYPE(PlasmaZones::LayoutCategory)

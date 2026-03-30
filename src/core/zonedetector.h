@@ -77,6 +77,7 @@ private:
     QRectF combineZoneGeometries(const QVector<Zone*>& zones) const;
     bool areZonesAdjacent(Zone* zone1, Zone* zone2) const;
     qreal distanceToZoneEdge(const QPointF& point, Zone* zone) const;
+    Zone* resolveOverlappingZone(const QPointF& point) const;
 
     Layout* m_layout = nullptr;
     ISettings* m_settings;

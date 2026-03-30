@@ -23,10 +23,10 @@ enum class ZoneGeometryMode {
  * @brief Default values for zone appearance and core module constants
  *
  * These defaults are used by core module files that can't depend on config.
- * For user-configurable settings, see ConfigDefaults and plasmazones.kcfg.
+ * For user-configurable settings, see ConfigDefaults.
  *
  * Layout ratio constants (PriorityGridMainRatio, FocusSideRatio, etc.) are
- * structural constants for built-in layouts and are NOT in .kcfg.
+ * structural constants for built-in layouts.
  */
 namespace Defaults {
 // Alpha values for semi-transparent colors
@@ -66,6 +66,116 @@ constexpr qreal FocusMainRatio = 0.6;
 }
 
 /**
+ * @brief Screen aspect ratio classification
+ *
+ * Used to tag layouts with their intended monitor type and to classify
+ * physical screens at runtime for smart layout filtering/recommendations.
+ */
+enum class AspectRatioClass {
+    Any = 0, ///< Suitable for all aspect ratios (default)
+    Standard = 1, ///< ~16:10 to ~16:9 (1.5 - 1.9)
+    Ultrawide = 2, ///< ~21:9 (1.9 - 2.8)
+    SuperUltrawide = 3, ///< ~32:9 (2.8+)
+    Portrait = 4 ///< Rotated/vertical monitors (< 1.0)
+};
+
+/**
+ * @brief Screen classification thresholds and utilities
+ */
+namespace ScreenClassification {
+// Aspect ratio boundary thresholds (width / height)
+constexpr qreal PortraitMax = 1.0; // AR < 1.0 → portrait
+constexpr qreal StandardMin = 1.0; // AR >= 1.0 and < UltrawideMin → standard
+constexpr qreal UltrawideMin = 1.9; // AR >= 1.9 and < SuperUltrawideMin → ultrawide
+constexpr qreal SuperUltrawideMin = 2.8; // AR >= 2.8 → super-ultrawide
+
+inline AspectRatioClass classify(qreal aspectRatio)
+{
+    if (aspectRatio < PortraitMax)
+        return AspectRatioClass::Portrait;
+    if (aspectRatio < UltrawideMin)
+        return AspectRatioClass::Standard;
+    if (aspectRatio < SuperUltrawideMin)
+        return AspectRatioClass::Ultrawide;
+    return AspectRatioClass::SuperUltrawide;
+}
+
+inline AspectRatioClass classify(int width, int height)
+{
+    if (height <= 0 || width <= 0)
+        return AspectRatioClass::Any;
+    return classify(static_cast<qreal>(width) / height);
+}
+
+inline QString toString(AspectRatioClass cls)
+{
+    switch (cls) {
+    case AspectRatioClass::Any:
+        return QStringLiteral("any");
+    case AspectRatioClass::Standard:
+        return QStringLiteral("standard");
+    case AspectRatioClass::Ultrawide:
+        return QStringLiteral("ultrawide");
+    case AspectRatioClass::SuperUltrawide:
+        return QStringLiteral("super-ultrawide");
+    case AspectRatioClass::Portrait:
+        return QStringLiteral("portrait");
+    }
+    return QStringLiteral("any");
+}
+
+inline AspectRatioClass fromString(const QString& str)
+{
+    if (str == QLatin1String("standard"))
+        return AspectRatioClass::Standard;
+    if (str == QLatin1String("ultrawide"))
+        return AspectRatioClass::Ultrawide;
+    if (str == QLatin1String("super-ultrawide"))
+        return AspectRatioClass::SuperUltrawide;
+    if (str == QLatin1String("portrait"))
+        return AspectRatioClass::Portrait;
+    return AspectRatioClass::Any;
+}
+
+/**
+ * @brief Get the representative aspect ratio for a class
+ * @param cls The aspect ratio class
+ * @param fallback Value to return for AspectRatioClass::Any (default 16:9)
+ * @return Representative aspect ratio (width/height)
+ */
+inline qreal aspectRatioForClass(AspectRatioClass cls, qreal fallback = 16.0 / 9.0)
+{
+    switch (cls) {
+    case AspectRatioClass::Standard:
+        return 16.0 / 9.0;
+    case AspectRatioClass::Ultrawide:
+        return 21.0 / 9.0;
+    case AspectRatioClass::SuperUltrawide:
+        return 32.0 / 9.0;
+    case AspectRatioClass::Portrait:
+        return 9.0 / 16.0;
+    case AspectRatioClass::Any:
+    default:
+        return fallback;
+    }
+}
+
+/**
+ * @brief Check if a layout's aspect ratio class matches the given screen class
+ *
+ * A layout with AspectRatioClass::Any matches all screens.
+ * Otherwise, exact match is required unless the layout specifies
+ * explicit min/max aspect ratio bounds (which take precedence).
+ */
+inline bool matches(AspectRatioClass layoutClass, AspectRatioClass screenClass)
+{
+    if (layoutClass == AspectRatioClass::Any)
+        return true;
+    return layoutClass == screenClass;
+}
+}
+
+/**
  * @brief Auto-tiling algorithm defaults
  */
 namespace AutotileDefaults {
@@ -85,6 +195,11 @@ constexpr bool DefaultFocusNewWindows = true;
 constexpr int MinMaxWindows = 1;
 constexpr int MaxMaxWindows = 12;
 constexpr int DefaultMaxWindows = 6;
+constexpr int MaxZones = 256;
+constexpr int MaxRuntimeTreeDepth = 50; ///< Maximum recursion depth for split tree operations
+constexpr qreal SplitRatioHysteresis = 0.05; ///< Band within which algorithm-switch ratio reset is suppressed
+constexpr int MinMetadataWindows = 1;
+constexpr int MaxMetadataWindows = 100;
 constexpr int MinInsertPosition = 0;
 constexpr int MaxInsertPosition = 2;
 constexpr int MinAnimationDuration = 50;
@@ -162,7 +277,6 @@ inline constexpr QLatin1String IsHighlighted{"isHighlighted"};
 
 // Layout keys
 inline constexpr QLatin1String DefaultOrder{"defaultOrder"};
-inline constexpr QLatin1String Type{"type"};
 inline constexpr QLatin1String Description{"description"};
 inline constexpr QLatin1String Zones{"zones"};
 inline constexpr QLatin1String ZonePadding{"zonePadding"};
@@ -203,6 +317,11 @@ inline constexpr QLatin1String PhysicalSize{"physicalSize"};
 inline constexpr QLatin1String Depth{"depth"};
 inline constexpr QLatin1String DevicePixelRatio{"devicePixelRatio"};
 inline constexpr QLatin1String RefreshRate{"refreshRate"};
+
+// Aspect ratio classification keys
+inline constexpr QLatin1String AspectRatioClassKey{"aspectRatioClass"};
+inline constexpr QLatin1String MinAspectRatio{"minAspectRatio"};
+inline constexpr QLatin1String MaxAspectRatio{"maxAspectRatio"};
 
 // App rules keys
 inline constexpr QLatin1String AppRules{"appRules"};
@@ -248,6 +367,7 @@ inline constexpr QLatin1String MasterCount{"masterCount"};
 inline constexpr QLatin1String SplitRatio{"splitRatio"};
 
 // AutotileConfig keys
+inline constexpr QLatin1String PerAlgorithmSettings{"perAlgorithmSettings"};
 inline constexpr QLatin1String AlgorithmId{"algorithmId"};
 inline constexpr QLatin1String InnerGap{"innerGap"};
 inline constexpr QLatin1String OuterGap{"outerGap"};
@@ -263,10 +383,13 @@ inline constexpr QLatin1String FocusFollowsMouse{"focusFollowsMouse"};
 inline constexpr QLatin1String InsertPosition{"insertPosition"};
 inline constexpr QLatin1String RespectMinimumSize{"respectMinimumSize"};
 inline constexpr QLatin1String MaxWindows{"maxWindows"};
+inline constexpr QLatin1String CenteredMasterSplitRatio{"centeredMasterSplitRatio"};
+inline constexpr QLatin1String CenteredMasterMasterCount{"centeredMasterMasterCount"};
 // InsertPosition values
 inline constexpr QLatin1String InsertEnd{"end"};
 inline constexpr QLatin1String InsertAfterFocused{"afterFocused"};
 inline constexpr QLatin1String InsertAsMaster{"asMaster"};
+inline constexpr QLatin1String SplitTreeKey{"splitTree"};
 }
 
 /**
@@ -284,6 +407,12 @@ namespace DBus {
 inline constexpr QLatin1String ServiceName{"org.plasmazones"};
 inline constexpr QLatin1String ObjectPath{"/PlasmaZones"};
 
+namespace SettingsApp {
+inline constexpr QLatin1String ServiceName{"org.plasmazones.Settings.App"};
+inline constexpr QLatin1String ObjectPath{"/SettingsApp"};
+inline constexpr QLatin1String Interface{"org.plasmazones.SettingsController"};
+}
+
 namespace Interface {
 inline constexpr QLatin1String LayoutManager{"org.plasmazones.LayoutManager"};
 inline constexpr QLatin1String Overlay{"org.plasmazones.Overlay"};
@@ -295,25 +424,6 @@ inline constexpr QLatin1String ZoneDetection{"org.plasmazones.ZoneDetection"};
 inline constexpr QLatin1String Autotile{"org.plasmazones.Autotile"};
 }
 
-/**
- * @brief Autotile algorithm D-Bus identifiers
- */
-namespace AutotileAlgorithm {
-inline constexpr QLatin1String MasterStack{"master-stack"};
-inline constexpr QLatin1String BSP{"bsp"};
-inline constexpr QLatin1String Columns{"columns"};
-inline constexpr QLatin1String Rows{"rows"};
-inline constexpr QLatin1String Dwindle{"dwindle"};
-inline constexpr QLatin1String Spiral{"spiral"};
-inline constexpr QLatin1String Monocle{"monocle"};
-inline constexpr QLatin1String ThreeColumn{"three-column"};
-inline constexpr QLatin1String Grid{"grid"};
-inline constexpr QLatin1String Wide{"wide"};
-inline constexpr QLatin1String CenteredMaster{"centered-master"};
-inline constexpr QLatin1String Cascade{"cascade"};
-inline constexpr QLatin1String Stair{"stair"};
-inline constexpr QLatin1String Spread{"spread"};
-}
 }
 
 /**
