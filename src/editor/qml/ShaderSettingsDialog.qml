@@ -28,6 +28,7 @@ Kirigami.Dialog {
     // Theme colors cached at dialog level for use in dynamically loaded Components
     // Use disabledTextColor with reduced opacity as separator color
     readonly property color themeSeparatorColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+    readonly property color themeBackgroundColor: Kirigami.Theme.backgroundColor
     readonly property int sliderValueLabelWidth: Kirigami.Units.gridUnit * 4
     readonly property int colorLabelWidth: Kirigami.Units.gridUnit * 7
     // ═══════════════════════════════════════════════════════════════════════
@@ -135,9 +136,9 @@ Kirigami.Dialog {
                 return a.localeCompare(b);
             });
             var subcategories = [];
-            for (var s = 0; s < subKeys.length; s++) subcategories.push({
-                "name": subKeys[s],
-                "shaders": node.subcats[subKeys[s]]
+            for (var si = 0; si < subKeys.length; si++) subcategories.push({
+                "name": subKeys[si],
+                "shaders": node.subcats[subKeys[si]]
             })
             categories.push({
                 "name": keys[k],
@@ -179,10 +180,15 @@ Kirigami.Dialog {
     function hideShaderPreview() {
         previewAnimationTimer.stop();
         previewShaderConfig = null;
-        shaderPreview.shaderSource = "";
+        // Setting previewShaderConfig = null deactivates the Loader, which
+        // destroys the ZoneShaderItem and releases all RHI resources cleanly.
         if (editorController)
             editorController.stopAudioCapture();
 
+    }
+
+    function restoreShaderPreview() {
+        Qt.callLater(root.updateLocalShaderPreview);
     }
 
     // Build local preview config from shader info + translated params + zones
@@ -220,12 +226,10 @@ Kirigami.Dialog {
         var wallpaperImg = useWallpaper ? editorController.loadWallpaperTexture() : null;
         var bsPaths = info.bufferShaderPaths || [];
         var shaderUrl = info.shaderUrl || "";
-        // Set config WITHOUT shaderSource — shaderSource is set imperatively
-        // after all config bindings have evaluated (see Qt.callLater below).
-        // This mirrors the daemon's applyShaderInfoToWindow() which sets
-        // shaderSource LAST because setShaderSource() triggers compilation
-        // that references bufferShaderPaths, zones, and params.
+        // Include shaderUrl in the config so the Loader's sourceComponent
+        // bindings and onLoaded can apply it after all other props settle.
         previewShaderConfig = {
+            "shaderUrl": shaderUrl,
             "bufferShaderPaths": (bsPaths.length > 0) ? Array.from(bsPaths) : (info.bufferShaderPath ? [info.bufferShaderPath] : []),
             "bufferFeedback": info.bufferFeedback || false,
             "bufferScale": info.bufferScale !== undefined ? info.bufferScale : 1,
@@ -236,17 +240,6 @@ Kirigami.Dialog {
             "labelsTexture": labelsImg,
             "wallpaperTexture": wallpaperImg
         };
-        // Set shaderSource AFTER bindings settle — Qt.callLater defers to
-        // the next event loop iteration, guaranteeing all property bindings
-        // from the config assignment above have been evaluated first.
-        // Guard against stale URL from rapid shader switching: only apply if
-        // the pending shader ID still matches when the deferred call fires.
-        var capturedShaderId = root.pendingShaderId;
-        Qt.callLater(function() {
-            if (root.pendingShaderId === capturedShaderId)
-                shaderPreview.shaderSource = shaderUrl;
-
-        });
         if (!previewAnimationTimer.running) {
             previewLastTime = Date.now() / 1000;
             previewITime = 0;
@@ -462,6 +455,16 @@ Kirigami.Dialog {
         shaderColorDialog.open();
     }
 
+    // Helper for ParameterDelegate to open image file dialog
+    // Owned by the dialog root (not the delegate) to avoid use-after-free
+    // when the Repeater destroys delegates while the native FileDialog wrapper
+    // is still alive — the platform dialog destructor races with QQmlData cleanup.
+    function openImageDialog(paramId) {
+        shaderImageDialog.paramId = paramId;
+        root.hideShaderPreview();
+        shaderImageDialog.open();
+    }
+
     function firstEffectId() {
         // Use sortedShaders (alphabetical by name) so the pick is deterministic
         var shaders = root.sortedShaders;
@@ -566,6 +569,24 @@ Kirigami.Dialog {
         root.hideShaderPreview();
         cachedShaderInfoForPreview = null;
         cachedShaderInfoId = "";
+        // Destroy dynamic menu items before the QML engine tears down.
+        // Without this, Qt's child destruction cascade hits QQmlData::destroyed
+        // on items whose context data is already partially freed.
+        if (shaderCategoryMenu._built) {
+            shaderCategoryMenu._built = false;
+            for (var i = 0; i < shaderCategoryMenu._allItems.length; i++) {
+                if (shaderCategoryMenu._allItems[i])
+                    shaderCategoryMenu._allItems[i].destroy();
+
+            }
+            shaderCategoryMenu._allItems = [];
+            for (var j = 0; j < shaderCategoryMenu._allSubMenus.length; j++) {
+                if (shaderCategoryMenu._allSubMenus[j])
+                    shaderCategoryMenu._allSubMenus[j].destroy();
+
+            }
+            shaderCategoryMenu._allSubMenus = [];
+        }
     }
     onPendingShaderIdChanged: {
         if (visible)
@@ -666,134 +687,169 @@ Kirigami.Dialog {
                     Kirigami.FormData.label: i18nc("@label", "Shader:")
                     enabled: root.hasShaderEffect
                     Layout.fillWidth: true
-                    onClicked: shaderCategoryMenu.popup(shaderMenuButton, 0, shaderMenuButton.height)
+                    onClicked: shaderCategoryMenu.showMenu()
                     Accessible.name: displayText
                     ToolTip.text: i18nc("@info:tooltip", "Choose a shader effect from categorized list")
                     ToolTip.visible: hovered && !shaderCategoryMenu.visible
                     ToolTip.delay: Kirigami.Units.toolTipDelay
 
-                    // Exclusive action group ensures only one shader is checked at a time
-                    ActionGroup {
-                        id: shaderActionGroup
+                    // Use ItemDelegate (not MenuItem) to avoid Qt 6 use-after-free in
+                    // QQuickPopupPrivate::finalizeExitTransition. Qt's QQuickMenu connects
+                    // internally to QQuickMenuItem::triggered → dismiss() cascade. ItemDelegate
+                    // is not a MenuItem, so Qt's onItemTriggered never fires and the dismiss
+                    // cascade never starts. Manual createObject + explicit destroy (same
+                    // pattern as Main.qml's dynamic screen items) keeps lifecycle under control.
+                    Component {
+                        id: shaderMenuItemComponent
 
-                        exclusive: true
+                        ItemDelegate {
+                            property string shaderId
+                            property bool isSelected: false
+
+                            icon.name: isSelected ? "checkmark" : ""
+                            onClicked: shaderCategoryMenu.selectShader(shaderId)
+                        }
+
+                    }
+
+                    Component {
+                        id: subMenuComponent
+
+                        Menu {
+                            // Force opaque background via palette (not background:
+                            // property — that crashes in finalizeExitTransition).
+                            palette.window: root.themeBackgroundColor
+
+                            // Empty transitions prevent the default animated exit
+                            // transition from deferring finalizeExitTransition to
+                            // an animation tick. With ItemDelegate (not MenuItem)
+                            // and build-once (no destroy), items are stable when
+                            // finalizeExitTransition runs synchronously.
+                            enter: Transition {
+                            }
+
+                            exit: Transition {
+                            }
+
+                        }
+
                     }
 
                     Menu {
                         id: shaderCategoryMenu
 
-                        // Category submenus (with support for nested subcategories via "/")
-                        Instantiator {
-                            id: categoryInstantiator
+                        // All shader ItemDelegates (flat list for checkmark updates)
+                        property var _allItems: []
+                        // All submenus (for force-hiding to bypass transitions)
+                        property var _allSubMenus: []
+                        property bool _built: false
 
-                            model: root.shaderCategories
-                            onObjectAdded: (index, object) => {
-                                return shaderCategoryMenu.insertMenu(index, object);
-                            }
-                            onObjectRemoved: (index, object) => {
-                                return shaderCategoryMenu.removeMenu(object);
-                            }
-
-                            delegate: Menu {
-                                id: categorySubMenu
-
-                                required property var modelData
-
-                                title: modelData.name
-
-                                // Direct shaders in this category (no subcategory)
-                                Instantiator {
-                                    model: modelData.shaders
-                                    onObjectAdded: (index, object) => {
-                                        return categorySubMenu.insertItem(index, object);
-                                    }
-                                    onObjectRemoved: (index, object) => {
-                                        return categorySubMenu.removeItem(object);
-                                    }
-
-                                    delegate: MenuItem {
-                                        required property var modelData
-
-                                        text: modelData.name
-                                        checkable: true
-                                        checked: modelData.id === root.pendingShaderId
-                                        ActionGroup.group: shaderActionGroup
-                                        onTriggered: root.pendingShaderId = modelData.id
-                                    }
+                        function selectShader(id) {
+                            // Defer everything to the next event loop tick.
+                            // The ItemDelegate's onClicked fires from handleRelease —
+                            // setting visible=false mid-event-delivery triggers
+                            // finalizeExitTransition while the event pipeline is active.
+                            Qt.callLater(function() {
+                                for (var i = 0; i < _allSubMenus.length; i++) {
+                                    if (_allSubMenus[i])
+                                        _allSubMenus[i].visible = false;
 
                                 }
+                                shaderCategoryMenu.visible = false;
+                                root.hideShaderPreview();
+                                root.pendingShaderId = id;
+                                root.restoreShaderPreview();
+                            });
+                        }
 
-                                // Subcategory submenus (from "/" path splits)
-                                Instantiator {
-                                    model: modelData.subcategories || []
-                                    onObjectAdded: (index, object) => {
-                                        return categorySubMenu.insertMenu(categorySubMenu.count, object);
+                        // Update checkmarks on existing items — no destroy/create
+                        function updateChecks() {
+                            for (var i = 0; i < _allItems.length; i++) {
+                                var it = _allItems[i];
+                                if (it)
+                                    it.isSelected = (it.shaderId === root.pendingShaderId);
+
+                            }
+                        }
+
+                        // Build menu once, reuse on subsequent opens
+                        function showMenu() {
+                            if (!_built) {
+                                _built = true;
+                                var categories = root.shaderCategories;
+                                for (var c = 0; c < categories.length; c++) {
+                                    var cat = categories[c];
+                                    var subMenu = subMenuComponent.createObject(shaderCategoryMenu, {
+                                        "title": cat.name
+                                    });
+                                    _allSubMenus.push(subMenu);
+                                    var shaders = cat.shaders || [];
+                                    for (var s = 0; s < shaders.length; s++) {
+                                        var item = shaderMenuItemComponent.createObject(subMenu, {
+                                            "text": shaders[s].name,
+                                            "shaderId": shaders[s].id
+                                        });
+                                        subMenu.addItem(item);
+                                        _allItems.push(item);
                                     }
-                                    onObjectRemoved: (index, object) => {
-                                        return categorySubMenu.removeMenu(object);
-                                    }
-
-                                    delegate: Menu {
-                                        id: subCategoryMenu
-
-                                        required property var modelData
-
-                                        title: modelData.name
-
-                                        Instantiator {
-                                            model: subCategoryMenu.modelData.shaders
-                                            onObjectAdded: (index, object) => {
-                                                return subCategoryMenu.insertItem(index, object);
-                                            }
-                                            onObjectRemoved: (index, object) => {
-                                                return subCategoryMenu.removeItem(object);
-                                            }
-
-                                            delegate: MenuItem {
-                                                required property var modelData
-
-                                                text: modelData.name
-                                                checkable: true
-                                                checked: modelData.id === root.pendingShaderId
-                                                ActionGroup.group: shaderActionGroup
-                                                onTriggered: root.pendingShaderId = modelData.id
-                                            }
-
+                                    var subcats = cat.subcategories || [];
+                                    for (var sc = 0; sc < subcats.length; sc++) {
+                                        var subSubMenu = subMenuComponent.createObject(subMenu, {
+                                            "title": subcats[sc].name
+                                        });
+                                        _allSubMenus.push(subSubMenu);
+                                        var subShaders = subcats[sc].shaders || [];
+                                        for (var ss = 0; ss < subShaders.length; ss++) {
+                                            var subItem = shaderMenuItemComponent.createObject(subSubMenu, {
+                                                "text": subShaders[ss].name,
+                                                "shaderId": subShaders[ss].id
+                                            });
+                                            subSubMenu.addItem(subItem);
+                                            _allItems.push(subItem);
                                         }
-
+                                        subMenu.addMenu(subSubMenu);
                                     }
-
+                                    shaderCategoryMenu.addMenu(subMenu);
                                 }
+                                var uncategorized = root.uncategorizedShaders;
+                                if (uncategorized.length > 0 && categories.length > 0)
+                                    shaderCategoryMenu.addItem(menuSeparatorComponent.createObject(shaderCategoryMenu));
 
+                                for (var u = 0; u < uncategorized.length; u++) {
+                                    var uncatItem = shaderMenuItemComponent.createObject(shaderCategoryMenu, {
+                                        "text": uncategorized[u].name,
+                                        "shaderId": uncategorized[u].id
+                                    });
+                                    shaderCategoryMenu.addItem(uncatItem);
+                                    _allItems.push(uncatItem);
+                                }
                             }
+                            updateChecks();
+                            shaderCategoryMenu.popup(shaderMenuButton, 0, shaderMenuButton.height);
+                        }
+
+                        // Force opaque background via palette (not background:
+                        // property — that crashes in finalizeExitTransition).
+                        palette.window: root.themeBackgroundColor
+                        onAboutToShow: previewAnimationTimer.stop()
+                        onAboutToHide: {
+                            if (root.previewShaderConfig)
+                                previewAnimationTimer.start();
 
                         }
 
-                        // Separator before uncategorized shaders (if any exist)
+                        enter: Transition {
+                        }
+
+                        exit: Transition {
+                        }
+
+                    }
+
+                    Component {
+                        id: menuSeparatorComponent
+
                         MenuSeparator {
-                            visible: root.uncategorizedShaders.length > 0 && root.shaderCategories.length > 0
-                        }
-
-                        // Uncategorized shaders appear at the top level
-                        Instantiator {
-                            model: root.uncategorizedShaders
-                            onObjectAdded: (index, object) => {
-                                return shaderCategoryMenu.insertItem(shaderCategoryMenu.count, object);
-                            }
-                            onObjectRemoved: (index, object) => {
-                                return shaderCategoryMenu.removeItem(object);
-                            }
-
-                            delegate: MenuItem {
-                                required property var modelData
-
-                                text: modelData.name
-                                checkable: true
-                                checked: modelData.id === root.pendingShaderId
-                                ActionGroup.group: shaderActionGroup
-                                onTriggered: root.pendingShaderId = modelData.id
-                            }
-
                         }
 
                     }
@@ -1201,6 +1257,7 @@ Kirigami.Dialog {
 
                 HoverHandler {
                     id: previewHover
+
                     onPointChanged: {
                         if (previewHover.hovered)
                             previewBackground.previewMouse = Qt.point(previewHover.point.position.x, previewHover.point.position.y);
@@ -1213,54 +1270,62 @@ Kirigami.Dialog {
                     }
                 }
 
-                // Local shader renderer — replaces daemon-side LayerShell overlay
-                // shaderSource is set imperatively via Qt.callLater in
-                // updateLocalShaderPreview() to guarantee it runs after all
-                // config bindings (bufferShaderPaths, zones, params) have settled.
-                ZoneShaderItem {
-                    id: shaderPreview
+                // Shader preview via Loader — destroy and recreate the ZoneShaderItem
+                // on each shader switch so all RHI resources (FBOs, pipelines, textures)
+                // are fully released before new ones are created. In-place resource
+                // swapping triggers heap corruption in NVIDIA's EGL driver (595.x).
+                Loader {
+                    id: shaderPreviewLoader
 
                     anchors.fill: parent
-                    visible: root.previewShaderConfig !== null
-                    // Render to a private layer FBO so multipass shaders' beginPass(rt)
-                    // clears only this layer — not the entire editor window surface.
-                    layer.enabled: true
-                    // Our render node already outputs correct top-down orientation;
-                    // disable default MirrorVertically to prevent double-flip.
-                    layer.textureMirroring: ShaderEffectSource.NoMirroring
-                    // All auxiliary props BEFORE shaderSource
-                    bufferShaderPaths: previewBackground.cfg.bufferShaderPaths || []
-                    bufferFeedback: previewBackground.cfg.bufferFeedback || false
-                    bufferScale: previewBackground.cfg.bufferScale !== undefined ? previewBackground.cfg.bufferScale : 1
-                    bufferWrap: previewBackground.cfg.bufferWrap || "clamp"
-                    zones: previewBackground.cfg.zones || []
-                    shaderParams: previewBackground.cfg.shaderParams || ({
-                    })
-                    useWallpaper: previewBackground.cfg.useWallpaper || false
-                    // Timing bound directly to root properties for per-frame updates
-                    iTime: root.previewITime
-                    iTimeDelta: root.previewTimeDelta
-                    iFrame: root.previewFrame
-                    iResolution: Qt.size(width, height)
-                    iMouse: previewBackground.previewMouse
-                    hoveredZoneIndex: previewBackground.previewHoveredZone
-                    audioSpectrum: editorController ? editorController.audioSpectrum : []
+                    active: root.previewShaderConfig !== null
+
+                    sourceComponent: ZoneShaderItem {
+                        // Render to a private layer FBO so multipass shaders' beginPass(rt)
+                        // clears only this layer — not the entire editor window surface.
+                        layer.enabled: shaderSource.toString() !== ""
+                        // Our render node already outputs correct top-down orientation;
+                        // disable default MirrorVertically to prevent double-flip.
+                        layer.textureMirroring: ShaderEffectSource.NoMirroring
+                        // shaderSource bound from config — applied reactively
+                        shaderSource: previewBackground.cfg.shaderUrl || ""
+                        // All auxiliary props
+                        bufferShaderPaths: previewBackground.cfg.bufferShaderPaths || []
+                        bufferFeedback: previewBackground.cfg.bufferFeedback || false
+                        bufferScale: previewBackground.cfg.bufferScale !== undefined ? previewBackground.cfg.bufferScale : 1
+                        bufferWrap: previewBackground.cfg.bufferWrap || "clamp"
+                        zones: previewBackground.cfg.zones || []
+                        shaderParams: previewBackground.cfg.shaderParams || ({
+                        })
+                        useWallpaper: previewBackground.cfg.useWallpaper || false
+                        // Timing bound directly to root properties for per-frame updates
+                        iTime: root.previewITime
+                        iTimeDelta: root.previewTimeDelta
+                        iFrame: root.previewFrame
+                        iResolution: Qt.size(width, height)
+                        iMouse: previewBackground.previewMouse
+                        hoveredZoneIndex: previewBackground.previewHoveredZone
+                        audioSpectrum: editorController ? editorController.audioSpectrum : []
+                    }
+
                 }
 
-                // QImage bindings use Binding with `when` guard to avoid passing
-                // undefined/null to C++ setters (can crash during teardown)
+                // Reactive QImage bindings — Binding elements update labelsTexture
+                // and wallpaperTexture whenever the config changes, not just on
+                // initial Loader creation. The `when` guard prevents assigning
+                // undefined/null to the C++ setter (which expects a valid QImage).
                 Binding {
-                    target: shaderPreview
+                    target: shaderPreviewLoader.item
                     property: "labelsTexture"
                     value: previewBackground.cfg.labelsTexture
-                    when: previewBackground.cfg.labelsTexture !== undefined && previewBackground.cfg.labelsTexture !== null
+                    when: shaderPreviewLoader.item !== null && previewBackground.cfg.labelsTexture !== undefined && previewBackground.cfg.labelsTexture !== null
                 }
 
                 Binding {
-                    target: shaderPreview
+                    target: shaderPreviewLoader.item
                     property: "wallpaperTexture"
                     value: previewBackground.cfg.wallpaperTexture
-                    when: previewBackground.cfg.wallpaperTexture !== undefined && previewBackground.cfg.wallpaperTexture !== null
+                    when: shaderPreviewLoader.item !== null && previewBackground.cfg.wallpaperTexture !== undefined && previewBackground.cfg.wallpaperTexture !== null
                 }
 
                 // Fallback message when no shader is rendering
@@ -1291,6 +1356,29 @@ Kirigami.Dialog {
             if (paramId)
                 root.setPendingParam(paramId, selectedColor.toString());
 
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SHARED IMAGE FILE DIALOG (owned by dialog root, not by delegate)
+    // ═══════════════════════════════════════════════════════════════════════
+    FileDialog {
+        id: shaderImageDialog
+
+        property string paramId: ""
+
+        title: i18nc("@title:window", "Choose Image")
+        nameFilters: [i18nc("@item:inlistbox", "Image files (*.png *.jpg *.jpeg *.bmp *.webp *.svg *.svgz)"), i18nc("@item:inlistbox", "All files (*)")]
+        fileMode: FileDialog.OpenFile
+        onAccepted: {
+            if (paramId) {
+                var path = decodeURIComponent(selectedFile.toString().replace(/^file:\/\/+/, "/"));
+                root.setPendingParam(paramId, path);
+            }
+            root.restoreShaderPreview();
+        }
+        onRejected: {
+            root.restoreShaderPreview();
         }
     }
 

@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 2.4.3 LANGUAGES CXX)
+project(PlasmaZones VERSION 2.5.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -69,7 +69,7 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qml_autoge
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qmlplugin_autogen/include)
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qmlplugin_init_autogen/include)
 
-# KDE/Qt requirements (Plasma 6.6 target: KF 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6)
+# KDE/Qt requirements (Plasma 6.6 target: KF 6.6, Qt 6.6, KWin 6.6)
 set(QT_MIN_VERSION "6.6.0")
 set(KF_MIN_VERSION "6.6.0")
 
@@ -86,6 +86,7 @@ include(FeatureSummary)
 find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
     Concurrent
     Core
+    Qml
     Quick
     QuickControls2
     Gui
@@ -144,10 +145,13 @@ else()
     message(STATUS "Building WITHOUT KDE Frameworks (portable Qt-only mode)")
 endif()
 
-# LayerShellQt for Wayland overlay support (REQUIRED, 6.6+ for setScreen/wantsToBeOnActiveScreen API)
-# PlasmaZones requires Wayland with LayerShellQt for proper overlay functionality.
+# Wayland layer-shell support (direct zwlr_layer_shell_v1 protocol, no KDE dependency)
+# PlasmaZones requires Wayland for proper overlay functionality.
 # X11 support has been removed as of v1.2.0 - Plasma 6 is Wayland-first.
-find_package(LayerShellQt 6.6 REQUIRED)
+find_package(Wayland REQUIRED COMPONENTS Client)
+find_package(Qt6 REQUIRED COMPONENTS WaylandClient)
+find_package(Qt6WaylandClientPrivate REQUIRED)
+find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
 
 # Systemd user unit directory (fallback if not provided by ECM)
 if(NOT DEFINED KDE_INSTALL_SYSTEMDUSERUNITDIR)
@@ -340,6 +344,14 @@ install(DIRECTORY data/shaders/
     PATTERN "*.vert"
     PATTERN "*.frag"
     PATTERN "*.png"
+    PATTERN "*.svg"
+)
+
+# Install bundled scripted tiling algorithms
+install(DIRECTORY data/algorithms/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/algorithms
+    FILES_MATCHING
+    PATTERN "*.js"
 )
 
 # Install icons (hicolor for dark themes, hicolor-light for light themes)
@@ -371,8 +383,13 @@ add_custom_target(uninstall
 # Build/install only installs files. Enabling the daemon, refreshing sycoca/KWin,
 # and user-facing messages are handled by packaging (Arch .install, Debian postinst, RPM %post).
 
-# Suppress transitive Qt6::Gui dependency from feature summary (not used by PlasmaZones)
-set_package_properties(WrapVulkanHeaders PROPERTIES TYPE RUNTIME)
+# Vulkan headers are needed at build time for QVulkanInstance (Vulkan backend support).
+# OPTIONAL so PlasmaZones builds silently on systems without Vulkan dev packages —
+# the Vulkan backend simply won't be available at runtime.
+# All Vulkan-specific C++ code is guarded with #if QT_CONFIG(vulkan).
+# Note: packaging specs (PKGBUILD, debian/control, rpm .spec, nix) list Vulkan as a
+# hard BuildRequires to ensure the backend is always available in distribution packages.
+set_package_properties(WrapVulkanHeaders PROPERTIES TYPE OPTIONAL)
 
 # Feature summary (REQUIRED + OPTIONAL only; RUNTIME hidden to reduce noise)
 feature_summary(WHAT REQUIRED_PACKAGES_FOUND REQUIRED_PACKAGES_NOT_FOUND

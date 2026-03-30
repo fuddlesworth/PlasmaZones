@@ -5,9 +5,8 @@
  * @file test_configdefaults.cpp
  * @brief Unit tests for the ConfigDefaults class (config/configdefaults.h)
  *
- * Tests verify that ConfigDefaults accessors return the expected values from
- * the .kcfg schema and that all numeric defaults fall within their declared
- * min/max bounds.
+ * Tests verify that ConfigDefaults accessors return the expected values and
+ * that all numeric defaults fall within their declared min/max bounds.
  *
  * CMake target (not yet added to CMakeLists.txt):
  *   add_executable(test_configdefaults test_configdefaults.cpp)
@@ -58,18 +57,12 @@ private Q_SLOTS:
     }
 
     /**
-     * Every numeric default must fall within the min/max bounds declared in the
-     * .kcfg schema. This prevents drift between ConfigDefaults and plasmazones.kcfg.
-     *
-     * The bounds are taken directly from the .kcfg <min>/<max> elements.
+     * Every numeric default must fall within the min/max bounds declared in
+     * ConfigDefaults. This prevents drift between default values and their bounds.
      */
     void testAllDefaults_withinKcfgBounds()
     {
         // Activation
-        QVERIFY(ConfigDefaults::dragActivationModifier() >= 0);
-        QVERIFY(ConfigDefaults::dragActivationModifier() <= 10);
-        QVERIFY(ConfigDefaults::dragActivationMouseButton() >= 0);
-        QVERIFY(ConfigDefaults::dragActivationMouseButton() <= ConfigDefaults::mouseButtonMax());
         QVERIFY(ConfigDefaults::zoneSpanModifier() >= 0);
         QVERIFY(ConfigDefaults::zoneSpanModifier() <= 10);
 
@@ -150,14 +143,7 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::autotileSplitRatio() <= ConfigDefaults::autotileSplitRatioMax());
         QVERIFY(ConfigDefaults::autotileMasterCount() >= ConfigDefaults::autotileMasterCountMin());
         QVERIFY(ConfigDefaults::autotileMasterCount() <= ConfigDefaults::autotileMasterCountMax());
-        QVERIFY(ConfigDefaults::autotileCenteredMasterSplitRatio()
-                >= ConfigDefaults::autotileCenteredMasterSplitRatioMin());
-        QVERIFY(ConfigDefaults::autotileCenteredMasterSplitRatio()
-                <= ConfigDefaults::autotileCenteredMasterSplitRatioMax());
-        QVERIFY(ConfigDefaults::autotileCenteredMasterMasterCount()
-                >= ConfigDefaults::autotileCenteredMasterMasterCountMin());
-        QVERIFY(ConfigDefaults::autotileCenteredMasterMasterCount()
-                <= ConfigDefaults::autotileCenteredMasterMasterCountMax());
+
         QVERIFY(ConfigDefaults::autotileInnerGap() >= ConfigDefaults::autotileInnerGapMin());
         QVERIFY(ConfigDefaults::autotileInnerGap() <= ConfigDefaults::autotileInnerGapMax());
         QVERIFY(ConfigDefaults::autotileOuterGap() >= ConfigDefaults::autotileOuterGapMin());
@@ -191,7 +177,7 @@ private Q_SLOTS:
     }
 
     /**
-     * autotileSplitRatio default must be 0.5 (matching the .kcfg <default>0.5</default>).
+     * autotileSplitRatio default must be 0.5.
      */
     void testAutotileSplitRatio_default_is0point5()
     {
@@ -199,7 +185,7 @@ private Q_SLOTS:
     }
 
     /**
-     * autotileMasterCount default must be 1 (matching the .kcfg <default>1</default>).
+     * autotileMasterCount default must be 1.
      */
     void testAutotileMasterCount_default_is1()
     {

@@ -63,6 +63,10 @@ static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, cons
 const QList<QShaderBaker::GeneratedShader>& detail::bakeTargets()
 {
     static const QList<QShaderBaker::GeneratedShader> targets = {
+        // SPIR-V 1.3 for Vulkan 1.1. QShaderVersion uses the same major*100 + minor*10
+        // encoding as GLSL versions, so SPIR-V 1.3 is represented as 130 (not 13).
+        // Vulkan 1.1 guarantees SPIR-V 1.3 support per the Vulkan spec appendix.
+        {QShader::SpirvShader, QShaderVersion(130)},
         {QShader::GlslShader, QShaderVersion(330)},
         {QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs)},
         {QShader::GlslShader, QShaderVersion(310, QShaderVersion::GlslEs)},
@@ -199,6 +203,9 @@ void ZoneShaderNodeRhi::prepare()
 
     if (!m_initialized) {
         m_initialized = true;
+        qCInfo(lcOverlay) << "ZoneShaderNodeRhi initializing — RHI backend:" << rhi->backendName()
+                          << "driver:" << rhi->driverInfo().deviceName
+                          << "Y-up framebuffer:" << rhi->isYUpInFramebuffer();
         // Create VBO (fullscreen quad)
         m_vbo.reset(
             rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(RhiConstants::QuadVertices)));
@@ -407,6 +414,13 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
     const bool multipassActive = multipassSingle || multipassMulti;
 
     if (multipassActive) {
+        // The scene graph's batch renderer keeps its render pass active when calling
+        // render() on nodes with the NoExternalRendering flag. We must end that pass
+        // before beginning our own passes on buffer FBOs. After buffer passes complete,
+        // we re-begin a pass on rt for the image pass; the scene graph will endPass()
+        // after render() returns, balancing our beginPass(rt).
+        cb->endPass();
+
         const QColor clearColor(0, 0, 0, 0);
         if (multiBufferMode) {
             const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);

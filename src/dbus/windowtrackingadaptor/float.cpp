@@ -13,6 +13,45 @@
 
 namespace PlasmaZones {
 
+void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
+{
+    if (!validateWindowId(windowId, QStringLiteral("drag-out unsnap"))) {
+        return;
+    }
+
+    QString zoneId = m_service->zoneForWindow(windowId);
+    if (zoneId.isEmpty()) {
+        // Window was not snapped — nothing to do
+        return;
+    }
+
+    QString screenId = m_service->screenAssignments().value(windowId, m_lastActiveScreenId);
+    qCInfo(lcDbusWindow) << "Drag-out unsnap (no activation trigger) for" << windowId << "screen:" << screenId;
+    windowUnsnappedForFloat(windowId);
+    setWindowFloating(windowId, true);
+
+    // Restore pre-snap size (not position — window stays where the user dropped it).
+    // This mirrors the activated-drag path in WindowDragAdaptor::dragStopped.
+    if (m_settings && m_settings->restoreOriginalSizeOnUnsnap()) {
+        auto geo = m_service->validatedPreTileGeometry(windowId, screenId);
+        if (geo) {
+            // Emit size-only restore: use 0,0 position with the pre-snap dimensions.
+            // The effect applies width/height while preserving the window's current position.
+            QJsonObject geoJson;
+            geoJson[QLatin1String("x")] = 0;
+            geoJson[QLatin1String("y")] = 0;
+            geoJson[QLatin1String("width")] = geo->width();
+            geoJson[QLatin1String("height")] = geo->height();
+            geoJson[QLatin1String("sizeOnly")] = true;
+            Q_EMIT applyGeometryRequested(windowId,
+                                          QString::fromUtf8(QJsonDocument(geoJson).toJson(QJsonDocument::Compact)),
+                                          QString(), screenId);
+            m_service->clearPreTileGeometry(windowId);
+            qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
+        }
+    }
+}
+
 void WindowTrackingAdaptor::windowUnsnappedForFloat(const QString& windowId)
 {
     if (!validateWindowId(windowId, QStringLiteral("prepare float"))) {

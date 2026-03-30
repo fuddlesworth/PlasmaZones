@@ -50,6 +50,7 @@ qt_add_qml_module(plasmazones-settings
         qml/SnappingQuickShortcutsPage.qml
         qml/TilingAssignmentsPage.qml
         qml/TilingQuickShortcutsPage.qml
+        qml/SharedBridge.qml
         qml/SnappingBridge.qml
         qml/TilingBridge.qml
         qml/AboutPage.qml
@@ -78,10 +79,13 @@ qt_add_qml_module(plasmazones-settings
         qml/ExclusionListCard.qml
         qml/LayoutGridDelegate.qml
         qml/LayoutToolbar.qml
+        qml/LayoutFilterBar.qml
+        qml/LayoutFilterLogic.js
         qml/ZoneSelectorSection.qml
         qml/EasingPreview.qml
         qml/EasingSettings.qml
         qml/SettingsCard.qml
+        qml/GapsSettingsCard.qml
         qml/OsdCard.qml
         qml/ShortcutCaptureField.qml
         qml/ModifierComboBox.qml
@@ -89,8 +93,18 @@ qt_add_qml_module(plasmazones-settings
         qml/SettingsSpinBox.qml
         qml/SettingsToggleRow.qml
         qml/SettingsSwitch.qml
+        qml/SettingsRow.qml
+        qml/SettingsSeparator.qml
         qml/SettingsButtonGroup.qml
         qml/ColorSwatchRow.qml
+        qml/NewLayoutDialog.qml
+        qml/NewAlgorithmDialog.qml
+        qml/WizardStepIndicator.qml
+        qml/WizardFooter.qml
+        qml/WizardTemplateCard.qml
+        qml/WizardPreviewBadge.qml
+        qml/WizardConfigCard.qml
+        qml/WizardUtils.js
     NO_PLUGIN
 )
 

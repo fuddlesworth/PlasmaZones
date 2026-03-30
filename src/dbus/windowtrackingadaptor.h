@@ -106,6 +106,15 @@ public Q_SLOTS:
     void windowUnsnapped(const QString& windowId);
 
     /**
+     * Notify that a snapped window was dragged without the activation trigger.
+     * If the window was tracked as snapped, treat it as a drag-out unsnap:
+     * save pre-float zone, mark floating, and clear zone assignment so the
+     * window doesn't auto-restore to the zone on close/reopen.
+     * @param windowId Window ID from the effect
+     */
+    void notifyDragOutUnsnap(const QString& windowId);
+
+    /**
      * Batch snap confirmations: process multiple snap/unsnap in one D-Bus call.
      * Used by KWin effect after resnap stagger completes to avoid per-window D-Bus round-trips.
      * @param batchJson JSON array of {windowId, zoneId, screenId, isRestore}
@@ -878,6 +887,14 @@ private:
     bool validateDirection(const QString& direction, const QString& action);
 
     /**
+     * @brief Check if a window is excluded from keyboard shortcut operations
+     * @param windowId Full window ID to check
+     * @param action Action name for feedback signal (e.g. "move", "swap")
+     * @return true if window is excluded (caller should abort), false to proceed
+     */
+    bool isWindowExcluded(const QString& windowId, const QString& action);
+
+    /**
      * @brief Detect which screen a zone is on by finding where its center falls
      * @param zoneId Zone UUID string
      * @return Screen name, or empty string if not determinable
@@ -960,6 +977,7 @@ private:
 
     bool m_hasPendingRestores = false; // True if layout has pending restores waiting
     bool m_pendingRestoresEmitted = false; // True if we already emitted pendingRestoresAvailable
+    bool m_shutdownSaveGuard = false; // True after saveStateOnShutdown() to prevent destruction-phase saves
 };
 
 } // namespace PlasmaZones

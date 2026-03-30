@@ -9,8 +9,9 @@
 #include "autotile/AutotileConfig.h"
 #include "autotile/TilingState.h"
 #include "autotile/AlgorithmRegistry.h"
-#include "autotile/algorithms/MonocleAlgorithm.h"
 #include "core/constants.h"
+
+#include "../helpers/ScriptedAlgoTestSetup.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -27,11 +28,14 @@ class TestAutotileEngineMaster : public QObject
 {
     Q_OBJECT
 
+private:
+    PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
+
 private Q_SLOTS:
 
     void initTestCase()
     {
-        AlgorithmRegistry::instance();
+        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
     }
 
     // =========================================================================
@@ -128,15 +132,18 @@ private Q_SLOTS:
 
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
-        engine.setAlgorithm(DBus::AutotileAlgorithm::Monocle);
+        engine.setAlgorithm(QLatin1String("monocle"));
 
+        // Monocle flag requires >= 2 windows (single window is just normal tiling)
         engine.windowOpened(QStringLiteral("win-mono-1"), screenName);
+        engine.windowOpened(QStringLiteral("win-mono-2"), screenName);
         QCoreApplication::processEvents();
 
         QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
 
         TilingState* state = engine.stateForScreen(screenName);
-        state->setCalculatedZones({QRect(10, 42, 1900, 1038)});
+        const QRect fullArea(10, 42, 1900, 1038);
+        state->setCalculatedZones({fullArea, fullArea});
         engine.retile(screenName);
 
         QVERIFY(tiledSpy.count() >= 1);
@@ -157,7 +164,7 @@ private Q_SLOTS:
 
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
-        engine.setAlgorithm(DBus::AutotileAlgorithm::MasterStack);
+        engine.setAlgorithm(QLatin1String("master-stack"));
 
         engine.windowOpened(QStringLiteral("win-ms-1"), screenName);
         engine.windowOpened(QStringLiteral("win-ms-2"), screenName);

@@ -15,7 +15,6 @@ import org.kde.kirigami as Kirigami
 RowLayout {
     id: root
 
-    property string formLabel
     property int from: 0
     property int to: 100
     property int stepSize: 1
@@ -26,7 +25,6 @@ RowLayout {
 
     signal valueModified(int value)
 
-    Kirigami.FormData.label: formLabel
     spacing: Kirigami.Units.smallSpacing
 
     SpinBox {

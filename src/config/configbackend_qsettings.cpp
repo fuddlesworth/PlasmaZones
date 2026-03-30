@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "configbackend_qsettings.h"
+#include "configdefaults.h"
 #include <QColor>
 #include <QDir>
 #include <QFile>
@@ -133,17 +134,40 @@ QString QSettingsConfigGroup::readString(const QString& key, const QString& defa
 
 int QSettingsConfigGroup::readInt(const QString& key, int defaultValue) const
 {
-    return m_settings->value(key, defaultValue).toInt();
+    QVariant val = m_settings->value(key);
+    if (!val.isValid())
+        return defaultValue;
+    bool ok = false;
+    int result = val.toInt(&ok);
+    return ok ? result : defaultValue;
 }
 
 bool QSettingsConfigGroup::readBool(const QString& key, bool defaultValue) const
 {
-    return m_settings->value(key, defaultValue).toBool();
+    QVariant val = m_settings->value(key);
+    if (!val.isValid())
+        return defaultValue;
+    // QVariant::toBool() treats any non-empty string as true (including "false").
+    // Our custom ini reader stores booleans as bool-typed QVariants, but imported
+    // or hand-edited configs may store "true"/"false" strings. Handle both.
+    if (val.typeId() == QMetaType::Bool)
+        return val.toBool();
+    const QString s = val.toString().toLower().trimmed();
+    if (s == QLatin1String("true") || s == QLatin1String("1") || s == QLatin1String("yes") || s == QLatin1String("on"))
+        return true;
+    if (s == QLatin1String("false") || s == QLatin1String("0") || s == QLatin1String("no") || s == QLatin1String("off"))
+        return false;
+    return defaultValue;
 }
 
 double QSettingsConfigGroup::readDouble(const QString& key, double defaultValue) const
 {
-    return m_settings->value(key, defaultValue).toDouble();
+    QVariant val = m_settings->value(key);
+    if (!val.isValid())
+        return defaultValue;
+    bool ok = false;
+    double result = val.toDouble(&ok);
+    return ok ? result : defaultValue;
 }
 
 QColor QSettingsConfigGroup::readColor(const QString& key, const QColor& defaultValue) const
@@ -252,11 +276,17 @@ QStringList QSettingsConfigBackend::groupList() const
 
 std::unique_ptr<QSettingsConfigBackend> QSettingsConfigBackend::createDefault()
 {
-    QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-    if (configDir.isEmpty()) {
-        configDir = QDir::homePath() + QStringLiteral("/.config");
+    return std::make_unique<QSettingsConfigBackend>(ConfigDefaults::configFilePath());
+}
+
+QMap<QString, QVariant> QSettingsConfigBackend::readConfigFromDisk()
+{
+    QSettings::SettingsMap map;
+    QFile f(ConfigDefaults::configFilePath());
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        readKConfigIni(f, map);
     }
-    return std::make_unique<QSettingsConfigBackend>(configDir + QStringLiteral("/plasmazonesrc"));
+    return map;
 }
 
 } // namespace PlasmaZones

@@ -15,8 +15,8 @@ import org.plasmazones.common as QFZCommon
  */
 Window {
     // contentWrapper
-    // Note: Escape shortcut removed - window uses BypassWindowManagerHint
-    // and doesn't receive keyboard focus on Wayland
+    // Note: Escape shortcut removed - layer-shell overlay windows do not
+    // receive keyboard focus on Wayland (KeyboardInteractivityNone)
 
     id: root
 
@@ -93,12 +93,12 @@ Window {
 
     }
 
-    // Window configuration - LayerShellQt handles overlay behavior on Wayland
+    // Window configuration - QPA layer-shell plugin handles overlay behavior on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
     // Size based on container (which is inside contentWrapper)
-    width: container.width + 40
-    height: container.height + 40
+    width: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
+    height: container.height + Math.round(Kirigami.Units.gridUnit * 2.5)
     // Start hidden, will be shown with animation
     // Note: Don't set Window.opacity - use contentWrapper.opacity instead
     // QWaylandWindow::setOpacity() is not implemented and logs warnings
@@ -174,6 +174,7 @@ Window {
     Item {
         id: contentWrapper
 
+        Accessible.name: i18n("Layout indicator")
         anchors.fill: parent
         opacity: 0
 
@@ -253,7 +254,7 @@ Window {
                     source: "object-locked"
                     width: Kirigami.Units.iconSizes.large
                     height: Kirigami.Units.iconSizes.large
-                    color: "white"
+                    color: Kirigami.Theme.highlightedTextColor
                 }
 
             }

@@ -41,6 +41,7 @@
 #include "../dbus/autotileadaptor.h"
 #include "../dbus/snapadaptor.h"
 #include "../autotile/AutotileEngine.h"
+#include "../autotile/algorithms/ScriptedAlgorithmLoader.h"
 #include "../autotile/AlgorithmRegistry.h"
 #include "../snap/SnapEngine.h"
 
@@ -331,6 +332,18 @@ bool Daemon::init()
     // Initialize autotile engine
     m_autotileEngine = std::make_unique<AutotileEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(),
                                                         m_screenManager.get(), this);
+
+    // Initialize scripted algorithm loader BEFORE syncFromSettings so that
+    // user-defined algorithms are registered in AlgorithmRegistry before the
+    // engine resolves the configured algorithm ID.
+    m_scriptedAlgorithmLoader = std::make_unique<ScriptedAlgorithmLoader>();
+    // When scripted algorithms change (hot-reload), notify layout list consumers
+    connect(m_scriptedAlgorithmLoader.get(), &ScriptedAlgorithmLoader::algorithmsChanged, this, [this]() {
+        if (m_layoutAdaptor)
+            m_layoutAdaptor->notifyLayoutListChanged();
+    });
+    m_scriptedAlgorithmLoader->scanAndRegister();
+
     m_autotileEngine->syncFromSettings(m_settings.get());
     m_autotileEngine->connectToSettings(m_settings.get());
 
@@ -538,6 +551,11 @@ void Daemon::stop()
     m_geometryUpdateTimer.stop();
     m_pendingGeometryUpdates.clear();
 
+    // Disconnect scripted algorithm loader to prevent file watcher events during teardown
+    if (m_scriptedAlgorithmLoader) {
+        m_scriptedAlgorithmLoader->disconnect();
+    }
+
     // Hide overlay
     hideOverlay();
 
@@ -587,8 +605,10 @@ void Daemon::stop()
     m_snapEngine.reset();
     m_autotileEngine.reset();
 
-    // Unregister D-Bus service to prevent late calls during shutdown
-    QDBusConnection::sessionBus().unregisterService(QString(DBus::ServiceName));
+    // Unregister D-Bus object path and service to prevent late calls during shutdown
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    bus.unregisterObject(QString(DBus::ObjectPath));
+    bus.unregisterService(QString(DBus::ServiceName));
 
     m_running = false;
 }

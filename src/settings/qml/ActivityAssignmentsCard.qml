@@ -129,16 +129,17 @@ SettingsCard {
 
                     }
 
-                    // Per-screen assignments using AssignmentRow + lock toggle
+                    // Per-screen assignments using AssignmentRow + lock toggle + enable switch
                     Repeater {
                         model: root.appSettings.screens
 
                         RowLayout {
-                            id: activityScreenRow
+                            id: activityScreenContainer
 
                             required property var modelData
                             required property int index
                             property string screenName: modelData.name || ""
+                            property bool activityActive: !root.appSettings.isActivityDisabled(screenName, activityDelegate.activityId)
 
                             Layout.fillWidth: true
                             Layout.leftMargin: Kirigami.Units.gridUnit * 2
@@ -149,14 +150,14 @@ SettingsCard {
 
                                 property string monitorLayout: {
                                     void (activityDelegate._activityRevision);
-                                    return root.getScreenLayout(activityScreenRow.screenName);
+                                    return root.getScreenLayout(activityScreenContainer.screenName);
                                 }
 
                                 Layout.fillWidth: true
                                 enabled: {
                                     void (activityDelegate._activityRevision);
                                     void (root._lockRevision);
-                                    return !root.appSettings.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode);
+                                    return activityScreenContainer.activityActive && !root.appSettings.isContextLocked(activityScreenContainer.screenName, 0, activityDelegate.activityId, root.viewMode);
                                 }
                                 appSettings: root.appSettings
                                 iconSource: "video-display"
@@ -164,25 +165,25 @@ SettingsCard {
                                 layoutFilter: root.viewMode === 1 ? 1 : 0
                                 showPreview: true
                                 labelText: {
-                                    let mfr = activityScreenRow.modelData.manufacturer || "";
-                                    let mdl = activityScreenRow.modelData.model || "";
+                                    let mfr = activityScreenContainer.modelData.manufacturer || "";
+                                    let mdl = activityScreenContainer.modelData.model || "";
                                     let parts = [mfr, mdl].filter(function(s) {
                                         return s !== "";
                                     });
                                     let displayInfo = parts.join(" ");
-                                    return displayInfo ? activityScreenRow.screenName + " — " + displayInfo : activityScreenRow.screenName;
+                                    return displayInfo ? activityScreenContainer.screenName + " — " + displayInfo : activityScreenContainer.screenName;
                                 }
                                 noneText: i18n("Use default")
-                                resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.appSettings.defaultLayoutId || "")
+                                resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.viewMode === 1 ? ("autotile:" + root.appSettings.defaultAutotileAlgorithm) : (root.appSettings.defaultLayoutId || ""))
                                 currentLayoutId: {
                                     void (activityDelegate._activityRevision);
-                                    return root.getScreenActivityLayout(activityScreenRow.screenName, activityDelegate.activityId);
+                                    return root.getScreenActivityLayout(activityScreenContainer.screenName, activityDelegate.activityId);
                                 }
                                 onAssignmentSelected: (layoutId) => {
-                                    root.assignScreenActivity(activityScreenRow.screenName, activityDelegate.activityId, layoutId);
+                                    root.assignScreenActivity(activityScreenContainer.screenName, activityDelegate.activityId, layoutId);
                                 }
                                 onAssignmentCleared: {
-                                    root.clearScreenActivity(activityScreenRow.screenName, activityDelegate.activityId);
+                                    root.clearScreenActivity(activityScreenContainer.screenName, activityDelegate.activityId);
                                 }
 
                                 Connections {
@@ -209,27 +210,51 @@ SettingsCard {
                                     target: root.appSettings
                                 }
 
+                                middleContent: Component {
+                                    Switch {
+                                        enabled: true
+                                        checked: activityScreenContainer.activityActive
+                                        onToggled: {
+                                            root.appSettings.setActivityDisabled(activityScreenContainer.screenName, activityDelegate.activityId, !checked);
+                                            activityScreenContainer.activityActive = checked;
+                                        }
+                                        ToolTip.visible: hovered
+                                        ToolTip.text: checked ? i18n("Disable PlasmaZones for %1 on %2", activityDelegate.activityName, activityScreenContainer.screenName) : i18n("Enable PlasmaZones for %1 on %2", activityDelegate.activityName, activityScreenContainer.screenName)
+
+                                        Connections {
+                                            function onDisabledActivitiesChanged() {
+                                                activityScreenContainer.activityActive = !root.appSettings.isActivityDisabled(activityScreenContainer.screenName, activityDelegate.activityId);
+                                            }
+
+                                            target: root.appSettings
+                                        }
+
+                                    }
+
+                                }
+
                             }
 
                             ToolButton {
+                                enabled: activityScreenContainer.activityActive
                                 icon.name: {
                                     void (activityDelegate._activityRevision);
                                     void (root._lockRevision);
-                                    return root.appSettings.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode) ? "object-locked" : "object-unlocked";
+                                    return root.appSettings.isContextLocked(activityScreenContainer.screenName, 0, activityDelegate.activityId, root.viewMode) ? "object-locked" : "object-unlocked";
                                 }
                                 opacity: {
                                     void (activityDelegate._activityRevision);
                                     void (root._lockRevision);
-                                    return root.appSettings.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode) ? 1 : 0.4;
+                                    return root.appSettings.isContextLocked(activityScreenContainer.screenName, 0, activityDelegate.activityId, root.viewMode) ? 1 : 0.4;
                                 }
                                 display: ToolButton.IconOnly
                                 ToolTip.text: {
                                     void (activityDelegate._activityRevision);
                                     void (root._lockRevision);
-                                    return root.appSettings.isContextLocked(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode) ? i18n("Unlock layout for %1 on %2", activityDelegate.activityName, activityScreenRow.screenName) : i18n("Lock layout for %1 on %2", activityDelegate.activityName, activityScreenRow.screenName);
+                                    return root.appSettings.isContextLocked(activityScreenContainer.screenName, 0, activityDelegate.activityId, root.viewMode) ? i18n("Unlock layout for %1 on %2", activityDelegate.activityName, activityScreenContainer.screenName) : i18n("Lock layout for %1 on %2", activityDelegate.activityName, activityScreenContainer.screenName);
                                 }
                                 ToolTip.visible: hovered
-                                onClicked: root.appSettings.toggleContextLock(activityScreenRow.screenName, 0, activityDelegate.activityId, root.viewMode)
+                                onClicked: root.appSettings.toggleContextLock(activityScreenContainer.screenName, 0, activityDelegate.activityId, root.viewMode)
                             }
 
                         }

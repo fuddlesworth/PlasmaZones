@@ -33,6 +33,8 @@ ComboBox {
     property string noneText: i18n("Default")
     property string currentLayoutId: ""
     property bool showPreview: false
+    // Whether to show the "Default"/"None" entry at the top of the list
+    property bool showNoneOption: true
     // Filter layouts by category: -1 = show all, 0 = manual/zone only, 1 = autotile only
     property int layoutFilter: -1
     // The layout ID that "Default" actually resolves to at runtime.
@@ -40,7 +42,16 @@ ComboBox {
     // - Monitor dropdown: appSettings.defaultLayoutId (global default)
     // - Per-desktop dropdown: monitor's layout (or global if none)
     // - Activity dropdown: monitor's layout (or global if none)
-    property string resolvedDefaultId: appSettings ? appSettings.defaultLayoutId : ""
+    // When layoutFilter === 1 (autotile only), falls back to the global default algorithm.
+    property string resolvedDefaultId: {
+        if (!appSettings)
+            return "";
+
+        if (root.layoutFilter === 1)
+            return "autotile:" + appSettings.defaultAutotileAlgorithm;
+
+        return appSettings.defaultLayoutId;
+    }
     // Defer model swap while the popup is open to prevent scroll resets.
     // The model will update as soon as the popup closes.
     property bool _rebuildPending: false
@@ -92,14 +103,17 @@ ComboBox {
     }
 
     function _buildItems() {
-        let defaultLayout = _resolveDefaultLayout();
-        let items = [{
-            "text": noneText,
-            "value": "",
-            "layout": defaultLayout,
-            "category": root.layoutFilter >= 0 ? root.layoutFilter : getCategory(defaultLayout, -1),
-            "isDefaultOption": true
-        }];
+        let items = [];
+        if (root.showNoneOption) {
+            let defaultLayout = _resolveDefaultLayout();
+            items.push({
+                "text": noneText,
+                "value": "",
+                "layout": defaultLayout,
+                "category": root.layoutFilter >= 0 ? root.layoutFilter : getCategory(defaultLayout, -1),
+                "isDefaultOption": true
+            });
+        }
         if (appSettings && appSettings.layouts) {
             let layouts = appSettings.layouts; // cache locally — avoid repeated QVariant→JS conversion
             let layoutItems = [];
@@ -173,8 +187,6 @@ ComboBox {
     }
 
     function _doRebuild() {
-        // Defer until popup closes
-
         _rebuildScheduled = false;
         let items = _buildItems();
         if (_modelMatchesItems(items)) {
@@ -207,6 +219,7 @@ ComboBox {
         currentIndex = 0;
     }
 
+    Accessible.name: i18n("Layout selection")
     textRole: "text"
     valueRole: "value"
     model: []
@@ -302,6 +315,7 @@ ComboBox {
         readonly property bool isDefaultOption: modelData.isDefaultOption === true
         readonly property bool isCurrentSelection: root.currentIndex === index
 
+        Accessible.name: modelData.text || ""
         width: root.popup.availableWidth
         implicitHeight: Kirigami.Units.gridUnit * 6
         // Only highlight the hovered/keyboard-navigated item (standard ComboBox UX).

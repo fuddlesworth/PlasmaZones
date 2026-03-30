@@ -57,13 +57,14 @@ jobs:
             cmake ninja-build extra-cmake-modules g++ pkg-config \
             build-essential pkg-kde-tools \
             devscripts debhelper fakeroot dpkg-dev \
-            qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-tools-dev qt6-shadertools-dev \
-            kwin-dev libwayland-dev libepoxy-dev libdrm-dev libxkbcommon-dev \
+            qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-tools-dev qt6-shadertools-dev qt6-svg-dev \
+            kwin-dev libwayland-dev libvulkan-dev libepoxy-dev libdrm-dev libxkbcommon-dev \
             libkf6config-dev libkf6configwidgets-dev \
+            qt6-wayland-private-dev \
             libkf6kcmutils-dev \
             libkf6windowsystem-dev libkf6globalaccel-dev \
             libkf6notifications-dev \
-            liblayershellqtinterface-dev plasma-activities-dev
+            qt6-wayland-dev plasma-activities-dev
           # Kirigami dev package name varies across distros
           apt-get install -y --no-install-recommends libkf6kirigami-dev 2>/dev/null \
             || apt-get install -y --no-install-recommends kf6-kirigami-dev
@@ -110,13 +111,14 @@ jobs:
           dnf install -y \
             cmake ninja-build extra-cmake-modules gcc-c++ \
             qt6-qtbase-devel qt6-qtbase-private-devel \
-            qt6-qtdeclarative-devel qt6-qttools-devel qt6-qtshadertools-devel \
-            kwin-devel wayland-devel libepoxy-devel libdrm-devel \
+            qt6-qtdeclarative-devel qt6-qttools-devel qt6-qtshadertools-devel qt6-qtsvg-devel \
+            kwin-devel wayland-devel vulkan-loader-devel vulkan-headers libepoxy-devel libdrm-devel \
             kf6-kconfig-devel kf6-kconfigwidgets-devel \
             kf6-kirigami-devel \
             kf6-kcmutils-devel \
             kf6-kglobalaccel-devel \
-            layer-shell-qt-devel plasma-activities-devel
+            qt6-qtwayland-devel \
+            plasma-activities-devel
 
       - name: Setup rpmbuild
         run: rpmdev-setuptree
@@ -177,13 +179,13 @@ jobs:
             'cmake(Qt6Core)' 'cmake(Qt6DBus)' 'cmake(Qt6Gui)' \
             'cmake(Qt6Qml)' 'cmake(Qt6Quick)' 'cmake(Qt6QuickControls2)' \
             'cmake(Qt6Widgets)' 'cmake(Qt6Concurrent)' \
-            'cmake(Qt6ShaderTools)' 'cmake(Qt6ShaderToolsPrivate)' 'cmake(Qt6LinguistTools)' \
+            'cmake(Qt6ShaderTools)' 'cmake(Qt6ShaderToolsPrivate)' 'cmake(Qt6Svg)' 'cmake(Qt6LinguistTools)' \
             'cmake(KF6Config)' 'cmake(KF6ConfigWidgets)' \
             'cmake(KF6Kirigami)' \
             'cmake(KF6KCMUtils)' \
             'cmake(KF6GlobalAccel)' \
             'cmake(KF6WindowSystem)' \
-            kwin6-devel 'cmake(LayerShellQt)' 'cmake(PlasmaActivities)' \
+            kwin6-devel wayland-devel vulkan-devel 'cmake(Qt6WaylandClient)' 'cmake(Qt6WaylandClientPrivate)' 'cmake(PlasmaActivities)' \
             'pkgconfig(systemd)'
 
       - name: Setup rpmbuild
@@ -239,11 +241,11 @@ jobs:
         run: |
           pacman -S --noconfirm --needed \
             cmake ninja extra-cmake-modules base-devel \
-            qt6-base qt6-declarative qt6-tools qt6-shadertools \
-            kwin wayland libepoxy libdrm \
+            qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
+            kwin wayland vulkan-headers vulkan-icd-loader libepoxy libdrm \
             kconfig kconfigwidgets \
             kcmutils kglobalaccel \
-            layer-shell-qt plasma-activities
+            qt6-wayland plasma-activities
 
       - name: Configure
         run: |
@@ -322,11 +324,12 @@ jobs:
         run: |
           pacman -S --noconfirm --needed \
             cmake ninja extra-cmake-modules \
-            qt6-base qt6-declarative qt6-tools \
+            qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
             kwin \
             kconfig kconfigwidgets \
             kcmutils kglobalaccel \
-            layer-shell-qt plasma-activities
+            qt6-wayland plasma-activities \
+            vulkan-headers vulkan-icd-loader
 
       - name: Prepare PKGBUILD
         run: |
@@ -350,7 +353,8 @@ jobs:
           depends=(
               'qt6-base' 'qt6-declarative'
               'kconfig' 'kconfigwidgets'
-              'kcmutils' 'kwindowsystem' 'kglobalaccel'
+              'kcmutils' 'kglobalaccel'
+              'kirigami'
           )
           makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja')
           optdepends=('plasma-activities: activity-based layouts')

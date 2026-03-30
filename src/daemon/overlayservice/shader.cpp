@@ -22,7 +22,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <LayerShellQt/Window>
+#include "../../core/layersurface.h"
 
 namespace PlasmaZones {
 
@@ -315,29 +315,42 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     m_shaderPreviewScreen = screen;
     m_shaderPreviewShaderId = shaderId;
     m_shaderPreviewScreenId = screenId;
-    m_shaderPreviewWindow->setScreen(screen);
 
     // Use ScreenManager geometry (virtual screen aware) with physical fallback
     auto* mgr = ScreenManager::instance();
     QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
     const QRect previewScreenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
 
-    // Only use setGeometry for physical screens; virtual screens are positioned
-    // by LayerShellQt margins and setGeometry would cause double-offset rendering.
-    if (previewScreenGeom == screen->geometry()) {
-        m_shaderPreviewWindow->setGeometry(x, y, width, height);
-    } else {
-        m_shaderPreviewWindow->setWidth(width);
-        m_shaderPreviewWindow->setHeight(height);
+    auto* layerSurface = LayerSurface::find(m_shaderPreviewWindow);
+    if (!layerSurface) {
+        qCWarning(lcOverlay) << "showShaderPreview: no LayerSurface for preview window"
+                             << "— layer-shell may have been lost (compositor restart?)."
+                             << "Destroying and recreating the window.";
+        destroyShaderPreviewWindow();
+        createShaderPreviewWindow(screen);
+        if (!m_shaderPreviewWindow) {
+            return;
+        }
+        layerSurface = LayerSurface::find(m_shaderPreviewWindow);
+        if (!layerSurface) {
+            qCWarning(lcOverlay) << "showShaderPreview: recreated window still has no LayerSurface — aborting";
+            return;
+        }
     }
 
-    if (auto* layerWindow = LayerShellQt::Window::get(m_shaderPreviewWindow)) {
+    {
         const int localX = x - previewScreenGeom.x();
         const int localY = y - previewScreenGeom.y();
-        layerWindow->setAnchors(
-            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft));
-        layerWindow->setMargins(QMargins(localX, localY, 0, 0));
+        // Batch anchors + margins into a single propertiesChanged() emission
+        LayerSurface::BatchGuard batch(layerSurface);
+        layerSurface->setAnchors(LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft));
+        layerSurface->setMargins(QMargins(localX, localY, 0, 0));
     }
+
+    // Set window size — position is controlled by layer-surface anchors + margins,
+    // not by setX/setY which are no-ops on layer surfaces.
+    m_shaderPreviewWindow->setWidth(width);
+    m_shaderPreviewWindow->setHeight(height);
 
     // Shader properties — set all auxiliary props BEFORE shaderSource,
     // because setShaderSource() emits statusChanged() which cascades
@@ -359,14 +372,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
 
     // Start iTime animation for preview (shared timer with main overlay)
     // Must start m_shaderTimer - updateShaderUniforms() uses it and returns early if invalid
-    {
-        QMutexLocker locker(&m_shaderTimerMutex);
-        if (!m_shaderTimer.isValid()) {
-            m_shaderTimer.start();
-            m_lastFrameTime.store(0);
-            m_frameCount.store(0);
-        }
-    }
+    ensureShaderTimerStarted(m_shaderTimer, m_shaderTimerMutex, m_lastFrameTime, m_frameCount);
     startShaderAnimation();
 
     m_shaderPreviewWindow->show();
@@ -391,19 +397,13 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
             QRect vsGeom = (!sid.isEmpty() && mgr) ? mgr->screenGeometry(sid) : QRect();
             const QRect screenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
 
-            // Only use setGeometry for physical screens; virtual screens are positioned
-            // by LayerShellQt margins and setGeometry would cause double-offset rendering.
-            if (screenGeom == screen->geometry()) {
-                m_shaderPreviewWindow->setGeometry(x, y, width, height);
-            } else {
-                m_shaderPreviewWindow->setWidth(width);
-                m_shaderPreviewWindow->setHeight(height);
-            }
-
-            if (auto* layerWindow = LayerShellQt::Window::get(m_shaderPreviewWindow)) {
+            // Size only — position is controlled by layer-surface anchors + margins.
+            m_shaderPreviewWindow->setWidth(width);
+            m_shaderPreviewWindow->setHeight(height);
+            if (auto* layerSurface = LayerSurface::find(m_shaderPreviewWindow)) {
                 const int localX = x - screenGeom.x();
                 const int localY = y - screenGeom.y();
-                layerWindow->setMargins(QMargins(localX, localY, 0, 0));
+                layerSurface->setMargins(QMargins(localX, localY, 0, 0));
             }
         }
     }
@@ -453,12 +453,11 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen)
 
     window->setProperty("isShaderOverlay", true);
 
-    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        layerWindow->setScreen(screen);
-        layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
-        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-        layerWindow->setScope(QStringLiteral("plasmazones-shader-preview"));
-        layerWindow->setExclusiveZone(-1);
+    if (!configureLayerSurface(window, screen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
+                               QStringLiteral("plasmazones-shader-preview-%1").arg(Utils::screenIdentifier(screen)))) {
+        qCWarning(lcOverlay) << "Failed to configure layer surface for shader preview on" << screen->name();
+        delete window;
+        return;
     }
 
     m_shaderPreviewWindow = window;
@@ -469,6 +468,10 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen)
 void OverlayService::destroyShaderPreviewWindow()
 {
     if (m_shaderPreviewWindow) {
+        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
+        if (m_shaderPreviewScreen) {
+            disconnect(m_shaderPreviewScreen, nullptr, m_shaderPreviewWindow, nullptr);
+        }
         m_shaderPreviewWindow->close();
         m_shaderPreviewWindow->deleteLater();
         m_shaderPreviewWindow = nullptr;

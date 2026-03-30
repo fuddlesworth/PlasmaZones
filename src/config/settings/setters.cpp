@@ -8,21 +8,13 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../autotile/AlgorithmRegistry.h"
+#include "../../autotile/AutotileConfig.h"
 
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Activation setters
 // ═══════════════════════════════════════════════════════════════════════════════
-
-void Settings::setShiftDragToActivate(bool enable)
-{
-    if (m_shiftDragToActivate != enable) {
-        m_shiftDragToActivate = enable;
-        Q_EMIT shiftDragToActivateChanged();
-        Q_EMIT settingsChanged();
-    }
-}
 
 void Settings::setDragActivationTriggers(const QVariantList& triggers)
 {
@@ -41,12 +33,12 @@ void Settings::setZoneSpanModifier(DragModifier modifier)
         // Keep triggers in sync: update first trigger's modifier to match
         if (!m_zoneSpanTriggers.isEmpty()) {
             auto first = m_zoneSpanTriggers.first().toMap();
-            first[QStringLiteral("modifier")] = static_cast<int>(modifier);
+            first[ConfigDefaults::triggerModifierField()] = static_cast<int>(modifier);
             m_zoneSpanTriggers[0] = first;
         } else {
             QVariantMap trigger;
-            trigger[QStringLiteral("modifier")] = static_cast<int>(modifier);
-            trigger[QStringLiteral("mouseButton")] = 0;
+            trigger[ConfigDefaults::triggerModifierField()] = static_cast<int>(modifier);
+            trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
             m_zoneSpanTriggers = {trigger};
         }
         Q_EMIT zoneSpanModifierChanged();
@@ -63,7 +55,7 @@ void Settings::setZoneSpanTriggers(const QVariantList& triggers)
         // Sync legacy zoneSpanModifier from first trigger with a non-zero modifier
         DragModifier synced = DragModifier::Disabled;
         for (const auto& t : capped) {
-            int mod = t.toMap().value(QStringLiteral("modifier"), 0).toInt();
+            int mod = t.toMap().value(ConfigDefaults::triggerModifierField(), 0).toInt();
             if (mod != 0) {
                 synced = static_cast<DragModifier>(qBound(0, mod, static_cast<int>(DragModifier::CtrlAltMeta)));
                 break;
@@ -108,6 +100,58 @@ bool Settings::isMonitorDisabled(const QString& screenIdOrName) const
         if (!connector.isEmpty() && m_disabledMonitors.contains(connector)) {
             return true;
         }
+    }
+    return false;
+}
+
+SETTINGS_SETTER(const QStringList&, DisabledDesktops, m_disabledDesktops, disabledDesktopsChanged)
+
+bool Settings::isDesktopDisabled(const QString& screenIdOrName, int desktop) const
+{
+    if (desktop <= 0)
+        return false;
+
+    // Resolve screen identifier bidirectionally (same pattern as isMonitorDisabled)
+    QStringList namesToCheck = {screenIdOrName};
+    if (Utils::isConnectorName(screenIdOrName)) {
+        QString resolved = Utils::screenIdForName(screenIdOrName);
+        if (resolved != screenIdOrName)
+            namesToCheck.append(resolved);
+    } else {
+        QString connector = Utils::screenNameForId(screenIdOrName);
+        if (!connector.isEmpty() && connector != screenIdOrName)
+            namesToCheck.append(connector);
+    }
+
+    const QString desktopStr = QString::number(desktop);
+    for (const QString& name : std::as_const(namesToCheck)) {
+        if (m_disabledDesktops.contains(name + QLatin1Char('/') + desktopStr))
+            return true;
+    }
+    return false;
+}
+
+SETTINGS_SETTER(const QStringList&, DisabledActivities, m_disabledActivities, disabledActivitiesChanged)
+
+bool Settings::isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const
+{
+    if (activityId.isEmpty())
+        return false;
+
+    QStringList namesToCheck = {screenIdOrName};
+    if (Utils::isConnectorName(screenIdOrName)) {
+        QString resolved = Utils::screenIdForName(screenIdOrName);
+        if (resolved != screenIdOrName)
+            namesToCheck.append(resolved);
+    } else {
+        QString connector = Utils::screenNameForId(screenIdOrName);
+        if (!connector.isEmpty() && connector != screenIdOrName)
+            namesToCheck.append(connector);
+    }
+
+    for (const QString& name : std::as_const(namesToCheck)) {
+        if (m_disabledActivities.contains(name + QLatin1Char('/') + activityId))
+            return true;
     }
     return false;
 }
@@ -414,18 +458,18 @@ SETTINGS_SETTER_CLAMPED(ZoneSelectorMaxRows, m_zoneSelectorMaxRows, zoneSelector
 
 SETTINGS_SETTER(bool, AutotileEnabled, m_autotileEnabled, autotileEnabledChanged)
 
-void Settings::setAutotileAlgorithm(const QString& algorithm)
+void Settings::setDefaultAutotileAlgorithm(const QString& algorithm)
 {
     // Validate algorithm ID against the algorithm registry (single source of truth)
     QString validatedAlgorithm = algorithm;
-    if (!AlgorithmRegistry::instance()->algorithm(algorithm)) {
+    if (!algorithm.startsWith(QLatin1String("script:")) && !AlgorithmRegistry::instance()->algorithm(algorithm)) {
         qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm << "- using default";
         validatedAlgorithm = AlgorithmRegistry::defaultAlgorithmId();
     }
 
-    if (m_autotileAlgorithm != validatedAlgorithm) {
-        m_autotileAlgorithm = validatedAlgorithm;
-        Q_EMIT autotileAlgorithmChanged();
+    if (m_defaultAutotileAlgorithm != validatedAlgorithm) {
+        m_defaultAutotileAlgorithm = validatedAlgorithm;
+        Q_EMIT defaultAutotileAlgorithmChanged();
         Q_EMIT settingsChanged();
     }
 }
@@ -434,14 +478,16 @@ SETTINGS_SETTER_CLAMPED_QREAL(AutotileSplitRatio, m_autotileSplitRatio, autotile
                               ConfigDefaults::autotileSplitRatioMin(), ConfigDefaults::autotileSplitRatioMax())
 SETTINGS_SETTER_CLAMPED(AutotileMasterCount, m_autotileMasterCount, autotileMasterCountChanged,
                         ConfigDefaults::autotileMasterCountMin(), ConfigDefaults::autotileMasterCountMax())
-SETTINGS_SETTER_CLAMPED_QREAL(AutotileCenteredMasterSplitRatio, m_autotileCenteredMasterSplitRatio,
-                              autotileCenteredMasterSplitRatioChanged,
-                              ConfigDefaults::autotileCenteredMasterSplitRatioMin(),
-                              ConfigDefaults::autotileCenteredMasterSplitRatioMax())
-SETTINGS_SETTER_CLAMPED(AutotileCenteredMasterMasterCount, m_autotileCenteredMasterMasterCount,
-                        autotileCenteredMasterMasterCountChanged,
-                        ConfigDefaults::autotileCenteredMasterMasterCountMin(),
-                        ConfigDefaults::autotileCenteredMasterMasterCountMax())
+void Settings::setAutotilePerAlgorithmSettings(const QVariantMap& value)
+{
+    // Round-trip sanitize: same validation the load() path uses
+    auto sanitized = AutotileConfig::perAlgoToVariantMap(AutotileConfig::perAlgoFromVariantMap(value));
+    if (m_autotilePerAlgorithmSettings != sanitized) {
+        m_autotilePerAlgorithmSettings = sanitized;
+        Q_EMIT autotilePerAlgorithmSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
 SETTINGS_SETTER_CLAMPED(AutotileInnerGap, m_autotileInnerGap, autotileInnerGapChanged,
                         ConfigDefaults::autotileInnerGapMin(), ConfigDefaults::autotileInnerGapMax())
 SETTINGS_SETTER_CLAMPED(AutotileOuterGap, m_autotileOuterGap, autotileOuterGapChanged,
@@ -530,7 +576,24 @@ void Settings::setLockedScreens(const QStringList& screens)
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Rendering
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void Settings::setRenderingBackend(const QString& backend)
+{
+    const QString value = ConfigDefaults::normalizeRenderingBackend(backend);
+    if (m_renderingBackend != value) {
+        m_renderingBackend = value;
+        Q_EMIT renderingBackendChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Shader Effects
+// ═══════════════════════════════════════════════════════════════════════════════
+
 SETTINGS_SETTER(bool, EnableShaderEffects, m_enableShaderEffects, enableShaderEffectsChanged)
 SETTINGS_SETTER_CLAMPED(ShaderFrameRate, m_shaderFrameRate, shaderFrameRateChanged,
                         ConfigDefaults::shaderFrameRateMin(), ConfigDefaults::shaderFrameRateMax())

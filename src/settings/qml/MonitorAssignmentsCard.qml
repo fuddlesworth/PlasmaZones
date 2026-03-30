@@ -133,9 +133,33 @@ SettingsCard {
 
                         }
 
+                        Switch {
+                            id: monitorEnableSwitch
+
+                            property bool monitorActive: !root.appSettings.isMonitorDisabled(monitorDelegate.screenName)
+
+                            checked: monitorActive
+                            onToggled: {
+                                root.appSettings.setMonitorDisabled(monitorDelegate.screenName, !checked);
+                                monitorActive = checked;
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.text: checked ? i18n("Disable PlasmaZones on this monitor") : i18n("Enable PlasmaZones on this monitor")
+
+                            Connections {
+                                function onDisabledMonitorsChanged() {
+                                    monitorEnableSwitch.monitorActive = !root.appSettings.isMonitorDisabled(monitorDelegate.screenName);
+                                }
+
+                                target: root.appSettings
+                            }
+
+                        }
+
                         Label {
                             text: root.viewMode === 1 ? i18n("Algorithm:") : i18n("All Desktops:")
                             Layout.alignment: Qt.AlignVCenter
+                            enabled: monitorEnableSwitch.checked
                         }
 
                         // Screen-level assignment using LayoutComboBox directly
@@ -147,7 +171,7 @@ SettingsCard {
                             enabled: {
                                 void (monitorDelegate._assignmentRevision);
                                 void (root._lockRevision);
-                                return !root.appSettings.isScreenLocked(monitorDelegate.screenName, root.viewMode);
+                                return monitorEnableSwitch.checked && !root.appSettings.isScreenLocked(monitorDelegate.screenName, root.viewMode);
                             }
                             appSettings: root.appSettings
                             noneText: i18n("Default")
@@ -199,7 +223,7 @@ SettingsCard {
                             enabled: {
                                 void (monitorDelegate._assignmentRevision);
                                 void (root._lockRevision);
-                                return !root.appSettings.isScreenLocked(monitorDelegate.screenName, root.viewMode);
+                                return monitorEnableSwitch.checked && !root.appSettings.isScreenLocked(monitorDelegate.screenName, root.viewMode);
                             }
                             onClicked: {
                                 if (root.viewMode === 1)
@@ -213,6 +237,7 @@ SettingsCard {
                         }
 
                         ToolButton {
+                            enabled: monitorEnableSwitch.checked
                             icon.name: {
                                 void (monitorDelegate._assignmentRevision);
                                 void (root._lockRevision);
@@ -239,6 +264,7 @@ SettingsCard {
 
                         ToolButton {
                             visible: root.appSettings.virtualDesktopCount > 1
+                            enabled: monitorEnableSwitch.checked
                             icon.name: monitorDelegate.expanded ? "go-up" : "go-down"
                             text: monitorDelegate.expanded ? "" : i18n("Per-desktop")
                             display: AbstractButton.TextBesideIcon
@@ -249,32 +275,12 @@ SettingsCard {
 
                     }
 
-                    // Monitor disable option
-                    CheckBox {
-                        id: disableCheck
-
-                        Layout.fillWidth: true
-                        text: i18n("Disable PlasmaZones on this monitor")
-                        checked: root.appSettings.isMonitorDisabled(monitorDelegate.screenName)
-                        onToggled: root.appSettings.setMonitorDisabled(monitorDelegate.screenName, checked)
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("When enabled, zones will not appear on this monitor")
-
-                        Connections {
-                            function onDisabledMonitorsChanged() {
-                                disableCheck.checked = root.appSettings.isMonitorDisabled(monitorDelegate.screenName);
-                            }
-
-                            target: root.appSettings
-                        }
-
-                    }
-
                     // Per-desktop section (expandable)
                     ColumnLayout {
                         Layout.fillWidth: true
                         Layout.leftMargin: Kirigami.Units.gridUnit * 2
                         visible: monitorDelegate.expanded && root.appSettings.virtualDesktopCount > 1
+                        enabled: monitorEnableSwitch.checked
                         spacing: Kirigami.Units.smallSpacing
 
                         Kirigami.Separator {
@@ -298,6 +304,7 @@ SettingsCard {
                                 required property int index
                                 property int desktopNumber: index + 1
                                 property string desktopName: root.appSettings.virtualDesktopNames[index] || i18n("Desktop %1", desktopNumber)
+                                property bool desktopActive: !root.appSettings.isDesktopDisabled(monitorDelegate.screenName, desktopNumber)
 
                                 Layout.fillWidth: true
                                 spacing: Kirigami.Units.smallSpacing
@@ -315,7 +322,7 @@ SettingsCard {
                                     enabled: {
                                         void (monitorDelegate._assignmentRevision);
                                         void (root._lockRevision);
-                                        return !root.appSettings.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode);
+                                        return desktopRowContainer.desktopActive && !root.appSettings.isContextLocked(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode);
                                     }
                                     appSettings: root.appSettings
                                     iconSource: "preferences-desktop-virtual"
@@ -323,7 +330,15 @@ SettingsCard {
                                     layoutFilter: root.viewMode === 1 ? 1 : 0
                                     showPreview: true
                                     noneText: i18n("Use default")
-                                    resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.appSettings.defaultLayoutId || "")
+                                    resolvedDefaultId: {
+                                        if (monitorLayout !== "")
+                                            return monitorLayout;
+
+                                        if (root.viewMode === 1)
+                                            return "autotile:" + root.appSettings.defaultAutotileAlgorithm;
+
+                                        return root.appSettings.defaultLayoutId || "";
+                                    }
                                     currentLayoutId: {
                                         void (monitorDelegate._assignmentRevision);
                                         if (root.viewMode === 1) {
@@ -346,9 +361,34 @@ SettingsCard {
                                         else
                                             root.appSettings.clearScreenDesktopAssignment(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
                                     }
+
+                                    middleContent: Component {
+                                        Switch {
+                                            enabled: true
+                                            checked: desktopRowContainer.desktopActive
+                                            onToggled: {
+                                                root.appSettings.setDesktopDisabled(monitorDelegate.screenName, desktopRowContainer.desktopNumber, !checked);
+                                                desktopRowContainer.desktopActive = checked;
+                                            }
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: checked ? i18n("Disable PlasmaZones on %1", desktopRowContainer.desktopName) : i18n("Enable PlasmaZones on %1", desktopRowContainer.desktopName)
+
+                                            Connections {
+                                                function onDisabledDesktopsChanged() {
+                                                    desktopRowContainer.desktopActive = !root.appSettings.isDesktopDisabled(monitorDelegate.screenName, desktopRowContainer.desktopNumber);
+                                                }
+
+                                                target: root.appSettings
+                                            }
+
+                                        }
+
+                                    }
+
                                 }
 
                                 ToolButton {
+                                    enabled: desktopRowContainer.desktopActive
                                     icon.name: {
                                         void (monitorDelegate._assignmentRevision);
                                         void (root._lockRevision);
@@ -369,6 +409,35 @@ SettingsCard {
                                     onClicked: root.appSettings.toggleContextLock(monitorDelegate.screenName, desktopRowContainer.desktopNumber, "", root.viewMode)
                                 }
 
+                            }
+
+                        }
+
+                        Kirigami.InlineMessage {
+                            function allDesktopsDisabledOnScreen() {
+                                let count = root.appSettings.virtualDesktopCount;
+                                if (count <= 1)
+                                    return false;
+
+                                for (let i = 1; i <= count; i++) {
+                                    if (!root.appSettings.isDesktopDisabled(monitorDelegate.screenName, i))
+                                        return false;
+
+                                }
+                                return true;
+                            }
+
+                            Layout.fillWidth: true
+                            visible: allDesktopsDisabledOnScreen()
+                            type: Kirigami.MessageType.Warning
+                            text: i18n("All desktops are disabled on this monitor.")
+
+                            Connections {
+                                function onDisabledDesktopsChanged() {
+                                    parent.visible = parent.allDesktopsDisabledOnScreen();
+                                }
+
+                                target: root.appSettings
                             }
 
                         }

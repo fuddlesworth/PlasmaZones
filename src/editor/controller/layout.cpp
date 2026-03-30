@@ -415,7 +415,11 @@ void EditorController::loadLayout(const QString& layoutId)
         m_cachedShaderParameters.clear();
     } else {
         QVariantMap info = getShaderInfo(m_currentShaderId);
-        m_cachedShaderParameters = info.value(QLatin1String("parameters")).toList();
+        if (info.contains(QLatin1String("parameters"))) {
+            m_cachedShaderParameters = info.value(QLatin1String("parameters")).toList();
+        } else {
+            m_cachedShaderParameters.clear();
+        }
     }
 
     // Strip stale params accumulated from previous shader selections

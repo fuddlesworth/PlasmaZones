@@ -4,11 +4,30 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "config/configdefaults.h"
 #include <QColor>
+#include <QHash>
 #include <QJsonObject>
 #include <QString>
+#include <QVariantMap>
 
 namespace PlasmaZones {
+
+/**
+ * @brief Per-algorithm saved settings (split ratio + master count)
+ *
+ * Replaces AlgorithmSettings for clarity. Saved when switching away
+ * from an algorithm, restored when switching back.
+ */
+struct AlgorithmSettings
+{
+    qreal splitRatio = 0.5;
+    int masterCount = 1;
+    bool operator==(const AlgorithmSettings& other) const
+    {
+        return masterCount == other.masterCount && qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio);
+    }
+};
 
 /**
  * @brief Configuration for autotiling behavior
@@ -35,7 +54,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Common values: "master-stack", "bsp", "columns", "dwindle", "spiral", "monocle"
      * See AlgorithmRegistry for available algorithms.
      */
-    QString algorithmId = QStringLiteral("bsp");
+    QString algorithmId = ConfigDefaults::defaultAutotileAlgorithm();
 
     // ═══════════════════════════════════════════════════════════════════════
     // Master Area Settings
@@ -47,7 +66,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 0.1 to 0.9
      * Default: 0.6 (60% master, 40% stack)
      */
-    qreal splitRatio = 0.6;
+    qreal splitRatio = AutotileDefaults::DefaultSplitRatio;
 
     /**
      * @brief Number of windows in master area
@@ -55,24 +74,17 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 1 to 5
      * Default: 1
      */
-    int masterCount = 1;
+    int masterCount = AutotileDefaults::DefaultMasterCount;
 
-    /**
-     * @brief Per-algorithm split ratio for centered-master
-     *
-     * Semantically different from splitRatio (center column width vs master area width).
-     * Range: 0.1 to 0.9
-     * Default: 0.5
-     */
-    qreal centeredMasterSplitRatio = 0.5;
+    /// Per-algorithm saved settings (split ratio + master count).
+    /// Saved when switching away from an algorithm, restored when switching back.
+    /// Key: algorithm ID (e.g. "master-stack", "centered-master", "script:deck")
+    QHash<QString, AlgorithmSettings> savedAlgorithmSettings;
 
-    /**
-     * @brief Per-algorithm master count for centered-master
-     *
-     * Range: 1 to 5
-     * Default: 1
-     */
-    int centeredMasterMasterCount = 1;
+    /// Convert per-algorithm settings from QVariantMap (Settings layer) to internal hash
+    static QHash<QString, AlgorithmSettings> perAlgoFromVariantMap(const QVariantMap& map);
+    /// Convert internal hash to QVariantMap for the Settings layer
+    static QVariantMap perAlgoToVariantMap(const QHash<QString, AlgorithmSettings>& hash);
 
     // ═══════════════════════════════════════════════════════════════════════
     // Gap Settings
@@ -84,7 +96,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 0 to 50
      * Default: 8
      */
-    int innerGap = 8;
+    int innerGap = AutotileDefaults::DefaultGap;
 
     /**
      * @brief Gap from screen edges in pixels (uniform)
@@ -92,7 +104,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 0 to 50
      * Default: 8
      */
-    int outerGap = 8;
+    int outerGap = AutotileDefaults::DefaultGap;
 
     /**
      * @brief Whether to use per-side outer gaps instead of uniform
@@ -171,7 +183,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 1 to 12
      * Default: 6
      */
-    int maxWindows = 6;
+    int maxWindows = AutotileDefaults::DefaultMaxWindows;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Comparison and Serialization

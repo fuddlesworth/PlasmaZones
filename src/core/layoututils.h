@@ -61,6 +61,30 @@ struct PLASMAZONES_EXPORT UnifiedLayoutEntry
     int aspectRatioClass = 0; ///< AspectRatioClass enum value (0=Any, 1=Standard, etc.)
     qreal referenceAspectRatio = 0.0; ///< For fixed-geometry layouts: the screen AR zones were designed for
     bool recommended = true; ///< True if layout matches the current screen's aspect ratio
+    QString zoneNumberDisplay; ///< How zone numbers are displayed in previews ("all", "last", etc.)
+    bool memory = false; ///< True if algorithm maintains persistent state (SplitTree)
+    bool supportsMasterCount = false; ///< True if algorithm supports configurable master window count
+    bool supportsSplitRatio = false; ///< True if algorithm supports configurable split ratio
+    bool producesOverlappingZones = false; ///< True if algorithm can produce overlapping zones
+    bool isScripted = false; ///< True if algorithm is loaded from a .js script file
+    bool isUserScript = false; ///< True if script is from the user's local directory
+
+    // ── Generic section grouping (data-driven, consumed by LayoutsPage) ──
+    QString sectionKey; ///< Grouping key (e.g. "any", "standard", "built-in", "custom")
+    QString sectionLabel; ///< Display label for the section header (i18n'd)
+    int sectionOrder = 0; ///< Sort priority (lower = first)
+
+    /// Whether this autotile entry should show as a "system" (lock icon) item.
+    /// Built-in C++ algorithms are always system entries. Scripted algorithms
+    /// are system entries only if they are system-installed (not user scripts).
+    bool isSystemEntry() const
+    {
+        if (!isAutotile)
+            return false;
+        if (!isScripted)
+            return true; // Built-in C++ algorithm
+        return !isUserScript; // System-installed script = system, user script = not system
+    }
 
     /**
      * @brief Extract the algorithm ID from an autotile entry

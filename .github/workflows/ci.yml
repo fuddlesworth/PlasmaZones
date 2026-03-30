@@ -30,11 +30,12 @@ jobs:
         run: |
           pacman -S --noconfirm --needed \
             cmake ninja extra-cmake-modules \
-            qt6-base qt6-declarative qt6-tools qt6-shadertools \
+            qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
             kwin \
             kconfig kconfigwidgets \
-            kcmutils kglobalaccel \
-            layer-shell-qt plasma-activities
+            kcmutils kglobalaccel kirigami \
+            qt6-wayland wayland plasma-activities \
+            vulkan-headers vulkan-icd-loader
 
       - name: Configure
         run: |

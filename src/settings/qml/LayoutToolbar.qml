@@ -23,6 +23,9 @@ RowLayout {
     signal requestImportFromKZones()
     signal requestImportKZonesFile()
     signal requestOpenLayoutsFolder()
+    signal requestCreateNewAlgorithm()
+    signal requestImportAlgorithm()
+    signal requestOpenAlgorithmsFolder()
     signal viewModeRequested(int mode)
 
     spacing: Kirigami.Units.smallSpacing
@@ -80,6 +83,31 @@ RowLayout {
         icon.name: "folder-open"
         flat: true
         onClicked: root.requestOpenLayoutsFolder()
+    }
+
+    // New Algorithm — only in Tiling view
+    Button {
+        visible: root.viewMode === 1
+        text: i18n("New Algorithm")
+        icon.name: "list-add"
+        onClicked: root.requestCreateNewAlgorithm()
+    }
+
+    // Import Algorithm — only in Tiling view
+    Button {
+        visible: root.viewMode === 1
+        text: i18n("Import")
+        icon.name: "document-import"
+        onClicked: root.requestImportAlgorithm()
+    }
+
+    // Open Algorithms Folder — only in Tiling view
+    Button {
+        visible: root.viewMode === 1
+        text: i18n("Open Folder")
+        icon.name: "folder-open"
+        flat: true
+        onClicked: root.requestOpenAlgorithmsFolder()
     }
 
     Item {

@@ -12,12 +12,13 @@ depends=(
     'qt6-base'
     'qt6-declarative'
     'qt6-shadertools'
+    'qt6-svg'
     'kconfig'
     'kconfigwidgets'
-    'ki18n'
+    'kirigami'
     'kcmutils'
     'kglobalaccel'
-    'layer-shell-qt'
+    'qt6-wayland'
 )
 optdepends=(
     'plasma-activities: activity-based layouts'

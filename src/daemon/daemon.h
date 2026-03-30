@@ -39,6 +39,7 @@ class UnifiedLayoutController;
 class AutotileAdaptor;
 class AutotileEngine;
 class IWindowEngine;
+class ScriptedAlgorithmLoader;
 class SnapAdaptor;
 class SnapEngine;
 
@@ -296,6 +297,9 @@ private:
 
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
+
+    // Scripted algorithm loader (file watcher for user-defined JS algorithms)
+    std::unique_ptr<ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;
 
     // Window engines
     std::unique_ptr<AutotileEngine> m_autotileEngine;

@@ -12,6 +12,7 @@
 #include "core/constants.h"
 #include "config/configbackend_qsettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/ScriptedAlgoTestSetup.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -42,12 +43,13 @@ class TestSettingsBridge : public QObject
 
 private:
     std::unique_ptr<IsolatedConfigGuard> m_configGuard;
+    PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
 
 private Q_SLOTS:
 
     void initTestCase()
     {
-        AlgorithmRegistry::instance();
+        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
     }
 
     void init()
@@ -108,41 +110,43 @@ private Q_SLOTS:
         engine.config()->maxWindows = 4;
         engine.retile();
 
-        // The backfill is called from syncFromSettings/setAlgorithm, not retile().
-        // Trigger it manually via the engine's exposed method pattern.
-        // Since backfillWindows is private, we test the observable effect through
-        // the settings bridge: config maxWindows increase alone does not trigger
-        // backfill without syncFromSettings. This test verifies the gate behavior.
+        // backfillWindows is private and only invoked via syncFromSettings(), which
+        // requires a fully-wired Settings object. Without that wiring, retile()
+        // alone does not trigger backfill — it only re-tiles already-tiled windows.
+        // Therefore this assertion can only verify the maxWindows gate kept the
+        // original 2 windows tiled; it cannot verify that win3 was backfilled.
+        // A full-integration test with Settings + syncFromSettings is needed to
+        // exercise the real backfill path (see TestSettingsIntegration).
         QVERIFY(state->tiledWindowCount() >= 2);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // centeredMasterSplitRatio retile scope
+    // savedAlgorithmSettings isolation
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testSettingsBridge_centeredMasterSplitRatio_onlyRetilesCenteredMaster()
+    void testSettingsBridge_savedAlgorithmSettings_onlyAffectsActiveAlgorithm()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
-        // Set algorithm to something other than centered-master
-        engine.setAlgorithm(DBus::AutotileAlgorithm::MasterStack);
+        // Set algorithm to master-stack first
+        engine.setAlgorithm(QLatin1String("master-stack"));
 
-        // Store a centeredMasterSplitRatio value in config
-        engine.config()->centeredMasterSplitRatio = 0.45;
+        // Store saved settings for centered-master in the per-algorithm map
+        engine.config()->savedAlgorithmSettings[QStringLiteral("centered-master")] = {0.45, 2};
 
-        // The centeredMasterSplitRatio only affects the active split ratio when
-        // the algorithm IS centered-master. When it's master-stack, changes
-        // to centeredMasterSplitRatio should NOT alter the active split ratio.
-        const qreal originalRatio = engine.config()->splitRatio;
+        // Capture the master-stack ratio before mutation
+        const qreal masterStackRatio = engine.config()->splitRatio;
 
-        // NOTE: This assertion is trivially true by struct layout -- originalRatio is
-        // read from config->splitRatio and compared to config->splitRatio in the same
-        // scope with no intervening mutation. The real intent is to document that
-        // centeredMasterSplitRatio is a separate field from splitRatio and changing
-        // it does NOT affect the active split ratio when the algorithm is master-stack.
-        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, originalRatio));
+        // Mutate the saved centered-master ratio — should NOT affect the active ratio
+        engine.config()->savedAlgorithmSettings[QStringLiteral("centered-master")] = {0.35, 3};
+        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, masterStackRatio));
+
+        // Now switch to centered-master — saved settings should be applied
+        engine.setAlgorithm(QLatin1String("centered-master"));
+        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, 0.35));
+        QCOMPARE(engine.config()->masterCount, 3);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -154,7 +158,7 @@ private Q_SLOTS:
         // Save state
         {
             AutotileEngine engine(nullptr, nullptr, nullptr);
-            engine.setAlgorithm(DBus::AutotileAlgorithm::BSP);
+            engine.setAlgorithm(QLatin1String("bsp"));
 
             TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
             state->addWindow(QStringLiteral("win1"));
@@ -175,7 +179,7 @@ private Q_SLOTS:
             engine.loadState();
 
             // Algorithm should be restored
-            QCOMPARE(engine.algorithm(), DBus::AutotileAlgorithm::BSP);
+            QCOMPARE(engine.algorithm(), QLatin1String("bsp"));
 
             // Per-screen state should be restored
             TilingState* state1 = engine.stateForScreen(QStringLiteral("eDP-1"));

@@ -8,6 +8,7 @@
 #include <QScreen>
 #include <cmath>
 #include "pz_i18n.h"
+#include "../config/configdefaults.h"
 #include "../daemon/shortcutbackend.h"
 #include "windowtrackingadaptor.h"
 #include "../core/interfaces.h"
@@ -126,8 +127,8 @@ bool WindowDragAdaptor::anyTriggerHeld(const QVariantList& triggers, Qt::Keyboar
 {
     for (const auto& t : triggers) {
         const auto map = t.toMap();
-        const int mod = map.value(QStringLiteral("modifier"), 0).toInt();
-        const int btn = map.value(QStringLiteral("mouseButton"), 0).toInt();
+        const int mod = map.value(ConfigDefaults::triggerModifierField(), 0).toInt();
+        const int btn = map.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt();
         // AND semantics: both modifier and mouse button must match when both are set.
         // A zero field means "don't care" (always matches). At least one must be non-zero.
         const bool modMatch = (mod == 0) || checkModifier(mod, mods);
@@ -299,7 +300,9 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     if (selectorScreenId.isEmpty() && screen) {
         selectorScreenId = Utils::screenIdentifier(screen);
     }
-    if (screen && m_settings->isMonitorDisabled(selectorScreenId)) {
+    if (screen
+        && isContextDisabled(m_settings, selectorScreenId, m_layoutManager->currentVirtualDesktop(),
+                             m_layoutManager->currentActivity())) {
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;
             m_overlayService->hideZoneSelector();

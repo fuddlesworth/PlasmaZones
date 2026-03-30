@@ -14,39 +14,74 @@ TilingAlgorithm::TilingAlgorithm(QObject* parent)
 {
 }
 
-int TilingAlgorithm::masterZoneIndex() const noexcept
+int TilingAlgorithm::masterZoneIndex() const
 {
     return -1; // Default: no master concept (subclasses override if they have one)
 }
 
-bool TilingAlgorithm::supportsMasterCount() const noexcept
+bool TilingAlgorithm::supportsMasterCount() const
 {
     return false;
 }
 
-bool TilingAlgorithm::supportsSplitRatio() const noexcept
+bool TilingAlgorithm::supportsSplitRatio() const
 {
     return false;
 }
 
-qreal TilingAlgorithm::defaultSplitRatio() const noexcept
+qreal TilingAlgorithm::defaultSplitRatio() const
 {
     return DefaultSplitRatio;
 }
 
-int TilingAlgorithm::minimumWindows() const noexcept
+int TilingAlgorithm::minimumWindows() const
 {
     return 1;
 }
 
-int TilingAlgorithm::defaultMaxWindows() const noexcept
+int TilingAlgorithm::defaultMaxWindows() const
 {
     return DefaultMaxWindows;
 }
 
-bool TilingAlgorithm::producesOverlappingZones() const noexcept
+bool TilingAlgorithm::producesOverlappingZones() const
 {
     return false;
+}
+
+QString TilingAlgorithm::zoneNumberDisplay() const noexcept
+{
+    return QStringLiteral("all");
+}
+
+bool TilingAlgorithm::centerLayout() const
+{
+    return false;
+}
+
+bool TilingAlgorithm::isScripted() const noexcept
+{
+    return false;
+}
+
+bool TilingAlgorithm::isUserScript() const noexcept
+{
+    return false;
+}
+
+bool TilingAlgorithm::supportsMinSizes() const noexcept
+{
+    return true;
+}
+
+bool TilingAlgorithm::supportsMemory() const noexcept
+{
+    return false;
+}
+
+void TilingAlgorithm::prepareTilingState(TilingState* /*state*/) const
+{
+    // Default no-op. Memory-based algorithms override to ensure their SplitTree exists.
 }
 
 QVector<int> TilingAlgorithm::distributeEvenly(int total, int count)
@@ -232,6 +267,40 @@ int TilingAlgorithm::minWidthAt(const QVector<QSize>& minSizes, int index)
 int TilingAlgorithm::minHeightAt(const QVector<QSize>& minSizes, int index)
 {
     return (index >= 0 && index < minSizes.size()) ? std::max(0, minSizes[index].height()) : 0;
+}
+
+void TilingAlgorithm::applyPerWindowMinSize(int& width, int& height, const QVector<QSize>& minSizes, int index)
+{
+    if (index < minSizes.size()) {
+        if (minSizes[index].width() > 0) {
+            width = std::max(width, minSizes[index].width());
+        }
+        if (minSizes[index].height() > 0) {
+            height = std::max(height, minSizes[index].height());
+        }
+    }
+}
+
+void TilingAlgorithm::solveTwoPartMinSizes(int contentDim, int& firstDim, int& secondDim, int minFirst, int minSecond)
+{
+    const int totalMin = std::max(minFirst, 0) + std::max(minSecond, 0);
+    if (totalMin > contentDim && totalMin > 0) {
+        firstDim = static_cast<int>(static_cast<qint64>(contentDim) * std::max(minFirst, 1) / totalMin);
+        secondDim = contentDim - firstDim;
+    } else {
+        if (minFirst > 0 && firstDim < minFirst) {
+            firstDim = minFirst;
+            secondDim = contentDim - firstDim;
+        }
+        if (minSecond > 0 && secondDim < minSecond) {
+            secondDim = minSecond;
+            firstDim = contentDim - secondDim;
+        }
+    }
+
+    // Clamp to non-negative to prevent negative dimensions when mins exceed contentDim
+    firstDim = std::max(0, firstDim);
+    secondDim = std::max(0, secondDim);
 }
 
 TilingAlgorithm::ThreeColumnWidths TilingAlgorithm::solveThreeColumnWidths(int areaX, int contentWidth, int innerGap,

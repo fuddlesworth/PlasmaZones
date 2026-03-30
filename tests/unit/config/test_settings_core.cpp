@@ -267,19 +267,18 @@ private Q_SLOTS:
     }
 
     /**
-     * When config has a legacy DragActivationModifier int but no DragActivationTriggers
-     * JSON, load should migrate the legacy value into the trigger list format.
+     * When config has no DragActivationTriggers JSON, load should use the
+     * default trigger list (Alt modifier, no mouse button).
      */
-    void testLoadActivation_migrationFromLegacyFormat()
+    void testLoadActivation_missingTriggersUsesDefault()
     {
         IsolatedConfigGuard guard;
 
-        // Write legacy format: DragActivationModifier=1 (Shift), no DragActivationTriggers key
+        // Write activation config without DragActivationTriggers
         {
             auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
             auto activation = backend->group(QStringLiteral("Activation"));
-            activation->writeInt(QStringLiteral("DragActivationModifier"), 1); // Shift
-            activation->writeInt(QStringLiteral("DragActivationMouseButton"), 0);
+            activation->writeBool(QStringLiteral("SnappingEnabled"), true);
             // Deliberately do NOT write DragActivationTriggers
             activation.reset();
             backend->sync();
@@ -288,11 +287,62 @@ private Q_SLOTS:
         Settings settings;
 
         QVariantList triggers = settings.dragActivationTriggers();
-        QVERIFY2(!triggers.isEmpty(), "Legacy DragActivationModifier must be migrated to trigger list");
+        QVERIFY2(!triggers.isEmpty(), "Missing DragActivationTriggers must fall back to defaults");
         QVariantMap first = triggers.first().toMap();
-        // The pre-written DragActivationModifier=1 (Shift) is read correctly and
-        // migrated into the trigger list format.
-        QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 1); // Shift (as written)
+        // Default: Alt modifier (3), no mouse button (0)
+        QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3);
+        QCOMPARE(first.value(QStringLiteral("mouseButton")).toInt(), 0);
+    }
+
+    /**
+     * When DragActivationTriggers contains corrupt/malformed JSON, load should
+     * fall back to the default trigger list rather than crashing.
+     */
+    void testLoadActivation_corruptJsonUsesDefault()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto activation = backend->group(QStringLiteral("Activation"));
+            activation->writeString(QStringLiteral("DragActivationTriggers"), QStringLiteral("{not valid json!}"));
+            activation.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+
+        QVariantList triggers = settings.dragActivationTriggers();
+        QVERIFY2(!triggers.isEmpty(), "Corrupt JSON must fall back to defaults");
+        QVariantMap first = triggers.first().toMap();
+        QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3);
+        QCOMPARE(first.value(QStringLiteral("mouseButton")).toInt(), 0);
+    }
+
+    /**
+     * When ZoneSpanModifier is set but ZoneSpanTriggers JSON is absent,
+     * the fallback trigger should use the actual ZoneSpanModifier value,
+     * not the static default.
+     */
+    void testLoadActivation_zoneSpanTriggersUsesActualModifier()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto activation = backend->group(QStringLiteral("Activation"));
+            activation->writeInt(QStringLiteral("ZoneSpanModifier"), 3); // Alt
+            // Deliberately do NOT write ZoneSpanTriggers
+            activation.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+
+        QVariantList triggers = settings.zoneSpanTriggers();
+        QVERIFY2(!triggers.isEmpty(), "Missing ZoneSpanTriggers must create trigger from ZoneSpanModifier value");
+        QVariantMap first = triggers.first().toMap();
+        QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3);
     }
 };
 

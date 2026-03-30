@@ -127,7 +127,6 @@ Window {
         readonly property int paddingSide: Kirigami.Units.gridUnit
         readonly property int containerRadius: Kirigami.Units.largeSpacing * 2
         readonly property int indicatorSpacing: Kirigami.Units.gridUnit
-        readonly property real backdropAlpha: 0.3
         // Card preview
         readonly property int previewWidth: 160
         // Show/hide animation
@@ -233,18 +232,12 @@ Window {
         anchors.fill: parent
         opacity: 0
 
-        // Backdrop - semi-transparent dim, click outside to close
-        Rectangle {
+        // Backdrop — click outside to dismiss (transparent, no dim)
+        MouseArea {
             anchors.fill: parent
-            color: "transparent"
-
-            MouseArea {
-                anchors.fill: parent
-                onClicked: root.hide()
-                Accessible.name: i18n("Dismiss layout picker")
-                Accessible.role: Accessible.Button
-            }
-
+            onClicked: root.hide()
+            Accessible.name: i18n("Dismiss layout picker")
+            Accessible.role: Accessible.Button
         }
 
         // Main container card

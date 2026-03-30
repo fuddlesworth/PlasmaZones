@@ -35,8 +35,6 @@ public:
     static constexpr int MaxTriggersPerAction = 4;
 
     // Activation settings
-    Q_PROPERTY(bool shiftDragToActivate READ shiftDragToActivate WRITE setShiftDragToActivate NOTIFY
-                   shiftDragToActivateChanged)
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
                    dragActivationTriggersChanged)
     Q_PROPERTY(bool zoneSpanEnabled READ zoneSpanEnabled WRITE setZoneSpanEnabled NOTIFY zoneSpanEnabledChanged)
@@ -52,6 +50,10 @@ public:
                    showZonesOnAllMonitorsChanged)
     Q_PROPERTY(
         QStringList disabledMonitors READ disabledMonitors WRITE setDisabledMonitors NOTIFY disabledMonitorsChanged)
+    Q_PROPERTY(
+        QStringList disabledDesktops READ disabledDesktops WRITE setDisabledDesktops NOTIFY disabledDesktopsChanged)
+    Q_PROPERTY(QStringList disabledActivities READ disabledActivities WRITE setDisabledActivities NOTIFY
+                   disabledActivitiesChanged)
     Q_PROPERTY(bool showZoneNumbers READ showZoneNumbers WRITE setShowZoneNumbers NOTIFY showZoneNumbersChanged)
     Q_PROPERTY(
         bool flashZonesOnSwitch READ flashZonesOnSwitch WRITE setFlashZonesOnSwitch NOTIFY flashZonesOnSwitchChanged)
@@ -160,16 +162,14 @@ public:
 
     // Autotiling Settings
     Q_PROPERTY(bool autotileEnabled READ autotileEnabled WRITE setAutotileEnabled NOTIFY autotileEnabledChanged)
-    Q_PROPERTY(
-        QString autotileAlgorithm READ autotileAlgorithm WRITE setAutotileAlgorithm NOTIFY autotileAlgorithmChanged)
+    Q_PROPERTY(QString defaultAutotileAlgorithm READ defaultAutotileAlgorithm WRITE setDefaultAutotileAlgorithm NOTIFY
+                   defaultAutotileAlgorithmChanged)
     Q_PROPERTY(
         qreal autotileSplitRatio READ autotileSplitRatio WRITE setAutotileSplitRatio NOTIFY autotileSplitRatioChanged)
     Q_PROPERTY(
         int autotileMasterCount READ autotileMasterCount WRITE setAutotileMasterCount NOTIFY autotileMasterCountChanged)
-    Q_PROPERTY(qreal autotileCenteredMasterSplitRatio READ autotileCenteredMasterSplitRatio WRITE
-                   setAutotileCenteredMasterSplitRatio NOTIFY autotileCenteredMasterSplitRatioChanged)
-    Q_PROPERTY(int autotileCenteredMasterMasterCount READ autotileCenteredMasterMasterCount WRITE
-                   setAutotileCenteredMasterMasterCount NOTIFY autotileCenteredMasterMasterCountChanged)
+    Q_PROPERTY(QVariantMap autotilePerAlgorithmSettings READ autotilePerAlgorithmSettings WRITE
+                   setAutotilePerAlgorithmSettings NOTIFY autotilePerAlgorithmSettingsChanged)
     Q_PROPERTY(int autotileInnerGap READ autotileInnerGap WRITE setAutotileInnerGap NOTIFY autotileInnerGapChanged)
     Q_PROPERTY(int autotileOuterGap READ autotileOuterGap WRITE setAutotileOuterGap NOTIFY autotileOuterGapChanged)
     Q_PROPERTY(bool autotileUsePerSideOuterGap READ autotileUsePerSideOuterGap WRITE setAutotileUsePerSideOuterGap
@@ -238,6 +238,9 @@ public:
                    setAutotileDecMasterCountShortcut NOTIFY autotileDecMasterCountShortcutChanged)
     Q_PROPERTY(QString autotileRetileShortcut READ autotileRetileShortcut WRITE setAutotileRetileShortcut NOTIFY
                    autotileRetileShortcutChanged)
+
+    // Rendering
+    Q_PROPERTY(QString renderingBackend READ renderingBackend WRITE setRenderingBackend NOTIFY renderingBackendChanged)
 
     // Shader Effects
     Q_PROPERTY(bool enableShaderEffects READ enableShaderEffects WRITE setEnableShaderEffects NOTIFY
@@ -367,12 +370,6 @@ public:
     // No singleton - use dependency injection instead
 
     // ISettings interface implementation
-    bool shiftDragToActivate() const override
-    {
-        return m_shiftDragToActivate;
-    }
-    void setShiftDragToActivate(bool enable) override;
-
     QVariantList dragActivationTriggers() const override
     {
         return m_dragActivationTriggers;
@@ -422,6 +419,20 @@ public:
     }
     void setDisabledMonitors(const QStringList& screenIdOrNames) override;
     bool isMonitorDisabled(const QString& screenIdOrName) const override;
+
+    QStringList disabledDesktops() const override
+    {
+        return m_disabledDesktops;
+    }
+    void setDisabledDesktops(const QStringList& entries) override;
+    bool isDesktopDisabled(const QString& screenIdOrName, int desktop) const override;
+
+    QStringList disabledActivities() const override
+    {
+        return m_disabledActivities;
+    }
+    void setDisabledActivities(const QStringList& entries) override;
+    bool isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const override;
 
     bool showZoneNumbers() const override
     {
@@ -824,11 +835,11 @@ public:
     }
     void setAutotileEnabled(bool enabled);
 
-    QString autotileAlgorithm() const
+    QString defaultAutotileAlgorithm() const
     {
-        return m_autotileAlgorithm;
+        return m_defaultAutotileAlgorithm;
     }
-    void setAutotileAlgorithm(const QString& algorithm);
+    void setDefaultAutotileAlgorithm(const QString& algorithm);
 
     qreal autotileSplitRatio() const
     {
@@ -842,17 +853,11 @@ public:
     }
     void setAutotileMasterCount(int count);
 
-    qreal autotileCenteredMasterSplitRatio() const
+    QVariantMap autotilePerAlgorithmSettings() const
     {
-        return m_autotileCenteredMasterSplitRatio;
+        return m_autotilePerAlgorithmSettings;
     }
-    void setAutotileCenteredMasterSplitRatio(qreal ratio);
-
-    int autotileCenteredMasterMasterCount() const
-    {
-        return m_autotileCenteredMasterMasterCount;
-    }
-    void setAutotileCenteredMasterMasterCount(int count);
+    void setAutotilePerAlgorithmSettings(const QVariantMap& settings);
 
     int autotileInnerGap() const
     {
@@ -1087,6 +1092,13 @@ public:
     void setVirtualScreenConfigs(const QHash<QString, VirtualScreenConfig>& configs);
     void setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config);
     VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
+
+    // Rendering (ISettings)
+    QString renderingBackend() const override
+    {
+        return m_renderingBackend;
+    }
+    void setRenderingBackend(const QString& backend) override;
 
     // Shader Effects
     bool enableShaderEffects() const override
@@ -1464,7 +1476,7 @@ private:
      * @param settingName Human-readable name for warning messages
      * @return Validated integer value
      */
-    int readValidatedInt(QSettingsConfigGroup& group, const char* key, int defaultValue, int min, int max,
+    int readValidatedInt(QSettingsConfigGroup& group, const QString& key, int defaultValue, int min, int max,
                          const char* settingName);
 
     /**
@@ -1475,7 +1487,7 @@ private:
      * @param settingName Human-readable name for warning messages
      * @return Validated QColor value
      */
-    QColor readValidatedColor(QSettingsConfigGroup& group, const char* key, const QColor& defaultValue,
+    QColor readValidatedColor(QSettingsConfigGroup& group, const QString& key, const QColor& defaultValue,
                               const char* settingName);
 
     /**
@@ -1494,17 +1506,6 @@ private:
      * @return Parsed list (capped at MaxTriggersPerAction), or std::nullopt if empty/invalid
      */
     static std::optional<QVariantList> parseTriggerListJson(const QString& json);
-
-    /**
-     * @brief Load a trigger list from config JSON, with error handling and cap-at-4
-     * @param group QSettingsConfigGroup to read from
-     * @param key Config key for the JSON trigger list
-     * @param legacyModifier Fallback modifier enum value if no JSON exists
-     * @param legacyMouseButton Fallback mouse button if no JSON exists
-     * @return Parsed trigger list (capped at 4 entries)
-     */
-    static QVariantList loadTriggerList(QSettingsConfigGroup& group, const QString& key, int legacyModifier,
-                                        int legacyMouseButton);
 
     /**
      * @brief Save a trigger list to config as compact JSON
@@ -1550,7 +1551,6 @@ private:
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Activation
-    bool m_shiftDragToActivate = ConfigDefaults::shiftDrag(); // Deprecated - kept for migration
     QVariantList m_dragActivationTriggers; // [{modifier: int, mouseButton: int}, ...]
     bool m_zoneSpanEnabled = ConfigDefaults::zoneSpanEnabled();
     DragModifier m_zoneSpanModifier = DragModifier::Ctrl;
@@ -1561,6 +1561,8 @@ private:
     // Display
     bool m_showZonesOnAllMonitors = ConfigDefaults::showOnAllMonitors();
     QStringList m_disabledMonitors;
+    QStringList m_disabledDesktops;
+    QStringList m_disabledActivities;
     bool m_showZoneNumbers = ConfigDefaults::showNumbers();
     bool m_flashZonesOnSwitch = ConfigDefaults::flashOnSwitch();
     bool m_showOsdOnLayoutSwitch = ConfigDefaults::showOsdOnLayoutSwitch();
@@ -1650,11 +1652,10 @@ private:
 
     // Autotiling Settings
     bool m_autotileEnabled = ConfigDefaults::autotileEnabled();
-    QString m_autotileAlgorithm = QString(DBus::AutotileAlgorithm::BSP);
+    QString m_defaultAutotileAlgorithm = ConfigDefaults::defaultAutotileAlgorithm();
     qreal m_autotileSplitRatio = ConfigDefaults::autotileSplitRatio();
     int m_autotileMasterCount = ConfigDefaults::autotileMasterCount();
-    qreal m_autotileCenteredMasterSplitRatio = ConfigDefaults::autotileCenteredMasterSplitRatio();
-    int m_autotileCenteredMasterMasterCount = ConfigDefaults::autotileCenteredMasterMasterCount();
+    QVariantMap m_autotilePerAlgorithmSettings;
     int m_autotileInnerGap = ConfigDefaults::autotileInnerGap();
     int m_autotileOuterGap = ConfigDefaults::autotileOuterGap();
     bool m_autotileUsePerSideOuterGap = ConfigDefaults::autotileUsePerSideOuterGap();
@@ -1695,6 +1696,9 @@ private:
     QString m_autotileIncMasterCountShortcut = ConfigDefaults::autotileIncMasterCountShortcut();
     QString m_autotileDecMasterCountShortcut = ConfigDefaults::autotileDecMasterCountShortcut();
     QString m_autotileRetileShortcut = ConfigDefaults::autotileRetileShortcut();
+
+    // Rendering
+    QString m_renderingBackend = ConfigDefaults::renderingBackend();
 
     // Shader Effects
     bool m_enableShaderEffects = ConfigDefaults::enableShaderEffects();

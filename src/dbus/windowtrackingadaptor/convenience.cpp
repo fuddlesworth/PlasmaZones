@@ -136,7 +136,9 @@ QString WindowTrackingAdaptor::getAllWindowStates()
     for (const QString& windowId : std::as_const(allWindowIds)) {
         QJsonObject state;
         state[QLatin1String("windowId")] = windowId;
+        // Primary zone (backwards compat)
         state[QLatin1String("zoneId")] = m_service->zoneForWindow(windowId);
+        // All zones the window spans
         QStringList zones = m_service->zonesForWindow(windowId);
         QJsonArray zonesArr;
         for (const QString& z : zones)

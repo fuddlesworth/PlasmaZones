@@ -13,6 +13,7 @@
 #include <QSize>
 #include <QString>
 #include <QStringList>
+#include <functional>
 #include <memory>
 
 #include "OverflowManager.h"
@@ -90,6 +91,12 @@ public:
      */
     bool isEnabled() const noexcept;
 
+    /// @brief Read-only access to per-screen tiling states (used by daemon for state persistence)
+    const QHash<TilingStateKey, TilingState*>& screenStates() const
+    {
+        return m_screenStates;
+    }
+
     /**
      * @brief Check if a specific screen uses autotile
      * @param screenId Screen to check
@@ -141,6 +148,22 @@ public:
      * @param activity Activity ID (empty string for no activity)
      */
     void setCurrentActivity(const QString& activity);
+
+    /**
+     * @brief Pin screens where all autotiled windows are sticky (on all desktops)
+     *
+     * For screens where every tiled/floating window is sticky, pins the
+     * TilingStateKey desktop to the current effective desktop so that
+     * currentKeyForScreen() continues to resolve the existing state after
+     * a desktop switch. Screens where not all windows are sticky are unpinned,
+     * with state migrated to m_currentDesktop if necessary.
+     *
+     * Must be called BEFORE setCurrentDesktop()/setCurrentActivity() so the
+     * pins are evaluated against the pre-switch context.
+     *
+     * @param isWindowSticky Callback returning true if the window is on all desktops
+     */
+    void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky);
 
     /**
      * @brief Prune TilingState and saved floating entries for a removed desktop
@@ -758,10 +781,17 @@ private:
 
     /**
      * @brief Construct a TilingStateKey for the current desktop/activity
+     *
+     * Respects per-screen desktop overrides for screens where all autotiled
+     * windows are sticky (on all desktops). This prevents desktop switches
+     * from creating orphan TilingStates when the KWin script
+     * "virtualdesktopsonlyonprimary" pins secondary-screen windows.
      */
     TilingStateKey currentKeyForScreen(const QString& screenId) const
     {
-        return TilingStateKey{screenId, m_currentDesktop, m_currentActivity};
+        auto it = m_screenDesktopOverride.constFind(screenId);
+        int desktop = (it != m_screenDesktopOverride.constEnd()) ? it.value() : m_currentDesktop;
+        return TilingStateKey{screenId, desktop, m_currentActivity};
     }
 
     /**
@@ -867,15 +897,10 @@ private:
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;
+    bool m_algorithmEverSet = false; ///< True after first successful setAlgorithm() call
     QString m_activeScreen; // Last-focused screen (updated by onWindowFocused)
     QHash<TilingStateKey, TilingState*> m_screenStates; // Owned via Qt parent (this)
-public:
-    const QHash<TilingStateKey, TilingState*>& screenStates() const
-    {
-        return m_screenStates;
-    }
 
-private:
     QHash<QString, TilingStateKey> m_windowToStateKey; // windowId -> owning state key
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
 
@@ -885,6 +910,14 @@ private:
     int m_currentDesktop = 1;
     QString m_currentActivity;
     bool m_isDesktopContextSwitch = false;
+
+    // Per-screen desktop override for sticky screens. When the KWin script
+    // "virtualdesktopsonlyonprimary" pins all secondary-screen windows to all
+    // desktops, the TilingStateKey desktop dimension becomes meaningless for
+    // those screens. This map pins such screens to their original desktop so
+    // currentKeyForScreen() returns the key of the existing TilingState rather
+    // than a new (empty) key after a desktop switch.
+    QHash<QString, int> m_screenDesktopOverride;
 
     // Floating window IDs preserved across mode switches, per desktop/activity.
     // When autotile is deactivated, floated windows are saved here so that

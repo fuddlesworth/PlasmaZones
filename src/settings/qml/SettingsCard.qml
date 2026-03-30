@@ -41,6 +41,11 @@ Item {
     // Collapse
     property bool collapsible: false
     property bool collapsed: false
+    // Header enable toggle
+    property bool showToggle: false
+    property bool toggleChecked: false
+
+    signal toggleClicked(bool checked)
 
     onCollapsedChanged: {
         if (collapsed) {
@@ -107,12 +112,6 @@ Item {
             visible: root.headerText.length > 0 || root.header !== null
             color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
             radius: cardBg.radius
-            // Reparent custom header
-            onVisibleChanged: {
-                if (root.header !== null && visible)
-                    root.header.parent = headerLoader;
-
-            }
 
             // Square off the bottom corners since content is below
             Rectangle {
@@ -124,6 +123,7 @@ Item {
 
             // Click to collapse/expand
             MouseArea {
+                z: -1
                 anchors.fill: parent
                 enabled: root.collapsible
                 cursorShape: root.collapsible ? Qt.PointingHandCursor : Qt.ArrowCursor
@@ -136,14 +136,6 @@ Item {
 
                 width: parent.width
                 sourceComponent: root.header !== null ? null : defaultHeaderComponent
-                onLoaded: {
-                    if (root.header !== null) {
-                        root.header.parent = headerLoader;
-                        root.header.width = Qt.binding(function() {
-                            return headerLoader.width;
-                        });
-                    }
-                }
             }
 
             Component {
@@ -157,7 +149,17 @@ Item {
                         text: root.headerText
                         level: 3
                         padding: Kirigami.Units.smallSpacing
+                        leftPadding: Kirigami.Units.smallSpacing
                         Layout.fillWidth: true
+                    }
+
+                    // Header enable toggle
+                    SettingsSwitch {
+                        visible: root.showToggle
+                        checked: root.toggleChecked
+                        accessibleName: root.headerText
+                        Layout.rightMargin: Kirigami.Units.smallSpacing
+                        onToggled: root.toggleClicked(checked)
                     }
 
                     // Collapse chevron
@@ -204,19 +206,14 @@ Item {
             width: parent.width
             height: contentColumn.implicitHeight
             clip: true
-            opacity: 1
+            opacity: root.showToggle && !root.toggleChecked ? 0.5 : 1
+            enabled: root.showToggle ? root.toggleChecked : true
 
             Item {
                 id: contentColumn
 
                 width: parent.width
                 implicitHeight: root.contentItem ? root.contentItem.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
-                // Reparent contentItem here
-                onWidthChanged: {
-                    if (root.contentItem)
-                        root.contentItem.width = width;
-
-                }
             }
 
             SequentialAnimation {
@@ -254,15 +251,28 @@ Item {
                 NumberAnimation {
                     target: contentClip
                     property: "opacity"
-                    to: 1
+                    to: root.showToggle && !root.toggleChecked ? 0.5 : 1
                     duration: 150
                     easing.type: Easing.OutCubic
                 }
 
                 ScriptAction {
-                    script: contentClip.height = Qt.binding(function() {
-                        return contentColumn.implicitHeight;
-                    })
+                    script: {
+                        contentClip.height = Qt.binding(function() {
+                            return contentColumn.implicitHeight;
+                        });
+                        contentClip.opacity = Qt.binding(function() {
+                            return root.showToggle && !root.toggleChecked ? 0.5 : 1;
+                        });
+                    }
+                }
+
+            }
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 200
+                    easing.type: Easing.OutCubic
                 }
 
             }

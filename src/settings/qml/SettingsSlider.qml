@@ -18,7 +18,6 @@ import org.kde.kirigami as Kirigami
 RowLayout {
     id: root
 
-    property string formLabel
     property real from: 0
     property real to: 100
     property real stepSize: 1
@@ -32,8 +31,14 @@ RowLayout {
 
     signal moved(real value)
 
-    Kirigami.FormData.label: formLabel
     spacing: Kirigami.Units.smallSpacing
+
+    Binding {
+        target: slider
+        property: "value"
+        value: root.value
+        when: !slider.pressed
+    }
 
     Slider {
         id: slider
@@ -42,7 +47,6 @@ RowLayout {
         from: root.from
         to: root.to
         stepSize: root.stepSize
-        value: root.value
         onMoved: {
             root.value = value;
             root.moved(value);

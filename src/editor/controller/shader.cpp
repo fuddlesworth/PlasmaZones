@@ -319,7 +319,11 @@ void EditorController::setCurrentShaderId(const QString& id)
 
     if (m_currentShaderId != id) {
         auto* cmd = new UpdateShaderIdCommand(this, m_currentShaderId, id);
-        m_undoController->push(cmd);
+        if (m_undoController) {
+            m_undoController->push(cmd);
+        } else {
+            delete cmd;
+        }
     }
 }
 
@@ -333,7 +337,11 @@ void EditorController::setCurrentShaderIdDirect(const QString& id)
             m_cachedShaderParameters.clear();
         } else {
             QVariantMap info = getShaderInfo(id);
-            m_cachedShaderParameters = info.value(QLatin1String("parameters")).toList();
+            if (info.contains(QLatin1String("parameters"))) {
+                m_cachedShaderParameters = info.value(QLatin1String("parameters")).toList();
+            } else {
+                m_cachedShaderParameters.clear();
+            }
         }
 
         markUnsaved();

@@ -24,6 +24,7 @@ Flickable {
     _layoutBridge: QtObject {
         readonly property var layouts: settingsController.layouts
         readonly property string defaultLayoutId: appSettings.defaultLayoutId
+        readonly property string defaultAutotileAlgorithm: appSettings.defaultAutotileAlgorithm
     }
 
     property var _screenStates: []

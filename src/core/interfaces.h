@@ -93,6 +93,10 @@ public:
     virtual bool autotileUseSystemBorderColors() const = 0;
     virtual void setAutotileUseSystemBorderColors(bool use) = 0;
 
+    // Rendering backend (pipeline-level, not specific to any sub-interface)
+    virtual QString renderingBackend() const = 0;
+    virtual void setRenderingBackend(const QString& backend) = 0;
+
     // Persistence (unique to ISettings)
     virtual void load() = 0;
     virtual void save() = 0;
@@ -100,7 +104,6 @@ public:
 
 Q_SIGNALS:
     void settingsChanged();
-    void shiftDragToActivateChanged(); // Deprecated
     void dragActivationTriggersChanged();
     void zoneSpanEnabledChanged();
     void zoneSpanModifierChanged();
@@ -109,6 +112,8 @@ Q_SIGNALS:
     void snappingEnabledChanged();
     void showZonesOnAllMonitorsChanged();
     void disabledMonitorsChanged();
+    void disabledDesktopsChanged();
+    void disabledActivitiesChanged();
     void showZoneNumbersChanged();
     void flashZonesOnSwitchChanged();
     void showOsdOnLayoutSwitchChanged();
@@ -170,6 +175,8 @@ Q_SIGNALS:
     void perScreenZoneSelectorSettingsChanged();
     void perScreenAutotileSettingsChanged();
     void perScreenSnappingSettingsChanged();
+    // Rendering
+    void renderingBackendChanged();
     // Shader effects
     void enableShaderEffectsChanged();
     void shaderFrameRateChanged();
@@ -242,11 +249,10 @@ Q_SIGNALS:
 
     // Autotile settings
     void autotileEnabledChanged();
-    void autotileAlgorithmChanged();
+    void defaultAutotileAlgorithmChanged();
     void autotileSplitRatioChanged();
     void autotileMasterCountChanged();
-    void autotileCenteredMasterSplitRatioChanged();
-    void autotileCenteredMasterMasterCountChanged();
+    void autotilePerAlgorithmSettingsChanged();
     void autotileInnerGapChanged();
     void autotileOuterGapChanged();
     void autotileUsePerSideOuterGapChanged();

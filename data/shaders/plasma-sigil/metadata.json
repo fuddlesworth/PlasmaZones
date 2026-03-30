@@ -1,0 +1,195 @@
+{
+    "id": "plasma-sigil",
+    "name": "Plasma Sigil",
+    "category": "Energy",
+    "description": "Holographic PlasmaZones icon rendered as a glowing energy sigil: five zone rectangles from the app icon are procedurally recreated with signed distance fields and animated with gradient energy flow, racing perimeter pulses, and energy bridge connections through layout dividers; bass pulses the sigil and expands the glow, mids cycle the gradient palette, treble spawns edge sparks along the icon strokes",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "fragmentShader": "effect.frag",
+    "vertexShader": "zone.vert",
+    "parameters": [
+        {
+            "id": "iconScale",
+            "name": "Icon Scale",
+            "group": "Icon",
+            "type": "float",
+            "slot": 0,
+            "default": 0.7,
+            "min": 0.3,
+            "max": 1.0
+        },
+        {
+            "id": "strokeWidth",
+            "name": "Stroke Width",
+            "group": "Icon",
+            "type": "float",
+            "slot": 1,
+            "default": 0.012,
+            "min": 0.004,
+            "max": 0.03
+        },
+        {
+            "id": "glowIntensity",
+            "name": "Glow Intensity",
+            "group": "Icon",
+            "type": "float",
+            "slot": 2,
+            "default": 0.8,
+            "min": 0.1,
+            "max": 2.0
+        },
+        {
+            "id": "pulseSpeed",
+            "name": "Pulse Speed",
+            "group": "Animation",
+            "type": "float",
+            "slot": 3,
+            "default": 1.0,
+            "min": 0.0,
+            "max": 3.0
+        },
+        {
+            "id": "gradientSpeed",
+            "name": "Gradient Flow Speed",
+            "group": "Animation",
+            "type": "float",
+            "slot": 4,
+            "default": 0.3,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "sparkRate",
+            "name": "Edge Spark Intensity",
+            "group": "Animation",
+            "type": "float",
+            "slot": 5,
+            "default": 0.6,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "ambientGlow",
+            "name": "Ambient Glow",
+            "group": "Appearance",
+            "type": "float",
+            "slot": 6,
+            "default": 0.15,
+            "min": 0.0,
+            "max": 0.5
+        },
+        {
+            "id": "audioReactivity",
+            "name": "Audio Reactivity",
+            "group": "Audio",
+            "type": "float",
+            "slot": 7,
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "fillOpacity",
+            "name": "Zone Fill Opacity",
+            "group": "Appearance",
+            "type": "float",
+            "slot": 8,
+            "default": 0.85,
+            "min": 0.3,
+            "max": 1.0
+        },
+        {
+            "id": "bloomStrength",
+            "name": "Bloom Strength",
+            "group": "Appearance",
+            "type": "float",
+            "slot": 9,
+            "default": 0.4,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "labelGlowSpread",
+            "name": "Label Glow Spread",
+            "group": "Labels",
+            "type": "float",
+            "slot": 10,
+            "default": 3.0,
+            "min": 1.0,
+            "max": 6.0
+        },
+        {
+            "id": "labelBrightness",
+            "name": "Label Brightness",
+            "group": "Labels",
+            "type": "float",
+            "slot": 11,
+            "default": 2.0,
+            "min": 1.0,
+            "max": 4.0
+        },
+        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 12, "default": true},
+        {
+            "id": "backgroundIntensity",
+            "name": "Background Intensity",
+            "group": "Appearance",
+            "type": "float",
+            "slot": 13,
+            "default": 0.12,
+            "min": 0.0,
+            "max": 0.4
+        },
+        {
+            "id": "veinIntensity",
+            "name": "Energy Vein Intensity",
+            "group": "Appearance",
+            "type": "float",
+            "slot": 14,
+            "default": 0.07,
+            "min": 0.0,
+            "max": 0.25
+        },
+        {
+            "id": "zoneTint",
+            "name": "Zone Color Tint",
+            "group": "Appearance",
+            "type": "float",
+            "slot": 15,
+            "default": 0.15,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "cyanColor",
+            "name": "Gradient Cyan",
+            "group": "Colors",
+            "type": "color",
+            "slot": 0,
+            "default": "#22D3EE"
+        },
+        {
+            "id": "blueColor",
+            "name": "Gradient Blue",
+            "group": "Colors",
+            "type": "color",
+            "slot": 1,
+            "default": "#3B82F6"
+        },
+        {
+            "id": "purpleColor",
+            "name": "Gradient Purple",
+            "group": "Colors",
+            "type": "color",
+            "slot": 2,
+            "default": "#A855F7"
+        },
+        {
+            "id": "roseColor",
+            "name": "Gradient Rose",
+            "group": "Colors",
+            "type": "color",
+            "slot": 3,
+            "default": "#F43F5E"
+        }
+    ]
+}

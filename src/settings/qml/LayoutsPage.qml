@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import "LayoutFilterLogic.js" as Logic
 import QtCore
 import QtQuick
 import QtQuick.Controls
@@ -20,8 +21,11 @@ ColumnLayout {
     readonly property int layoutListMinHeight: Kirigami.Units.gridUnit * 20
     // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms
     property int viewMode: 0
-    // Aspect ratio labels come from Main.qml (window.aspectRatioLabels)
-    readonly property var aspectRatioLabels: window.aspectRatioLabels
+
+    // m-15: Extract URL-to-path helper to avoid duplicating regex in FileDialogs
+    function filePathFromUrl(url) {
+        return url.toString().replace(/^file:\/\/+/, "/");
+    }
 
     spacing: 0
 
@@ -45,17 +49,43 @@ ColumnLayout {
         Layout.bottomMargin: Kirigami.Units.smallSpacing
         appSettings: root.settingsBridge
         viewMode: root.viewMode
-        onRequestCreateNewLayout: settingsController.createNewLayout()
+        onRequestCreateNewLayout: newLayoutDialog.open()
+        onRequestCreateNewAlgorithm: newAlgorithmDialog.open()
         onRequestImportLayout: importDialog.open()
         onRequestImportFromKZones: settingsController.importFromKZones()
         onRequestImportKZonesFile: kzonesFileDialog.open()
         onRequestOpenLayoutsFolder: settingsController.openLayoutsFolder()
+        onRequestImportAlgorithm: algorithmImportDialog.open()
+        onRequestOpenAlgorithmsFolder: settingsController.openAlgorithmsFolder()
         onViewModeRequested: (mode) => {
             root.viewMode = mode;
             layoutGrid.selectedLayoutId = "";
-            layoutGrid.rebuildModel();
+            // rebuildModel() already triggered by filterBar.onViewModeChanged → loadState → filterSettingsChanged
             layoutGrid.selectDefaultLayout(mode);
         }
+    }
+
+    Kirigami.Separator {
+        Layout.fillWidth: true
+        Layout.topMargin: Kirigami.Units.smallSpacing
+        Layout.bottomMargin: Kirigami.Units.smallSpacing
+    }
+
+    // ─── Filter / Group / Sort bar ──────────────────────────────────────
+    LayoutFilterBar {
+        id: filterBar
+
+        Layout.fillWidth: true
+        Layout.topMargin: Kirigami.Units.smallSpacing
+        Layout.bottomMargin: Kirigami.Units.smallSpacing
+        viewMode: root.viewMode
+        onFilterSettingsChanged: layoutGrid.rebuildModel()
+    }
+
+    Kirigami.Separator {
+        Layout.fillWidth: true
+        Layout.topMargin: Kirigami.Units.smallSpacing
+        Layout.bottomMargin: Kirigami.Units.smallSpacing
     }
 
     // ─── Scrollable content ──────────────────────────────────────────────
@@ -83,10 +113,42 @@ ColumnLayout {
                 readonly property real cellHeight: Kirigami.Units.gridUnit * 12
                 // Selected layout tracking (across sections)
                 property string selectedLayoutId: ""
+                // Capability group definitions for tiling view — hoisted to avoid
+                // recreating on every rebuildModel() call.
+                // NOTE: items matching multiple capabilities appear in multiple groups;
+                // the same card will be highlighted in both sections simultaneously.
+                readonly property var tilingCapabilityGroups: [{
+                    "key": "masterCount",
+                    "label": i18n("Master Count"),
+                    "order": 0,
+                    "test": (a) => {
+                        return a.supportsMasterCount === true;
+                    }
+                }, {
+                    "key": "splitRatio",
+                    "label": i18n("Split Ratio"),
+                    "order": 1,
+                    "test": (a) => {
+                        return a.supportsSplitRatio === true;
+                    }
+                }, {
+                    "key": "overlapping",
+                    "label": i18n("Overlapping Zones"),
+                    "order": 2,
+                    "test": (a) => {
+                        return a.producesOverlappingZones === true;
+                    }
+                }, {
+                    "key": "persistent",
+                    "label": i18n("Persistent (Memory)"),
+                    "order": 3,
+                    "test": (a) => {
+                        return a.memory === true;
+                    }
+                }]
 
                 function rebuildModel() {
                     let allLayouts = settingsController.layouts;
-                    // Filter by view mode
                     let filtered = [];
                     for (let i = 0; i < allLayouts.length; i++) {
                         let isAutotile = allLayouts[i].isAutotile === true;
@@ -95,46 +157,18 @@ ColumnLayout {
                         else if (root.viewMode === 1 && isAutotile)
                             filtered.push(allLayouts[i]);
                     }
-                    // Group by aspect ratio class
-                    let aspectOrder = ["any", "standard", "ultrawide", "super-ultrawide", "portrait"];
-                    let aspectLabels = root.aspectRatioLabels;
-                    let groups = {
-                    };
-                    for (let i = 0; i < filtered.length; i++) {
-                        let cls = filtered[i].aspectRatioClass || "any";
-                        if (!groups[cls])
-                            groups[cls] = [];
-
-                        groups[cls].push(filtered[i]);
-                    }
-                    // Sort each group alphabetically
-                    for (let cls in groups) {
-                        groups[cls].sort((a, b) => {
-                            return (a.name || "").localeCompare(b.name || "");
-                        });
-                    }
-                    // Build section model: [{label, layouts}, ...]
-                    let sections = [];
-                    let groupCount = 0;
-                    for (let a = 0; a < aspectOrder.length; a++) {
-                        if (groups[aspectOrder[a]] && groups[aspectOrder[a]].length > 0)
-                            groupCount++;
-
-                    }
-                    for (let a = 0; a < aspectOrder.length; a++) {
-                        let cls = aspectOrder[a];
-                        if (groups[cls] && groups[cls].length > 0)
-                            sections.push({
-                            "label": groupCount > 1 ? aspectLabels[cls] : "",
-                            "layouts": groups[cls]
-                        });
-
-                    }
-                    model = sections;
+                    let search = filterBar.filterText.toLowerCase();
+                    if (root.viewMode === 0)
+                        filtered = Logic.applySnappingFilters(filtered, search, filterBar);
+                    else
+                        filtered = Logic.applyTilingFilters(filtered, search, filterBar);
+                    let groups = buildGroups(filtered, filterBar.groupByIndex);
+                    Logic.sortItems(groups, filterBar.sortByIndex, filterBar.sortAscending);
+                    model = Logic.finalizeGroups(groups);
                 }
 
                 function selectDefaultLayout(mode) {
-                    let defaultId = (mode === 1) ? ("autotile:" + root.settingsBridge.autotileAlgorithm) : root.settingsBridge.defaultLayoutId;
+                    let defaultId = (mode === 1) ? ("autotile:" + root.settingsBridge.defaultAutotileAlgorithm) : root.settingsBridge.defaultLayoutId;
                     if (defaultId)
                         selectedLayoutId = defaultId;
 
@@ -147,6 +181,41 @@ ColumnLayout {
                     return layoutId !== "";
                 }
 
+                // Grouping — kept in QML because group labels require i18n/i18np
+                function buildGroups(filtered, groupIdx) {
+                    if (root.viewMode === 1) {
+                        if (groupIdx === filterBar.groupCapability)
+                            return Logic.groupByCapability(filtered, tilingCapabilityGroups, i18n("Other"));
+                        else if (groupIdx === filterBar.groupTilingSource)
+                            return Logic.groupByBoolKey(filtered, (item) => {
+                            return Logic.isBuiltIn(item);
+                        }, "builtin", i18n("Built-in"), "user", i18n("User Scripts"));
+                        else if (groupIdx === filterBar.groupPersistent)
+                            return Logic.groupByBoolKey(filtered, (item) => {
+                            return item.memory === true;
+                        }, "persistent", i18n("Persistent"), "stateless", i18n("Stateless"));
+                        return Logic.ungrouped(filtered);
+                    }
+                    // Snapping grouping
+                    if (groupIdx === filterBar.groupAspectRatio)
+                        return Logic.groupByAspectRatio(filtered);
+                    else if (groupIdx === filterBar.groupZoneCount)
+                        return Logic.groupByZoneCount(filtered, (count) => {
+                        return i18np("%1 zone", "%1 zones", count);
+                    }, i18n("Unknown"));
+                    else if (groupIdx === filterBar.groupAutoManual)
+                        return Logic.groupByBoolKey(filtered, (item) => {
+                        return item.autoAssign === true;
+                    }, "auto", i18n("Auto"), "manual", i18n("Manual"));
+                    else if (groupIdx === filterBar.groupSource)
+                        return Logic.groupByBoolKey(filtered, (item) => {
+                        return Logic.isBuiltIn(item);
+                    }, "builtin", i18n("Built-in"), "user", i18n("User Layouts"));
+                    return Logic.ungrouped(filtered);
+                }
+
+                Layout.topMargin: Kirigami.Units.largeSpacing
+                Accessible.name: i18n("Layout grid")
                 Layout.fillWidth: true
                 Layout.leftMargin: Kirigami.Units.smallSpacing
                 Layout.rightMargin: Kirigami.Units.smallSpacing
@@ -179,8 +248,36 @@ ColumnLayout {
                     anchors.centerIn: parent
                     width: parent.width - Kirigami.Units.gridUnit * 4
                     visible: layoutGrid.count === 0
-                    text: root.viewMode === 1 ? i18n("No autotile algorithms available") : i18n("No layouts available")
-                    explanation: root.viewMode === 1 ? i18n("Enable autotiling to use tiling algorithms") : i18n("Start the PlasmaZones daemon or create a new layout")
+                    text: {
+                        if (filterBar.hasActiveFilters)
+                            return root.viewMode === 1 ? i18n("No matching algorithms") : i18n("No matching layouts");
+
+                        return root.viewMode === 1 ? i18n("No autotile algorithms available") : i18n("No layouts available");
+                    }
+                    explanation: {
+                        if (filterBar.hasActiveFilters) {
+                            let hints = [];
+                            if (root.viewMode === 0 && !filterBar.showBuiltInLayouts && !filterBar.showUserLayouts)
+                                hints.push(i18n("Both Built-in and User layout sources are hidden"));
+
+                            if (root.viewMode === 0 && !filterBar.showAutoLayouts && !filterBar.showManualLayouts)
+                                hints.push(i18n("Both Auto and Manual layout types are hidden"));
+
+                            if (root.viewMode === 1 && !filterBar.showBuiltInAlgorithms && !filterBar.showUserAlgorithms)
+                                hints.push(i18n("Both Built-in and User algorithm sources are hidden"));
+
+                            return hints.length > 0 ? hints.join("\n") : i18n("Try adjusting your filters or search terms");
+                        }
+                        return root.viewMode === 1 ? i18n("Enable autotiling to use tiling algorithms") : i18n("Start the PlasmaZones daemon or create a new layout");
+                    }
+
+                    helpfulAction: Kirigami.Action {
+                        visible: filterBar.hasActiveFilters
+                        text: i18n("Reset Filters")
+                        icon.name: "edit-reset"
+                        onTriggered: filterBar.resetFilters()
+                    }
+
                 }
 
                 // ─── Section Delegate (header + Flow of layout cards) ────────
@@ -256,10 +353,10 @@ ColumnLayout {
         id: importDialog
 
         title: i18n("Import Layout")
-        nameFilters: ["JSON files (*.json)", "All files (*)"]
+        nameFilters: [i18n("JSON files") + " (*.json)", i18n("All files") + " (*)"]
         fileMode: FileDialog.OpenFile
         onAccepted: {
-            settingsController.importLayout(selectedFile.toString().replace(/^file:\/\/+/, "/"));
+            settingsController.importLayout(root.filePathFromUrl(selectedFile));
         }
     }
 
@@ -270,10 +367,26 @@ ColumnLayout {
         property string layoutId: ""
 
         title: i18n("Export Layout")
-        nameFilters: ["JSON files (*.json)"]
+        nameFilters: [i18n("JSON files") + " (*.json)"]
         fileMode: FileDialog.SaveFile
         onAccepted: {
-            settingsController.exportLayout(exportDialog.layoutId, selectedFile.toString().replace(/^file:\/\/+/, "/"));
+            settingsController.exportLayout(exportDialog.layoutId, root.filePathFromUrl(selectedFile));
+        }
+    }
+
+    // Algorithm import dialog
+    FileDialog {
+        id: algorithmImportDialog
+
+        title: i18n("Import Tiling Algorithm")
+        nameFilters: [i18n("JavaScript files") + " (*.js)", i18n("All files") + " (*)"]
+        fileMode: FileDialog.OpenFile
+        onAccepted: {
+            if (settingsController.importAlgorithm(root.filePathFromUrl(selectedFile))) {
+                if (window && window.showToast)
+                    window.showToast(i18n("Algorithm imported"));
+
+            }
         }
     }
 
@@ -282,10 +395,10 @@ ColumnLayout {
         id: kzonesFileDialog
 
         title: i18n("Import KZones Layout File")
-        nameFilters: ["JSON files (*.json)", "All files (*)"]
+        nameFilters: [i18n("JSON files") + " (*.json)", i18n("All files") + " (*)"]
         fileMode: FileDialog.OpenFile
         onAccepted: {
-            settingsController.importFromKZonesFile(selectedFile.toString().replace(/^file:\/\/+/, "/"));
+            settingsController.importFromKZonesFile(root.filePathFromUrl(selectedFile));
         }
     }
 
@@ -308,20 +421,86 @@ ColumnLayout {
         }
 
         function onExportRequested(layoutId) {
-            exportDialog.layoutId = layoutId;
-            exportDialog.open();
+            if (layoutId.startsWith("autotile:")) {
+                algorithmExportDialog.algorithmId = settingsController.algorithmIdFromLayoutId(layoutId);
+                algorithmExportDialog.open();
+            } else {
+                exportDialog.layoutId = layoutId;
+                exportDialog.open();
+            }
         }
 
         target: window.layoutContextMenu
     }
 
-    // Delete confirmation dialog
+    // New Layout wizard dialog
+    NewLayoutDialog {
+        id: newLayoutDialog
+
+        appSettings: root.settingsBridge
+        controller: settingsController
+    }
+
+    // New Algorithm wizard dialog
+    NewAlgorithmDialog {
+        id: newAlgorithmDialog
+
+        controller: settingsController
+    }
+
+    // Algorithm created/failed signals from C++ (fires after AlgorithmRegistry picks up the new file)
+    Connections {
+        function onAlgorithmCreated(algorithmId) {
+            // Always rebuild so the new algorithm is available; only switch view
+            // and auto-select if the user is already looking at the tiling view
+            // (avoids jarring view switch when duplicating from a different context)
+            layoutGrid.rebuildModel();
+            if (root.viewMode === 1)
+                layoutGrid.selectedLayoutId = "autotile:" + algorithmId;
+
+        }
+
+        function onAlgorithmOperationFailed(reason) {
+            // Only show toast when the wizard dialog is closed — if the dialog
+            // is open, it shows the error inline via its own Connections block
+            if (!newAlgorithmDialog.opened && window && window.showToast)
+                window.showToast(reason);
+
+        }
+
+        function onLayoutOperationFailed(reason) {
+            // Only show toast when the wizard dialog is closed — if the dialog
+            // is open, it shows the error inline via its own Connections block
+            if (!newLayoutDialog.opened && window && window.showToast)
+                window.showToast(reason);
+
+        }
+
+        target: settingsController
+    }
+
+    // Algorithm export file dialog
+    FileDialog {
+        id: algorithmExportDialog
+
+        property string algorithmId: ""
+
+        title: i18n("Export Algorithm")
+        nameFilters: [i18n("JavaScript files") + " (*.js)"]
+        fileMode: FileDialog.SaveFile
+        onAccepted: {
+            settingsController.exportAlgorithm(algorithmExportDialog.algorithmId, root.filePathFromUrl(selectedFile));
+        }
+    }
+
+    // Delete confirmation dialog (handles both layouts and algorithms)
     Kirigami.PromptDialog {
         id: deleteConfirmDialog
 
         property var layoutToDelete: null
+        readonly property bool isAlgorithm: layoutToDelete && layoutToDelete.isAutotile === true
 
-        title: i18n("Delete Layout")
+        title: isAlgorithm ? i18n("Delete Algorithm") : i18n("Delete Layout")
         subtitle: layoutToDelete ? i18n("Are you sure you want to delete \"%1\"?", layoutToDelete.name || "") : ""
         standardButtons: Kirigami.Dialog.NoButton
         onRejected: layoutToDelete = null
@@ -332,7 +511,12 @@ ColumnLayout {
                 icon.name: "edit-delete"
                 onTriggered: {
                     if (deleteConfirmDialog.layoutToDelete) {
-                        settingsController.deleteLayout(deleteConfirmDialog.layoutToDelete.id);
+                        if (deleteConfirmDialog.isAlgorithm) {
+                            let algoId = settingsController.algorithmIdFromLayoutId(deleteConfirmDialog.layoutToDelete.id);
+                            settingsController.deleteAlgorithm(algoId);
+                        } else {
+                            settingsController.deleteLayout(deleteConfirmDialog.layoutToDelete.id);
+                        }
                         deleteConfirmDialog.layoutToDelete = null;
                     }
                     deleteConfirmDialog.close();

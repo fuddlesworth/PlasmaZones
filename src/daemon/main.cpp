@@ -2,15 +2,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "daemon.h"
+#include "../config/configdefaults.h"
 #include "../core/logging.h"
+#include "../core/qpa/layershellpluginloader.h"
+#include "../core/layersurface.h"
 #include "../core/translationloader.h"
 #include "version.h"
 #include "rendering/zoneshaderitem.h"
+#include "vulkan_support.h"
 #include <QGuiApplication>
 #include <QCommandLineParser>
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QIcon>
+#include <QLibrary>
+#include <QQuickWindow>
+#include <QSettings>
 #include <QThread>
 #include <QTimer>
 #include <QtQml/qqmlextensionplugin.h>
@@ -35,8 +42,111 @@ void signalHandler(int /*signal*/)
 
 int main(int argc, char* argv[])
 {
+    // Register our layer-shell QPA plugin before QGuiApplication
+    PlasmaZones::registerLayerShellPlugin();
+
+    // Read rendering backend preference and probe Vulkan BEFORE QGuiApplication —
+    // QQuickWindow::setGraphicsApi() must be called before the app object exists.
+    // Vulkan instance creation is also done here so that fallback to OpenGL can
+    // happen before the graphics API is locked in by QGuiApplication construction.
+    // vulkanInstance is declared BEFORE app so C++ destruction order guarantees
+    // it outlives QGuiApplication (and all QQuickWindows that reference it).
+    bool useVulkan = false;
+#if QT_CONFIG(vulkan)
+    QVulkanInstance vulkanInstance;
+#endif
+    {
+        // QSettings::IniFormat is used intentionally — it maps top-level keys (before
+        // any [section] header) into the "General" group automatically, so it reads
+        // both the legacy ungrouped key and the proper [General] key correctly.
+        // The custom kconfigIniFormat cannot be used here because it requires the
+        // QCoreApplication event loop for QConfFile caching, which doesn't exist yet.
+        QSettings cfg(PlasmaZones::ConfigDefaults::configFilePath(), QSettings::IniFormat);
+        cfg.beginGroup(PlasmaZones::ConfigDefaults::generalGroup());
+        const QString backend = PlasmaZones::ConfigDefaults::normalizeRenderingBackend(
+            cfg.value(PlasmaZones::ConfigDefaults::renderingBackendKey(),
+                      PlasmaZones::ConfigDefaults::renderingBackend())
+                .toString());
+        cfg.endGroup();
+
+        if (backend == QLatin1String("vulkan")) {
+#if QT_CONFIG(vulkan)
+            // Probe Vulkan availability before committing to the API.
+            // QVulkanInstance::create() calls ensureVulkan() which dlopens
+            // libvulkan — this can SEGFAULT if the Vulkan ICD or loader is
+            // broken. Guard with a QLibrary pre-check so we fail gracefully.
+            // NOTE: this only guards against a missing loader library; a broken
+            // ICD manifest (pointing to a non-existent driver .so) can still
+            // crash inside vkCreateInstance. No portable way to catch that.
+            QLibrary vulkanLib(QStringLiteral("vulkan"), 1);
+            bool vulkanLibAvailable = vulkanLib.load();
+            if (!vulkanLibAvailable) {
+                vulkanLib.setFileName(QStringLiteral("vulkan"));
+                vulkanLibAvailable = vulkanLib.load();
+            }
+
+            if (vulkanLibAvailable) {
+                vulkanInstance.setApiVersion(PlasmaZones::PzVulkanApiVersion);
+                if (vulkanInstance.create()) {
+                    QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
+                    useVulkan = true;
+                } else {
+                    qCCritical(PlasmaZones::lcDaemon)
+                        << "Failed to create Vulkan instance — falling back to OpenGL."
+                        << "Check that Vulkan drivers are installed (vulkan-icd-loader, mesa-vulkan-drivers, etc.)";
+                    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+                }
+            } else {
+                qCCritical(PlasmaZones::lcDaemon) << "Vulkan library not found — falling back to OpenGL."
+                                                  << "Install vulkan-icd-loader or equivalent for your distro.";
+                QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+            }
+#else
+            qCWarning(PlasmaZones::lcDaemon)
+                << "Vulkan backend requested but Qt was built without Vulkan support — falling back to OpenGL.";
+            QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+#endif
+        } else if (backend == QLatin1String("opengl")) {
+            QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+        }
+        // "auto" → let Qt choose (default behavior)
+        const char* detail = "(explicit OpenGL)";
+        if (useVulkan)
+            detail = "(Vulkan active)";
+        else if (backend == QLatin1String("vulkan"))
+            detail = "(Vulkan failed, OpenGL fallback)";
+        else if (backend == QLatin1String("auto"))
+            detail = "(Qt default)";
+        qCInfo(PlasmaZones::lcDaemon) << "Rendering backend:" << backend << detail;
+    }
+
     QGuiApplication app(argc, argv);
+
+    // Store instance pointer as a dynamic property so OverlayService::createQmlWindow()
+    // can retrieve it and call setVulkanInstance() on each QQuickWindow.
+#if QT_CONFIG(vulkan)
+    qRegisterMetaType<QVulkanInstance*>();
+    if (useVulkan) {
+        app.setProperty(PlasmaZones::PzVulkanInstanceProperty, QVariant::fromValue(&vulkanInstance));
+    }
+#endif
     PlasmaZones::loadTranslations(&app);
+
+    // Register metatype for QVariant storage (LayerSurface stores itself
+    // as a QWindow dynamic property via QVariant::fromValue).
+    qRegisterMetaType<PlasmaZones::LayerSurface*>();
+
+    // Verify the layer-shell QPA plugin loaded successfully. If not, overlays will
+    // be created as xdg_toplevel (wrong stacking/anchoring) — warn loudly.
+    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && !PlasmaZones::LayerSurface::isSupported()) {
+        qCCritical(lcDaemon) << "Layer-shell QPA plugin did not initialize —"
+                             << "overlays will use xdg_toplevel (wrong stacking/anchoring)."
+                             << "Zone overlays will appear as regular windows (visible in taskbar,"
+                             << "wrong z-order, no keyboard grab). This compositor may not support"
+                             << "zwlr_layer_shell_v1 (e.g. GNOME/Mutter)."
+                             << "Check that pz-layer-shell.so is installed to Qt's"
+                             << "wayland-shell-integration plugin directory.";
+    }
 
     // Daemon must survive monitor power-off (DP disconnect destroys all overlay
     // windows; without this, Qt sees zero windows and calls quit()).
@@ -118,6 +228,18 @@ int main(int argc, char* argv[])
 
     daemon.stop();
     g_daemon = nullptr;
+
+    // Close all remaining windows before QGuiApplication teardown.
+    // The NVIDIA Vulkan ICD (driver 595.x+) crashes in vkDestroyInstance during
+    // dlclose when GPU worker threads are still running. Explicitly closing windows
+    // here lets the Wayland platform plugin tear down EGL/Vulkan surfaces while the
+    // event loop is still partially intact, before ~QGuiApplication triggers the
+    // problematic dlclose path. This is an NVIDIA driver bug — this workaround
+    // reduces (but may not eliminate) the crash window.
+    const auto topLevels = QGuiApplication::topLevelWindows();
+    for (QWindow* w : topLevels) {
+        w->destroy();
+    }
 
     return result;
 }

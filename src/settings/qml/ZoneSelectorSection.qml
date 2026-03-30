@@ -89,13 +89,17 @@ ColumnLayout {
         visible: true
     }
 
-    // Enable toggle - prominent at top
-    CheckBox {
-        Layout.fillWidth: true
-        text: i18n("Enable zone selector popup")
-        checked: appSettings.zoneSelectorEnabled
-        onToggled: appSettings.zoneSelectorEnabled = checked
-        font.weight: Font.DemiBold
+    // Enable toggle
+    SettingsRow {
+        title: i18n("Zone selector popup")
+        description: i18n("Show a layout picker when dragging windows to screen edges")
+
+        SettingsSwitch {
+            checked: appSettings.zoneSelectorEnabled
+            accessibleName: i18n("Enable zone selector popup")
+            onToggled: appSettings.zoneSelectorEnabled = checked
+        }
+
     }
 
     MonitorSelectorSection {
@@ -127,7 +131,7 @@ ColumnLayout {
                 // Centered position picker with description
                 Item {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: positionPicker.height + Kirigami.Units.gridUnit * 4
+                    Layout.preferredHeight: positionPicker.height + Kirigami.Units.gridUnit * 2
 
                     PositionPicker {
                         id: positionPicker
@@ -156,63 +160,42 @@ ColumnLayout {
 
                 }
 
-                // Trigger distance - centered like position picker
-                Item {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: triggerColumn.implicitHeight + Kirigami.Units.gridUnit * 2
+                SettingsSeparator {
+                }
 
-                    ColumnLayout {
-                        id: triggerColumn
+                // Trigger distance
+                SettingsRow {
+                    title: i18n("Trigger distance")
+                    description: i18n("How close to the screen edge before the popup appears")
 
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: parent.top
+                    RowLayout {
                         spacing: Kirigami.Units.smallSpacing
-                        width: Math.min(Kirigami.Units.gridUnit * 25, parent.width)
 
-                        Label {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: i18n("Trigger Distance")
-                            font.weight: Font.DemiBold
+                        Slider {
+                            id: triggerSlider
+
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 10
+                            from: root.constants.zoneSelectorTriggerMin
+                            to: root.constants.zoneSelectorTriggerMax
+                            stepSize: 10
+                            Accessible.name: i18n("Trigger distance")
+                            onMoved: root.writeSetting("TriggerDistance", value, function(v) {
+                                appSettings.zoneSelectorTriggerDistance = v;
+                            })
+
+                            Binding on value {
+                                value: root.effectiveTriggerDistance
+                                when: !triggerSlider.pressed
+                                restoreMode: Binding.RestoreNone
+                            }
+
                         }
 
                         Label {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: i18n("How close to the screen edge before the popup appears")
-                            opacity: 0.7
-                            font: Kirigami.Theme.smallFont
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Kirigami.Units.smallSpacing
-
-                            Slider {
-                                id: triggerSlider
-
-                                Layout.fillWidth: true
-                                from: root.constants.zoneSelectorTriggerMin
-                                to: root.constants.zoneSelectorTriggerMax
-                                stepSize: 10
-                                Accessible.name: i18n("Trigger distance")
-                                onMoved: root.writeSetting("TriggerDistance", value, function(v) {
-                                    appSettings.zoneSelectorTriggerDistance = v;
-                                })
-
-                                Binding on value {
-                                    value: root.effectiveTriggerDistance
-                                    when: !triggerSlider.pressed
-                                    restoreMode: Binding.RestoreNone
-                                }
-
-                            }
-
-                            Label {
-                                text: root.effectiveTriggerDistance + " px"
-                                Layout.preferredWidth: root.constants.sliderValueLabelWidth + 15
-                                horizontalAlignment: Text.AlignRight
-                                font: Kirigami.Theme.fixedWidthFont
-                            }
-
+                            text: root.effectiveTriggerDistance + " px"
+                            Layout.preferredWidth: root.constants.sliderValueLabelWidth + 15
+                            horizontalAlignment: Text.AlignRight
+                            font: Kirigami.Theme.fixedWidthFont
                         }
 
                     }
@@ -238,56 +221,81 @@ ColumnLayout {
             headerText: i18n("Layout Arrangement")
             collapsible: true
 
-            contentItem: Kirigami.FormLayout {
-                WideComboBox {
-                    id: zoneSelectorLayoutModeCombo
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
 
-                    Kirigami.FormData.label: i18n("Arrangement:")
-                    textRole: "text"
-                    valueRole: "value"
-                    model: [{
-                        "text": i18n("Grid"),
-                        "value": 0
-                    }, {
-                        "text": i18n("Horizontal"),
-                        "value": 1
-                    }, {
-                        "text": i18n("Vertical"),
-                        "value": 2
-                    }]
-                    currentIndex: Math.max(0, indexOfValue(root.effectiveLayoutMode))
-                    onActivated: root.writeSetting("LayoutMode", currentValue, function(v) {
-                        appSettings.zoneSelectorLayoutMode = v;
-                    })
+                SettingsRow {
+                    title: i18n("Arrangement")
+                    description: i18n("How layout previews are arranged in the popup")
+
+                    WideComboBox {
+                        id: zoneSelectorLayoutModeCombo
+
+                        Accessible.name: i18n("Arrangement")
+                        textRole: "text"
+                        valueRole: "value"
+                        model: [{
+                            "text": i18n("Grid"),
+                            "value": 0
+                        }, {
+                            "text": i18n("Horizontal"),
+                            "value": 1
+                        }, {
+                            "text": i18n("Vertical"),
+                            "value": 2
+                        }]
+                        currentIndex: Math.max(0, indexOfValue(root.effectiveLayoutMode))
+                        onActivated: root.writeSetting("LayoutMode", currentValue, function(v) {
+                            appSettings.zoneSelectorLayoutMode = v;
+                        })
+                    }
+
                 }
 
-                SettingsSpinBox {
-                    formLabel: i18n("Grid columns:")
-                    from: root.constants.zoneSelectorGridColumnsMin
-                    to: root.constants.zoneSelectorGridColumnsMax
-                    value: root.effectiveGridColumns
+                SettingsSeparator {
                     visible: root.effectiveLayoutMode === 0
-                    unitText: ""
-                    onValueModified: (value) => {
-                        return root.writeSetting("GridColumns", value, function(v) {
-                            appSettings.zoneSelectorGridColumns = v;
-                        });
-                    }
                 }
 
-                SettingsSpinBox {
-                    formLabel: i18n("Max visible rows:")
-                    from: root.constants.zoneSelectorMaxRowsMin
-                    to: 10
-                    value: root.effectiveMaxRows
+                SettingsRow {
                     visible: root.effectiveLayoutMode === 0
-                    unitText: ""
-                    tooltipText: i18n("Scrolling enabled when more rows exist")
-                    onValueModified: (value) => {
-                        return root.writeSetting("MaxRows", value, function(v) {
-                            appSettings.zoneSelectorMaxRows = v;
-                        });
+                    title: i18n("Grid columns")
+                    description: i18n("Number of layout previews per row")
+
+                    SettingsSpinBox {
+                        from: root.constants.zoneSelectorGridColumnsMin
+                        to: root.constants.zoneSelectorGridColumnsMax
+                        value: root.effectiveGridColumns
+                        unitText: ""
+                        onValueModified: (value) => {
+                            return root.writeSetting("GridColumns", value, function(v) {
+                                appSettings.zoneSelectorGridColumns = v;
+                            });
+                        }
                     }
+
+                }
+
+                SettingsSeparator {
+                    visible: root.effectiveLayoutMode === 0
+                }
+
+                SettingsRow {
+                    visible: root.effectiveLayoutMode === 0
+                    title: i18n("Max visible rows")
+                    description: i18n("Scrolling enabled when more rows exist")
+
+                    SettingsSpinBox {
+                        from: root.constants.zoneSelectorMaxRowsMin
+                        to: 10
+                        value: root.effectiveMaxRows
+                        unitText: ""
+                        onValueModified: (value) => {
+                            return root.writeSetting("MaxRows", value, function(v) {
+                                appSettings.zoneSelectorMaxRows = v;
+                            });
+                        }
+                    }
+
                 }
 
             }
@@ -315,7 +323,7 @@ ColumnLayout {
                 // Live preview - centered
                 Item {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.effectivePreviewHeight + 50
+                    Layout.preferredHeight: root.effectivePreviewHeight + Kirigami.Units.gridUnit * 3
 
                     // Preview container
                     Item {

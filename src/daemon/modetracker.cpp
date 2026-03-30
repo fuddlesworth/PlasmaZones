@@ -3,6 +3,7 @@
 
 #include "modetracker.h"
 
+#include "../autotile/AlgorithmRegistry.h"
 #include "../config/settings.h"
 #include "../core/constants.h"
 #include "../core/layoutmanager.h"
@@ -77,13 +78,13 @@ QString ModeTracker::lastManualLayoutId() const
 QString ModeTracker::lastAutotileAlgorithm() const
 {
     if (!m_layoutManager || m_screenId.isEmpty()) {
-        return m_settings ? m_settings->autotileAlgorithm() : QString(DBus::AutotileAlgorithm::BSP);
+        return m_settings ? m_settings->defaultAutotileAlgorithm() : AlgorithmRegistry::defaultAlgorithmId();
     }
     QString algo = m_layoutManager->tilingAlgorithmForScreen(m_screenId, m_desktop, m_activity);
     if (algo.isEmpty() && m_settings) {
-        algo = m_settings->autotileAlgorithm();
+        algo = m_settings->defaultAutotileAlgorithm();
     }
-    return algo.isEmpty() ? QString(DBus::AutotileAlgorithm::BSP) : algo;
+    return algo.isEmpty() ? AlgorithmRegistry::defaultAlgorithmId() : algo;
 }
 
 } // namespace PlasmaZones

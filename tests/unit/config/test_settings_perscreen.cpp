@@ -102,7 +102,6 @@ private Q_SLOTS:
         Settings settings;
 
         // Activation defaults
-        QCOMPARE(settings.shiftDragToActivate(), ConfigDefaults::shiftDrag());
         QCOMPARE(settings.zoneSpanEnabled(), ConfigDefaults::zoneSpanEnabled());
         QCOMPARE(settings.toggleActivation(), ConfigDefaults::toggleActivation());
         QCOMPARE(settings.snappingEnabled(), ConfigDefaults::snappingEnabled());

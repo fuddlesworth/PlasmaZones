@@ -7,6 +7,91 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-03-30
+
+### Added
+- **Scripted tiling algorithms** ([#256], [#259]): All 24 tiling algorithms are now JavaScript, running in a sandboxed QJSEngine with hot-reload. The 15 former C++ algorithms have been converted to JS with identical behavior. Six new algorithms added: Cascade, Corner Master, Floating Center, Horizontal Deck, Paper, and Stair. Custom user algorithms are loaded from `~/.local/share/plasmazones/algorithms/`.
+- **Dwindle (Memory) algorithm**: Dwindle variant with a persistent split tree — resizing one tile does not affect others. Split positions survive window close/reopen.
+- **Multi-compositor support** ([#261]): Custom `pz-layer-shell` QPA plugin replaces the `LayerShellQt` dependency. PlasmaZones now works on any Wayland compositor with `zwlr_layer_shell_v1` support (Hyprland, Sway, Wayfire, niri, COSMIC, river, labwc).
+- **Vulkan rendering backend** ([#264]): Optional Vulkan backend for zone overlay rendering with automatic fallback to OpenGL on unsupported hardware or driver crash. User-selectable in **Settings → General**.
+- **New Layout / New Algorithm wizards** ([#263]): Guided dialogs for creating zone layouts from templates and tiling algorithms from a starter script, accessible from the settings app.
+- **Layout filter bar** ([#265]): Replace hardcoded layout groups with configurable group-by, sort-by, and filter controls in the layout list.
+- **Disable per virtual desktop / activity** ([#260]): Disable PlasmaZones on specific virtual desktops or activities per screen. Overlay hides automatically on disabled contexts.
+- **Settings UX polish** ([#268], [#269]): Two-line description rows, collapsible card sections, consolidated footer bar with Apply/Reset/Defaults, sidebar page badges, inline toggle switches replacing disable checkboxes.
+- **Single-instance settings app** ([#270]): `plasmazones-settings` is now single-instance via D-Bus. Launching it again raises the existing window and navigates to the requested page (`--page <name>` / `-p <name>`).
+- **Unsaved changes confirmation**: Settings app prompts before closing with unsaved changes; Reset and Defaults buttons require confirmation.
+- **Master indicator dots**: Algorithm grid cards show dots indicating which zones are master positions.
+- **Memory indicator icon**: Stateful algorithms (Dwindle Memory) show a persistence icon in the algorithm selector.
+- **Per-algorithm settings storage**: Split ratio, master count, and other parameters are saved per-algorithm rather than globally.
+- **Algorithm import and open folder**: Import `.js` algorithm files and open the user algorithm directory from the tiling settings page.
+- **Algorithm capability grouping**: Tiling algorithms grouped by capability (Built-in / Extras / Custom) in the settings UI.
+- **D-Bus `zoneIds` array**: Window state responses now include the full list of zone IDs a window occupies.
+
+### Changed
+- **LayerShellQt replaced**: Custom `pz-layer-shell` QPA plugin is now the sole layer-shell backend. Packagers: drop `layer-shell-qt` build dependency, add `qt6-wayland` and `wayland-scanner`.
+- **Config keys centralized** ([#266]): All config group names and key strings extracted to `ConfigDefaults` accessors — no more inline string literals in settings code.
+- **Settings page IDs renamed**: `snap-*` / `tile-*` page IDs renamed to `snapping-*` / `tiling-*` for consistency.
+- **Algorithm registry**: Hardcoded algorithm ID constants replaced with a data-driven registry. Algorithm metadata (name, capabilities, flags) comes from JS `@tag` annotations.
+- **README streamlined**: Detailed algorithm table, shader table, D-Bus API reference, and project structure moved to the wiki. README reduced from 742 to 593 lines with summary + wiki links.
+
+### Removed
+- **LayerShellQt dependency**: No longer required — replaced by `pz-layer-shell` QPA plugin.
+- **C++ tiling algorithm implementations**: All algorithms are now JavaScript. The C++ implementations have been removed.
+- **Legacy migration code**: Removed all config key migration and backward-compatibility shims from settings save/load paths.
+- **kcfg/kcfgc schema files**: Unused KConfig schema files removed.
+- **Accent stripe feature**: Removed from `SettingsCard` component.
+
+### Fixed
+- **Window restore on daemon restart**: Bypass QSettings cache in `loadState` so window-to-zone mappings are read fresh from disk after daemon restart ([#268]).
+- **Multipass shader rendering**: Fix ping-pong buffer handling in overlay renderer for multi-pass shaders.
+- **Editor shader menu crash**: Rewrite shader submenu to prevent Qt 6 `finalizeExitTransition` use-after-free when selecting a shader while the menu is animating closed.
+- **Editor context menu crash**: Use shared context menu instance to prevent `QQmlData` use-after-free when zones update while the popup is open.
+- **NVIDIA Vulkan crash**: Suppress spurious shutdown crash on NVIDIA drivers and auto-fallback to OpenGL.
+- **NVIDIA EGL crash in editor**: Guard shader preview reload against EGL context loss on NVIDIA.
+- **Layout picker dimmed backdrop**: Remove unintended dimmed background overlay from the fullscreen layout picker.
+- **CAVA crash suppression**: Suppress misleading "CAVA Crashed" error message caused by process-group SIGTERM during daemon shutdown.
+- **Shader preview bindings**: Restore reactive label and wallpaper texture bindings in the editor shader preview.
+- **Settings dirty flag on navigation**: Prevent spurious unsaved-changes prompts when switching between settings pages.
+- **Slider snap-back bug**: Fix master count control snapping back to previous value; replace SpinBox with SettingsSlider.
+- **Aspect ratio menu**: Replace flat menu items with nested submenu for aspect ratio presets.
+- **Layer-shell window recovery**: Recover shader preview when the Wayland `LayerSurface` is unexpectedly destroyed.
+
+### Migration Notes (Packagers)
+- Drop `layer-shell-qt` / `liblayershellqtinterface-dev` build dependency
+- Add `qt6-wayland` / `qt6-wayland-dev` build dependency
+- Add `wayland-scanner` build dependency (usually in `wayland-devel`)
+- Add `vulkan-headers` and `vulkan-loader` build dependencies (optional, for Vulkan backend)
+
+## [2.4.7] - 2026-03-27
+
+### Added
+- **Center-distance zone selection for overlapping zones** ([#258]): When zones overlap (e.g. quadrants + halves + fullscreen), the zone whose center is closest to the cursor now wins instead of always picking the smallest zone. This lets users reach background zones by dragging toward their center — matching the FancyZones behavior. The multi-zone span path is unaffected, preserving the [#211] fix.
+
+### Fixed
+- **Window picker inserts unmatchable values** ([#251]): "Pick from running windows" in App Rules and Exclusions inserted raw X11 window class format (e.g. `"signal signal"`) instead of the normalized form used for matching (`"signal"`). Manually typing the name worked; using the picker did not.
+- **Keyboard shortcuts move excluded windows** ([#251]): Move, Push, and Swap keyboard shortcuts ignored exclusion rules, moving the window behind an excluded app instead of doing nothing. All navigation shortcuts now check exclusions consistently.
+- **Drag-out unsnap doesn't clear persisted zone** ([#251]): Dragging a window out of its zone and closing it would still persist the zone, causing the window to snap back on reopen. The floating state flag was not always set due to an overly strict guard condition.
+- **D-Bus zone detection missing geometry recalculation**: `detectMultiZoneAtPosition` did not call `recalculateZoneGeometries` before detection, potentially using stale zone coordinates.
+
+## [2.4.6] - 2026-03-27
+
+### Added
+- **Plasma Sigil shader**: Animated energy sigil based on the PlasmaZones icon with glowing rune effects.
+
+### Fixed
+- **System Settings crash when opening PlasmaZones KCM**: The KCM linked the entire `plasmazones_core` library (with layer-shell QPA plugin, PlasmaActivities, 21 static initializers) just to read a version string. When the daemon was not running this caused heap corruption and SIGABRT during QML binding creation. Replaced with a compile-time version define — the KCM no longer loads the core library at all.
+- **Editor context menu crash on zone updates**: Use shared context menu to prevent QQmlData use-after-free crash when zones update while the menu is open.
+
+## [2.4.5] - 2026-03-26
+
+### Added
+- **SVG support for shader textures**: SVG/SVGZ files can now be used as user texture parameters in shaders, rasterized at configurable resolution (64–4096px, default 1024) via `QSvgRenderer`. An inline resolution spinbox appears in the shader settings UI when an SVG is selected.
+
+### Fixed
+- **Exclusions UI: can't add new entries** ([#251]): The QML JS array mutation pattern (`slice()` + `push()` + reassign) silently fails in Qt 6.10 due to `QStringList`↔JS Array round-trip type confusion. Replaced with `Q_INVOKABLE` C++ methods that modify the `QStringList` directly and emit proper `NOTIFY` signals.
+- **Excluded app keyboard shortcuts: no feedback** ([#251]): Snap-to-zone shortcuts blocked by exclusion rules now emit OSD feedback instead of failing silently.
+- **Neon Phantom shader white-out**: Reduced brightness multipliers and widened energy smoothstep range to prevent the effect from blowing out to featureless white at high energy accumulation.
+
 ## [2.4.3] - 2026-03-26
 
 ### Fixed
@@ -496,7 +581,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 - **Reapply timing**: Reapply runs after every geometry batch (0ms delay). Removed redundant 1100ms/450ms reapply path; delayed panel requery still triggers the same debounce → processPendingGeometryUpdates → reapply flow.
 - **Daemon**: Reapply timer stopped in `stop()`; named constants for geometry and panel delays.
-- **Nix**: Build asserts LayerShellQt 6.6 and fails with a clear message when nixpkgs provides the 6.5 stack. Nix CI and release Nix build/artifact disabled until nixpkgs has Plasma 6.6.
+- **Nix**: Build asserts layer-shell QPA plugin compatibility and fails with a clear message when nixpkgs provides the 6.5 stack. Nix CI and release Nix build/artifact disabled until nixpkgs has Plasma 6.6.
 
 ## [1.11.8] - 2026-02-16
 
@@ -984,11 +1069,19 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.3...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.0...HEAD
+[2.5.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.7...v2.5.0
+[2.4.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.6...v2.4.7
+[2.4.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.5...v2.4.6
+[2.4.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.3...v2.4.5
 [2.4.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.1...v2.4.2
+[#211]: https://github.com/fuddlesworth/PlasmaZones/discussions/211
+[#249]: https://github.com/fuddlesworth/PlasmaZones/issues/249
+[#251]: https://github.com/fuddlesworth/PlasmaZones/discussions/251
 [#252]: https://github.com/fuddlesworth/PlasmaZones/issues/252
 [#254]: https://github.com/fuddlesworth/PlasmaZones/issues/254
+[#258]: https://github.com/fuddlesworth/PlasmaZones/discussions/258
 [2.4.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.16...v2.4.0
 [2.3.16]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.3.15...v2.3.16
@@ -1148,3 +1241,14 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#186]: https://github.com/fuddlesworth/PlasmaZones/pull/186
 [#187]: https://github.com/fuddlesworth/PlasmaZones/issues/187
 [#188]: https://github.com/fuddlesworth/PlasmaZones/pull/188
+[#256]: https://github.com/fuddlesworth/PlasmaZones/pull/256
+[#259]: https://github.com/fuddlesworth/PlasmaZones/pull/259
+[#260]: https://github.com/fuddlesworth/PlasmaZones/pull/260
+[#261]: https://github.com/fuddlesworth/PlasmaZones/pull/261
+[#263]: https://github.com/fuddlesworth/PlasmaZones/pull/263
+[#264]: https://github.com/fuddlesworth/PlasmaZones/pull/264
+[#265]: https://github.com/fuddlesworth/PlasmaZones/pull/265
+[#266]: https://github.com/fuddlesworth/PlasmaZones/pull/266
+[#268]: https://github.com/fuddlesworth/PlasmaZones/pull/268
+[#269]: https://github.com/fuddlesworth/PlasmaZones/pull/269
+[#270]: https://github.com/fuddlesworth/PlasmaZones/pull/270

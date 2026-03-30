@@ -32,8 +32,7 @@ Rectangle {
     readonly property int selectedBorderWidth: Math.round(Kirigami.Units.devicePixelRatio * 2.5) // Thicker when selected
     // Aspect ratio: use the layout's intended ratio so previews show correct proportions.
     // Falls back to primary screen ratio for user-created layouts (aspectRatioClass "any" or absent).
-    readonly property var primaryScreen: Screen.primaryScreen
-    readonly property real fallbackAspectRatio: primaryScreen ? (primaryScreen.width / primaryScreen.height) : (16 / 9)
+    readonly property real fallbackAspectRatio: (Screen.width > 0 && Screen.height > 0) ? (Screen.width / Screen.height) : (16 / 9)
     readonly property real layoutAspectRatio: {
         var cls = root.layout ? (root.layout.aspectRatioClass || "any") : "any";
         switch (cls) {
@@ -83,16 +82,43 @@ Rectangle {
         anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5 + Kirigami.Units.smallSpacing // Space for label
         zones: root.layout && root.layout.zones ? root.layout.zones : []
         isActive: root.isSelected
+        producesOverlappingZones: root.layout && root.layout.producesOverlappingZones === true
         zonePadding: 1 // Minimal padding for thumbnail
         edgeGap: 1 // Minimal edge gap for thumbnail
         minZoneSize: 8
         showZoneNumbers: true
+        zoneNumberDisplay: root.layout ? (root.layout.zoneNumberDisplay || "all") : "all"
         fontFamily: root.fontFamily
         fontSizeScale: root.fontSizeScale
         fontWeight: root.fontWeight
         fontItalic: root.fontItalic
         fontUnderline: root.fontUnderline
         fontStrikeout: root.fontStrikeout
+    }
+
+    // Master indicator dots for autotile algorithms that support master count
+    Repeater {
+        model: root.layout && root.layout.isAutotile === true && root.layout.supportsMasterCount === true ? zonePreview.zones : []
+
+        Rectangle {
+            required property var modelData
+            required property int index
+            readonly property real relX: (modelData.relativeGeometry && modelData.relativeGeometry.x) || 0
+            readonly property real relY: (modelData.relativeGeometry && modelData.relativeGeometry.y) || 0
+            readonly property real leftOffset: relX < 0.01 ? zonePreview.edgeGap : zonePreview.zonePadding / 2
+            readonly property real topOffset: relY < 0.01 ? zonePreview.edgeGap : zonePreview.zonePadding / 2
+
+            // Use per-layout masterCount if available, default to 1
+            visible: index < (root.layout && root.layout.masterCount !== undefined ? root.layout.masterCount : 1)
+            Accessible.ignored: true
+            x: zonePreview.x + relX * zonePreview.width + leftOffset + Kirigami.Units.smallSpacing
+            y: zonePreview.y + relY * zonePreview.height + topOffset + Kirigami.Units.smallSpacing
+            width: Kirigami.Units.smallSpacing * 2
+            height: Kirigami.Units.smallSpacing * 2
+            radius: Kirigami.Units.smallSpacing
+            color: Kirigami.Theme.positiveTextColor
+        }
+
     }
 
     // Layout name label

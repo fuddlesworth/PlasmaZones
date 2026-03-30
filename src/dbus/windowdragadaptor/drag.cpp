@@ -5,6 +5,7 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <cmath>
+#include "../../config/configdefaults.h"
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
 #include "../../core/layoutmanager.h"
@@ -147,7 +148,8 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
         screenId = Utils::screenIdentifier(outScreen);
     }
     outScreenId = screenId;
-    if (m_settings && m_settings->isMonitorDisabled(screenId)) {
+    if (isContextDisabled(m_settings, screenId, m_layoutManager->currentVirtualDesktop(),
+                          m_layoutManager->currentActivity())) {
         return nullptr;
     }
 

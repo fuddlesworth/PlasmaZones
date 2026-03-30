@@ -15,6 +15,7 @@
 
 #include "../core/interfaces.h"
 #include "../core/layout.h"
+#include "vulkan_support.h"
 
 class QQmlEngine;
 
@@ -190,9 +191,14 @@ private:
     // Skips hidden windows — showZoneSelector()/show() refresh before showing.
     void refreshVisibleWindows();
 
+    // Hide overlay/selector windows on screens where the current context is disabled,
+    // then update remaining visible windows. Used by setCurrentVirtualDesktop/Activity.
+    void hideDisabledAndRefresh();
+
     void createOverlayWindow(QScreen* screen);
     void destroyOverlayWindow(QScreen* screen);
     void updateOverlayWindow(QScreen* screen);
+    void recreateOverlayWindowsOnTypeMismatch();
 
     /**
      * @brief Create/destroy/update overlay windows keyed by screen ID
@@ -303,8 +309,8 @@ private:
     /**
      * @brief Re-assert a window's screen and geometry before showing on Wayland
      *
-     * On Wayland, LayerShellQt reads QWindow::screen() at surface commit time.
-     * Call this before show() to ensure the window maps to the correct output.
+     * The QPA plugin binds the Wayland output once during LayerSurface/platform
+     * window construction. Set QWindow::screen() BEFORE the window is shown.
      */
     static void assertWindowOnScreen(QWindow* window, QScreen* screen, const QRect& geometry = QRect());
 
@@ -382,6 +388,11 @@ private:
 
     // Screens excluded from overlay display (autotile-managed screens)
     QSet<QString> m_excludedScreens;
+
+    // Fallback QVulkanInstance for when 'auto' backend resolves to Vulkan
+#if QT_CONFIG(vulkan)
+    std::unique_ptr<QVulkanInstance> m_fallbackVulkanInstance;
+#endif
 };
 
 } // namespace PlasmaZones

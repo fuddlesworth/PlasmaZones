@@ -23,80 +23,117 @@ Flickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // =====================================================================
-        // APPEARANCE
-        // =====================================================================
+        // =================================================================
+        // COLORS
+        // =================================================================
         Item {
             Layout.fillWidth: true
-            implicitHeight: appearanceCard.implicitHeight
+            implicitHeight: colorsCard.implicitHeight
 
             SettingsCard {
-                id: appearanceCard
+                id: colorsCard
 
                 anchors.fill: parent
-                headerText: i18n("Appearance")
+                headerText: i18n("Colors")
                 collapsible: true
 
-                contentItem: Kirigami.FormLayout {
-                    Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Colors")
-                    }
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
 
-                    CheckBox {
-                        id: useSystemColorsCheck
+                    SettingsRow {
+                        title: i18n("System accent color")
+                        description: i18n("Use your desktop color scheme for zone colors")
 
-                        Kirigami.FormData.label: i18n("Color scheme:")
-                        text: i18n("Use system accent color")
-                        checked: appSettings.useSystemColors
-                        onToggled: appSettings.useSystemColors = checked
-                    }
+                        SettingsSwitch {
+                            id: useSystemColorsSwitch
 
-                    ColorSwatchRow {
-                        formLabel: i18n("Highlight:")
-                        visible: !useSystemColorsCheck.checked
-                        color: appSettings.highlightColor
-                        onClicked: {
-                            highlightColorDialog.selectedColor = appSettings.highlightColor;
-                            highlightColorDialog.open();
-                        }
-                    }
-
-                    ColorSwatchRow {
-                        formLabel: i18n("Inactive:")
-                        visible: !useSystemColorsCheck.checked
-                        color: appSettings.inactiveColor
-                        onClicked: {
-                            inactiveColorDialog.selectedColor = appSettings.inactiveColor;
-                            inactiveColorDialog.open();
-                        }
-                    }
-
-                    ColorSwatchRow {
-                        formLabel: i18n("Border:")
-                        visible: !useSystemColorsCheck.checked
-                        color: appSettings.borderColor
-                        onClicked: {
-                            borderColorDialog.selectedColor = appSettings.borderColor;
-                            borderColorDialog.open();
-                        }
-                    }
-
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Import colors:")
-                        visible: !useSystemColorsCheck.checked
-                        spacing: Kirigami.Units.smallSpacing
-
-                        Button {
-                            text: i18n("From pywal")
-                            icon.name: "color-management"
-                            onClicked: settingsController.loadColorsFromPywal()
+                            checked: appSettings.useSystemColors
+                            accessibleName: i18n("Use system accent color")
+                            onToggled: appSettings.useSystemColors = checked
                         }
 
-                        Button {
-                            text: i18n("From file...")
-                            icon.name: "document-open"
-                            onClicked: colorFileDialog.open()
+                    }
+
+                    SettingsSeparator {
+                    }
+
+                    SettingsRow {
+                        visible: !useSystemColorsSwitch.checked
+                        title: i18n("Highlight color")
+                        description: i18n("Color for the active/hovered zone")
+
+                        ColorSwatchRow {
+                            color: appSettings.highlightColor
+                            onClicked: {
+                                highlightColorDialog.selectedColor = appSettings.highlightColor;
+                                highlightColorDialog.open();
+                            }
+                        }
+
+                    }
+
+                    SettingsSeparator {
+                        visible: !useSystemColorsSwitch.checked
+                    }
+
+                    SettingsRow {
+                        visible: !useSystemColorsSwitch.checked
+                        title: i18n("Inactive color")
+                        description: i18n("Color for zones that are not hovered")
+
+                        ColorSwatchRow {
+                            color: appSettings.inactiveColor
+                            onClicked: {
+                                inactiveColorDialog.selectedColor = appSettings.inactiveColor;
+                                inactiveColorDialog.open();
+                            }
+                        }
+
+                    }
+
+                    SettingsSeparator {
+                        visible: !useSystemColorsSwitch.checked
+                    }
+
+                    SettingsRow {
+                        visible: !useSystemColorsSwitch.checked
+                        title: i18n("Border color")
+                        description: i18n("Color for zone borders")
+
+                        ColorSwatchRow {
+                            color: appSettings.borderColor
+                            onClicked: {
+                                borderColorDialog.selectedColor = appSettings.borderColor;
+                                borderColorDialog.open();
+                            }
+                        }
+
+                    }
+
+                    SettingsSeparator {
+                        visible: !useSystemColorsSwitch.checked
+                    }
+
+                    SettingsRow {
+                        visible: !useSystemColorsSwitch.checked
+                        title: i18n("Import colors")
+                        description: i18n("Load a color scheme from pywal or a JSON file")
+
+                        RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Button {
+                                text: i18n("From pywal")
+                                icon.name: "color-management"
+                                onClicked: settingsController.loadColorsFromPywal()
+                            }
+
+                            Button {
+                                text: i18n("From file...")
+                                icon.name: "document-open"
+                                onClicked: colorFileDialog.open()
+                            }
+
                         }
 
                     }
@@ -117,117 +154,218 @@ Flickable {
                         onTriggered: colorImportMessage.visible = false
                     }
 
-                    Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                    }
+                }
 
-                    // Opacity subsection
-                    SettingsSlider {
-                        formLabel: i18n("Active opacity:")
-                        from: 0
-                        to: root.opacitySliderMax
-                        value: appSettings.activeOpacity * root.opacitySliderMax
-                        onMoved: (value) => {
-                            return appSettings.activeOpacity = value / root.opacitySliderMax;
-                        }
-                    }
+            }
 
-                    SettingsSlider {
-                        formLabel: i18n("Inactive opacity:")
-                        from: 0
-                        to: root.opacitySliderMax
-                        value: appSettings.inactiveOpacity * root.opacitySliderMax
-                        onMoved: (value) => {
-                            return appSettings.inactiveOpacity = value / root.opacitySliderMax;
-                        }
-                    }
+        }
 
-                    Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Border")
-                    }
+        // =================================================================
+        // OPACITY
+        // =================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: opacityCard.implicitHeight
 
-                    SettingsSpinBox {
-                        formLabel: i18n("Border width:")
-                        from: settingsController.borderWidthMin
-                        to: root.borderWidthMax
-                        value: appSettings.borderWidth
-                        onValueModified: (value) => {
-                            return appSettings.borderWidth = value;
-                        }
-                    }
+            SettingsCard {
+                id: opacityCard
 
-                    SettingsSpinBox {
-                        formLabel: i18n("Border radius:")
-                        from: settingsController.borderRadiusMin
-                        to: root.borderRadiusMax
-                        value: appSettings.borderRadius
-                        onValueModified: (value) => {
-                            return appSettings.borderRadius = value;
-                        }
-                    }
+                anchors.fill: parent
+                headerText: i18n("Opacity")
+                collapsible: true
 
-                    Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Zone Labels")
-                    }
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
 
-                    ColorSwatchRow {
-                        formLabel: i18n("Color:")
-                        visible: !useSystemColorsCheck.checked
-                        color: appSettings.labelFontColor
-                        onClicked: {
-                            labelFontColorDialog.selectedColor = appSettings.labelFontColor;
-                            labelFontColorDialog.open();
-                        }
-                    }
+                    SettingsRow {
+                        title: i18n("Active opacity")
+                        description: i18n("Opacity of the zone under the cursor")
 
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Font:")
-                        spacing: Kirigami.Units.smallSpacing
-
-                        Button {
-                            text: appSettings.labelFontFamily || i18n("System default")
-                            font.family: appSettings.labelFontFamily
-                            font.weight: appSettings.labelFontWeight
-                            font.italic: appSettings.labelFontItalic
-                            icon.name: "font-select-symbolic"
-                            onClicked: {
-                                fontPickerDialog.selectedFamily = appSettings.labelFontFamily;
-                                fontPickerDialog.selectedWeight = appSettings.labelFontWeight;
-                                fontPickerDialog.selectedItalic = appSettings.labelFontItalic;
-                                fontPickerDialog.selectedUnderline = appSettings.labelFontUnderline;
-                                fontPickerDialog.selectedStrikeout = appSettings.labelFontStrikeout;
-                                fontPickerDialog.open();
-                            }
-                        }
-
-                        Button {
-                            icon.name: "edit-clear"
-                            visible: appSettings.labelFontFamily !== "" || appSettings.labelFontWeight !== Font.Bold || appSettings.labelFontItalic || appSettings.labelFontUnderline || appSettings.labelFontStrikeout || Math.abs(appSettings.labelFontSizeScale - 1) > 0.01
-                            ToolTip.text: i18n("Reset to defaults")
-                            ToolTip.visible: hovered
-                            onClicked: {
-                                appSettings.labelFontFamily = "";
-                                appSettings.labelFontSizeScale = 1;
-                                appSettings.labelFontWeight = Font.Bold;
-                                appSettings.labelFontItalic = false;
-                                appSettings.labelFontUnderline = false;
-                                appSettings.labelFontStrikeout = false;
+                        SettingsSlider {
+                            from: 0
+                            to: root.opacitySliderMax
+                            value: appSettings.activeOpacity * root.opacitySliderMax
+                            onMoved: (value) => {
+                                return appSettings.activeOpacity = value / root.opacitySliderMax;
                             }
                         }
 
                     }
 
-                    SettingsSlider {
-                        formLabel: i18n("Scale:")
-                        from: 25
-                        to: 300
-                        stepSize: 5
-                        value: appSettings.labelFontSizeScale * 100
-                        onMoved: (value) => {
-                            return appSettings.labelFontSizeScale = value / 100;
+                    SettingsSeparator {
+                    }
+
+                    SettingsRow {
+                        title: i18n("Inactive opacity")
+                        description: i18n("Opacity of zones not under the cursor")
+
+                        SettingsSlider {
+                            from: 0
+                            to: root.opacitySliderMax
+                            value: appSettings.inactiveOpacity * root.opacitySliderMax
+                            onMoved: (value) => {
+                                return appSettings.inactiveOpacity = value / root.opacitySliderMax;
+                            }
                         }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        // =================================================================
+        // BORDER
+        // =================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: borderCard.implicitHeight
+
+            SettingsCard {
+                id: borderCard
+
+                anchors.fill: parent
+                headerText: i18n("Border")
+                collapsible: true
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    SettingsRow {
+                        title: i18n("Border width")
+                        description: i18n("Thickness of zone borders in pixels")
+
+                        SettingsSpinBox {
+                            from: settingsController.borderWidthMin
+                            to: root.borderWidthMax
+                            value: appSettings.borderWidth
+                            onValueModified: (value) => {
+                                return appSettings.borderWidth = value;
+                            }
+                        }
+
+                    }
+
+                    SettingsSeparator {
+                    }
+
+                    SettingsRow {
+                        title: i18n("Border radius")
+                        description: i18n("Corner rounding of zone borders in pixels")
+
+                        SettingsSpinBox {
+                            from: settingsController.borderRadiusMin
+                            to: root.borderRadiusMax
+                            value: appSettings.borderRadius
+                            onValueModified: (value) => {
+                                return appSettings.borderRadius = value;
+                            }
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        // =================================================================
+        // ZONE LABELS
+        // =================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: labelsCard.implicitHeight
+
+            SettingsCard {
+                id: labelsCard
+
+                anchors.fill: parent
+                headerText: i18n("Zone Labels")
+                collapsible: true
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    SettingsRow {
+                        visible: !useSystemColorsSwitch.checked
+                        title: i18n("Label color")
+                        description: i18n("Text color for zone labels")
+
+                        ColorSwatchRow {
+                            color: appSettings.labelFontColor
+                            onClicked: {
+                                labelFontColorDialog.selectedColor = appSettings.labelFontColor;
+                                labelFontColorDialog.open();
+                            }
+                        }
+
+                    }
+
+                    SettingsSeparator {
+                        visible: !useSystemColorsSwitch.checked
+                    }
+
+                    SettingsRow {
+                        title: i18n("Font")
+                        description: i18n("Typeface and style for zone labels")
+
+                        RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Button {
+                                text: appSettings.labelFontFamily || i18n("System default")
+                                font.family: appSettings.labelFontFamily
+                                font.weight: appSettings.labelFontWeight
+                                font.italic: appSettings.labelFontItalic
+                                icon.name: "font-select-symbolic"
+                                onClicked: {
+                                    fontPickerDialog.selectedFamily = appSettings.labelFontFamily;
+                                    fontPickerDialog.selectedWeight = appSettings.labelFontWeight;
+                                    fontPickerDialog.selectedItalic = appSettings.labelFontItalic;
+                                    fontPickerDialog.selectedUnderline = appSettings.labelFontUnderline;
+                                    fontPickerDialog.selectedStrikeout = appSettings.labelFontStrikeout;
+                                    fontPickerDialog.open();
+                                }
+                            }
+
+                            Button {
+                                icon.name: "edit-clear"
+                                visible: appSettings.labelFontFamily !== "" || appSettings.labelFontWeight !== Font.Bold || appSettings.labelFontItalic || appSettings.labelFontUnderline || appSettings.labelFontStrikeout || Math.abs(appSettings.labelFontSizeScale - 1) > 0.01
+                                Accessible.name: i18n("Reset to defaults")
+                                onClicked: {
+                                    appSettings.labelFontFamily = "";
+                                    appSettings.labelFontSizeScale = 1;
+                                    appSettings.labelFontWeight = Font.Bold;
+                                    appSettings.labelFontItalic = false;
+                                    appSettings.labelFontUnderline = false;
+                                    appSettings.labelFontStrikeout = false;
+                                }
+                            }
+
+                        }
+
+                    }
+
+                    SettingsSeparator {
+                    }
+
+                    SettingsRow {
+                        title: i18n("Label scale")
+                        description: i18n("Size multiplier for zone label text")
+
+                        SettingsSlider {
+                            from: 25
+                            to: 300
+                            stepSize: 5
+                            value: appSettings.labelFontSizeScale * 100
+                            onMoved: (value) => {
+                                return appSettings.labelFontSizeScale = value / 100;
+                            }
+                        }
+
                     }
 
                 }
@@ -238,9 +376,9 @@ Flickable {
 
     }
 
-    // =========================================================================
+    // =====================================================================
     // COLOR DIALOGS
-    // =========================================================================
+    // =====================================================================
     ColorDialog {
         id: highlightColorDialog
 

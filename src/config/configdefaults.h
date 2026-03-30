@@ -11,54 +11,40 @@
 #include <QtCore/qnamespace.h>
 
 #include "../core/constants.h"
+#include "../core/enums.h"
+#include "configkeys.h"
+#include "plasmazones_export.h"
 
 namespace PlasmaZones {
 
 /**
  * @brief Provides static access to default configuration values
  *
- * Hardcoded defaults matching the plasmazones.kcfg schema.
- * The .kcfg file remains the canonical reference; these values are copied
- * from it so that the daemon and editor can build without KConfigXT.
+ * Canonical default values for all PlasmaZones configuration keys.
+ * Used by Settings::load() when no persisted value exists.
  *
  * Usage:
  *   int cols = ConfigDefaults::gridColumns();  // Returns 5
  *   int rows = ConfigDefaults::maxRows();      // Returns 4
  */
-class ConfigDefaults
+class ConfigDefaults : public ConfigKeys
 {
 public:
     // ═══════════════════════════════════════════════════════════════════════════
     // Activation Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    static bool shiftDrag()
-    {
-        return true;
-    }
-    static int dragActivationModifier()
-    {
-        return 3;
-    }
-    static int dragActivationMouseButton()
-    {
-        return 0;
-    }
     static QVariantList dragActivationTriggers()
     {
         // Default: single trigger with Alt modifier, no mouse button
         QVariantMap trigger;
-        trigger[QStringLiteral("modifier")] = dragActivationModifier();
-        trigger[QStringLiteral("mouseButton")] = dragActivationMouseButton();
+        trigger[ConfigKeys::triggerModifierField()] = static_cast<int>(DragModifier::Alt);
+        trigger[ConfigKeys::triggerMouseButtonField()] = 0;
         return {trigger};
     }
     static bool toggleActivation()
     {
         return false;
-    }
-    static constexpr int mouseButtonMax()
-    {
-        return 128;
     }
     static bool snappingEnabled()
     {
@@ -75,8 +61,8 @@ public:
     static QVariantList zoneSpanTriggers()
     {
         QVariantMap trigger;
-        trigger[QStringLiteral("modifier")] = zoneSpanModifier();
-        trigger[QStringLiteral("mouseButton")] = 0;
+        trigger[ConfigKeys::triggerModifierField()] = zoneSpanModifier();
+        trigger[ConfigKeys::triggerMouseButtonField()] = 0;
         return {trigger};
     }
 
@@ -87,6 +73,14 @@ public:
     static bool showOnAllMonitors()
     {
         return false;
+    }
+    static QStringList disabledDesktops()
+    {
+        return {};
+    }
+    static QStringList disabledActivities()
+    {
+        return {};
     }
     static bool showNumbers()
     {
@@ -424,8 +418,8 @@ public:
     {
         // Default: Middle mouse
         QVariantMap trigger;
-        trigger[QStringLiteral("modifier")] = 0;
-        trigger[QStringLiteral("mouseButton")] = static_cast<int>(Qt::MiddleButton);
+        trigger[ConfigKeys::triggerModifierField()] = static_cast<int>(DragModifier::Disabled);
+        trigger[ConfigKeys::triggerMouseButtonField()] = static_cast<int>(Qt::MiddleButton);
         return {trigger};
     }
 
@@ -548,6 +542,74 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Config Path
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Returns the absolute path to plasmazonesrc.
+    // Not cached — QStandardPaths respects $XDG_CONFIG_HOME changes at runtime,
+    // which tests rely on via IsolatedConfigGuard.
+    PLASMAZONES_EXPORT static QString configFilePath();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Rendering Settings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static QString renderingBackend()
+    {
+        return QStringLiteral("auto");
+    }
+
+    struct RenderingBackendEntry
+    {
+        QString key;
+        QString displayName;
+    };
+
+    // Single source of truth for backend keys and display names.
+    // Order here determines ComboBox order in the settings UI.
+    // When adding entries, also add the display name to the translation catalog.
+    static const QList<RenderingBackendEntry>& renderingBackendEntries()
+    {
+        static const QList<RenderingBackendEntry> entries = {
+            {QStringLiteral("auto"), QStringLiteral("Automatic")},
+            {QStringLiteral("vulkan"), QStringLiteral("Vulkan")},
+            {QStringLiteral("opengl"), QStringLiteral("OpenGL")},
+        };
+        return entries;
+    }
+
+    static const QStringList& renderingBackendOptions()
+    {
+        static const QStringList keys = [] {
+            QStringList k;
+            for (const auto& e : renderingBackendEntries())
+                k.append(e.key);
+            return k;
+        }();
+        return keys;
+    }
+
+    // Untranslated display names — use for translation source only.
+    // SettingsController translates these via PzI18n::tr() at runtime.
+    static QStringList renderingBackendDisplayNames()
+    {
+        QStringList names;
+        for (const auto& e : renderingBackendEntries())
+            names.append(e.displayName);
+        return names;
+    }
+
+    static QString normalizeRenderingBackend(const QString& raw)
+    {
+        const QString normalized = raw.toLower().trimmed();
+        for (const auto& e : renderingBackendEntries()) {
+            if (e.key == normalized)
+                return normalized;
+        }
+        return renderingBackend();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Shader Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -592,7 +654,7 @@ public:
     {
         return false;
     }
-    static QString autotileAlgorithm()
+    static QString defaultAutotileAlgorithm()
     {
         return QStringLiteral("bsp");
     }
@@ -617,30 +679,6 @@ public:
         return AutotileDefaults::MinMasterCount;
     }
     static constexpr int autotileMasterCountMax()
-    {
-        return AutotileDefaults::MaxMasterCount;
-    }
-    static double autotileCenteredMasterSplitRatio()
-    {
-        return 0.5;
-    }
-    static constexpr qreal autotileCenteredMasterSplitRatioMin()
-    {
-        return AutotileDefaults::MinSplitRatio;
-    }
-    static constexpr qreal autotileCenteredMasterSplitRatioMax()
-    {
-        return AutotileDefaults::MaxSplitRatio;
-    }
-    static int autotileCenteredMasterMasterCount()
-    {
-        return 1;
-    }
-    static constexpr int autotileCenteredMasterMasterCountMin()
-    {
-        return AutotileDefaults::MinMasterCount;
-    }
-    static constexpr int autotileCenteredMasterMasterCountMax()
     {
         return AutotileDefaults::MaxMasterCount;
     }

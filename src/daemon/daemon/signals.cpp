@@ -266,7 +266,7 @@ void Daemon::initializeAutotile()
                     algoId = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, QString());
                 }
                 if (algoId.isEmpty() && m_settings) {
-                    algoId = m_settings->autotileAlgorithm();
+                    algoId = m_settings->defaultAutotileAlgorithm();
                 }
                 if (algoId.isEmpty()) {
                     algoId = AlgorithmRegistry::defaultAlgorithmId();
@@ -619,6 +619,13 @@ void Daemon::finalizeStartup()
 
     // Signal that daemon is fully initialized and ready for queries
     Q_EMIT m_layoutAdaptor->daemonReady();
+
+    // Explicitly broadcast settingsChanged so the KWin effect re-fetches all
+    // settings (including activation triggers) after daemonReady.  The effect's
+    // initial async getSetting() calls can race with daemon construction and
+    // return stale/empty values; this second broadcast guarantees a clean load.
+    if (m_settingsAdaptor)
+        Q_EMIT m_settingsAdaptor->settingsChanged();
 
     // Show the layout OSD on ALL screens so the user sees what's assigned everywhere.
     // The layoutApplied signal only fires for the focused screen; this covers the rest.

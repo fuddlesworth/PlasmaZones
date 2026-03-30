@@ -52,13 +52,6 @@ public:
     {
     }
 
-    bool shiftDragToActivate() const override
-    {
-        return false;
-    }
-    void setShiftDragToActivate(bool) override
-    {
-    }
     QVariantList dragActivationTriggers() const override
     {
         return {};
@@ -116,6 +109,28 @@ public:
     {
     }
     bool isMonitorDisabled(const QString&) const override
+    {
+        return false;
+    }
+    QStringList disabledDesktops() const override
+    {
+        return {};
+    }
+    void setDisabledDesktops(const QStringList&) override
+    {
+    }
+    bool isDesktopDisabled(const QString&, int) const override
+    {
+        return false;
+    }
+    QStringList disabledActivities() const override
+    {
+        return {};
+    }
+    void setDisabledActivities(const QStringList&) override
+    {
+    }
+    bool isActivityDisabled(const QString&, const QString&) const override
     {
         return false;
     }
@@ -670,6 +685,13 @@ public:
         return false;
     }
     void setContextLocked(const QString&, int, const QString&, bool) override
+    {
+    }
+    QString renderingBackend() const override
+    {
+        return QStringLiteral("rhi");
+    }
+    void setRenderingBackend(const QString&) override
     {
     }
     void load() override

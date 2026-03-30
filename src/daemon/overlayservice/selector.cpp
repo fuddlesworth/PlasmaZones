@@ -17,7 +17,7 @@
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QQmlEngine>
-#include <LayerShellQt/Window>
+#include "../../core/layersurface.h"
 
 namespace PlasmaZones {
 
@@ -53,8 +53,8 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             if (!targetScreenId.isEmpty() && screenId != targetScreenId) {
                 continue;
             }
-            // Skip monitors where PlasmaZones is disabled
-            if (m_settings && m_settings->isMonitorDisabled(screenId)) {
+            // Skip monitors/desktops/activities where PlasmaZones is disabled
+            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
             }
             // Skip autotile-managed screens (zone selector is for manual zone selection)
@@ -80,7 +80,8 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
                 continue;
             }
             QString screenId = Utils::screenIdentifier(screen);
-            if (m_settings && m_settings->isMonitorDisabled(screenId)) {
+            // Skip monitors/desktops/activities where PlasmaZones is disabled
+            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
@@ -295,28 +296,27 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
         m_settings ? m_settings->resolvedZoneSelectorConfig(screenId) : defaultZoneSelectorConfig();
     const auto pos = static_cast<ZoneSelectorPosition>(config.position);
 
-    // Configure LayerShellQt for zone selector (LayerTop for pointer input)
-    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        layerWindow->setScreen(physScreen);
-        layerWindow->setLayer(LayerShellQt::Window::LayerTop);
-        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
+    // Configure layer surface for zone selector (LayerTop for pointer input)
+    if (!configureLayerSurface(window, physScreen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityNone,
+                               QStringLiteral("plasmazones-selector-%1").arg(screenId), getAnchorsForPosition(pos))) {
+        qCWarning(lcOverlay) << "Failed to configure layer surface for zone selector on" << screenId;
+        delete window;
+        return;
+    }
 
-        layerWindow->setAnchors(getAnchorsForPosition(pos));
-
-        // For virtual screens, add margins to confine the zone selector within
-        // the virtual screen region of the physical monitor
-        const bool isVirtualScreen = (screenGeom != physScreen->geometry());
-        if (isVirtualScreen) {
+    // For virtual screens, add margins to confine the zone selector within
+    // the virtual screen region of the physical monitor
+    const bool isVirtualScreen = (screenGeom != physScreen->geometry());
+    if (isVirtualScreen) {
+        auto* layerSurface = LayerSurface::find(window);
+        if (layerSurface) {
             const QRect physGeom = physScreen->geometry();
             const int leftOff = screenGeom.x() - physGeom.x();
             const int topOff = screenGeom.y() - physGeom.y();
             const int rightOff = (physGeom.right() - screenGeom.right());
             const int bottomOff = (physGeom.bottom() - screenGeom.bottom());
-            layerWindow->setMargins(QMargins(leftOff, topOff, rightOff, bottomOff));
+            layerSurface->setMargins(QMargins(leftOff, topOff, rightOff, bottomOff));
         }
-
-        layerWindow->setExclusiveZone(-1);
-        layerWindow->setScope(QStringLiteral("plasmazones-selector-%1").arg(screenId));
     }
 
     // Set screen properties for layout preview scaling
@@ -356,6 +356,10 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
 void OverlayService::destroyZoneSelectorWindow(const QString& screenId)
 {
     if (auto* window = m_zoneSelectorWindows.take(screenId)) {
+        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
+        if (auto* physScreen = m_zoneSelectorPhysScreens.value(screenId)) {
+            disconnect(physScreen, nullptr, window, nullptr);
+        }
         window->close();
         window->deleteLater();
     }

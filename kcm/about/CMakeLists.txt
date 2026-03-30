@@ -13,13 +13,11 @@ kcmutils_add_qml_kcm(kcm_plasmazones_about
     SOURCES ${kcm_about_SRCS}
 )
 
-target_include_directories(kcm_plasmazones_about PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
+target_compile_definitions(kcm_plasmazones_about PRIVATE
+    PLASMAZONES_VERSION="${PROJECT_VERSION}"
 )
 
 target_link_libraries(kcm_plasmazones_about
     PRIVATE
-        plasmazones_core
-        Qt6::DBus
         KF6::KCMUtils
 )

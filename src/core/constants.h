@@ -23,10 +23,10 @@ enum class ZoneGeometryMode {
  * @brief Default values for zone appearance and core module constants
  *
  * These defaults are used by core module files that can't depend on config.
- * For user-configurable settings, see ConfigDefaults and plasmazones.kcfg.
+ * For user-configurable settings, see ConfigDefaults.
  *
  * Layout ratio constants (PriorityGridMainRatio, FocusSideRatio, etc.) are
- * structural constants for built-in layouts and are NOT in .kcfg.
+ * structural constants for built-in layouts.
  */
 namespace Defaults {
 // Alpha values for semi-transparent colors
@@ -195,6 +195,11 @@ constexpr bool DefaultFocusNewWindows = true;
 constexpr int MinMaxWindows = 1;
 constexpr int MaxMaxWindows = 12;
 constexpr int DefaultMaxWindows = 6;
+constexpr int MaxZones = 256;
+constexpr int MaxRuntimeTreeDepth = 50; ///< Maximum recursion depth for split tree operations
+constexpr qreal SplitRatioHysteresis = 0.05; ///< Band within which algorithm-switch ratio reset is suppressed
+constexpr int MinMetadataWindows = 1;
+constexpr int MaxMetadataWindows = 100;
 constexpr int MinInsertPosition = 0;
 constexpr int MaxInsertPosition = 2;
 constexpr int MinAnimationDuration = 50;
@@ -362,6 +367,7 @@ inline constexpr QLatin1String MasterCount{"masterCount"};
 inline constexpr QLatin1String SplitRatio{"splitRatio"};
 
 // AutotileConfig keys
+inline constexpr QLatin1String PerAlgorithmSettings{"perAlgorithmSettings"};
 inline constexpr QLatin1String AlgorithmId{"algorithmId"};
 inline constexpr QLatin1String InnerGap{"innerGap"};
 inline constexpr QLatin1String OuterGap{"outerGap"};
@@ -377,10 +383,13 @@ inline constexpr QLatin1String FocusFollowsMouse{"focusFollowsMouse"};
 inline constexpr QLatin1String InsertPosition{"insertPosition"};
 inline constexpr QLatin1String RespectMinimumSize{"respectMinimumSize"};
 inline constexpr QLatin1String MaxWindows{"maxWindows"};
+inline constexpr QLatin1String CenteredMasterSplitRatio{"centeredMasterSplitRatio"};
+inline constexpr QLatin1String CenteredMasterMasterCount{"centeredMasterMasterCount"};
 // InsertPosition values
 inline constexpr QLatin1String InsertEnd{"end"};
 inline constexpr QLatin1String InsertAfterFocused{"afterFocused"};
 inline constexpr QLatin1String InsertAsMaster{"asMaster"};
+inline constexpr QLatin1String SplitTreeKey{"splitTree"};
 }
 
 /**
@@ -398,6 +407,12 @@ namespace DBus {
 inline constexpr QLatin1String ServiceName{"org.plasmazones"};
 inline constexpr QLatin1String ObjectPath{"/PlasmaZones"};
 
+namespace SettingsApp {
+inline constexpr QLatin1String ServiceName{"org.plasmazones.Settings.App"};
+inline constexpr QLatin1String ObjectPath{"/SettingsApp"};
+inline constexpr QLatin1String Interface{"org.plasmazones.SettingsController"};
+}
+
 namespace Interface {
 inline constexpr QLatin1String LayoutManager{"org.plasmazones.LayoutManager"};
 inline constexpr QLatin1String Overlay{"org.plasmazones.Overlay"};
@@ -409,25 +424,6 @@ inline constexpr QLatin1String ZoneDetection{"org.plasmazones.ZoneDetection"};
 inline constexpr QLatin1String Autotile{"org.plasmazones.Autotile"};
 }
 
-/**
- * @brief Autotile algorithm D-Bus identifiers
- */
-namespace AutotileAlgorithm {
-inline constexpr QLatin1String MasterStack{"master-stack"};
-inline constexpr QLatin1String BSP{"bsp"};
-inline constexpr QLatin1String Columns{"columns"};
-inline constexpr QLatin1String Rows{"rows"};
-inline constexpr QLatin1String Dwindle{"dwindle"};
-inline constexpr QLatin1String Spiral{"spiral"};
-inline constexpr QLatin1String Monocle{"monocle"};
-inline constexpr QLatin1String ThreeColumn{"three-column"};
-inline constexpr QLatin1String Grid{"grid"};
-inline constexpr QLatin1String Wide{"wide"};
-inline constexpr QLatin1String CenteredMaster{"centered-master"};
-inline constexpr QLatin1String Cascade{"cascade"};
-inline constexpr QLatin1String Stair{"stair"};
-inline constexpr QLatin1String Spread{"spread"};
-}
 }
 
 /**

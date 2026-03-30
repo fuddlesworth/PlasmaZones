@@ -21,6 +21,7 @@ void OverlayService::setSettings(ISettings* settings)
         // Disconnect from old settings signals
         if (m_settings) {
             disconnect(m_settings, &ISettings::settingsChanged, this, nullptr);
+            disconnect(m_settings, &ISettings::overlayDisplayModeChanged, this, nullptr);
             disconnect(m_settings, &ISettings::enableShaderEffectsChanged, this, nullptr);
             disconnect(m_settings, &ISettings::enableAudioVisualizerChanged, this, nullptr);
             disconnect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, nullptr);
@@ -41,6 +42,12 @@ void OverlayService::setSettings(ISettings* settings)
                 }
             };
             connect(m_settings, &ISettings::settingsChanged, this, refreshZoneSelectors);
+
+            // Recreate overlay windows when the overlay display mode changes
+            // (e.g. compact mode can't use shader overlays). Connected to the
+            // specific signal instead of settingsChanged to avoid redundant work.
+            connect(m_settings, &ISettings::overlayDisplayModeChanged, this,
+                    &OverlayService::recreateOverlayWindowsOnTypeMismatch);
 
             connect(m_settings, &ISettings::enableShaderEffectsChanged, this, [this]() {
                 // When shader effects setting changes, recreate overlay windows if visible
@@ -75,7 +82,7 @@ void OverlayService::setSettings(ISettings* settings)
 
                         // Recreate windows with correct type per-screen
                         for (const QString& screenId : screenIds) {
-                            if (!m_settings || !m_settings->isMonitorDisabled(screenId)) {
+                            if (!isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
                                 QScreen* physScreen = savedPhysScreens.value(screenId);
                                 if (!physScreen) {
                                     continue;

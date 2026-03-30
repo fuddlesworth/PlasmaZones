@@ -46,10 +46,10 @@ QString Settings::normalizeUuidString(const QString& uuidStr)
     return uuid.toString();
 }
 
-int Settings::readValidatedInt(QSettingsConfigGroup& group, const char* key, int defaultValue, int min, int max,
+int Settings::readValidatedInt(QSettingsConfigGroup& group, const QString& key, int defaultValue, int min, int max,
                                const char* settingName)
 {
-    int value = group.readInt(QString::fromLatin1(key), defaultValue);
+    int value = group.readInt(key, defaultValue);
     if (value < min || value > max) {
         qCWarning(lcConfig) << settingName << ":" << value << "invalid, using default (must be" << min << "-" << max
                             << ")";
@@ -58,10 +58,10 @@ int Settings::readValidatedInt(QSettingsConfigGroup& group, const char* key, int
     return value;
 }
 
-QColor Settings::readValidatedColor(QSettingsConfigGroup& group, const char* key, const QColor& defaultValue,
+QColor Settings::readValidatedColor(QSettingsConfigGroup& group, const QString& key, const QColor& defaultValue,
                                     const char* settingName)
 {
-    QColor color = group.readColor(QString::fromLatin1(key), defaultValue);
+    QColor color = group.readColor(key, defaultValue);
     if (!color.isValid()) {
         qCWarning(lcConfig) << settingName << "color: invalid, using default";
         color = defaultValue;
@@ -95,8 +95,8 @@ std::optional<QVariantList> Settings::parseTriggerListJson(const QString& json)
         if (val.isObject()) {
             QJsonObject obj = val.toObject();
             QVariantMap trigger;
-            trigger[QStringLiteral("modifier")] = obj.value(QLatin1String("modifier")).toInt(0);
-            trigger[QStringLiteral("mouseButton")] = obj.value(QLatin1String("mouseButton")).toInt(0);
+            trigger[ConfigDefaults::triggerModifierField()] = obj.value(QLatin1String("modifier")).toInt(0);
+            trigger[ConfigDefaults::triggerMouseButtonField()] = obj.value(QLatin1String("mouseButton")).toInt(0);
             result.append(trigger);
         } else {
             qCWarning(lcConfig) << "Trigger array: non-object element at index" << result.size() << ", skipping";
@@ -108,30 +108,14 @@ std::optional<QVariantList> Settings::parseTriggerListJson(const QString& json)
     return result; // May be empty (valid [] means no triggers)
 }
 
-QVariantList Settings::loadTriggerList(QSettingsConfigGroup& group, const QString& key, int legacyModifier,
-                                       int legacyMouseButton)
-{
-    QString json = group.readString(key);
-    std::optional<QVariantList> parsed = parseTriggerListJson(json);
-    if (parsed.has_value()) {
-        qCDebug(lcConfig) << "Loaded" << key << ":" << parsed->size() << "triggers";
-        return *parsed;
-    }
-    // No valid JSON: construct single-element trigger list from legacy values
-    QVariantMap trigger;
-    trigger[QStringLiteral("modifier")] = legacyModifier;
-    trigger[QStringLiteral("mouseButton")] = legacyMouseButton;
-    return {trigger};
-}
-
 void Settings::saveTriggerList(QSettingsConfigGroup& group, const QString& key, const QVariantList& triggers)
 {
     QJsonArray arr;
     for (const QVariant& t : triggers) {
         auto map = t.toMap();
         QJsonObject obj;
-        obj[QLatin1String("modifier")] = map.value(QStringLiteral("modifier"), 0).toInt();
-        obj[QLatin1String("mouseButton")] = map.value(QStringLiteral("mouseButton"), 0).toInt();
+        obj[QLatin1String("modifier")] = map.value(ConfigDefaults::triggerModifierField(), 0).toInt();
+        obj[QLatin1String("mouseButton")] = map.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt();
         arr.append(obj);
     }
     group.writeString(key, QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
@@ -145,59 +129,68 @@ void Settings::load()
 
     // Capture old values for post-load signal emission
     const QString oldDefaultLayoutId = m_defaultLayoutId;
+    const QString oldRenderingBackend = m_renderingBackend;
     const bool oldEnableShaders = m_enableShaderEffects;
     const int oldShaderFrameRate = m_shaderFrameRate;
     const bool oldEnableAudioViz = m_enableAudioVisualizer;
     const int oldBarCount = m_audioSpectrumBarCount;
 
     {
-        auto activation = m_configBackend->group(QStringLiteral("Activation"));
+        auto activation = m_configBackend->group(ConfigDefaults::activationGroup());
         loadActivationConfig(*activation);
     }
     {
-        auto display = m_configBackend->group(QStringLiteral("Display"));
+        auto display = m_configBackend->group(ConfigDefaults::displayGroup());
         loadDisplayConfig(*display);
     }
     {
-        auto appearance = m_configBackend->group(QStringLiteral("Appearance"));
+        auto appearance = m_configBackend->group(ConfigDefaults::appearanceGroup());
         loadAppearanceConfig(*appearance);
     }
     {
-        auto zones = m_configBackend->group(QStringLiteral("Zones"));
+        auto zones = m_configBackend->group(ConfigDefaults::zonesGroup());
         loadZoneGeometryConfig(*zones);
     }
     loadBehaviorConfig(m_configBackend.get());
     {
-        auto zoneSelector = m_configBackend->group(QStringLiteral("ZoneSelector"));
+        auto zoneSelector = m_configBackend->group(ConfigDefaults::zoneSelectorGroup());
         loadZoneSelectorConfig(*zoneSelector);
     }
     loadPerScreenOverrides(m_configBackend.get());
     loadVirtualScreenConfigs(m_configBackend.get());
 
+    // Rendering backend lives in [General] (affects whole graphics pipeline, not just shaders).
+    {
+        auto general = m_configBackend->group(ConfigDefaults::generalGroup());
+        const QString raw = general->readString(ConfigDefaults::renderingBackendKey());
+        m_renderingBackend =
+            ConfigDefaults::normalizeRenderingBackend(raw.isEmpty() ? ConfigDefaults::renderingBackend() : raw);
+    }
+
     // Shaders (small enough to stay inline)
     {
-        auto shaders = m_configBackend->group(QStringLiteral("Shaders"));
+        auto shaders = m_configBackend->group(ConfigDefaults::shadersGroup());
         m_enableShaderEffects =
-            shaders->readBool(QStringLiteral("EnableShaderEffects"), ConfigDefaults::enableShaderEffects());
+            shaders->readBool(ConfigDefaults::enableShaderEffectsKey(), ConfigDefaults::enableShaderEffects());
         m_shaderFrameRate =
             qBound(ConfigDefaults::shaderFrameRateMin(),
-                   shaders->readInt(QStringLiteral("ShaderFrameRate"), ConfigDefaults::shaderFrameRate()),
+                   shaders->readInt(ConfigDefaults::shaderFrameRateKey(), ConfigDefaults::shaderFrameRate()),
                    ConfigDefaults::shaderFrameRateMax());
         m_enableAudioVisualizer =
-            shaders->readBool(QStringLiteral("EnableAudioVisualizer"), ConfigDefaults::enableAudioVisualizer());
-        m_audioSpectrumBarCount =
-            qBound(ConfigDefaults::audioSpectrumBarCountMin(),
-                   shaders->readInt(QStringLiteral("AudioSpectrumBarCount"), ConfigDefaults::audioSpectrumBarCount()),
-                   ConfigDefaults::audioSpectrumBarCountMax());
+            shaders->readBool(ConfigDefaults::enableAudioVisualizerKey(), ConfigDefaults::enableAudioVisualizer());
+        m_audioSpectrumBarCount = qBound(
+            ConfigDefaults::audioSpectrumBarCountMin(),
+            shaders->readInt(ConfigDefaults::audioSpectrumBarCountKey(), ConfigDefaults::audioSpectrumBarCount()),
+            ConfigDefaults::audioSpectrumBarCountMax());
     }
 
     {
-        auto globalShortcuts = m_configBackend->group(QStringLiteral("GlobalShortcuts"));
+        auto globalShortcuts = m_configBackend->group(ConfigDefaults::globalShortcutsGroup());
         loadShortcutConfig(*globalShortcuts);
     }
     loadAutotilingConfig(m_configBackend.get());
     {
-        auto editor = m_configBackend->group(QStringLiteral("Editor"));
+        auto editor = m_configBackend->group(ConfigDefaults::editorGroup());
         loadEditorConfig(*editor);
     }
 
@@ -212,6 +205,8 @@ void Settings::load()
     Q_EMIT settingsChanged();
 
     // Emit specific signals for settings with runtime side-effects
+    if (m_renderingBackend != oldRenderingBackend)
+        Q_EMIT renderingBackendChanged();
     if (m_enableShaderEffects != oldEnableShaders)
         Q_EMIT enableShaderEffectsChanged();
     if (m_shaderFrameRate != oldShaderFrameRate)
@@ -229,45 +224,51 @@ void Settings::load()
 void Settings::save()
 {
     {
-        auto activation = m_configBackend->group(QStringLiteral("Activation"));
+        auto activation = m_configBackend->group(ConfigDefaults::activationGroup());
         saveActivationConfig(*activation);
     }
     {
-        auto display = m_configBackend->group(QStringLiteral("Display"));
+        auto display = m_configBackend->group(ConfigDefaults::displayGroup());
         saveDisplayConfig(*display);
     }
     {
-        auto appearance = m_configBackend->group(QStringLiteral("Appearance"));
+        auto appearance = m_configBackend->group(ConfigDefaults::appearanceGroup());
         saveAppearanceConfig(*appearance);
     }
     {
-        auto zones = m_configBackend->group(QStringLiteral("Zones"));
+        auto zones = m_configBackend->group(ConfigDefaults::zonesGroup());
         saveZoneGeometryConfig(*zones);
     }
     saveBehaviorConfig(m_configBackend.get());
     {
-        auto zoneSelector = m_configBackend->group(QStringLiteral("ZoneSelector"));
+        auto zoneSelector = m_configBackend->group(ConfigDefaults::zoneSelectorGroup());
         saveZoneSelectorConfig(*zoneSelector);
     }
     saveAllPerScreenOverrides(m_configBackend.get());
     saveVirtualScreenConfigs(m_configBackend.get());
     {
-        auto globalShortcuts = m_configBackend->group(QStringLiteral("GlobalShortcuts"));
+        auto globalShortcuts = m_configBackend->group(ConfigDefaults::globalShortcutsGroup());
         saveShortcutConfig(*globalShortcuts);
     }
     saveAutotilingConfig(m_configBackend.get());
     {
-        auto editor = m_configBackend->group(QStringLiteral("Editor"));
+        auto editor = m_configBackend->group(ConfigDefaults::editorGroup());
         saveEditorConfig(*editor);
     }
 
-    // Shader Effects (4 entries, not worth a separate helper)
+    // Rendering backend in [General]
     {
-        auto shaders = m_configBackend->group(QStringLiteral("Shaders"));
-        shaders->writeBool(QStringLiteral("EnableShaderEffects"), m_enableShaderEffects);
-        shaders->writeInt(QStringLiteral("ShaderFrameRate"), m_shaderFrameRate);
-        shaders->writeBool(QStringLiteral("EnableAudioVisualizer"), m_enableAudioVisualizer);
-        shaders->writeInt(QStringLiteral("AudioSpectrumBarCount"), m_audioSpectrumBarCount);
+        auto general = m_configBackend->group(ConfigDefaults::generalGroup());
+        general->writeString(ConfigDefaults::renderingBackendKey(), m_renderingBackend);
+    }
+
+    // Shader Effects
+    {
+        auto shaders = m_configBackend->group(ConfigDefaults::shadersGroup());
+        shaders->writeBool(ConfigDefaults::enableShaderEffectsKey(), m_enableShaderEffects);
+        shaders->writeInt(ConfigDefaults::shaderFrameRateKey(), m_shaderFrameRate);
+        shaders->writeBool(ConfigDefaults::enableAudioVisualizerKey(), m_enableAudioVisualizer);
+        shaders->writeInt(ConfigDefaults::audioSpectrumBarCountKey(), m_audioSpectrumBarCount);
     }
 
     m_configBackend->sync();
@@ -277,21 +278,14 @@ void Settings::save()
 
 void Settings::reset()
 {
-    const QStringList groups = {QStringLiteral("Activation"),
-                                QStringLiteral("Display"),
-                                QStringLiteral("Appearance"),
-                                QStringLiteral("Zones"),
-                                QStringLiteral("Behavior"),
-                                QStringLiteral("Exclusions"),
-                                QStringLiteral("ZoneSelector"),
-                                QStringLiteral("Shaders"),
-                                QStringLiteral("GlobalShortcuts"),
-                                QStringLiteral("Autotiling"),
-                                QStringLiteral("AutotileShortcuts"),
-                                QStringLiteral("Animations"),
-                                QStringLiteral("Updates"),
-                                QStringLiteral("Editor"),
-                                QStringLiteral("TilingQuickLayoutSlots")};
+    const QStringList groups = {ConfigDefaults::generalGroup(),    ConfigDefaults::activationGroup(),
+                                ConfigDefaults::displayGroup(),    ConfigDefaults::appearanceGroup(),
+                                ConfigDefaults::zonesGroup(),      ConfigDefaults::behaviorGroup(),
+                                ConfigDefaults::exclusionsGroup(), ConfigDefaults::zoneSelectorGroup(),
+                                ConfigDefaults::shadersGroup(),    ConfigDefaults::globalShortcutsGroup(),
+                                ConfigDefaults::autotilingGroup(), ConfigDefaults::autotileShortcutsGroup(),
+                                ConfigDefaults::animationsGroup(), ConfigDefaults::updatesGroup(),
+                                ConfigDefaults::editorGroup(),     ConfigDefaults::tilingQuickLayoutSlotsGroup()};
     for (const QString& groupName : groups) {
         m_configBackend->deleteGroup(groupName);
     }
@@ -410,7 +404,7 @@ QString Settings::readTilingQuickLayoutSlot(int slotNumber) const
         return {};
     // Config is already current from load() — no reparse needed per read.
     // The staged value check in getTilingQuickLayoutSlot() handles unsaved changes.
-    auto group = m_configBackend->group(QStringLiteral("TilingQuickLayoutSlots"));
+    auto group = m_configBackend->group(ConfigDefaults::tilingQuickLayoutSlotsGroup());
     return group->readString(QString::number(slotNumber));
 }
 
@@ -418,7 +412,7 @@ void Settings::writeTilingQuickLayoutSlot(int slotNumber, const QString& layoutI
 {
     if (slotNumber < 1 || slotNumber > 9)
         return;
-    auto group = m_configBackend->group(QStringLiteral("TilingQuickLayoutSlots"));
+    auto group = m_configBackend->group(ConfigDefaults::tilingQuickLayoutSlotsGroup());
     group->writeString(QString::number(slotNumber), layoutId);
 }
 

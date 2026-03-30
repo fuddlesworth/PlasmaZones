@@ -210,12 +210,12 @@ Window {
 
     }
 
-    // Window configuration - LayerShellQt handles overlay behavior on Wayland
+    // Window configuration - QPA layer-shell plugin handles overlay behavior on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
     // Size based on container (which is inside contentWrapper)
-    width: container.width + 40
-    height: container.height + 40
+    width: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
+    height: container.height + Math.round(Kirigami.Units.gridUnit * 2.5)
     // Start hidden, will be shown with animation
     // Note: Don't set Window.opacity - use contentWrapper.opacity instead
     // QWaylandWindow::setOpacity() is not implemented and logs warnings

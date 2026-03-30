@@ -9,8 +9,10 @@
 #include "core/layout.h"
 #include "core/logging.h"
 
+#include <QCoreApplication>
 #include <QDebug>
 #include <QRect>
+#include <QThread>
 #include <algorithm>
 
 namespace {
@@ -20,17 +22,12 @@ constexpr int PreviewSize = 1000;
 
 namespace PlasmaZones {
 
-AlgorithmRegistry::PreviewParams AlgorithmRegistry::s_previewParams;
-
 bool AlgorithmRegistry::PreviewParams::operator==(const PreviewParams& other) const
 {
     return algorithmId == other.algorithmId && maxWindows == other.maxWindows && masterCount == other.masterCount
         && qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio)
-        && centeredMasterMasterCount == other.centeredMasterMasterCount
-        && qFuzzyCompare(1.0 + centeredMasterSplitRatio, 1.0 + other.centeredMasterSplitRatio);
+        && savedAlgorithmSettings == other.savedAlgorithmSettings;
 }
-
-using namespace DBus::AutotileAlgorithm;
 
 // Global pending registrations list - shared by all AlgorithmRegistrar instantiations
 QList<PendingAlgorithmRegistration>& pendingAlgorithmRegistrations()
@@ -43,14 +40,40 @@ AlgorithmRegistry::AlgorithmRegistry(QObject* parent)
     : QObject(parent)
 {
     registerBuiltInAlgorithms();
+
+    // Connect cleanup to aboutToQuit — safe here because the constructor
+    // runs exactly once under the C++11 static-init guarantee.
+    if (QCoreApplication::instance()) {
+        QObject::connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this,
+                         &AlgorithmRegistry::cleanup);
+    }
 }
 
 AlgorithmRegistry::~AlgorithmRegistry()
 {
-    // Clear the hash first. The TilingAlgorithm objects are QObject children
-    // of this registry, so they will be deleted by ~QObject() after this
-    // destructor completes. We clear the hash to prevent any accidental
-    // access to stale pointers during destruction.
+    // Ensure algorithms are destroyed before ~QObject() runs.
+    // Normally cleanup() has already been called via aboutToQuit(),
+    // but guard against the case where it was not (e.g. no QCoreApplication).
+    cleanup();
+}
+
+void AlgorithmRegistry::cleanup()
+{
+    if (m_algorithms.isEmpty()) {
+        return; // Already cleaned up (e.g., aboutToQuit already ran)
+    }
+
+    // Explicitly delete all algorithm children while Qt is still alive.
+    // This prevents crashes when the static singleton is destroyed after
+    // QCoreApplication during static destruction (ScriptedAlgorithm
+    // instances hold QJSEngine internals that require a live Qt runtime).
+    // Use direct delete instead of deleteLater() — this runs during shutdown
+    // where the event loop may not drain the deferred-delete queue before
+    // ~QObject() tries to destroy remaining children (double-free risk).
+    for (auto* algo : std::as_const(m_algorithms)) {
+        algo->setParent(nullptr);
+        delete algo;
+    }
     m_algorithms.clear();
     m_registrationOrder.clear();
 }
@@ -58,13 +81,16 @@ AlgorithmRegistry::~AlgorithmRegistry()
 AlgorithmRegistry* AlgorithmRegistry::instance()
 {
     // Meyer's singleton: C++11 guarantees thread-safe initialization
-    // of static local variables (§6.7 [stmt.dcl] p4)
+    // of static local variables (§6.7 [stmt.dcl] p4).
+    // The constructor connects cleanup() — no separate connection needed.
     static AlgorithmRegistry s_instance;
     return &s_instance;
 }
 
 void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* algorithm)
 {
+    Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
+
     // Validate inputs - take ownership and delete on failure to prevent leaks
     if (id.isEmpty()) {
         delete algorithm;
@@ -85,17 +111,30 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
     }
 
     // Remove existing algorithm with same ID (replacement case)
+    // Preserve registration order position so replacements don't shift to the end
+    int oldIndex = m_registrationOrder.indexOf(id);
     auto* old = removeAlgorithmInternal(id);
-    if (old && old != algorithm) {
-        old->deleteLater();
-    }
 
-    // Take ownership
+    // Register the new algorithm BEFORE emitting signals so that signal handlers
+    // querying the registry see the new algorithm already in place.
     algorithm->setParent(this);
     m_algorithms.insert(id, algorithm);
-    m_registrationOrder.append(id);
+    if (oldIndex >= 0) {
+        m_registrationOrder.insert(oldIndex, id);
+    } else {
+        m_registrationOrder.append(id);
+    }
 
-    Q_EMIT algorithmRegistered(id);
+    if (old && old != algorithm) {
+        // Emit unregistered then registered so listeners see the full replacement
+        // sequence with the new algorithm already queryable.
+        Q_EMIT algorithmUnregistered(id, true);
+        Q_EMIT algorithmRegistered(id);
+
+        safeDeleteAlgorithm(old);
+    } else {
+        Q_EMIT algorithmRegistered(id);
+    }
 }
 
 QString AlgorithmRegistry::findAlgorithmId(TilingAlgorithm* algorithm) const
@@ -120,14 +159,38 @@ TilingAlgorithm* AlgorithmRegistry::removeAlgorithmInternal(const QString& id)
 
 bool AlgorithmRegistry::unregisterAlgorithm(const QString& id)
 {
+    Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
+
     auto* algorithm = removeAlgorithmInternal(id);
     if (!algorithm) {
         return false;
     }
 
-    algorithm->deleteLater();
-    Q_EMIT algorithmUnregistered(id);
+    // Emit before delete so signal handlers can safely reference the id
+    // without risk of use-after-free on any cached algorithm pointers.
+    Q_EMIT algorithmUnregistered(id, false);
+
+    safeDeleteAlgorithm(algorithm);
     return true;
+}
+
+void AlgorithmRegistry::safeDeleteAlgorithm(TilingAlgorithm* algo)
+{
+    if (!algo) {
+        return;
+    }
+    // Use deleteLater() to avoid re-entrancy: signal handlers connected to
+    // algorithmUnregistered may call back into the registry. Synchronous
+    // delete during signal emission would risk use-after-free if a handler
+    // holds a pointer to the algorithm.
+    //
+    // setParent(nullptr) detaches from the registry's QObject tree so the
+    // registry destructor doesn't double-delete. This is safe because:
+    //   1. The algorithm was already removed from m_algorithms by
+    //      removeAlgorithmInternal(), so cleanup() won't see it.
+    //   2. deleteLater() ensures the QObject event loop handles final deletion.
+    algo->setParent(nullptr);
+    algo->deleteLater();
 }
 
 TilingAlgorithm* AlgorithmRegistry::algorithm(const QString& id) const
@@ -164,12 +227,19 @@ bool AlgorithmRegistry::hasAlgorithm(const QString& id) const noexcept
 
 QString AlgorithmRegistry::defaultAlgorithmId()
 {
-    return ConfigDefaults::autotileAlgorithm();
+    return ConfigDefaults::defaultAutotileAlgorithm();
 }
 
 TilingAlgorithm* AlgorithmRegistry::defaultAlgorithm() const
 {
-    return algorithm(defaultAlgorithmId());
+    auto* algo = algorithm(defaultAlgorithmId());
+    if (!algo && !m_algorithms.isEmpty() && !m_registrationOrder.isEmpty()) {
+        // Configured default not registered (e.g. BSP script failed to load).
+        // Fall back to the first available algorithm so callers never get nullptr
+        // when algorithms are registered.
+        algo = m_algorithms.value(m_registrationOrder.first(), nullptr);
+    }
+    return algo;
 }
 
 void AlgorithmRegistry::registerBuiltInAlgorithms()
@@ -191,30 +261,6 @@ void AlgorithmRegistry::registerBuiltInAlgorithms()
     pending.clear();
 }
 
-namespace {
-/**
- * @brief Check if all zones have identical geometry (monocle-style)
- *
- * Monocle algorithm returns all windows at fullscreen, which would cause
- * zone numbers to stack on top of each other in preview. We detect this
- * and apply visual offsets.
- */
-bool areAllZonesIdentical(const QVector<QRect>& zones)
-{
-    if (zones.size() <= 1) {
-        return false; // Nothing to offset for single zone
-    }
-
-    const QRect& first = zones.first();
-    for (int i = 1; i < zones.size(); ++i) {
-        if (zones[i] != first) {
-            return false;
-        }
-    }
-    return true;
-}
-} // namespace
-
 QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect>& zones, const QRect& previewRect)
 {
     if (!previewRect.isValid() || previewRect.width() == 0 || previewRect.height() == 0) {
@@ -222,25 +268,15 @@ QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect>& zo
     }
 
     QVariantList result;
-    const bool isMonocle = areAllZonesIdentical(zones);
-
     for (int i = 0; i < zones.size(); ++i) {
         QVariantMap zoneMap;
         zoneMap[QLatin1String("zoneNumber")] = i + 1;
 
         QVariantMap relGeo;
-        if (isMonocle) {
-            const qreal offset = i * MonoclePreviewOffset;
-            relGeo[QLatin1String("x")] = offset;
-            relGeo[QLatin1String("y")] = offset;
-            relGeo[QLatin1String("width")] = 1.0 - offset * 2;
-            relGeo[QLatin1String("height")] = 1.0 - offset * 2;
-        } else {
-            relGeo[QLatin1String("x")] = static_cast<qreal>(zones[i].x()) / previewRect.width();
-            relGeo[QLatin1String("y")] = static_cast<qreal>(zones[i].y()) / previewRect.height();
-            relGeo[QLatin1String("width")] = static_cast<qreal>(zones[i].width()) / previewRect.width();
-            relGeo[QLatin1String("height")] = static_cast<qreal>(zones[i].height()) / previewRect.height();
-        }
+        relGeo[QLatin1String("x")] = static_cast<qreal>(zones[i].x()) / previewRect.width();
+        relGeo[QLatin1String("y")] = static_cast<qreal>(zones[i].y()) / previewRect.height();
+        relGeo[QLatin1String("width")] = static_cast<qreal>(zones[i].width()) / previewRect.width();
+        relGeo[QLatin1String("height")] = static_cast<qreal>(zones[i].height()) / previewRect.height();
         zoneMap[QLatin1String("relativeGeometry")] = relGeo;
 
         result.append(zoneMap);
@@ -251,30 +287,30 @@ QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect>& zo
 
 void AlgorithmRegistry::setConfiguredPreviewParams(const PreviewParams& params)
 {
-    s_previewParams = params;
+    instance()->m_previewParams = params;
 }
 
 const AlgorithmRegistry::PreviewParams& AlgorithmRegistry::configuredPreviewParams()
 {
-    return s_previewParams;
+    return instance()->m_previewParams;
 }
 
 int AlgorithmRegistry::configuredMaxWindows()
 {
-    return s_previewParams.maxWindows;
+    return instance()->m_previewParams.maxWindows;
 }
 
 int AlgorithmRegistry::effectiveMaxWindows(TilingAlgorithm* algorithm)
 {
+    const auto& params = instance()->m_previewParams;
     if (!algorithm) {
-        return s_previewParams.maxWindows;
+        return params.maxWindows;
     }
     // Use the user-configured maxWindows only for the active algorithm.
     // Other algorithms use their own default so each preview is representative.
-    if (s_previewParams.maxWindows > 0 && !s_previewParams.algorithmId.isEmpty()) {
-        auto* inst = instance();
-        if (inst && inst->algorithm(s_previewParams.algorithmId) == algorithm) {
-            return s_previewParams.maxWindows;
+    if (params.maxWindows > 0 && !params.algorithmId.isEmpty()) {
+        if (instance()->algorithm(params.algorithmId) == algorithm) {
+            return params.maxWindows;
         }
     }
     return algorithm->defaultMaxWindows();
@@ -292,25 +328,33 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm,
         count = effectiveMaxWindows(algorithm);
     }
 
-    // Apply configured params only to the active algorithm (or centered-master's dedicated params).
-    // Non-active algorithms use their own defaults so each preview is representative.
+    // Apply configured params: active algorithm uses global masterCount/splitRatio,
+    // other algorithms check savedAlgorithmSettings for per-algorithm overrides,
+    // and fall back to their own defaults.
     auto* inst = instance();
-    const bool isActive =
-        inst && !s_previewParams.algorithmId.isEmpty() && inst->algorithm(s_previewParams.algorithmId) == algorithm;
-    const bool isCenteredMaster = inst && (algorithm == inst->algorithm(CenteredMaster));
+    const auto& params = inst->m_previewParams;
+    const bool isActive = !params.algorithmId.isEmpty() && inst->algorithm(params.algorithmId) == algorithm;
 
     int masterCount = 1;
     qreal splitRatio = algorithm->defaultSplitRatio();
-    if (isCenteredMaster) {
-        if (s_previewParams.centeredMasterMasterCount > 0)
-            masterCount = s_previewParams.centeredMasterMasterCount;
-        if (s_previewParams.centeredMasterSplitRatio > 0)
-            splitRatio = s_previewParams.centeredMasterSplitRatio;
-    } else if (isActive) {
-        if (s_previewParams.masterCount > 0)
-            masterCount = s_previewParams.masterCount;
-        if (s_previewParams.splitRatio > 0)
-            splitRatio = s_previewParams.splitRatio;
+    if (isActive) {
+        if (params.masterCount > 0)
+            masterCount = params.masterCount;
+        if (params.splitRatio > 0)
+            splitRatio = params.splitRatio;
+    } else {
+        // Look up per-algorithm saved settings from the generalized map
+        const QString algoId = inst->findAlgorithmId(algorithm);
+        const auto it = params.savedAlgorithmSettings.constFind(algoId);
+        if (it != params.savedAlgorithmSettings.constEnd()) {
+            const QVariantMap& saved = it.value();
+            const int savedMasterCount = saved.value(PerAlgoKeys::MasterCount, -1).toInt();
+            const qreal savedSplitRatio = saved.value(PerAlgoKeys::SplitRatio, -1.0).toDouble();
+            if (savedMasterCount > 0)
+                masterCount = savedMasterCount;
+            if (savedSplitRatio > 0)
+                splitRatio = savedSplitRatio;
+        }
     }
 
     // Generate preview zones for a representative window count
@@ -322,7 +366,6 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm,
 
     QVector<QRect> zones = algorithm->calculateZones({count, previewRect, &previewState, 0, {}});
 
-    // Convert to relative geometry (handles monocle offset detection internally)
     QVariantList list = zonesToRelativeGeometry(zones, previewRect);
 
     // Enrich with extra fields needed by zone selector / layout cards
@@ -335,25 +378,6 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm,
     }
 
     return list;
-}
-
-QVariantMap AlgorithmRegistry::algorithmToVariantMap(TilingAlgorithm* algorithm, const QString& algorithmId)
-{
-    QVariantMap map;
-
-    if (!algorithm) {
-        return map;
-    }
-
-    // Use autotile: prefix for ID to distinguish from manual layout UUIDs
-    map[QLatin1String("id")] = LayoutId::makeAutotileId(algorithmId);
-    map[QLatin1String("name")] = algorithm->name();
-    map[QLatin1String("description")] = algorithm->description();
-    map[QLatin1String("zoneCount")] = effectiveMaxWindows(algorithm);
-    map[QLatin1String("zones")] = generatePreviewZones(algorithm);
-    map[QLatin1String("category")] = static_cast<int>(LayoutCategory::Autotile);
-
-    return map;
 }
 
 } // namespace PlasmaZones

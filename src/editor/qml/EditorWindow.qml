@@ -16,6 +16,7 @@ Window {
     // ═══════════════════════════════════════════════════════════════════
     // CONNECTIONS
     // ═══════════════════════════════════════════════════════════════════
+    // Helper function to find zone by ID
 
     id: editorWindow
 
@@ -152,9 +153,20 @@ Window {
         return editorShortcuts.formatShortcut(shortcut);
     }
 
+    // Open the shared context menu for a specific zone
+    function openContextMenu(zoneId) {
+        sharedContextMenu.zoneId = zoneId;
+        sharedContextMenu.popup();
+    }
+
     // Window flags - fullscreen editor window on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowFullScreenButtonHint
-    color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.7)
+    // Transparent window clear color — the semi-transparent visual effect is
+    // provided by _windowBackground below. Using alpha on Window.color causes
+    // Menu/Popup surfaces (xdg_popup) to inherit the window-level transparency
+    // on Wayland, making all menus see-through. A child Rectangle achieves the
+    // same visual without affecting popup surface compositing.
+    color: "transparent"
     // Start hidden — on Wayland the compositor assigns the output when the surface
     // is first mapped. We must set the target screen BEFORE showing, otherwise the
     // window always lands on the primary monitor.
@@ -197,10 +209,95 @@ Window {
 
     }
 
+    // Semi-transparent background — replaces the old Window.color alpha=0.7.
+    // A child Rectangle lets the window surface be fully transparent while
+    // popup menus (xdg_popup) get their own opaque surfaces from the style.
+    Rectangle {
+        id: _windowBackground
+
+        anchors.fill: parent
+        z: -1
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.7)
+    }
+
     ZoneOperations {
         id: zoneOps
     }
-    // Helper function to find zone by ID
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SHARED CONTEXT MENU — Single instance to avoid QQmlData crash
+    // When a QVariantList-backed Repeater destroys delegates, per-delegate
+    // Menu/MenuItem objects (with KDE desktop style helpers) can trigger
+    // a use-after-free in QQmlData::destroyed(). A shared Menu at the
+    // Window level is never destroyed during model updates.
+    // ═══════════════════════════════════════════════════════════════════
+    ZoneContextMenu {
+        id: sharedContextMenu
+
+        editorController: editorWindow._editorController
+        zoneId: ""
+        // Defer model-mutating operations to the next event loop iteration.
+        // Qt 6 Menu.dismiss() tears down the popup in the same tick as
+        // onTriggered; if the handler modifies the Repeater model
+        // synchronously, finalizeExitTransition walks stale child pointers
+        // and crashes in derefWindow (QTBUG-white-paper popup UAF).
+        onSplitHorizontalRequested: {
+            let id = zoneId;
+            if (editorWindow._editorController && id)
+                Qt.callLater(editorWindow._editorController.splitZone, id, true);
+
+        }
+        onSplitVerticalRequested: {
+            let id = zoneId;
+            if (editorWindow._editorController && id)
+                Qt.callLater(editorWindow._editorController.splitZone, id, false);
+
+        }
+        onDuplicateRequested: {
+            let id = zoneId;
+            if (editorWindow._editorController && id)
+                Qt.callLater(editorWindow._editorController.duplicateZone, id);
+
+        }
+        onDeleteRequested: {
+            let id = zoneId;
+            if (editorWindow._editorController && id)
+                Qt.callLater(editorWindow._editorController.deleteZone, id);
+
+        }
+        onDeleteWithFillRequested: {
+            let id = zoneId;
+            if (editorWindow._editorController && id)
+                Qt.callLater(zoneOps.deleteWithFillAnimation, id, editorWindow._editorController, editorWindow._zonesRepeater, drawingArea.width, drawingArea.height);
+
+        }
+        onFillRequested: {
+            let id = zoneId;
+            if (editorWindow._editorController && id)
+                Qt.callLater(editorWindow._editorController.expandToFillSpace, id);
+
+        }
+        onBringToFrontRequested: {
+            if (editorWindow._editorController && zoneId)
+                editorWindow._editorController.bringToFront(zoneId);
+
+        }
+        onBringForwardRequested: {
+            if (editorWindow._editorController && zoneId)
+                editorWindow._editorController.bringForward(zoneId);
+
+        }
+        onSendBackwardRequested: {
+            if (editorWindow._editorController && zoneId)
+                editorWindow._editorController.sendBackward(zoneId);
+
+        }
+        onSendToBackRequested: {
+            if (editorWindow._editorController && zoneId)
+                editorWindow._editorController.sendToBack(zoneId);
+
+        }
+    }
 
     // ═══════════════════════════════════════════════════════════════════
     // SHORTCUTS - Extracted to EditorShortcuts.qml

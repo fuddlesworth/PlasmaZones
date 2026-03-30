@@ -8,8 +8,6 @@ import org.kde.kirigami as Kirigami
 
 /**
  * @brief Quick layout slots card - Assign layouts to keyboard shortcuts
- *
- * Refactored to use cleaner structure with LayoutComboBox.
  */
 SettingsCard {
     id: root
@@ -33,29 +31,12 @@ SettingsCard {
     collapsible: true
 
     contentItem: ColumnLayout {
-        spacing: Kirigami.Units.smallSpacing
+        spacing: 0
 
-        Label {
-            Layout.fillWidth: true
-            Layout.margins: Kirigami.Units.smallSpacing
-            text: root.viewMode === 1 ? i18n("Assign tiling algorithms to keyboard shortcuts for instant switching.") : i18n("Assign layouts to keyboard shortcuts for instant switching.")
-            wrapMode: Text.WordWrap
-            opacity: 0.7
-        }
-
-        ListView {
-            id: quickLayoutListView
-
-            Layout.fillWidth: true
-            Layout.preferredHeight: contentHeight
-            Layout.margins: Kirigami.Units.smallSpacing
-            clip: true
+        Repeater {
             model: 9
-            interactive: false
-            Accessible.name: i18n("Quick layout shortcuts list")
-            Accessible.role: Accessible.List
 
-            delegate: Item {
+            delegate: ColumnLayout {
                 id: slotDelegate
 
                 required property int index
@@ -63,78 +44,93 @@ SettingsCard {
                 property string shortcutText: root.appSettings.getQuickLayoutShortcut(slotNumber)
                 property int _slotRevision: 0
 
-                width: ListView.view.width
-                height: slotRow.implicitHeight + Kirigami.Units.smallSpacing * 2
+                Layout.fillWidth: true
+                spacing: 0
 
+                // Separator between items (not before the first)
+                SettingsSeparator {
+                    visible: slotDelegate.index > 0
+                }
+
+                // Slot row — matches SettingsRow layout: title+description left, control right
                 RowLayout {
-                    id: slotRow
+                    Layout.fillWidth: true
+                    Layout.margins: Kirigami.Units.smallSpacing
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    spacing: Kirigami.Units.largeSpacing
 
-                    anchors.fill: parent
-                    anchors.margins: Kirigami.Units.smallSpacing
-                    spacing: Kirigami.Units.smallSpacing
-
-                    // Slot label + shortcut
+                    // Left: slot title + shortcut info
                     ColumnLayout {
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 14
-                        spacing: 0
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: Kirigami.Units.gridUnit * 10
+                        spacing: Kirigami.Units.smallSpacing / 2
 
                         Label {
                             text: root.viewMode === 1 ? i18n("Quick Tiling %1", slotDelegate.slotNumber) : i18n("Quick Layout %1", slotDelegate.slotNumber)
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
                         }
 
                         Label {
                             text: slotDelegate.shortcutText !== "" ? slotDelegate.shortcutText : i18n("No shortcut assigned")
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
                             font: Kirigami.Theme.smallFont
-                            opacity: slotDelegate.shortcutText !== "" ? 0.7 : 0.4
+                            opacity: slotDelegate.shortcutText !== "" ? 0.6 : 0.35
                         }
 
                     }
 
-                    Item {
-                        Layout.fillWidth: true
-                    }
+                    // Right: layout combo + clear button
+                    RowLayout {
+                        Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+                        Layout.maximumWidth: parent.width * 0.45
+                        spacing: Kirigami.Units.smallSpacing
 
-                    // Layout selection
-                    LayoutComboBox {
-                        id: slotLayoutCombo
+                        LayoutComboBox {
+                            id: slotLayoutCombo
 
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 16
-                        appSettings: root.appSettings
-                        noneText: i18n("None")
-                        showPreview: root.viewMode === 0
-                        layoutFilter: root.viewMode === 1 ? 1 : 0
-                        resolvedDefaultId: ""
-                        currentLayoutId: {
-                            void (slotDelegate._slotRevision);
-                            return root.getSlot(slotDelegate.slotNumber);
-                        }
-                        onActivated: {
-                            root.setSlot(slotDelegate.slotNumber, model[currentIndex].value);
-                        }
-
-                        Connections {
-                            function onQuickLayoutSlotsChanged() {
-                                slotDelegate._slotRevision++;
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: Kirigami.Units.gridUnit * 10
+                            appSettings: root.appSettings
+                            noneText: i18n("None")
+                            showPreview: root.viewMode === 0
+                            layoutFilter: root.viewMode === 1 ? 1 : 0
+                            resolvedDefaultId: ""
+                            currentLayoutId: {
+                                void (slotDelegate._slotRevision);
+                                return root.getSlot(slotDelegate.slotNumber);
+                            }
+                            onActivated: {
+                                root.setSlot(slotDelegate.slotNumber, model[currentIndex].value);
                             }
 
-                            function onTilingQuickLayoutSlotsChanged() {
-                                slotDelegate._slotRevision++;
+                            Connections {
+                                function onQuickLayoutSlotsChanged() {
+                                    slotDelegate._slotRevision++;
+                                }
+
+                                function onTilingQuickLayoutSlotsChanged() {
+                                    slotDelegate._slotRevision++;
+                                }
+
+                                target: root.appSettings
                             }
 
-                            target: root.appSettings
                         }
 
-                    }
-
-                    ToolButton {
-                        icon.name: "edit-clear"
-                        onClicked: {
-                            root.setSlot(slotDelegate.slotNumber, "");
-                            slotLayoutCombo.clearSelection();
+                        ToolButton {
+                            icon.name: "edit-clear"
+                            onClicked: {
+                                root.setSlot(slotDelegate.slotNumber, "");
+                                slotLayoutCombo.clearSelection();
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.text: i18n("Clear shortcut")
+                            Accessible.name: i18n("Clear shortcut %1", slotDelegate.slotNumber)
                         }
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("Clear shortcut")
-                        Accessible.name: i18n("Clear shortcut %1", slotDelegate.slotNumber)
+
                     }
 
                 }

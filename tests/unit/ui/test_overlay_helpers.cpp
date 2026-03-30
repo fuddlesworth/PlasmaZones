@@ -5,149 +5,11 @@
 #include <QSignalSpy>
 #include <QGuiApplication>
 #include <QQuickWindow>
-#include <QQmlProperty>
-#include <QJsonDocument>
-#include <QJsonArray>
-#include <QJsonObject>
-#include <QVariantList>
-#include <QVariantMap>
-#include <QElapsedTimer>
-#include <QMutex>
-#include <QMutexLocker>
-#include <atomic>
 
-#include <LayerShellQt/Window>
-
-#include "core/logging.h"
-#include "core/enums.h"
+// Shared overlay helpers — single source of truth for both production and tests.
+// Previously these were duplicated here; now they live in overlay_helpers.h.
+#include "daemon/overlayservice/overlay_helpers.h"
 #include "../helpers/TestHelpers.h"
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Extracted inline functions from daemon/overlayservice/internal.h
-//
-// internal.h cannot be included directly in test TUs due to its relative
-// include of ../config/configdefaults.h (only resolves in unity builds).
-// We replicate the exact function bodies here for testing. These must be
-// kept in sync with internal.h — any functional change there should update
-// these copies and this comment.
-// ═══════════════════════════════════════════════════════════════════════════════
-
-namespace PlasmaZones {
-
-inline void writeQmlProperty(QObject* object, const QString& name, const QVariant& value)
-{
-    if (!object) {
-        return;
-    }
-
-    QQmlProperty prop(object, name);
-    if (prop.isValid()) {
-        prop.write(value);
-    } else {
-        object->setProperty(name.toUtf8().constData(), value);
-    }
-}
-
-inline QVariantList patchZonesWithHighlight(const QVariantList& zones, QQuickWindow* window)
-{
-    if (!window) {
-        return zones;
-    }
-    const QString hid = window->property("highlightedZoneId").toString();
-    const QVariantList hids = window->property("highlightedZoneIds").toList();
-
-    QVariantList out;
-    for (const QVariant& z : zones) {
-        QVariantMap m = z.toMap();
-        const QString id = m.value(QLatin1String("id")).toString();
-        bool hi = (!id.isEmpty() && id == hid);
-        if (!hi) {
-            for (const QVariant& v : hids) {
-                if (v.toString() == id) {
-                    hi = true;
-                    break;
-                }
-            }
-        }
-        m[QLatin1String("isHighlighted")] = hi;
-        out.append(m);
-    }
-    return out;
-}
-
-inline QVariantList parseZonesJson(const QString& json, const char* context)
-{
-    QVariantList zones;
-    if (json.isEmpty()) {
-        return zones;
-    }
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qCWarning(lcOverlay) << context << "invalid zones JSON:" << parseError.errorString();
-        return zones;
-    }
-    if (!doc.isArray()) {
-        qCWarning(lcOverlay) << context << "zones JSON is not an array";
-        return zones;
-    }
-    for (const QJsonValue& v : doc.array()) {
-        if (v.isObject()) {
-            QVariantMap m;
-            const QJsonObject o = v.toObject();
-            for (auto it = o.begin(); it != o.end(); ++it) {
-                m.insert(it.key(), it.value().toVariant());
-            }
-            zones.append(m);
-        }
-    }
-    return zones;
-}
-
-inline void ensureShaderTimerStarted(QElapsedTimer& timer, QMutex& mutex, std::atomic<qint64>& lastFrame,
-                                     std::atomic<int>& frameCount)
-{
-    QMutexLocker locker(&mutex);
-    if (!timer.isValid()) {
-        timer.start();
-        lastFrame.store(0);
-        frameCount.store(0);
-    }
-}
-
-inline LayerShellQt::Window::Anchors getAnchorsForPosition(ZoneSelectorPosition pos)
-{
-    switch (pos) {
-    case ZoneSelectorPosition::TopLeft:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
-    case ZoneSelectorPosition::Top:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
-                                             | LayerShellQt::Window::AnchorRight);
-    case ZoneSelectorPosition::TopRight:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorRight);
-    case ZoneSelectorPosition::Left:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
-                                             | LayerShellQt::Window::AnchorBottom);
-    case ZoneSelectorPosition::Center:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                             | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight);
-    case ZoneSelectorPosition::Right:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
-                                             | LayerShellQt::Window::AnchorBottom);
-    case ZoneSelectorPosition::BottomLeft:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft);
-    case ZoneSelectorPosition::Bottom:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft
-                                             | LayerShellQt::Window::AnchorRight);
-    case ZoneSelectorPosition::BottomRight:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorRight);
-    default:
-        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
-                                             | LayerShellQt::Window::AnchorRight);
-    }
-}
-
-} // namespace PlasmaZones
 
 using namespace PlasmaZones;
 
@@ -405,85 +267,112 @@ private Q_SLOTS:
     void testGetAnchorsForPosition_topLeft()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::TopLeft);
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorTop), "TopLeft must have AnchorTop");
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorLeft), "TopLeft must have AnchorLeft");
-        QVERIFY2(!anchors.testFlag(LayerShellQt::Window::AnchorBottom), "TopLeft must not have AnchorBottom");
-        QVERIFY2(!anchors.testFlag(LayerShellQt::Window::AnchorRight), "TopLeft must not have AnchorRight");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop), "TopLeft must have AnchorTop");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft), "TopLeft must have AnchorLeft");
+        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorBottom), "TopLeft must not have AnchorBottom");
+        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight), "TopLeft must not have AnchorRight");
     }
 
     void testGetAnchorsForPosition_top()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::Top);
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorTop), "Top must have AnchorTop");
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorLeft), "Top must have AnchorLeft (horizontal stretch)");
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorRight), "Top must have AnchorRight (horizontal stretch)");
-        QVERIFY2(!anchors.testFlag(LayerShellQt::Window::AnchorBottom), "Top must not have AnchorBottom");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop), "Top must have AnchorTop");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft),
+                 "Top must have AnchorLeft (horizontal stretch)");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight),
+                 "Top must have AnchorRight (horizontal stretch)");
+        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorBottom), "Top must not have AnchorBottom");
     }
 
     void testGetAnchorsForPosition_topRight()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::TopRight);
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorTop), "TopRight must have AnchorTop");
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorRight), "TopRight must have AnchorRight");
-        QVERIFY2(!anchors.testFlag(LayerShellQt::Window::AnchorLeft), "TopRight must not have AnchorLeft");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop), "TopRight must have AnchorTop");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight), "TopRight must have AnchorRight");
+        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft), "TopRight must not have AnchorLeft");
     }
 
     void testGetAnchorsForPosition_left()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::Left);
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorLeft), "Left must have AnchorLeft");
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorTop), "Left must have AnchorTop (vertical stretch)");
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorBottom),
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft), "Left must have AnchorLeft");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop), "Left must have AnchorTop (vertical stretch)");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorBottom),
                  "Left must have AnchorBottom (vertical stretch)");
-        QVERIFY2(!anchors.testFlag(LayerShellQt::Window::AnchorRight), "Left must not have AnchorRight");
+        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight), "Left must not have AnchorRight");
     }
 
     void testGetAnchorsForPosition_right()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::Right);
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorRight), "Right must have AnchorRight");
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorTop), "Right must have AnchorTop (vertical stretch)");
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorBottom),
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight), "Right must have AnchorRight");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop),
+                 "Right must have AnchorTop (vertical stretch)");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorBottom),
                  "Right must have AnchorBottom (vertical stretch)");
-        QVERIFY2(!anchors.testFlag(LayerShellQt::Window::AnchorLeft), "Right must not have AnchorLeft");
+        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft), "Right must not have AnchorLeft");
     }
 
     void testGetAnchorsForPosition_bottomLeft()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::BottomLeft);
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorBottom), "BottomLeft must have AnchorBottom");
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorLeft), "BottomLeft must have AnchorLeft");
-        QVERIFY2(!anchors.testFlag(LayerShellQt::Window::AnchorTop), "BottomLeft must not have AnchorTop");
-        QVERIFY2(!anchors.testFlag(LayerShellQt::Window::AnchorRight), "BottomLeft must not have AnchorRight");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorBottom), "BottomLeft must have AnchorBottom");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft), "BottomLeft must have AnchorLeft");
+        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop), "BottomLeft must not have AnchorTop");
+        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight), "BottomLeft must not have AnchorRight");
     }
 
     void testGetAnchorsForPosition_bottom()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::Bottom);
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorBottom), "Bottom must have AnchorBottom");
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorLeft),
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorBottom), "Bottom must have AnchorBottom");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft),
                  "Bottom must have AnchorLeft (horizontal stretch)");
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorRight),
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight),
                  "Bottom must have AnchorRight (horizontal stretch)");
-        QVERIFY2(!anchors.testFlag(LayerShellQt::Window::AnchorTop), "Bottom must not have AnchorTop");
+        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop), "Bottom must not have AnchorTop");
     }
 
     void testGetAnchorsForPosition_bottomRight()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::BottomRight);
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorBottom), "BottomRight must have AnchorBottom");
-        QVERIFY2(anchors.testFlag(LayerShellQt::Window::AnchorRight), "BottomRight must have AnchorRight");
-        QVERIFY2(!anchors.testFlag(LayerShellQt::Window::AnchorLeft), "BottomRight must not have AnchorLeft");
-        QVERIFY2(!anchors.testFlag(LayerShellQt::Window::AnchorTop), "BottomRight must not have AnchorTop");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorBottom), "BottomRight must have AnchorBottom");
+        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight), "BottomRight must have AnchorRight");
+        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft), "BottomRight must not have AnchorLeft");
+        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop), "BottomRight must not have AnchorTop");
+    }
+
+    void testGetAnchorsForPosition_center()
+    {
+        auto anchors = getAnchorsForPosition(ZoneSelectorPosition::Center);
+        QCOMPARE(anchors, PlasmaZones::LayerSurface::AnchorAll);
     }
 
     void testGetAnchorsForPosition_defaultFallback()
     {
         // Invalid enum value should fall through to default (Top anchors)
         auto def = getAnchorsForPosition(static_cast<ZoneSelectorPosition>(99));
-        QVERIFY(def.testFlag(LayerShellQt::Window::AnchorTop));
-        QVERIFY(def.testFlag(LayerShellQt::Window::AnchorLeft));
-        QVERIFY(def.testFlag(LayerShellQt::Window::AnchorRight));
+        QVERIFY(def.testFlag(PlasmaZones::LayerSurface::AnchorTop));
+        QVERIFY(def.testFlag(PlasmaZones::LayerSurface::AnchorLeft));
+        QVERIFY(def.testFlag(PlasmaZones::LayerSurface::AnchorRight));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // P1: parseZonesJson — additional edge cases
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testParseZonesJson_mixedArray_skipsNonObjects()
+    {
+        QString json = QStringLiteral("[1, \"string\", null, {\"id\": \"z1\"}]");
+        QVariantList result = parseZonesJson(json, "test:");
+        QCOMPARE(result.size(), 1);
+        QCOMPARE(result[0].toMap().value(QLatin1String("id")).toString(), QStringLiteral("z1"));
+    }
+
+    void testParseZonesJson_emptyArray_returnsEmpty()
+    {
+        QVariantList result = parseZonesJson(QStringLiteral("[]"), "test:");
+        QVERIFY(result.isEmpty());
     }
 };
 

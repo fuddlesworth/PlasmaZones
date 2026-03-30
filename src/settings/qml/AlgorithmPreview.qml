@@ -31,14 +31,46 @@ Item {
     // Throttled zone calculation (~60fps cap) to avoid redundant recalcs
     // when multiple properties change in the same frame
     property var zones: []
+    property string zoneNumberDisplay: "all"
+    // Cache availableAlgorithms() to avoid calling it on every binding evaluation
+    property var _cachedAlgos: root.appSettings ? root.appSettings.availableAlgorithms() : []
+    // Computed once at the root level (not per-delegate) to avoid N redundant
+    // C++ calls inside the Repeater delegate.
+    readonly property bool _currentAlgoSupportsMasterCount: {
+        var algos = root._cachedAlgos;
+        for (var i = 0; i < algos.length; i++) {
+            if (algos[i].id === root.algorithmId && algos[i].supportsMasterCount)
+                return true;
+
+        }
+        return false;
+    }
+    readonly property bool _currentAlgoProducesOverlappingZones: {
+        var algos = root._cachedAlgos;
+        for (var i = 0; i < algos.length; i++) {
+            if (algos[i].id === root.algorithmId && algos[i].producesOverlappingZones)
+                return true;
+
+        }
+        return false;
+    }
+    // Algorithm display name (avoids hardcoded switch statement)
+    property string algorithmName: ""
     // Algorithm name label (hidden when used inside the Tiling tab's algorithm section
     // where the name is already shown alongside the combo box)
     property bool showLabel: true
 
     function recalcZones() {
-        if (root.algorithmId !== "")
+        if (root.algorithmId !== "") {
             root.zones = root.appSettings.generateAlgorithmPreview(root.algorithmId, root.windowCount, root.splitRatio, root.masterCount);
+            // Retry once if a stale watchdog interrupt caused empty results —
+            // the first call clears the interrupt flag, so the second succeeds.
+            if (root.zones.length === 0 && root.windowCount > 0)
+                root.zones = root.appSettings.generateAlgorithmPreview(root.algorithmId, root.windowCount, root.splitRatio, root.masterCount);
 
+        } else {
+            root.zones = [];
+        }
     }
 
     onAlgorithmIdChanged: recalcTimer.restart()
@@ -46,6 +78,14 @@ Item {
     onSplitRatioChanged: recalcTimer.restart()
     onMasterCountChanged: recalcTimer.restart()
     Component.onCompleted: recalcTimer.start()
+
+    Connections {
+        function onAvailableAlgorithmsChanged() {
+            root._cachedAlgos = root.appSettings.availableAlgorithms();
+        }
+
+        target: root.appSettings
+    }
 
     Timer {
         id: recalcTimer
@@ -56,11 +96,14 @@ Item {
 
     // Render using shared ZonePreview (same component used in LayoutComboBox dropdowns)
     QFZCommon.ZonePreview {
+        id: zonePreview
+
         anchors.fill: parent
         zones: root.zones
         isHovered: true
         showZoneNumbers: true
-        onlyShowLastZoneNumber: root.algorithmId === "cascade"
+        zoneNumberDisplay: root.zoneNumberDisplay
+        producesOverlappingZones: root._currentAlgoProducesOverlappingZones
         highlightColor: Qt.rgba(root.windowColor.r, root.windowColor.g, root.windowColor.b, 0.7)
         borderColor: Qt.rgba(root.windowBorder.r, root.windowBorder.g, root.windowBorder.b, 0.9)
         zonePadding: 1
@@ -76,10 +119,16 @@ Item {
         Rectangle {
             required property var modelData
             required property int index
+            // Position relative to ZonePreview, accounting for its internal zone padding/edgeGap offsets.
+            // Edge zones get edgeGap offset, non-edge zones get zonePadding/2.
+            readonly property real relX: (modelData.relativeGeometry && modelData.relativeGeometry.x) || 0
+            readonly property real relY: (modelData.relativeGeometry && modelData.relativeGeometry.y) || 0
+            readonly property real leftOffset: relX < 0.01 ? zonePreview.edgeGap : zonePreview.zonePadding / 2
+            readonly property real topOffset: relY < 0.01 ? zonePreview.edgeGap : zonePreview.zonePadding / 2
 
-            visible: (root.algorithmId === "master-stack" || root.algorithmId === "wide" || root.algorithmId === "centered-master") && index < root.masterCount
-            x: ((modelData.relativeGeometry && modelData.relativeGeometry.x) || 0) * root.width + Kirigami.Units.smallSpacing
-            y: ((modelData.relativeGeometry && modelData.relativeGeometry.y) || 0) * root.height + Kirigami.Units.smallSpacing
+            visible: root.appSettings && root.appSettings.generateAlgorithmPreview && root.algorithmId !== "" && index < root.masterCount && root._currentAlgoSupportsMasterCount
+            x: zonePreview.x + relX * zonePreview.width + leftOffset + Kirigami.Units.smallSpacing
+            y: zonePreview.y + relY * zonePreview.height + topOffset + Kirigami.Units.smallSpacing
             width: Kirigami.Units.smallSpacing * 2
             height: Kirigami.Units.smallSpacing * 2
             radius: Kirigami.Units.smallSpacing
@@ -92,35 +141,8 @@ Item {
         visible: root.showLabel
         anchors.bottom: parent.bottom
         anchors.right: parent.right
-        anchors.margins: 2
-        text: {
-            switch (root.algorithmId) {
-            case "master-stack":
-                return i18n("Master + Stack");
-            case "bsp":
-                return i18n("BSP");
-            case "columns":
-                return i18n("Columns");
-            case "rows":
-                return i18n("Rows");
-            case "dwindle":
-                return i18n("Dwindle");
-            case "spiral":
-                return i18n("Spiral");
-            case "monocle":
-                return i18n("Monocle");
-            case "three-column":
-                return i18n("Three Column");
-            case "grid":
-                return i18n("Grid");
-            case "wide":
-                return i18n("Wide");
-            case "centered-master":
-                return i18n("Centered Master");
-            default:
-                return root.algorithmId;
-            }
-        }
+        anchors.margins: Math.round(Kirigami.Units.smallSpacing / 2)
+        text: root.algorithmName || root.algorithmId
         font: Kirigami.Theme.smallFont
         opacity: 0.5
     }

@@ -29,50 +29,77 @@ Item {
         headerText: i18n("On-Screen Display")
         collapsible: true
 
-        contentItem: Kirigami.FormLayout {
-            CheckBox {
-                id: showOsdCheckbox
+        contentItem: ColumnLayout {
+            spacing: Kirigami.Units.smallSpacing
 
-                Kirigami.FormData.label: i18n("Layout switch:")
-                text: i18n("Show OSD when switching layouts")
-                checked: osdRoot.appSettings.showOsdOnLayoutSwitch
-                onToggled: osdRoot.appSettings.showOsdOnLayoutSwitch = checked
-            }
+            SettingsRow {
+                title: i18n("Layout switch OSD")
+                description: i18n("Show notification when switching between zone layouts")
 
-            CheckBox {
-                Kirigami.FormData.label: i18n("Keyboard navigation:")
-                text: i18n("Show OSD when using keyboard navigation")
-                checked: osdRoot.appSettings.showNavigationOsd
-                onToggled: osdRoot.appSettings.showNavigationOsd = checked
-            }
-
-            WideComboBox {
-                id: osdStyleCombo
-
-                readonly property int osdStyleNone: 0
-                readonly property int osdStyleText: 1
-                readonly property int osdStylePreview: 2
-
-                Kirigami.FormData.label: i18n("OSD style:")
-                enabled: showOsdCheckbox.checked || osdRoot.appSettings.showNavigationOsd
-                currentIndex: Math.max(0, Math.min(osdRoot.appSettings.osdStyle, 2))
-                model: [i18n("None"), i18n("Text only"), i18n("Visual preview")]
-                onActivated: (index) => {
-                    osdRoot.appSettings.osdStyle = index;
+                SettingsSwitch {
+                    checked: osdRoot.appSettings.showOsdOnLayoutSwitch
+                    accessibleName: i18n("Show OSD on layout switch")
+                    onToggled: osdRoot.appSettings.showOsdOnLayoutSwitch = checked
                 }
-                ToolTip.visible: hovered
-                ToolTip.text: currentIndex === 0 ? i18n("No OSD shown. Enable layout switch or keyboard navigation above to show OSD.") : (currentIndex === 1 ? i18n("Show layout name as text only") : i18n("Show visual layout preview"))
+
             }
 
-            WideComboBox {
-                Kirigami.FormData.label: i18n("Overlay style:")
-                currentIndex: Math.max(0, Math.min(osdRoot.appSettings.overlayDisplayMode, 1))
-                model: [i18n("Full zone highlight"), i18n("Compact preview")]
-                onActivated: (index) => {
-                    osdRoot.appSettings.overlayDisplayMode = index;
+            SettingsSeparator {
+            }
+
+            SettingsRow {
+                title: i18n("Keyboard navigation OSD")
+                description: i18n("Show notification when moving windows with keyboard shortcuts")
+
+                SettingsSwitch {
+                    checked: osdRoot.appSettings.showNavigationOsd
+                    accessibleName: i18n("Show keyboard navigation OSD")
+                    onToggled: osdRoot.appSettings.showNavigationOsd = checked
                 }
-                ToolTip.visible: hovered
-                ToolTip.text: currentIndex === 0 ? i18n("Highlight each zone as a full-size translucent rectangle while dragging") : i18n("Show a small layout thumbnail inside each zone while dragging")
+
+            }
+
+            SettingsSeparator {
+            }
+
+            SettingsRow {
+                title: i18n("OSD style")
+                description: i18n("Visual style of on-screen notifications")
+
+                WideComboBox {
+                    id: osdStyleCombo
+
+                    readonly property int osdStyleNone: 0
+                    readonly property int osdStyleText: 1
+                    readonly property int osdStylePreview: 2
+
+                    Accessible.name: i18n("OSD style")
+                    enabled: osdRoot.appSettings.showOsdOnLayoutSwitch || osdRoot.appSettings.showNavigationOsd
+                    currentIndex: Math.max(0, Math.min(osdRoot.appSettings.osdStyle, 2))
+                    model: [i18n("None"), i18n("Text only"), i18n("Visual preview")]
+                    onActivated: (index) => {
+                        osdRoot.appSettings.osdStyle = index;
+                    }
+                }
+
+            }
+
+            SettingsSeparator {
+            }
+
+            SettingsRow {
+                title: i18n("Overlay style")
+                description: i18n("How zones appear while dragging a window")
+
+                WideComboBox {
+                    Accessible.name: i18n("Overlay style")
+                    currentIndex: Math.max(0, Math.min(osdRoot.appSettings.overlayDisplayMode, 1))
+                    model: [i18n("Full zone highlight"), i18n("Compact preview")]
+                    onActivated: (index) => {
+                        osdRoot.appSettings.overlayDisplayMode = index;
+                    }
+                }
+
             }
 
         }

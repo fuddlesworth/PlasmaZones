@@ -14,9 +14,10 @@ ApplicationWindow {
     // Responsive sidebar: collapse to icon-only below 750px
     readonly property bool sidebarCompact: window.width < Kirigami.Units.gridUnit * 50
     // Track page navigation for transitions
-    property int _previousIndex: 0
     // Shortcut overlay visibility
     property bool _showShortcuts: false
+    // Close-without-save guard
+    property bool _closeConfirmed: false
     // ── Drill-down sidebar state ─────────────────────────────────────
     // "main" = top-level list; otherwise the parent name (e.g. "snapping")
     property string _sidebarMode: "main"
@@ -85,48 +86,48 @@ ApplicationWindow {
     // Children for each parent
     readonly property var _childItems: ({
         "snapping": [{
-            "name": "snap-appearance",
+            "name": "snapping-appearance",
             "label": i18n("Appearance"),
             "iconName": "preferences-desktop-color"
         }, {
-            "name": "snap-behavior",
+            "name": "snapping-behavior",
             "label": i18n("Behavior"),
             "iconName": "preferences-system"
         }, {
-            "name": "snap-zoneselector",
-            "label": i18n("Zone Layout"),
+            "name": "snapping-zoneselector",
+            "label": i18n("Zone Selector"),
             "iconName": "view-choose"
         }, {
-            "name": "snap-effects",
+            "name": "snapping-effects",
             "label": i18n("Effects"),
             "iconName": "preferences-desktop-effects"
         }, {
-            "name": "snap-assignments",
+            "name": "snapping-assignments",
             "label": i18n("Assignments"),
             "iconName": "view-list-details"
         }, {
-            "name": "snap-shortcuts",
+            "name": "snapping-shortcuts",
             "label": i18n("Quick Shortcuts"),
             "iconName": "bookmark"
         }],
         "tiling": [{
-            "name": "tile-appearance",
+            "name": "tiling-appearance",
             "label": i18n("Appearance"),
             "iconName": "preferences-desktop-color"
         }, {
-            "name": "tile-behavior",
+            "name": "tiling-behavior",
             "label": i18n("Behavior"),
             "iconName": "preferences-system"
         }, {
-            "name": "tile-algorithm",
-            "label": i18n("Algorithm"),
+            "name": "tiling-algorithm",
+            "label": i18n("Algorithms"),
             "iconName": "view-grid"
         }, {
-            "name": "tile-assignments",
+            "name": "tiling-assignments",
             "label": i18n("Assignments"),
             "iconName": "view-list-details"
         }, {
-            "name": "tile-shortcuts",
+            "name": "tiling-shortcuts",
             "label": i18n("Quick Shortcuts"),
             "iconName": "bookmark"
         }]
@@ -136,17 +137,17 @@ ApplicationWindow {
         "overview": "MonitorStatePage.qml",
         "virtualscreens": "VirtualScreensPage.qml",
         "layouts": "LayoutsPage.qml",
-        "snap-appearance": "SnappingAppearancePage.qml",
-        "snap-behavior": "SnappingBehaviorPage.qml",
-        "snap-zoneselector": "SnappingZoneSelectorPage.qml",
-        "snap-effects": "SnappingEffectsPage.qml",
-        "tile-appearance": "TilingAppearancePage.qml",
-        "tile-behavior": "TilingBehaviorPage.qml",
-        "tile-algorithm": "TilingAlgorithmPage.qml",
-        "snap-assignments": "SnappingAssignmentsPage.qml",
-        "snap-shortcuts": "SnappingQuickShortcutsPage.qml",
-        "tile-assignments": "TilingAssignmentsPage.qml",
-        "tile-shortcuts": "TilingQuickShortcutsPage.qml",
+        "snapping-appearance": "SnappingAppearancePage.qml",
+        "snapping-behavior": "SnappingBehaviorPage.qml",
+        "snapping-zoneselector": "SnappingZoneSelectorPage.qml",
+        "snapping-effects": "SnappingEffectsPage.qml",
+        "tiling-appearance": "TilingAppearancePage.qml",
+        "tiling-behavior": "TilingBehaviorPage.qml",
+        "tiling-algorithm": "TilingAlgorithmPage.qml",
+        "snapping-assignments": "SnappingAssignmentsPage.qml",
+        "snapping-shortcuts": "SnappingQuickShortcutsPage.qml",
+        "tiling-assignments": "TilingAssignmentsPage.qml",
+        "tiling-shortcuts": "TilingQuickShortcutsPage.qml",
         "apprules": "AssignmentsAppRulesPage.qml",
         "exclusions": "ExclusionsPage.qml",
         "editor": "EditorPage.qml",
@@ -330,8 +331,12 @@ ApplicationWindow {
     width: Kirigami.Units.gridUnit * 80
     height: Kirigami.Units.gridUnit * 48
     visible: true
-    onClosing: {
+    onClosing: function(close) {
         settingsController.saveWindowGeometry(window.x, window.y, window.width, window.height);
+        if (settingsController.needsSave && !window._closeConfirmed) {
+            close.accepted = false;
+            unsavedChangesDialog.open();
+        }
     }
     Component.onCompleted: {
         // Restore window geometry
@@ -568,7 +573,6 @@ ApplicationWindow {
                                 window._drillIn(name);
                                 return ;
                             }
-                            window._previousIndex = sidebar.currentIndex;
                             // If selecting an inline search result child, clear search and drill into parent
                             if (sidebarSearch.text.length > 0 && _sidebarMode === "main") {
                                 let parents = Object.keys(_childItems);
@@ -707,6 +711,50 @@ ApplicationWindow {
 
                             }
 
+                            // Unsaved changes badge
+                            Rectangle {
+                                width: Kirigami.Units.smallSpacing * 1.5
+                                height: Kirigami.Units.smallSpacing * 1.5
+                                radius: width / 2
+                                color: Kirigami.Theme.neutralTextColor
+                                visible: navDelegate.isActive && settingsController.needsSave && !navDelegate.isDivider && !navDelegate.isBackButton
+                                Layout.alignment: Qt.AlignVCenter
+
+                                SequentialAnimation {
+                                    id: dirtyBadgePulse
+
+                                    property Item target: dirtyBadgePulse.parent
+
+                                    loops: Animation.Infinite
+                                    running: navDelegate.isActive && settingsController.needsSave
+                                    onRunningChanged: {
+                                        if (!running)
+                                            target.opacity = 1;
+
+                                    }
+
+                                    NumberAnimation {
+                                        target: dirtyBadgePulse.target
+                                        property: "opacity"
+                                        from: 1
+                                        to: 0.4
+                                        duration: 1000
+                                        easing.type: Easing.InOutSine
+                                    }
+
+                                    NumberAnimation {
+                                        target: dirtyBadgePulse.target
+                                        property: "opacity"
+                                        from: 0.4
+                                        to: 1
+                                        duration: 1000
+                                        easing.type: Easing.InOutSine
+                                    }
+
+                                }
+
+                            }
+
                             // Enable/disable toggle for snapping and tiling
                             SettingsSwitch {
                                 visible: (navDelegate.name === "snapping" || navDelegate.name === "tiling") && !window.sidebarCompact
@@ -763,11 +811,22 @@ ApplicationWindow {
                             color: settingsController.daemonRunning ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
 
                             // Pulsing glow when running
-                            SequentialAnimation on opacity {
+                            SequentialAnimation {
+                                id: daemonPulse
+
+                                property Item target: daemonPulse.parent
+
                                 loops: settingsController.daemonRunning ? Animation.Infinite : 0
                                 running: settingsController.daemonRunning
+                                onRunningChanged: {
+                                    if (!running)
+                                        target.opacity = 1;
+
+                                }
 
                                 NumberAnimation {
+                                    target: daemonPulse.target
+                                    property: "opacity"
                                     from: 1
                                     to: 0.4
                                     duration: 1500
@@ -775,6 +834,8 @@ ApplicationWindow {
                                 }
 
                                 NumberAnimation {
+                                    target: daemonPulse.target
+                                    property: "opacity"
                                     from: 0.4
                                     to: 1
                                     duration: 1500
@@ -913,35 +974,6 @@ ApplicationWindow {
                                 return window._mainItemLabel(settingsController.activePage);
                             }
                             opacity: 0.5
-                        }
-
-                    }
-
-                    // Unsaved changes indicator
-                    Label {
-                        visible: settingsController.needsSave
-                        text: "●"
-                        color: Kirigami.Theme.highlightColor
-                        font: Kirigami.Theme.smallFont
-
-                        SequentialAnimation on opacity {
-                            loops: Animation.Infinite
-                            running: settingsController.needsSave
-
-                            NumberAnimation {
-                                from: 1
-                                to: 0.4
-                                duration: 1000
-                                easing.type: Easing.InOutSine
-                            }
-
-                            NumberAnimation {
-                                from: 0.4
-                                to: 1
-                                duration: 1000
-                                easing.type: Easing.InOutSine
-                            }
-
                         }
 
                     }
@@ -1130,8 +1162,11 @@ ApplicationWindow {
                 property var layout: null
                 property int viewMode: 0
                 property var _screenItems: []
+                property bool _aspectRatioMenuInserted: false
                 readonly property bool isAutotile: layout && layout.isAutotile === true
                 readonly property string layoutId: layout ? (layout.id || "") : ""
+                // Aspect ratio options: [key, label, settingsIndex]
+                readonly property var _aspectRatioOptions: [["any", window.aspectRatioLabels["any"], 0], ["standard", window.aspectRatioLabels["standard"], 1], ["ultrawide", window.aspectRatioLabels["ultrawide"], 2], ["super-ultrawide", window.aspectRatioLabels["super-ultrawide"], 3], ["portrait", window.aspectRatioLabels["portrait"], 4]]
 
                 // Signals for dialogs that live in LayoutsPage
                 signal deleteRequested(var layout)
@@ -1140,6 +1175,28 @@ ApplicationWindow {
                 function showForLayout(layout) {
                     layoutContextMenu.layout = layout;
                     layoutContextMenu.viewMode = (layout && layout.isAutotile === true) ? 1 : 0;
+                    // Add/remove aspect ratio submenu (Qt6 ignores visible on inline Menu submenus,
+                    // so we imperatively insert/remove it like screen items)
+                    if (_aspectRatioMenuInserted) {
+                        layoutContextMenu.removeMenu(aspectRatioSubMenu);
+                        _aspectRatioMenuInserted = false;
+                    }
+                    if (!layoutContextMenu.isAutotile) {
+                        aspectRatioSubMenu.updateChecks();
+                        // Insert after the aspectRatioMarker separator
+                        let markerIdx = -1;
+                        for (let k = 0; k < layoutContextMenu.count; k++) {
+                            if (layoutContextMenu.itemAt(k) === aspectRatioMarker) {
+                                markerIdx = k;
+                                break;
+                            }
+                        }
+                        if (markerIdx >= 0)
+                            layoutContextMenu.insertMenu(markerIdx + 1, aspectRatioSubMenu);
+                        else
+                            layoutContextMenu.addMenu(aspectRatioSubMenu);
+                        _aspectRatioMenuInserted = true;
+                    }
                     // Rebuild dynamic "Edit on <screen>" items
                     for (let j = 0; j < _screenItems.length; j++) {
                         layoutContextMenu.removeItem(_screenItems[j]);
@@ -1185,6 +1242,22 @@ ApplicationWindow {
                     visible: false
                 }
 
+                // -- Open in Editor (external text editor) --
+                MenuItem {
+                    text: i18n("Open in Text Editor")
+                    icon.name: "document-open"
+                    Accessible.name: text
+                    onTriggered: {
+                        if (layoutContextMenu.isAutotile)
+                            settingsController.openAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId));
+                        else
+                            settingsController.openLayoutFile(layoutContextMenu.layoutId);
+                    }
+                }
+
+                MenuSeparator {
+                }
+
                 // -- State --
                 MenuItem {
                     text: i18n("Set as Default")
@@ -1194,13 +1267,13 @@ ApplicationWindow {
                             return false;
 
                         if (layoutContextMenu.viewMode === 1)
-                            return layoutContextMenu.layoutId !== ("autotile:" + appSettings.autotileAlgorithm);
+                            return layoutContextMenu.layoutId !== ("autotile:" + appSettings.defaultAutotileAlgorithm);
 
                         return layoutContextMenu.layoutId !== appSettings.defaultLayoutId;
                     }
                     onTriggered: {
                         if (layoutContextMenu.viewMode === 1)
-                            appSettings.autotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
+                            appSettings.defaultAutotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
                         else
                             appSettings.defaultLayoutId = layoutContextMenu.layoutId;
                     }
@@ -1219,52 +1292,14 @@ ApplicationWindow {
                     onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true))
                 }
 
-                // -- Aspect Ratio (flat, no nested Menu — Qt6 crashes with submenu) --
+                // -- Aspect Ratio insertion point (submenu managed imperatively in showForLayout) --
                 MenuSeparator {
+                    id: aspectRatioMarker
+
                     visible: !layoutContextMenu.isAutotile
                 }
 
-                MenuItem {
-                    text: "  " + window.aspectRatioLabels["any"]
-                    checkable: true
-                    visible: !layoutContextMenu.isAutotile
-                    checked: layoutContextMenu.layout && (layoutContextMenu.layout.aspectRatioClass || "any") === "any"
-                    onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 0)
-                }
-
-                MenuItem {
-                    text: "  " + window.aspectRatioLabels["standard"]
-                    checkable: true
-                    visible: !layoutContextMenu.isAutotile
-                    checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "standard"
-                    onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 1)
-                }
-
-                MenuItem {
-                    text: "  " + window.aspectRatioLabels["ultrawide"]
-                    checkable: true
-                    visible: !layoutContextMenu.isAutotile
-                    checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "ultrawide"
-                    onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 2)
-                }
-
-                MenuItem {
-                    text: "  " + window.aspectRatioLabels["super-ultrawide"]
-                    checkable: true
-                    visible: !layoutContextMenu.isAutotile
-                    checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "super-ultrawide"
-                    onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 3)
-                }
-
-                MenuItem {
-                    text: "  " + window.aspectRatioLabels["portrait"]
-                    checkable: true
-                    visible: !layoutContextMenu.isAutotile
-                    checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "portrait"
-                    onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 4)
-                }
-
-                // -- Manage --
+                // -- Manage (snapping layouts) --
                 MenuSeparator {
                     visible: layoutContextMenu.viewMode === 0 && !layoutContextMenu.isAutotile
                 }
@@ -1279,7 +1314,7 @@ ApplicationWindow {
                 MenuItem {
                     text: i18n("Export")
                     icon.name: "document-export"
-                    visible: layoutContextMenu.viewMode === 0
+                    visible: layoutContextMenu.viewMode === 0 && !layoutContextMenu.isAutotile
                     onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId)
                 }
 
@@ -1294,6 +1329,39 @@ ApplicationWindow {
                     onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
                 }
 
+                // -- Algorithms: Manage --
+                MenuSeparator {
+                    // Only show if at least one item below is visible (Duplicate/Export always
+                    // are, so this fires for any autotile entry — but keeps the separator hidden
+                    // when !isAutotile, avoiding a dangling line for snapping layouts).
+                    visible: layoutContextMenu.isAutotile
+                }
+
+                MenuItem {
+                    text: i18n("Duplicate")
+                    icon.name: "edit-copy"
+                    visible: layoutContextMenu.isAutotile
+                    onTriggered: settingsController.duplicateAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId))
+                }
+
+                MenuItem {
+                    text: i18n("Export")
+                    icon.name: "document-export"
+                    visible: layoutContextMenu.isAutotile
+                    onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId)
+                }
+
+                MenuSeparator {
+                    visible: layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem
+                }
+
+                MenuItem {
+                    text: i18n("Delete")
+                    icon.name: "edit-delete"
+                    visible: layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem
+                    onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
+                }
+
             }
 
             // Component for dynamic "Edit on <screen>" menu items
@@ -1304,6 +1372,78 @@ ApplicationWindow {
                     property string _screenName: ""
 
                     onTriggered: settingsController.editLayoutOnScreen(layoutContextMenu.layoutId, _screenName)
+                }
+
+            }
+
+            // Component for aspect ratio submenu items (ItemDelegate, not MenuItem —
+            // avoids Qt6 finalizeExitTransition crash; same pattern as editor shader menu)
+            Component {
+                id: aspectRatioItemComponent
+
+                ItemDelegate {
+                    property string _arKey: ""
+                    property int _arIndex: 0
+                    property bool isSelected: false
+
+                    icon.name: isSelected ? "checkmark" : ""
+                    Accessible.name: text
+                    onClicked: {
+                        let layoutId = layoutContextMenu.layoutId;
+                        let idx = _arIndex;
+                        Qt.callLater(function() {
+                            aspectRatioSubMenu.visible = false;
+                            layoutContextMenu.visible = false;
+                            settingsController.setLayoutAspectRatio(layoutId, idx);
+                        });
+                    }
+                }
+
+            }
+
+            // Aspect ratio submenu (managed imperatively by showForLayout —
+            // Qt6 ignores visible on inline Menu submenus, so we add/remove it)
+            Menu {
+                id: aspectRatioSubMenu
+
+                property var _items: []
+                property bool _built: false
+
+                function buildOnce() {
+                    if (_built)
+                        return ;
+
+                    _built = true;
+                    var options = layoutContextMenu._aspectRatioOptions;
+                    for (var i = 0; i < options.length; i++) {
+                        var item = aspectRatioItemComponent.createObject(aspectRatioSubMenu, {
+                            "text": options[i][1],
+                            "_arKey": options[i][0],
+                            "_arIndex": options[i][2]
+                        });
+                        aspectRatioSubMenu.addItem(item);
+                        _items.push(item);
+                    }
+                }
+
+                function updateChecks() {
+                    buildOnce();
+                    var currentClass = (layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass) || "any";
+                    for (var i = 0; i < _items.length; i++) {
+                        if (_items[i])
+                            _items[i].isSelected = (_items[i]._arKey === currentClass);
+
+                    }
+                }
+
+                title: i18n("Aspect Ratio")
+                icon.name: "view-fullscreen"
+                onAboutToShow: updateChecks()
+
+                enter: Transition {
+                }
+
+                exit: Transition {
                 }
 
             }
@@ -1323,93 +1463,86 @@ ApplicationWindow {
 
             }
 
-            Pane {
+            // -- Unsaved changes notification bar -------------------------
+            Item {
+                id: unsavedBar
+
                 Layout.fillWidth: true
-                padding: Kirigami.Units.smallSpacing * 1.5
-                topPadding: Kirigami.Units.smallSpacing * 2
-                bottomPadding: Kirigami.Units.smallSpacing * 2
+                implicitHeight: settingsController.needsSave ? unsavedBarContent.implicitHeight : 0
+                clip: true
 
-                RowLayout {
-                    anchors.fill: parent
+                Rectangle {
+                    id: unsavedBarContent
 
-                    Button {
-                        text: i18n("Reset")
-                        icon.name: "edit-undo"
-                        enabled: settingsController.needsSave
-                        flat: true
-                        onClicked: settingsController.load()
-                        opacity: enabled ? 1 : 0.4
+                    width: parent.width
+                    implicitHeight: unsavedBarRow.implicitHeight + Kirigami.Units.smallSpacing * 3
+                    anchors.bottom: parent.bottom
+                    color: Qt.rgba(Kirigami.Theme.neutralTextColor.r, Kirigami.Theme.neutralTextColor.g, Kirigami.Theme.neutralTextColor.b, 0.12)
 
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 150
+                    // Top accent line
+                    Rectangle {
+                        anchors.top: parent.top
+                        width: parent.width
+                        height: Math.round(Kirigami.Units.devicePixelRatio)
+                        color: Kirigami.Theme.neutralTextColor
+                        opacity: 0.4
+                    }
+
+                    RowLayout {
+                        id: unsavedBarRow
+
+                        anchors.fill: parent
+                        anchors.leftMargin: Kirigami.Units.largeSpacing
+                        anchors.rightMargin: Kirigami.Units.largeSpacing
+                        anchors.topMargin: Kirigami.Units.smallSpacing * 1.5
+                        anchors.bottomMargin: Kirigami.Units.smallSpacing * 1.5
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Kirigami.Icon {
+                            source: "dialog-information"
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            color: Kirigami.Theme.neutralTextColor
+                        }
+
+                        Label {
+                            text: i18n("Unsaved changes")
+                            color: Kirigami.Theme.neutralTextColor
+                            Layout.fillWidth: true
+                        }
+
+                        Button {
+                            text: i18n("Defaults")
+                            icon.name: "document-revert"
+                            flat: true
+                            onClicked: defaultsConfirmDialog.open()
+                        }
+
+                        Button {
+                            text: i18n("Discard")
+                            icon.name: "edit-undo"
+                            flat: true
+                            onClicked: resetConfirmDialog.open()
+                        }
+
+                        Button {
+                            text: i18n("Save")
+                            icon.name: "document-save"
+                            highlighted: true
+                            onClicked: {
+                                settingsController.save();
+                                toast.show(i18n("Settings saved"));
                             }
-
                         }
 
                     }
 
-                    Button {
-                        text: i18n("Defaults")
-                        icon.name: "document-revert"
-                        flat: true
-                        onClicked: settingsController.defaults()
-                        opacity: 0.7
-                    }
+                }
 
-                    Item {
-                        Layout.fillWidth: true
-                    }
-
-                    Button {
-                        id: applyButton
-
-                        text: i18n("Apply")
-                        icon.name: "dialog-ok-apply"
-                        enabled: settingsController.needsSave
-                        highlighted: settingsController.needsSave
-                        onClicked: {
-                            settingsController.save();
-                            toast.show(i18n("Settings applied"));
-                        }
-
-                        // Reset scale when not pulsing
-                        Binding {
-                            target: applyButton
-                            property: "scale"
-                            value: 1
-                            when: !settingsController.needsSave
-                            restoreMode: Binding.RestoreBinding
-                        }
-
-                        // Subtle pulsing glow when changes are pending
-                        SequentialAnimation on scale {
-                            loops: Animation.Infinite
-                            running: settingsController.needsSave
-
-                            NumberAnimation {
-                                from: 1
-                                to: 1.03
-                                duration: 800
-                                easing.type: Easing.InOutSine
-                            }
-
-                            NumberAnimation {
-                                from: 1.03
-                                to: 1
-                                duration: 800
-                                easing.type: Easing.InOutSine
-                            }
-
-                        }
-
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 150
-                            }
-
-                        }
-
+                Behavior on implicitHeight {
+                    NumberAnimation {
+                        duration: 250
+                        easing.type: Easing.OutCubic
                     }
 
                 }
@@ -1418,6 +1551,89 @@ ApplicationWindow {
 
         }
 
+    }
+
+    // ── Unsaved changes confirmation dialog ────────────────────────
+    Kirigami.PromptDialog {
+        id: unsavedChangesDialog
+
+        title: i18n("Unsaved Changes")
+        subtitle: i18n("You have unsaved changes. Do you want to apply them before closing?")
+        standardButtons: Kirigami.Dialog.NoButton
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Apply")
+                icon.name: "dialog-ok-apply"
+                onTriggered: {
+                    unsavedChangesDialog.close();
+                    settingsController.save();
+                    window._closeConfirmed = true;
+                    window.close();
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Discard")
+                icon.name: "edit-delete"
+                onTriggered: {
+                    unsavedChangesDialog.close();
+                    window._closeConfirmed = true;
+                    window.close();
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Cancel")
+                icon.name: "dialog-cancel"
+                onTriggered: unsavedChangesDialog.close()
+            }
+        ]
+    }
+
+    // ── Reset confirmation dialog ───────────────────────────────────
+    Kirigami.PromptDialog {
+        id: resetConfirmDialog
+
+        title: i18n("Discard Changes")
+        subtitle: i18n("Are you sure you want to discard all unsaved changes?")
+        standardButtons: Kirigami.Dialog.NoButton
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Discard")
+                icon.name: "edit-undo"
+                onTriggered: {
+                    resetConfirmDialog.close();
+                    settingsController.load();
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Cancel")
+                icon.name: "dialog-cancel"
+                onTriggered: resetConfirmDialog.close()
+            }
+        ]
+    }
+
+    // ── Defaults confirmation dialog ────────────────────────────────
+    Kirigami.PromptDialog {
+        id: defaultsConfirmDialog
+
+        title: i18n("Restore Defaults")
+        subtitle: i18n("Are you sure you want to reset all settings to their default values?")
+        standardButtons: Kirigami.Dialog.NoButton
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Restore Defaults")
+                icon.name: "document-revert"
+                onTriggered: {
+                    defaultsConfirmDialog.close();
+                    settingsController.defaults();
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Cancel")
+                icon.name: "dialog-cancel"
+                onTriggered: defaultsConfirmDialog.close()
+            }
+        ]
     }
 
     // ── Keyboard shortcut overlay ──────────────────────────────────

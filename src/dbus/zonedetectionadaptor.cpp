@@ -65,27 +65,17 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
         return QString();
     }
 
-    // Find which zone contains this point by checking relative coordinates
-    qreal relX = static_cast<qreal>(x - refGeom.x()) / refGeom.width();
-    qreal relY = static_cast<qreal>(y - refGeom.y()) / refGeom.height();
+    // Recalculate zone geometries so detectZone operates on absolute coords
+    layout->recalculateZoneGeometries(refGeom);
+    m_zoneDetector->setLayout(layout);
 
-    // When zones overlap, pick the smallest zone containing the cursor.
-    // "Area covered" heuristic: smallest zone containing the cursor wins.
-    Zone* foundZone = nullptr;
-    qreal bestArea = std::numeric_limits<qreal>::max();
-    for (auto* zone : layout->zones()) {
-        QRectF relGeom = zone->normalizedGeometry(refGeom);
-        if (relGeom.contains(QPointF(relX, relY))) {
-            qreal area = relGeom.width() * relGeom.height();
-            if (area < bestArea) {
-                bestArea = area;
-                foundZone = zone;
-            }
-        }
-    }
+    // Use ZoneDetector::detectZone which resolves overlapping zones via
+    // center-distance heuristic — consistent with the drag path.
+    QPointF cursorPos(static_cast<qreal>(x), static_cast<qreal>(y));
+    ZoneDetectionResult detection = m_zoneDetector->detectZone(cursorPos);
+    Zone* foundZone = detection.primaryZone;
 
     if (foundZone) {
-        m_zoneDetector->setLayout(layout);
         m_zoneDetector->highlightZone(foundZone);
         // Trigger overlay update via signal (decoupled)
         Q_EMIT zoneDetected(foundZone->id().toString(), getZoneGeometry(foundZone->id().toString()));
@@ -187,6 +177,13 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
         return zoneIds;
     }
 
+    // Use the layout's geometry preference (full screen or available area)
+    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
+    if (refGeom.width() <= 0 || refGeom.height() <= 0) {
+        return zoneIds;
+    }
+
+    layout->recalculateZoneGeometries(refGeom);
     m_zoneDetector->setLayout(layout);
 
     // Convert cursor position to QPointF for detection

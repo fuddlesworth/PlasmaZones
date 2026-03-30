@@ -22,7 +22,7 @@ Item {
     required property real cellHeight
     property int viewMode: 0 // 0 = Snapping Layouts, 1 = Auto Tile
     // The full autotile default ID including prefix, for comparison
-    readonly property string autotileDefaultId: "autotile:" + root.appSettings.autotileAlgorithm
+    readonly property string autotileDefaultId: "autotile:" + root.appSettings.defaultAutotileAlgorithm
     // Selection state (bound from parent GridView)
     property bool isSelected: false
     property bool isHovered: false
@@ -176,7 +176,15 @@ Item {
                         color: Kirigami.Theme.disabledTextColor
                         ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.visible: systemIconMA.containsMouse && visible
-                        ToolTip.text: root.modelData.isSystem ? i18n("System layout (read-only)") : i18n("Modified system layout")
+                        ToolTip.text: {
+                            if (root.modelData.isAutotile && root.modelData.isSystem)
+                                return i18n("Bundled algorithm");
+
+                            if (root.modelData.isSystem)
+                                return i18n("System layout (read-only)");
+
+                            return i18n("Modified system layout");
+                        }
 
                         MouseArea {
                             id: systemIconMA
@@ -236,6 +244,7 @@ Item {
                         icon.height: Kirigami.Units.iconSizes.small
                         icon.color: root.modelData.autoAssign === true ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
                         onClicked: settingsController.setLayoutAutoAssign(root.modelData.id, !(root.modelData.autoAssign === true))
+                        Accessible.name: i18n("Auto-assign layout")
                         ToolTip.visible: hovered
                         ToolTip.text: root.modelData.autoAssign === true ? i18n("Auto-assign enabled: new windows fill empty zones. Click to disable.") : i18n("Click to auto-assign new windows to empty zones")
                     }
@@ -251,6 +260,7 @@ Item {
                         icon.height: Kirigami.Units.iconSizes.small
                         icon.color: root.modelData.hiddenFromSelector ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.textColor
                         onClicked: settingsController.setLayoutHidden(root.modelData.id, !root.modelData.hiddenFromSelector)
+                        Accessible.name: i18n("Toggle layout visibility")
                         ToolTip.visible: hovered
                         ToolTip.text: root.modelData.hiddenFromSelector ? i18n("Hidden from zone selector. Click to show.") : i18n("Visible in zone selector. Click to hide.")
                     }
@@ -270,6 +280,29 @@ Item {
                     autoAssign: root.modelData.autoAssign === true
                 }
 
+                // Memory indicator for algorithms that persist split state
+                Kirigami.Icon {
+                    visible: root.modelData.memory === true
+                    source: "document-save-symbolic"
+                    implicitWidth: Kirigami.Units.iconSizes.small
+                    implicitHeight: Kirigami.Units.iconSizes.small
+                    color: Kirigami.Theme.positiveTextColor
+                    opacity: 0.7
+                    Accessible.name: i18n("Persistent algorithm")
+                    ToolTip.delay: Kirigami.Units.toolTipDelay
+                    ToolTip.visible: memoryIconMA.containsMouse && visible
+                    ToolTip.text: i18n("Remembers split positions across window changes")
+
+                    MouseArea {
+                        id: memoryIconMA
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.NoButton
+                    }
+
+                }
+
                 QFZCommon.AspectRatioBadge {
                     aspectRatioClass: root.modelData.aspectRatioClass || "any"
                 }
@@ -287,14 +320,14 @@ Item {
 
         Behavior on color {
             ColorAnimation {
-                duration: 150
+                duration: Kirigami.Units.shortDuration
             }
 
         }
 
         Behavior on border.color {
             ColorAnimation {
-                duration: 150
+                duration: Kirigami.Units.shortDuration
             }
 
         }
@@ -307,7 +340,7 @@ Item {
 
             Behavior on xScale {
                 NumberAnimation {
-                    duration: 150
+                    duration: Kirigami.Units.shortDuration
                     easing.type: Easing.OutCubic
                 }
 
@@ -315,7 +348,7 @@ Item {
 
             Behavior on yScale {
                 NumberAnimation {
-                    duration: 150
+                    duration: Kirigami.Units.shortDuration
                     easing.type: Easing.OutCubic
                 }
 

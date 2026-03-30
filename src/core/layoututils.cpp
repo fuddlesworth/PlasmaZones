@@ -5,6 +5,7 @@
 #include "constants.h"
 #include "interfaces.h"
 #include "layout.h"
+#include "pz_i18n.h"
 #include "utils.h"
 #include "zone.h"
 #include "../autotile/AlgorithmRegistry.h"
@@ -152,6 +153,37 @@ QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields)
 // Unified layout list building
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * @brief Map aspect ratio class to section label and order for manual layouts
+ */
+static void setAspectRatioSection(UnifiedLayoutEntry& entry)
+{
+    const auto cls = static_cast<AspectRatioClass>(entry.aspectRatioClass);
+    entry.sectionKey = ScreenClassification::toString(cls);
+    switch (cls) {
+    case AspectRatioClass::Any:
+        entry.sectionLabel = PzI18n::tr("All Monitors");
+        entry.sectionOrder = 0;
+        break;
+    case AspectRatioClass::Standard:
+        entry.sectionLabel = PzI18n::tr("Standard (16:9)");
+        entry.sectionOrder = 1;
+        break;
+    case AspectRatioClass::Ultrawide:
+        entry.sectionLabel = PzI18n::tr("Ultrawide (21:9)");
+        entry.sectionOrder = 2;
+        break;
+    case AspectRatioClass::SuperUltrawide:
+        entry.sectionLabel = PzI18n::tr("Super-Ultrawide (32:9)");
+        entry.sectionOrder = 3;
+        break;
+    case AspectRatioClass::Portrait:
+        entry.sectionLabel = PzI18n::tr("Portrait (9:16)");
+        entry.sectionOrder = 4;
+        break;
+    }
+}
+
 static UnifiedLayoutEntry entryFromLayout(Layout* layout)
 {
     UnifiedLayoutEntry entry;
@@ -167,6 +199,7 @@ static UnifiedLayoutEntry entryFromLayout(Layout* layout)
         if (refGeo.height() > 0)
             entry.referenceAspectRatio = refGeo.width() / refGeo.height();
     }
+    setAspectRatioSection(entry);
     return entry;
 }
 
@@ -190,6 +223,14 @@ static void appendAutotileEntries(QVector<UnifiedLayoutEntry>& list)
         entry.previewZones = AlgorithmRegistry::generatePreviewZones(algo);
         entry.zones = entry.previewZones;
         entry.zoneCount = AlgorithmRegistry::effectiveMaxWindows(algo);
+        entry.zoneNumberDisplay = algo->zoneNumberDisplay();
+        entry.memory = algo->supportsMemory();
+        entry.supportsMasterCount = algo->supportsMasterCount();
+        entry.supportsSplitRatio = algo->supportsSplitRatio();
+        entry.producesOverlappingZones = algo->producesOverlappingZones();
+        entry.isScripted = algo->isScripted();
+        entry.isUserScript = algo->isUserScript();
+
         list.append(entry);
     }
 }
@@ -327,11 +368,29 @@ QVariantMap toVariantMap(const UnifiedLayoutEntry& entry)
     map[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
     map[AutoAssign] = entry.autoAssign;
     map[QLatin1String("isAutotile")] = entry.isAutotile;
-    map[IsSystem] = false;
+    map[IsSystem] = entry.isSystemEntry();
     map[AspectRatioClassKey] = ScreenClassification::toString(static_cast<AspectRatioClass>(entry.aspectRatioClass));
     map[QLatin1String("recommended")] = entry.recommended;
+    if (!entry.zoneNumberDisplay.isEmpty()) {
+        map[QLatin1String("zoneNumberDisplay")] = entry.zoneNumberDisplay;
+    }
+    if (entry.memory) {
+        map[QLatin1String("memory")] = true;
+    }
+    if (entry.isAutotile) {
+        map[QLatin1String("supportsMasterCount")] = entry.supportsMasterCount;
+        map[QLatin1String("supportsSplitRatio")] = entry.supportsSplitRatio;
+        map[QLatin1String("producesOverlappingZones")] = entry.producesOverlappingZones;
+    }
     if (entry.referenceAspectRatio > 0.0) {
         map[QLatin1String("referenceAspectRatio")] = entry.referenceAspectRatio;
+    }
+
+    // Generic section grouping
+    if (!entry.sectionKey.isEmpty()) {
+        map[QLatin1String("sectionKey")] = entry.sectionKey;
+        map[QLatin1String("sectionLabel")] = entry.sectionLabel;
+        map[QLatin1String("sectionOrder")] = entry.sectionOrder;
     }
 
     return map;
@@ -358,7 +417,7 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
     json[Name] = entry.name;
     json[Description] = entry.description;
     json[ZoneCount] = entry.zoneCount;
-    json[IsSystem] = false;
+    json[IsSystem] = entry.isSystemEntry();
     json[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
     json[QLatin1String("isAutotile")] = entry.isAutotile;
     if (entry.aspectRatioClass != 0) {
@@ -368,6 +427,25 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
     if (entry.autoAssign) {
         json[AutoAssign] = true;
     }
+    // Generic section grouping
+    if (!entry.sectionKey.isEmpty()) {
+        json[QLatin1String("sectionKey")] = entry.sectionKey;
+        json[QLatin1String("sectionLabel")] = entry.sectionLabel;
+        json[QLatin1String("sectionOrder")] = entry.sectionOrder;
+    }
+
+    if (!entry.zoneNumberDisplay.isEmpty()) {
+        json[QLatin1String("zoneNumberDisplay")] = entry.zoneNumberDisplay;
+    }
+    if (entry.memory) {
+        json[QLatin1String("memory")] = true;
+    }
+    if (entry.isAutotile) {
+        json[QLatin1String("supportsMasterCount")] = entry.supportsMasterCount;
+        json[QLatin1String("supportsSplitRatio")] = entry.supportsSplitRatio;
+        json[QLatin1String("producesOverlappingZones")] = entry.producesOverlappingZones;
+    }
+
     // hiddenFromSelector is added by callers that have access to the Layout*
 
     // Convert zones to JSON array

@@ -2,7 +2,7 @@
 # Window tiling and autotiling for KDE Plasma
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6+).
+# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, KWin 6.6+).
 #
 # Build: rpmbuild -ba plasmazones.spec
 # Clean build: mock -r fedora-43-x86_64 plasmazones-1.2.0-1.fc43.src.rpm
@@ -24,6 +24,7 @@ Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 ExclusiveArch:  x86_64 aarch64
 
 # Build tools
+BuildRequires:  /usr/bin/wayland-scanner
 BuildRequires:  cmake >= 3.16
 BuildRequires:  extra-cmake-modules >= 6.6.0
 BuildRequires:  gcc-c++
@@ -45,14 +46,17 @@ BuildRequires:  cmake(Qt6Widgets)
 BuildRequires:  cmake(Qt6Concurrent)
 BuildRequires:  cmake(Qt6ShaderTools)
 BuildRequires:  cmake(Qt6ShaderToolsPrivate)
+BuildRequires:  qt6-svg-devel
 BuildRequires:  qt6-core-private-devel
 BuildRequires:  qt6-gui-private-devel
+BuildRequires:  vulkan-devel
 %else
 BuildRequires:  qt6-qtbase-devel >= 6.6.0
 BuildRequires:  qt6-qtbase-private-devel
 BuildRequires:  qt6-qtdeclarative-devel
 BuildRequires:  qt6-qttools-devel
 BuildRequires:  qt6-qtshadertools-devel
+BuildRequires:  qt6-qtsvg-devel
 %endif
 
 # KDE Frameworks 6 (6.6+ for Plasma 6.6 API)
@@ -66,21 +70,25 @@ BuildRequires:  kf6-kglobalaccel-devel >= 6.6.0
 BuildRequires:  kf6-kirigami-devel >= 6.6.0
 %endif
 
-# Plasma 6.6 / KWin 6.6 (effect API), LayerShellQt 6.6 (setScreen API)
+# Plasma 6.6 / KWin 6.6 (effect API)
 # The KWin effect plugin links against libkwin; RPM auto-generates soname deps
 # for ABI safety. Patch releases (6.6.x) maintain ABI and IID compatibility.
 %if 0%{?suse_version}
 BuildRequires:  kwin6-devel
-BuildRequires:  cmake(LayerShellQt) >= 6.6.0
+BuildRequires:  cmake(Qt6WaylandClient)
+BuildRequires:  cmake(Qt6WaylandClientPrivate)
+BuildRequires:  wayland-devel
 BuildRequires:  cmake(PlasmaActivities)
 BuildRequires:  pkgconfig(systemd)
 %else
 BuildRequires:  kwin-devel >= 6.6.0
-BuildRequires:  layer-shell-qt-devel >= 6.6.0
+BuildRequires:  qt6-qtwayland-devel
 BuildRequires:  libepoxy-devel
 BuildRequires:  wayland-devel
 BuildRequires:  libdrm-devel
 BuildRequires:  libxkbcommon-devel
+BuildRequires:  vulkan-loader-devel
+BuildRequires:  vulkan-headers
 BuildRequires:  plasma-activities-devel
 BuildRequires:  systemd-rpm-macros
 %endif
@@ -94,7 +102,7 @@ Requires:       qt6-qtdeclarative
 Requires:       qt6-qtshadertools
 Requires:       kf6-kirigami >= 6.6.0
 Requires:       kf6-kcmutils >= 6.6.0
-Requires:       layer-shell-qt >= 6.6.0
+Requires:       qt6-qtwayland >= 6.6.0
 Requires:       kwin >= 6.6.0
 %endif
 Requires:       hicolor-icon-theme
@@ -160,6 +168,9 @@ echo ""
 # KWin effect plugin
 %{_libdir}/qt6/plugins/kwin/effects/plugins/kwin_effect_plasmazones.so
 
+# Layer-shell QPA plugin
+%{_libdir}/qt6/plugins/wayland-shell-integration/pz-layer-shell.so
+
 # KCM sub-modules (System Settings)
 %{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_plasmazones_*.so
 
@@ -188,8 +199,6 @@ echo ""
 %{_datadir}/icons/hicolor-light/scalable/apps/plasmazones-editor.svg
 %{_datadir}/icons/hicolor-light/scalable/apps/plasmazones-settings.svg
 
-# KConfig
-%{_datadir}/config.kcfg/plasmazones.kcfg
 
 # Systemd user service
 %{_userunitdir}/plasmazones.service

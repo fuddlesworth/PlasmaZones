@@ -31,6 +31,8 @@ RowLayout {
     property string resolvedDefaultId: appSettings ? appSettings.defaultLayoutId : ""
     // Current assignment (set externally, component updates selection)
     property string currentLayoutId: ""
+    // Optional component injected between label and combo (e.g. enable Switch)
+    property Component middleContent: null
 
     // Signals for assignment changes
     signal assignmentSelected(string layoutId)
@@ -56,6 +58,12 @@ RowLayout {
         Layout.fillWidth: true
         Layout.alignment: Qt.AlignVCenter
         elide: Text.ElideRight
+    }
+
+    Loader {
+        active: root.middleContent !== null
+        sourceComponent: root.middleContent
+        visible: active
     }
 
     LayoutComboBox {

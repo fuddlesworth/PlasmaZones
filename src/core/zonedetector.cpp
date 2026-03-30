@@ -58,8 +58,10 @@ ZoneDetectionResult ZoneDetector::detectZone(const QPointF& cursorPos) const
         return result;
     }
 
-    // First check if cursor is inside any zone
-    Zone* containingZone = zoneAtPoint(cursorPos);
+    // Use center-distance heuristic to resolve overlapping zones.
+    // Unlike zoneAtPoint() (smallest-area-wins), this lets the user reach
+    // background zones by dragging toward their center.
+    Zone* containingZone = resolveOverlappingZone(cursorPos);
     if (containingZone) {
         result.primaryZone = containingZone;
         result.snapGeometry = containingZone->geometry();
@@ -195,6 +197,62 @@ QVector<Zone*> expandZonesByIntersection(Layout* layout, const QVector<Zone*>& s
 }
 
 } // namespace
+
+Zone* ZoneDetector::resolveOverlappingZone(const QPointF& point) const
+{
+    if (!m_layout) {
+        return nullptr;
+    }
+
+    // Collect all zones containing the point
+    QVector<Zone*> containing;
+    for (auto* zone : m_layout->zones()) {
+        if (zone && zone->containsPoint(point)) {
+            containing.append(zone);
+        }
+    }
+
+    if (containing.isEmpty()) {
+        return nullptr;
+    }
+    if (containing.size() == 1) {
+        return containing.first();
+    }
+
+    // Multiple overlapping zones: use normalized distance-to-center.
+    // For each zone, compute how far the cursor is from the zone's center
+    // as a proportion of the zone's half-dimensions (0.0 = at center, 1.0 = at edge).
+    // The zone with the lowest normalized distance wins, so the user can "reach"
+    // a background zone by dragging toward its center.
+    // Tiebreaker: when two zones have the same score (e.g. concentric zones with
+    // identical centers), prefer the smaller zone for deterministic behavior.
+    Zone* best = nullptr;
+    qreal bestScore = std::numeric_limits<qreal>::max();
+    qreal bestArea = std::numeric_limits<qreal>::max();
+
+    for (auto* zone : containing) {
+        const QRectF& geom = zone->geometry();
+        qreal halfW = geom.width() * 0.5;
+        qreal halfH = geom.height() * 0.5;
+        if (halfW <= 0 || halfH <= 0) {
+            continue;
+        }
+
+        QPointF center = geom.center();
+        qreal nx = (point.x() - center.x()) / halfW; // -1..+1
+        qreal ny = (point.y() - center.y()) / halfH; // -1..+1
+        qreal score = nx * nx + ny * ny; // Squared normalized distance, 0 at center
+
+        qreal area = geom.width() * geom.height();
+        if (score < bestScore || (score == bestScore && area < bestArea)) {
+            bestScore = score;
+            bestArea = area;
+            best = zone;
+        }
+    }
+
+    return best;
+}
 
 ZoneDetectionResult ZoneDetector::detectMultiZone(const QPointF& cursorPos) const
 {

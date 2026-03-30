@@ -71,9 +71,11 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     const int capturedLastCursorX = m_lastCursorX;
     const int capturedLastCursorY = m_lastCursorY;
 
-    // Release on a disabled monitor: do not snap to overlay zone (avoids snapping to a zone on another screen)
+    // Release on a disabled context: do not snap to overlay zone
     bool useOverlayZone = true;
-    if (releaseScreen && m_settings && m_settings->isMonitorDisabled(releaseScreenId)) {
+    int curDesktopDrop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
+    QString curActivityDrop = m_layoutManager ? m_layoutManager->currentActivity() : QString();
+    if (releaseScreen && isContextDisabled(m_settings, releaseScreenId, curDesktopDrop, curActivityDrop)) {
         useOverlayZone = false;
     }
 
@@ -121,7 +123,8 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 + QStringLiteral(":");
             selectorScreenLocked = m_settings->isContextLocked(prefix + selectorScreenId, curDesktop, curActivity);
         }
-        if (screen && !selectorScreenLocked && (!m_settings || !m_settings->isMonitorDisabled(selectorScreenId))) {
+        if (screen && !selectorScreenLocked
+            && !isContextDisabled(m_settings, selectorScreenId, curDesktopDrop, curActivityDrop)) {
             QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(selectorScreenId);
             if (zoneGeom.isValid()) {
                 snapX = zoneGeom.x();
@@ -239,8 +242,12 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
 
     // Handle unsnap - window was snapped but dropped outside any zone
     // Use same state as float shortcut: save zone for restore and mark floating, so unfloat/snap-back works.
+    // Call unconditionally when capturedWasSnapped: windowUnsnappedForFloat handles the
+    // no-zone case internally, and setWindowFloating ensures windowClosed won't persist
+    // the zone (floating windows are excluded from persistence).
     if (!shouldApplyGeometry && capturedWasSnapped) {
-        if (m_windowTracking && !m_windowTracking->getZoneForWindow(windowId).isEmpty()) {
+        qCInfo(lcDbusWindow) << "Drag-out unsnap for" << windowId << "releaseScreen:" << releaseScreenId;
+        if (m_windowTracking) {
             m_windowTracking->windowUnsnappedForFloat(windowId);
             m_windowTracking->setWindowFloating(windowId, true);
         }
@@ -261,11 +268,11 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 // If not cleared, it remains available for a subsequent float
                 // toggle (applyGeometryForFloat) if the user re-floats later.
                 m_windowTracking->clearPreTileGeometry(windowId);
+                qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
+            } else {
+                qCInfo(lcDbusWindow) << "Drag-out unsnap: no pre-tile geometry found for" << windowId;
             }
         }
-        // Note: if restore failed (no pre-tile geometry found), keep the entry
-        // so applyGeometryForFloat can still use it on a later float toggle.
-        // It will be cleaned up naturally when the window closes (windowClosed).
     }
 
     // Snap Assist: only when we actually SNAPPED to a zone (not when restoring size on unsnap).

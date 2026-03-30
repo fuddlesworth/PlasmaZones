@@ -30,10 +30,18 @@ Menu {
     signal sendBackwardRequested()
     signal sendToBackRequested()
 
+    // Workaround for Qt 6 use-after-free in QQuickPopupPrivate::finalizeExitTransition.
+    // dismiss()/close() still triggers the transition machinery which crashes on stale
+    // Instantiator items. Setting visible=false bypasses the transition system entirely.
+    function deferAction(action) {
+        contextMenu.visible = false;
+        Qt.callLater(action);
+    }
+
     MenuItem {
         text: i18nc("@action", "Split Horizontally")
         icon.name: "view-split-top-bottom"
-        onTriggered: contextMenu.splitHorizontalRequested()
+        onTriggered: contextMenu.deferAction(contextMenu.splitHorizontalRequested)
         Accessible.name: text
         Accessible.role: Accessible.MenuItem
     }
@@ -41,7 +49,7 @@ Menu {
     MenuItem {
         text: i18nc("@action", "Split Vertically")
         icon.name: "view-split-left-right"
-        onTriggered: contextMenu.splitVerticalRequested()
+        onTriggered: contextMenu.deferAction(contextMenu.splitVerticalRequested)
         Accessible.name: text
         Accessible.role: Accessible.MenuItem
     }
@@ -54,10 +62,13 @@ Menu {
         icon.name: "edit-copy"
         enabled: contextMenu.zoneId !== "" && contextMenu.editorController !== null
         onTriggered: {
-            if (contextMenu.editorController && contextMenu.zoneId) {
-                var zoneIds = [contextMenu.zoneId];
-                contextMenu.editorController.copyZones(zoneIds);
-            }
+            let ctrl = contextMenu.editorController;
+            let id = contextMenu.zoneId;
+            contextMenu.deferAction(function() {
+                if (ctrl && id)
+                    ctrl.copyZones([id]);
+
+            });
         }
         Accessible.name: i18nc("@action", "Copy zone")
         Accessible.description: i18nc("@info", "Copy the selected zone to clipboard")
@@ -69,10 +80,13 @@ Menu {
         icon.name: "edit-cut"
         enabled: contextMenu.zoneId !== "" && contextMenu.editorController !== null
         onTriggered: {
-            if (contextMenu.editorController && contextMenu.zoneId) {
-                var zoneIds = [contextMenu.zoneId];
-                contextMenu.editorController.cutZones(zoneIds);
-            }
+            let ctrl = contextMenu.editorController;
+            let id = contextMenu.zoneId;
+            contextMenu.deferAction(function() {
+                if (ctrl && id)
+                    ctrl.cutZones([id]);
+
+            });
         }
         Accessible.name: i18nc("@action", "Cut zone")
         Accessible.description: i18nc("@info", "Cut the selected zone to clipboard")
@@ -82,7 +96,7 @@ Menu {
     MenuItem {
         text: i18nc("@action", "Duplicate")
         icon.name: "edit-copy"
-        onTriggered: contextMenu.duplicateRequested()
+        onTriggered: contextMenu.deferAction(contextMenu.duplicateRequested)
         Accessible.name: text
         Accessible.role: Accessible.MenuItem
     }
@@ -90,7 +104,7 @@ Menu {
     MenuItem {
         text: i18nc("@action", "Delete")
         icon.name: "edit-delete"
-        onTriggered: contextMenu.deleteRequested()
+        onTriggered: contextMenu.deferAction(contextMenu.deleteRequested)
         Accessible.name: text
         Accessible.role: Accessible.MenuItem
     }
@@ -98,7 +112,7 @@ Menu {
     MenuItem {
         text: i18nc("@action", "Delete and Fill")
         icon.name: "edit-delete"
-        onTriggered: contextMenu.deleteWithFillRequested()
+        onTriggered: contextMenu.deferAction(contextMenu.deleteWithFillRequested)
         Accessible.name: text
         Accessible.description: i18nc("@info:tooltip", "Delete this zone and expand neighbors to fill the space")
         Accessible.role: Accessible.MenuItem
@@ -112,9 +126,12 @@ Menu {
         icon.name: "edit-paste"
         enabled: contextMenu.editorController && contextMenu.editorController.canPaste
         onTriggered: {
-            if (contextMenu.editorController)
-                contextMenu.editorController.pasteZones(false);
+            let ctrl = contextMenu.editorController;
+            contextMenu.deferAction(function() {
+                if (ctrl)
+                    ctrl.pasteZones(false);
 
+            });
         }
         Accessible.name: i18nc("@action", "Paste zone")
         Accessible.description: i18nc("@info", "Paste zones from clipboard")
@@ -126,9 +143,12 @@ Menu {
         icon.name: "edit-paste"
         enabled: contextMenu.editorController && contextMenu.editorController.canPaste
         onTriggered: {
-            if (contextMenu.editorController)
-                contextMenu.editorController.pasteZones(true);
+            let ctrl = contextMenu.editorController;
+            contextMenu.deferAction(function() {
+                if (ctrl)
+                    ctrl.pasteZones(true);
 
+            });
         }
         Accessible.name: i18nc("@action", "Paste zone with offset")
         Accessible.description: i18nc("@info", "Paste zones from clipboard with offset to avoid overlap")
@@ -141,7 +161,7 @@ Menu {
     MenuItem {
         text: i18nc("@action", "Fill Available Space")
         icon.name: "zoom-fit-best"
-        onTriggered: contextMenu.fillRequested()
+        onTriggered: contextMenu.deferAction(contextMenu.fillRequested)
         Accessible.name: text
         Accessible.description: i18nc("@info:tooltip", "Expand zone to fill adjacent empty space")
         Accessible.role: Accessible.MenuItem
@@ -153,7 +173,7 @@ Menu {
     MenuItem {
         text: i18nc("@action", "Bring to Front")
         icon.name: "layer-top"
-        onTriggered: contextMenu.bringToFrontRequested()
+        onTriggered: contextMenu.deferAction(contextMenu.bringToFrontRequested)
         Accessible.name: text
         Accessible.role: Accessible.MenuItem
     }
@@ -161,7 +181,7 @@ Menu {
     MenuItem {
         text: i18nc("@action", "Bring Forward")
         icon.name: "layer-raise"
-        onTriggered: contextMenu.bringForwardRequested()
+        onTriggered: contextMenu.deferAction(contextMenu.bringForwardRequested)
         Accessible.name: text
         Accessible.role: Accessible.MenuItem
     }
@@ -169,7 +189,7 @@ Menu {
     MenuItem {
         text: i18nc("@action", "Send Backward")
         icon.name: "layer-lower"
-        onTriggered: contextMenu.sendBackwardRequested()
+        onTriggered: contextMenu.deferAction(contextMenu.sendBackwardRequested)
         Accessible.name: text
         Accessible.role: Accessible.MenuItem
     }
@@ -177,7 +197,7 @@ Menu {
     MenuItem {
         text: i18nc("@action", "Send to Back")
         icon.name: "layer-bottom"
-        onTriggered: contextMenu.sendToBackRequested()
+        onTriggered: contextMenu.deferAction(contextMenu.sendToBackRequested)
         Accessible.name: text
         Accessible.role: Accessible.MenuItem
     }

@@ -65,7 +65,11 @@ DaemonController::~DaemonController()
 
 bool DaemonController::isRunning() const
 {
-    return QDBusConnection::sessionBus().interface()->isServiceRegistered(QString(DBus::ServiceName));
+    auto* iface = QDBusConnection::sessionBus().interface();
+    if (!iface) {
+        return false;
+    }
+    return iface->isServiceRegistered(QString(DBus::ServiceName));
 }
 
 bool DaemonController::isEnabled() const

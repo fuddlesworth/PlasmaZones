@@ -27,10 +27,12 @@
 #include <QStandardPaths>
 #include <QTimer>
 #include <QMutexLocker>
+
 #include "../core/logging.h"
 #include "pz_qml_i18n.h"
+#include "vulkan_support.h"
 
-#include <LayerShellQt/Window>
+#include "../core/layersurface.h"
 
 namespace PlasmaZones {
 
@@ -165,6 +167,15 @@ bool OverlayService::isZoneSelectorVisible() const
 
 OverlayService::~OverlayService()
 {
+    // Clear the Vulkan instance app property before destruction to avoid dangling pointer.
+    // Only needed for the fallback instance we own — when main.cpp provided the instance,
+    // it outlives OverlayService (declared before QGuiApplication), so no cleanup needed.
+#if QT_CONFIG(vulkan)
+    if (m_fallbackVulkanInstance && qGuiApp) {
+        qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty, QVariant());
+    }
+#endif
+
     // Disconnect from QGuiApplication first so we don't get screen-related callbacks
     // while we're destroying windows.
     if (qGuiApp) {
@@ -234,7 +245,39 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* scree
         window->setGraphicsConfiguration(config);
     }
 
-    // Set the screen before configuring LayerShellQt
+    // When the Vulkan backend is active, each QQuickWindow needs a QVulkanInstance
+    // set before it can create a Vulkan surface. The instance is stored as a dynamic
+    // property on QGuiApplication by main.cpp.
+    // IMPORTANT: setVulkanInstance() must be called before the window is shown or
+    // the scene graph is initialized. This is safe here because the window starts
+    // with visible: false and show() is called separately after createQmlWindow().
+#if QT_CONFIG(vulkan)
+    auto* vulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
+    if (vulkanInstance) {
+        window->setVulkanInstance(vulkanInstance);
+    } else if (QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan) {
+        // This can happen when backend is 'auto' and Qt chose Vulkan at runtime.
+        // Create a QVulkanInstance on-the-fly so overlays still work.
+        if (!m_fallbackVulkanInstance) {
+            m_fallbackVulkanInstance = std::make_unique<QVulkanInstance>();
+            m_fallbackVulkanInstance->setApiVersion(PlasmaZones::PzVulkanApiVersion);
+            if (m_fallbackVulkanInstance->create()) {
+                qCInfo(lcOverlay) << "Created fallback QVulkanInstance for 'auto' backend (Qt chose Vulkan).";
+                qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty,
+                                  QVariant::fromValue(m_fallbackVulkanInstance.get()));
+            } else {
+                qCCritical(lcOverlay) << "Failed to create fallback QVulkanInstance."
+                                      << "Overlay windows will not render correctly.";
+                m_fallbackVulkanInstance.reset();
+                window->deleteLater();
+                return nullptr;
+            }
+        }
+        window->setVulkanInstance(m_fallbackVulkanInstance.get());
+    }
+#endif
+
+    // Set the screen before the QPA plugin creates the LayerSurface
     window->setScreen(screen);
 
     return window;
@@ -268,7 +311,7 @@ void OverlayService::show()
             if (effectiveId.isEmpty()) {
                 effectiveId = Utils::screenIdentifier(cursorScreen);
             }
-            if (m_settings->isMonitorDisabled(effectiveId)) {
+            if (isContextDisabled(m_settings, effectiveId, m_currentVirtualDesktop, m_currentActivity)) {
                 return;
             }
         }
@@ -302,7 +345,8 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         if (effectiveId.isEmpty() && cursorScreen) {
             effectiveId = Utils::screenIdentifier(cursorScreen);
         }
-        if (m_settings && !effectiveId.isEmpty() && m_settings->isMonitorDisabled(effectiveId)) {
+        if (!effectiveId.isEmpty()
+            && isContextDisabled(m_settings, effectiveId, m_currentVirtualDesktop, m_currentActivity)) {
             return;
         }
     }
@@ -374,27 +418,25 @@ void OverlayService::updateSettings(ISettings* settings)
     // the current configuration.
     syncCavaState();
 
-    // Hide overlay and zone selector on monitors that are now disabled
-    if (m_settings) {
-        for (const QString& screenId : m_overlayWindows.keys()) {
-            if (m_settings->isMonitorDisabled(screenId)) {
-                if (auto* window = m_overlayWindows.value(screenId)) {
-                    window->hide();
-                }
+    // Hide overlay and zone selector on screens/desktops/activities that are now disabled
+    for (const QString& screenId : m_overlayWindows.keys()) {
+        if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+            if (auto* window = m_overlayWindows.value(screenId)) {
+                window->hide();
             }
         }
-        for (const QString& selectorScreenId : m_zoneSelectorWindows.keys()) {
-            if (m_settings->isMonitorDisabled(selectorScreenId)) {
-                if (auto* window = m_zoneSelectorWindows.value(selectorScreenId)) {
-                    window->hide();
-                }
+    }
+    for (const QString& selectorScreenId : m_zoneSelectorWindows.keys()) {
+        if (isContextDisabled(m_settings, selectorScreenId, m_currentVirtualDesktop, m_currentActivity)) {
+            if (auto* window = m_zoneSelectorWindows.value(selectorScreenId)) {
+                window->hide();
             }
         }
     }
 
     if (m_visible) {
         for (const QString& screenId : m_overlayWindows.keys()) {
-            if (m_settings && m_settings->isMonitorDisabled(screenId)) {
+            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
             }
             QScreen* physScreen = m_overlayPhysScreens.value(screenId);
@@ -407,10 +449,10 @@ void OverlayService::updateSettings(ISettings* settings)
     // Keep zone selector windows in sync with settings changes (position, layout, sizing).
     // Without this, changing settings while the selector is visible can leave stale geometry
     // and anchors, causing corrupted rendering or incorrect window sizing.
-    // Skip disabled monitors.
+    // Skip disabled screens/desktops/activities.
     if (!m_zoneSelectorWindows.isEmpty()) {
         for (const QString& selectorScreenId : m_zoneSelectorWindows.keys()) {
-            if (m_settings && m_settings->isMonitorDisabled(selectorScreenId)) {
+            if (isContextDisabled(m_settings, selectorScreenId, m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
             }
             updateZoneSelectorWindow(selectorScreenId);
@@ -457,21 +499,40 @@ Layout* OverlayService::resolveScreenLayout(const QString& screenId) const
     return screenLayout;
 }
 
-void OverlayService::setCurrentVirtualDesktop(int desktop)
+void OverlayService::hideDisabledAndRefresh()
 {
-    if (m_currentVirtualDesktop != desktop) {
-        m_currentVirtualDesktop = desktop;
-        qCInfo(lcOverlay) << "Virtual desktop changed to" << desktop;
-
-        // Update zone selector windows with the new active layout for this desktop
-        if (!m_zoneSelectorWindows.isEmpty()) {
-            for (const QString& selectorScreenId : m_zoneSelectorWindows.keys()) {
-                updateZoneSelectorWindow(selectorScreenId);
+    // Hide overlay/selector on screens where the current context is disabled
+    if (m_settings) {
+        for (const QString& screenId : m_zoneSelectorWindows.keys()) {
+            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+                if (auto* window = m_zoneSelectorWindows.value(screenId)) {
+                    window->hide();
+                }
             }
         }
-        // Also refresh overlay windows when visible (symmetry with activity; overlay shows per-desktop layout)
-        if (m_visible && !m_overlayWindows.isEmpty()) {
+        if (m_visible) {
             for (const QString& screenId : m_overlayWindows.keys()) {
+                if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+                    if (auto* window = m_overlayWindows.value(screenId)) {
+                        window->hide();
+                    }
+                }
+            }
+        }
+    }
+
+    // Update remaining (non-disabled) zone selector windows
+    if (!m_zoneSelectorWindows.isEmpty()) {
+        for (const QString& screenId : m_zoneSelectorWindows.keys()) {
+            if (!isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+                updateZoneSelectorWindow(screenId);
+            }
+        }
+    }
+    // Update remaining overlay windows when visible
+    if (m_visible && !m_overlayWindows.isEmpty()) {
+        for (const QString& screenId : m_overlayWindows.keys()) {
+            if (!isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
                 QScreen* physScreen = m_overlayPhysScreens.value(screenId);
                 if (physScreen) {
                     updateOverlayWindow(screenId, physScreen);
@@ -481,27 +542,21 @@ void OverlayService::setCurrentVirtualDesktop(int desktop)
     }
 }
 
+void OverlayService::setCurrentVirtualDesktop(int desktop)
+{
+    if (m_currentVirtualDesktop != desktop) {
+        m_currentVirtualDesktop = desktop;
+        qCInfo(lcOverlay) << "Virtual desktop changed to" << desktop;
+        hideDisabledAndRefresh();
+    }
+}
+
 void OverlayService::setCurrentActivity(const QString& activityId)
 {
     if (m_currentActivity != activityId) {
         m_currentActivity = activityId;
         qCInfo(lcOverlay) << "Activity changed activity=" << activityId;
-
-        // Update zone selector windows with the new active layout for this activity
-        if (!m_zoneSelectorWindows.isEmpty()) {
-            for (const QString& selectorScreenId : m_zoneSelectorWindows.keys()) {
-                updateZoneSelectorWindow(selectorScreenId);
-            }
-        }
-        // Also refresh overlay windows when visible (symmetry with desktop; overlay shows per-activity layout)
-        if (m_visible && !m_overlayWindows.isEmpty()) {
-            for (const QString& screenId : m_overlayWindows.keys()) {
-                QScreen* physScreen = m_overlayPhysScreens.value(screenId);
-                if (physScreen) {
-                    updateOverlayWindow(screenId, physScreen);
-                }
-            }
-        }
+        hideDisabledAndRefresh();
     }
 }
 
@@ -553,7 +608,7 @@ void OverlayService::handleScreenAdded(QScreen* screen)
         return;
     }
     const QString physScreenId = Utils::screenIdentifier(screen);
-    if (m_settings && m_settings->isMonitorDisabled(physScreenId)) {
+    if (isContextDisabled(m_settings, physScreenId, m_currentVirtualDesktop, m_currentActivity)) {
         return;
     }
 
@@ -561,6 +616,9 @@ void OverlayService::handleScreenAdded(QScreen* screen)
     if (mgr && mgr->hasVirtualScreens(physScreenId)) {
         // Create overlays for each virtual screen on this physical screen
         for (const QString& vsId : mgr->virtualScreenIdsFor(physScreenId)) {
+            if (isContextDisabled(m_settings, vsId, m_currentVirtualDesktop, m_currentActivity)) {
+                continue;
+            }
             QRect vsGeom = mgr->screenGeometry(vsId);
             if (vsGeom.isValid()) {
                 createOverlayWindow(vsId, screen, vsGeom);

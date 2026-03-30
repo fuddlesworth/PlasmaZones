@@ -38,62 +38,95 @@ Flickable {
                 headerText: i18n("Keyboard Shortcuts")
                 collapsible: true
 
-                contentItem: Kirigami.FormLayout {
-                    ShortcutCaptureField {
-                        id: editorDuplicateShortcutField
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
 
-                        formLabel: i18n("Duplicate zone:")
-                        keySequence: settingsController.editorDuplicateShortcut
-                        placeholderText: "Ctrl+D"
-                        tooltipText: i18n("Keyboard shortcut to duplicate the selected zone. Click to capture.")
-                        onKeySequenceModified: (seq) => {
-                            settingsController.editorDuplicateShortcut = seq;
+                    SettingsRow {
+                        title: i18n("Duplicate zone")
+                        description: i18n("Clone the currently selected zone")
+
+                        ShortcutCaptureField {
+                            id: editorDuplicateShortcutField
+
+                            keySequence: settingsController.editorDuplicateShortcut
+                            placeholderText: "Ctrl+D"
+                            onKeySequenceModified: (seq) => {
+                                settingsController.editorDuplicateShortcut = seq;
+                            }
                         }
+
                     }
 
-                    ShortcutCaptureField {
-                        id: editorSplitHorizontalShortcutField
-
-                        formLabel: i18n("Split horizontally:")
-                        keySequence: settingsController.editorSplitHorizontalShortcut
-                        placeholderText: "Ctrl+Shift+H"
-                        tooltipText: i18n("Keyboard shortcut to split selected zone horizontally. Click to capture.")
-                        onKeySequenceModified: (seq) => {
-                            settingsController.editorSplitHorizontalShortcut = seq;
-                        }
+                    SettingsSeparator {
                     }
 
-                    ShortcutCaptureField {
-                        id: editorSplitVerticalShortcutField
+                    SettingsRow {
+                        title: i18n("Split horizontally")
+                        description: i18n("Divide selected zone into left and right halves")
 
-                        formLabel: i18n("Split vertically:")
-                        keySequence: settingsController.editorSplitVerticalShortcut
-                        placeholderText: "Ctrl+Alt+V"
-                        tooltipText: i18n("Keyboard shortcut to split selected zone vertically. Click to capture.")
-                        onKeySequenceModified: (seq) => {
-                            settingsController.editorSplitVerticalShortcut = seq;
+                        ShortcutCaptureField {
+                            id: editorSplitHorizontalShortcutField
+
+                            keySequence: settingsController.editorSplitHorizontalShortcut
+                            placeholderText: "Ctrl+Shift+H"
+                            onKeySequenceModified: (seq) => {
+                                settingsController.editorSplitHorizontalShortcut = seq;
+                            }
                         }
+
                     }
 
-                    ShortcutCaptureField {
-                        id: editorFillShortcutField
-
-                        formLabel: i18n("Fill space:")
-                        keySequence: settingsController.editorFillShortcut
-                        placeholderText: "Ctrl+Shift+F"
-                        tooltipText: i18n("Keyboard shortcut to expand selected zone to fill available space. Click to capture.")
-                        onKeySequenceModified: (seq) => {
-                            settingsController.editorFillShortcut = seq;
-                        }
+                    SettingsSeparator {
                     }
 
-                    Button {
-                        Kirigami.FormData.label: i18n("Reset:")
-                        text: i18n("Reset to defaults")
-                        icon.name: "edit-reset"
-                        onClicked: settingsController.resetEditorDefaults()
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("Reset all editor shortcuts to their default values")
+                    SettingsRow {
+                        title: i18n("Split vertically")
+                        description: i18n("Divide selected zone into top and bottom halves")
+
+                        ShortcutCaptureField {
+                            id: editorSplitVerticalShortcutField
+
+                            keySequence: settingsController.editorSplitVerticalShortcut
+                            placeholderText: "Ctrl+Alt+V"
+                            onKeySequenceModified: (seq) => {
+                                settingsController.editorSplitVerticalShortcut = seq;
+                            }
+                        }
+
+                    }
+
+                    SettingsSeparator {
+                    }
+
+                    SettingsRow {
+                        title: i18n("Fill space")
+                        description: i18n("Expand selected zone to fill surrounding empty area")
+
+                        ShortcutCaptureField {
+                            id: editorFillShortcutField
+
+                            keySequence: settingsController.editorFillShortcut
+                            placeholderText: "Ctrl+Shift+F"
+                            onKeySequenceModified: (seq) => {
+                                settingsController.editorFillShortcut = seq;
+                            }
+                        }
+
+                    }
+
+                    SettingsSeparator {
+                    }
+
+                    SettingsRow {
+                        title: i18n("Reset shortcuts")
+                        description: i18n("Restore all editor shortcuts to their default values")
+
+                        Button {
+                            text: i18n("Reset to defaults")
+                            icon.name: "edit-reset"
+                            onClicked: settingsController.resetEditorDefaults()
+                        }
+
                     }
 
                 }
@@ -116,79 +149,101 @@ Flickable {
                 headerText: i18n("Snapping")
                 collapsible: true
 
-                contentItem: Kirigami.FormLayout {
-                    Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Snap Behavior")
-                    }
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
 
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("Grid snapping:")
-                        text: i18n("Enable grid snapping")
-                        checked: settingsController.editorGridSnappingEnabled
-                        onToggled: settingsController.editorGridSnappingEnabled = checked
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("Snap zones to a grid while dragging or resizing")
-                    }
+                    // ── Snap Behavior ──────────────────────────────────────
+                    SettingsRow {
+                        title: i18n("Grid snapping")
+                        description: i18n("Snap zones to a grid while dragging or resizing")
 
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("Edge snapping:")
-                        text: i18n("Enable edge snapping")
-                        checked: settingsController.editorEdgeSnappingEnabled
-                        onToggled: settingsController.editorEdgeSnappingEnabled = checked
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("Snap zones to edges of other zones while dragging or resizing")
-                    }
-
-                    Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Grid Intervals")
-                    }
-
-                    SettingsSlider {
-                        id: snapIntervalXSlider
-
-                        formLabel: i18n("Grid interval X:")
-                        from: 0.01
-                        to: 0.5
-                        stepSize: 0.01
-                        value: settingsController.editorSnapIntervalX
-                        formatValue: function(v) {
-                            return Math.round(v * 100) + "%";
+                        SettingsSwitch {
+                            checked: settingsController.editorGridSnappingEnabled
+                            accessibleName: i18n("Enable grid snapping")
+                            onToggled: settingsController.editorGridSnappingEnabled = checked
                         }
-                        onMoved: (value) => {
-                            return settingsController.editorSnapIntervalX = value;
-                        }
+
                     }
 
-                    SettingsSlider {
-                        id: snapIntervalYSlider
-
-                        formLabel: i18n("Grid interval Y:")
-                        from: 0.01
-                        to: 0.5
-                        stepSize: 0.01
-                        value: settingsController.editorSnapIntervalY
-                        formatValue: function(v) {
-                            return Math.round(v * 100) + "%";
-                        }
-                        onMoved: (value) => {
-                            return settingsController.editorSnapIntervalY = value;
-                        }
+                    SettingsSeparator {
                     }
 
-                    Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Modifier")
+                    SettingsRow {
+                        title: i18n("Edge snapping")
+                        description: i18n("Snap zones to edges of neighboring zones")
+
+                        SettingsSwitch {
+                            checked: settingsController.editorEdgeSnappingEnabled
+                            accessibleName: i18n("Enable edge snapping")
+                            onToggled: settingsController.editorEdgeSnappingEnabled = checked
+                        }
+
                     }
 
-                    ModifierComboBox {
-                        formLabel: i18n("Override modifier:")
-                        modifierValue: root.settingsBridge.editorSnapOverrideModifier
-                        tooltipText: i18n("Hold this modifier to temporarily override snap behavior")
-                        onModifierSelected: (value) => {
-                            root.settingsBridge.editorSnapOverrideModifier = value;
+                    SettingsSeparator {
+                    }
+
+                    // ── Grid Intervals ─────────────────────────────────────
+                    SettingsRow {
+                        title: i18n("Grid interval X")
+                        description: i18n("Horizontal grid spacing as percentage of screen width")
+
+                        SettingsSlider {
+                            id: snapIntervalXSlider
+
+                            from: 0.01
+                            to: 0.5
+                            stepSize: 0.01
+                            value: settingsController.editorSnapIntervalX
+                            formatValue: function(v) {
+                                return Math.round(v * 100) + "%";
+                            }
+                            onMoved: (value) => {
+                                return settingsController.editorSnapIntervalX = value;
+                            }
                         }
+
+                    }
+
+                    SettingsSeparator {
+                    }
+
+                    SettingsRow {
+                        title: i18n("Grid interval Y")
+                        description: i18n("Vertical grid spacing as percentage of screen height")
+
+                        SettingsSlider {
+                            id: snapIntervalYSlider
+
+                            from: 0.01
+                            to: 0.5
+                            stepSize: 0.01
+                            value: settingsController.editorSnapIntervalY
+                            formatValue: function(v) {
+                                return Math.round(v * 100) + "%";
+                            }
+                            onMoved: (value) => {
+                                return settingsController.editorSnapIntervalY = value;
+                            }
+                        }
+
+                    }
+
+                    SettingsSeparator {
+                    }
+
+                    // ── Modifier ───────────────────────────────────────────
+                    SettingsRow {
+                        title: i18n("Override modifier")
+                        description: i18n("Hold this key to temporarily bypass snap behavior")
+
+                        ModifierComboBox {
+                            modifierValue: root.settingsBridge.editorSnapOverrideModifier
+                            onModifierSelected: (value) => {
+                                root.settingsBridge.editorSnapOverrideModifier = value;
+                            }
+                        }
+
                     }
 
                 }
@@ -209,27 +264,26 @@ Flickable {
 
                 anchors.fill: parent
                 headerText: i18n("Fill on Drop")
+                showToggle: true
+                toggleChecked: root.settingsBridge.fillOnDropEnabled
+                onToggleClicked: (checked) => {
+                    return root.settingsBridge.fillOnDropEnabled = checked;
+                }
 
-                contentItem: Kirigami.FormLayout {
-                    CheckBox {
-                        id: fillOnDropEnabledCheck
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
 
-                        Kirigami.FormData.label: i18n("Enable:")
-                        text: i18n("Fill zone on drop with modifier key")
-                        checked: root.settingsBridge.fillOnDropEnabled
-                        onToggled: root.settingsBridge.fillOnDropEnabled = checked
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("When enabled, holding the modifier key while dropping a zone expands it to fill available space")
-                    }
+                    SettingsRow {
+                        title: i18n("Modifier key")
+                        description: i18n("Hold this key while dropping a zone to expand it into available space")
 
-                    ModifierComboBox {
-                        formLabel: i18n("Modifier:")
-                        enabled: fillOnDropEnabledCheck.checked
-                        modifierValue: root.settingsBridge.fillOnDropModifier
-                        tooltipText: i18n("Hold this modifier while dropping to fill available space")
-                        onModifierSelected: (value) => {
-                            root.settingsBridge.fillOnDropModifier = value;
+                        ModifierComboBox {
+                            modifierValue: root.settingsBridge.fillOnDropModifier
+                            onModifierSelected: (value) => {
+                                root.settingsBridge.fillOnDropModifier = value;
+                            }
                         }
+
                     }
 
                 }

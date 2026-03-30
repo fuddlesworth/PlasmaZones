@@ -4,7 +4,6 @@
 #include "kcmabout.h"
 #include <QProcess>
 #include <KPluginFactory>
-#include "../../src/config/updatechecker.h"
 
 K_PLUGIN_FACTORY_WITH_JSON(KCMAboutFactory, "kcm_plasmazones_about.json", registerPlugin<PlasmaZones::KCMAbout>();)
 
@@ -20,12 +19,16 @@ KCMAbout::~KCMAbout() = default;
 
 QString KCMAbout::currentVersion() const
 {
-    return UpdateChecker::currentVersion();
+    return QStringLiteral(PLASMAZONES_VERSION);
 }
 
-void KCMAbout::openSettings()
+void KCMAbout::openSettings(const QString& page)
 {
-    QProcess::startDetached(QStringLiteral("plasmazones-settings"), {});
+    QStringList args;
+    if (!page.isEmpty()) {
+        args << QStringLiteral("--page") << page;
+    }
+    QProcess::startDetached(QStringLiteral("plasmazones-settings"), args);
 }
 
 } // namespace PlasmaZones

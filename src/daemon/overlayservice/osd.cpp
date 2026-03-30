@@ -12,7 +12,7 @@
 #include <QScreen>
 #include <QQmlEngine>
 #include <QGuiApplication>
-#include <LayerShellQt/Window>
+#include "../../core/layersurface.h"
 
 namespace PlasmaZones {
 
@@ -31,28 +31,34 @@ struct OsdWindowSetup
     }
 };
 
-// Center an OSD/layer window within a screen geometry using LayerShellQt margins.
+// Center an OSD/layer window within a screen geometry using layer surface margins.
 // physScreenGeom is the full physical screen; targetGeom is the area to center within
 // (same as physScreenGeom for physical screens, or a sub-region for virtual screens).
+// Precondition: the window must already have a LayerSurface (created before show()).
+// This function retrieves the existing LayerSurface — it does not create one.
 void centerLayerWindowOnScreen(QQuickWindow* window, const QRect& physScreenGeom, const QRect& targetGeom, int osdWidth,
                                int osdHeight)
 {
     if (!window) {
         return;
     }
-    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        // Compute center position within the target area, expressed as margins from physical screen edges
-        const int targetCenterX = (targetGeom.x() - physScreenGeom.x()) + qMax(0, (targetGeom.width() - osdWidth) / 2);
-        const int targetCenterY =
-            (targetGeom.y() - physScreenGeom.y()) + qMax(0, (targetGeom.height() - osdHeight) / 2);
-        const int rightMargin = qMax(0, physScreenGeom.width() - targetCenterX - osdWidth);
-        const int bottomMargin = qMax(0, physScreenGeom.height() - targetCenterY - osdHeight);
-
-        layerWindow->setAnchors(
-            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
-        layerWindow->setMargins(QMargins(targetCenterX, targetCenterY, rightMargin, bottomMargin));
+    auto* layerSurface = LayerSurface::find(window);
+    if (!layerSurface) {
+        qCWarning(lcOverlay) << "centerLayerWindowOnScreen: no LayerSurface for window"
+                             << "— was LayerSurface::get() called before show()?";
+        return;
     }
+    // Compute center position within the target area, expressed as margins from physical screen edges
+    const int targetCenterX = (targetGeom.x() - physScreenGeom.x()) + qMax(0, (targetGeom.width() - osdWidth) / 2);
+    const int targetCenterY = (targetGeom.y() - physScreenGeom.y()) + qMax(0, (targetGeom.height() - osdHeight) / 2);
+    const int rightMargin = qMax(0, physScreenGeom.width() - targetCenterX - osdWidth);
+    const int bottomMargin = qMax(0, physScreenGeom.height() - targetCenterY - osdHeight);
+
+    // Batch anchors + margins into a single propertiesChanged() emission
+    // to avoid two applyProperties()+wl_surface_commit round-trips.
+    LayerSurface::BatchGuard batch(layerSurface);
+    layerSurface->setAnchors(LayerSurface::AnchorAll);
+    layerSurface->setMargins(QMargins(targetCenterX, targetCenterY, rightMargin, bottomMargin));
 }
 
 // Calculate OSD size and center window
@@ -307,15 +313,14 @@ void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* phy
         return;
     }
 
-    // Configure LayerShellQt for Wayland overlay (prevents window from appearing in taskbar)
-    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        layerWindow->setScreen(physScreen);
-        layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
-        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-        // Anchors will be set dynamically in showLayoutOsd() based on window size
-        // Use screenId in scope to make it unique per virtual screen
-        layerWindow->setScope(QStringLiteral("plasmazones-layout-osd-%1").arg(screenId));
-        layerWindow->setExclusiveZone(-1);
+    // Configure layer surface for Wayland overlay (prevents window from appearing in taskbar)
+    // Anchors will be set dynamically in showLayoutOsd() based on window size
+    // Use screenId in scope to make it unique per virtual screen
+    if (!configureLayerSurface(window, physScreen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
+                               QStringLiteral("plasmazones-layout-osd-%1").arg(screenId))) {
+        qCWarning(lcOverlay) << "Failed to configure layer surface for layout OSD on" << screenId;
+        delete window;
+        return;
     }
 
     auto layoutOsdConn = connect(window, SIGNAL(dismissed()), this, SLOT(hideLayoutOsd()));
@@ -330,6 +335,10 @@ void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* phy
 void OverlayService::destroyLayoutOsdWindow(const QString& screenId)
 {
     if (auto* window = m_layoutOsdWindows.take(screenId)) {
+        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
+        if (auto* physScreen = m_layoutOsdPhysScreens.value(screenId)) {
+            disconnect(physScreen, nullptr, window, nullptr);
+        }
         window->close();
         window->deleteLater();
     }
@@ -494,13 +503,13 @@ void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen*
         return;
     }
 
-    // Configure LayerShellQt for Wayland overlay
-    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        layerWindow->setScreen(physScreen);
-        layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
-        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-        layerWindow->setScope(QStringLiteral("plasmazones-navigation-osd-%1").arg(screenId));
-        layerWindow->setExclusiveZone(-1);
+    // Configure layer surface for Wayland overlay
+    if (!configureLayerSurface(window, physScreen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
+                               QStringLiteral("plasmazones-navigation-osd-%1").arg(screenId))) {
+        qCWarning(lcOverlay) << "Failed to configure layer surface for navigation OSD on" << screenId;
+        m_navigationOsdCreationFailed.insert(screenId, true);
+        delete window;
+        return;
     }
 
     auto navOsdConn = connect(window, SIGNAL(dismissed()), this, SLOT(hideNavigationOsd()));
@@ -516,6 +525,10 @@ void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen*
 void OverlayService::destroyNavigationOsdWindow(const QString& screenId)
 {
     if (auto* window = m_navigationOsdWindows.take(screenId)) {
+        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
+        if (auto* physScreen = m_navigationOsdPhysScreens.value(screenId)) {
+            disconnect(physScreen, nullptr, window, nullptr);
+        }
         window->close();
         window->deleteLater();
     }

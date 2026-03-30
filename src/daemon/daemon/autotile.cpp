@@ -44,6 +44,10 @@ void Daemon::updateAutotileScreens()
     QHash<QString, QString> screenAlgorithms;
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
     for (const QString& screenId : effectiveIds) {
+        // Skip screens/desktops/activities where PlasmaZones is disabled
+        if (isContextDisabled(m_settings.get(), screenId, desktop, activity)) {
+            continue;
+        }
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
         if (LayoutId::isAutotile(assignmentId)) {
             autotileScreens.insert(screenId);
@@ -76,7 +80,7 @@ void Daemon::updateAutotileScreens()
                 // respect their choice.
                 //
                 // Use the engine's runtime algorithm (m_autotileEngine->algorithm())
-                // instead of m_settings->autotileAlgorithm(). During layout cycling,
+                // instead of m_settings->defaultAutotileAlgorithm(). During layout cycling,
                 // the settings algorithm retains the initial KCM value while the
                 // engine's algorithm changes with each cycle. Using the stale settings
                 // value caused incorrect MaxWindows injection and unpredictable
@@ -234,7 +238,7 @@ void Daemon::handleSnappingToAutotile()
     }
 
     // Resolve algorithm from settings (this is a global enable, not per-desktop toggle)
-    QString algoId = m_settings->autotileAlgorithm();
+    QString algoId = m_settings->defaultAutotileAlgorithm();
     if (algoId.isEmpty()) {
         algoId = AlgorithmRegistry::defaultAlgorithmId();
     }

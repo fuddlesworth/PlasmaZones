@@ -8,6 +8,7 @@
 #pragma once
 
 #include "../config/configdefaults.h"
+#include "../pz_i18n.h"
 #include "../config/settings.h"
 #include "../config/updatechecker.h"
 #include "../common/daemoncontroller.h"
@@ -16,7 +17,9 @@
 #include "../core/enums.h"
 #include "../core/modifierutils.h"
 
+#include <QHash>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QDBusConnection>
 #include <QVariantList>
@@ -81,6 +84,11 @@ class SettingsController : public QObject
                    snapAssistTriggersChanged)
     Q_PROPERTY(QVariantList defaultSnapAssistTriggers READ defaultSnapAssistTriggers CONSTANT)
 
+    // Rendering backend info
+    Q_PROPERTY(QStringList renderingBackendOptions READ renderingBackendOptions CONSTANT)
+    Q_PROPERTY(QStringList renderingBackendDisplayNames READ renderingBackendDisplayNames CONSTANT)
+    Q_PROPERTY(QString startupRenderingBackend READ startupRenderingBackend CONSTANT)
+
     // Cava detection
     Q_PROPERTY(bool cavaAvailable READ cavaAvailable CONSTANT)
 
@@ -124,13 +132,22 @@ class SettingsController : public QObject
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
-    ~SettingsController() override = default;
+    ~SettingsController() override;
+
+    /// Register on the session bus so a second instance can forward page requests.
+    bool registerDBusService();
 
     QString activePage() const
     {
         return m_activePage;
     }
-    void setActivePage(const QString& page);
+    Q_SCRIPTABLE void setActivePage(const QString& page);
+
+    /// Raise the settings window to the foreground.
+    Q_SCRIPTABLE void raise();
+
+    static const QSet<QString>& validPageNames();
+    static const QHash<QString, QString>& parentPageRedirects();
 
     bool needsSave() const
     {
@@ -202,6 +219,9 @@ public:
 
     // Layout CRUD (D-Bus to daemon)
     Q_INVOKABLE void createNewLayout();
+    Q_INVOKABLE bool createNewLayout(const QString& name, const QString& type, int aspectRatioClass, bool openInEditor);
+    Q_INVOKABLE QString createNewAlgorithm(const QString& name, const QString& baseTemplate, bool supportsMasterCount,
+                                           bool supportsSplitRatio, bool producesOverlappingZones, bool supportsMemory);
     Q_INVOKABLE void deleteLayout(const QString& layoutId);
     Q_INVOKABLE void duplicateLayout(const QString& layoutId);
     Q_INVOKABLE void editLayout(const QString& layoutId);
@@ -221,6 +241,10 @@ public:
     // Screen helpers
     Q_INVOKABLE bool isMonitorDisabled(const QString& screenName) const;
     Q_INVOKABLE void setMonitorDisabled(const QString& screenName, bool disabled);
+    Q_INVOKABLE bool isDesktopDisabled(const QString& screenName, int desktop) const;
+    Q_INVOKABLE void setDesktopDisabled(const QString& screenName, int desktop, bool disabled);
+    Q_INVOKABLE bool isActivityDisabled(const QString& screenName, const QString& activityId) const;
+    Q_INVOKABLE void setActivityDisabled(const QString& screenName, const QString& activityId, bool disabled);
 
     // Font helpers (for FontPickerDialog)
     Q_INVOKABLE QStringList fontStylesForFamily(const QString& family) const;
@@ -329,6 +353,24 @@ public:
     void setDragActivationTriggers(const QVariantList& triggers);
     void setZoneSpanTriggers(const QVariantList& triggers);
     void setSnapAssistTriggers(const QVariantList& triggers);
+
+    // ── Rendering backend ─────────────────────────────────────────────────────
+    QStringList renderingBackendOptions() const
+    {
+        return PlasmaZones::ConfigDefaults::renderingBackendOptions();
+    }
+
+    QStringList renderingBackendDisplayNames() const
+    {
+        return m_renderingBackendDisplayNames;
+    }
+
+    // Backend value at settings app launch — survives page recreation so the
+    // "restart required" InlineMessage stays visible after navigating away and back.
+    QString startupRenderingBackend() const
+    {
+        return m_startupRenderingBackend;
+    }
 
     // ── Cava detection ───────────────────────────────────────────────────────
     bool cavaAvailable() const;
@@ -503,6 +545,14 @@ public:
     Q_INVOKABLE QVariantList availableAlgorithms() const;
     Q_INVOKABLE QVariantList generateAlgorithmPreview(const QString& algorithmId, int windowCount, double splitRatio,
                                                       int masterCount) const;
+    Q_INVOKABLE void openAlgorithmsFolder();
+    Q_INVOKABLE bool importAlgorithm(const QString& filePath);
+    Q_INVOKABLE static QString algorithmIdFromLayoutId(const QString& layoutId);
+    Q_INVOKABLE void openAlgorithm(const QString& algorithmId);
+    Q_INVOKABLE void openLayoutFile(const QString& layoutId);
+    Q_INVOKABLE bool deleteAlgorithm(const QString& algorithmId);
+    Q_INVOKABLE bool duplicateAlgorithm(const QString& algorithmId);
+    Q_INVOKABLE bool exportAlgorithm(const QString& algorithmId, const QString& destPath);
 
     // ── Per-screen autotile overrides ────────────────────────────────────────
     Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenName) const;
@@ -550,6 +600,10 @@ Q_SIGNALS:
     void daemonRunningChanged();
     void layoutsChanged();
     void layoutAdded(const QString& layoutId);
+    void availableAlgorithmsChanged();
+    void algorithmCreated(const QString& algorithmId);
+    void algorithmOperationFailed(const QString& reason);
+    void layoutOperationFailed(const QString& reason);
     void screensChanged();
     void dismissedUpdateVersionChanged();
 
@@ -572,6 +626,8 @@ Q_SIGNALS:
     // KZones import signals
     void kzonesImportFinished(int count, const QString& message);
     void lockedScreensChanged();
+    void disabledDesktopsChanged();
+    void disabledActivitiesChanged();
 
     // Editor signals
     void editorDuplicateShortcutChanged();
@@ -595,6 +651,12 @@ private Q_SLOTS:
     void onScreenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
 
 private:
+    QString scriptedFilePath(const QString& algorithmId) const;
+    void watchForAlgorithmRegistration(const QString& expectedId);
+    void cancelAlgorithmWatcher(const QString& expectedId);
+
+    QHash<QString, std::shared_ptr<QMetaObject::Connection>> m_algorithmWatchers;
+
     void setNeedsSave(bool needs);
     void scheduleLayoutLoad();
     void refreshVirtualDesktops();
@@ -607,6 +669,8 @@ private:
     static QVariantList convertTriggersForStorage(const QVariantList& triggers);
 
     Settings m_settings;
+    QStringList m_renderingBackendDisplayNames;
+    QString m_startupRenderingBackend;
     DaemonController m_daemonController;
     UpdateChecker m_updateChecker;
     QString m_dismissedUpdateVersion;
@@ -614,6 +678,7 @@ private:
     QString m_activePage = QStringLiteral("overview");
     bool m_needsSave = false;
     bool m_saving = false;
+    bool m_loading = false;
 
     // Layout state
     QVariantList m_layouts;
