@@ -654,6 +654,7 @@ private:
     QString m_activePage = QStringLiteral("overview");
     bool m_needsSave = false;
     bool m_saving = false;
+    bool m_loading = false;
 
     // Layout state
     QVariantList m_layouts;

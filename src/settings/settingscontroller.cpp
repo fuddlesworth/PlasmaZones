@@ -232,19 +232,31 @@ void SettingsController::dismissUpdate()
 void SettingsController::setActivePage(const QString& page)
 {
     if (m_activePage != page) {
+        // Capture dirty state BEFORE emitting, because the QML Loader
+        // reacts synchronously to activePageChanged — new page creation
+        // may trigger NOTIFY signals that set needsSave before we return.
+        const bool wasDirty = m_needsSave;
+        m_loading = true;
         m_activePage = page;
         Q_EMIT activePageChanged();
+        m_loading = false;
+        // Restore the dirty state that existed before page navigation.
+        // Any NOTIFY signals that fired during page creation were suppressed
+        // by m_loading and should not mark the settings as dirty.
+        setNeedsSave(wasDirty);
     }
 }
 
 void SettingsController::load()
 {
+    m_loading = true;
     m_settings.load();
     m_screenHelper.refreshScreens();
     scheduleLayoutLoad();
     m_stagedAssignments.clear();
     m_stagedQuickSlots.clear();
     m_stagedTilingQuickSlots.clear();
+    m_loading = false;
     setNeedsSave(false);
 }
 
@@ -317,7 +329,7 @@ void SettingsController::launchEditor()
 
 void SettingsController::onSettingsPropertyChanged()
 {
-    if (!m_saving) {
+    if (!m_saving && !m_loading) {
         setNeedsSave(true);
     }
 }

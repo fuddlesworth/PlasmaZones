@@ -14,6 +14,7 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - ALWAYS run tests after making code changes
 - ALWAYS verify build succeeds before committing
 - NEVER run `cmake --install` or `sudo` — the user handles installation
+- NEVER use temporary workarounds, TODOs, "for now" hacks, or deferred fixes — solve the root cause properly the first time
 
 ## File Organization
 - NEVER save to root folder — use the directories below

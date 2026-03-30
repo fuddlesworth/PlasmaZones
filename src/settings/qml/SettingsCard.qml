@@ -173,8 +173,10 @@ Item {
                         accessibleName: root.headerText
                         Layout.rightMargin: Kirigami.Units.smallSpacing
                         onToggled: {
-                            root.toggleChecked = checked;
-                            root.toggleChanged();
+                            if (checked !== root.toggleChecked) {
+                                root.toggleChecked = checked;
+                                root.toggleChanged();
+                            }
                         }
                     }
 
