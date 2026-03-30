@@ -101,6 +101,11 @@ public:
         Q_UNUSED(use)
     }
 
+    /** Enable depth buffer (R32F at binding 12) for MRT depth writing/reading. Default no-op. */
+    virtual void setUseDepthBuffer(bool)
+    {
+    }
+
     /** Multi-pass: optional buffer pass fragment shader path. No-op if backend does not support multipass. */
     virtual void setBufferShaderPath(const QString& path)
     {

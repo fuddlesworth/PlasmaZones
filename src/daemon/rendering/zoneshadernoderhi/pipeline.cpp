@@ -19,7 +19,8 @@ namespace PlasmaZones {
 // alpha channel for data without darkening the RGB output.
 static std::unique_ptr<QRhiGraphicsPipeline>
 createFullscreenQuadPipeline(QRhi* rhi, QRhiRenderPassDescriptor* rpDesc, const QShader& vertexShader,
-                             const QShader& fragmentShader, QRhiShaderResourceBindings* srb, bool enableBlend = true)
+                             const QShader& fragmentShader, QRhiShaderResourceBindings* srb, bool enableBlend = true,
+                             int numColorAttachments = 1)
 {
     std::unique_ptr<QRhiGraphicsPipeline> pipeline(rhi->newGraphicsPipeline());
     pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
@@ -31,13 +32,20 @@ createFullscreenQuadPipeline(QRhi* rhi, QRhiRenderPassDescriptor* rpDesc, const 
     pipeline->setVertexInputLayout(inputLayout);
     pipeline->setShaderResourceBindings(srb);
     pipeline->setRenderPassDescriptor(rpDesc);
+    QList<QRhiGraphicsPipeline::TargetBlend> blends;
     QRhiGraphicsPipeline::TargetBlend blend;
     blend.enable = enableBlend;
     blend.srcColor = QRhiGraphicsPipeline::SrcAlpha;
     blend.dstColor = QRhiGraphicsPipeline::OneMinusSrcAlpha;
     blend.srcAlpha = QRhiGraphicsPipeline::One;
     blend.dstAlpha = QRhiGraphicsPipeline::OneMinusSrcAlpha;
-    pipeline->setTargetBlends({blend});
+    blends.append(blend);
+    for (int i = 1; i < numColorAttachments; ++i) {
+        QRhiGraphicsPipeline::TargetBlend depthBlend;
+        depthBlend.enable = false; // No blending for depth attachment
+        blends.append(depthBlend);
+    }
+    pipeline->setTargetBlends(blends.begin(), blends.end());
     if (!pipeline->create()) {
         return nullptr;
     }
@@ -62,14 +70,46 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
     const int bufferW = qMax(1, static_cast<int>(m_width * m_bufferScale));
     const int bufferH = qMax(1, static_cast<int>(m_height * m_bufferScale));
     const QSize bufferSize(bufferW, bufferH);
-    auto createTextureAndRT = [rhi, bufferSize](std::unique_ptr<QRhiTexture>& tex,
-                                                std::unique_ptr<QRhiTextureRenderTarget>& rt,
-                                                std::unique_ptr<QRhiRenderPassDescriptor>& rpd) -> bool {
+    // Create or resize depth texture before render targets that reference it
+    if (m_useDepthBuffer && (!m_depthTexture || m_depthTexture->pixelSize() != bufferSize)) {
+        m_depthTexture.reset(rhi->newTexture(QRhiTexture::R32F, bufferSize, 1, QRhiTexture::RenderTarget));
+        if (!m_depthTexture->create()) {
+            qCWarning(lcOverlay) << "Failed to create depth texture";
+            return false;
+        }
+        if (!m_depthSampler) {
+            m_depthSampler.reset(rhi->newSampler(QRhiSampler::Nearest, QRhiSampler::Nearest, QRhiSampler::None,
+                                                 QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+            if (!m_depthSampler->create()) {
+                qCWarning(lcOverlay) << "Failed to create depth sampler";
+                return false;
+            }
+        }
+        // Force RT recreation since attachment count changed
+        m_bufferPipeline.reset();
+        m_bufferSrb.reset();
+        m_bufferSrbB.reset();
+        m_srb.reset();
+        m_srbB.reset();
+        for (int i = 0; i < kMaxBufferPasses; ++i) {
+            m_multiBufferPipelines[i].reset();
+            m_multiBufferSrbs[i].reset();
+        }
+    }
+
+    auto createTextureAndRT = [rhi, bufferSize, this](std::unique_ptr<QRhiTexture>& tex,
+                                                      std::unique_ptr<QRhiTextureRenderTarget>& rt,
+                                                      std::unique_ptr<QRhiRenderPassDescriptor>& rpd) -> bool {
         tex.reset(rhi->newTexture(QRhiTexture::RGBA8, bufferSize, 1, QRhiTexture::RenderTarget));
         if (!tex->create()) {
             return false;
         }
-        QRhiTextureRenderTargetDescription desc(QRhiColorAttachment(tex.get()));
+        QRhiTextureRenderTargetDescription desc;
+        if (m_useDepthBuffer && m_depthTexture) {
+            desc.setColorAttachments({QRhiColorAttachment(tex.get()), QRhiColorAttachment(m_depthTexture.get())});
+        } else {
+            desc.setColorAttachments({QRhiColorAttachment(tex.get())});
+        }
         rt.reset(rhi->newTextureRenderTarget(desc));
         rpd.reset(rt->newCompatibleRenderPassDescriptor());
         rt->setRenderPassDescriptor(rpd.get());
@@ -230,6 +270,7 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
                 }
                 appendUserTextureBindings(bindings);
                 appendWallpaperBinding(bindings);
+                appendDepthBinding(bindings);
                 srb->setBindings(bindings.begin(), bindings.end());
                 if (!srb->create()) {
                     m_shaderError = QStringLiteral("Failed to create multi-buffer pass SRB ");
@@ -243,7 +284,7 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
                     : m_multiBufferRenderTargets[i]->renderPassDescriptor();
                 m_multiBufferPipelines[i] = createFullscreenQuadPipeline(
                     rhi, rpDescI, m_vertexShader, m_multiBufferFragmentShaders[i], m_multiBufferSrbs[i].get(),
-                    /*enableBlend=*/false);
+                    /*enableBlend=*/false, /*numColorAttachments=*/m_useDepthBuffer ? 2 : 1);
                 if (!m_multiBufferPipelines[i]) {
                     m_shaderError = QStringLiteral("Failed to create multi-buffer pipeline ");
                     return false;
@@ -297,6 +338,7 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
         }
         appendUserTextureBindings(bindings);
         appendWallpaperBinding(bindings);
+        appendDepthBinding(bindings);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
@@ -320,7 +362,7 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
     if (!m_bufferPipeline) {
         m_bufferPipeline =
             createFullscreenQuadPipeline(rhi, rpDesc, m_vertexShader, m_bufferFragmentShader, m_bufferSrb.get(),
-                                         /*enableBlend=*/false);
+                                         /*enableBlend=*/false, /*numColorAttachments=*/m_useDepthBuffer ? 2 : 1);
         if (!m_bufferPipeline) {
             m_shaderError = QStringLiteral("Failed to create buffer pipeline");
             return false;
@@ -384,6 +426,7 @@ bool ZoneShaderNodeRhi::ensurePipeline()
         }
         appendUserTextureBindings(bindings);
         appendWallpaperBinding(bindings);
+        appendDepthBinding(bindings);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
@@ -414,6 +457,7 @@ bool ZoneShaderNodeRhi::ensurePipeline()
         }
         appendUserTextureBindings(bindings);
         appendWallpaperBinding(bindings);
+        appendDepthBinding(bindings);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };

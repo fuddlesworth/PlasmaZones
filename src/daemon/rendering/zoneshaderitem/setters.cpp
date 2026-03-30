@@ -522,6 +522,16 @@ void ZoneShaderItem::setUseWallpaper(bool use)
     update();
 }
 
+void ZoneShaderItem::setUseDepthBuffer(bool use)
+{
+    if (m_useDepthBuffer == use) {
+        return;
+    }
+    m_useDepthBuffer = use;
+    Q_EMIT useDepthBufferChanged();
+    update();
+}
+
 // ============================================================================
 // Custom Color By Index (for setShaderParams loop)
 // ============================================================================

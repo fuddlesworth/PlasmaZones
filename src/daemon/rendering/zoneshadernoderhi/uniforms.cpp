@@ -417,6 +417,8 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_wallpaperTexture.reset();
     m_wallpaperSampler.reset();
     m_wallpaperDirty = true;
+    m_depthTexture.reset();
+    m_depthSampler.reset();
     m_ubo.reset();
     m_vbo.reset();
     m_vertexShader = QShader();

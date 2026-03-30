@@ -271,6 +271,9 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         node->setUserTextureWrap(i, m_userTextureWraps[i]);
     }
 
+    // Sync depth buffer (binding 12)
+    node->setUseDepthBuffer(m_useDepthBuffer);
+
     // Sync desktop wallpaper texture (binding 11)
     node->setUseWallpaper(m_useWallpaper);
     {

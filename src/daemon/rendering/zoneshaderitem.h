@@ -136,6 +136,9 @@ class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public QQuickItem
     /** Whether the current shader subscribes to the wallpaper texture. */
     Q_PROPERTY(bool useWallpaper READ useWallpaper WRITE setUseWallpaper NOTIFY useWallpaperChanged FINAL)
 
+    /** Whether the current shader uses a depth buffer (R32F at binding 12). */
+    Q_PROPERTY(bool useDepthBuffer READ useDepthBuffer WRITE setUseDepthBuffer NOTIFY useDepthBufferChanged FINAL)
+
     // Status
     Q_PROPERTY(Status status READ status NOTIFY statusChanged FINAL)
     Q_PROPERTY(QString errorLog READ errorLog NOTIFY errorLogChanged FINAL)
@@ -423,6 +426,12 @@ public:
     }
     void setUseWallpaper(bool use);
 
+    bool useDepthBuffer() const
+    {
+        return m_useDepthBuffer;
+    }
+    void setUseDepthBuffer(bool use);
+
     // Status getters
     Status status() const
     {
@@ -490,6 +499,7 @@ Q_SIGNALS:
     void audioSpectrumChanged();
     void wallpaperTextureChanged();
     void useWallpaperChanged();
+    void useDepthBufferChanged();
     void statusChanged();
     void errorLogChanged();
 
@@ -614,6 +624,7 @@ private:
     QImage m_wallpaperTexture;
     mutable QMutex m_wallpaperTextureMutex;
     bool m_useWallpaper = false;
+    bool m_useDepthBuffer = false;
 
     // User texture data (bindings 7-10)
     std::array<QString, 4> m_userTexturePaths;

@@ -234,6 +234,27 @@ void ZoneShaderNodeRhi::appendWallpaperBinding(QVector<QRhiShaderResourceBinding
     }
 }
 
+void ZoneShaderNodeRhi::appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings) const
+{
+    if (m_useDepthBuffer && m_depthTexture && m_depthSampler) {
+        bindings.append(QRhiShaderResourceBinding::sampledTexture(12, QRhiShaderResourceBinding::FragmentStage,
+                                                                  m_depthTexture.get(), m_depthSampler.get()));
+    }
+}
+
+void ZoneShaderNodeRhi::setUseDepthBuffer(bool use)
+{
+    if (m_useDepthBuffer == use) {
+        return;
+    }
+    m_useDepthBuffer = use;
+    // Force recreation of render targets and pipelines
+    m_depthTexture.reset();
+    m_depthSampler.reset();
+    resetAllSrbs();
+    markDirty(QSGNode::DirtyMaterial);
+}
+
 void ZoneShaderNodeRhi::resetAllSrbs()
 {
     m_srb.reset();

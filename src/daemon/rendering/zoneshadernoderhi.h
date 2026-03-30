@@ -95,6 +95,7 @@ public:
     void setBufferScale(qreal scale) override;
     void setBufferWrap(const QString& wrap) override;
     void setBufferWraps(const QStringList& wraps) override;
+    void setUseDepthBuffer(bool use) override;
     bool loadVertexShader(const QString& path) override;
     bool loadFragmentShader(const QString& path) override;
     void setVertexShaderSource(const QString& source) override;
@@ -113,6 +114,7 @@ private:
     void releaseRhiResources();
     void appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
     void appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
+    void appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
     void resetAllSrbs();
     void bakeBufferShaders();
 
@@ -244,6 +246,11 @@ private:
     std::array<std::unique_ptr<QRhiSampler>, kMaxUserTextures> m_userTextureSamplers;
     std::array<QString, kMaxUserTextures> m_userTextureWraps;
     std::array<bool, kMaxUserTextures> m_userTextureDirty = {};
+
+    // Depth buffer (binding 12) — opt-in via metadata "depthBuffer": true
+    bool m_useDepthBuffer = false;
+    std::unique_ptr<QRhiTexture> m_depthTexture; // R32F, readable at binding 12
+    std::unique_ptr<QRhiSampler> m_depthSampler;
 
     // Desktop wallpaper texture (binding 11) — opt-in via metadata "wallpaper": true
     bool m_useWallpaper = false;

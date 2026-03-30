@@ -506,6 +506,8 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
     const QString wrap = root.value(QLatin1String("bufferWrap")).toString(QStringLiteral("clamp"));
     info.bufferWrap = (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
 
+    info.useDepthBuffer = root.value(QLatin1String("depthBuffer")).toBool(false);
+
     const QJsonArray bufferWrapsArray = root.value(QLatin1String("bufferWraps")).toArray();
     if (!bufferWrapsArray.isEmpty()) {
         for (const QJsonValue& v : bufferWrapsArray) {
