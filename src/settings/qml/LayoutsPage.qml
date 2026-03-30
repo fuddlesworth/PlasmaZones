@@ -103,6 +103,14 @@ ColumnLayout {
 
             // ─── Layout Grid (grouped by aspect ratio) ─────────────────────
             ListView {
+                // Source (built-in vs user scripts)
+                // Persistent (stateful vs stateless)
+                // None
+                // Auto / Manual
+                // Source (built-in vs user-created)
+                // Note: snapping layouts use hasSystemOrigin; algorithms do not
+                // None
+
                 id: layoutGrid
 
                 // Responsive cell sizing for Flow delegates
@@ -212,12 +220,16 @@ ColumnLayout {
 
                             return true;
                         });
-                        // Auto-assign filter
-                        if (filterBar.showAutoAssignOnly)
-                            filtered = filtered.filter((item) => {
-                            return item.autoAssign === true;
-                        });
+                        // Auto / Manual filter
+                        filtered = filtered.filter((item) => {
+                            if (item.autoAssign === true && !filterBar.showAutoLayouts)
+                                return false;
 
+                            if (item.autoAssign !== true && !filterBar.showManualLayouts)
+                                return false;
+
+                            return true;
+                        });
                     } else {
                         // Tiling: source filter (algorithms don't have hasSystemOrigin)
                         filtered = filtered.filter((item) => {
@@ -229,38 +241,27 @@ ColumnLayout {
 
                             return true;
                         });
-                        // Capability filter (positive: if any checked, show only matching)
-                        let hasCapFilter = filterBar.onlyMasterCount || filterBar.onlySplitRatio || filterBar.onlyOverlapping || filterBar.onlyPersistent;
-                        if (hasCapFilter)
-                            filtered = filtered.filter((item) => {
-                            if (filterBar.onlyMasterCount && item.supportsMasterCount === true)
-                                return true;
+                        // Capability filters (hide when unchecked)
+                        filtered = filtered.filter((item) => {
+                            if (!filterBar.showMasterCount && item.supportsMasterCount === true)
+                                return false;
 
-                            if (filterBar.onlySplitRatio && item.supportsSplitRatio === true)
-                                return true;
+                            if (!filterBar.showSplitRatio && item.supportsSplitRatio === true)
+                                return false;
 
-                            if (filterBar.onlyOverlapping && item.producesOverlappingZones === true)
-                                return true;
+                            if (!filterBar.showOverlapping && item.producesOverlappingZones === true)
+                                return false;
 
-                            if (filterBar.onlyPersistent && item.memory === true)
-                                return true;
+                            if (!filterBar.showPersistent && item.memory === true)
+                                return false;
 
-                            return false;
+                            return true;
                         });
-
                     }
                     return filtered;
                 }
 
                 function buildGroups(filtered, groupIdx) {
-                    // Source (built-in vs user scripts)
-                    // Persistent (stateful vs stateless)
-                    // None
-                    // Auto / Manual
-                    // Source (built-in vs user-created)
-                    // Note: snapping layouts use hasSystemOrigin; algorithms do not
-                    // None
-
                     let groups = {
                     };
                     if (root.viewMode === 1) {
@@ -440,6 +441,9 @@ ColumnLayout {
                         if (filterBar.hasActiveFilters) {
                             if (root.viewMode === 0 && !filterBar.showBuiltInLayouts && !filterBar.showUserLayouts)
                                 return i18n("Both Built-in and User layout sources are hidden");
+
+                            if (root.viewMode === 0 && !filterBar.showAutoLayouts && !filterBar.showManualLayouts)
+                                return i18n("Both Auto and Manual layout types are hidden");
 
                             if (root.viewMode === 1 && !filterBar.showBuiltInAlgorithms && !filterBar.showUserAlgorithms)
                                 return i18n("Both Built-in and User algorithm sources are hidden");

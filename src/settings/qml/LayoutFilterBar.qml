@@ -28,25 +28,26 @@ RowLayout {
     property bool showAspectUltrawide: true
     property bool showAspectSuperUltrawide: true
     property bool showAspectPortrait: true
-    property bool showAutoAssignOnly: false
+    property bool showAutoLayouts: true
+    property bool showManualLayouts: true
     property bool showBuiltInLayouts: true
     property bool showUserLayouts: true
     // ── Exposed state: tiling filters ───────────────────────────────────────
     property bool showBuiltInAlgorithms: true
     property bool showUserAlgorithms: true
-    property bool onlyMasterCount: false
-    property bool onlySplitRatio: false
-    property bool onlyOverlapping: false
-    property bool onlyPersistent: false
+    property bool showMasterCount: true
+    property bool showSplitRatio: true
+    property bool showOverlapping: true
+    property bool showPersistent: true
     // Whether any non-default filter is active (drives badge visibility)
     readonly property bool hasActiveFilters: {
         if (filterText.length > 0)
             return true;
 
         if (root.viewMode === 0)
-            return !showAspectAny || !showAspectStandard || !showAspectUltrawide || !showAspectSuperUltrawide || !showAspectPortrait || showHidden || showAutoAssignOnly || !showBuiltInLayouts || !showUserLayouts;
+            return !showAspectAny || !showAspectStandard || !showAspectUltrawide || !showAspectSuperUltrawide || !showAspectPortrait || showHidden || !showAutoLayouts || !showManualLayouts || !showBuiltInLayouts || !showUserLayouts;
         else
-            return !showBuiltInAlgorithms || !showUserAlgorithms || showHidden || onlyMasterCount || onlySplitRatio || onlyOverlapping || onlyPersistent;
+            return !showBuiltInAlgorithms || !showUserAlgorithms || showHidden || !showMasterCount || !showSplitRatio || !showOverlapping || !showPersistent;
     }
     // Static ComboBox models (avoids inline array recreation that resets currentIndex)
     readonly property var snappingGroupModel: [i18n("Aspect Ratio"), i18n("Zone Count"), i18n("Auto / Manual"), i18n("Source"), i18n("None")]
@@ -71,15 +72,16 @@ RowLayout {
         showAspectUltrawide = true;
         showAspectSuperUltrawide = true;
         showAspectPortrait = true;
-        showAutoAssignOnly = false;
+        showAutoLayouts = true;
+        showManualLayouts = true;
         showBuiltInLayouts = true;
         showUserLayouts = true;
         showBuiltInAlgorithms = true;
         showUserAlgorithms = true;
-        onlyMasterCount = false;
-        onlySplitRatio = false;
-        onlyOverlapping = false;
-        onlyPersistent = false;
+        showMasterCount = true;
+        showSplitRatio = true;
+        showOverlapping = true;
+        showPersistent = true;
         _resetting = false;
     }
 
@@ -253,9 +255,15 @@ RowLayout {
         }
 
         FilterMenuItem {
-            text: i18n("Auto Only")
-            filterProperty: "showAutoAssignOnly"
-            checked: root.showAutoAssignOnly
+            text: i18n("Auto")
+            filterProperty: "showAutoLayouts"
+            checked: root.showAutoLayouts
+        }
+
+        FilterMenuItem {
+            text: i18n("Manual")
+            filterProperty: "showManualLayouts"
+            checked: root.showManualLayouts
         }
 
         MenuSeparator {
@@ -296,33 +304,28 @@ RowLayout {
         MenuSeparator {
         }
 
-        MenuItem {
-            text: i18n("Capabilities (any match):")
-            enabled: false
-        }
-
         FilterMenuItem {
             text: i18n("Master Count")
-            filterProperty: "onlyMasterCount"
-            checked: root.onlyMasterCount
+            filterProperty: "showMasterCount"
+            checked: root.showMasterCount
         }
 
         FilterMenuItem {
             text: i18n("Split Ratio")
-            filterProperty: "onlySplitRatio"
-            checked: root.onlySplitRatio
+            filterProperty: "showSplitRatio"
+            checked: root.showSplitRatio
         }
 
         FilterMenuItem {
             text: i18n("Overlapping Zones")
-            filterProperty: "onlyOverlapping"
-            checked: root.onlyOverlapping
+            filterProperty: "showOverlapping"
+            checked: root.showOverlapping
         }
 
         FilterMenuItem {
             text: i18n("Persistent (Memory)")
-            filterProperty: "onlyPersistent"
-            checked: root.onlyPersistent
+            filterProperty: "showPersistent"
+            checked: root.showPersistent
         }
 
         MenuSeparator {
