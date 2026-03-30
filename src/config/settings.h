@@ -238,8 +238,10 @@ public:
     Q_PROPERTY(QString autotileRetileShortcut READ autotileRetileShortcut WRITE setAutotileRetileShortcut NOTIFY
                    autotileRetileShortcutChanged)
 
-    // Shader Effects
+    // Rendering
     Q_PROPERTY(QString renderingBackend READ renderingBackend WRITE setRenderingBackend NOTIFY renderingBackendChanged)
+
+    // Shader Effects
     Q_PROPERTY(bool enableShaderEffects READ enableShaderEffects WRITE setEnableShaderEffects NOTIFY
                    enableShaderEffectsChanged)
     Q_PROPERTY(int shaderFrameRate READ shaderFrameRate WRITE setShaderFrameRate NOTIFY shaderFrameRateChanged)
@@ -1084,12 +1086,14 @@ public:
     void setContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity,
                           bool locked) override;
 
-    // Shader Effects
+    // Rendering (ISettings)
     QString renderingBackend() const override
     {
         return m_renderingBackend;
     }
     void setRenderingBackend(const QString& backend) override;
+
+    // Shader Effects
     bool enableShaderEffects() const override
     {
         return m_enableShaderEffects;
@@ -1691,8 +1695,10 @@ private:
     QString m_autotileDecMasterCountShortcut = ConfigDefaults::autotileDecMasterCountShortcut();
     QString m_autotileRetileShortcut = ConfigDefaults::autotileRetileShortcut();
 
-    // Shader Effects
+    // Rendering
     QString m_renderingBackend = ConfigDefaults::renderingBackend();
+
+    // Shader Effects
     bool m_enableShaderEffects = ConfigDefaults::enableShaderEffects();
     int m_shaderFrameRate = ConfigDefaults::shaderFrameRate();
     bool m_enableAudioVisualizer = ConfigDefaults::enableAudioVisualizer();

@@ -94,6 +94,8 @@ bool OverlayService::isZoneSelectorVisible() const
 OverlayService::~OverlayService()
 {
     // Clear the Vulkan instance app property before destruction to avoid dangling pointer.
+    // Only needed for the fallback instance we own — when main.cpp provided the instance,
+    // it outlives OverlayService (declared before QGuiApplication), so no cleanup needed.
 #if QT_CONFIG(vulkan)
     if (m_fallbackVulkanInstance && qGuiApp) {
         qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty, QVariant());

@@ -552,13 +552,17 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Shader Settings
+    // Config Path
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Returns the absolute path to plasmazonesrc.
     // Not cached — QStandardPaths respects $XDG_CONFIG_HOME changes at runtime,
     // which tests rely on via IsolatedConfigGuard.
     PLASMAZONES_EXPORT static QString configFilePath();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Rendering Settings
+    // ═══════════════════════════════════════════════════════════════════════════
 
     static QString renderingBackend()
     {
@@ -595,14 +599,13 @@ public:
         return keys;
     }
 
-    static const QStringList& renderingBackendDisplayNames()
+    // Untranslated display names — use for translation source only.
+    // SettingsController translates these via PzI18n::tr() at runtime.
+    static QStringList renderingBackendDisplayNames()
     {
-        static const QStringList names = [] {
-            QStringList n;
-            for (const auto& e : renderingBackendEntries())
-                n.append(e.displayName);
-            return n;
-        }();
+        QStringList names;
+        for (const auto& e : renderingBackendEntries())
+            names.append(e.displayName);
         return names;
     }
 
@@ -615,6 +618,10 @@ public:
         }
         return renderingBackend();
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Shader Settings
+    // ═══════════════════════════════════════════════════════════════════════════
 
     static bool enableShaderEffects()
     {

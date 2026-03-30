@@ -159,8 +159,6 @@ public:
     virtual void setLabelFontStrikeout(bool strikeout) = 0;
 
     // Shader effects
-    virtual QString renderingBackend() const = 0;
-    virtual void setRenderingBackend(const QString& backend) = 0;
     virtual bool enableShaderEffects() const = 0;
     virtual void setEnableShaderEffects(bool enable) = 0;
     virtual int shaderFrameRate() const = 0;

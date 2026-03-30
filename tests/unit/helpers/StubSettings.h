@@ -278,19 +278,6 @@ public:
     void setLabelFontStrikeout(bool) override
     {
     }
-    QString renderingBackend() const override
-    {
-        return m_renderingBackend;
-    }
-    void setRenderingBackend(const QString& backend) override
-    {
-        const QString value = ConfigDefaults::normalizeRenderingBackend(backend);
-        if (m_renderingBackend != value) {
-            m_renderingBackend = value;
-            Q_EMIT renderingBackendChanged();
-            Q_EMIT settingsChanged();
-        }
-    }
     bool enableShaderEffects() const override
     {
         return false;
@@ -693,6 +680,21 @@ public:
     }
     void setContextLocked(const QString&, int, const QString&, bool) override
     {
+    }
+
+    // Rendering (ISettings)
+    QString renderingBackend() const override
+    {
+        return m_renderingBackend;
+    }
+    void setRenderingBackend(const QString& backend) override
+    {
+        const QString value = ConfigDefaults::normalizeRenderingBackend(backend);
+        if (m_renderingBackend != value) {
+            m_renderingBackend = value;
+            Q_EMIT renderingBackendChanged();
+            Q_EMIT settingsChanged();
+        }
     }
 
     // Persistence (ISettings)

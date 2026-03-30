@@ -3,6 +3,11 @@
 
 #pragma once
 
+#if QT_CONFIG(vulkan)
+#include <QVulkanInstance>
+Q_DECLARE_METATYPE(QVulkanInstance*)
+#endif
+
 namespace PlasmaZones {
 
 // Shared property name for passing the QVulkanInstance* between main.cpp and OverlayService.
@@ -11,8 +16,3 @@ namespace PlasmaZones {
 inline constexpr const char* PzVulkanInstanceProperty = "_pz_vulkanInstance";
 
 } // namespace PlasmaZones
-
-#if QT_CONFIG(vulkan)
-#include <QVulkanInstance>
-Q_DECLARE_METATYPE(QVulkanInstance*)
-#endif

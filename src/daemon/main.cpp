@@ -73,6 +73,9 @@ int main(int argc, char* argv[])
             // QVulkanInstance::create() calls ensureVulkan() which dlopens
             // libvulkan — this can SEGFAULT if the Vulkan ICD or loader is
             // broken. Guard with a QLibrary pre-check so we fail gracefully.
+            // NOTE: this only guards against a missing loader library; a broken
+            // ICD manifest (pointing to a non-existent driver .so) can still
+            // crash inside vkCreateInstance. No portable way to catch that.
             bool vulkanLibAvailable = QLibrary(QStringLiteral("vulkan"), 1).load();
             if (!vulkanLibAvailable)
                 vulkanLibAvailable = QLibrary(QStringLiteral("vulkan")).load();

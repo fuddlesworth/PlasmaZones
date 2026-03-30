@@ -147,9 +147,17 @@ bool QSettingsConfigGroup::readBool(const QString& key, bool defaultValue) const
     QVariant val = m_settings->value(key);
     if (!val.isValid())
         return defaultValue;
-    // Our custom reader already stores true/false as bool QVariants,
-    // so canConvert<bool> is reliable here.
-    return val.toBool();
+    // QVariant::toBool() treats any non-empty string as true (including "false").
+    // Our custom ini reader stores booleans as bool-typed QVariants, but imported
+    // or hand-edited configs may store "true"/"false" strings. Handle both.
+    if (val.typeId() == QMetaType::Bool)
+        return val.toBool();
+    const QString s = val.toString().toLower().trimmed();
+    if (s == QLatin1String("true") || s == QLatin1String("1"))
+        return true;
+    if (s == QLatin1String("false") || s == QLatin1String("0"))
+        return false;
+    return defaultValue;
 }
 
 double QSettingsConfigGroup::readDouble(const QString& key, double defaultValue) const
@@ -262,27 +270,6 @@ void QSettingsConfigBackend::deleteGroup(const QString& name)
 QStringList QSettingsConfigBackend::groupList() const
 {
     return m_settings->childGroups();
-}
-
-void QSettingsConfigBackend::removeUngroupedKey(const QString& key)
-{
-    // QSettings without beginGroup() accesses root-level keys.
-    // In our custom format, ungrouped keys have no "/" prefix.
-    Q_ASSERT_X(m_settings->group().isEmpty(), "removeUngroupedKey", "A ConfigGroup is still active — destroy it first");
-    m_settings->remove(key);
-}
-
-bool QSettingsConfigBackend::hasUngroupedKey(const QString& key) const
-{
-    Q_ASSERT_X(m_settings->group().isEmpty(), "hasUngroupedKey", "A ConfigGroup is still active — destroy it first");
-    return m_settings->contains(key);
-}
-
-QString QSettingsConfigBackend::readUngroupedString(const QString& key, const QString& defaultValue) const
-{
-    Q_ASSERT_X(m_settings->group().isEmpty(), "readUngroupedString",
-               "A ConfigGroup is still active — destroy it first");
-    return m_settings->value(key, defaultValue).toString();
 }
 
 // ── Static factory ───────────────────────────────────────────────────────────

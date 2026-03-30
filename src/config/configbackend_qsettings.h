@@ -78,15 +78,6 @@ public:
     /// List all top-level group names.
     QStringList groupList() const;
 
-    /// Remove an ungrouped (root-level) key.
-    void removeUngroupedKey(const QString& key);
-
-    /// Check if an ungrouped (root-level) key exists.
-    bool hasUngroupedKey(const QString& key) const;
-
-    /// Read an ungrouped (root-level) string key.
-    QString readUngroupedString(const QString& key, const QString& defaultValue = {}) const;
-
     /// Create the default config backend for the standard plasmazonesrc file.
     static std::unique_ptr<QSettingsConfigBackend> createDefault();
 
