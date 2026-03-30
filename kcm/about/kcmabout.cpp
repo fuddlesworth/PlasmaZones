@@ -22,9 +22,13 @@ QString KCMAbout::currentVersion() const
     return QStringLiteral(PLASMAZONES_VERSION);
 }
 
-void KCMAbout::openSettings()
+void KCMAbout::openSettings(const QString& page)
 {
-    QProcess::startDetached(QStringLiteral("plasmazones-settings"), {});
+    QStringList args;
+    if (!page.isEmpty()) {
+        args << QStringLiteral("--page") << page;
+    }
+    QProcess::startDetached(QStringLiteral("plasmazones-settings"), args);
 }
 
 } // namespace PlasmaZones

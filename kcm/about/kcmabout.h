@@ -23,7 +23,7 @@ public:
 
     QString currentVersion() const;
 
-    Q_INVOKABLE void openSettings();
+    Q_INVOKABLE void openSettings(const QString& page = QString());
 };
 
 } // namespace PlasmaZones

@@ -22,6 +22,7 @@
 #include <QFontDatabase>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QWindow>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDesktopServices>
@@ -64,6 +65,12 @@ QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
 
 SettingsController::~SettingsController()
 {
+    // Unregister D-Bus service so a stale name doesn't linger if the
+    // QDBusConnection outlives this object.
+    auto bus = QDBusConnection::sessionBus();
+    bus.unregisterObject(DBus::SettingsApp::ObjectPath);
+    bus.unregisterService(DBus::SettingsApp::ServiceName);
+
     // Disconnect all pending algorithm registration watchers — AlgorithmRegistry
     // is a singleton that outlives this object, so dangling connections would fire
     // into a destroyed SettingsController.
@@ -249,21 +256,91 @@ void SettingsController::dismissUpdate()
     setDismissedUpdateVersion(m_updateChecker.latestVersion());
 }
 
+const QHash<QString, QString>& SettingsController::parentPageRedirects()
+{
+    // Parent sidebar categories have no QML component — resolve them to their
+    // first child so D-Bus / CLI callers get a sensible result.
+    static const QHash<QString, QString> redirects{
+        {QStringLiteral("snapping"), QStringLiteral("snapping-appearance")},
+        {QStringLiteral("tiling"), QStringLiteral("tiling-appearance")},
+    };
+    return redirects;
+}
+
+const QSet<QString>& SettingsController::validPageNames()
+{
+    // Keep in sync with _pageComponents in Main.qml — every entry here must
+    // have a corresponding QML component file in that map.
+    static const QSet<QString> pages{
+        QStringLiteral("overview"),
+        QStringLiteral("layouts"),
+        QStringLiteral("snapping-appearance"),
+        QStringLiteral("snapping-behavior"),
+        QStringLiteral("snapping-zoneselector"),
+        QStringLiteral("snapping-effects"),
+        QStringLiteral("snapping-assignments"),
+        QStringLiteral("snapping-shortcuts"),
+        QStringLiteral("tiling-appearance"),
+        QStringLiteral("tiling-behavior"),
+        QStringLiteral("tiling-algorithm"),
+        QStringLiteral("tiling-assignments"),
+        QStringLiteral("tiling-shortcuts"),
+        QStringLiteral("apprules"),
+        QStringLiteral("exclusions"),
+        QStringLiteral("editor"),
+        QStringLiteral("general"),
+        QStringLiteral("about"),
+    };
+    return pages;
+}
+
 void SettingsController::setActivePage(const QString& page)
 {
-    if (m_activePage != page) {
+    // Resolve parent category names (e.g. "snapping" → "snapping-appearance")
+    const QString resolved = parentPageRedirects().value(page, page);
+
+    if (!validPageNames().contains(resolved)) {
+        qCWarning(PlasmaZones::lcCore) << "Unknown settings page:" << page;
+        return;
+    }
+    if (m_activePage != resolved) {
         // Capture dirty state BEFORE emitting, because the QML Loader
         // reacts synchronously to activePageChanged — new page creation
         // may trigger NOTIFY signals that set needsSave before we return.
         const bool wasDirty = m_needsSave;
         m_loading = true;
-        m_activePage = page;
+        m_activePage = resolved;
         Q_EMIT activePageChanged();
         m_loading = false;
         // Restore the dirty state that existed before page navigation.
         // Any NOTIFY signals that fired during page creation were suppressed
         // by m_loading and should not mark the settings as dirty.
         setNeedsSave(wasDirty);
+    }
+}
+
+bool SettingsController::registerDBusService()
+{
+    auto bus = QDBusConnection::sessionBus();
+    if (!bus.registerService(DBus::SettingsApp::ServiceName)) {
+        return false;
+    }
+    // ExportScriptableSlots exposes all Q_SCRIPTABLE methods on this object (raise + setActivePage).
+    // Adding new Q_SCRIPTABLE slots will automatically expose them on D-Bus.
+    bus.registerObject(DBus::SettingsApp::ObjectPath, this, QDBusConnection::ExportScriptableSlots);
+    return true;
+}
+
+void SettingsController::raise()
+{
+    const auto windows = QGuiApplication::allWindows();
+    for (auto* w : windows) {
+        if (w->type() != Qt::Window)
+            continue;
+        w->show();
+        w->raise();
+        w->requestActivate();
+        break; // Only raise the primary application window
     }
 }
 

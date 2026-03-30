@@ -103,36 +103,7 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 
 ### Autotiling
 
-Enable autotiling per-screen and windows arrange themselves using one of 24 built-in algorithms:
-
-| Algorithm | Description |
-|-----------|-------------|
-| Master+Stack | Main window with a stack beside it |
-| Centered Master | Main window centered, stacks on both sides |
-| Three Column | Even three-column split |
-| Columns | Equal vertical columns |
-| Rows | Equal horizontal rows |
-| Grid | Automatic grid arrangement |
-| Dwindle | Recursive halving, alternating direction |
-| Dwindle (Memory) | Dwindle with persistent split positions — resize without affecting others |
-| Spiral | Recursive halving in a spiral |
-| BSP | Binary space partitioning |
-| Wide | Horizontal main area with stacked columns below |
-| Monocle | One window at a time, cycle between them |
-| Cascade | Overlapping windows in a diagonal cascade |
-| Corner Master | Master in a corner, rest fill the L-shaped remainder |
-| Deck | Focused window takes the left portion, others peek from the right |
-| Floating Center | Centered main window with peripheral panels on all sides |
-| Focus+Sidebar | Main window with vertically stacked sidebar |
-| Horizontal Deck | Focused window on top, others peek from the bottom |
-| Paper | Equal-width overlapping pages like a document viewer |
-| Quadrant Priority | First window gets a large corner quadrant |
-| Spread | Windows spread evenly across the screen with overlap |
-| Stair | Stepped staircase arrangement |
-| Tatami | Japanese tatami mat pattern — no four corners meet |
-| Zen | Centered column with margins for distraction-free work |
-
-All algorithms are written in JavaScript and run in a sandboxed engine. You can create your own custom algorithms — see the [Tiling Algorithms Guide](https://github.com/fuddlesworth/PlasmaZones/wiki/Tiling-Algorithms) on the wiki.
+24 built-in JavaScript tiling algorithms including master+stack, dwindle, BSP, spiral, grid, monocle, and more. All algorithms run in a sandboxed engine and support hot-reload. You can create your own custom algorithms — see the full list and authoring guide on the [Tiling Algorithms](https://github.com/fuddlesworth/PlasmaZones/wiki/Tiling-Algorithms) wiki page.
 
 - Per-screen algorithm selection with independent settings
 - Configurable master ratio and master count (separate settings for Centered Master vs Master+Stack)
@@ -156,41 +127,13 @@ All algorithms are written in JavaScript and run in a sandboxed engine. You can 
 
 ### Shader Effects
 
-23 built-in GLSL shader effects for zone overlays, including audio-reactive visuals:
-
-| Effect | Description |
-|--------|-------------|
-| Arch Drift | Procedural Arch Linux logo with terminal rain and audio reactivity |
-| Aretha Shell | Cyberpunk hex grid with data streams |
-| Berry Drift | Metaball blobs in berry and violet tones |
-| CachyOS Drift | Crystalline drift with domain-warped FBM and iridescent glow |
-| Cosmic Flow | Fractal noise with animated colors |
-| Ember Trace | Fractal fire patterns with ping-pong feedback and eruption shockwaves |
-| EndeavourOS Drift | Tri-sail logo over constellation network with per-sail audio |
-| Fedora Drift | Infinity-f logo with neon tube strokes and northern-lights sky |
-| KDE Neon Drift | KDE gear logo with concentric rings and orbital dots |
-| Liquid Canvas | Wallpaper as a liquid painting with flow distortion |
-| Magnetic Field | Mouse-reactive field with orbiting particles |
-| Mosaic Pulse | Audio-reactive stained glass mosaic |
-| Neon Phantom | Ghosted neon energy with hexagonal lattice and scanline glitch |
-| Nexus Cascade | Plasma with distortion, bloom, and chromatic aberration |
-| NixOS Drift | Snowflake logo with aurora curtains and hexagonal Voronoi lattice |
-| openSUSE Drift | Chameleon scale field with thin-film color shifting and Geeko logo |
-| Plasma Sigil | Holographic PlasmaZones icon as a glowing energy sigil |
-| Prismata | Prismatic facets with audio-reactive chromatic fracture |
-| Sonic Ripple | Audio-reactive concentric rings with bass shockwaves |
-| Spectrum Bloom | Polar contour with frequency-driven shape morphing |
-| Spectrum Pulse | Audio-reactive neon energy with CAVA integration |
-| Toxic Circuit | Glowing circuit traces with digital corruption |
-| Voxel Terrain | Infinite 3D voxel world with neon edges and audio-reactive glow |
-
-Up to 4 custom image textures per shader, plus desktop wallpaper sampling.
+23 built-in GLSL shader effects for zone overlays, including audio-reactive visuals, distro-themed drifts, and procedural effects. Supports up to 4 custom image textures per shader plus desktop wallpaper sampling.
 
 <p align="center">
   <img src="docs/media/videos/shaders.gif" alt="Shader effects showcase" />
 </p>
 
-Custom shaders supported — see the [Shader Guide](https://github.com/fuddlesworth/PlasmaZones/wiki/Shaders) on the wiki.
+Custom shaders supported — see the full effect list and authoring guide in the [Shader Guide](https://github.com/fuddlesworth/PlasmaZones/wiki/Shaders) on the wiki.
 
 ### Snap Assist
 
@@ -549,8 +492,12 @@ All configurable in **System Settings → Shortcuts → PlasmaZones** (KDE) or i
 Open the settings app:
 
 ```bash
-plasmazones-settings
+plasmazones-settings                    # opens on overview page
+plasmazones-settings -p layouts         # opens directly to layouts page
+plasmazones-settings --page tiling-behavior  # opens to tiling behavior page
 ```
+
+The app is single-instance — launching it again while running raises the existing window and switches to the requested page.
 
 Settings stored in `~/.config/plasmazonesrc`. Layouts stored as JSON in `~/.local/share/plasmazones/layouts/`.
 
@@ -596,92 +543,21 @@ systemctl --user restart plasmazones.service
 
 ## D-Bus API
 
-PlasmaZones exposes 10 D-Bus interfaces for scripting and integration:
-
-| Interface | Purpose |
-|-----------|---------|
-| `Autotile` | Autotiling engine control, algorithm selection, window float/unfloat |
-| `CompositorBridge` | Compositor-agnostic bridge protocol for non-KWin compositors |
-| `Control` | High-level convenience API for third-party integrations and scripts |
-| `LayoutManager` | Layout CRUD, screen/desktop/activity assignment, quick slots |
-| `Overlay` | Zone overlay visibility, highlighting, zone detection, Zone Selector |
-| `Screen` | Screen enumeration, geometry, scale, add/remove notifications |
-| `Settings` | Configuration load/save/reset, get/set by key |
-| `Shader` | Shader discovery, parameter introspection, compilation lifecycle |
-| `WindowDrag` | Window drag lifecycle from KWin, snap geometry response |
-| `WindowTracking` | Window-to-zone tracking, pre-snap geometry, floating state |
+PlasmaZones exposes 10 D-Bus interfaces on `org.plasmazones` for scripting and integration — Autotile, Control, LayoutManager, Overlay, Screen, Settings, Shader, and more.
 
 ```bash
-# List all layouts
+# Quick examples
 qdbus6 org.plasmazones /PlasmaZones org.plasmazones.LayoutManager.getLayoutList
-
-# Get active layout (returns JSON)
-qdbus6 org.plasmazones /PlasmaZones org.plasmazones.LayoutManager.getActiveLayout
-
-# Switch layout
-qdbus6 org.plasmazones /PlasmaZones org.plasmazones.LayoutManager.setActiveLayout "{uuid}"
-
-# Show/hide overlay
 qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Overlay.showOverlay
-qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Overlay.hideOverlay
-
-# Get all screens
-qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Screen.getScreens
 ```
 
-Full API documentation: [wiki — D-Bus API](https://github.com/fuddlesworth/PlasmaZones/wiki/D-Bus-API)
+Full API reference, scripting examples, and per-interface documentation: [D-Bus API](https://github.com/fuddlesworth/PlasmaZones/wiki/D-Bus-API) on the wiki.
 
 ---
 
 ## Project Structure
 
-```
-src/
-├── autotile/           # Autotiling engine, per-screen config
-│   └── algorithms/     # 24 tiling algorithms (master-stack, dwindle, bsp, etc.)
-├── snap/               # Snap engine (zone matching, multi-zone selection)
-├── core/               # Zone, Layout, LayoutManager, ShaderRegistry
-│   ├── geometryutils/  # Geometry math helpers
-│   ├── layout/         # Layout model and serialization
-│   ├── layoutmanager/  # Layout lifecycle and assignment
-│   ├── screenmanager/  # Screen tracking and resolution
-│   ├── shaderregistry/ # Shader discovery and loading
-│   └── windowtrackingservice/  # Window-to-zone tracking
-├── daemon/             # Background service, overlay windows
-│   ├── daemon/         # Startup, signals, navigation handlers
-│   ├── overlayservice/ # Overlay window lifecycle
-│   ├── rendering/      # GPU rendering (QRhi), label textures
-│   └── shortcutmanager/  # Global shortcut handlers
-├── editor/             # Visual layout editor
-│   ├── qml/            # Editor QML UI
-│   ├── controller/     # Editor operations (gaps, layout, selection, etc.)
-│   ├── helpers/        # D-Bus queries, serialization, batch operations
-│   ├── services/       # Snapping, templates, zone manager
-│   └── undo/           # Undo/redo command system
-├── dbus/               # D-Bus adaptors (10 interfaces)
-├── config/             # Settings (QSettingsConfigBackend), update checker
-├── ui/                 # QML components (OSD, overlays, zone selector)
-└── shared/             # Shared QML components and plugins
-kcm/                    # System Settings module (KCM) — About page + settings launcher
-kwin-effect/            # KWin effect plugin
-└── autotilehandler/    # Autotile event handling from KWin
-data/
-├── layouts/            # Default layout templates (26) — user layouts in ~/.local/share/plasmazones/layouts/
-├── algorithms/         # Built-in JS tiling algorithms (24) — user scripts in ~/.local/share/plasmazones/algorithms/
-└── shaders/            # Built-in GLSL shader effects (23) — user shaders in ~/.local/share/plasmazones/shaders/
-packaging/
-├── arch/               # AUR PKGBUILD (source, binary, git)
-├── debian/             # Debian packaging
-├── local-install/      # Portable tarball installer
-├── nix/                # Nix flake package
-└── rpm/                # RPM spec
-cmake/                  # CMake helpers (format-qml, uninstall)
-tests/unit/             # Unit tests (autotile, config, core, helpers, ui)
-dbus/                   # D-Bus XML interface definitions (10 interfaces)
-icons/                  # Application icons (hicolor + hicolor-light)
-translations/           # Qt Linguist translations (.ts/.qm)
-docs/                   # Documentation and media
-```
+See the full directory tree and data locations on the [Project Structure](https://github.com/fuddlesworth/PlasmaZones/wiki/Project-Structure) wiki page.
 
 ---
 

@@ -17,7 +17,9 @@
 #include "../core/enums.h"
 #include "../core/modifierutils.h"
 
+#include <QHash>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QDBusConnection>
 #include <QVariantList>
@@ -132,11 +134,20 @@ public:
     explicit SettingsController(QObject* parent = nullptr);
     ~SettingsController() override;
 
+    /// Register on the session bus so a second instance can forward page requests.
+    bool registerDBusService();
+
     QString activePage() const
     {
         return m_activePage;
     }
-    void setActivePage(const QString& page);
+    Q_SCRIPTABLE void setActivePage(const QString& page);
+
+    /// Raise the settings window to the foreground.
+    Q_SCRIPTABLE void raise();
+
+    static const QSet<QString>& validPageNames();
+    static const QHash<QString, QString>& parentPageRedirects();
 
     bool needsSave() const
     {
