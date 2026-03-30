@@ -282,6 +282,7 @@ private:
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
     QString m_lastNavigationAction;
     QString m_lastNavigationReason;
+    QString m_lastNavigationScreenId;
     QElapsedTimer m_lastNavigationTime;
 
     void createZoneSelectorWindow(const QString& screenId, QScreen* physScreen, const QRect& geom);

@@ -13,7 +13,6 @@
 #include "../../core/utils.h"
 
 #include "pz_i18n.h"
-#include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusReply>
@@ -651,7 +650,7 @@ void EditorController::discardChanges()
 void EditorController::importLayout(const QString& filePath)
 {
     if (filePath.isEmpty()) {
-        Q_EMIT layoutLoadFailed(QCoreApplication::translate("EditorController", "File path cannot be empty"));
+        Q_EMIT layoutLoadFailed(PzI18n::tr("File path cannot be empty"));
         return;
     }
 
@@ -659,7 +658,7 @@ void EditorController::importLayout(const QString& filePath)
                                  QString::fromLatin1(DBus::Interface::LayoutManager), QDBusConnection::sessionBus());
 
     if (!layoutManager.isValid()) {
-        QString error = QCoreApplication::translate("EditorController", "Cannot connect to PlasmaZones daemon");
+        QString error = PzI18n::tr("Cannot connect to PlasmaZones daemon");
         qCWarning(lcEditor) << error;
         Q_EMIT layoutLoadFailed(error);
         return;
@@ -667,8 +666,7 @@ void EditorController::importLayout(const QString& filePath)
 
     QDBusReply<QString> reply = layoutManager.call(QStringLiteral("importLayout"), filePath);
     if (!reply.isValid()) {
-        QString error =
-            QCoreApplication::translate("EditorController", "Failed to import layout: %1").arg(reply.error().message());
+        QString error = PzI18n::tr("Failed to import layout: %1").arg(reply.error().message());
         qCWarning(lcEditor) << error;
         Q_EMIT layoutLoadFailed(error);
         return;
@@ -676,7 +674,7 @@ void EditorController::importLayout(const QString& filePath)
 
     QString newLayoutId = reply.value();
     if (newLayoutId.isEmpty()) {
-        QString error = QCoreApplication::translate("EditorController", "Imported layout but received empty ID");
+        QString error = PzI18n::tr("Imported layout but received empty ID");
         qCWarning(lcEditor) << error;
         Q_EMIT layoutLoadFailed(error);
         return;
@@ -696,12 +694,12 @@ void EditorController::importLayout(const QString& filePath)
 void EditorController::exportLayout(const QString& filePath)
 {
     if (filePath.isEmpty()) {
-        Q_EMIT layoutSaveFailed(QCoreApplication::translate("EditorController", "File path cannot be empty"));
+        Q_EMIT layoutSaveFailed(PzI18n::tr("File path cannot be empty"));
         return;
     }
 
     if (m_layoutId.isEmpty()) {
-        Q_EMIT layoutSaveFailed(QCoreApplication::translate("EditorController", "No layout loaded to export"));
+        Q_EMIT layoutSaveFailed(PzI18n::tr("No layout loaded to export"));
         return;
     }
 
@@ -709,7 +707,7 @@ void EditorController::exportLayout(const QString& filePath)
                                  QString::fromLatin1(DBus::Interface::LayoutManager), QDBusConnection::sessionBus());
 
     if (!layoutManager.isValid()) {
-        QString error = QCoreApplication::translate("EditorController", "Cannot connect to PlasmaZones daemon");
+        QString error = PzI18n::tr("Cannot connect to PlasmaZones daemon");
         qCWarning(lcEditor) << error;
         Q_EMIT layoutSaveFailed(error);
         return;
@@ -717,8 +715,7 @@ void EditorController::exportLayout(const QString& filePath)
 
     QDBusReply<void> reply = layoutManager.call(QStringLiteral("exportLayout"), m_layoutId, filePath);
     if (!reply.isValid()) {
-        QString error =
-            QCoreApplication::translate("EditorController", "Failed to export layout: %1").arg(reply.error().message());
+        QString error = PzI18n::tr("Failed to export layout: %1").arg(reply.error().message());
         qCWarning(lcEditor) << error;
         Q_EMIT layoutSaveFailed(error);
         return;

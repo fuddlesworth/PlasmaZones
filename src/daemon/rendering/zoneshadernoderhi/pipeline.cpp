@@ -59,8 +59,8 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
         return false;
     }
     const bool multiBufferMode = m_bufferPaths.size() > 1;
-    const int bufferW = qMax(1, static_cast<int>(m_width * m_bufferScale));
-    const int bufferH = qMax(1, static_cast<int>(m_height * m_bufferScale));
+    const int bufferW = qMax(1, qRound(m_width * m_bufferScale));
+    const int bufferH = qMax(1, qRound(m_height * m_bufferScale));
     const QSize bufferSize(bufferW, bufferH);
     auto createTextureAndRT = [rhi, bufferSize](std::unique_ptr<QRhiTexture>& tex,
                                                 std::unique_ptr<QRhiTextureRenderTarget>& rt,
@@ -75,6 +75,21 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
         rt->setRenderPassDescriptor(rpd.get());
         return rt->create();
     };
+
+    // Create buffer sampler once if needed (shared by all buffer paths below)
+    if (!m_bufferSampler) {
+        const QRhiSampler::AddressMode addr =
+            (m_bufferWrap == QLatin1String("repeat")) ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
+        m_bufferSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
+        if (!m_bufferSampler->create()) {
+            qCWarning(lcOverlay) << "Failed to create buffer sampler";
+            return false;
+        }
+        m_bufferSrb.reset();
+        m_bufferSrbB.reset();
+        m_srb.reset();
+        m_srbB.reset();
+    }
 
     if (multiBufferMode) {
         const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
@@ -101,16 +116,6 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
             m_srb.reset();
             m_srbB.reset();
         }
-        if (!m_bufferSampler) {
-            const QRhiSampler::AddressMode addr =
-                (m_bufferWrap == QLatin1String("repeat")) ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
-            m_bufferSampler.reset(
-                rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
-            if (!m_bufferSampler->create()) {
-                qCWarning(lcOverlay) << "Failed to create buffer sampler";
-                return false;
-            }
-        }
         return true;
     }
 
@@ -118,16 +123,6 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
         if (!createTextureAndRT(m_bufferTexture, m_bufferRenderTarget, m_bufferRenderPassDescriptor)) {
             qCWarning(lcOverlay) << "Failed to create buffer texture";
             return false;
-        }
-        if (!m_bufferSampler) {
-            const QRhiSampler::AddressMode addr =
-                (m_bufferWrap == QLatin1String("repeat")) ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
-            m_bufferSampler.reset(
-                rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
-            if (!m_bufferSampler->create()) {
-                qCWarning(lcOverlay) << "Failed to create buffer sampler";
-                return false;
-            }
         }
         if (m_bufferFeedback
             && !createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB)) {
@@ -160,19 +155,6 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
         }
         m_bufferPipeline.reset();
         m_bufferSrb.reset();
-        m_srb.reset();
-        m_srbB.reset();
-    }
-    if (m_bufferTexture && !m_bufferSampler) {
-        const QRhiSampler::AddressMode addr =
-            (m_bufferWrap == QLatin1String("repeat")) ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
-        m_bufferSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
-        if (!m_bufferSampler->create()) {
-            qCWarning(lcOverlay) << "Failed to create buffer sampler";
-            return false;
-        }
-        m_bufferSrb.reset();
-        m_bufferSrbB.reset();
         m_srb.reset();
         m_srbB.reset();
     }

@@ -56,6 +56,30 @@ bool AutotileHandler::hasSavedGeometryForWindow(const QHash<QString, QRectF>& sa
     return !findSavedGeometryKey(savedGeometries, windowId).isEmpty();
 }
 
+bool AutotileHandler::transferPreAutotileGeometry(const QString& windowId, const QString& fromScreenId,
+                                                  const QString& toScreenId)
+{
+    // Extract from source screen
+    auto fromIt = m_preAutotileGeometries.find(fromScreenId);
+    if (fromIt == m_preAutotileGeometries.end()) {
+        return false;
+    }
+    const QString savedKey = findSavedGeometryKey(fromIt.value(), windowId);
+    if (savedKey.isEmpty()) {
+        return false;
+    }
+    QRectF geo = fromIt->take(savedKey);
+    if (fromIt->isEmpty()) {
+        m_preAutotileGeometries.erase(fromIt);
+    }
+    if (!geo.isValid()) {
+        return false;
+    }
+    // Inject into target screen (caller must ensure target is an autotile screen)
+    m_preAutotileGeometries[toScreenId][windowId] = geo;
+    return true;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Monocle helpers
 // ═══════════════════════════════════════════════════════════════════════════════

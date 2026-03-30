@@ -142,11 +142,10 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
                 QSize ps = m_multiBufferTextures[i]->pixelSize();
                 m_uniforms.iChannelResolution[i][0] = static_cast<float>(ps.width());
                 m_uniforms.iChannelResolution[i][1] = static_cast<float>(ps.height());
-            } else if (!multiBufferMode && i == 0 && m_bufferTexture && m_width > 0 && m_height > 0) {
-                const int bufferW = qMax(1, static_cast<int>(m_width * m_bufferScale));
-                const int bufferH = qMax(1, static_cast<int>(m_height * m_bufferScale));
-                m_uniforms.iChannelResolution[0][0] = static_cast<float>(bufferW);
-                m_uniforms.iChannelResolution[0][1] = static_cast<float>(bufferH);
+            } else if (!multiBufferMode && i == 0 && m_bufferTexture) {
+                QSize ps = m_bufferTexture->pixelSize();
+                m_uniforms.iChannelResolution[0][0] = static_cast<float>(ps.width());
+                m_uniforms.iChannelResolution[0][1] = static_cast<float>(ps.height());
             } else {
                 m_uniforms.iChannelResolution[i][0] = 1.0f; // dummy 1x1
                 m_uniforms.iChannelResolution[i][1] = 1.0f;
@@ -258,9 +257,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
     if (m_dummyChannelTextureNeedsUpload && m_dummyChannelTexture) {
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
         if (batch) {
-            QImage onePixel(1, 1, QImage::Format_RGBA8888);
-            onePixel.fill(Qt::transparent);
-            batch->uploadTexture(m_dummyChannelTexture.get(), onePixel);
+            batch->uploadTexture(m_dummyChannelTexture.get(), m_transparentFallbackImage);
             cb->resourceUpdate(batch);
             m_dummyChannelTextureNeedsUpload = false;
         }
@@ -293,9 +290,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             batch->uploadTexture(m_audioSpectrumTexture.get(), img);
             cb->resourceUpdate(batch);
         } else if (batch && bars == 0) {
-            QImage onePixel(1, 1, QImage::Format_RGBA8888);
-            onePixel.fill(0);
-            batch->uploadTexture(m_audioSpectrumTexture.get(), onePixel);
+            batch->uploadTexture(m_audioSpectrumTexture.get(), m_transparentFallbackImage);
             cb->resourceUpdate(batch);
         }
     }
@@ -334,9 +329,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             if (!img.isNull() && img.width() > 0 && img.height() > 0) {
                 ubatch->uploadTexture(m_userTextures[i].get(), img);
             } else {
-                QImage onePixel(1, 1, QImage::Format_RGBA8888);
-                onePixel.fill(Qt::transparent);
-                ubatch->uploadTexture(m_userTextures[i].get(), onePixel);
+                ubatch->uploadTexture(m_userTextures[i].get(), m_transparentFallbackImage);
             }
             cb->resourceUpdate(ubatch);
         }
@@ -363,9 +356,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             if (!img.isNull() && img.width() > 0 && img.height() > 0) {
                 ubatch->uploadTexture(m_wallpaperTexture.get(), img);
             } else {
-                QImage onePixel(1, 1, QImage::Format_RGBA8888);
-                onePixel.fill(Qt::transparent);
-                ubatch->uploadTexture(m_wallpaperTexture.get(), onePixel);
+                ubatch->uploadTexture(m_wallpaperTexture.get(), m_transparentFallbackImage);
             }
             cb->resourceUpdate(ubatch);
         }

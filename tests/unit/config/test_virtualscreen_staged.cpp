@@ -68,10 +68,10 @@ private:
             screenObj[QLatin1String("id")] = vs.id;
             screenObj[QLatin1String("index")] = vs.index;
             screenObj[QLatin1String("displayName")] = vs.displayName;
-            screenObj[QLatin1String("region")] = QJsonObject{{QStringLiteral("x"), vs.region.x()},
-                                                             {QStringLiteral("y"), vs.region.y()},
-                                                             {QStringLiteral("width"), vs.region.width()},
-                                                             {QStringLiteral("height"), vs.region.height()}};
+            screenObj[QLatin1String("region")] = QJsonObject{{QLatin1String("x"), vs.region.x()},
+                                                             {QLatin1String("y"), vs.region.y()},
+                                                             {QLatin1String("width"), vs.region.width()},
+                                                             {QLatin1String("height"), vs.region.height()}};
             screensArr.append(screenObj);
         }
         root[QLatin1String("screens")] = screensArr;
@@ -104,8 +104,8 @@ private:
             def.physicalScreenId = physId;
             def.displayName = screenObj[QLatin1String("displayName")].toString();
             def.region =
-                QRectF(regionObj[QStringLiteral("x")].toDouble(), regionObj[QStringLiteral("y")].toDouble(),
-                       regionObj[QStringLiteral("width")].toDouble(), regionObj[QStringLiteral("height")].toDouble());
+                QRectF(regionObj[QLatin1String("x")].toDouble(), regionObj[QLatin1String("y")].toDouble(),
+                       regionObj[QLatin1String("width")].toDouble(), regionObj[QLatin1String("height")].toDouble());
             config.screens.append(def);
         }
 

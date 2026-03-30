@@ -5,6 +5,7 @@
 // Part of WindowTrackingService — split from windowtrackingservice.cpp for SRP.
 
 #include "../windowtrackingservice.h"
+#include "../constants.h"
 #include "../geometryutils.h"
 #include "../layout.h"
 #include "../screenmanager.h"
@@ -42,7 +43,7 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
             }
         }
         for (const QString& zoneId : it.value()) {
-            if (zoneId.startsWith(QStringLiteral("zoneselector-"))) {
+            if (zoneId.startsWith(ZoneSelectorIdPrefix)) {
                 continue;
             }
             auto uuid = Utils::parseUuid(zoneId);

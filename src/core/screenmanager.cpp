@@ -20,6 +20,8 @@
 #include <QDBusServiceWatcher>
 #include <QRegularExpression>
 
+#include <limits>
+
 #include "layersurface.h"
 
 namespace PlasmaZones {
@@ -629,6 +631,8 @@ QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
         static constexpr int MinUsableScreenDimension = 100;
         if (!result.isValid() || result.width() < MinUsableScreenDimension
             || result.height() < MinUsableScreenDimension) {
+            qCWarning(lcScreen) << "screenAvailableGeometry: panel leaves insufficient space in virtual screen"
+                                << screenId << "- using full virtual geometry";
             return vsGeom;
         }
         return result;
@@ -660,12 +664,12 @@ VirtualScreenDef::PhysicalEdges ScreenManager::physicalEdgesFor(const QString& s
     }
 
     QString physId = VirtualScreenId::extractPhysicalId(screenId);
-    if (!m_virtualConfigs.contains(physId)) {
+    auto it = m_virtualConfigs.constFind(physId);
+    if (it == m_virtualConfigs.constEnd()) {
         return {true, true, true, true};
     }
 
-    const auto& config = m_virtualConfigs.value(physId);
-    for (const auto& vs : config.screens) {
+    for (const auto& vs : it->screens) {
         if (vs.id == screenId) {
             return vs.physicalEdges();
         }
@@ -683,13 +687,13 @@ QString ScreenManager::virtualScreenAt(const QPoint& globalPos, const QString& p
 QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const QString& physicalScreenId,
                                                  QScreen* screen) const
 {
-    if (!m_virtualConfigs.contains(physicalScreenId) || !screen) {
+    auto it = m_virtualConfigs.constFind(physicalScreenId);
+    if (it == m_virtualConfigs.constEnd() || !screen) {
         return {};
     }
 
-    const auto& config = m_virtualConfigs.value(physicalScreenId);
     QRect physGeom = screen->geometry();
-    for (const auto& vs : config.screens) {
+    for (const auto& vs : it->screens) {
         QRect absGeom = vs.absoluteGeometry(physGeom);
         if (absGeom.contains(globalPos)) {
             return vs.id;
@@ -711,6 +715,27 @@ QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
             QString vsId = virtualScreenAtWithScreen(globalPos, physId, screen);
             if (!vsId.isEmpty()) {
                 return vsId;
+            }
+            // Point is in gap between virtual screens — find nearest by center distance
+            auto cfgIt = m_virtualConfigs.constFind(physId);
+            if (cfgIt != m_virtualConfigs.constEnd()) {
+                QRect physGeom = screen->geometry();
+                QString nearestId;
+                qreal minDist = std::numeric_limits<qreal>::max();
+                for (const auto& vs : cfgIt->screens) {
+                    QRect absGeom = vs.absoluteGeometry(physGeom);
+                    QPointF center = QRectF(absGeom).center();
+                    qreal dx = center.x() - globalPos.x();
+                    qreal dy = center.y() - globalPos.y();
+                    qreal dist = dx * dx + dy * dy;
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearestId = vs.id;
+                    }
+                }
+                if (!nearestId.isEmpty()) {
+                    return nearestId;
+                }
             }
         }
 
@@ -741,7 +766,8 @@ void ScreenManager::invalidateVirtualGeometryCache(const QString& physicalScreen
 
 void ScreenManager::rebuildVirtualGeometryCache(const QString& physicalScreenId) const
 {
-    if (!m_virtualConfigs.contains(physicalScreenId)) {
+    auto it = m_virtualConfigs.constFind(physicalScreenId);
+    if (it == m_virtualConfigs.constEnd()) {
         return;
     }
 
@@ -751,8 +777,7 @@ void ScreenManager::rebuildVirtualGeometryCache(const QString& physicalScreenId)
     }
 
     QRect physGeom = screen->geometry();
-    const auto& config = m_virtualConfigs.value(physicalScreenId);
-    for (const auto& vs : config.screens) {
+    for (const auto& vs : it->screens) {
         m_virtualGeometryCache.insert(vs.id, vs.absoluteGeometry(physGeom));
     }
 }

@@ -143,6 +143,21 @@ public:
     std::optional<QRect> borderZoneGeometry(const QString& windowId) const;
     QVector<QRect> allBorderZoneGeometries() const;
 
+    /**
+     * @brief Extract pre-autotile geometry from one screen and inject into another.
+     *
+     * Used during virtual screen drag transfers where handleWindowOutputChanged
+     * won't fire (same physical monitor). Snapshots the geometry before
+     * onWindowClosed clears it, then injects into the target screen's map
+     * after notifyWindowAdded.
+     *
+     * @param windowId The window being transferred
+     * @param fromScreenId Source screen to extract geometry from
+     * @param toScreenId Target screen to inject geometry into
+     * @return true if geometry was transferred
+     */
+    bool transferPreAutotileGeometry(const QString& windowId, const QString& fromScreenId, const QString& toScreenId);
+
     // Invalidate pending stagger timers (call before triggering retile)
     void invalidateStaggerGeneration()
     {

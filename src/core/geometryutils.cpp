@@ -352,16 +352,16 @@ QRectF effectiveScreenGeometry(Layout* layout, const QString& screenId)
 
 QRectF extractZoneGeometry(const QVariantMap& zone)
 {
-    return QRectF(zone.value(QLatin1String("x")).toDouble(), zone.value(QLatin1String("y")).toDouble(),
-                  zone.value(QLatin1String("width")).toDouble(), zone.value(QLatin1String("height")).toDouble());
+    return QRectF(zone.value(JsonKeys::X).toDouble(), zone.value(JsonKeys::Y).toDouble(),
+                  zone.value(JsonKeys::Width).toDouble(), zone.value(JsonKeys::Height).toDouble());
 }
 
 void setZoneGeometry(QVariantMap& zone, const QRectF& rect)
 {
-    zone[QLatin1String("x")] = rect.x();
-    zone[QLatin1String("y")] = rect.y();
-    zone[QLatin1String("width")] = rect.width();
-    zone[QLatin1String("height")] = rect.height();
+    zone[JsonKeys::X] = rect.x();
+    zone[JsonKeys::Y] = rect.y();
+    zone[JsonKeys::Width] = rect.width();
+    zone[JsonKeys::Height] = rect.height();
 }
 
 static QJsonObject zoneToEmptyZoneJson(Zone* zone, const QRectF& overlayGeom, ISettings* settings)
@@ -385,6 +385,40 @@ static QJsonObject zoneToEmptyZoneJson(Zone* zone, const QRectF& overlayGeom, IS
     return obj;
 }
 
+/**
+ * @brief Build the JSON array of empty zone entries for a given screen geometry context
+ *
+ * Shared helper used by both buildEmptyZonesJson overloads (physical QScreen* and
+ * virtual screen ID). Each caller resolves geometry and gap parameters, then delegates
+ * the zone iteration and JSON serialization to this function.
+ */
+static QString buildEmptyZonesJsonImpl(Layout* layout, const QRect& screenGeometry, const QRect& availableGeometry,
+                                       const QString& screenId, int zonePadding, const EdgeGaps& outerGaps,
+                                       bool useAvail, ISettings* settings, const QRect& overlayOriginRect,
+                                       QScreen* physScreen, const std::function<bool(const Zone*)>& isZoneEmpty)
+{
+    QJsonArray arr;
+    for (Zone* zone : layout->zones()) {
+        if (!isZoneEmpty(zone)) {
+            continue;
+        }
+        QRectF geom;
+        if (physScreen && screenGeometry == QRect()) {
+            // Physical screen path — use QScreen* overload
+            geom = getZoneGeometryWithGaps(zone, physScreen, zonePadding, outerGaps, useAvail);
+        } else {
+            QRect availGeom = availableGeometry.isValid() ? availableGeometry : screenGeometry;
+            geom = getZoneGeometryWithGaps(zone, screenGeometry, availGeom, zonePadding, outerGaps, useAvail, screenId);
+        }
+        QRectF overlayGeom = physScreen && screenGeometry == QRect()
+            ? availableAreaToOverlayCoordinates(geom, physScreen)
+            : availableAreaToOverlayCoordinates(geom, overlayOriginRect);
+
+        arr.append(zoneToEmptyZoneJson(zone, overlayGeom, settings));
+    }
+    return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+}
+
 QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings,
                             const std::function<bool(const Zone*)>& isZoneEmpty)
 {
@@ -399,18 +433,8 @@ QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings
     int zonePadding = getEffectiveZonePadding(layout, settings, screenId);
     EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, screenId);
 
-    QJsonArray arr;
-    for (Zone* zone : layout->zones()) {
-        if (!isZoneEmpty(zone)) {
-            continue;
-        }
-        QRectF geom = getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
-        QRectF overlayGeom = availableAreaToOverlayCoordinates(geom, screen);
-
-        QJsonObject obj = zoneToEmptyZoneJson(zone, overlayGeom, settings);
-        arr.append(obj);
-    }
-    return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+    return buildEmptyZonesJsonImpl(layout, QRect(), QRect(), screenId, zonePadding, outerGaps, useAvail, settings,
+                                   QRect(), screen, isZoneEmpty);
 }
 
 QString rectToJson(const QRect& rect)
@@ -469,19 +493,8 @@ QString buildEmptyZonesJson(Layout* layout, const QString& screenId, QScreen* ph
         int zonePadding = getEffectiveZonePadding(layout, settings, screenId);
         EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, screenId);
 
-        QJsonArray arr;
-        for (Zone* zone : layout->zones()) {
-            if (!isZoneEmpty(zone)) {
-                continue;
-            }
-            QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
-            QRectF geom = getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding, outerGaps, useAvail, screenId);
-            QRectF overlayGeom = availableAreaToOverlayCoordinates(geom, vsGeom);
-
-            QJsonObject obj = zoneToEmptyZoneJson(zone, overlayGeom, settings);
-            arr.append(obj);
-        }
-        return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+        return buildEmptyZonesJsonImpl(layout, vsGeom, vsAvailGeom, screenId, zonePadding, outerGaps, useAvail,
+                                       settings, vsGeom, nullptr, isZoneEmpty);
     }
 
     // Fallback: use physical QScreen*

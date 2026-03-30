@@ -546,7 +546,7 @@ public:
     /// Check if a screen ID is a virtual screen ID (contains "/vs:").
     static bool isVirtualScreenId(const QString& screenId)
     {
-        return screenId.indexOf(QStringLiteral("/vs:")) > 0;
+        return screenId.indexOf(QLatin1String("/vs:")) > 0;
     }
 
 private:

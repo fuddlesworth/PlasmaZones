@@ -1164,6 +1164,33 @@ private Q_SLOTS:
         QVERIFY(!Utils::screensMatch(physId, vs0));
     }
 
+    // =====================================================================
+    // Cross-virtual-screen occupancy isolation
+    // =====================================================================
+
+    void testCrossVirtualScreenIsolation()
+    {
+        // A window snapped on vs:0 must NOT appear occupied when querying vs:1.
+        // This verifies that buildOccupiedZoneSet isolates per virtual screen.
+        QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
+        QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
+        QString windowId = QStringLiteral("konsole|cross-iso-test");
+
+        // Assign window to zone 0 on vs:0
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
+        QVERIFY(m_service->isWindowSnapped(windowId));
+
+        // Query occupied zones for vs:1 — should NOT contain zone 0
+        QSet<QUuid> occupiedOnVs1 = m_service->buildOccupiedZoneSet(vs1);
+        QUuid zone0Uuid = m_testLayout->zones().at(0)->id();
+        QVERIFY2(!occupiedOnVs1.contains(zone0Uuid),
+                 "Zone snapped on vs:0 must NOT appear occupied when querying vs:1");
+
+        // Sanity: querying vs:0 SHOULD contain zone 0
+        QSet<QUuid> occupiedOnVs0 = m_service->buildOccupiedZoneSet(vs0);
+        QVERIFY2(occupiedOnVs0.contains(zone0Uuid), "Zone snapped on vs:0 must appear occupied when querying vs:0");
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     LayoutManager* m_layoutManager = nullptr;

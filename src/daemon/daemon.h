@@ -145,7 +145,8 @@ private:
     void handleRetile();
     void connectToKWinScript(); // Shortcuts now handled by ShortcutManager
 
-    // Start-up sub-methods (defined in daemon_start.cpp)
+    // Start-up sub-methods (defined in start.cpp)
+    void createDbusAdaptors();
     void connectScreenSignals();
     void connectDesktopActivity();
     void connectShortcutSignals();

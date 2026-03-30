@@ -56,7 +56,8 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         }
 
         // Get physical screen geometry to compute absolute zone position
-        QScreen* physScreen = Utils::findScreenByIdOrName(physicalScreenId);
+        QScreen* physScreen =
+            ScreenManager::instance() ? ScreenManager::instance()->physicalQScreenFor(physicalScreenId) : nullptr;
         if (!physScreen) {
             return virtualScreenIds.first();
         }
@@ -162,7 +163,7 @@ void WindowTrackingService::windowClosed(const QString& windowId)
     QString zoneId = zoneIds.isEmpty() ? QString() : zoneIds.first();
     // Check floating with full windowId first, fallback to appId
     bool isFloating = isWindowFloating(windowId);
-    if (!zoneId.isEmpty() && !zoneId.startsWith(QStringLiteral("zoneselector-")) && !isFloating) {
+    if (!zoneId.isEmpty() && !zoneId.startsWith(ZoneSelectorIdPrefix) && !isFloating) {
         if (!appId.isEmpty()) {
             PendingRestore entry;
             entry.zoneIds = zoneIds;
@@ -338,7 +339,7 @@ void WindowTrackingService::onLayoutChanged()
             int pos = posMap->value(zoneId, 0);
             if (pos <= 0) {
                 // Handle zoneselector synthetic IDs: "zoneselector-{layoutId}-{index}"
-                if (zoneId.startsWith(QStringLiteral("zoneselector-"))) {
+                if (zoneId.startsWith(ZoneSelectorIdPrefix)) {
                     int lastDash = zoneId.lastIndexOf(QStringLiteral("-"));
                     if (lastDash > 0) {
                         bool ok = false;

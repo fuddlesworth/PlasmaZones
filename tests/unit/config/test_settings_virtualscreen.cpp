@@ -185,21 +185,21 @@ private Q_SLOTS:
         {
             auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
             auto group = backend->group(QStringLiteral("VirtualScreen:") + physId);
-            group->writeInt(QStringLiteral("count"), 2);
+            group->writeInt(ConfigDefaults::virtualScreenCountKey(), 2);
 
             // Screen 0: valid
-            group->writeString(QStringLiteral("0/name"), QStringLiteral("Left"));
-            group->writeDouble(QStringLiteral("0/x"), 0.0);
-            group->writeDouble(QStringLiteral("0/y"), 0.0);
-            group->writeDouble(QStringLiteral("0/width"), 0.5);
-            group->writeDouble(QStringLiteral("0/height"), 1.0);
+            group->writeString(QStringLiteral("0/") + ConfigDefaults::virtualScreenNameKey(), QStringLiteral("Left"));
+            group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenXKey(), 0.0);
+            group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenYKey(), 0.0);
+            group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenWidthKey(), 0.5);
+            group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenHeightKey(), 1.0);
 
             // Screen 1: invalid -- x + width = 0.5 + 0.7 = 1.2, exceeds 1.0
-            group->writeString(QStringLiteral("1/name"), QStringLiteral("Right"));
-            group->writeDouble(QStringLiteral("1/x"), 0.5);
-            group->writeDouble(QStringLiteral("1/y"), 0.0);
-            group->writeDouble(QStringLiteral("1/width"), 0.7);
-            group->writeDouble(QStringLiteral("1/height"), 1.0);
+            group->writeString(QStringLiteral("1/") + ConfigDefaults::virtualScreenNameKey(), QStringLiteral("Right"));
+            group->writeDouble(QStringLiteral("1/") + ConfigDefaults::virtualScreenXKey(), 0.5);
+            group->writeDouble(QStringLiteral("1/") + ConfigDefaults::virtualScreenYKey(), 0.0);
+            group->writeDouble(QStringLiteral("1/") + ConfigDefaults::virtualScreenWidthKey(), 0.7);
+            group->writeDouble(QStringLiteral("1/") + ConfigDefaults::virtualScreenHeightKey(), 1.0);
 
             group.reset();
             backend->sync();
@@ -223,12 +223,12 @@ private Q_SLOTS:
         {
             auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
             auto group = backend->group(QStringLiteral("VirtualScreen:") + physId);
-            group->writeInt(QStringLiteral("count"), 1);
-            group->writeString(QStringLiteral("0/name"), QStringLiteral("Bad"));
-            group->writeDouble(QStringLiteral("0/x"), -0.1);
-            group->writeDouble(QStringLiteral("0/y"), 0.0);
-            group->writeDouble(QStringLiteral("0/width"), 0.5);
-            group->writeDouble(QStringLiteral("0/height"), 1.0);
+            group->writeInt(ConfigDefaults::virtualScreenCountKey(), 1);
+            group->writeString(QStringLiteral("0/") + ConfigDefaults::virtualScreenNameKey(), QStringLiteral("Bad"));
+            group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenXKey(), -0.1);
+            group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenYKey(), 0.0);
+            group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenWidthKey(), 0.5);
+            group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenHeightKey(), 1.0);
             group.reset();
             backend->sync();
         }
@@ -250,7 +250,7 @@ private Q_SLOTS:
         {
             auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
             auto group = backend->group(QStringLiteral("VirtualScreen:") + physId);
-            group->writeInt(QStringLiteral("count"), 0);
+            group->writeInt(ConfigDefaults::virtualScreenCountKey(), 0);
             group.reset();
             backend->sync();
         }

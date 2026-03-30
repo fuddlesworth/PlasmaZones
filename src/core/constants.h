@@ -352,6 +352,10 @@ inline constexpr QLatin1String OuterGapRight{"outerGapRight"};
 
 // Pywal color file keys
 inline constexpr QLatin1String Colors{"colors"};
+
+// Virtual screen keys
+inline constexpr QLatin1String IsVirtualScreen{"isVirtualScreen"};
+inline constexpr QLatin1String VirtualDisplayName{"virtualDisplayName"};
 }
 
 /**
@@ -399,6 +403,15 @@ namespace Audio {
 constexpr int MinBars = 16;
 constexpr int MaxBars = 256;
 }
+
+/**
+ * @brief Synthetic zone ID prefix used by the zone selector overlay
+ *
+ * Zone IDs starting with this prefix are transient selector entries,
+ * not real zone UUIDs. They must be excluded from persistence and
+ * occupancy checks.
+ */
+inline const QString ZoneSelectorIdPrefix = QStringLiteral("zoneselector-");
 
 /**
  * @brief D-Bus service constants

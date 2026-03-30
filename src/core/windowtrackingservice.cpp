@@ -157,6 +157,45 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
             ++it;
         }
     }
+
+    // Sweep tracking hashes that can have entries without a zone assignment.
+    // windowClosed() cleans all of these per-window; prune must do the same
+    // for windows that disappeared without a close event.
+    auto removeIfNotAlive = [&](auto& hash) {
+        for (auto hashIt = hash.begin(); hashIt != hash.end();) {
+            if (!aliveWindowIds.contains(hashIt.key())) {
+                hashIt = hash.erase(hashIt);
+                ++pruned;
+            } else {
+                ++hashIt;
+            }
+        }
+    };
+
+    removeIfNotAlive(m_preTileGeometries);
+    removeIfNotAlive(m_preFloatZoneAssignments);
+    removeIfNotAlive(m_preFloatScreenAssignments);
+    removeIfNotAlive(m_windowScreenAssignments);
+    removeIfNotAlive(m_windowStickyStates);
+
+    // Sweep QSet members (different iterator API)
+    auto removeSetIfNotAlive = [&](auto& set) {
+        for (auto setIt = set.begin(); setIt != set.end();) {
+            if (!aliveWindowIds.contains(*setIt)) {
+                setIt = set.erase(setIt);
+                ++pruned;
+            } else {
+                ++setIt;
+            }
+        }
+    };
+
+    removeSetIfNotAlive(m_floatingWindows);
+    removeSetIfNotAlive(m_autotileFloatedWindows);
+    removeSetIfNotAlive(m_savedSnapFloatingWindows);
+    removeSetIfNotAlive(m_autoSnappedWindows);
+    removeSetIfNotAlive(m_effectReportedWindows);
+
     return pruned;
 }
 

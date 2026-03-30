@@ -27,12 +27,16 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
 {
     Q_UNUSED(mouseButtons); // Only used in dragMoved for dynamic activation
 
+    if (!m_settings) {
+        return;
+    }
+
     // Pre-parse triggers to avoid QVariantMap unboxing on every dragMoved tick
     m_cachedActivationTriggers = parseTriggers(m_settings->dragActivationTriggers());
     m_cachedZoneSpanTriggers = parseTriggers(m_settings->zoneSpanTriggers());
 
     // Check if snapping is enabled
-    if (m_settings && !m_settings->snappingEnabled()) {
+    if (!m_settings->snappingEnabled()) {
         qCInfo(lcDbusWindow) << "Snapping disabled in settings, ignoring drag";
         m_snapCancelled = true;
         m_draggedWindowId.clear();

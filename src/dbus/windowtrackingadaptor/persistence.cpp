@@ -95,7 +95,11 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
         return false;
     }
 
-    auto geo = m_service->validatedPreTileGeometry(windowId);
+    QString screenId;
+    if (m_service) {
+        screenId = m_service->screenAssignments().value(windowId);
+    }
+    auto geo = m_service->validatedPreTileGeometry(windowId, screenId);
     if (!geo) {
         return false;
     }

@@ -15,56 +15,11 @@
 namespace PlasmaZones {
 
 /**
- * @brief Resolve current screen for keyboard shortcuts
- *
- * Primary source: the cursor's screen, reported by the KWin effect via
- * cursorScreenChanged (fires on every monitor crossing in slotMouseChanged).
- * This accurately reflects where the user is looking, even if no window
- * on that screen has focus.
- *
- * Fallback: the focused window's screen, reported via windowActivated.
- * Used when the effect hasn't loaded yet or no mouse movement has occurred.
- *
- * QCursor::pos() is NOT used — it returns stale data for background daemons
- * on Wayland.
- */
-inline QScreen* resolveShortcutScreen(const WindowTrackingAdaptor* trackingAdaptor)
-{
-    if (!trackingAdaptor) {
-        return nullptr;
-    }
-
-    // Prefer cursor screen — tracks the physical cursor position
-    const QString& cursorScreen = trackingAdaptor->lastCursorScreenName();
-    if (!cursorScreen.isEmpty()) {
-        QScreen* screen = Utils::findScreenByIdOrName(cursorScreen);
-        if (screen) {
-            return screen;
-        }
-    }
-
-    // Cursor screen not yet reported (effect not loaded or no mouse movement).
-    // Fall back to focused window's screen.
-    const QString& activeScreen = trackingAdaptor->lastActiveScreenName();
-    if (!activeScreen.isEmpty()) {
-        QScreen* screen = Utils::findScreenByIdOrName(activeScreen);
-        if (screen) {
-            return screen;
-        }
-    }
-
-    // Last resort: primary screen (daemon just started, no KWin effect data yet)
-    qCDebug(lcDaemon) << "resolveShortcutScreen: using primary screen";
-    return Utils::primaryScreen();
-}
-
-/**
  * @brief Resolve the screen ID for a keyboard shortcut action (virtual-screen-aware).
  *
  * Returns the virtual screen ID (e.g., "Dell:U2722D:115107/vs:0") if the cursor
- * is on a subdivided screen, otherwise the physical screen ID.  Unlike
- * resolveShortcutScreen() which returns a QScreen* (losing the virtual component),
- * this returns the raw string from the KWin effect -- preserving virtual screen IDs.
+ * is on a subdivided screen, otherwise the physical screen ID.  Returns the raw
+ * string from the KWin effect, preserving virtual screen IDs.
  */
 inline QString resolveShortcutScreenId(const WindowTrackingAdaptor* trackingAdaptor)
 {

@@ -272,11 +272,20 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                         if (dropScreenId != m_dragBypassScreenId) {
                             qCInfo(lcEffect) << "Autotile drag: virtual screen changed" << m_dragBypassScreenId << "->"
                                              << dropScreenId;
+                            // Preserve pre-autotile geometry across virtual screen transfer
+                            // (mirrors handleWindowOutputChanged in AutotileHandler).
+                            // Must happen BEFORE onWindowClosed which clears the source map.
+                            const bool dropIsAutotile = m_autotileHandler->isAutotileScreen(dropScreenId);
+                            if (dropIsAutotile) {
+                                m_autotileHandler->transferPreAutotileGeometry(windowId, m_dragBypassScreenId,
+                                                                               dropScreenId);
+                            }
+
                             // Transfer: remove from old virtual screen, add to new one.
                             // handleWindowOutputChanged won't fire (same physical monitor),
                             // so manually perform the close/open cycle.
                             m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
-                            if (w && m_autotileHandler->isAutotileScreen(dropScreenId)) {
+                            if (w && dropIsAutotile) {
                                 m_autotileHandler->notifyWindowAdded(w);
                             } else {
                                 // Dropped on a non-autotile screen — float it
@@ -608,11 +617,6 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     const QString closedWindowId = getWindowId(w);
     const QString closedScreenId = getWindowScreenId(w);
 
-    // Clean up caches
-    m_windowIdCache.remove(w);
-    m_windowIdReverse.remove(closedWindowId);
-    m_trackedScreenPerWindow.remove(w);
-
     // Clean up snap-mode minimize tracking
     m_minimizeFloatedWindows.remove(closedWindowId);
 
@@ -625,6 +629,13 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
 
     // Notify general daemon for cleanup
     notifyWindowClosed(w);
+
+    // Clean up caches AFTER all consumers that call getWindowId(w).
+    // The windowDeleted handler does final cleanup, but removing here
+    // prevents re-insertion by any late calls.
+    m_windowIdCache.remove(w);
+    m_windowIdReverse.remove(closedWindowId);
+    m_trackedScreenPerWindow.remove(w);
 }
 
 void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
@@ -1951,24 +1962,24 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                     return;
                 }
 
-                QJsonArray screens = doc.object().value(QStringLiteral("screens")).toArray();
+                QJsonArray screens = doc.object().value(QLatin1String("screens")).toArray();
                 QVector<EffectVirtualScreenDef> defs;
                 for (const QJsonValue& val : screens) {
                     QJsonObject obj = val.toObject();
-                    QJsonObject region = obj.value(QStringLiteral("region")).toObject();
+                    QJsonObject region = obj.value(QLatin1String("region")).toObject();
 
                     EffectVirtualScreenDef def;
-                    def.id = obj.value(QStringLiteral("id")).toString();
+                    def.id = obj.value(QLatin1String("id")).toString();
 
                     // Compute absolute geometry from fractional region within physical screen
                     const auto outputs = KWin::effects->screens();
                     for (const auto* out : outputs) {
                         if (self->outputScreenId(out) == physicalScreenId) {
                             const QRect physGeom = out->geometry();
-                            qreal rx = region.value(QStringLiteral("x")).toDouble();
-                            qreal ry = region.value(QStringLiteral("y")).toDouble();
-                            qreal rw = region.value(QStringLiteral("width")).toDouble();
-                            qreal rh = region.value(QStringLiteral("height")).toDouble();
+                            qreal rx = region.value(QLatin1String("x")).toDouble();
+                            qreal ry = region.value(QLatin1String("y")).toDouble();
+                            qreal rw = region.value(QLatin1String("width")).toDouble();
+                            qreal rh = region.value(QLatin1String("height")).toDouble();
                             // Edge-consistent rounding: compute edges then derive width/height
                             // to avoid 1px gaps between abutting virtual screens
                             int left = physGeom.x() + qRound(rx * physGeom.width());
