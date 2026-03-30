@@ -21,155 +21,219 @@ Flickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // =====================================================================
-        // ACTIVATION
-        // =====================================================================
+        // =================================================================
+        // TRIGGERS
+        // =================================================================
         Item {
             Layout.fillWidth: true
-            implicitHeight: activationCard.implicitHeight
+            implicitHeight: triggersCard.implicitHeight
 
             SettingsCard {
-                id: activationCard
+                id: triggersCard
 
                 anchors.fill: parent
-                headerText: i18n("Activation")
+                headerText: i18n("Triggers")
+                showAccent: true
                 collapsible: true
 
-                contentItem: Kirigami.FormLayout {
-                    Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Triggers")
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    SettingsRow {
+                        title: i18n("Activate on every drag")
+                        description: i18n("Show the zone overlay on every window drag without requiring a modifier key or mouse button")
+
+                        SettingsSwitch {
+                            id: alwaysActivateSwitch
+
+                            checked: settingsController.alwaysActivateOnDrag
+                            accessibleName: i18n("Activate on every window drag")
+                            onToggled: settingsController.alwaysActivateOnDrag = checked
+                        }
+
                     }
 
-                    CheckBox {
-                        id: alwaysActivateCheck
-
+                    Kirigami.Separator {
                         Layout.fillWidth: true
-                        Kirigami.FormData.label: i18n("Zone activation:")
-                        text: i18n("Activate on every window drag")
-                        checked: settingsController.alwaysActivateOnDrag
-                        onToggled: settingsController.alwaysActivateOnDrag = checked
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("When enabled, the zone overlay appears on every window drag without requiring a modifier key or mouse button.")
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                    }
+
+                    SettingsRow {
+                        title: i18n("Hold to activate")
+                        description: i18n("Hold a modifier or mouse button to show zones while dragging")
                     }
 
                     ModifierAndMouseCheckBoxes {
                         id: dragActivationInput
 
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: root.sliderPreferredWidth
-                        Kirigami.FormData.label: i18n("Hold to activate:")
-                        enabled: !alwaysActivateCheck.checked
+                        Layout.alignment: Qt.AlignRight
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        Layout.preferredWidth: Math.min(root.sliderPreferredWidth, parent.width * 0.45)
+                        enabled: !alwaysActivateSwitch.checked
                         opacity: enabled ? 1 : 0.4
                         allowMultiple: true
                         acceptMode: acceptModeAll
                         triggers: settingsController.dragActivationTriggers
                         defaultTriggers: settingsController.defaultDragActivationTriggers
-                        tooltipEnabled: true
-                        customTooltipText: i18n("Hold modifier or use mouse button to show zones while dragging. Add multiple triggers to activate with any of them.")
+                        tooltipEnabled: false
                         onTriggersModified: (triggers) => {
                             settingsController.dragActivationTriggers = triggers;
                         }
                     }
 
-                    CheckBox {
-                        Layout.fillWidth: true
-                        Kirigami.FormData.label: i18n("Toggle mode:")
-                        enabled: !alwaysActivateCheck.checked
-                        opacity: enabled ? 1 : 0.4
-                        text: i18n("Tap trigger to toggle overlay")
-                        checked: appSettings.toggleActivation
-                        onToggled: appSettings.toggleActivation = checked
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("When enabled, press the activation trigger once to show the overlay, press again to hide it. When disabled, hold the trigger to show.")
-                    }
-
                     Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Zone Span")
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
                     }
 
-                    CheckBox {
-                        id: zoneSpanEnabledCheck
+                    SettingsRow {
+                        title: i18n("Toggle mode")
+                        description: i18n("Tap the activation trigger once to show the overlay, tap again to hide it")
+                        enabled: !alwaysActivateSwitch.checked
+                        opacity: enabled ? 1 : 0.4
 
-                        Kirigami.FormData.label: i18n("Paint-to-span:")
-                        text: i18n("Enable zone spanning")
-                        checked: appSettings.zoneSpanEnabled
-                        onToggled: appSettings.zoneSpanEnabled = checked
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("When enabled, you can paint across multiple zones to snap a window to the combined area.")
+                        SettingsSwitch {
+                            checked: appSettings.toggleActivation
+                            accessibleName: i18n("Toggle mode")
+                            onToggled: appSettings.toggleActivation = checked
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        // =================================================================
+        // ZONE SPAN
+        // =================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: zoneSpanCard.implicitHeight
+
+            SettingsCard {
+                id: zoneSpanCard
+
+                anchors.fill: parent
+                headerText: i18n("Zone Span")
+                showAccent: true
+                showToggle: true
+                toggleChecked: appSettings.zoneSpanEnabled
+                collapsible: true
+                onToggleChanged: appSettings.zoneSpanEnabled = toggleChecked
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    SettingsRow {
+                        title: i18n("Span modifier")
+                        description: i18n("Hold a modifier or mouse button while dragging to paint across zones")
                     }
 
                     ModifierAndMouseCheckBoxes {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: root.sliderPreferredWidth
-                        Kirigami.FormData.label: i18n("Modifier:")
-                        enabled: zoneSpanEnabledCheck.checked
-                        opacity: enabled ? 1 : 0.4
+                        Layout.alignment: Qt.AlignRight
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        Layout.preferredWidth: Math.min(root.sliderPreferredWidth, parent.width * 0.45)
                         allowMultiple: true
                         acceptMode: acceptModeAll
                         triggers: settingsController.zoneSpanTriggers
                         defaultTriggers: settingsController.defaultZoneSpanTriggers
-                        tooltipEnabled: true
-                        customTooltipText: i18n("Hold modifier or use mouse button while dragging to paint across zones. Add multiple triggers to activate with any of them.")
+                        tooltipEnabled: false
                         onTriggersModified: (triggers) => {
                             settingsController.zoneSpanTriggers = triggers;
                         }
                     }
 
-                    SettingsSpinBox {
-                        Layout.preferredWidth: root.sliderPreferredWidth
-                        formLabel: i18n("Edge threshold:")
-                        enabled: zoneSpanEnabledCheck.checked
-                        opacity: enabled ? 1 : 0.4
-                        from: settingsController.adjacentThresholdMin
-                        to: root.thresholdMax
-                        value: appSettings.adjacentThreshold
-                        tooltipText: i18n("Distance from zone edge for multi-zone selection")
-                        onValueModified: (value) => {
-                            return appSettings.adjacentThreshold = value;
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                    }
+
+                    SettingsRow {
+                        title: i18n("Edge threshold")
+                        description: i18n("Distance from zone edge for multi-zone selection")
+
+                        SettingsSpinBox {
+                            from: settingsController.adjacentThresholdMin
+                            to: root.thresholdMax
+                            value: appSettings.adjacentThreshold
+                            onValueModified: (value) => {
+                                return appSettings.adjacentThreshold = value;
+                            }
                         }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        // =================================================================
+        // SNAP ASSIST
+        // =================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: snapAssistCard.implicitHeight
+
+            SettingsCard {
+                id: snapAssistCard
+
+                anchors.fill: parent
+                headerText: i18n("Snap Assist")
+                showAccent: true
+                showToggle: true
+                toggleChecked: appSettings.snapAssistFeatureEnabled
+                collapsible: true
+                onToggleChanged: appSettings.snapAssistFeatureEnabled = toggleChecked
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    SettingsRow {
+                        title: i18n("Always show after snapping")
+                        description: i18n("Show a window picker after every snap to fill remaining empty zones")
+
+                        SettingsSwitch {
+                            id: snapAssistAlwaysSwitch
+
+                            checked: appSettings.snapAssistEnabled
+                            accessibleName: i18n("Always show after snapping")
+                            onToggled: appSettings.snapAssistEnabled = checked
+                        }
+
                     }
 
                     Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Snap Assist")
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
                     }
 
-                    CheckBox {
-                        id: snapAssistFeatureEnabledCheck
-
-                        Kirigami.FormData.label: i18n("Window picker:")
-                        text: i18n("Enable snap assist")
-                        checked: appSettings.snapAssistFeatureEnabled
-                        onToggled: appSettings.snapAssistFeatureEnabled = checked
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("Show a window picker after snapping to fill remaining empty zones")
-                    }
-
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("Behavior:")
-                        text: i18n("Always show after snapping")
-                        checked: appSettings.snapAssistEnabled
-                        onToggled: appSettings.snapAssistEnabled = checked
-                        enabled: snapAssistFeatureEnabledCheck.checked
+                    SettingsRow {
+                        title: i18n("Hold to enable")
+                        description: i18n("Hold this modifier when releasing a window to show the picker for that snap only")
+                        enabled: !snapAssistAlwaysSwitch.checked
                         opacity: enabled ? 1 : 0.4
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("When enabled, a window picker appears after every snap. When disabled, hold the trigger below while dropping to show the picker for that snap only.")
                     }
 
                     ModifierAndMouseCheckBoxes {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: root.sliderPreferredWidth
-                        Kirigami.FormData.label: i18n("Hold to enable:")
-                        enabled: snapAssistFeatureEnabledCheck.checked && !appSettings.snapAssistEnabled
+                        Layout.alignment: Qt.AlignRight
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        Layout.preferredWidth: Math.min(root.sliderPreferredWidth, parent.width * 0.45)
+                        enabled: !snapAssistAlwaysSwitch.checked
                         opacity: enabled ? 1 : 0.4
                         allowMultiple: true
                         acceptMode: acceptModeAll
                         triggers: settingsController.snapAssistTriggers
                         defaultTriggers: settingsController.defaultSnapAssistTriggers
-                        tooltipEnabled: true
-                        customTooltipText: i18n("Hold this modifier or mouse button when releasing a window to show the picker for that snap only. Add multiple triggers to activate with any of them.")
+                        tooltipEnabled: false
                         onTriggersModified: (triggers) => {
                             settingsController.snapAssistTriggers = triggers;
                         }
@@ -181,102 +245,173 @@ Flickable {
 
         }
 
-        // =====================================================================
-        // BEHAVIOR
-        // =====================================================================
+        // =================================================================
+        // DISPLAY
+        // =================================================================
         Item {
             Layout.fillWidth: true
-            implicitHeight: behaviorCard.implicitHeight
+            implicitHeight: displayCard.implicitHeight
 
             SettingsCard {
-                id: behaviorCard
+                id: displayCard
 
                 anchors.fill: parent
-                headerText: i18n("Behavior")
+                headerText: i18n("Display")
+                showAccent: true
                 collapsible: true
 
-                contentItem: Kirigami.FormLayout {
-                    Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Display")
-                    }
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
 
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("Multi-monitor:")
-                        text: i18n("Show zones on all monitors while dragging")
-                        checked: appSettings.showZonesOnAllMonitors
-                        onToggled: appSettings.showZonesOnAllMonitors = checked
-                    }
+                    SettingsRow {
+                        title: i18n("Show zones on all monitors")
+                        description: i18n("Display zone overlays on every monitor while dragging a window")
 
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("Aspect ratio filter:")
-                        text: i18n("Only show layouts matching this monitor's aspect ratio")
-                        checked: appSettings.filterLayoutsByAspectRatio
-                        onToggled: appSettings.filterLayoutsByAspectRatio = checked
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("When enabled, the zone selector, layout picker, and cycle shortcuts only show layouts designed for the current monitor's aspect ratio. Layouts tagged as 'Any' always appear.")
+                        SettingsSwitch {
+                            checked: appSettings.showZonesOnAllMonitors
+                            accessibleName: i18n("Show zones on all monitors")
+                            onToggled: appSettings.showZonesOnAllMonitors = checked
+                        }
+
                     }
 
                     Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Window Handling")
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
                     }
 
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("Resolution:")
-                        text: i18n("Re-snap windows to their zones after resolution changes")
-                        checked: appSettings.keepWindowsInZonesOnResolutionChange
-                        onToggled: appSettings.keepWindowsInZonesOnResolutionChange = checked
+                    SettingsRow {
+                        title: i18n("Filter by aspect ratio")
+                        description: i18n("Only show layouts matching the current monitor's aspect ratio")
+
+                        SettingsSwitch {
+                            checked: appSettings.filterLayoutsByAspectRatio
+                            accessibleName: i18n("Filter layouts by aspect ratio")
+                            onToggled: appSettings.filterLayoutsByAspectRatio = checked
+                        }
+
                     }
 
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("New windows:")
-                        text: i18n("Move new windows to their last used zone")
-                        checked: appSettings.moveNewWindowsToLastZone
-                        onToggled: appSettings.moveNewWindowsToLastZone = checked
-                    }
+                }
 
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("Unsnapping:")
-                        text: i18n("Restore original window size when unsnapping")
-                        checked: appSettings.restoreOriginalSizeOnUnsnap
-                        onToggled: appSettings.restoreOriginalSizeOnUnsnap = checked
+            }
+
+        }
+
+        // =================================================================
+        // WINDOW HANDLING
+        // =================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: windowHandlingCard.implicitHeight
+
+            SettingsCard {
+                id: windowHandlingCard
+
+                anchors.fill: parent
+                headerText: i18n("Window Handling")
+                showAccent: true
+                collapsible: true
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    SettingsRow {
+                        title: i18n("Re-snap on resolution change")
+                        description: i18n("Move windows back to their zones after the screen resolution changes")
+
+                        SettingsSwitch {
+                            checked: appSettings.keepWindowsInZonesOnResolutionChange
+                            accessibleName: i18n("Re-snap on resolution change")
+                            onToggled: appSettings.keepWindowsInZonesOnResolutionChange = checked
+                        }
+
                     }
 
                     Kirigami.Separator {
-                        Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Session Restore")
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
                     }
 
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("Reopening:")
-                        text: i18n("Restore windows to their previous zone")
-                        checked: appSettings.restoreWindowsToZonesOnLogin
-                        onToggled: appSettings.restoreWindowsToZonesOnLogin = checked
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("When enabled, windows return to their previous zone when reopened, including after login or session restart.")
+                    SettingsRow {
+                        title: i18n("New windows to last zone")
+                        description: i18n("Automatically move newly opened windows to the zone they last occupied")
+
+                        SettingsSwitch {
+                            checked: appSettings.moveNewWindowsToLastZone
+                            accessibleName: i18n("Move new windows to last zone")
+                            onToggled: appSettings.moveNewWindowsToLastZone = checked
+                        }
+
                     }
 
-                    WideComboBox {
-                        id: stickyHandlingCombo
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                    }
 
-                        Kirigami.FormData.label: i18n("Sticky windows:")
-                        textRole: "text"
-                        valueRole: "value"
-                        model: [{
-                            "text": i18n("Treat as normal"),
-                            "value": 0
-                        }, {
-                            "text": i18n("Restore only"),
-                            "value": 1
-                        }, {
-                            "text": i18n("Ignore all"),
-                            "value": 2
-                        }]
-                        currentIndex: Math.max(0, indexOfValue(appSettings.stickyWindowHandling))
-                        onActivated: appSettings.stickyWindowHandling = currentValue
-                        ToolTip.visible: hovered
-                        ToolTip.text: i18n("Sticky windows appear on all desktops. Choose how snapping should behave.")
+                    SettingsRow {
+                        title: i18n("Restore size on unsnap")
+                        description: i18n("Return a window to its original size when dragged out of a zone")
+
+                        SettingsSwitch {
+                            checked: appSettings.restoreOriginalSizeOnUnsnap
+                            accessibleName: i18n("Restore original size on unsnap")
+                            onToggled: appSettings.restoreOriginalSizeOnUnsnap = checked
+                        }
+
+                    }
+
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                    }
+
+                    SettingsRow {
+                        title: i18n("Restore zones on login")
+                        description: i18n("Return windows to their previous zone when reopened or after a session restart")
+
+                        SettingsSwitch {
+                            checked: appSettings.restoreWindowsToZonesOnLogin
+                            accessibleName: i18n("Restore zones on login")
+                            onToggled: appSettings.restoreWindowsToZonesOnLogin = checked
+                        }
+
+                    }
+
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                    }
+
+                    SettingsRow {
+                        title: i18n("Sticky windows")
+                        description: i18n("How to handle windows that appear on all desktops")
+
+                        WideComboBox {
+                            id: stickyHandlingCombo
+
+                            textRole: "text"
+                            valueRole: "value"
+                            model: [{
+                                "text": i18n("Treat as normal"),
+                                "value": 0
+                            }, {
+                                "text": i18n("Restore only"),
+                                "value": 1
+                            }, {
+                                "text": i18n("Ignore all"),
+                                "value": 2
+                            }]
+                            currentIndex: Math.max(0, indexOfValue(appSettings.stickyWindowHandling))
+                            onActivated: appSettings.stickyWindowHandling = currentValue
+                        }
+
                     }
 
                 }

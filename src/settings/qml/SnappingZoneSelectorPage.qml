@@ -57,9 +57,9 @@ Flickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // =====================================================================
+        // =================================================================
         // PER-MONITOR SELECTION (shared between gaps and zone selector)
-        // =====================================================================
+        // =================================================================
         MonitorSelectorSection {
             id: monitorSelector
 
@@ -77,9 +77,9 @@ Flickable {
             }
         }
 
-        // =====================================================================
-        // ZONE GEOMETRY
-        // =====================================================================
+        // =================================================================
+        // GAPS
+        // =================================================================
         Item {
             Layout.fillWidth: true
             implicitHeight: gapsCard.implicitHeight
@@ -89,46 +89,69 @@ Flickable {
 
                 anchors.fill: parent
                 headerText: i18n("Gaps")
+                showAccent: true
                 collapsible: true
 
-                contentItem: Kirigami.FormLayout {
-                    SettingsSpinBox {
-                        formLabel: i18n("Zone padding:")
-                        from: settingsController.gapMin
-                        to: root.paddingMax
-                        value: root.snappingSettingValue("ZonePadding", appSettings.zonePadding)
-                        onValueModified: (value) => {
-                            return root.writeSnappingSetting("ZonePadding", value, function(v) {
-                                appSettings.zonePadding = v;
-                            });
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    SettingsRow {
+                        title: i18n("Zone padding")
+                        description: i18n("Space between tiled windows")
+
+                        SettingsSpinBox {
+                            from: settingsController.gapMin
+                            to: root.paddingMax
+                            value: root.snappingSettingValue("ZonePadding", appSettings.zonePadding)
+                            onValueModified: (value) => {
+                                return root.writeSnappingSetting("ZonePadding", value, function(v) {
+                                    appSettings.zonePadding = v;
+                                });
+                            }
                         }
+
                     }
 
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Edge gap:")
-                        spacing: Kirigami.Units.smallSpacing
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                    }
+
+                    SettingsRow {
+                        visible: !perSideSwitch.checked
+                        title: i18n("Edge gap")
+                        description: i18n("Space from screen edges to tiled windows")
 
                         SpinBox {
+                            id: outerGapSpinBox
+
                             from: 0
                             to: root.paddingMax
-                            value: root.snappingSettingValue("OuterGap", appSettings.outerGap)
-                            enabled: !perSideCheck.checked
                             onValueModified: root.writeSnappingSetting("OuterGap", value, function(v) {
                                 appSettings.outerGap = v;
                             })
                             Accessible.name: i18n("Edge gap")
+
+                            Binding on value {
+                                value: root.snappingSettingValue("OuterGap", appSettings.outerGap)
+                                when: !outerGapSpinBox.activeFocus
+                                restoreMode: Binding.RestoreNone
+                            }
+
                         }
 
-                        Label {
-                            text: i18n("px")
-                            visible: !perSideCheck.checked
-                        }
+                    }
 
-                        CheckBox {
-                            id: perSideCheck
+                    SettingsRow {
+                        title: i18n("Per-side outer gaps")
+                        description: perSideSwitch.checked ? i18n("Set different gap sizes for each screen edge") : i18n("Use a single outer gap value for all edges")
 
-                            text: i18n("Set per side")
+                        SettingsSwitch {
+                            id: perSideSwitch
+
                             checked: root.snappingSettingValue("UsePerSideOuterGap", appSettings.usePerSideOuterGap)
+                            accessibleName: i18n("Set gaps per side")
                             onToggled: root.writeSnappingSetting("UsePerSideOuterGap", checked, function(v) {
                                 appSettings.usePerSideOuterGap = v;
                             })
@@ -136,83 +159,101 @@ Flickable {
 
                     }
 
+                    // Per-side gap grid (only when per-side is enabled)
                     GridLayout {
-                        Kirigami.FormData.label: i18n("Per-side gaps:")
-                        visible: perSideCheck.checked
-                        columns: 6
-                        columnSpacing: Kirigami.Units.smallSpacing
+                        visible: perSideSwitch.checked
+                        Layout.alignment: Qt.AlignRight
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        columns: 4
+                        columnSpacing: Kirigami.Units.largeSpacing
                         rowSpacing: Kirigami.Units.smallSpacing
 
                         Label {
-                            text: i18n("Top:")
+                            text: i18n("Top")
                         }
 
                         SpinBox {
+                            id: topGapSpinBox
+
                             from: 0
                             to: root.paddingMax
-                            value: root.snappingSettingValue("OuterGapTop", appSettings.outerGapTop)
                             onValueModified: root.writeSnappingSetting("OuterGapTop", value, function(v) {
                                 appSettings.outerGapTop = v;
                             })
                             Accessible.name: i18nc("@label", "Top edge gap")
+
+                            Binding on value {
+                                value: root.snappingSettingValue("OuterGapTop", appSettings.outerGapTop)
+                                when: !topGapSpinBox.activeFocus
+                                restoreMode: Binding.RestoreNone
+                            }
+
                         }
 
                         Label {
-                            text: i18nc("@label", "px")
-                        }
-
-                        Label {
-                            text: i18n("Bottom:")
+                            text: i18n("Bottom")
                         }
 
                         SpinBox {
+                            id: bottomGapSpinBox
+
                             from: 0
                             to: root.paddingMax
-                            value: root.snappingSettingValue("OuterGapBottom", appSettings.outerGapBottom)
                             onValueModified: root.writeSnappingSetting("OuterGapBottom", value, function(v) {
                                 appSettings.outerGapBottom = v;
                             })
                             Accessible.name: i18nc("@label", "Bottom edge gap")
+
+                            Binding on value {
+                                value: root.snappingSettingValue("OuterGapBottom", appSettings.outerGapBottom)
+                                when: !bottomGapSpinBox.activeFocus
+                                restoreMode: Binding.RestoreNone
+                            }
+
                         }
 
                         Label {
-                            text: i18nc("@label", "px")
-                        }
-
-                        Label {
-                            text: i18n("Left:")
+                            text: i18n("Left")
                         }
 
                         SpinBox {
+                            id: leftGapSpinBox
+
                             from: 0
                             to: root.paddingMax
-                            value: root.snappingSettingValue("OuterGapLeft", appSettings.outerGapLeft)
                             onValueModified: root.writeSnappingSetting("OuterGapLeft", value, function(v) {
                                 appSettings.outerGapLeft = v;
                             })
                             Accessible.name: i18nc("@label", "Left edge gap")
+
+                            Binding on value {
+                                value: root.snappingSettingValue("OuterGapLeft", appSettings.outerGapLeft)
+                                when: !leftGapSpinBox.activeFocus
+                                restoreMode: Binding.RestoreNone
+                            }
+
                         }
 
                         Label {
-                            text: i18nc("@label", "px")
-                        }
-
-                        Label {
-                            text: i18n("Right:")
+                            text: i18n("Right")
                         }
 
                         SpinBox {
+                            id: rightGapSpinBox
+
                             from: 0
                             to: root.paddingMax
-                            value: root.snappingSettingValue("OuterGapRight", appSettings.outerGapRight)
                             onValueModified: root.writeSnappingSetting("OuterGapRight", value, function(v) {
                                 appSettings.outerGapRight = v;
                             })
                             Accessible.name: i18nc("@label", "Right edge gap")
-                        }
 
-                        Label {
-                            text: i18nc("@label", "px")
+                            Binding on value {
+                                value: root.snappingSettingValue("OuterGapRight", appSettings.outerGapRight)
+                                when: !rightGapSpinBox.activeFocus
+                                restoreMode: Binding.RestoreNone
+                            }
+
                         }
 
                     }
@@ -223,9 +264,9 @@ Flickable {
 
         }
 
-        // =====================================================================
+        // =================================================================
         // ZONE SELECTOR (per-monitor popup configuration)
-        // =====================================================================
+        // =================================================================
         ZoneSelectorSection {
             id: zoneSelectorSection
 
