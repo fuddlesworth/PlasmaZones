@@ -972,6 +972,7 @@ private:
 
     bool m_hasPendingRestores = false; // True if layout has pending restores waiting
     bool m_pendingRestoresEmitted = false; // True if we already emitted pendingRestoresAvailable
+    bool m_shutdownSaveGuard = false; // True after saveStateOnShutdown() to prevent destruction-phase saves
 };
 
 } // namespace PlasmaZones

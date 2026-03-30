@@ -81,6 +81,10 @@ public:
     /// Create the default config backend for the standard plasmazonesrc file.
     static std::unique_ptr<QSettingsConfigBackend> createDefault();
 
+    /// Read config file directly from disk, bypassing Qt's QConfFile cache.
+    /// Returns a QSettings::SettingsMap (QMap<QString, QVariant>) with all keys.
+    static QMap<QString, QVariant> readConfigFromDisk();
+
 private:
     QString m_filePath;
     std::unique_ptr<QSettings> m_settings;

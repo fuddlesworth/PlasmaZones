@@ -279,4 +279,14 @@ std::unique_ptr<QSettingsConfigBackend> QSettingsConfigBackend::createDefault()
     return std::make_unique<QSettingsConfigBackend>(ConfigDefaults::configFilePath());
 }
 
+QMap<QString, QVariant> QSettingsConfigBackend::readConfigFromDisk()
+{
+    QSettings::SettingsMap map;
+    QFile f(ConfigDefaults::configFilePath());
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        readKConfigIni(f, map);
+    }
+    return map;
+}
+
 } // namespace PlasmaZones
