@@ -85,14 +85,17 @@ QVariantList ZoneSelectorController::layouts() const
 {
     // Use shared utility to build filtered layout list for current context
     // and mode-based filtering (manual-only vs autotile-only)
+    // Guard: m_screen may be null after hot-unplug; use empty screenId and
+    // default aspect ratio to avoid dereferencing a stale QPointer.
     QString screenId;
+    qreal aspectRatio = 16.0 / 9.0;
     if (m_screen) {
         screenId = m_screenId;
+        aspectRatio = Utils::screenAspectRatio(m_screen);
     }
     const auto entries = LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
-        m_includeAutotileLayouts, Utils::screenAspectRatio(m_screen),
-        m_settings && m_settings->filterLayoutsByAspectRatio());
+        m_includeAutotileLayouts, aspectRatio, m_settings && m_settings->filterLayoutsByAspectRatio());
     return LayoutUtils::toVariantList(entries);
 }
 
@@ -361,18 +364,15 @@ void ZoneSelectorController::selectLayout(const QString& layoutId)
     setActiveLayoutId(layoutId);
     Q_EMIT layoutSelected(layoutId);
 
-    // Apply layout directly as a defensive fallback. The QML signal chain
-    // (zoneSelected → OverlayService::onZoneSelected → manualLayoutSelected → daemon handler)
-    // is the primary path, but selectLayout() may be called from keyboard navigation
-    // or other controller paths where that chain doesn't apply.
-    if (m_layoutManager) {
-        QUuid uuid = QUuid::fromString(layoutId);
-        if (!uuid.isNull()) {
-            Layout* layout = m_layoutManager->layoutById(uuid);
-            if (layout && layout != m_layoutManager->activeLayout()) {
-                m_layoutManager->setActiveLayout(layout);
-            }
-        }
+    // Layout application is handled by whoever connects to layoutSelected().
+    // The primary path is QML zoneSelected → OverlayService::onZoneSelected →
+    // manualLayoutSelected → daemon handler, which routes through the unified
+    // layout pipeline (per-screen assignments, mode tracking, resnap).
+    // Do NOT call m_layoutManager->setActiveLayout() here — it bypasses that
+    // pipeline and leaves per-screen state, mode tracking, and resnap out of sync.
+    if (!QObject::receivers(SIGNAL(layoutSelected(QString)))) {
+        qCWarning(lcOverlay) << "selectLayout(): no receivers connected to layoutSelected signal"
+                             << "— layout" << layoutId << "will not be applied";
     }
 }
 

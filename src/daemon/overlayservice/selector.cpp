@@ -252,8 +252,9 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                     }
                 }
                 // Cursor is over layout indicator but not on a specific zone
-                // Clear selection if we had one in a different layout
-                if (!m_selectedLayoutId.isEmpty() && m_selectedLayoutId != layoutId) {
+                // Always clear zone selection — the cursor may have moved off a zone
+                // within the same layout, so checking layout ID is not sufficient
+                if (!m_selectedLayoutId.isEmpty() || m_selectedZoneIndex >= 0) {
                     m_selectedLayoutId.clear();
                     m_selectedZoneIndex = -1;
                     m_selectedZoneRelGeo = QRectF();

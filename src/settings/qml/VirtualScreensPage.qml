@@ -107,6 +107,8 @@ Flickable {
 
     // Clamp divider move: ensure both adjacent regions have at least 10%
     function _moveDivider(dividerIndex, newFraction) {
+        // Clamp: don't allow the move — last screen would get negative/tiny width
+
         if (dividerIndex < 0 || dividerIndex >= _pendingScreens.length - 1)
             return ;
 
@@ -127,7 +129,6 @@ Flickable {
         }
         var lastWidth = 1 - total;
         if (lastWidth < minW)
-            // Clamp: don't allow the move — last screen would get negative/tiny width
             return ;
 
         screens[screens.length - 1].width = lastWidth;
@@ -295,13 +296,13 @@ Flickable {
 
                             ColumnLayout {
                                 anchors.centerIn: parent
-                                spacing: 2
+                                spacing: Math.round(Kirigami.Units.smallSpacing / 2)
 
                                 Label {
                                     Layout.alignment: Qt.AlignHCenter
                                     text: modelData.displayName || i18n("Screen %1", index + 1)
                                     font.weight: Font.DemiBold
-                                    font.pixelSize: Math.max(10, Math.min(14, parent.parent.width / 8))
+                                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.7, Math.min(Kirigami.Theme.defaultFont.pixelSize * 1, parent.parent.width / 8))
                                     color: Kirigami.Theme.textColor
                                     elide: Text.ElideRight
                                     maximumLineCount: 1
@@ -310,7 +311,7 @@ Flickable {
                                 Label {
                                     Layout.alignment: Qt.AlignHCenter
                                     text: Math.round(modelData.width * root._screenWidth) + "px · " + Math.round(modelData.width * 100) + "%"
-                                    font.pixelSize: Math.max(9, Math.min(12, parent.parent.width / 10))
+                                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.65, Math.min(Kirigami.Theme.defaultFont.pixelSize * 0.85, parent.parent.width / 10))
                                     color: Kirigami.Theme.disabledTextColor
                                 }
 
@@ -339,6 +340,8 @@ Flickable {
                             y: 0
                             width: 7
                             height: previewRect.height
+                            Accessible.name: i18n("Virtual screen divider %1", index + 1)
+                            Accessible.role: Accessible.Separator
 
                             // Visual divider line
                             Rectangle {
@@ -378,7 +381,7 @@ Flickable {
                                 // Grip dots
                                 Column {
                                     anchors.centerIn: parent
-                                    spacing: 3
+                                    spacing: Math.round(Kirigami.Units.smallSpacing / 2)
 
                                     Repeater {
                                         model: 3
@@ -456,6 +459,7 @@ Flickable {
                         enabled: root._selectedScreen !== ""
                         highlighted: root._matchesPreset([50, 50])
                         onClicked: root._loadPreset([50, 50], [i18n("Left"), i18n("Right")])
+                        Accessible.name: i18n("Preset: %1", text)
                     }
 
                     Button {
@@ -464,6 +468,7 @@ Flickable {
                         enabled: root._selectedScreen !== ""
                         highlighted: root._matchesPreset([60, 40])
                         onClicked: root._loadPreset([60, 40], [i18n("Main"), i18n("Side")])
+                        Accessible.name: i18n("Preset: %1", text)
                     }
 
                     Button {
@@ -472,6 +477,7 @@ Flickable {
                         enabled: root._selectedScreen !== ""
                         highlighted: root._matchesPreset([33.3, 33.4, 33.3])
                         onClicked: root._loadPreset([33.3, 33.4, 33.3], [i18n("Left"), i18n("Center"), i18n("Right")])
+                        Accessible.name: i18n("Preset: %1", text)
                     }
 
                     Button {
@@ -480,6 +486,7 @@ Flickable {
                         enabled: root._selectedScreen !== ""
                         highlighted: root._matchesPreset([40, 20, 40])
                         onClicked: root._loadPreset([40, 20, 40], [i18n("Left"), i18n("Center"), i18n("Right")])
+                        Accessible.name: i18n("Preset: %1", text)
                     }
 
                 }
@@ -519,6 +526,7 @@ Flickable {
                         onValueModified: {
                             root._redistributeEqual(value);
                         }
+                        Accessible.name: i18n("Number of virtual screens")
                     }
 
                     Item {
@@ -533,6 +541,7 @@ Flickable {
                         onClicked: root._redistributeEqual(root._pendingScreens.length)
                         ToolTip.text: i18n("Reset all splits to equal widths")
                         ToolTip.visible: hovered
+                        Accessible.name: i18n("Equalize virtual screen sizes")
                     }
 
                 }
@@ -576,7 +585,7 @@ Flickable {
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 3
                             horizontalAlignment: Text.AlignRight
                             color: Kirigami.Theme.disabledTextColor
-                            font.family: "monospace"
+                            font: Kirigami.Theme.smallFont
                         }
 
                         Label {
@@ -614,6 +623,7 @@ Flickable {
             }
             ToolTip.text: i18n("Remove all virtual screen subdivisions from this monitor")
             ToolTip.visible: hovered
+            Accessible.name: i18n("Remove virtual screen subdivisions")
         }
 
     }

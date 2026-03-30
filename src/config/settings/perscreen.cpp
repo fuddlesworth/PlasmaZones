@@ -78,6 +78,9 @@ constexpr const char* kPerScreenKeys[] = {
     ZoneSelectorConfigKey::TriggerDistance,
 };
 
+// NOTE: These per-screen override key strings intentionally differ from ConfigKeys accessors
+// (e.g. "AutotileAlgorithm" vs ConfigKeys::defaultAutotileAlgorithmKey() = "DefaultAutotileAlgorithm").
+// Adding 20+ new ConfigKeys accessors for per-screen-specific keys is too invasive; tracked as DRY-7.
 constexpr const char* kPerScreenAutotileKeys[] = {
     "AutotileAlgorithm",     "AutotileSplitRatio",         "AutotileMasterCount",       "AutotileInnerGap",
     "AutotileOuterGap",      "AutotileUsePerSideOuterGap", "AutotileOuterGapTop",       "AutotileOuterGapBottom",
@@ -138,6 +141,7 @@ QVariant readPerScreenAutotileEntry(QSettingsConfigGroup& group, const QString& 
     return QVariant(group.readInt(key, 0));
 }
 
+// NOTE: Per-screen snapping override keys — same DRY-7 convention note as kPerScreenAutotileKeys above.
 constexpr const char* kPerScreenSnappingKeys[] = {
     "SnapAssistEnabled",    "ZoneSelectorEnabled",      "ZoneSelectorTriggerDistance",
     "ZoneSelectorPosition", "ZoneSelectorLayoutMode",   "ZoneSelectorSizeMode",

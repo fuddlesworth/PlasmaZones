@@ -416,10 +416,10 @@ QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings
 QString rectToJson(const QRect& rect)
 {
     QJsonObject obj;
-    obj[QStringLiteral("x")] = rect.x();
-    obj[QStringLiteral("y")] = rect.y();
-    obj[QStringLiteral("width")] = rect.width();
-    obj[QStringLiteral("height")] = rect.height();
+    obj[JsonKeys::X] = rect.x();
+    obj[JsonKeys::Y] = rect.y();
+    obj[JsonKeys::Width] = rect.width();
+    obj[JsonKeys::Height] = rect.height();
     return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
 }
 
@@ -431,19 +431,19 @@ QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries)
     QJsonArray array;
     for (const ZoneAssignmentEntry& entry : entries) {
         QJsonObject obj;
-        obj[QStringLiteral("windowId")] = entry.windowId;
-        obj[QStringLiteral("sourceZoneId")] = entry.sourceZoneId;
-        obj[QStringLiteral("targetZoneId")] = entry.targetZoneId;
+        obj[QLatin1String("windowId")] = entry.windowId;
+        obj[QLatin1String("sourceZoneId")] = entry.sourceZoneId;
+        obj[QLatin1String("targetZoneId")] = entry.targetZoneId;
         if (!entry.targetZoneIds.isEmpty()) {
             QJsonArray zoneIdsArr;
             for (const QString& zid : entry.targetZoneIds)
                 zoneIdsArr.append(zid);
-            obj[QStringLiteral("targetZoneIds")] = zoneIdsArr;
+            obj[QLatin1String("targetZoneIds")] = zoneIdsArr;
         }
-        obj[QStringLiteral("x")] = entry.targetGeometry.x();
-        obj[QStringLiteral("y")] = entry.targetGeometry.y();
-        obj[QStringLiteral("width")] = entry.targetGeometry.width();
-        obj[QStringLiteral("height")] = entry.targetGeometry.height();
+        obj[JsonKeys::X] = entry.targetGeometry.x();
+        obj[JsonKeys::Y] = entry.targetGeometry.y();
+        obj[JsonKeys::Width] = entry.targetGeometry.width();
+        obj[JsonKeys::Height] = entry.targetGeometry.height();
         array.append(obj);
     }
     return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));

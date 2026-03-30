@@ -418,46 +418,9 @@ void OverlayService::updateSettings(ISettings* settings)
     // the current configuration.
     syncCavaState();
 
-    // Hide overlay and zone selector on screens/desktops/activities that are now disabled
-    for (const QString& screenId : m_overlayWindows.keys()) {
-        if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
-            if (auto* window = m_overlayWindows.value(screenId)) {
-                window->hide();
-            }
-        }
-    }
-    for (const QString& selectorScreenId : m_zoneSelectorWindows.keys()) {
-        if (isContextDisabled(m_settings, selectorScreenId, m_currentVirtualDesktop, m_currentActivity)) {
-            if (auto* window = m_zoneSelectorWindows.value(selectorScreenId)) {
-                window->hide();
-            }
-        }
-    }
-
-    if (m_visible) {
-        for (const QString& screenId : m_overlayWindows.keys()) {
-            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
-                continue;
-            }
-            QScreen* physScreen = m_overlayPhysScreens.value(screenId);
-            if (physScreen) {
-                updateOverlayWindow(screenId, physScreen);
-            }
-        }
-    }
-
-    // Keep zone selector windows in sync with settings changes (position, layout, sizing).
-    // Without this, changing settings while the selector is visible can leave stale geometry
-    // and anchors, causing corrupted rendering or incorrect window sizing.
-    // Skip disabled screens/desktops/activities.
-    if (!m_zoneSelectorWindows.isEmpty()) {
-        for (const QString& selectorScreenId : m_zoneSelectorWindows.keys()) {
-            if (isContextDisabled(m_settings, selectorScreenId, m_currentVirtualDesktop, m_currentActivity)) {
-                continue;
-            }
-            updateZoneSelectorWindow(selectorScreenId);
-        }
-    }
+    // Hide overlay and zone selector on disabled screens/desktops/activities,
+    // then refresh remaining (non-disabled) windows with the new settings.
+    hideDisabledAndRefresh();
 
     // If the selector was visible but got disabled via settings, hide it immediately.
     if (m_zoneSelectorVisible && m_settings && !m_settings->zoneSelectorEnabled()) {

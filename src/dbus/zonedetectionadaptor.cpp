@@ -41,8 +41,8 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
     }
 
     // Resolve to effective (virtual) screen ID at the cursor position
-    auto* smgr = ScreenManager::instance();
-    QString screenId = smgr ? smgr->effectiveScreenAt(QPoint(x, y)) : QString();
+    auto* mgr = ScreenManager::instance();
+    QString screenId = mgr ? mgr->effectiveScreenAt(QPoint(x, y)) : QString();
     if (screenId.isEmpty()) {
         screenId = Utils::screenIdentifier(screen);
     }
@@ -55,8 +55,7 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
 
     // Use the layout's geometry preference (full screen or available area)
     // Prefer virtual screen geometry when the effective screen ID is a virtual screen
-    auto* smgrRef = ScreenManager::instance();
-    QRect vsRefGeom = smgrRef ? smgrRef->screenGeometry(screenId) : QRect();
+    QRect vsRefGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
     QRectF refGeom = vsRefGeom.isValid() ? GeometryUtils::effectiveScreenGeometry(layout, screenId)
                                          : GeometryUtils::effectiveScreenGeometry(layout, screen);
 
@@ -116,13 +115,13 @@ QString ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& zoneId, co
     int zonePadding = GeometryUtils::getEffectiveZonePadding(zoneLayout, m_settings, resolvedScreenId);
     EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(zoneLayout, m_settings, resolvedScreenId);
     bool useAvail = !(zoneLayout && zoneLayout->useFullScreenGeometry());
-    auto* smgr1 = ScreenManager::instance();
-    QRect vsGeom1 = smgr1 ? smgr1->screenGeometry(resolvedScreenId) : QRect();
-    QRect vsAvailGeom1 = smgr1 ? smgr1->screenAvailableGeometry(resolvedScreenId) : QRect();
+    auto* mgr = ScreenManager::instance();
+    QRect vsGeom = mgr ? mgr->screenGeometry(resolvedScreenId) : QRect();
+    QRect vsAvailGeom = mgr ? mgr->screenAvailableGeometry(resolvedScreenId) : QRect();
     QRectF geom;
-    if (vsGeom1.isValid()) {
-        QRect availGeom1 = vsAvailGeom1.isValid() ? vsAvailGeom1 : vsGeom1;
-        geom = GeometryUtils::getZoneGeometryWithGaps(zone, vsGeom1, availGeom1, zonePadding, outerGaps, useAvail,
+    if (vsGeom.isValid()) {
+        QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
+        geom = GeometryUtils::getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding, outerGaps, useAvail,
                                                       resolvedScreenId);
     } else {
         geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
@@ -165,8 +164,8 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
     }
 
     // Resolve to effective (virtual) screen ID at the cursor position
-    auto* smgr2 = ScreenManager::instance();
-    QString effectiveId = smgr2 ? smgr2->effectiveScreenAt(QPoint(x, y)) : QString();
+    auto* mgr = ScreenManager::instance();
+    QString effectiveId = mgr ? mgr->effectiveScreenAt(QPoint(x, y)) : QString();
     if (effectiveId.isEmpty()) {
         effectiveId = Utils::screenIdentifier(screen);
     }
@@ -178,7 +177,10 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
     }
 
     // Use the layout's geometry preference (full screen or available area)
-    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
+    // Prefer virtual screen geometry when the effective screen ID is a virtual screen
+    QRect vsRefGeom = mgr ? mgr->screenGeometry(effectiveId) : QRect();
+    QRectF refGeom = vsRefGeom.isValid() ? GeometryUtils::effectiveScreenGeometry(layout, effectiveId)
+                                         : GeometryUtils::effectiveScreenGeometry(layout, screen);
     if (refGeom.width() <= 0 || refGeom.height() <= 0) {
         return zoneIds;
     }
@@ -238,8 +240,8 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
     QString resolvedId = screenId.isEmpty()
         ? screenId
         : (VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId));
-    auto* smgr = ScreenManager::instance();
-    QRect vsGeom = smgr ? smgr->screenGeometry(resolvedId) : QRect();
+    auto* mgr = ScreenManager::instance();
+    QRect vsGeom = mgr ? mgr->screenGeometry(resolvedId) : QRect();
     QRectF refGeom;
     if (vsGeom.isValid()) {
         refGeom = GeometryUtils::effectiveScreenGeometry(layout, resolvedId);
@@ -324,8 +326,8 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
 
     // Get reference geometry for normalizedGeometry() (needed for fixed-mode zones)
     // Use virtual-screen-aware resolution: prefer ScreenManager geometry, then fall back to QScreen.
-    auto* smgr = ScreenManager::instance();
-    QRect vsGeom = smgr ? smgr->screenGeometry(resolvedId) : QRect();
+    auto* mgr = ScreenManager::instance();
+    QRect vsGeom = mgr ? mgr->screenGeometry(resolvedId) : QRect();
     QRectF refGeom;
     if (vsGeom.isValid()) {
         refGeom = GeometryUtils::effectiveScreenGeometry(layout, resolvedId);
@@ -432,15 +434,15 @@ QStringList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& screenId)
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, resolvedScreenId);
     EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, resolvedScreenId);
     bool useAvail = !(layout && layout->useFullScreenGeometry());
-    auto* smgr2 = ScreenManager::instance();
-    QRect vsGeom2 = smgr2 ? smgr2->screenGeometry(resolvedScreenId) : QRect();
-    QRect vsAvailGeom2 = smgr2 ? smgr2->screenAvailableGeometry(resolvedScreenId) : QRect();
+    auto* mgr = ScreenManager::instance();
+    QRect vsGeom = mgr ? mgr->screenGeometry(resolvedScreenId) : QRect();
+    QRect vsAvailGeom = mgr ? mgr->screenAvailableGeometry(resolvedScreenId) : QRect();
     for (auto* zone : layout->zones()) {
         // Use geometry with gaps (matches snap behavior)
         QRectF geom;
-        if (vsGeom2.isValid()) {
-            QRect availGeom2 = vsAvailGeom2.isValid() ? vsAvailGeom2 : vsGeom2;
-            geom = GeometryUtils::getZoneGeometryWithGaps(zone, vsGeom2, availGeom2, zonePadding, outerGaps, useAvail,
+        if (vsGeom.isValid()) {
+            QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
+            geom = GeometryUtils::getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding, outerGaps, useAvail,
                                                           resolvedScreenId);
         } else {
             geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);

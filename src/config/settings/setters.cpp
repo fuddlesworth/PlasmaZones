@@ -789,7 +789,6 @@ void Settings::setVirtualScreenConfigs(const QHash<QString, VirtualScreenConfig>
 {
     if (m_virtualScreenConfigs != configs) {
         m_virtualScreenConfigs = configs;
-        save();
         Q_EMIT virtualScreenConfigsChanged();
     }
 }
@@ -805,7 +804,6 @@ void Settings::setVirtualScreenConfig(const QString& physicalScreenId, const Vir
             return;
         m_virtualScreenConfigs.insert(physicalScreenId, config);
     }
-    save();
     Q_EMIT virtualScreenConfigsChanged();
 }
 

@@ -264,6 +264,21 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
         def.displayName = screenObj[QLatin1String("displayName")].toString();
         def.region = QRectF(regionObj[JsonKeys::X].toDouble(), regionObj[JsonKeys::Y].toDouble(),
                             regionObj[JsonKeys::Width].toDouble(), regionObj[JsonKeys::Height].toDouble());
+
+        // Validate region coordinates are within [0.0, 1.0] bounds (relative geometry)
+        constexpr qreal tolerance = 1e-6;
+        const qreal rx = def.region.x();
+        const qreal ry = def.region.y();
+        const qreal rw = def.region.width();
+        const qreal rh = def.region.height();
+        if (rx < -tolerance || ry < -tolerance || rw < -tolerance || rh < -tolerance || rx + rw > 1.0 + tolerance
+            || ry + rh > 1.0 + tolerance) {
+            qCWarning(lcDbus) << "setVirtualScreenConfig: invalid region for virtual screen" << def.index
+                              << "- x:" << rx << "y:" << ry << "w:" << rw << "h:" << rh
+                              << "(must be within [0.0, 1.0])";
+            continue;
+        }
+
         config.screens.append(def);
     }
 

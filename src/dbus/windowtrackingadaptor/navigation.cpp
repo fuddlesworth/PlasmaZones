@@ -10,6 +10,7 @@
 #include "../../core/layout.h"
 #include "../../core/screenmanager.h"
 #include "../../core/utils.h"
+#include "../../core/virtualscreen.h"
 
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -38,8 +39,18 @@ static QString resolveNavScreen(const WindowTrackingAdaptor* adaptor, const QStr
     QString zoneId = service->zoneForWindow(windowId);
     if (!zoneId.isEmpty()) {
         QString storedScreen = service->screenAssignments().value(windowId);
-        if (!storedScreen.isEmpty() && Utils::findScreenByIdOrName(storedScreen)) {
-            return storedScreen;
+        if (!storedScreen.isEmpty()) {
+            // For virtual screen IDs, verify the backing physical screen exists
+            if (VirtualScreenId::isVirtual(storedScreen)) {
+                QString physId = VirtualScreenId::extractPhysicalId(storedScreen);
+                QScreen* physScreen = Utils::findScreenByIdOrName(physId);
+                if (physScreen) {
+                    return storedScreen; // Virtual screen is valid, return as-is
+                }
+                // Physical screen gone, fall through to cursor-based resolution
+            } else if (Utils::findScreenByIdOrName(storedScreen)) {
+                return storedScreen;
+            }
         }
     }
     // Cursor screen (primary), active-window screen (fallback)

@@ -10,6 +10,7 @@
 #include "../../core/utils.h"
 #include "../../core/constants.h"
 #include "../../core/screenmanager.h"
+#include "../../core/virtualscreen.h"
 #include "../../autotile/AlgorithmRegistry.h"
 #include "../../autotile/TilingAlgorithm.h"
 #include <QJsonDocument>
@@ -130,9 +131,29 @@ QString LayoutAdaptor::getAllScreenAssignments()
     QJsonObject root;
     const int desktopCount = getVirtualDesktopCount();
 
-    for (QScreen* screen : Utils::allScreens()) {
-        QString connectorName = screen->name();
-        QString screenId = Utils::screenIdentifier(screen);
+    // Use effective screen IDs (includes virtual screens when configured)
+    // so the KCM sees one entry per virtual screen, not per physical monitor.
+    auto* mgr = ScreenManager::instance();
+    const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
+
+    QStringList screenIds;
+    if (!effectiveIds.isEmpty()) {
+        screenIds = effectiveIds;
+    } else {
+        for (QScreen* screen : Utils::allScreens()) {
+            screenIds.append(Utils::screenIdentifier(screen));
+        }
+    }
+
+    for (const QString& screenId : std::as_const(screenIds)) {
+        // Derive connector name for the JSON key (KCM compatibility)
+        QScreen* physScreen = Utils::findScreenByIdOrName(
+            VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId);
+        QString connectorName = physScreen ? physScreen->name() : screenId;
+        // For virtual screens, append the virtual screen ID suffix to keep keys unique
+        if (VirtualScreenId::isVirtual(screenId)) {
+            connectorName = screenId;
+        }
         QJsonObject screenObj;
 
         // Explicit assignment entry with mode, snappingLayout, tilingAlgorithm

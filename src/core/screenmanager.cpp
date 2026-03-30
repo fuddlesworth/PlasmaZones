@@ -497,6 +497,9 @@ void ScreenManager::disconnectScreenSignals(QScreen* screen)
 void ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config)
 {
     if (config.isEmpty()) {
+        if (!m_virtualConfigs.contains(physicalScreenId)) {
+            return;
+        }
         m_virtualConfigs.remove(physicalScreenId);
         invalidateVirtualGeometryCache(physicalScreenId);
         Q_EMIT virtualScreensChanged(physicalScreenId);
@@ -536,6 +539,10 @@ void ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
                 return;
             }
         }
+    }
+
+    if (m_virtualConfigs.value(physicalScreenId) == config) {
+        return;
     }
 
     m_virtualConfigs.insert(physicalScreenId, config);
@@ -618,7 +625,9 @@ QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
         QRect result = vsGeom.intersected(physAvail);
         // If panel consumes most of the virtual screen, fall back to full virtual geometry
         // to avoid zero/unusable available areas
-        if (!result.isValid() || result.width() < 100 || result.height() < 100) {
+        static constexpr int MinUsableScreenDimension = 100;
+        if (!result.isValid() || result.width() < MinUsableScreenDimension
+            || result.height() < MinUsableScreenDimension) {
             return vsGeom;
         }
         return result;
@@ -667,25 +676,8 @@ VirtualScreenDef::PhysicalEdges ScreenManager::physicalEdgesFor(const QString& s
 
 QString ScreenManager::virtualScreenAt(const QPoint& globalPos, const QString& physicalScreenId) const
 {
-    if (!m_virtualConfigs.contains(physicalScreenId)) {
-        return {};
-    }
-
-    const auto& config = m_virtualConfigs.value(physicalScreenId);
     QScreen* screen = Utils::findScreenByIdOrName(physicalScreenId);
-    if (!screen) {
-        return {};
-    }
-
-    QRect physGeom = screen->geometry();
-    for (const auto& vs : config.screens) {
-        QRect absGeom = vs.absoluteGeometry(physGeom);
-        if (absGeom.contains(globalPos)) {
-            return vs.id;
-        }
-    }
-
-    return {};
+    return virtualScreenAtWithScreen(globalPos, physicalScreenId, screen);
 }
 
 QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const QString& physicalScreenId,

@@ -146,8 +146,8 @@ QVector<WindowDragAdaptor::ParsedTrigger> WindowDragAdaptor::parseTriggers(const
     for (const auto& t : triggers) {
         const auto map = t.toMap();
         ParsedTrigger pt;
-        pt.modifier = map.value(QStringLiteral("modifier"), 0).toInt();
-        pt.mouseButton = map.value(QStringLiteral("mouseButton"), 0).toInt();
+        pt.modifier = map.value(ConfigDefaults::triggerModifierField(), 0).toInt();
+        pt.mouseButton = map.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt();
         result.append(pt);
     }
     return result;

@@ -389,7 +389,12 @@ void SettingsController::save()
                                         screenData.value(QStringLiteral("y")).toDouble(),
                                         screenData.value(QStringLiteral("width")).toDouble(),
                                         screenData.value(QStringLiteral("height")).toDouble());
-                    def.id = it.key() + VirtualScreenId::Separator + QString::number(i);
+                    def.id = VirtualScreenId::make(it.key(), i);
+                    if (!def.isValid()) {
+                        qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << it.key() << "index" << i
+                                            << "region:" << def.region;
+                        continue;
+                    }
                     vsConfig.screens.append(def);
                 }
             }
