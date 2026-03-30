@@ -30,8 +30,16 @@ void Settings::loadActivationConfig(QSettingsConfigGroup& activation)
     }
     m_zoneSpanModifier = static_cast<DragModifier>(spanMod);
 
-    m_zoneSpanTriggers = parseTriggerListJson(activation.readString(ConfigDefaults::zoneSpanTriggersKey()))
-                             .value_or(ConfigDefaults::zoneSpanTriggers());
+    auto parsedSpanTriggers = parseTriggerListJson(activation.readString(ConfigDefaults::zoneSpanTriggersKey()));
+    if (parsedSpanTriggers.has_value()) {
+        m_zoneSpanTriggers = *parsedSpanTriggers;
+    } else {
+        // No valid JSON — build default trigger from the actual spanMod value read above
+        QVariantMap trigger;
+        trigger[ConfigDefaults::triggerModifierField()] = spanMod;
+        trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
+        m_zoneSpanTriggers = {trigger};
+    }
 
     m_toggleActivation = activation.readBool(ConfigDefaults::toggleActivationKey(), ConfigDefaults::toggleActivation());
     m_snappingEnabled = activation.readBool(ConfigDefaults::snappingEnabledKey(), ConfigDefaults::snappingEnabled());
@@ -278,7 +286,7 @@ void Settings::loadShortcutConfig(QSettingsConfigGroup& globalShortcuts)
         ConfigDefaults::quickLayout5Shortcut(), ConfigDefaults::quickLayout6Shortcut(),
         ConfigDefaults::quickLayout7Shortcut(), ConfigDefaults::quickLayout8Shortcut(),
         ConfigDefaults::quickLayout9Shortcut()};
-    loadIndexedShortcuts(globalShortcuts, QStringLiteral("QuickLayout%1Shortcut"), m_quickLayoutShortcuts,
+    loadIndexedShortcuts(globalShortcuts, ConfigDefaults::quickLayoutShortcutKeyPattern(), m_quickLayoutShortcuts,
                          quickLayoutDefaults);
     m_moveWindowLeftShortcut = globalShortcuts.readString(ConfigDefaults::moveWindowLeftShortcutKey(),
                                                           ConfigDefaults::moveWindowLeftShortcut());
@@ -315,7 +323,8 @@ void Settings::loadShortcutConfig(QSettingsConfigGroup& globalShortcuts)
                                            ConfigDefaults::snapToZone5Shortcut(), ConfigDefaults::snapToZone6Shortcut(),
                                            ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
                                            ConfigDefaults::snapToZone9Shortcut()};
-    loadIndexedShortcuts(globalShortcuts, QStringLiteral("SnapToZone%1"), m_snapToZoneShortcuts, snapToZoneDefaults);
+    loadIndexedShortcuts(globalShortcuts, ConfigDefaults::snapToZoneShortcutKeyPattern(), m_snapToZoneShortcuts,
+                         snapToZoneDefaults);
     m_rotateWindowsClockwiseShortcut = globalShortcuts.readString(ConfigDefaults::rotateWindowsClockwiseShortcutKey(),
                                                                   ConfigDefaults::rotateWindowsClockwiseShortcut());
     m_rotateWindowsCounterclockwiseShortcut =
@@ -376,9 +385,8 @@ void Settings::loadAutotilingConfig(QSettingsConfigBackend* backend)
     }
     m_autotileMasterCount = masterCount;
 
-    // Load per-algorithm settings map (with backwards compat for centered-master fields)
-    const QString perAlgoStr =
-        autotiling->readString(ConfigDefaults::autotilePerAlgorithmSettingsKey(), QStringLiteral(""));
+    // Load per-algorithm settings map
+    const QString perAlgoStr = autotiling->readString(ConfigDefaults::autotilePerAlgorithmSettingsKey(), QString());
     if (!perAlgoStr.isEmpty()) {
         // Deserialize JSON → QVariantMap → QHash → QVariantMap: the round-trip
         // through perAlgoFromVariantMap sanitizes/clamps values before storing.

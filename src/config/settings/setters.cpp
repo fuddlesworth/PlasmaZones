@@ -33,12 +33,12 @@ void Settings::setZoneSpanModifier(DragModifier modifier)
         // Keep triggers in sync: update first trigger's modifier to match
         if (!m_zoneSpanTriggers.isEmpty()) {
             auto first = m_zoneSpanTriggers.first().toMap();
-            first[QStringLiteral("modifier")] = static_cast<int>(modifier);
+            first[ConfigDefaults::triggerModifierField()] = static_cast<int>(modifier);
             m_zoneSpanTriggers[0] = first;
         } else {
             QVariantMap trigger;
-            trigger[QStringLiteral("modifier")] = static_cast<int>(modifier);
-            trigger[QStringLiteral("mouseButton")] = 0;
+            trigger[ConfigDefaults::triggerModifierField()] = static_cast<int>(modifier);
+            trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
             m_zoneSpanTriggers = {trigger};
         }
         Q_EMIT zoneSpanModifierChanged();
@@ -55,7 +55,7 @@ void Settings::setZoneSpanTriggers(const QVariantList& triggers)
         // Sync legacy zoneSpanModifier from first trigger with a non-zero modifier
         DragModifier synced = DragModifier::Disabled;
         for (const auto& t : capped) {
-            int mod = t.toMap().value(QStringLiteral("modifier"), 0).toInt();
+            int mod = t.toMap().value(ConfigDefaults::triggerModifierField(), 0).toInt();
             if (mod != 0) {
                 synced = static_cast<DragModifier>(qBound(0, mod, static_cast<int>(DragModifier::CtrlAltMeta)));
                 break;

@@ -293,6 +293,57 @@ private Q_SLOTS:
         QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3);
         QCOMPARE(first.value(QStringLiteral("mouseButton")).toInt(), 0);
     }
+
+    /**
+     * When DragActivationTriggers contains corrupt/malformed JSON, load should
+     * fall back to the default trigger list rather than crashing.
+     */
+    void testLoadActivation_corruptJsonUsesDefault()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto activation = backend->group(QStringLiteral("Activation"));
+            activation->writeString(QStringLiteral("DragActivationTriggers"), QStringLiteral("{not valid json!}"));
+            activation.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+
+        QVariantList triggers = settings.dragActivationTriggers();
+        QVERIFY2(!triggers.isEmpty(), "Corrupt JSON must fall back to defaults");
+        QVariantMap first = triggers.first().toMap();
+        QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3);
+        QCOMPARE(first.value(QStringLiteral("mouseButton")).toInt(), 0);
+    }
+
+    /**
+     * When ZoneSpanModifier is set but ZoneSpanTriggers JSON is absent,
+     * the fallback trigger should use the actual ZoneSpanModifier value,
+     * not the static default.
+     */
+    void testLoadActivation_zoneSpanTriggersUsesActualModifier()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto activation = backend->group(QStringLiteral("Activation"));
+            activation->writeInt(QStringLiteral("ZoneSpanModifier"), 3); // Alt
+            // Deliberately do NOT write ZoneSpanTriggers
+            activation.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+
+        QVariantList triggers = settings.zoneSpanTriggers();
+        QVERIFY2(!triggers.isEmpty(), "Missing ZoneSpanTriggers must create trigger from ZoneSpanModifier value");
+        QVariantMap first = triggers.first().toMap();
+        QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3);
+    }
 };
 
 QTEST_MAIN(TestSettingsCore)

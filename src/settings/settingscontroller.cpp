@@ -1472,9 +1472,9 @@ QVariantList SettingsController::convertTriggersForQml(const QVariantList& trigg
     for (const auto& t : triggers) {
         auto map = t.toMap();
         QVariantMap converted;
-        converted[QStringLiteral("modifier")] =
-            ModifierUtils::dragModifierToBitmask(map.value(QStringLiteral("modifier"), 0).toInt());
-        converted[QStringLiteral("mouseButton")] = map.value(QStringLiteral("mouseButton"), 0);
+        converted[ConfigDefaults::triggerModifierField()] =
+            ModifierUtils::dragModifierToBitmask(map.value(ConfigDefaults::triggerModifierField(), 0).toInt());
+        converted[ConfigDefaults::triggerMouseButtonField()] = map.value(ConfigDefaults::triggerMouseButtonField(), 0);
         result.append(converted);
     }
     return result;
@@ -1486,9 +1486,9 @@ QVariantList SettingsController::convertTriggersForStorage(const QVariantList& t
     for (const auto& t : triggers) {
         auto map = t.toMap();
         QVariantMap stored;
-        stored[QStringLiteral("modifier")] =
-            ModifierUtils::bitmaskToDragModifier(map.value(QStringLiteral("modifier"), 0).toInt());
-        stored[QStringLiteral("mouseButton")] = map.value(QStringLiteral("mouseButton"), 0);
+        stored[ConfigDefaults::triggerModifierField()] =
+            ModifierUtils::bitmaskToDragModifier(map.value(ConfigDefaults::triggerModifierField(), 0).toInt());
+        stored[ConfigDefaults::triggerMouseButtonField()] = map.value(ConfigDefaults::triggerMouseButtonField(), 0);
         result.append(stored);
     }
     return result;
@@ -1503,7 +1503,7 @@ bool SettingsController::alwaysActivateOnDrag() const
     const int alwaysActive = static_cast<int>(DragModifier::AlwaysActive);
     const auto triggers = m_settings.dragActivationTriggers();
     for (const auto& t : triggers) {
-        if (t.toMap().value(QStringLiteral("modifier"), 0).toInt() == alwaysActive) {
+        if (t.toMap().value(ConfigDefaults::triggerModifierField(), 0).toInt() == alwaysActive) {
             return true;
         }
     }
@@ -1566,8 +1566,8 @@ void SettingsController::setAlwaysActivateOnDrag(bool enabled)
     if (enabled) {
         // Single AlwaysActive trigger -- written directly in storage format (DragModifier enum)
         QVariantMap trigger;
-        trigger[QStringLiteral("modifier")] = static_cast<int>(DragModifier::AlwaysActive);
-        trigger[QStringLiteral("mouseButton")] = 0;
+        trigger[ConfigDefaults::triggerModifierField()] = static_cast<int>(DragModifier::AlwaysActive);
+        trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
         m_settings.setDragActivationTriggers({trigger});
     } else {
         // Revert to default triggers

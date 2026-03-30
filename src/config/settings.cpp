@@ -95,8 +95,8 @@ std::optional<QVariantList> Settings::parseTriggerListJson(const QString& json)
         if (val.isObject()) {
             QJsonObject obj = val.toObject();
             QVariantMap trigger;
-            trigger[QStringLiteral("modifier")] = obj.value(QLatin1String("modifier")).toInt(0);
-            trigger[QStringLiteral("mouseButton")] = obj.value(QLatin1String("mouseButton")).toInt(0);
+            trigger[ConfigDefaults::triggerModifierField()] = obj.value(QLatin1String("modifier")).toInt(0);
+            trigger[ConfigDefaults::triggerMouseButtonField()] = obj.value(QLatin1String("mouseButton")).toInt(0);
             result.append(trigger);
         } else {
             qCWarning(lcConfig) << "Trigger array: non-object element at index" << result.size() << ", skipping";
@@ -114,8 +114,8 @@ void Settings::saveTriggerList(QSettingsConfigGroup& group, const QString& key, 
     for (const QVariant& t : triggers) {
         auto map = t.toMap();
         QJsonObject obj;
-        obj[QLatin1String("modifier")] = map.value(QStringLiteral("modifier"), 0).toInt();
-        obj[QLatin1String("mouseButton")] = map.value(QStringLiteral("mouseButton"), 0).toInt();
+        obj[QLatin1String("modifier")] = map.value(ConfigDefaults::triggerModifierField(), 0).toInt();
+        obj[QLatin1String("mouseButton")] = map.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt();
         arr.append(obj);
     }
     group.writeString(key, QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));

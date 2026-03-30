@@ -3,6 +3,7 @@
 
 #include "plasmazoneseffect.h"
 
+#include "../src/config/configkeys.h"
 #include <algorithm>
 #include <memory>
 #include <QBuffer>
@@ -1389,8 +1390,8 @@ void PlasmaZonesEffect::loadCachedSettings()
                     map = t.toMap();
                 }
                 ParsedTrigger pt;
-                pt.modifier = map.value(QStringLiteral("modifier"), 0).toInt();
-                pt.mouseButton = map.value(QStringLiteral("mouseButton"), 0).toInt();
+                pt.modifier = map.value(PlasmaZones::ConfigKeys::triggerModifierField(), 0).toInt();
+                pt.mouseButton = map.value(PlasmaZones::ConfigKeys::triggerMouseButtonField(), 0).toInt();
                 m_parsedTriggers.append(pt);
             }
 
