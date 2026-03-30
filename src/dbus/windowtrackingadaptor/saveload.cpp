@@ -123,9 +123,6 @@ void WindowTrackingAdaptor::saveState()
     tracking->writeString(QStringLiteral("PreTileGeometriesFull"),
                           serializeGeometryMapFull(m_service->preTileGeometries()));
     tracking->writeString(QStringLiteral("PreTileGeometries"), serializeGeometryMap(m_service->preTileGeometries()));
-    // Remove old split keys if present (migration)
-    tracking->deleteKey(QStringLiteral("PreSnapGeometries"));
-    tracking->deleteKey(QStringLiteral("PreAutotileGeometries"));
 
     // Save last used zone info (from service)
     tracking->writeString(QStringLiteral("LastUsedZoneId"), m_service->lastUsedZoneId());
@@ -444,10 +441,6 @@ void WindowTrackingAdaptor::loadState()
                 preTileGeometries[it.key()] = it.value();
             }
         }
-    } else if (preTileGeometries.isEmpty()) {
-        // Migration: merge old split keys
-        loadGeometries(readVal(QStringLiteral("PreAutotileGeometries"), QString()), preTileGeometries);
-        loadGeometries(readVal(QStringLiteral("PreSnapGeometries"), QString()), preTileGeometries);
     }
     m_service->setPreTileGeometries(preTileGeometries);
 
