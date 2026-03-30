@@ -60,7 +60,7 @@ ColumnLayout {
         onViewModeRequested: (mode) => {
             root.viewMode = mode;
             layoutGrid.selectedLayoutId = "";
-            layoutGrid.rebuildModel();
+            // rebuildModel() already triggered by filterBar.onViewModeChanged → loadState → filterSettingsChanged
             layoutGrid.selectDefaultLayout(mode);
         }
     }
@@ -125,18 +125,25 @@ ColumnLayout {
                         return a.supportsMasterCount === true;
                     }
                 }, {
+                    "key": "splitRatio",
+                    "label": i18n("Split Ratio"),
+                    "order": 1,
+                    "test": (a) => {
+                        return a.supportsSplitRatio === true;
+                    }
+                }, {
                     "key": "overlapping",
                     "label": i18n("Overlapping Zones"),
-                    "order": 1,
+                    "order": 2,
                     "test": (a) => {
                         return a.producesOverlappingZones === true;
                     }
                 }, {
-                    "key": "splitRatio",
-                    "label": i18n("Split Ratio"),
-                    "order": 2,
+                    "key": "persistent",
+                    "label": i18n("Persistent (Memory)"),
+                    "order": 3,
                     "test": (a) => {
-                        return a.supportsSplitRatio === true;
+                        return a.memory === true;
                     }
                 }]
 
@@ -346,7 +353,7 @@ ColumnLayout {
         id: importDialog
 
         title: i18n("Import Layout")
-        nameFilters: [i18n("JSON files (*.json)"), i18n("All files (*)")]
+        nameFilters: [i18n("JSON files") + " (*.json)", i18n("All files") + " (*)"]
         fileMode: FileDialog.OpenFile
         onAccepted: {
             settingsController.importLayout(root.filePathFromUrl(selectedFile));
@@ -360,7 +367,7 @@ ColumnLayout {
         property string layoutId: ""
 
         title: i18n("Export Layout")
-        nameFilters: [i18n("JSON files (*.json)")]
+        nameFilters: [i18n("JSON files") + " (*.json)"]
         fileMode: FileDialog.SaveFile
         onAccepted: {
             settingsController.exportLayout(exportDialog.layoutId, root.filePathFromUrl(selectedFile));
@@ -372,7 +379,7 @@ ColumnLayout {
         id: algorithmImportDialog
 
         title: i18n("Import Tiling Algorithm")
-        nameFilters: [i18n("JavaScript files (*.js)"), i18n("All files (*)")]
+        nameFilters: [i18n("JavaScript files") + " (*.js)", i18n("All files") + " (*)"]
         fileMode: FileDialog.OpenFile
         onAccepted: {
             if (settingsController.importAlgorithm(root.filePathFromUrl(selectedFile))) {
@@ -388,7 +395,7 @@ ColumnLayout {
         id: kzonesFileDialog
 
         title: i18n("Import KZones Layout File")
-        nameFilters: [i18n("JSON files (*.json)"), i18n("All files (*)")]
+        nameFilters: [i18n("JSON files") + " (*.json)", i18n("All files") + " (*)"]
         fileMode: FileDialog.OpenFile
         onAccepted: {
             settingsController.importFromKZonesFile(root.filePathFromUrl(selectedFile));
@@ -479,7 +486,7 @@ ColumnLayout {
         property string algorithmId: ""
 
         title: i18n("Export Algorithm")
-        nameFilters: [i18n("JavaScript files (*.js)")]
+        nameFilters: [i18n("JavaScript files") + " (*.js)"]
         fileMode: FileDialog.SaveFile
         onAccepted: {
             settingsController.exportAlgorithm(algorithmExportDialog.algorithmId, root.filePathFromUrl(selectedFile));
