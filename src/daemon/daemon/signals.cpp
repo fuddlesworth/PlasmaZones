@@ -613,6 +613,13 @@ void Daemon::finalizeStartup()
     // Signal that daemon is fully initialized and ready for queries
     Q_EMIT m_layoutAdaptor->daemonReady();
 
+    // Explicitly broadcast settingsChanged so the KWin effect re-fetches all
+    // settings (including activation triggers) after daemonReady.  The effect's
+    // initial async getSetting() calls can race with daemon construction and
+    // return stale/empty values; this second broadcast guarantees a clean load.
+    if (m_settingsAdaptor)
+        Q_EMIT m_settingsAdaptor->settingsChanged();
+
     // Show the layout OSD on ALL screens so the user sees what's assigned everywhere.
     // The layoutApplied signal only fires for the focused screen; this covers the rest.
     if (m_settings && m_settings->showOsdOnLayoutSwitch() && m_layoutManager && m_screenManager) {

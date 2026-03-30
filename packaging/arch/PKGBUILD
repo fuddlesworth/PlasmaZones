@@ -29,6 +29,8 @@ makedepends=(
     'qt6-tools'
     'kwin'
     'wayland'
+    'vulkan-headers'
+    'vulkan-icd-loader'
 )
 optdepends=(
     'plasma-activities: activity-based layouts'

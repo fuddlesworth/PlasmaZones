@@ -111,6 +111,7 @@ set(plasmazones_core_SRCS
     config/settings/setters.cpp
     config/settings/perscreen.cpp
     config/settings.h
+    config/configdefaults.cpp
     config/configbackend_qsettings.h
     config/configbackend_qsettings.cpp
     config/colorimporter.cpp
@@ -223,6 +224,7 @@ target_sources(plasmazones_core PRIVATE
 set_source_files_properties(
     core/qpa/layershellintegration.cpp
     core/qpa/layershellwindow.cpp
+    config/configdefaults.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 target_include_directories(plasmazones_core PRIVATE ${_pz_gen_dir})

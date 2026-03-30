@@ -11,6 +11,7 @@
 #include <QtCore/qnamespace.h>
 
 #include "../core/constants.h"
+#include "plasmazones_export.h"
 
 namespace PlasmaZones {
 
@@ -31,10 +32,6 @@ public:
     // Activation Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    static bool shiftDrag()
-    {
-        return true;
-    }
     static int dragActivationModifier()
     {
         return 3;
@@ -552,6 +549,87 @@ public:
     static constexpr int gridColumnsMax()
     {
         return 10;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static QString generalGroup()
+    {
+        return QStringLiteral("General");
+    }
+    static QString renderingBackendKey()
+    {
+        return QStringLiteral("RenderingBackend");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Path
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Returns the absolute path to plasmazonesrc.
+    // Not cached — QStandardPaths respects $XDG_CONFIG_HOME changes at runtime,
+    // which tests rely on via IsolatedConfigGuard.
+    PLASMAZONES_EXPORT static QString configFilePath();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Rendering Settings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static QString renderingBackend()
+    {
+        return QStringLiteral("auto");
+    }
+
+    struct RenderingBackendEntry
+    {
+        QString key;
+        QString displayName;
+    };
+
+    // Single source of truth for backend keys and display names.
+    // Order here determines ComboBox order in the settings UI.
+    // When adding entries, also add the display name to the translation catalog.
+    static const QList<RenderingBackendEntry>& renderingBackendEntries()
+    {
+        static const QList<RenderingBackendEntry> entries = {
+            {QStringLiteral("auto"), QStringLiteral("Automatic")},
+            {QStringLiteral("vulkan"), QStringLiteral("Vulkan")},
+            {QStringLiteral("opengl"), QStringLiteral("OpenGL")},
+        };
+        return entries;
+    }
+
+    static const QStringList& renderingBackendOptions()
+    {
+        static const QStringList keys = [] {
+            QStringList k;
+            for (const auto& e : renderingBackendEntries())
+                k.append(e.key);
+            return k;
+        }();
+        return keys;
+    }
+
+    // Untranslated display names — use for translation source only.
+    // SettingsController translates these via PzI18n::tr() at runtime.
+    static QStringList renderingBackendDisplayNames()
+    {
+        QStringList names;
+        for (const auto& e : renderingBackendEntries())
+            names.append(e.displayName);
+        return names;
+    }
+
+    static QString normalizeRenderingBackend(const QString& raw)
+    {
+        const QString normalized = raw.toLower().trimmed();
+        for (const auto& e : renderingBackendEntries()) {
+            if (e.key == normalized)
+                return normalized;
+        }
+        return renderingBackend();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -8,6 +8,7 @@
 #pragma once
 
 #include "../config/configdefaults.h"
+#include "../pz_i18n.h"
 #include "../config/settings.h"
 #include "../config/updatechecker.h"
 #include "../common/daemoncontroller.h"
@@ -80,6 +81,11 @@ class SettingsController : public QObject
     Q_PROPERTY(QVariantList snapAssistTriggers READ snapAssistTriggers WRITE setSnapAssistTriggers NOTIFY
                    snapAssistTriggersChanged)
     Q_PROPERTY(QVariantList defaultSnapAssistTriggers READ defaultSnapAssistTriggers CONSTANT)
+
+    // Rendering backend info
+    Q_PROPERTY(QStringList renderingBackendOptions READ renderingBackendOptions CONSTANT)
+    Q_PROPERTY(QStringList renderingBackendDisplayNames READ renderingBackendDisplayNames CONSTANT)
+    Q_PROPERTY(QString startupRenderingBackend READ startupRenderingBackend CONSTANT)
 
     // Cava detection
     Q_PROPERTY(bool cavaAvailable READ cavaAvailable CONSTANT)
@@ -336,6 +342,24 @@ public:
     void setDragActivationTriggers(const QVariantList& triggers);
     void setZoneSpanTriggers(const QVariantList& triggers);
     void setSnapAssistTriggers(const QVariantList& triggers);
+
+    // ── Rendering backend ─────────────────────────────────────────────────────
+    QStringList renderingBackendOptions() const
+    {
+        return PlasmaZones::ConfigDefaults::renderingBackendOptions();
+    }
+
+    QStringList renderingBackendDisplayNames() const
+    {
+        return m_renderingBackendDisplayNames;
+    }
+
+    // Backend value at settings app launch — survives page recreation so the
+    // "restart required" InlineMessage stays visible after navigating away and back.
+    QString startupRenderingBackend() const
+    {
+        return m_startupRenderingBackend;
+    }
 
     // ── Cava detection ───────────────────────────────────────────────────────
     bool cavaAvailable() const;
@@ -621,6 +645,8 @@ private:
     static QVariantList convertTriggersForStorage(const QVariantList& triggers);
 
     Settings m_settings;
+    QStringList m_renderingBackendDisplayNames;
+    QString m_startupRenderingBackend;
     DaemonController m_daemonController;
     UpdateChecker m_updateChecker;
     QString m_dismissedUpdateVersion;

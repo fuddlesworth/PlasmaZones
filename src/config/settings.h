@@ -34,8 +34,6 @@ public:
     static constexpr int MaxTriggersPerAction = 4;
 
     // Activation settings
-    Q_PROPERTY(bool shiftDragToActivate READ shiftDragToActivate WRITE setShiftDragToActivate NOTIFY
-                   shiftDragToActivateChanged)
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
                    dragActivationTriggersChanged)
     Q_PROPERTY(bool zoneSpanEnabled READ zoneSpanEnabled WRITE setZoneSpanEnabled NOTIFY zoneSpanEnabledChanged)
@@ -240,6 +238,9 @@ public:
     Q_PROPERTY(QString autotileRetileShortcut READ autotileRetileShortcut WRITE setAutotileRetileShortcut NOTIFY
                    autotileRetileShortcutChanged)
 
+    // Rendering
+    Q_PROPERTY(QString renderingBackend READ renderingBackend WRITE setRenderingBackend NOTIFY renderingBackendChanged)
+
     // Shader Effects
     Q_PROPERTY(bool enableShaderEffects READ enableShaderEffects WRITE setEnableShaderEffects NOTIFY
                    enableShaderEffectsChanged)
@@ -368,12 +369,6 @@ public:
     // No singleton - use dependency injection instead
 
     // ISettings interface implementation
-    bool shiftDragToActivate() const override
-    {
-        return m_shiftDragToActivate;
-    }
-    void setShiftDragToActivate(bool enable) override;
-
     QVariantList dragActivationTriggers() const override
     {
         return m_dragActivationTriggers;
@@ -1091,6 +1086,13 @@ public:
     void setContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity,
                           bool locked) override;
 
+    // Rendering (ISettings)
+    QString renderingBackend() const override
+    {
+        return m_renderingBackend;
+    }
+    void setRenderingBackend(const QString& backend) override;
+
     // Shader Effects
     bool enableShaderEffects() const override
     {
@@ -1550,7 +1552,6 @@ private:
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Activation
-    bool m_shiftDragToActivate = ConfigDefaults::shiftDrag(); // Deprecated - kept for migration
     QVariantList m_dragActivationTriggers; // [{modifier: int, mouseButton: int}, ...]
     bool m_zoneSpanEnabled = ConfigDefaults::zoneSpanEnabled();
     DragModifier m_zoneSpanModifier = DragModifier::Ctrl;
@@ -1693,6 +1694,9 @@ private:
     QString m_autotileIncMasterCountShortcut = ConfigDefaults::autotileIncMasterCountShortcut();
     QString m_autotileDecMasterCountShortcut = ConfigDefaults::autotileDecMasterCountShortcut();
     QString m_autotileRetileShortcut = ConfigDefaults::autotileRetileShortcut();
+
+    // Rendering
+    QString m_renderingBackend = ConfigDefaults::renderingBackend();
 
     // Shader Effects
     bool m_enableShaderEffects = ConfigDefaults::enableShaderEffects();

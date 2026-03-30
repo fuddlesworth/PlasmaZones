@@ -20,9 +20,9 @@
 namespace PlasmaZones {
 
 /**
- * @brief QSGRenderNode for zone overlay rendering via Qt RHI (OpenGL)
+ * @brief QSGRenderNode for zone overlay rendering via Qt RHI (Vulkan / OpenGL)
  *
- * Uses QRhi and QShaderBaker (runtime GLSL 330 bake). Requires Qt 6.6+
+ * Uses QRhi and QShaderBaker (runtime SPIR-V + GLSL 330 bake). Requires Qt 6.6+
  * (commandBuffer(), renderTarget()).
  */
 class ZoneShaderNodeRhi : public ZoneShaderNodeBase

@@ -34,7 +34,8 @@ jobs:
             kwin \
             kconfig kconfigwidgets \
             kcmutils kglobalaccel kirigami \
-            qt6-wayland wayland plasma-activities
+            qt6-wayland wayland plasma-activities \
+            vulkan-headers vulkan-icd-loader
 
       - name: Configure
         run: |

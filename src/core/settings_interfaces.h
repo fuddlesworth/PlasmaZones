@@ -66,8 +66,6 @@ class PLASMAZONES_EXPORT IZoneActivationSettings
 public:
     virtual ~IZoneActivationSettings() = default;
 
-    virtual bool shiftDragToActivate() const = 0;
-    virtual void setShiftDragToActivate(bool enable) = 0;
     virtual QVariantList dragActivationTriggers() const = 0;
     virtual void setDragActivationTriggers(const QVariantList& triggers) = 0;
     virtual bool zoneSpanEnabled() const = 0;

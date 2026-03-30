@@ -101,7 +101,6 @@ Window {
     }
 
     // Window flags - QPA layer-shell plugin handles the overlay behavior on Wayland
-    Accessible.name: i18n("Zone overlay")
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
     visible: false
@@ -110,6 +109,7 @@ Window {
         id: content
 
         anchors.fill: parent
+        Accessible.name: i18n("Zone overlay")
 
         MouseArea {
             id: mouseTracker
