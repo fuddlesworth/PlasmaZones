@@ -101,10 +101,62 @@ Flickable {
         }
 
         // ═══════════════════════════════════════════════════════════════════════
+        // RENDERING CARD
+        // ═══════════════════════════════════════════════════════════════════════
+        SettingsCard {
+            headerText: i18n("Rendering")
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                Kirigami.FormLayout {
+                    ComboBox {
+                        id: renderingBackendCombo
+
+                        function syncIndex() {
+                            currentIndex = Math.max(0, settingsController.renderingBackendOptions.indexOf(appSettings.renderingBackend));
+                        }
+
+                        Kirigami.FormData.label: i18n("Rendering backend:")
+                        Accessible.name: i18n("Rendering backend")
+                        model: settingsController.renderingBackendDisplayNames
+                        currentIndex: Math.max(0, settingsController.renderingBackendOptions.indexOf(appSettings.renderingBackend))
+                        onActivated: (index) => {
+                            if (index >= 0 && index < settingsController.renderingBackendOptions.length)
+                                appSettings.renderingBackend = settingsController.renderingBackendOptions[index];
+
+                        }
+
+                        Connections {
+                            function onRenderingBackendChanged() {
+                                renderingBackendCombo.syncIndex();
+                            }
+
+                            target: appSettings
+                        }
+
+                    }
+
+                }
+
+                Kirigami.InlineMessage {
+                    Layout.fillWidth: true
+                    type: Kirigami.MessageType.Information
+                    text: i18n("Rendering backend changes take effect after restarting the daemon.")
+                    visible: appSettings.renderingBackend !== settingsController.startupRenderingBackend
+                }
+
+            }
+
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
         // CONFIGURATION CARD
         // ═══════════════════════════════════════════════════════════════════════
         SettingsCard {
             headerText: i18n("Configuration")
+            collapsible: true
 
             contentItem: Kirigami.FormLayout {
                 Button {

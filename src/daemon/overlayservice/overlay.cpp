@@ -332,6 +332,44 @@ void OverlayService::createOverlayWindow(QScreen* screen)
     m_overlayWindows.insert(screen, window);
 }
 
+void OverlayService::recreateOverlayWindowsOnTypeMismatch()
+{
+    QList<QScreen*> screensToRecreate;
+    for (auto it = m_overlayWindows.constBegin(); it != m_overlayWindows.constEnd(); ++it) {
+        auto* window = it.value();
+        if (!window)
+            continue;
+        const bool windowIsShader = window->property("isShaderOverlay").toBool();
+        const bool shouldUseShader = useShaderForScreen(it.key());
+        if (windowIsShader != shouldUseShader)
+            screensToRecreate.append(it.key());
+    }
+    if (screensToRecreate.isEmpty())
+        return;
+
+    const bool wasVisible = m_visible;
+    if (wasVisible)
+        stopShaderAnimation();
+
+    for (QScreen* screen : screensToRecreate)
+        destroyOverlayWindow(screen);
+    for (QScreen* screen : screensToRecreate) {
+        if (!isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                               m_currentActivity)) {
+            createOverlayWindow(screen);
+            if (auto* w = m_overlayWindows.value(screen)) {
+                updateOverlayWindow(screen);
+                if (wasVisible)
+                    w->show();
+            }
+        }
+    }
+    if (wasVisible && anyScreenUsesShader()) {
+        updateZonesForAllWindows();
+        startShaderAnimation();
+    }
+}
+
 void OverlayService::destroyOverlayWindow(QScreen* screen)
 {
     if (auto* window = m_overlayWindows.take(screen)) {

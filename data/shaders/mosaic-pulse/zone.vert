@@ -13,6 +13,6 @@ layout(location = 1) out vec2 vFragCoord;
 
 void main() {
     vTexCoord = texCoord;
-    vFragCoord = vec2(texCoord.x, 1.0 - texCoord.y) * iResolution;
+    vFragCoord = fragCoordFromTexCoord(texCoord);
     gl_Position = vec4(position, 0.0, 1.0);
 }

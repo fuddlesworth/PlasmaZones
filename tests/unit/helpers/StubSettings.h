@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "config/configdefaults.h"
 #include "core/interfaces.h"
 
 namespace PlasmaZones {
@@ -39,13 +40,6 @@ public:
     }
 
     // IZoneActivationSettings
-    bool shiftDragToActivate() const override
-    {
-        return false;
-    }
-    void setShiftDragToActivate(bool) override
-    {
-    }
     bool snappingEnabled() const override
     {
         return true;
@@ -688,6 +682,21 @@ public:
     {
     }
 
+    // Rendering (ISettings)
+    QString renderingBackend() const override
+    {
+        return m_renderingBackend;
+    }
+    void setRenderingBackend(const QString& backend) override
+    {
+        const QString value = ConfigDefaults::normalizeRenderingBackend(backend);
+        if (m_renderingBackend != value) {
+            m_renderingBackend = value;
+            Q_EMIT renderingBackendChanged();
+            Q_EMIT settingsChanged();
+        }
+    }
+
     // Persistence (ISettings)
     void load() override
     {
@@ -701,6 +710,7 @@ public:
 
 private:
     QString m_defaultLayoutId;
+    QString m_renderingBackend = ConfigDefaults::renderingBackend();
 };
 
 } // namespace PlasmaZones

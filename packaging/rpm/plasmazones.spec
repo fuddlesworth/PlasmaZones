@@ -49,6 +49,7 @@ BuildRequires:  cmake(Qt6ShaderToolsPrivate)
 BuildRequires:  qt6-svg-devel
 BuildRequires:  qt6-core-private-devel
 BuildRequires:  qt6-gui-private-devel
+BuildRequires:  vulkan-devel
 %else
 BuildRequires:  qt6-qtbase-devel >= 6.6.0
 BuildRequires:  qt6-qtbase-private-devel
@@ -87,6 +88,8 @@ BuildRequires:  libepoxy-devel
 BuildRequires:  wayland-devel
 BuildRequires:  libdrm-devel
 BuildRequires:  libxkbcommon-devel
+BuildRequires:  vulkan-loader-devel
+BuildRequires:  vulkan-headers
 BuildRequires:  plasma-activities-devel
 BuildRequires:  systemd-rpm-macros
 %endif

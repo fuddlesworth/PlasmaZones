@@ -163,10 +163,7 @@ void SettingsAdaptor::initializeRegistry()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("string");
 
-    // Activation settings
-    REGISTER_BOOL_SETTING("shiftDragToActivate", shiftDragToActivate, setShiftDragToActivate)
-
-    // Drag activation triggers list (multi-bind)
+    // Activation settings — drag activation triggers list (multi-bind)
     m_getters[QStringLiteral("dragActivationTriggers")] = [this]() {
         return QVariant::fromValue(m_settings->dragActivationTriggers());
     };
@@ -271,6 +268,7 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("labelFontItalic", labelFontItalic, setLabelFontItalic)
     REGISTER_BOOL_SETTING("labelFontUnderline", labelFontUnderline, setLabelFontUnderline)
     REGISTER_BOOL_SETTING("labelFontStrikeout", labelFontStrikeout, setLabelFontStrikeout)
+    REGISTER_STRING_SETTING("renderingBackend", renderingBackend, setRenderingBackend)
     REGISTER_BOOL_SETTING("enableShaderEffects", enableShaderEffects, setEnableShaderEffects)
     REGISTER_INT_SETTING("shaderFrameRate", shaderFrameRate, setShaderFrameRate)
     REGISTER_BOOL_SETTING("enableAudioVisualizer", enableAudioVisualizer, setEnableAudioVisualizer)

@@ -15,6 +15,7 @@
 
 #include "../core/interfaces.h"
 #include "../core/layout.h"
+#include "vulkan_support.h"
 
 class QQmlEngine;
 
@@ -196,6 +197,7 @@ private:
     void createOverlayWindow(QScreen* screen);
     void destroyOverlayWindow(QScreen* screen);
     void updateOverlayWindow(QScreen* screen);
+    void recreateOverlayWindowsOnTypeMismatch();
     void updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
                                       Layout* screenLayout);
     QVariantList buildZonesList(QScreen* screen) const;
@@ -359,6 +361,11 @@ private:
 
     // Screens excluded from overlay display (autotile-managed screens)
     QSet<QString> m_excludedScreens;
+
+    // Fallback QVulkanInstance for when 'auto' backend resolves to Vulkan
+#if QT_CONFIG(vulkan)
+    std::unique_ptr<QVulkanInstance> m_fallbackVulkanInstance;
+#endif
 };
 
 } // namespace PlasmaZones

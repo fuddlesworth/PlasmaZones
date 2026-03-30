@@ -18,15 +18,9 @@ namespace PlasmaZones {
 
 void Settings::loadActivationConfig(QSettingsConfigGroup& activation)
 {
-    m_shiftDragToActivate = activation.readBool(QStringLiteral("ShiftDrag"), ConfigDefaults::shiftDrag());
-
     int legacyDragMod = activation.readInt(QStringLiteral("DragActivationModifier"), -1);
     if (legacyDragMod == -1) {
-        if (activation.hasKey(QStringLiteral("ShiftDrag")) && m_shiftDragToActivate) {
-            legacyDragMod = static_cast<int>(DragModifier::Shift);
-        } else {
-            legacyDragMod = ConfigDefaults::dragActivationModifier();
-        }
+        legacyDragMod = ConfigDefaults::dragActivationModifier();
     } else {
         legacyDragMod = qBound(0, legacyDragMod, static_cast<int>(DragModifier::CtrlAltMeta));
     }
@@ -624,7 +618,6 @@ void Settings::saveEditorConfig(QSettingsConfigGroup& editor)
 
 void Settings::saveActivationConfig(QSettingsConfigGroup& activation)
 {
-    activation.writeBool(QStringLiteral("ShiftDrag"), m_shiftDragToActivate); // Deprecated, kept for compatibility
     saveTriggerList(activation, QStringLiteral("DragActivationTriggers"), m_dragActivationTriggers);
     // Note: cannot delete individual entries with QSettingsConfigGroup interface.
     // Write empty strings to clear obsolete keys.

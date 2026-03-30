@@ -383,8 +383,13 @@ add_custom_target(uninstall
 # Build/install only installs files. Enabling the daemon, refreshing sycoca/KWin,
 # and user-facing messages are handled by packaging (Arch .install, Debian postinst, RPM %post).
 
-# Suppress transitive Qt6::Gui dependency from feature summary (not used by PlasmaZones)
-set_package_properties(WrapVulkanHeaders PROPERTIES TYPE RUNTIME)
+# Vulkan headers are needed at build time for QVulkanInstance (Vulkan backend support).
+# OPTIONAL so PlasmaZones builds silently on systems without Vulkan dev packages —
+# the Vulkan backend simply won't be available at runtime.
+# All Vulkan-specific C++ code is guarded with #if QT_CONFIG(vulkan).
+# Note: packaging specs (PKGBUILD, debian/control, rpm .spec, nix) list Vulkan as a
+# hard BuildRequires to ensure the backend is always available in distribution packages.
+set_package_properties(WrapVulkanHeaders PROPERTIES TYPE OPTIONAL)
 
 # Feature summary (REQUIRED + OPTIONAL only; RUNTIME hidden to reduce noise)
 feature_summary(WHAT REQUIRED_PACKAGES_FOUND REQUIRED_PACKAGES_NOT_FOUND

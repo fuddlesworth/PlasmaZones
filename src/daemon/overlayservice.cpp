@@ -24,8 +24,10 @@
 #include <QQuickWindow>
 #include <QTimer>
 #include <QMutexLocker>
+
 #include "../core/logging.h"
 #include "pz_qml_i18n.h"
+#include "vulkan_support.h"
 
 #include "../core/layersurface.h"
 
@@ -91,6 +93,15 @@ bool OverlayService::isZoneSelectorVisible() const
 
 OverlayService::~OverlayService()
 {
+    // Clear the Vulkan instance app property before destruction to avoid dangling pointer.
+    // Only needed for the fallback instance we own — when main.cpp provided the instance,
+    // it outlives OverlayService (declared before QGuiApplication), so no cleanup needed.
+#if QT_CONFIG(vulkan)
+    if (m_fallbackVulkanInstance && qGuiApp) {
+        qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty, QVariant());
+    }
+#endif
+
     // Disconnect from QGuiApplication first so we don't get screen-related callbacks
     // while we're destroying windows.
     if (qGuiApp) {
@@ -148,6 +159,38 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* scree
 
     // Take C++ ownership so QML's GC doesn't delete the window
     QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
+
+    // When the Vulkan backend is active, each QQuickWindow needs a QVulkanInstance
+    // set before it can create a Vulkan surface. The instance is stored as a dynamic
+    // property on QGuiApplication by main.cpp.
+    // IMPORTANT: setVulkanInstance() must be called before the window is shown or
+    // the scene graph is initialized. This is safe here because the window starts
+    // with visible: false and show() is called separately after createQmlWindow().
+#if QT_CONFIG(vulkan)
+    auto* vulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
+    if (vulkanInstance) {
+        window->setVulkanInstance(vulkanInstance);
+    } else if (QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan) {
+        // This can happen when backend is 'auto' and Qt chose Vulkan at runtime.
+        // Create a QVulkanInstance on-the-fly so overlays still work.
+        if (!m_fallbackVulkanInstance) {
+            m_fallbackVulkanInstance = std::make_unique<QVulkanInstance>();
+            m_fallbackVulkanInstance->setApiVersion(PlasmaZones::PzVulkanApiVersion);
+            if (m_fallbackVulkanInstance->create()) {
+                qCInfo(lcOverlay) << "Created fallback QVulkanInstance for 'auto' backend (Qt chose Vulkan).";
+                qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty,
+                                  QVariant::fromValue(m_fallbackVulkanInstance.get()));
+            } else {
+                qCCritical(lcOverlay) << "Failed to create fallback QVulkanInstance."
+                                      << "Overlay windows will not render correctly.";
+                m_fallbackVulkanInstance.reset();
+                window->deleteLater();
+                return nullptr;
+            }
+        }
+        window->setVulkanInstance(m_fallbackVulkanInstance.get());
+    }
+#endif
 
     // Set the screen before the QPA plugin creates the LayerSurface
     window->setScreen(screen);

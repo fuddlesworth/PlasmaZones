@@ -16,15 +16,6 @@ namespace PlasmaZones {
 // Activation setters
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void Settings::setShiftDragToActivate(bool enable)
-{
-    if (m_shiftDragToActivate != enable) {
-        m_shiftDragToActivate = enable;
-        Q_EMIT shiftDragToActivateChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
 void Settings::setDragActivationTriggers(const QVariantList& triggers)
 {
     QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
@@ -585,7 +576,24 @@ void Settings::setLockedScreens(const QStringList& screens)
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Rendering
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void Settings::setRenderingBackend(const QString& backend)
+{
+    const QString value = ConfigDefaults::normalizeRenderingBackend(backend);
+    if (m_renderingBackend != value) {
+        m_renderingBackend = value;
+        Q_EMIT renderingBackendChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Shader Effects
+// ═══════════════════════════════════════════════════════════════════════════════
+
 SETTINGS_SETTER(bool, EnableShaderEffects, m_enableShaderEffects, enableShaderEffectsChanged)
 SETTINGS_SETTER_CLAMPED(ShaderFrameRate, m_shaderFrameRate, shaderFrameRateChanged,
                         ConfigDefaults::shaderFrameRateMin(), ConfigDefaults::shaderFrameRateMax())

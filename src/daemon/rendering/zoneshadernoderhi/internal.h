@@ -41,7 +41,7 @@ static constexpr int ComponentW = 3;
 
 namespace detail {
 
-/// Shader bake targets (GLSL 330 + ES variants). Defined in zoneshadernoderhi.cpp.
+/// Shader bake targets (SPIR-V 1.3 + GLSL 330 + ES variants). Defined in zoneshadernoderhi.cpp.
 const QList<QShaderBaker::GeneratedShader>& bakeTargets();
 
 /// Load shader file, expand #include directives. Defined in zoneshadernoderhi.cpp.
