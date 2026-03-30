@@ -113,6 +113,32 @@ ColumnLayout {
                 readonly property real cellHeight: Kirigami.Units.gridUnit * 12
                 // Selected layout tracking (across sections)
                 property string selectedLayoutId: ""
+                // Capability group definitions for tiling view — hoisted to avoid
+                // recreating on every rebuildModel() call.
+                // NOTE: items matching multiple capabilities appear in multiple groups;
+                // the same card will be highlighted in both sections simultaneously.
+                readonly property var tilingCapabilityGroups: [{
+                    "key": "masterCount",
+                    "label": i18n("Master Count"),
+                    "order": 0,
+                    "test": (a) => {
+                        return a.supportsMasterCount === true;
+                    }
+                }, {
+                    "key": "overlapping",
+                    "label": i18n("Overlapping Zones"),
+                    "order": 1,
+                    "test": (a) => {
+                        return a.producesOverlappingZones === true;
+                    }
+                }, {
+                    "key": "splitRatio",
+                    "label": i18n("Split Ratio"),
+                    "order": 2,
+                    "test": (a) => {
+                        return a.supportsSplitRatio === true;
+                    }
+                }]
 
                 function rebuildModel() {
                     let allLayouts = settingsController.layouts;
@@ -151,31 +177,9 @@ ColumnLayout {
                 // Grouping — kept in QML because group labels require i18n/i18np
                 function buildGroups(filtered, groupIdx) {
                     if (root.viewMode === 1) {
-                        if (groupIdx === filterBar.groupCapability) {
-                            let capGroups = [{
-                                "key": "masterCount",
-                                "label": i18n("Master Count"),
-                                "order": 0,
-                                "test": (a) => {
-                                    return a.supportsMasterCount === true;
-                                }
-                            }, {
-                                "key": "overlapping",
-                                "label": i18n("Overlapping Zones"),
-                                "order": 1,
-                                "test": (a) => {
-                                    return a.producesOverlappingZones === true;
-                                }
-                            }, {
-                                "key": "splitRatio",
-                                "label": i18n("Split Ratio"),
-                                "order": 2,
-                                "test": (a) => {
-                                    return a.supportsSplitRatio === true;
-                                }
-                            }];
-                            return Logic.groupByCapability(filtered, capGroups, i18n("Other"));
-                        } else if (groupIdx === filterBar.groupTilingSource)
+                        if (groupIdx === filterBar.groupCapability)
+                            return Logic.groupByCapability(filtered, tilingCapabilityGroups, i18n("Other"));
+                        else if (groupIdx === filterBar.groupTilingSource)
                             return Logic.groupByBoolKey(filtered, (item) => {
                             return Logic.isBuiltIn(item);
                         }, "builtin", i18n("Built-in"), "user", i18n("User Scripts"));

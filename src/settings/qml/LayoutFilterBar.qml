@@ -76,7 +76,9 @@ RowLayout {
     // _defaultValues, _snappingStateMap or _tilingStateMap, and persistedState.
     readonly property var _snappingStateMap: [["groupByIndex", "snappingGroupByIndex"], ["sortByIndex", "snappingSortByIndex"], ["sortAscending", "snappingSortAscending"], ["showHidden", "snappingShowHidden"], ["showAspectAny", "snappingShowAspectAny"], ["showAspectStandard", "snappingShowAspectStandard"], ["showAspectUltrawide", "snappingShowAspectUltrawide"], ["showAspectSuperUltrawide", "snappingShowAspectSuperUltrawide"], ["showAspectPortrait", "snappingShowAspectPortrait"], ["showAutoLayouts", "snappingShowAutoLayouts"], ["showManualLayouts", "snappingShowManualLayouts"], ["showBuiltInLayouts", "snappingShowBuiltInLayouts"], ["showUserLayouts", "snappingShowUserLayouts"]]
     readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"]]
-    // Default values for all resettable filter properties (not group/sort)
+    // Default values for all resettable filter properties (not group/sort).
+    // Adding a filter requires updating: property declaration, _defaultValues,
+    // the relevant state map, persistedState, hasActiveFilters, menu item, and JS logic.
     readonly property var _defaultValues: {
         "showHidden": false,
         "showAspectAny": true,
@@ -106,8 +108,14 @@ RowLayout {
         _resetting = true;
         searchField.clear();
         filterText = "";
-        let keys = Object.keys(_defaultValues);
-        for (let i = 0; i < keys.length; i++) root[keys[i]] = _defaultValues[keys[i]]
+        // Only reset properties relevant to the current view mode
+        let map = viewMode === 0 ? _snappingStateMap : _tilingStateMap;
+        for (let i = 0; i < map.length; i++) {
+            let prop = map[i][0];
+            if (prop in _defaultValues)
+                root[prop] = _defaultValues[prop];
+
+        }
         _resetting = false;
         saveState(viewMode);
         filterSettingsChanged();
@@ -240,10 +248,8 @@ RowLayout {
         rightPadding: clearButton.visible ? clearButton.width + Kirigami.Units.smallSpacing : Kirigami.Units.smallSpacing
         Accessible.name: root.viewMode === 0 ? i18n("Search layouts") : i18n("Search algorithms")
         onTextChanged: {
-            if (root.filterText === text)
-                return ;
-
-            root.filterText = text;
+            // filterText is set by the debounce timer (or clear button) to keep
+            // the filter badge and grid rebuild in sync — avoid setting it here.
             if (!root._resetting)
                 searchDebounce.restart();
 
@@ -273,7 +279,10 @@ RowLayout {
         id: searchDebounce
 
         interval: 150
-        onTriggered: root.filterSettingsChanged()
+        onTriggered: {
+            root.filterText = searchField.text;
+            root.filterSettingsChanged();
+        }
     }
 
     // ── Filter Button ───────────────────────────────────────────────────────

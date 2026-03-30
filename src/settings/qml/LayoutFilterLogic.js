@@ -13,7 +13,8 @@
 
 // ── Predicates ──────────────────────────────────────────────────────────────
 
-// Snapping layouts use hasSystemOrigin; algorithms use isSystem only.
+// Both fields are checked for all item types — snapping layouts typically
+// set hasSystemOrigin while algorithms set isSystem; the other is undefined/false.
 function isBuiltIn(item) {
     return item.isSystem || item.hasSystemOrigin;
 }
@@ -41,9 +42,9 @@ function applySnappingFilters(items, search, f) {
     return items.filter(function(item) {
         if (!matchesCommonFilters(item, search, f.showHidden))
             return false;
-        // Unknown aspect-ratio classes (not in arMap) pass through intentionally
-        var cls = item.aspectRatioClass || "any";
-        if (arMap[cls] === false)
+        // Items with no aspectRatioClass always pass — don't conflate with "any"
+        var cls = item.aspectRatioClass || "";
+        if (cls !== "" && arMap[cls] === false)
             return false;
         if (isBuiltIn(item) && !f.showBuiltInLayouts)
             return false;
@@ -57,11 +58,14 @@ function applySnappingFilters(items, search, f) {
     });
 }
 
+// Capability filters (showMasterCount, etc.) follow the same show/hide pattern
+// as source filters: all ON = show everything; unchecking one hides items
+// with that capability (e.g., unchecking "Master Count" hides algorithms
+// that support adjustable master count).
 function applyTilingFilters(items, search, f) {
     return items.filter(function(item) {
         if (!matchesCommonFilters(item, search, f.showHidden))
             return false;
-        // isSystem vs hasSystemOrigin: algorithms only have isSystem
         if (isBuiltIn(item) && !f.showBuiltInAlgorithms)
             return false;
         if (!isBuiltIn(item) && !f.showUserAlgorithms)
@@ -164,6 +168,8 @@ function ungrouped(items) {
 
 // ── Sorting ─────────────────────────────────────────────────────────────────
 
+// sortIdx 0 = Name (both modes), 1 = Zone Count (snapping only).
+// Tiling sort model only has Name; loadState() clamps persisted values.
 function sortItems(groups, sortIdx, ascending) {
     for (var key in groups) {
         groups[key].items.sort(function(a, b) {
