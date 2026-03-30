@@ -14,7 +14,7 @@
 #include <QCommandLineParser>
 #include <QDBusConnection>
 #include <QDBusInterface>
-#include <QDBusReply>
+#include <QDBusMessage>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -31,7 +31,7 @@ bool activateRunningInstance(const QString& page)
         return false;
 
     QDBusInterface iface(PlasmaZones::DBus::SettingsApp::ServiceName, PlasmaZones::DBus::SettingsApp::ObjectPath,
-                         QString(), bus);
+                         PlasmaZones::DBus::SettingsApp::Interface, bus);
     if (!iface.isValid())
         return false;
 
@@ -39,7 +39,9 @@ bool activateRunningInstance(const QString& page)
     if (!page.isEmpty()) {
         iface.call(QStringLiteral("setActivePage"), page);
     }
-    iface.call(QStringLiteral("raise"));
+    QDBusMessage reply = iface.call(QStringLiteral("raise"));
+    if (reply.type() == QDBusMessage::ErrorMessage)
+        return false;
     return true;
 }
 

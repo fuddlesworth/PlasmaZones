@@ -230,8 +230,29 @@ void SettingsController::dismissUpdate()
     setDismissedUpdateVersion(m_updateChecker.latestVersion());
 }
 
+const QSet<QString>& SettingsController::validPageNames()
+{
+    static const QSet<QString> pages{
+        QStringLiteral("overview"),        QStringLiteral("layouts"),
+        QStringLiteral("snapping"),        QStringLiteral("snap-appearance"),
+        QStringLiteral("snap-behavior"),   QStringLiteral("snap-zoneselector"),
+        QStringLiteral("snap-effects"),    QStringLiteral("snap-assignments"),
+        QStringLiteral("snap-shortcuts"),  QStringLiteral("tiling"),
+        QStringLiteral("tile-appearance"), QStringLiteral("tile-behavior"),
+        QStringLiteral("tile-algorithm"),  QStringLiteral("tile-assignments"),
+        QStringLiteral("tile-shortcuts"),  QStringLiteral("apprules"),
+        QStringLiteral("exclusions"),      QStringLiteral("editor"),
+        QStringLiteral("general"),         QStringLiteral("about"),
+    };
+    return pages;
+}
+
 void SettingsController::setActivePage(const QString& page)
 {
+    if (!validPageNames().contains(page)) {
+        qCWarning(PlasmaZones::lcCore) << "Unknown settings page:" << page;
+        return;
+    }
     if (m_activePage != page) {
         m_activePage = page;
         Q_EMIT activePageChanged();
@@ -244,7 +265,8 @@ bool SettingsController::registerDBusService()
     if (!bus.registerService(DBus::SettingsApp::ServiceName)) {
         return false;
     }
-    // Exports all Q_SCRIPTABLE methods (currently raise + setActivePage)
+    // ExportScriptableSlots exposes all Q_SCRIPTABLE methods on this object (raise + setActivePage).
+    // Adding new Q_SCRIPTABLE slots will automatically expose them on D-Bus.
     bus.registerObject(DBus::SettingsApp::ObjectPath, this, QDBusConnection::ExportScriptableSlots);
     return true;
 }

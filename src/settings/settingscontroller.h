@@ -18,6 +18,7 @@
 #include "../core/modifierutils.h"
 
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QDBusConnection>
 #include <QVariantList>
@@ -143,6 +144,8 @@ public:
 
     /// Raise the settings window to the foreground.
     Q_SCRIPTABLE void raise();
+
+    static const QSet<QString>& validPageNames();
 
     bool needsSave() const
     {

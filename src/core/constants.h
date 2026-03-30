@@ -410,6 +410,7 @@ inline constexpr QLatin1String ObjectPath{"/PlasmaZones"};
 namespace SettingsApp {
 inline constexpr QLatin1String ServiceName{"org.plasmazones.Settings.App"};
 inline constexpr QLatin1String ObjectPath{"/SettingsApp"};
+inline constexpr QLatin1String Interface{"org.plasmazones.SettingsController"};
 }
 
 namespace Interface {
