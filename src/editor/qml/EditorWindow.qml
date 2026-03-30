@@ -172,6 +172,13 @@ Window {
     // window always lands on the primary monitor.
     visible: false
     title: i18nc("@title", "Layout Editor")
+    // Dismiss open popups before the window is destroyed.
+    // Qt 6 QQuickPopupPrivate::finalizeExitTransition walks the item tree
+    // during the close transition; if the parent window is already tearing
+    // down, derefWindow hits a dangling pointer and crashes (SIGSEGV).
+    onClosing: function(close) {
+        sharedContextMenu.visible = false;
+    }
     Component.onCompleted: {
         // Initialize selectedZoneId from editorController context property
         if (editorWindow._editorController) {

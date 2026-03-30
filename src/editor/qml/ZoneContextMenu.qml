@@ -202,4 +202,15 @@ Menu {
         Accessible.role: Accessible.MenuItem
     }
 
+    // Empty transitions prevent the default animated exit transition from
+    // deferring finalizeExitTransition to an animation tick. Without this,
+    // the transition manager walks the popup's item tree after zone delegates
+    // have been destroyed by a Repeater model update, hitting a dangling
+    // QQuickItem pointer in derefWindow → qmlobject_can_cpp_cast (SIGSEGV).
+    enter: Transition {
+    }
+
+    exit: Transition {
+    }
+
 }
