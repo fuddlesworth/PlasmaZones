@@ -381,6 +381,13 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
     const bool multipassActive = multipassSingle || multipassMulti;
 
     if (multipassActive) {
+        // The scene graph's batch renderer keeps its render pass active when calling
+        // render() on nodes with the NoExternalRendering flag. We must end that pass
+        // before beginning our own passes on buffer FBOs. After buffer passes complete,
+        // we re-begin a pass on rt for the image pass; the scene graph will endPass()
+        // after render() returns, balancing our beginPass(rt).
+        cb->endPass();
+
         const QColor clearColor(0, 0, 0, 0);
         if (multiBufferMode) {
             const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
