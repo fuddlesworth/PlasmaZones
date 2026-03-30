@@ -1129,8 +1129,11 @@ ApplicationWindow {
                 property var layout: null
                 property int viewMode: 0
                 property var _screenItems: []
+                property bool _aspectRatioMenuInserted: false
                 readonly property bool isAutotile: layout && layout.isAutotile === true
                 readonly property string layoutId: layout ? (layout.id || "") : ""
+                // Aspect ratio options: [key, label, settingsIndex]
+                readonly property var _aspectRatioOptions: [["any", window.aspectRatioLabels["any"], 0], ["standard", window.aspectRatioLabels["standard"], 1], ["ultrawide", window.aspectRatioLabels["ultrawide"], 2], ["super-ultrawide", window.aspectRatioLabels["super-ultrawide"], 3], ["portrait", window.aspectRatioLabels["portrait"], 4]]
 
                 // Signals for dialogs that live in LayoutsPage
                 signal deleteRequested(var layout)
@@ -1139,6 +1142,28 @@ ApplicationWindow {
                 function showForLayout(layout) {
                     layoutContextMenu.layout = layout;
                     layoutContextMenu.viewMode = (layout && layout.isAutotile === true) ? 1 : 0;
+                    // Add/remove aspect ratio submenu (Qt6 ignores visible on inline Menu submenus,
+                    // so we imperatively insert/remove it like screen items)
+                    if (_aspectRatioMenuInserted) {
+                        layoutContextMenu.removeMenu(aspectRatioSubMenu);
+                        _aspectRatioMenuInserted = false;
+                    }
+                    if (!layoutContextMenu.isAutotile) {
+                        aspectRatioSubMenu.updateChecks();
+                        // Insert after the aspectRatioMarker separator
+                        let markerIdx = -1;
+                        for (let k = 0; k < layoutContextMenu.count; k++) {
+                            if (layoutContextMenu.itemAt(k) === aspectRatioMarker) {
+                                markerIdx = k;
+                                break;
+                            }
+                        }
+                        if (markerIdx >= 0)
+                            layoutContextMenu.insertMenu(markerIdx + 1, aspectRatioSubMenu);
+                        else
+                            layoutContextMenu.addMenu(aspectRatioSubMenu);
+                        _aspectRatioMenuInserted = true;
+                    }
                     // Rebuild dynamic "Edit on <screen>" items
                     for (let j = 0; j < _screenItems.length; j++) {
                         layoutContextMenu.removeItem(_screenItems[j]);
@@ -1234,49 +1259,11 @@ ApplicationWindow {
                     onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true))
                 }
 
-                // -- Aspect Ratio (flat, no nested Menu — Qt6 crashes with submenu) --
+                // -- Aspect Ratio insertion point (submenu managed imperatively in showForLayout) --
                 MenuSeparator {
-                    visible: !layoutContextMenu.isAutotile
-                }
+                    id: aspectRatioMarker
 
-                MenuItem {
-                    text: "  " + window.aspectRatioLabels["any"]
-                    checkable: true
                     visible: !layoutContextMenu.isAutotile
-                    checked: layoutContextMenu.layout && (layoutContextMenu.layout.aspectRatioClass || "any") === "any"
-                    onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 0)
-                }
-
-                MenuItem {
-                    text: "  " + window.aspectRatioLabels["standard"]
-                    checkable: true
-                    visible: !layoutContextMenu.isAutotile
-                    checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "standard"
-                    onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 1)
-                }
-
-                MenuItem {
-                    text: "  " + window.aspectRatioLabels["ultrawide"]
-                    checkable: true
-                    visible: !layoutContextMenu.isAutotile
-                    checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "ultrawide"
-                    onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 2)
-                }
-
-                MenuItem {
-                    text: "  " + window.aspectRatioLabels["super-ultrawide"]
-                    checkable: true
-                    visible: !layoutContextMenu.isAutotile
-                    checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "super-ultrawide"
-                    onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 3)
-                }
-
-                MenuItem {
-                    text: "  " + window.aspectRatioLabels["portrait"]
-                    checkable: true
-                    visible: !layoutContextMenu.isAutotile
-                    checked: layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass === "portrait"
-                    onTriggered: settingsController.setLayoutAspectRatio(layoutContextMenu.layoutId, 4)
                 }
 
                 // -- Manage (snapping layouts) --
@@ -1352,6 +1339,78 @@ ApplicationWindow {
                     property string _screenName: ""
 
                     onTriggered: settingsController.editLayoutOnScreen(layoutContextMenu.layoutId, _screenName)
+                }
+
+            }
+
+            // Component for aspect ratio submenu items (ItemDelegate, not MenuItem —
+            // avoids Qt6 finalizeExitTransition crash; same pattern as editor shader menu)
+            Component {
+                id: aspectRatioItemComponent
+
+                ItemDelegate {
+                    property string _arKey: ""
+                    property int _arIndex: 0
+                    property bool isSelected: false
+
+                    icon.name: isSelected ? "checkmark" : ""
+                    Accessible.name: text
+                    onClicked: {
+                        let layoutId = layoutContextMenu.layoutId;
+                        let idx = _arIndex;
+                        Qt.callLater(function() {
+                            aspectRatioSubMenu.visible = false;
+                            layoutContextMenu.visible = false;
+                            settingsController.setLayoutAspectRatio(layoutId, idx);
+                        });
+                    }
+                }
+
+            }
+
+            // Aspect ratio submenu (managed imperatively by showForLayout —
+            // Qt6 ignores visible on inline Menu submenus, so we add/remove it)
+            Menu {
+                id: aspectRatioSubMenu
+
+                property var _items: []
+                property bool _built: false
+
+                function buildOnce() {
+                    if (_built)
+                        return ;
+
+                    _built = true;
+                    var options = layoutContextMenu._aspectRatioOptions;
+                    for (var i = 0; i < options.length; i++) {
+                        var item = aspectRatioItemComponent.createObject(aspectRatioSubMenu, {
+                            "text": options[i][1],
+                            "_arKey": options[i][0],
+                            "_arIndex": options[i][2]
+                        });
+                        aspectRatioSubMenu.addItem(item);
+                        _items.push(item);
+                    }
+                }
+
+                function updateChecks() {
+                    buildOnce();
+                    var currentClass = (layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass) || "any";
+                    for (var i = 0; i < _items.length; i++) {
+                        if (_items[i])
+                            _items[i].isSelected = (_items[i]._arKey === currentClass);
+
+                    }
+                }
+
+                title: i18n("Aspect Ratio")
+                icon.name: "view-fullscreen"
+                onAboutToShow: updateChecks()
+
+                enter: Transition {
+                }
+
+                exit: Transition {
                 }
 
             }
