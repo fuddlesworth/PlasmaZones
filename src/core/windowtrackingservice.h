@@ -785,6 +785,14 @@ private:
     Zone* findZoneById(const QString& zoneId) const;
     QString findEmptyZoneInLayout(Layout* layout, const QString& screenId) const;
 
+    /// Sort zones by zone number ascending, with UUID tie-breaker for determinism
+    /// when multiple zones share the same number.
+    static void sortZonesByNumber(QVector<Zone*>& zones);
+
+    /// Resolve zone geometry: combined geometry for multi-zone, single for single zone.
+    /// Avoids repeating the (size>1) ? multiZoneGeometry : zoneGeometry ternary.
+    QRect resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const;
+
 public:
     /// Build set of occupied zone UUIDs, optionally filtered by screen.
     /// Uses Utils::screensMatch() for format-agnostic screen comparison.

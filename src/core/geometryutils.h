@@ -12,6 +12,7 @@
 #include <functional>
 #include <QVector>
 #include <QSize>
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -93,6 +94,23 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, const QRect& scree
  */
 PLASMAZONES_EXPORT QRect getZoneGeometryForScreen(Zone* zone, QScreen* screen, const QString& screenId, Layout* layout,
                                                   ISettings* settings);
+
+/**
+ * @brief Get zone geometry with gaps, auto-resolving virtual screen geometry (floating-point)
+ *
+ * Same as getZoneGeometryForScreen but returns unsnapped QRectF. Use when the
+ * caller needs to combine multiple zone geometries (e.g. QRectF::united()) before
+ * a final snap, or when floating-point precision is needed for overlay coordinates.
+ *
+ * @param zone Zone to get geometry for
+ * @param screen Physical QScreen* (used as fallback)
+ * @param screenId Screen identifier (physical or virtual)
+ * @param layout Layout for gap overrides
+ * @param settings Global settings for gap fallbacks
+ * @return Floating-point geometry with appropriate gaps applied
+ */
+PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(Zone* zone, QScreen* screen, const QString& screenId,
+                                                    Layout* layout, ISettings* settings);
 
 /**
  * @brief Get effective zone padding for a layout

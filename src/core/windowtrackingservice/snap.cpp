@@ -10,6 +10,7 @@
 #include "../zone.h"
 #include "../layoutmanager.h"
 #include "../virtualdesktopmanager.h"
+#include "../virtualscreen.h"
 #include "../utils.h"
 #include "../screenmanager.h"
 #include "../logging.h"
@@ -327,6 +328,21 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
     QString zoneId = zoneIds.first(); // Primary zone for validation
     QString savedScreen = entry.screenId.isEmpty() ? screenId : entry.screenId;
 
+    // E7: Validate virtual screen still exists — configuration may have changed since save.
+    // Fall back to physical screen ID if the virtual screen was removed.
+    if (VirtualScreenId::isVirtual(savedScreen)) {
+        auto* smgr = ScreenManager::instance();
+        if (smgr) {
+            const QStringList effectiveIds = smgr->effectiveScreenIds();
+            if (!effectiveIds.contains(savedScreen)) {
+                QString physId = VirtualScreenId::extractPhysicalId(savedScreen);
+                qCInfo(lcCore) << "sessionRestore:" << appId << "saved virtual screen" << savedScreen
+                               << "no longer exists, falling back to physical screen" << physId;
+                savedScreen = physId;
+            }
+        }
+    }
+
     // BUG FIX: Verify layout context matches before restoring
     // Without this check, windows would restore even if the current layout is different
     // from the layout that was active when the window was saved
@@ -375,12 +391,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
     }
 
     // Calculate geometry (use combined geometry for multi-zone)
-    QRect geo;
-    if (zoneIds.size() > 1) {
-        geo = multiZoneGeometry(zoneIds, savedScreen);
-    } else {
-        geo = zoneGeometry(zoneId, savedScreen);
-    }
+    QRect geo = resolveZoneGeometry(zoneIds, savedScreen);
 
     // Zone-number fallback: zone UUIDs may have changed after layout edit.
     // Re-resolve layout for this screen and look up by zone number instead.
@@ -396,8 +407,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
                         fallbackIds.append(z->id().toString());
                 }
                 if (!fallbackIds.isEmpty()) {
-                    geo = (fallbackIds.size() > 1) ? multiZoneGeometry(fallbackIds, savedScreen)
-                                                   : zoneGeometry(fallbackIds.first(), savedScreen);
+                    geo = resolveZoneGeometry(fallbackIds, savedScreen);
                     if (geo.isValid()) {
                         zoneId = fallbackIds.first();
                         zoneIds = fallbackIds;

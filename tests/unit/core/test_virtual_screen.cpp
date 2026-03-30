@@ -386,6 +386,27 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Tiny region: absoluteGeometry guarantees minimum 1px dimensions
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testAbsoluteGeometry_tinyRegion()
+    {
+        // A very tiny region (width=0.001) on a 1920px screen:
+        // raw width = round(0.001 * 1920) - round(0 * 1920) could be ~2px,
+        // but absoluteGeometry enforces qMax(1, ...) so even a sub-pixel
+        // region must produce at least 1px in each dimension.
+        VirtualScreenDef def;
+        def.region = QRectF(0, 0, 0.001, 0.001);
+        QRect phys(0, 0, 1920, 1080);
+
+        QRect result = def.absoluteGeometry(phys);
+        QVERIFY2(result.width() >= 1, "Tiny region must produce at least 1px width");
+        QVERIFY2(result.height() >= 1, "Tiny region must produce at least 1px height");
+        QCOMPARE(result.x(), 0);
+        QCOMPARE(result.y(), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Rounding edge case: no gaps or overlaps for common resolutions
     // ═══════════════════════════════════════════════════════════════════════════
 

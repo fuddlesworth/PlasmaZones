@@ -61,14 +61,7 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
     // Callers with virtual screen context should use buildZonesList(screenId, physScreen) directly.
 
     // Use cursor position to disambiguate when multiple virtual screens share one QScreen*.
-    auto* mgr = ScreenManager::instance();
-    QString screenId;
-    if (mgr) {
-        screenId = mgr->effectiveScreenAt(QCursor::pos());
-    }
-    if (screenId.isEmpty()) {
-        screenId = Utils::screenIdentifier(screen);
-    }
+    QString screenId = Utils::effectiveScreenIdAt(QCursor::pos(), screen);
     return buildZonesList(screenId, screen);
 }
 
@@ -105,14 +98,7 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
 {
     // Physical screen overload: delegates to screenId overload.
     // Use cursor position to disambiguate when multiple virtual screens share one QScreen*.
-    auto* mgr = ScreenManager::instance();
-    QString screenId;
-    if (mgr) {
-        screenId = mgr->effectiveScreenAt(QCursor::pos());
-    }
-    if (screenId.isEmpty()) {
-        screenId = Utils::screenIdentifier(screen);
-    }
+    QString screenId = Utils::effectiveScreenIdAt(QCursor::pos(), screen);
     QRect overlayGeom = m_overlayGeometries.value(screenId, screen->geometry());
     return zoneToVariantMap(zone, screenId, screen, overlayGeom, layout);
 }
@@ -131,28 +117,14 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, const QString& screenId
     // Calculate zone geometry with gaps applied (matches snap geometry).
     // Uses the layout's geometry preference: available area (excluding panels/taskbars)
     // or full screen geometry depending on useFullScreenGeometry setting.
-    // Layout's zonePadding/outerGap takes precedence over global settings
-    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
-    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
-    bool useAvail = !(layout && layout->useFullScreenGeometry());
+    // Calculate zone geometry with gaps, auto-resolving virtual screen geometry
+    QRectF geom = GeometryUtils::getZoneGeometryForScreenF(zone, physScreen, screenId, layout, m_settings);
 
-    // Determine if this is a virtual screen (overlay geometry differs from physical screen)
+    // Convert to overlay-local coordinates: virtual screens use the overlay rect origin,
+    // physical screens use the QScreen origin
     const bool isVirtual = (overlayGeometry.isValid() && overlayGeometry != physScreen->geometry());
-
-    QRectF geom;
-    QRectF overlayGeom;
-    if (isVirtual) {
-        // Virtual screen: calculate zones against virtual screen bounds
-        auto* mgr = ScreenManager::instance();
-        QRect availGeom = mgr ? mgr->screenAvailableGeometry(screenId) : overlayGeometry;
-        geom = GeometryUtils::getZoneGeometryWithGaps(zone, overlayGeometry, availGeom, zonePadding, outerGaps,
-                                                      useAvail, screenId);
-        overlayGeom = GeometryUtils::availableAreaToOverlayCoordinates(geom, overlayGeometry);
-    } else {
-        // Physical screen: existing path
-        geom = GeometryUtils::getZoneGeometryWithGaps(zone, physScreen, zonePadding, outerGaps, useAvail);
-        overlayGeom = GeometryUtils::availableAreaToOverlayCoordinates(geom, physScreen);
-    }
+    QRectF overlayGeom = isVirtual ? GeometryUtils::availableAreaToOverlayCoordinates(geom, overlayGeometry)
+                                   : GeometryUtils::availableAreaToOverlayCoordinates(geom, physScreen);
 
     map[JsonKeys::Id] = zone->id().toString(); // Include zone ID for stable selection
     map[JsonKeys::X] = overlayGeom.x();

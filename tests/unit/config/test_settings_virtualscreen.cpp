@@ -431,6 +431,138 @@ private Q_SLOTS:
         VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
         QVERIFY2(loaded.isEmpty(), "reset() must clear virtual screen configs");
     }
+
+    // =========================================================================
+    // E9: Partial invalidation — 3-screen config with 1 invalid region
+    // =========================================================================
+
+    /**
+     * Save a 3-screen config where one screen has x > 1.0 (invalid region).
+     * On load, the invalid screen is dropped but the two valid screens survive
+     * because the loader requires >= 2 valid screens for a meaningful subdivision.
+     */
+    void testLoad_partialInvalidation_threeScreenConfig()
+    {
+        IsolatedConfigGuard guard;
+
+        const QString physId = QStringLiteral("test:partial-invalid");
+
+        // Write a 3-screen config directly to the backend: 2 valid + 1 invalid
+        {
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto group = backend->group(QStringLiteral("VirtualScreen:") + physId);
+            group->writeInt(ConfigDefaults::virtualScreenCountKey(), 3);
+
+            // Screen 0: valid (left third)
+            group->writeString(QStringLiteral("0/") + ConfigDefaults::virtualScreenNameKey(), QStringLiteral("Left"));
+            group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenXKey(), 0.0);
+            group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenYKey(), 0.0);
+            group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenWidthKey(), 0.333);
+            group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenHeightKey(), 1.0);
+
+            // Screen 1: invalid — x=1.5 exceeds [0,1] bounds
+            group->writeString(QStringLiteral("1/") + ConfigDefaults::virtualScreenNameKey(), QStringLiteral("Bad"));
+            group->writeDouble(QStringLiteral("1/") + ConfigDefaults::virtualScreenXKey(), 1.5);
+            group->writeDouble(QStringLiteral("1/") + ConfigDefaults::virtualScreenYKey(), 0.0);
+            group->writeDouble(QStringLiteral("1/") + ConfigDefaults::virtualScreenWidthKey(), 0.333);
+            group->writeDouble(QStringLiteral("1/") + ConfigDefaults::virtualScreenHeightKey(), 1.0);
+
+            // Screen 2: valid (right third)
+            group->writeString(QStringLiteral("2/") + ConfigDefaults::virtualScreenNameKey(), QStringLiteral("Right"));
+            group->writeDouble(QStringLiteral("2/") + ConfigDefaults::virtualScreenXKey(), 0.667);
+            group->writeDouble(QStringLiteral("2/") + ConfigDefaults::virtualScreenYKey(), 0.0);
+            group->writeDouble(QStringLiteral("2/") + ConfigDefaults::virtualScreenWidthKey(), 0.333);
+            group->writeDouble(QStringLiteral("2/") + ConfigDefaults::virtualScreenHeightKey(), 1.0);
+
+            group.reset();
+            backend->sync();
+        }
+
+        // Load: invalid screen 1 is dropped, 2 valid screens remain (>= 2 threshold met)
+        Settings settings;
+        VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
+        QVERIFY2(!loaded.isEmpty(), "Config with 2 valid screens after invalidation must be kept");
+        QCOMPARE(loaded.screens.size(), 2);
+        QCOMPARE(loaded.screens[0].displayName, QStringLiteral("Left"));
+        QCOMPARE(loaded.screens[1].displayName, QStringLiteral("Right"));
+    }
+
+    // =========================================================================
+    // E9: Max count boundary — 11 screens capped to 10
+    // =========================================================================
+
+    /**
+     * Write a config with count=11 to the backend. The loader caps at 10 via
+     * qBound(0, count, 10), so only the first 10 screens are read.
+     */
+    void testLoad_maxCountBoundary()
+    {
+        IsolatedConfigGuard guard;
+
+        const QString physId = QStringLiteral("test:max-count");
+
+        {
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto group = backend->group(QStringLiteral("VirtualScreen:") + physId);
+            group->writeInt(ConfigDefaults::virtualScreenCountKey(), 11);
+
+            // Write 11 equal-width screens
+            for (int i = 0; i < 11; ++i) {
+                const QString p = QString::number(i) + QLatin1Char('/');
+                const qreal w = 1.0 / 11.0;
+                group->writeString(p + ConfigDefaults::virtualScreenNameKey(), QStringLiteral("Screen %1").arg(i + 1));
+                group->writeDouble(p + ConfigDefaults::virtualScreenXKey(), i * w);
+                group->writeDouble(p + ConfigDefaults::virtualScreenYKey(), 0.0);
+                group->writeDouble(p + ConfigDefaults::virtualScreenWidthKey(), w);
+                group->writeDouble(p + ConfigDefaults::virtualScreenHeightKey(), 1.0);
+            }
+
+            group.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
+        QVERIFY2(!loaded.isEmpty(), "Config with capped count must still load");
+        QCOMPARE(loaded.screens.size(), 10);
+    }
+
+    // =========================================================================
+    // E9: Overlapping regions — accepted (no overlap validation)
+    // =========================================================================
+
+    /**
+     * Create a 2-screen config with overlapping regions. The loader validates
+     * individual region bounds via isValid() but does NOT check for overlap
+     * between regions. Both screens should survive the load.
+     */
+    void testOverlappingRegions()
+    {
+        IsolatedConfigGuard guard;
+
+        const QString physId = QStringLiteral("test:overlap");
+
+        {
+            Settings settings;
+            VirtualScreenConfig config;
+            config.physicalScreenId = physId;
+            // Screen 0: x=0, w=0.6 — covers [0, 0.6]
+            config.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0, 0, 0.6, 1)));
+            // Screen 1: x=0.4, w=0.6 — covers [0.4, 1.0], overlaps with screen 0
+            config.screens.append(makeDef(physId, 1, QStringLiteral("Right"), QRectF(0.4, 0, 0.6, 1)));
+            settings.setVirtualScreenConfig(physId, config);
+            settings.save();
+        }
+
+        // Overlapping regions are individually valid, so both survive
+        Settings settings;
+        VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
+        QVERIFY2(!loaded.isEmpty(), "Overlapping but individually valid regions must be accepted");
+        QCOMPARE(loaded.screens.size(), 2);
+        QVERIFY(qAbs(loaded.screens[0].region.width() - 0.6) < 1e-6);
+        QVERIFY(qAbs(loaded.screens[1].region.x() - 0.4) < 1e-6);
+        QVERIFY(qAbs(loaded.screens[1].region.width() - 0.6) < 1e-6);
+    }
 };
 
 QTEST_MAIN(TestSettingsVirtualScreen)

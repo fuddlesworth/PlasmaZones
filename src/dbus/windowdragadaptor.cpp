@@ -76,16 +76,7 @@ QScreen* WindowDragAdaptor::screenAtPoint(int x, int y) const
 
 QString WindowDragAdaptor::effectiveScreenIdAt(int x, int y) const
 {
-    auto* mgr = ScreenManager::instance();
-    if (mgr) {
-        QString id = mgr->effectiveScreenAt(QPoint(x, y));
-        if (!id.isEmpty()) {
-            return id;
-        }
-    }
-    // Fallback: physical screen
-    QScreen* screen = Utils::findScreenAtPosition(x, y);
-    return screen ? Utils::screenIdentifier(screen) : QString();
+    return Utils::effectiveScreenIdAt(QPoint(x, y));
 }
 
 bool WindowDragAdaptor::checkModifier(int modifierSetting, Qt::KeyboardModifiers mods) const
@@ -171,30 +162,10 @@ QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<Zone*>& zone
     if (zones.isEmpty()) {
         return QRectF();
     }
-    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
-    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
-    bool useAvail = !(layout && layout->useFullScreenGeometry());
-
-    // Use virtual screen geometry when available
-    auto* mgr = ScreenManager::instance();
-    QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
-    QRect vsAvailGeom = mgr ? mgr->screenAvailableGeometry(screenId) : QRect();
-
-    QRectF combined;
-    if (vsGeom.isValid()) {
-        QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
-        combined = GeometryUtils::getZoneGeometryWithGaps(zones.first(), vsGeom, availGeom, zonePadding, outerGaps,
-                                                          useAvail, screenId);
-        for (int i = 1; i < zones.size(); ++i) {
-            combined = combined.united(GeometryUtils::getZoneGeometryWithGaps(zones[i], vsGeom, availGeom, zonePadding,
-                                                                              outerGaps, useAvail, screenId));
-        }
-    } else {
-        combined = GeometryUtils::getZoneGeometryWithGaps(zones.first(), screen, zonePadding, outerGaps, useAvail);
-        for (int i = 1; i < zones.size(); ++i) {
-            combined = combined.united(
-                GeometryUtils::getZoneGeometryWithGaps(zones[i], screen, zonePadding, outerGaps, useAvail));
-        }
+    QRectF combined = GeometryUtils::getZoneGeometryForScreenF(zones.first(), screen, screenId, layout, m_settings);
+    for (int i = 1; i < zones.size(); ++i) {
+        combined =
+            combined.united(GeometryUtils::getZoneGeometryForScreenF(zones[i], screen, screenId, layout, m_settings));
     }
     return combined;
 }
@@ -317,11 +288,7 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
         m_zoneSelectorShown = true;
         // Call directly - QDBusAbstractAdaptor signals don't work for internal Qt connections
         // Pass screen ID string (supports virtual screen IDs like "physicalId/vs:N")
-        auto* smgr = ScreenManager::instance();
-        QString zoneScreenId = smgr ? smgr->effectiveScreenAt(QPoint(cursorX, cursorY)) : QString();
-        if (zoneScreenId.isEmpty()) {
-            zoneScreenId = Utils::screenIdentifier(screen);
-        }
+        QString zoneScreenId = Utils::effectiveScreenIdAt(QPoint(cursorX, cursorY), screen);
         m_overlayService->showZoneSelector(zoneScreenId);
     } else if (!nearEdge && m_zoneSelectorShown) {
         // Hide zone selector when cursor moves away from edge

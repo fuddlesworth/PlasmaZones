@@ -274,6 +274,7 @@ Q_SIGNALS:
     void autotileInactiveBorderColorChanged();
     void autotileUseSystemBorderColorsChanged();
     void lockedScreensChanged();
+    void virtualScreenConfigsChanged();
     // Animation settings (general)
     void animationsEnabledChanged();
     void animationDurationChanged();

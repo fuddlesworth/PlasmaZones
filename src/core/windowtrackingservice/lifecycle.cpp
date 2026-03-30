@@ -30,6 +30,9 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         return;
     }
 
+    // Clear resnap buffer — stale physical screen IDs would cause mismatches
+    m_resnapBuffer.clear();
+
     // Helper: determine which virtual screen a zone center falls within.
     // Returns the first virtual screen as default if the zone can't be resolved.
     auto resolveVirtualScreen = [&](const QStringList& zoneIds) -> QString {
@@ -105,6 +108,21 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         }
     }
 
+    // Migrate m_lastUsedScreenId: if it matches the physical screen being subdivided,
+    // update it to the first virtual screen so that last-zone-snap resolves correctly.
+    if (m_lastUsedScreenId == physicalScreenId && !virtualScreenIds.isEmpty()) {
+        m_lastUsedScreenId = virtualScreenIds.first();
+    }
+
+    // Migrate pre-tile geometry connectorName fields from physical to virtual
+    for (auto it = m_preTileGeometries.begin(); it != m_preTileGeometries.end(); ++it) {
+        if (it->connectorName == physicalScreenId) {
+            // Use resolveVirtualScreen if the window has zone info, otherwise default to first
+            QStringList zoneIds = m_windowZoneAssignments.value(it.key());
+            it->connectorName = resolveVirtualScreen(zoneIds);
+        }
+    }
+
     if (migrated > 0) {
         qCInfo(lcCore) << "Migrated" << migrated << "window screen assignments from" << physicalScreenId
                        << "to virtual screens";
@@ -114,6 +132,9 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
 
 void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& physicalScreenId)
 {
+    // Clear resnap buffer — stale virtual screen IDs would cause mismatches
+    m_resnapBuffer.clear();
+
     const QString prefix = physicalScreenId + VirtualScreenId::separator();
     int migrated = 0;
 
@@ -137,6 +158,20 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
             if (entry.screenId.startsWith(prefix)) {
                 entry.screenId = physicalScreenId;
             }
+        }
+    }
+
+    // B2: Migrate m_lastUsedScreenId if it references a virtual screen on this physical screen
+    if (VirtualScreenId::isVirtual(m_lastUsedScreenId)
+        && VirtualScreenId::extractPhysicalId(m_lastUsedScreenId) == physicalScreenId) {
+        m_lastUsedScreenId = physicalScreenId;
+    }
+
+    // B3: Migrate pre-tile geometry connectorName fields
+    for (auto it = m_preTileGeometries.begin(); it != m_preTileGeometries.end(); ++it) {
+        if (VirtualScreenId::isVirtual(it->connectorName)
+            && VirtualScreenId::extractPhysicalId(it->connectorName) == physicalScreenId) {
+            it->connectorName = physicalScreenId;
         }
     }
 
@@ -286,9 +321,7 @@ void WindowTrackingService::onLayoutChanged()
                 return map;
             }
             QVector<Zone*> zones = layout->zones();
-            std::sort(zones.begin(), zones.end(), [](Zone* a, Zone* b) {
-                return a->zoneNumber() < b->zoneNumber();
-            });
+            sortZonesByNumber(zones);
             for (int i = 0; i < zones.size(); ++i) {
                 map[zones[i]->id().toString()] = i + 1;
             }

@@ -26,6 +26,12 @@
 
 namespace PlasmaZones {
 
+namespace {
+/// Minimum usable dimension (pixels) for a virtual screen available area.
+/// If panel intersection leaves less than this, fall back to full virtual geometry.
+constexpr int MinUsableScreenDimension = 100;
+} // anonymous namespace
+
 // Global cache for available geometry (screen name -> geometry)
 // Updated by sensor windows, read by actualAvailableGeometry()
 static QHash<QString, QRect> s_availableGeometryCache;
@@ -544,6 +550,21 @@ void ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
         }
     }
 
+    // Validate: regions should approximately cover [0,1]x[0,1]
+    qreal totalArea = 0.0;
+    for (const auto& def : config.screens) {
+        totalArea += def.region.width() * def.region.height();
+    }
+    if (totalArea < 0.99) {
+        qCWarning(lcScreen) << "setVirtualScreenConfig: insufficient coverage for" << physicalScreenId << "- total area"
+                            << totalArea << "< 0.99, rejecting config";
+        return;
+    }
+    if (totalArea > 1.01) {
+        qCWarning(lcScreen) << "setVirtualScreenConfig: suspicious total area" << totalArea << "> 1.01 for"
+                            << physicalScreenId;
+    }
+
     if (m_virtualConfigs.value(physicalScreenId) == config) {
         return;
     }
@@ -628,7 +649,6 @@ QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
         QRect result = vsGeom.intersected(physAvail);
         // If panel consumes most of the virtual screen, fall back to full virtual geometry
         // to avoid zero/unusable available areas
-        static constexpr int MinUsableScreenDimension = 100;
         if (!result.isValid() || result.width() < MinUsableScreenDimension
             || result.height() < MinUsableScreenDimension) {
             qCWarning(lcScreen) << "screenAvailableGeometry: panel leaves insufficient space in virtual screen"
@@ -700,7 +720,33 @@ QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const 
         }
     }
 
-    return {};
+    // Point falls in gap between virtual screens — find nearest by edge distance
+    auto edgeDistance = [](const QPoint& pt, const QRect& r) -> int {
+        int dx = 0;
+        int dy = 0;
+        if (pt.x() < r.left())
+            dx = r.left() - pt.x();
+        else if (pt.x() > r.right())
+            dx = pt.x() - r.right();
+        if (pt.y() < r.top())
+            dy = r.top() - pt.y();
+        else if (pt.y() > r.bottom())
+            dy = pt.y() - r.bottom();
+        return dx * dx + dy * dy;
+    };
+
+    QString nearestId;
+    int minDist = std::numeric_limits<int>::max();
+    for (const auto& vs : it->screens) {
+        QRect absGeom = vs.absoluteGeometry(physGeom);
+        int dist = edgeDistance(globalPos, absGeom);
+        if (dist < minDist) {
+            minDist = dist;
+            nearestId = vs.id;
+        }
+    }
+
+    return nearestId;
 }
 
 QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
@@ -716,18 +762,29 @@ QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
             if (!vsId.isEmpty()) {
                 return vsId;
             }
-            // Point is in gap between virtual screens — find nearest by center distance
+            // Point is in gap between virtual screens — find nearest by edge distance
             auto cfgIt = m_virtualConfigs.constFind(physId);
             if (cfgIt != m_virtualConfigs.constEnd()) {
+                auto edgeDistance = [](const QPoint& pt, const QRect& r) -> int {
+                    int dx = 0;
+                    int dy = 0;
+                    if (pt.x() < r.left())
+                        dx = r.left() - pt.x();
+                    else if (pt.x() > r.right())
+                        dx = pt.x() - r.right();
+                    if (pt.y() < r.top())
+                        dy = r.top() - pt.y();
+                    else if (pt.y() > r.bottom())
+                        dy = pt.y() - r.bottom();
+                    return dx * dx + dy * dy;
+                };
+
                 QRect physGeom = screen->geometry();
                 QString nearestId;
-                qreal minDist = std::numeric_limits<qreal>::max();
+                int minDist = std::numeric_limits<int>::max();
                 for (const auto& vs : cfgIt->screens) {
                     QRect absGeom = vs.absoluteGeometry(physGeom);
-                    QPointF center = QRectF(absGeom).center();
-                    qreal dx = center.x() - globalPos.x();
-                    qreal dy = center.y() - globalPos.y();
-                    qreal dist = dx * dx + dy * dy;
+                    int dist = edgeDistance(globalPos, absGeom);
                     if (dist < minDist) {
                         minDist = dist;
                         nearestId = vs.id;

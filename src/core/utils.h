@@ -274,6 +274,25 @@ inline bool appIdMatches(const QString& appId, const QString& pattern)
     return false;
 }
 
+/**
+ * @brief Resolve the effective screen ID at a global position (virtual-screen-aware)
+ *
+ * Queries ScreenManager::effectiveScreenAt() for virtual screen resolution,
+ * falling back to the physical QScreen's stable identifier. Eliminates the
+ * repeated pattern of:
+ *   auto* mgr = ScreenManager::instance();
+ *   QString id = mgr ? mgr->effectiveScreenAt(pos) : QString();
+ *   if (id.isEmpty()) id = Utils::screenIdentifier(screen);
+ *
+ * @param pos Global compositor position
+ * @param fallbackScreen Physical QScreen* to derive screen ID from if ScreenManager
+ *        is unavailable or pos is outside all virtual screens. If nullptr, the
+ *        QScreen at pos (via QGuiApplication::screenAt) is used.
+ * @return Effective screen ID (virtual if subdivided, physical otherwise), or
+ *         empty string if no screen could be resolved
+ */
+PLASMAZONES_EXPORT QString effectiveScreenIdAt(const QPoint& pos, QScreen* fallbackScreen = nullptr);
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Screen Identity Utilities (EDID-based stable identification)
 // Declarations — bodies in utils.cpp

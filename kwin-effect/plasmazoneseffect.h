@@ -538,7 +538,7 @@ public:
     /// (which the effect cannot include). Keep in sync.
     static QString extractPhysicalScreenId(const QString& screenId)
     {
-        static const QString vsSep = QStringLiteral("/vs:");
+        static const QLatin1String vsSep("/vs:");
         int pos = screenId.indexOf(vsSep);
         return (pos > 0) ? screenId.left(pos) : screenId;
     }

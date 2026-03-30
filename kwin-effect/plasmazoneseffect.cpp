@@ -2003,6 +2003,19 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                     self->m_virtualScreenDefs.insert(physicalScreenId, defs);
                 }
 
+                // Re-resolve tracked screen IDs so stale virtual screen IDs
+                // are replaced with IDs from the updated boundaries.
+                for (auto it = self->m_trackedScreenPerWindow.begin(); it != self->m_trackedScreenPerWindow.end();
+                     ++it) {
+                    if (auto* window = it.key()) {
+                        const QPoint center = window->frameGeometry().center().toPoint();
+                        const QString newScreenId = self->resolveEffectiveScreenId(center, window->screen());
+                        if (!newScreenId.isEmpty()) {
+                            it.value() = newScreenId;
+                        }
+                    }
+                }
+
                 countdownVsGate();
             });
 }
@@ -2020,6 +2033,8 @@ void PlasmaZonesEffect::fetchAllVirtualScreenConfigs()
             physIds.append(physId);
         }
     }
+
+    physIds.removeDuplicates();
 
     if (physIds.isEmpty()) {
         // No physical screens to query — gate opens immediately

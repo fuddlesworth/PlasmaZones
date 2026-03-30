@@ -19,20 +19,6 @@
 
 namespace PlasmaZones {
 
-namespace {
-/// Sort zones by zone number ascending, with UUID tie-breaker for determinism
-/// when multiple zones share the same number. Used by resnap, snap-all, and
-/// autotile-order-to-zone-assignment logic.
-void sortZonesByNumber(QVector<Zone*>& zones)
-{
-    std::stable_sort(zones.begin(), zones.end(), [](Zone* a, Zone* b) {
-        if (a->zoneNumber() != b->zoneNumber())
-            return a->zoneNumber() < b->zoneNumber();
-        return a->id() < b->id();
-    });
-}
-} // anonymous namespace
-
 QVector<ZoneAssignmentEntry> WindowTrackingService::calculateResnapFromPreviousLayout()
 {
     QVector<ZoneAssignmentEntry> result;
@@ -96,8 +82,7 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateResnapFromPreviousL
                         targetZoneIds.append(z->id().toString());
                 }
                 if (!targetZoneIds.isEmpty()) {
-                    QRect geo = (targetZoneIds.size() > 1) ? multiZoneGeometry(targetZoneIds, screenId)
-                                                           : zoneGeometry(targetZoneIds.first(), screenId);
+                    QRect geo = resolveZoneGeometry(targetZoneIds, screenId);
                     if (geo.isValid()) {
                         ZoneAssignmentEntry assignEntry;
                         assignEntry.windowId = entry->windowId;
@@ -166,9 +151,7 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     QHash<QString, int> globalZoneIdToPosition;
     for (Layout* layout : m_layoutManager->layouts()) {
         QVector<Zone*> zones = layout->zones();
-        std::sort(zones.begin(), zones.end(), [](Zone* a, Zone* b) {
-            return a->zoneNumber() < b->zoneNumber();
-        });
+        sortZonesByNumber(zones);
         for (int i = 0; i < zones.size(); ++i) {
             globalZoneIdToPosition[zones[i]->id().toString()] = i + 1; // 1-based
         }
@@ -245,8 +228,7 @@ WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& scre
             continue;
         }
 
-        QRect geo =
-            (zoneIds.size() > 1) ? multiZoneGeometry(zoneIds, screenId) : zoneGeometry(zoneIds.first(), screenId);
+        QRect geo = resolveZoneGeometry(zoneIds, screenId);
         if (!geo.isValid()) {
             continue;
         }
@@ -269,9 +251,7 @@ WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& scre
         for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
             QString screen = m_windowScreenAssignments.value(it.key());
             bool floating = isWindowFloating(it.key());
-            QRect geo = it.value().isEmpty() ? QRect()
-                                             : (it.value().size() > 1 ? multiZoneGeometry(it.value(), screen)
-                                                                      : zoneGeometry(it.value().first(), screen));
+            QRect geo = it.value().isEmpty() ? QRect() : resolveZoneGeometry(it.value(), screen);
             qCDebug(lcCore) << "  skipped:" << it.key() << "zones=" << it.value() << "screen=" << screen
                             << "floating=" << floating << "geoValid=" << geo.isValid()
                             << "screenMatch=" << (screenFilter.isEmpty() || screen == screenFilter);
@@ -349,12 +329,7 @@ WindowTrackingService::calculateResnapFromAutotileOrder(const QStringList& autot
             continue;
 
         // Compute geometry: combined for multi-zone, single for normal
-        QRect geo;
-        if (validZoneIds.size() > 1) {
-            geo = multiZoneGeometry(validZoneIds, screenId);
-        } else {
-            geo = zoneGeometry(validZoneIds.first(), screenId);
-        }
+        QRect geo = resolveZoneGeometry(validZoneIds, screenId);
 
         if (geo.isValid()) {
             ZoneAssignmentEntry entry;
@@ -558,8 +533,7 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
         }
         QString screenId = m_windowScreenAssignments.value(windowId);
 
-        QRect geo =
-            (zoneIds.size() > 1) ? multiZoneGeometry(zoneIds, screenId) : zoneGeometry(zoneIds.first(), screenId);
+        QRect geo = resolveZoneGeometry(zoneIds, screenId);
         if (geo.isValid()) {
             result[windowId] = geo;
         }

@@ -44,7 +44,9 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
         bottom = qMin(bottom, physicalGeometry.y() + physicalGeometry.height());
         left = qMax(left, physicalGeometry.x());
         top = qMax(top, physicalGeometry.y());
-        return QRect(left, top, qMax(0, right - left), qMax(0, bottom - top));
+        int w = qMax(1, right - left);
+        int h = qMax(1, bottom - top);
+        return QRect(left, top, w, h);
     }
 
     bool operator==(const VirtualScreenDef& other) const

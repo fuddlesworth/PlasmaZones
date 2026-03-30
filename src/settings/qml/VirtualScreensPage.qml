@@ -15,6 +15,8 @@ import org.kde.kirigami as Kirigami
  * button is clicked.
  */
 Flickable {
+    // Clamp: don't allow the move — last screen would get negative/tiny width
+
     id: root
 
     // ── Internal state ───────────────────────────────────────────────────
@@ -107,8 +109,6 @@ Flickable {
 
     // Clamp divider move: ensure both adjacent regions have at least 10%
     function _moveDivider(dividerIndex, newFraction) {
-        // Clamp: don't allow the move — last screen would get negative/tiny width
-
         if (dividerIndex < 0 || dividerIndex >= _pendingScreens.length - 1)
             return ;
 
@@ -250,7 +250,7 @@ Flickable {
                     color: Kirigami.Theme.disabledTextColor
                 }
 
-                Rectangle {
+                VirtualScreenPreview {
                     id: previewRect
 
                     Layout.fillWidth: true
@@ -263,172 +263,12 @@ Flickable {
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     Layout.bottomMargin: Kirigami.Units.largeSpacing
-                    color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
-                    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
-                    border.width: 1
-                    radius: Kirigami.Units.smallSpacing
-
-                    // "No subdivisions" label when empty
-                    Label {
-                        anchors.centerIn: parent
-                        visible: root._pendingScreens.length === 0
-                        text: i18n("No subdivisions (full screen)")
-                        color: Kirigami.Theme.disabledTextColor
-                        font.italic: true
+                    pendingScreens: root._pendingScreens
+                    screenWidth: root._screenWidth
+                    screenHeight: root._screenHeight
+                    onDividerMoved: function(dividerIndex, newFraction) {
+                        root._moveDivider(dividerIndex, newFraction);
                     }
-
-                    // Virtual screen region rectangles
-                    Repeater {
-                        model: root._pendingScreens
-
-                        Rectangle {
-                            required property var modelData
-                            required property int index
-
-                            x: modelData.x * previewRect.width + 1
-                            y: modelData.y * previewRect.height + 1
-                            width: modelData.width * previewRect.width - 2
-                            height: modelData.height * previewRect.height - 2
-                            color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
-                            border.color: Kirigami.Theme.highlightColor
-                            border.width: 2
-                            radius: Kirigami.Units.smallSpacing / 2
-
-                            ColumnLayout {
-                                anchors.centerIn: parent
-                                spacing: Math.round(Kirigami.Units.smallSpacing / 2)
-
-                                Label {
-                                    Layout.alignment: Qt.AlignHCenter
-                                    text: modelData.displayName || i18n("Screen %1", index + 1)
-                                    font.weight: Font.DemiBold
-                                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.7, Math.min(Kirigami.Theme.defaultFont.pixelSize * 1, parent.parent.width / 8))
-                                    color: Kirigami.Theme.textColor
-                                    elide: Text.ElideRight
-                                    maximumLineCount: 1
-                                }
-
-                                Label {
-                                    Layout.alignment: Qt.AlignHCenter
-                                    text: Math.round(modelData.width * root._screenWidth) + "px · " + Math.round(modelData.width * 100) + "%"
-                                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.65, Math.min(Kirigami.Theme.defaultFont.pixelSize * 0.85, parent.parent.width / 10))
-                                    color: Kirigami.Theme.disabledTextColor
-                                }
-
-                            }
-
-                        }
-
-                    }
-
-                    // Draggable divider handles between regions
-                    Repeater {
-                        model: root._pendingScreens.length > 1 ? root._pendingScreens.length - 1 : 0
-
-                        Item {
-                            id: dividerHandle
-
-                            required property int index
-                            readonly property real dividerX: {
-                                if (index < root._pendingScreens.length - 1)
-                                    return (root._pendingScreens[index].x + root._pendingScreens[index].width) * previewRect.width;
-
-                                return 0;
-                            }
-
-                            x: dividerX - 3
-                            y: 0
-                            width: 7
-                            height: previewRect.height
-                            Accessible.name: i18n("Virtual screen divider %1", index + 1)
-                            Accessible.role: Accessible.Separator
-
-                            // Visual divider line
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: dividerDragArea.containsMouse || dividerDragArea.pressed ? 3 : 1
-                                height: parent.height - 4
-                                radius: 1
-                                color: dividerDragArea.containsMouse || dividerDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
-
-                                Behavior on width {
-                                    NumberAnimation {
-                                        duration: 100
-                                    }
-
-                                }
-
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: 100
-                                    }
-
-                                }
-
-                            }
-
-                            // Drag grip indicator
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: 12
-                                height: 24
-                                radius: 4
-                                color: dividerDragArea.containsMouse || dividerDragArea.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
-                                border.width: 1
-                                border.color: dividerDragArea.containsMouse || dividerDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                                visible: previewRect.height > 40
-
-                                // Grip dots
-                                Column {
-                                    anchors.centerIn: parent
-                                    spacing: Math.round(Kirigami.Units.smallSpacing / 2)
-
-                                    Repeater {
-                                        model: 3
-
-                                        Rectangle {
-                                            width: 2
-                                            height: 2
-                                            radius: 1
-                                            color: Kirigami.Theme.textColor
-                                            opacity: 0.5
-                                        }
-
-                                    }
-
-                                }
-
-                            }
-
-                            MouseArea {
-                                id: dividerDragArea
-
-                                property real dragStartX: 0
-                                property real dragStartFraction: 0
-
-                                anchors.fill: parent
-                                anchors.margins: -4
-                                cursorShape: Qt.SplitHCursor
-                                hoverEnabled: true
-                                onPressed: function(mouse) {
-                                    dragStartX = mouse.x + dividerHandle.x;
-                                    dragStartFraction = dividerHandle.dividerX / previewRect.width;
-                                }
-                                onPositionChanged: function(mouse) {
-                                    if (!pressed)
-                                        return ;
-
-                                    var globalX = mouse.x + dividerHandle.x;
-                                    var deltaFraction = (globalX - dragStartX) / previewRect.width;
-                                    var newFraction = dragStartFraction + deltaFraction;
-                                    root._moveDivider(dividerHandle.index, newFraction);
-                                }
-                            }
-
-                        }
-
-                    }
-
                 }
 
             }

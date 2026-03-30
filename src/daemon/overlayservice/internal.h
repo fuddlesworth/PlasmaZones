@@ -12,6 +12,7 @@
 #include "overlay_helpers.h"
 #include "../../core/screenmanager.h"
 #include "../../core/settings_interfaces.h"
+#include "../../core/interfaces.h"
 #include "../../core/shaderregistry.h"
 #include "../../core/utils.h"
 #include "../config/configdefaults.h"
@@ -178,6 +179,22 @@ inline void applyLayerShellScreenPosition(QWindow* window, QScreen* physScreen, 
     } else {
         layerSurface->setAnchors(LayerSurface::AnchorAll);
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Lock-mode check helper shared across overlayservice TUs
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Check whether either snapping mode (0 = manual, 1 = autotile) is locked for
+/// the given screen/desktop/activity context. Used by zone selector, layout
+/// picker, and overlay update paths that must respect per-context lock state.
+inline bool isAnyModeLocked(ISettings* settings, const QString& screenId, int desktop, const QString& activity)
+{
+    if (!settings) {
+        return false;
+    }
+    return settings->isContextLocked(QStringLiteral("0:") + screenId, desktop, activity)
+        || settings->isContextLocked(QStringLiteral("1:") + screenId, desktop, activity);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

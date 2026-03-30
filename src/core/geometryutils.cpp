@@ -178,11 +178,11 @@ QRectF getZoneGeometryWithGaps(Zone* zone, const QRect& screenGeometry, const QR
     return applyGapsToZoneGeometry(geom, zone, referenceGeom, innerGap, outerGaps);
 }
 
-QRect getZoneGeometryForScreen(Zone* zone, QScreen* screen, const QString& screenId, Layout* layout,
-                               ISettings* settings)
+QRectF getZoneGeometryForScreenF(Zone* zone, QScreen* screen, const QString& screenId, Layout* layout,
+                                 ISettings* settings)
 {
     if (!zone) {
-        return QRect();
+        return QRectF();
     }
 
     int zonePadding = getEffectiveZonePadding(layout, settings, screenId);
@@ -193,17 +193,21 @@ QRect getZoneGeometryForScreen(Zone* zone, QScreen* screen, const QString& scree
     QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
     QRect vsAvailGeom = mgr ? mgr->screenAvailableGeometry(screenId) : QRect();
 
-    QRectF geoF;
     if (vsGeom.isValid()) {
         QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
-        geoF = getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding, outerGaps, useAvail, screenId);
-    } else if (screen) {
-        geoF = getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
-    } else {
-        return QRect();
+        return getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding, outerGaps, useAvail, screenId);
     }
+    if (screen) {
+        return getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
+    }
+    return QRectF();
+}
 
-    return snapToRect(geoF);
+QRect getZoneGeometryForScreen(Zone* zone, QScreen* screen, const QString& screenId, Layout* layout,
+                               ISettings* settings)
+{
+    QRectF geoF = getZoneGeometryForScreenF(zone, screen, screenId, layout, settings);
+    return geoF.isValid() ? snapToRect(geoF) : QRect();
 }
 
 int getEffectiveZonePadding(Layout* layout, ISettings* settings, const QString& screenId)
@@ -392,10 +396,11 @@ static QJsonObject zoneToEmptyZoneJson(Zone* zone, const QRectF& overlayGeom, IS
  * virtual screen ID). Each caller resolves geometry and gap parameters, then delegates
  * the zone iteration and JSON serialization to this function.
  */
-static QString buildEmptyZonesJsonImpl(Layout* layout, const QRect& screenGeometry, const QRect& availableGeometry,
-                                       const QString& screenId, int zonePadding, const EdgeGaps& outerGaps,
-                                       bool useAvail, ISettings* settings, const QRect& overlayOriginRect,
-                                       QScreen* physScreen, const std::function<bool(const Zone*)>& isZoneEmpty)
+static QString buildEmptyZonesJsonImpl(Layout* layout, const std::optional<QRect>& screenGeometry,
+                                       const QRect& availableGeometry, const QString& screenId, int zonePadding,
+                                       const EdgeGaps& outerGaps, bool useAvail, ISettings* settings,
+                                       const QRect& overlayOriginRect, QScreen* physScreen,
+                                       const std::function<bool(const Zone*)>& isZoneEmpty)
 {
     QJsonArray arr;
     for (Zone* zone : layout->zones()) {
@@ -403,14 +408,15 @@ static QString buildEmptyZonesJsonImpl(Layout* layout, const QRect& screenGeomet
             continue;
         }
         QRectF geom;
-        if (physScreen && screenGeometry == QRect()) {
+        if (physScreen && !screenGeometry.has_value()) {
             // Physical screen path — use QScreen* overload
             geom = getZoneGeometryWithGaps(zone, physScreen, zonePadding, outerGaps, useAvail);
         } else {
-            QRect availGeom = availableGeometry.isValid() ? availableGeometry : screenGeometry;
-            geom = getZoneGeometryWithGaps(zone, screenGeometry, availGeom, zonePadding, outerGaps, useAvail, screenId);
+            QRect sg = screenGeometry.value();
+            QRect availGeom = availableGeometry.isValid() ? availableGeometry : sg;
+            geom = getZoneGeometryWithGaps(zone, sg, availGeom, zonePadding, outerGaps, useAvail, screenId);
         }
-        QRectF overlayGeom = physScreen && screenGeometry == QRect()
+        QRectF overlayGeom = (physScreen && !screenGeometry.has_value())
             ? availableAreaToOverlayCoordinates(geom, physScreen)
             : availableAreaToOverlayCoordinates(geom, overlayOriginRect);
 
@@ -426,14 +432,14 @@ QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings
         return QStringLiteral("[]");
     }
 
-    bool useAvail = !(layout && layout->useFullScreenGeometry());
+    bool useAvail = !layout->useFullScreenGeometry();
     layout->recalculateZoneGeometries(effectiveScreenGeometry(layout, screen));
 
     QString screenId = Utils::screenIdentifier(screen);
     int zonePadding = getEffectiveZonePadding(layout, settings, screenId);
     EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, screenId);
 
-    return buildEmptyZonesJsonImpl(layout, QRect(), QRect(), screenId, zonePadding, outerGaps, useAvail, settings,
+    return buildEmptyZonesJsonImpl(layout, std::nullopt, QRect(), screenId, zonePadding, outerGaps, useAvail, settings,
                                    QRect(), screen, isZoneEmpty);
 }
 
@@ -486,15 +492,15 @@ QString buildEmptyZonesJson(Layout* layout, const QString& screenId, QScreen* ph
     QRect vsAvailGeom = mgr ? mgr->screenAvailableGeometry(screenId) : QRect();
 
     if (vsGeom.isValid()) {
-        bool useAvail = !(layout && layout->useFullScreenGeometry());
+        bool useAvail = !layout->useFullScreenGeometry();
         QRectF effectiveGeom = useAvail && vsAvailGeom.isValid() ? QRectF(vsAvailGeom) : QRectF(vsGeom);
         layout->recalculateZoneGeometries(effectiveGeom);
 
         int zonePadding = getEffectiveZonePadding(layout, settings, screenId);
         EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, screenId);
 
-        return buildEmptyZonesJsonImpl(layout, vsGeom, vsAvailGeom, screenId, zonePadding, outerGaps, useAvail,
-                                       settings, vsGeom, nullptr, isZoneEmpty);
+        return buildEmptyZonesJsonImpl(layout, std::optional<QRect>(vsGeom), vsAvailGeom, screenId, zonePadding,
+                                       outerGaps, useAvail, settings, vsGeom, nullptr, isZoneEmpty);
     }
 
     // Fallback: use physical QScreen*

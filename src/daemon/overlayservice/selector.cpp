@@ -142,14 +142,8 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
 
     // Update the zone selector window with cursor position for hover effects
     // Resolve to effective (virtual) screen ID if applicable
+    QString cursorScreenId = Utils::effectiveScreenIdAt(QPoint(cursorX, cursorY), screen);
     auto* mgr = ScreenManager::instance();
-    QString cursorScreenId;
-    if (mgr) {
-        cursorScreenId = mgr->effectiveScreenAt(QPoint(cursorX, cursorY));
-    }
-    if (cursorScreenId.isEmpty()) {
-        cursorScreenId = Utils::screenIdentifier(screen);
-    }
     // Clear selection highlight on all OTHER zone selector windows when cursor moves
     // to a different virtual screen, preventing stale highlights from previous screen.
     for (auto it = m_zoneSelectorWindows.begin(); it != m_zoneSelectorWindows.end(); ++it) {
@@ -215,9 +209,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 if (m_settings && m_layoutManager) {
                     int curDesktop = m_layoutManager->currentVirtualDesktop();
                     QString curActivity = m_layoutManager->currentActivity();
-                    bool locked =
-                        m_settings->isContextLocked(QStringLiteral("0:") + cursorScreenId, curDesktop, curActivity)
-                        || m_settings->isContextLocked(QStringLiteral("1:") + cursorScreenId, curDesktop, curActivity);
+                    bool locked = isAnyModeLocked(m_settings, cursorScreenId, curDesktop, curActivity);
                     if (locked) {
                         // Only allow zone selection from the active layout
                         Layout* activeLayout = m_layoutManager->resolveLayoutForScreen(cursorScreenId);
@@ -393,14 +385,7 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
     }
     // Delegate to screenId overload for virtual-screen-aware geometry.
     // Use cursor position to disambiguate when multiple virtual screens share one QScreen*.
-    auto* mgr = ScreenManager::instance();
-    QString screenId;
-    if (mgr) {
-        screenId = mgr->effectiveScreenAt(QCursor::pos());
-    }
-    if (screenId.isEmpty()) {
-        screenId = Utils::screenIdentifier(screen);
-    }
+    QString screenId = Utils::effectiveScreenIdAt(QCursor::pos(), screen);
     return getSelectedZoneGeometry(screenId);
 }
 
@@ -420,27 +405,10 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
             && m_selectedZoneIndex < static_cast<int>(selectedLayout->zones().size())) {
             Zone* zone = selectedLayout->zones().at(m_selectedZoneIndex);
             if (zone) {
-                int zonePadding = GeometryUtils::getEffectiveZonePadding(selectedLayout, m_settings, screenId);
-                EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(selectedLayout, m_settings, screenId);
-                bool useAvail = !(selectedLayout && selectedLayout->useFullScreenGeometry());
-
-                // Use virtual screen geometry when available
-                if (mgr) {
-                    QRect vsGeom = mgr->screenGeometry(screenId);
-                    QRect vsAvailGeom = mgr->screenAvailableGeometry(screenId);
-                    if (vsGeom.isValid()) {
-                        QRectF geom = GeometryUtils::getZoneGeometryWithGaps(
-                            zone, vsGeom, vsAvailGeom.isValid() ? vsAvailGeom : vsGeom, zonePadding, outerGaps,
-                            useAvail, screenId);
-                        return GeometryUtils::snapToRect(geom);
-                    }
-                }
-
-                // Fallback to physical screen
-                if (physScreen) {
-                    QRectF geom =
-                        GeometryUtils::getZoneGeometryWithGaps(zone, physScreen, zonePadding, outerGaps, useAvail);
-                    return GeometryUtils::snapToRect(geom);
+                QRect result =
+                    GeometryUtils::getZoneGeometryForScreen(zone, physScreen, screenId, selectedLayout, m_settings);
+                if (result.isValid()) {
+                    return result;
                 }
             }
         }

@@ -384,6 +384,22 @@ void warnDuplicateScreenIds()
     }
 }
 
+QString effectiveScreenIdAt(const QPoint& pos, QScreen* fallbackScreen)
+{
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        QString id = mgr->effectiveScreenAt(pos);
+        if (!id.isEmpty()) {
+            return id;
+        }
+    }
+    QScreen* screen = fallbackScreen;
+    if (!screen) {
+        screen = findScreenAtPosition(pos);
+    }
+    return screen ? screenIdentifier(screen) : QString();
+}
+
 qreal screenAspectRatio(const QString& screenNameOrId)
 {
     // For virtual screen IDs, use ScreenManager geometry

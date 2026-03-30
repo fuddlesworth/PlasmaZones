@@ -6,6 +6,7 @@
 #include "interfaces.h"
 #include "layout.h"
 #include "screenmanager.h"
+#include "virtualscreen.h"
 #include "zone.h"
 #include "layoutmanager.h"
 #include "virtualdesktopmanager.h"
@@ -14,6 +15,7 @@
 #include <QScreen>
 #include <QSet>
 #include <QUuid>
+#include <algorithm>
 
 namespace PlasmaZones {
 
@@ -345,10 +347,13 @@ std::optional<QRect> WindowTrackingService::validatedPreTileGeometry(const QStri
         return std::nullopt;
     }
 
-    // Cross-screen check: if the geometry was captured on a different screen than
-    // where the window currently is, the absolute coordinates are wrong. Preserve
-    // the size but center on the current screen.
-    if (!storedScreen.isEmpty() && !currentScreenName.isEmpty() && storedScreen != currentScreenName) {
+    // Cross-screen check: if the geometry was captured on a different physical screen
+    // than where the window currently is, the absolute coordinates are wrong. Preserve
+    // the size but center on the current screen. Use physical ID comparison so that
+    // virtual screens on the same physical monitor (e.g. DP-1/vs:0 vs DP-1/vs:1) do
+    // not incorrectly trigger cross-screen centering.
+    if (!storedScreen.isEmpty() && !currentScreenName.isEmpty()
+        && VirtualScreenId::extractPhysicalId(storedScreen) != VirtualScreenId::extractPhysicalId(currentScreenName)) {
         auto* mgr = ScreenManager::instance();
         QScreen* target =
             mgr ? mgr->physicalQScreenFor(currentScreenName) : Utils::findScreenByIdOrName(currentScreenName);
@@ -552,12 +557,7 @@ UnfloatResult WindowTrackingService::resolveUnfloatGeometry(const QString& windo
     }
 
     // Compute geometry (combined for multi-zone)
-    QRect geo;
-    if (zoneIds.size() > 1) {
-        geo = multiZoneGeometry(zoneIds, restoreScreen);
-    } else {
-        geo = zoneGeometry(zoneIds.first(), restoreScreen);
-    }
+    QRect geo = resolveZoneGeometry(zoneIds, restoreScreen);
 
     if (!geo.isValid()) {
         return result;
@@ -582,6 +582,27 @@ void WindowTrackingService::setWindowSticky(const QString& windowId, bool sticky
 bool WindowTrackingService::isWindowSticky(const QString& windowId) const
 {
     return m_windowStickyStates.value(windowId, false);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Shared Helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void WindowTrackingService::sortZonesByNumber(QVector<Zone*>& zones)
+{
+    std::stable_sort(zones.begin(), zones.end(), [](Zone* a, Zone* b) {
+        if (a->zoneNumber() != b->zoneNumber())
+            return a->zoneNumber() < b->zoneNumber();
+        return a->id() < b->id();
+    });
+}
+
+QRect WindowTrackingService::resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const
+{
+    if (zoneIds.isEmpty()) {
+        return QRect();
+    }
+    return (zoneIds.size() > 1) ? multiZoneGeometry(zoneIds, screenId) : zoneGeometry(zoneIds.first(), screenId);
 }
 
 } // namespace PlasmaZones

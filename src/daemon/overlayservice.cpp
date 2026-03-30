@@ -317,14 +317,7 @@ void OverlayService::show()
         // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
         // Check both physical and effective (virtual) screen IDs
         if (cursorScreen && m_settings) {
-            auto* mgr = ScreenManager::instance();
-            QString effectiveId;
-            if (mgr) {
-                effectiveId = mgr->effectiveScreenAt(QCursor::pos());
-            }
-            if (effectiveId.isEmpty()) {
-                effectiveId = Utils::screenIdentifier(cursorScreen);
-            }
+            QString effectiveId = Utils::effectiveScreenIdAt(QCursor::pos(), cursorScreen);
             if (isContextDisabled(m_settings, effectiveId, m_currentVirtualDesktop, m_currentActivity)) {
                 return;
             }
@@ -351,14 +344,7 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
 
         // Check disabled status using the effective (virtual-aware) screen ID,
         // not just the physical screen, so per-virtual-screen disabling works.
-        auto* mgr = ScreenManager::instance();
-        QString effectiveId;
-        if (mgr) {
-            effectiveId = mgr->effectiveScreenAt(QPoint(cursorX, cursorY));
-        }
-        if (effectiveId.isEmpty() && cursorScreen) {
-            effectiveId = Utils::screenIdentifier(cursorScreen);
-        }
+        QString effectiveId = Utils::effectiveScreenIdAt(QPoint(cursorX, cursorY), cursorScreen);
         if (!effectiveId.isEmpty()
             && isContextDisabled(m_settings, effectiveId, m_currentVirtualDesktop, m_currentActivity)) {
             return;
@@ -370,11 +356,7 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
     if (m_visible) {
         // Already visible: when single-monitor mode, switch overlay if cursor moved to different screen (#136)
         // Use effective (virtual-aware) screen ID to detect cross-virtual-screen movement
-        auto* mgr2 = ScreenManager::instance();
-        QString cursorEffectiveId = mgr2 ? mgr2->effectiveScreenAt(QPoint(cursorX, cursorY)) : QString();
-        if (cursorEffectiveId.isEmpty() && cursorScreen) {
-            cursorEffectiveId = Utils::screenIdentifier(cursorScreen);
-        }
+        QString cursorEffectiveId = Utils::effectiveScreenIdAt(QPoint(cursorX, cursorY), cursorScreen);
         if (!showOnAllMonitors && !cursorEffectiveId.isEmpty() && m_currentOverlayScreenId != cursorEffectiveId) {
             initializeOverlay(cursorScreen, cursorPos);
         }

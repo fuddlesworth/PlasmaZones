@@ -65,9 +65,7 @@ QString WindowTrackingService::findEmptyZoneInLayout(Layout* layout, const QStri
 
     // Sort by zone number so "first empty" is the lowest-numbered empty zone
     QVector<Zone*> sortedZones = layout->zones();
-    std::sort(sortedZones.begin(), sortedZones.end(), [](const Zone* a, const Zone* b) {
-        return a->zoneNumber() < b->zoneNumber();
-    });
+    sortZonesByNumber(sortedZones);
 
     for (Zone* zone : sortedZones) {
         if (!occupiedZoneIds.contains(zone->id())) {
@@ -189,9 +187,7 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateRotation(bool clock
 
         // Get zones sorted by zone number
         QVector<Zone*> zones = layout->zones();
-        std::sort(zones.begin(), zones.end(), [](Zone* a, Zone* b) {
-            return a->zoneNumber() < b->zoneNumber();
-        });
+        sortZonesByNumber(zones);
 
         // Build zone ID -> index map (with and without braces for format-agnostic matching)
         QHash<QString, int> zoneIdToIndex;

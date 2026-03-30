@@ -437,16 +437,7 @@ void ZoneSelectorController::updateProximity()
         if (cursorScreen) {
             m_screen = cursorScreen;
             // Resolve to effective (virtual) screen ID at the cursor position
-            auto* smgr = ScreenManager::instance();
-            if (smgr) {
-                QString resolved = smgr->effectiveScreenAt(m_cursorPosition.toPoint());
-                if (!resolved.isEmpty()) {
-                    m_screenId = resolved;
-                }
-            }
-            if (m_screenId.isEmpty()) {
-                m_screenId = Utils::screenIdentifier(cursorScreen);
-            }
+            m_screenId = Utils::effectiveScreenIdAt(m_cursorPosition.toPoint(), cursorScreen);
         }
     }
 
