@@ -92,6 +92,7 @@ QList<ScreenInfo> fetchScreens()
             info.model = screen->model();
             info.width = screen->geometry().width();
             info.height = screen->geometry().height();
+            info.connectorName = screen->name();
             info.screenId = Utils::screenIdentifier(screen);
             result.append(info);
         }

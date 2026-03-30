@@ -216,15 +216,6 @@ void Daemon::showAlgorithmOsdDeferred(const QString& algorithmId, const QString&
     });
 }
 
-void Daemon::connectToKWinScript()
-{
-    // The KWin script will call us via D-Bus
-    // We just need to be ready to receive calls
-
-    // Monitor for KWin script connection
-    // The script will call getActiveLayout() on startup
-}
-
 void Daemon::updateLayoutFilter()
 {
     updateLayoutFilterForScreen(QString());

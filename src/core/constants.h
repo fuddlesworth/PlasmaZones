@@ -5,6 +5,7 @@
 
 #include <QColor>
 #include <QLatin1String>
+#include <QString>
 
 namespace PlasmaZones {
 
@@ -356,6 +357,12 @@ inline constexpr QLatin1String Colors{"colors"};
 // Virtual screen keys
 inline constexpr QLatin1String IsVirtualScreen{"isVirtualScreen"};
 inline constexpr QLatin1String VirtualDisplayName{"virtualDisplayName"};
+inline constexpr QLatin1String PhysicalScreenId{"physicalScreenId"};
+inline constexpr QLatin1String SerialNumber{"serialNumber"};
+inline constexpr QLatin1String Index{"index"};
+inline constexpr QLatin1String DisplayName{"displayName"};
+inline constexpr QLatin1String Region{"region"};
+inline constexpr QLatin1String Screens{"screens"};
 }
 
 /**
@@ -412,6 +419,15 @@ constexpr int MaxBars = 256;
  * occupancy checks.
  */
 inline constexpr QLatin1String ZoneSelectorIdPrefix{"zoneselector-"};
+
+/**
+ * @brief Sentinel value used as targetZoneId when restoring pre-tiling geometry
+ *
+ * When a window is released from autotile, its zone assignment entry uses this
+ * sentinel instead of a real zone UUID to signal that the window should be
+ * restored to its original (pre-tiling) geometry rather than snapped to a zone.
+ */
+inline const QString RestoreSentinel = QStringLiteral("__restore__");
 
 /**
  * @brief D-Bus service constants

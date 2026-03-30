@@ -299,6 +299,22 @@ public:
     PZ_CONFIG_KEY(fillOnDropEnabledKey, "FillOnDropEnabled")
     PZ_CONFIG_KEY(fillOnDropModifierKey, "FillOnDropModifier")
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Virtual Screens
+    // The "VirtualScreen:" prefix is intentional — parsing must use
+    // groupName.mid(prefix.size()) to extract the physical screen ID,
+    // NOT split on ':',  because screen IDs themselves may contain colons
+    // (e.g. "BNQ:BenQ PD3220U:serial").
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    PZ_CONFIG_KEY(virtualScreenGroupPrefix, "VirtualScreen:")
+    PZ_CONFIG_KEY(virtualScreenCountKey, "count")
+    PZ_CONFIG_KEY(virtualScreenXKey, "x")
+    PZ_CONFIG_KEY(virtualScreenYKey, "y")
+    PZ_CONFIG_KEY(virtualScreenWidthKey, "width")
+    PZ_CONFIG_KEY(virtualScreenHeightKey, "height")
+    PZ_CONFIG_KEY(virtualScreenNameKey, "name")
+
 private:
     // Non-instantiable
     ConfigKeys() = delete;

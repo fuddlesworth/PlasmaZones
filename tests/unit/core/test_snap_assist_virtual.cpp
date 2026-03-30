@@ -36,84 +36,13 @@
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/StubSettings.h"
+#include "../helpers/StubZoneDetector.h"
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 // Type alias — shared StubSettings with snap assist enabled for this test file
 using StubSettingsSnapAssist = StubSettings;
-
-// =========================================================================
-// Stub Zone Detector
-// =========================================================================
-
-class StubZoneDetectorSnapAssist : public IZoneDetector
-{
-    Q_OBJECT
-public:
-    explicit StubZoneDetectorSnapAssist(QObject* parent = nullptr)
-        : IZoneDetector(parent)
-    {
-    }
-    Layout* layout() const override
-    {
-        return m_layout;
-    }
-    void setLayout(Layout* layout) override
-    {
-        m_layout = layout;
-    }
-    ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    Zone* zoneAtPoint(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    Zone* nearestZone(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    QVector<Zone*> expandPaintedZonesToRect(const QVector<Zone*>&) const override
-    {
-        return {};
-    }
-    void highlightZone(Zone*) override
-    {
-    }
-    void highlightZones(const QVector<Zone*>&) override
-    {
-    }
-    void clearHighlights() override
-    {
-    }
-
-private:
-    Layout* m_layout = nullptr;
-};
-
-// =========================================================================
-// Helper
-// =========================================================================
-
-static Layout* createTestLayout(int zoneCount, QObject* parent)
-{
-    auto* layout = new Layout(QStringLiteral("TestLayout"), parent);
-    for (int i = 0; i < zoneCount; ++i) {
-        auto* zone = new Zone(layout);
-        qreal x = static_cast<qreal>(i) / zoneCount;
-        qreal w = 1.0 / zoneCount;
-        zone->setRelativeGeometry(QRectF(x, 0.0, w, 1.0));
-        zone->setZoneNumber(i + 1);
-        layout->addZone(zone);
-    }
-    return layout;
-}
 
 // =========================================================================
 // Test Class
@@ -131,7 +60,7 @@ private Q_SLOTS:
         m_settings = new StubSettingsSnapAssist(nullptr);
         m_settings->setSnapAssistFeatureEnabled(true);
         m_settings->setSnapAssistEnabled(true);
-        m_zoneDetector = new StubZoneDetectorSnapAssist(nullptr);
+        m_zoneDetector = new StubZoneDetector(nullptr);
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, m_settings, nullptr, nullptr);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
@@ -535,7 +464,7 @@ private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     LayoutManager* m_layoutManager = nullptr;
     StubSettingsSnapAssist* m_settings = nullptr;
-    StubZoneDetectorSnapAssist* m_zoneDetector = nullptr;
+    StubZoneDetector* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;
     Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;

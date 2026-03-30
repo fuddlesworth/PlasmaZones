@@ -18,7 +18,7 @@ namespace PlasmaZones {
 
 namespace {
 constexpr int CollapseDelayMs = 300; // Delay before collapsing selector after cursor leaves
-constexpr int ProximityCheckMs = 16; // ~60fps polling; TODO: derive from screen refresh rate
+constexpr int ProximityCheckMs = 16; // ~60fps polling
 } // namespace
 
 ZoneSelectorController::ZoneSelectorController(QObject* parent)

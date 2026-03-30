@@ -48,21 +48,23 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
     connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this](QScreen* screen) {
         const QString physId = Utils::screenIdentifier(screen);
 
-        // Emit screenRemoved for virtual screen IDs first, then physical
+        // Mirror screenAdded: emit virtual IDs OR physical ID, never both.
         auto* mgr = ScreenManager::instance();
         if (mgr) {
             QStringList vsIds = mgr->virtualScreenIdsFor(physId);
-            if (vsIds.size() > 1 || (vsIds.size() == 1 && vsIds.first() != physId)) {
+            if (vsIds.size() > 1 || (!vsIds.isEmpty() && vsIds.first() != physId)) {
                 for (const QString& vsId : vsIds) {
                     Q_EMIT screenRemoved(vsId);
                 }
+                // NOTE: Do NOT clear virtual screen config here — the user's
+                // configuration should persist across monitor disconnections so it
+                // is automatically restored when the screen is reconnected.
+            } else {
+                Q_EMIT screenRemoved(physId);
             }
-            // NOTE: Do NOT clear virtual screen config here — the user's
-            // configuration should persist across monitor disconnections so it
-            // is automatically restored when the screen is reconnected.
+        } else {
+            Q_EMIT screenRemoved(physId);
         }
-
-        Q_EMIT screenRemoved(physId);
     });
 
     // Connect existing screens
@@ -148,11 +150,11 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenId)
         info[JsonKeys::RefreshRate] = screen->refreshRate();
         info[JsonKeys::Depth] = screen->depth();
         info[JsonKeys::ScreenId] = screenId;
-        info[QLatin1String("serialNumber")] = screen->serialNumber();
+        info[JsonKeys::SerialNumber] = screen->serialNumber();
         if (VirtualScreenId::isVirtual(screenId)) {
             info[JsonKeys::IsVirtualScreen] = true;
             QString physId = VirtualScreenId::extractPhysicalId(screenId);
-            info[QLatin1String("physicalScreenId")] = physId;
+            info[JsonKeys::PhysicalScreenId] = physId;
             // Include the user-facing display name (e.g. "Left", "Right")
             if (mgr) {
                 VirtualScreenConfig config = mgr->virtualScreenConfig(physId);
@@ -210,21 +212,21 @@ QString ScreenAdaptor::getVirtualScreenConfig(const QString& physicalScreenId)
     VirtualScreenConfig config = mgr->virtualScreenConfig(physicalScreenId);
 
     QJsonObject root;
-    root[QLatin1String("physicalScreenId")] = physicalScreenId;
+    root[JsonKeys::PhysicalScreenId] = physicalScreenId;
 
     QJsonArray screensArr;
     for (const auto& vs : config.screens) {
         QJsonObject screenObj;
         screenObj[JsonKeys::Id] = vs.id;
-        screenObj[QLatin1String("index")] = vs.index;
-        screenObj[QLatin1String("displayName")] = vs.displayName;
-        screenObj[QLatin1String("region")] = QJsonObject{{JsonKeys::X, vs.region.x()},
-                                                         {JsonKeys::Y, vs.region.y()},
-                                                         {JsonKeys::Width, vs.region.width()},
-                                                         {JsonKeys::Height, vs.region.height()}};
+        screenObj[JsonKeys::Index] = vs.index;
+        screenObj[JsonKeys::DisplayName] = vs.displayName;
+        screenObj[JsonKeys::Region] = QJsonObject{{JsonKeys::X, vs.region.x()},
+                                                  {JsonKeys::Y, vs.region.y()},
+                                                  {JsonKeys::Width, vs.region.width()},
+                                                  {JsonKeys::Height, vs.region.height()}};
         screensArr.append(screenObj);
     }
-    root[QLatin1String("screens")] = screensArr;
+    root[JsonKeys::Screens] = screensArr;
 
     return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
 }
@@ -245,7 +247,7 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
     }
 
     QJsonObject root = doc.object();
-    QJsonArray screensArr = root[QLatin1String("screens")].toArray();
+    QJsonArray screensArr = root[JsonKeys::Screens].toArray();
 
     VirtualScreenConfig config;
     config.physicalScreenId = physicalScreenId;
@@ -253,13 +255,13 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
 
     for (const auto& entry : screensArr) {
         QJsonObject screenObj = entry.toObject();
-        QJsonObject regionObj = screenObj[QLatin1String("region")].toObject();
+        QJsonObject regionObj = screenObj[JsonKeys::Region].toObject();
 
         VirtualScreenDef def;
-        def.index = screenObj[QLatin1String("index")].toInt();
+        def.index = screenObj[JsonKeys::Index].toInt();
         def.id = VirtualScreenId::make(physicalScreenId, def.index);
         def.physicalScreenId = physicalScreenId;
-        def.displayName = screenObj[QLatin1String("displayName")].toString();
+        def.displayName = screenObj[JsonKeys::DisplayName].toString();
         def.region = QRectF(regionObj[JsonKeys::X].toDouble(), regionObj[JsonKeys::Y].toDouble(),
                             regionObj[JsonKeys::Width].toDouble(), regionObj[JsonKeys::Height].toDouble());
 
@@ -271,9 +273,9 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
         const qreal rh = def.region.height();
         if (rx < -tolerance || ry < -tolerance || rw < -tolerance || rh < -tolerance || rx + rw > 1.0 + tolerance
             || ry + rh > 1.0 + tolerance) {
-            qCWarning(lcDbus) << "setVirtualScreenConfig: invalid region for virtual screen" << def.index
-                              << "- x:" << rx << "y:" << ry << "w:" << rw << "h:" << rh
-                              << "(must be within [0.0, 1.0])";
+            qCWarning(lcDbus) << "setVirtualScreenConfig: dropping virtual screen" << def.index << "for"
+                              << physicalScreenId << "- invalid region: x=" << rx << "y=" << ry << "w=" << rw
+                              << "h=" << rh << "(all coordinates must be within [0.0, 1.0])";
             continue;
         }
 

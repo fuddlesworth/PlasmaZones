@@ -40,16 +40,29 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             return virtualScreenIds.first();
         }
 
-        // Resolve the layout for the physical screen
-        Layout* layout = m_layoutManager->resolveLayoutForScreen(physicalScreenId);
-        if (!layout) {
-            return virtualScreenIds.first();
-        }
-
-        // Find the zone object for the primary zone
         const QString& primaryZoneId = zoneIds.first();
         auto uuidOpt = Utils::parseUuid(primaryZoneId);
         if (!uuidOpt) {
+            return virtualScreenIds.first();
+        }
+
+        // Try per-virtual-screen layouts first: if a VS has its own layout
+        // assignment, the zone may belong to that layout rather than the
+        // physical screen's layout.
+        for (const QString& vsId : virtualScreenIds) {
+            Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(vsId);
+            if (!vsLayout) {
+                continue;
+            }
+            Zone* zone = vsLayout->zoneById(*uuidOpt);
+            if (zone) {
+                return vsId;
+            }
+        }
+
+        // Fall back to the physical screen's layout and center-point mapping
+        Layout* layout = m_layoutManager->resolveLayoutForScreen(physicalScreenId);
+        if (!layout) {
             return virtualScreenIds.first();
         }
 
@@ -376,7 +389,7 @@ void WindowTrackingService::onLayoutChanged()
             if (pos <= 0) {
                 // Handle zoneselector synthetic IDs: "zoneselector-{layoutId}-{index}"
                 if (zoneId.startsWith(ZoneSelectorIdPrefix)) {
-                    int lastDash = zoneId.lastIndexOf(QStringLiteral("-"));
+                    int lastDash = zoneId.lastIndexOf(QLatin1Char('-'));
                     if (lastDash > 0) {
                         bool ok = false;
                         int idx = zoneId.mid(lastDash + 1).toInt(&ok);

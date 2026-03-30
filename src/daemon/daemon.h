@@ -143,7 +143,6 @@ private:
     void handleIncreaseMasterCount();
     void handleDecreaseMasterCount();
     void handleRetile();
-    void connectToKWinScript(); // Shortcuts now handled by ShortcutManager
 
     // Start-up sub-methods (defined in start.cpp)
     void createDbusAdaptors();

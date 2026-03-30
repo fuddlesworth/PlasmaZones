@@ -33,88 +33,13 @@
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
+#include "../helpers/StubSettings.h"
+#include "../helpers/StubZoneDetector.h"
+
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
-// =========================================================================
-// Stub Settings
-// =========================================================================
-
-#include "../helpers/StubSettings.h"
-
 using StubSettingsLifecycle = StubSettings;
-
-// =========================================================================
-// Stub Zone Detector
-// =========================================================================
-
-class StubZoneDetectorLifecycle : public IZoneDetector
-{
-    Q_OBJECT
-public:
-    explicit StubZoneDetectorLifecycle(QObject* parent = nullptr)
-        : IZoneDetector(parent)
-    {
-    }
-    Layout* layout() const override
-    {
-        return m_layout;
-    }
-    void setLayout(Layout* layout) override
-    {
-        m_layout = layout;
-    }
-    ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    Zone* zoneAtPoint(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    Zone* nearestZone(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    QVector<Zone*> expandPaintedZonesToRect(const QVector<Zone*>&) const override
-    {
-        return {};
-    }
-    void highlightZone(Zone*) override
-    {
-    }
-    void highlightZones(const QVector<Zone*>&) override
-    {
-    }
-    void clearHighlights() override
-    {
-    }
-
-private:
-    Layout* m_layout = nullptr;
-};
-
-// =========================================================================
-// Helper
-// =========================================================================
-
-static Layout* createTestLayout(int zoneCount, QObject* parent)
-{
-    auto* layout = new Layout(QStringLiteral("TestLayout"), parent);
-    for (int i = 0; i < zoneCount; ++i) {
-        auto* zone = new Zone(layout);
-        qreal x = static_cast<qreal>(i) / zoneCount;
-        qreal w = 1.0 / zoneCount;
-        zone->setRelativeGeometry(QRectF(x, 0.0, w, 1.0));
-        zone->setZoneNumber(i + 1);
-        layout->addZone(zone);
-    }
-    return layout;
-}
 
 // =========================================================================
 // Test Class
@@ -131,7 +56,7 @@ private Q_SLOTS:
         // Pass nullptr as parent to avoid double-delete: cleanup() deletes manually
         m_layoutManager = new LayoutManager(nullptr);
         m_settings = new StubSettingsLifecycle(nullptr);
-        m_zoneDetector = new StubZoneDetectorLifecycle(nullptr);
+        m_zoneDetector = new StubZoneDetector(nullptr);
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, m_settings, nullptr, nullptr);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
@@ -274,10 +199,12 @@ private Q_SLOTS:
         m_service->onLayoutChanged();
 
         QVector<ZoneAssignmentEntry> resnap = m_service->calculateResnapFromPreviousLayout();
-        // In headless mode the buffer may be empty but the call must not crash.
-        // The original assertion `resnap.size() >= 0` was always true;
-        // we keep this as a smoke-test and document the limitation.
-        Q_UNUSED(resnap);
+        // Two windows were assigned above, so the resnap buffer should contain
+        // entries for both (mapped to the new layout's zones by relative position).
+        // In headless mode zone geometry resolution may differ, but the buffer
+        // must still be populated with the window IDs that were snapped.
+        QVERIFY2(!resnap.isEmpty(), "Resnap buffer must contain entries for the previously-snapped windows");
+        QCOMPARE(resnap.size(), 2);
     }
 
     void testOnLayoutChanged_floatingWindowsExcludedFromResnap()
@@ -301,7 +228,7 @@ private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     LayoutManager* m_layoutManager = nullptr;
     StubSettingsLifecycle* m_settings = nullptr;
-    StubZoneDetectorLifecycle* m_zoneDetector = nullptr;
+    StubZoneDetector* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;
     Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;

@@ -238,6 +238,9 @@ void OverlayService::createSnapAssistWindow(const QString& /* screenId */, QScre
         return;
     }
 
+    m_snapAssistWindow = window;
+    m_snapAssistScreen = screen;
+
     connect(window, &QObject::destroyed, this, [this]() {
         m_snapAssistWindow = nullptr;
         m_snapAssistScreen = nullptr;
@@ -260,9 +263,6 @@ void OverlayService::createSnapAssistWindow(const QString& /* screenId */, QScre
     // The QML Shortcut may not fire if the layer shell keyboard focus
     // isn't fully reflected in Qt's internal focus model.
     window->installEventFilter(this);
-
-    m_snapAssistWindow = window;
-    m_snapAssistScreen = screen;
     window->setVisible(false);
 }
 

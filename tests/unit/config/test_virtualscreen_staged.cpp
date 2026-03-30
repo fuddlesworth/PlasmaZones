@@ -372,6 +372,30 @@ private Q_SLOTS:
         // id is empty
         QVERIFY(!def.isValid());
     }
+
+    void testIsValid_negativeWidth()
+    {
+        VirtualScreenDef def = makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0.0, 0.0, -0.5, 1.0));
+        QVERIFY(!def.isValid());
+    }
+
+    void testIsValid_negativeHeight()
+    {
+        VirtualScreenDef def = makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0.0, 0.0, 0.5, -1.0));
+        QVERIFY(!def.isValid());
+    }
+
+    void testIsValid_zeroHeight()
+    {
+        VirtualScreenDef def = makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0.0, 0.0, 0.5, 0.0));
+        QVERIFY(!def.isValid());
+    }
+
+    void testIsValid_negativeY()
+    {
+        VirtualScreenDef def = makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0.0, -0.1, 0.5, 1.0));
+        QVERIFY(!def.isValid());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestVirtualScreenStaged)

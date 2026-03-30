@@ -165,6 +165,10 @@ QRectF getZoneGeometryWithGaps(Zone* zone, const QRect& screenGeometry, const QR
     // For virtual screens, determine which edges are at the physical screen boundary.
     // Internal edges (shared with another virtual screen) get inner gap instead of
     // outer gap to avoid double gaps at virtual screen boundaries.
+    // Note: When ScreenManager::instance() is null (e.g. in unit tests), the fallback
+    // below applies default {true,true,true,true} physEdges. Tests exercising virtual
+    // screen gap calculations should provide explicit physEdges via applyGapsToZoneGeometry()
+    // directly, rather than relying on this code path.
     if (!screenId.isEmpty() && VirtualScreenId::isVirtual(screenId)) {
         auto* mgr = ScreenManager::instance();
         if (mgr) {

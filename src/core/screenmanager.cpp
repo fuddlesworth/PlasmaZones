@@ -33,10 +33,14 @@ constexpr int MinUsableScreenDimension = 100;
 
 /// Squared edge distance from a point to a rectangle (0 if inside).
 /// Uses qint64 to avoid overflow when squaring large pixel distances.
+/// Uses exclusive-right semantics (x + width, y + height) to match
+/// VirtualScreenDef::absoluteGeometry() which constructs QRects from
+/// (left, top, width, height). This avoids dist=0 ties at boundary
+/// pixels between adjacent virtual screens.
 qint64 edgeDistance(const QRect& rect, const QPoint& point)
 {
-    const qint64 dx = qMax(0, qMax(rect.left() - point.x(), point.x() - rect.right()));
-    const qint64 dy = qMax(0, qMax(rect.top() - point.y(), point.y() - rect.bottom()));
+    const qint64 dx = qMax(0, qMax(rect.left() - point.x(), point.x() - (rect.x() + rect.width())));
+    const qint64 dy = qMax(0, qMax(rect.top() - point.y(), point.y() - (rect.y() + rect.height())));
     return dx * dx + dy * dy;
 }
 } // anonymous namespace

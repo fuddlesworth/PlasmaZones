@@ -373,7 +373,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     if (!configureLayerSurface(window, physScreen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
                                QStringLiteral("plasmazones-overlay-%1").arg(screenId))) {
         qCWarning(lcOverlay) << "Failed to configure layer surface for overlay on" << screenId;
-        delete window;
+        window->deleteLater();
         return;
     }
     // Apply virtual screen positioning (anchors + margins) after configureLayerSurface

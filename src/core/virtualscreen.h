@@ -49,6 +49,9 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
         return QRect(left, top, w, h);
     }
 
+    /// WARNING: operator== uses fuzzy floating-point comparison for the region
+    /// field, so VirtualScreenDef must NOT be used as a QHash/QSet key.
+    /// Two defs that compare equal may have different hash values.
     bool operator==(const VirtualScreenDef& other) const
     {
         auto fuzzyEqual = [](qreal a, qreal b) {

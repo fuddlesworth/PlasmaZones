@@ -40,9 +40,6 @@ static QHash<QString, QStringList> parseZoneListMap(const QString& json)
             if (!zones.isEmpty()) {
                 result[it.key()] = zones;
             }
-        } else if (it.value().isString() && !it.value().toString().isEmpty()) {
-            // Backward compat: old format stored single zone ID string
-            result[it.key()] = QStringList{it.value().toString()};
         }
     }
     return result;
@@ -106,15 +103,6 @@ void WindowTrackingAdaptor::saveState()
     }
     tracking->writeString(QStringLiteral("PendingRestoreQueues"),
                           QString::fromUtf8(QJsonDocument(pendingQueuesObj).toJson(QJsonDocument::Compact)));
-
-    // Clean up obsolete keys from old formats
-    tracking->deleteKey(QStringLiteral("PendingWindowScreenAssignments"));
-    tracking->deleteKey(QStringLiteral("PendingWindowDesktopAssignments"));
-    tracking->deleteKey(QStringLiteral("PendingWindowLayoutAssignments"));
-    tracking->deleteKey(QStringLiteral("PendingWindowZoneNumbers"));
-    tracking->deleteKey(QStringLiteral("WindowZoneAssignments"));
-    tracking->deleteKey(QStringLiteral("WindowScreenAssignments"));
-    tracking->deleteKey(QStringLiteral("WindowDesktopAssignments"));
 
     // Save pre-tile geometries so float-toggle restores to the correct position
     // even after daemon restart (windows stay at their zone positions across restarts).

@@ -429,7 +429,9 @@ void Daemon::connectShortcutSignals()
                 QStringLiteral("systemd-run"),
                 {QStringLiteral("--user"), QStringLiteral("--scope"), QStringLiteral("plasmazones-settings")})) {
             // Fallback if systemd-run is unavailable
-            QProcess::startDetached(QStringLiteral("plasmazones-settings"), {});
+            if (!QProcess::startDetached(QStringLiteral("plasmazones-settings"), {})) {
+                qCWarning(lcDaemon) << "Failed to launch plasmazones-settings";
+            }
         }
     });
     connect(m_shortcutManager.get(), &ShortcutManager::openEditorRequested, this, [this]() {

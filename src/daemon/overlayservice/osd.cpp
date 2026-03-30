@@ -359,10 +359,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
 
     // Deduplicate: Skip if same action+reason+screen within 200ms (prevents duplicate from Qt signal + D-Bus signal)
-    QString actionKey = action + QLatin1String(":") + reason + QLatin1String(":") + screenId;
-    if (actionKey
-            == m_lastNavigationAction + QLatin1String(":") + m_lastNavigationReason + QLatin1String(":")
-                + m_lastNavigationScreenId
+    if (action == m_lastNavigationAction && reason == m_lastNavigationReason && screenId == m_lastNavigationScreenId
         && m_lastNavigationTime.isValid() && m_lastNavigationTime.elapsed() < 200) {
         qCDebug(lcOverlay) << "Skipping duplicate navigation OSD:" << action << reason;
         return;

@@ -40,10 +40,10 @@ private Q_SLOTS:
         QVERIFY(doc.isObject());
 
         QJsonObject obj = doc.object();
-        QCOMPARE(obj.value(QStringLiteral("x")).toInt(), 10);
-        QCOMPARE(obj.value(QStringLiteral("y")).toInt(), 20);
-        QCOMPARE(obj.value(QStringLiteral("width")).toInt(), 300);
-        QCOMPARE(obj.value(QStringLiteral("height")).toInt(), 400);
+        QCOMPARE(obj.value(QLatin1String("x")).toInt(), 10);
+        QCOMPARE(obj.value(QLatin1String("y")).toInt(), 20);
+        QCOMPARE(obj.value(QLatin1String("width")).toInt(), 300);
+        QCOMPARE(obj.value(QLatin1String("height")).toInt(), 400);
     }
 
     void test_rectToJson_emptyRect()
@@ -57,10 +57,10 @@ private Q_SLOTS:
         QVERIFY(doc.isObject());
 
         QJsonObject obj = doc.object();
-        QCOMPARE(obj.value(QStringLiteral("x")).toInt(), 0);
-        QCOMPARE(obj.value(QStringLiteral("y")).toInt(), 0);
-        QCOMPARE(obj.value(QStringLiteral("width")).toInt(), 0);
-        QCOMPARE(obj.value(QStringLiteral("height")).toInt(), 0);
+        QCOMPARE(obj.value(QLatin1String("x")).toInt(), 0);
+        QCOMPARE(obj.value(QLatin1String("y")).toInt(), 0);
+        QCOMPARE(obj.value(QLatin1String("width")).toInt(), 0);
+        QCOMPARE(obj.value(QLatin1String("height")).toInt(), 0);
     }
 
     void test_rectToJson_negativeCoordinates()
@@ -70,10 +70,10 @@ private Q_SLOTS:
 
         QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         QJsonObject obj = doc.object();
-        QCOMPARE(obj.value(QStringLiteral("x")).toInt(), -50);
-        QCOMPARE(obj.value(QStringLiteral("y")).toInt(), -100);
-        QCOMPARE(obj.value(QStringLiteral("width")).toInt(), 200);
-        QCOMPARE(obj.value(QStringLiteral("height")).toInt(), 150);
+        QCOMPARE(obj.value(QLatin1String("x")).toInt(), -50);
+        QCOMPARE(obj.value(QLatin1String("y")).toInt(), -100);
+        QCOMPARE(obj.value(QLatin1String("width")).toInt(), 200);
+        QCOMPARE(obj.value(QLatin1String("height")).toInt(), 150);
     }
 
     void test_serializeZoneAssignments_empty()
@@ -104,13 +104,13 @@ private Q_SLOTS:
         QCOMPARE(arr.size(), 1);
 
         QJsonObject obj = arr[0].toObject();
-        QCOMPARE(obj.value(QStringLiteral("windowId")).toString(), QStringLiteral("win-abc"));
-        QCOMPARE(obj.value(QStringLiteral("sourceZoneId")).toString(), QStringLiteral("zone-src-1"));
-        QCOMPARE(obj.value(QStringLiteral("targetZoneId")).toString(), QStringLiteral("zone-tgt-1"));
-        QCOMPARE(obj.value(QStringLiteral("x")).toInt(), 100);
-        QCOMPARE(obj.value(QStringLiteral("y")).toInt(), 200);
-        QCOMPARE(obj.value(QStringLiteral("width")).toInt(), 500);
-        QCOMPARE(obj.value(QStringLiteral("height")).toInt(), 600);
+        QCOMPARE(obj.value(QLatin1String("windowId")).toString(), QStringLiteral("win-abc"));
+        QCOMPARE(obj.value(QLatin1String("sourceZoneId")).toString(), QStringLiteral("zone-src-1"));
+        QCOMPARE(obj.value(QLatin1String("targetZoneId")).toString(), QStringLiteral("zone-tgt-1"));
+        QCOMPARE(obj.value(QLatin1String("x")).toInt(), 100);
+        QCOMPARE(obj.value(QLatin1String("y")).toInt(), 200);
+        QCOMPARE(obj.value(QLatin1String("width")).toInt(), 500);
+        QCOMPARE(obj.value(QLatin1String("height")).toInt(), 600);
     }
 
     void test_serializeZoneAssignments_multiple()
@@ -147,16 +147,16 @@ private Q_SLOTS:
         QCOMPARE(arr.size(), 3);
 
         // Verify order is preserved
-        QCOMPARE(arr[0].toObject().value(QStringLiteral("windowId")).toString(), QStringLiteral("win-1"));
-        QCOMPARE(arr[1].toObject().value(QStringLiteral("windowId")).toString(), QStringLiteral("win-2"));
-        QCOMPARE(arr[2].toObject().value(QStringLiteral("windowId")).toString(), QStringLiteral("win-3"));
+        QCOMPARE(arr[0].toObject().value(QLatin1String("windowId")).toString(), QStringLiteral("win-1"));
+        QCOMPARE(arr[1].toObject().value(QLatin1String("windowId")).toString(), QStringLiteral("win-2"));
+        QCOMPARE(arr[2].toObject().value(QLatin1String("windowId")).toString(), QStringLiteral("win-3"));
 
         // Verify geometry of last entry
         QJsonObject third = arr[2].toObject();
-        QCOMPARE(third.value(QStringLiteral("x")).toInt(), 960);
-        QCOMPARE(third.value(QStringLiteral("y")).toInt(), 540);
-        QCOMPARE(third.value(QStringLiteral("width")).toInt(), 960);
-        QCOMPARE(third.value(QStringLiteral("height")).toInt(), 540);
+        QCOMPARE(third.value(QLatin1String("x")).toInt(), 960);
+        QCOMPARE(third.value(QLatin1String("y")).toInt(), 540);
+        QCOMPARE(third.value(QLatin1String("width")).toInt(), 960);
+        QCOMPARE(third.value(QLatin1String("height")).toInt(), 540);
     }
 
     void test_serializeZoneAssignments_emptyStrings()
@@ -177,14 +177,14 @@ private Q_SLOTS:
         QCOMPARE(doc.array().size(), 1);
 
         QJsonObject obj = doc.array()[0].toObject();
-        QCOMPARE(obj.value(QStringLiteral("windowId")).toString(), QString());
-        QCOMPARE(obj.value(QStringLiteral("sourceZoneId")).toString(), QString());
-        QCOMPARE(obj.value(QStringLiteral("targetZoneId")).toString(), QString());
+        QCOMPARE(obj.value(QLatin1String("windowId")).toString(), QString());
+        QCOMPARE(obj.value(QLatin1String("sourceZoneId")).toString(), QString());
+        QCOMPARE(obj.value(QLatin1String("targetZoneId")).toString(), QString());
         // Geometry should still be correct
-        QCOMPARE(obj.value(QStringLiteral("x")).toInt(), 10);
-        QCOMPARE(obj.value(QStringLiteral("y")).toInt(), 20);
-        QCOMPARE(obj.value(QStringLiteral("width")).toInt(), 30);
-        QCOMPARE(obj.value(QStringLiteral("height")).toInt(), 40);
+        QCOMPARE(obj.value(QLatin1String("x")).toInt(), 10);
+        QCOMPARE(obj.value(QLatin1String("y")).toInt(), 20);
+        QCOMPARE(obj.value(QLatin1String("width")).toInt(), 30);
+        QCOMPARE(obj.value(QLatin1String("height")).toInt(), 40);
     }
 
     void test_serializeZoneAssignments_roundTrip()
@@ -220,13 +220,13 @@ private Q_SLOTS:
             QJsonObject obj = arr[i].toObject();
             const ZoneAssignmentEntry& expected = original[i];
 
-            QCOMPARE(obj.value(QStringLiteral("windowId")).toString(), expected.windowId);
-            QCOMPARE(obj.value(QStringLiteral("sourceZoneId")).toString(), expected.sourceZoneId);
-            QCOMPARE(obj.value(QStringLiteral("targetZoneId")).toString(), expected.targetZoneId);
-            QCOMPARE(obj.value(QStringLiteral("x")).toInt(), expected.targetGeometry.x());
-            QCOMPARE(obj.value(QStringLiteral("y")).toInt(), expected.targetGeometry.y());
-            QCOMPARE(obj.value(QStringLiteral("width")).toInt(), expected.targetGeometry.width());
-            QCOMPARE(obj.value(QStringLiteral("height")).toInt(), expected.targetGeometry.height());
+            QCOMPARE(obj.value(QLatin1String("windowId")).toString(), expected.windowId);
+            QCOMPARE(obj.value(QLatin1String("sourceZoneId")).toString(), expected.sourceZoneId);
+            QCOMPARE(obj.value(QLatin1String("targetZoneId")).toString(), expected.targetZoneId);
+            QCOMPARE(obj.value(QLatin1String("x")).toInt(), expected.targetGeometry.x());
+            QCOMPARE(obj.value(QLatin1String("y")).toInt(), expected.targetGeometry.y());
+            QCOMPARE(obj.value(QLatin1String("width")).toInt(), expected.targetGeometry.width());
+            QCOMPARE(obj.value(QLatin1String("height")).toInt(), expected.targetGeometry.height());
         }
     }
 
@@ -238,8 +238,8 @@ private Q_SLOTS:
         QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         QJsonObject obj = doc.object();
 
-        QRect reconstructed(obj.value(QStringLiteral("x")).toInt(), obj.value(QStringLiteral("y")).toInt(),
-                            obj.value(QStringLiteral("width")).toInt(), obj.value(QStringLiteral("height")).toInt());
+        QRect reconstructed(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
+                            obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
 
         QCOMPARE(reconstructed, original);
     }

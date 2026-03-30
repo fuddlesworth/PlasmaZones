@@ -249,6 +249,8 @@ void WindowTrackingService::storePreTileGeometry(const QString& windowId, const 
     // Memory cleanup: limit cache to prevent unbounded growth.
     // Each window stores up to 2 keys (windowId + appId), so evict until we're
     // back at the cap. Skip just-inserted keys.
+    // Note: The inner loop is O(N) per eviction, but N is bounded by
+    // MaxPreTileGeometries (100), so the total cost is acceptable.
     static constexpr int MaxPreTileGeometries = 100;
     while (m_preTileGeometries.size() > MaxPreTileGeometries) {
         bool evicted = false;

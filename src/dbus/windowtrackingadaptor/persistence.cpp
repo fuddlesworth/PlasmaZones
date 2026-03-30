@@ -283,8 +283,8 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
                 refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
             }
             QRectF normGeom = zone->normalizedGeometry(refGeom);
-            QPoint zoneCenter(refGeom.x() + static_cast<int>(normGeom.center().x() * refGeom.width()),
-                              refGeom.y() + static_cast<int>(normGeom.center().y() * refGeom.height()));
+            QPoint zoneCenter(refGeom.x() + qRound(normGeom.center().x() * refGeom.width()),
+                              refGeom.y() + qRound(normGeom.center().y() * refGeom.height()));
             if (effGeom.contains(zoneCenter)) {
                 return sid;
             }
@@ -293,8 +293,8 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
         for (QScreen* screen : Utils::allScreens()) {
             QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
             QRectF normGeom = zone->normalizedGeometry(refGeom);
-            QPoint zoneCenter(refGeom.x() + static_cast<int>(normGeom.center().x() * refGeom.width()),
-                              refGeom.y() + static_cast<int>(normGeom.center().y() * refGeom.height()));
+            QPoint zoneCenter(refGeom.x() + qRound(normGeom.center().x() * refGeom.width()),
+                              refGeom.y() + qRound(normGeom.center().y() * refGeom.height()));
             if (screen->geometry().contains(zoneCenter)) {
                 return Utils::screenIdentifier(screen);
             }

@@ -542,39 +542,6 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Virtual Screen Settings
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    static QString virtualScreenGroupPrefix()
-    {
-        return QStringLiteral("VirtualScreen:");
-    }
-    static QString virtualScreenCountKey()
-    {
-        return QStringLiteral("count");
-    }
-    static QString virtualScreenXKey()
-    {
-        return QStringLiteral("x");
-    }
-    static QString virtualScreenYKey()
-    {
-        return QStringLiteral("y");
-    }
-    static QString virtualScreenWidthKey()
-    {
-        return QStringLiteral("width");
-    }
-    static QString virtualScreenHeightKey()
-    {
-        return QStringLiteral("height");
-    }
-    static QString virtualScreenNameKey()
-    {
-        return QStringLiteral("name");
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
     // Config Path
     // ═══════════════════════════════════════════════════════════════════════════
 

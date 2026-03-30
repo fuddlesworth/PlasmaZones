@@ -13,6 +13,7 @@
 #include "../../core/virtualdesktopmanager.h"
 #include "../../core/activitymanager.h"
 #include "../../core/logging.h"
+#include "../../core/constants.h"
 #include "../../core/utils.h"
 #include "../../core/windowtrackingservice.h"
 #include "../../dbus/layoutadaptor.h"
@@ -141,7 +142,6 @@ void Daemon::initializeAutotile()
                 [this](const QStringList& windowIds) {
                     if (m_windowTrackingAdaptor) {
                         WindowTrackingService* wts = m_windowTrackingAdaptor->service();
-                        static const QString restoreSentinel = QStringLiteral("__restore__");
                         m_pendingSnapFloatRestores.clear();
                         for (const QString& windowId : windowIds) {
                             // Clear autotile-originated floats (they don't persist into snap mode)
@@ -162,7 +162,7 @@ void Daemon::initializeAutotile()
                                 if (geo) {
                                     ZoneAssignmentEntry entry;
                                     entry.windowId = windowId;
-                                    entry.targetZoneId = restoreSentinel;
+                                    entry.targetZoneId = RestoreSentinel;
                                     entry.targetGeometry = *geo;
                                     m_pendingSnapFloatRestores.append(entry);
                                 }
@@ -604,9 +604,6 @@ void Daemon::connectOverlaySignals()
                     m_overlayService->hideSnapAssist();
                 }
             });
-
-    // Connect to KWin script
-    connectToKWinScript();
 }
 
 void Daemon::finalizeStartup()

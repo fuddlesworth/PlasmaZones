@@ -99,8 +99,8 @@ private Q_SLOTS:
         QCOMPARE(left.physicalScreenId, physId);
         QCOMPARE(left.displayName, QStringLiteral("Left"));
         QCOMPARE(left.index, 0);
-        QVERIFY(qFuzzyCompare(left.region.x(), 0.0));
-        QVERIFY(qFuzzyCompare(left.region.y(), 0.0));
+        QVERIFY(qAbs(left.region.x()) < 1e-6);
+        QVERIFY(qAbs(left.region.y()) < 1e-6);
         QVERIFY(qFuzzyCompare(left.region.width(), 0.5));
         QVERIFY(qFuzzyCompare(left.region.height(), 1.0));
 
@@ -110,8 +110,8 @@ private Q_SLOTS:
         QCOMPARE(right.physicalScreenId, physId);
         QCOMPARE(right.displayName, QStringLiteral("Right"));
         QCOMPARE(right.index, 1);
-        QVERIFY(qFuzzyCompare(right.region.x(), 0.5));
-        QVERIFY(qFuzzyCompare(right.region.y(), 0.0));
+        QVERIFY(qAbs(right.region.x() - 0.5) < 1e-6);
+        QVERIFY(qAbs(right.region.y()) < 1e-6);
         QVERIFY(qFuzzyCompare(right.region.width(), 0.5));
         QVERIFY(qFuzzyCompare(right.region.height(), 1.0));
     }

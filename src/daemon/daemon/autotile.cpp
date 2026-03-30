@@ -11,6 +11,7 @@
 #include "../../core/activitymanager.h"
 #include "../../core/geometryutils.h"
 #include "../../core/logging.h"
+#include "../../core/constants.h"
 #include "../../core/utils.h"
 #include "../../core/windowtrackingservice.h"
 #include "../config/settings.h"
@@ -333,7 +334,6 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
     if (!wts) {
         return entries;
     }
-    static const QString restoreSentinel = QStringLiteral("__restore__");
     for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
         if (desktop >= 0 && (it.key().desktop != desktop || it.key().activity != activity)) {
             continue;
@@ -350,7 +350,7 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
             if (geo) {
                 ZoneAssignmentEntry entry;
                 entry.windowId = windowId;
-                entry.targetZoneId = restoreSentinel;
+                entry.targetZoneId = RestoreSentinel;
                 entry.targetGeometry = *geo;
                 entries.append(entry);
                 qCInfo(lcDaemon) << "Batched float-restore: windowId=" << windowId << "geo=" << *geo

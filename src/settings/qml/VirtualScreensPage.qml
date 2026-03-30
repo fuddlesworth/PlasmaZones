@@ -20,6 +20,7 @@ Flickable {
     id: root
 
     // ── Internal state ───────────────────────────────────────────────────
+    readonly property int _maxVirtualScreens: 5
     property string _selectedScreen: ""
     property var _pendingScreens: [] // Local editable state
     property var _savedScreens: [] // What is actually applied in daemon
@@ -85,8 +86,8 @@ Flickable {
         if (count < 1)
             count = 1;
 
-        if (count > 5)
-            count = 5;
+        if (count > _maxVirtualScreens)
+            count = _maxVirtualScreens;
 
         var screens = [];
         var w = 1 / count;
@@ -359,7 +360,7 @@ Flickable {
                         id: splitCountSpinBox
 
                         from: 2
-                        to: 5
+                        to: root._maxVirtualScreens
                         value: root._pendingScreens.length > 1 ? root._pendingScreens.length : 2
                         editable: true
                         enabled: root._selectedScreen !== ""
