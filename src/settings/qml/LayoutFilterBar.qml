@@ -117,7 +117,6 @@ RowLayout {
 
         }
         _resetting = false;
-        saveState(viewMode);
         filterSettingsChanged();
     }
 
@@ -146,7 +145,6 @@ RowLayout {
         groupByCombo.currentIndex = groupByIndex;
         sortByCombo.currentIndex = sortByIndex;
         _resetting = false;
-        saveState(viewMode);
         filterSettingsChanged();
     }
 

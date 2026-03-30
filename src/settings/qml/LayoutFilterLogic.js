@@ -6,9 +6,10 @@
 /**
  * Shared filtering, grouping, and sorting helpers for the layout/algorithm grid.
  *
- * All functions are pure — they receive data and filter config and return
- * results without accessing any QML context.  i18n-dependent labels are
- * passed in by the caller.
+ * Functions receive data and filter config without accessing any QML context.
+ * i18n-dependent labels are passed in by the caller.
+ *
+ * NOTE: sortItems() sorts group arrays in-place for efficiency.
  */
 
 // ── Predicates ──────────────────────────────────────────────────────────────
