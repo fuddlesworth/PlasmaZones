@@ -52,6 +52,11 @@ QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo& info) const
     map[QStringLiteral("wallpaper")] = info.useWallpaper;
     map[QStringLiteral("depthBuffer")] = info.useDepthBuffer;
 
+    if (!info.computeShaderPath.isEmpty()) {
+        map[QStringLiteral("computeShaderPath")] = info.computeShaderPath;
+    }
+    map[QStringLiteral("particleCount")] = info.particleCount;
+
     // Parameters list (empty list is OK for D-Bus)
     QVariantList params;
     for (const ParameterInfo& param : info.parameters) {

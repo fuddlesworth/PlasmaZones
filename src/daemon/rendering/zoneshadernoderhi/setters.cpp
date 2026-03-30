@@ -255,6 +255,42 @@ void ZoneShaderNodeRhi::setUseDepthBuffer(bool use)
     markDirty(QSGNode::DirtyMaterial);
 }
 
+void ZoneShaderNodeRhi::setComputeShaderPath(const QString& path)
+{
+    if (m_computeShaderPath == path) {
+        return;
+    }
+    m_computeShaderPath = path;
+    m_computeShaderDirty = true;
+    m_computeShaderReady = false;
+    m_computeShaderSource.clear();
+    m_computeShader = QShader();
+    m_computeMtime = 0;
+    m_computePipeline.reset();
+    m_computeSrb.reset();
+    m_particleSsbo.reset();
+    m_particleSsboNeedsInit = true;
+    m_particleTexture.reset();
+    m_particleSampler.reset();
+    resetAllSrbs();
+    markDirty(QSGNode::DirtyMaterial);
+}
+
+void ZoneShaderNodeRhi::setParticleCount(int count)
+{
+    const int clamped = qBound(0, count, MaxParticles);
+    if (m_particleCount == clamped) {
+        return;
+    }
+    m_particleCount = clamped;
+    // Force SSBO and pipeline recreation
+    m_particleSsbo.reset();
+    m_particleSsboNeedsInit = true;
+    m_computePipeline.reset();
+    m_computeSrb.reset();
+    markDirty(QSGNode::DirtyMaterial);
+}
+
 void ZoneShaderNodeRhi::resetAllSrbs()
 {
     m_srb.reset();

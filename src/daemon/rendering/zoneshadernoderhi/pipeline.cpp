@@ -271,6 +271,7 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
                 appendUserTextureBindings(bindings);
                 appendWallpaperBinding(bindings);
                 appendDepthBinding(bindings);
+                appendParticleTextureBinding(bindings);
                 srb->setBindings(bindings.begin(), bindings.end());
                 if (!srb->create()) {
                     m_shaderError = QStringLiteral("Failed to create multi-buffer pass SRB ");
@@ -339,6 +340,7 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
         appendUserTextureBindings(bindings);
         appendWallpaperBinding(bindings);
         appendDepthBinding(bindings);
+        appendParticleTextureBinding(bindings);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
@@ -427,6 +429,7 @@ bool ZoneShaderNodeRhi::ensurePipeline()
         appendUserTextureBindings(bindings);
         appendWallpaperBinding(bindings);
         appendDepthBinding(bindings);
+        appendParticleTextureBinding(bindings);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
@@ -458,6 +461,7 @@ bool ZoneShaderNodeRhi::ensurePipeline()
         appendUserTextureBindings(bindings);
         appendWallpaperBinding(bindings);
         appendDepthBinding(bindings);
+        appendParticleTextureBinding(bindings);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };

@@ -361,6 +361,7 @@ set(plasmazones_rendering_SRCS
     daemon/rendering/zoneshadernoderhi/setters.cpp
     daemon/rendering/zoneshadernoderhi/pipeline.cpp
     daemon/rendering/zoneshadernoderhi/uniforms.cpp
+    daemon/rendering/zoneshadernoderhi/compute.cpp
     daemon/rendering/zoneshaderitem.h
     daemon/rendering/zoneshaderitem.cpp
     daemon/rendering/zoneshaderitem/setters.cpp

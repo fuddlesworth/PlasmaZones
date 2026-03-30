@@ -188,4 +188,26 @@ struct ZoneDataSnapshot
     int version = 0; ///< Incremented on each update for change detection
 };
 
+/**
+ * @brief Per-particle data for GPU compute shader particle systems
+ *
+ * Layout matches the GLSL Particle struct in compute.glsl (std430).
+ * SSBO at binding 14; compute shader reads/writes, fragment shader reads via texture.
+ */
+struct alignas(4) ParticleData
+{
+    float pos[2]; ///< Normalized position (0-1)
+    float vel[2]; ///< Velocity
+    float life; ///< Remaining life (1.0 = full, 0.0 = dead)
+    float age; ///< Accumulated age in seconds
+    float seed; ///< Per-particle random seed (0-1)
+    float size; ///< Particle radius in normalized coords
+    float color[4]; ///< RGBA color
+};
+
+static_assert(sizeof(ParticleData) == 48);
+
+/// Maximum number of particles supported by the compute shader pipeline
+static constexpr int MaxParticles = 16384;
+
 } // namespace PlasmaZones

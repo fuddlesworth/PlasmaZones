@@ -274,6 +274,10 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     // Sync depth buffer (binding 12)
     node->setUseDepthBuffer(m_useDepthBuffer);
 
+    // Sync compute shader (particle systems)
+    node->setComputeShaderPath(m_computeShaderPath);
+    node->setParticleCount(m_particleCount);
+
     // Sync desktop wallpaper texture (binding 11)
     node->setUseWallpaper(m_useWallpaper);
     {

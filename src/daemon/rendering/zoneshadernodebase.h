@@ -106,6 +106,15 @@ public:
     {
     }
 
+    /** Compute shader path (.comp) for particle systems. Default no-op. */
+    virtual void setComputeShaderPath(const QString&)
+    {
+    }
+    /** Number of particles for compute shader (0 = disabled). Default no-op. */
+    virtual void setParticleCount(int)
+    {
+    }
+
     /** Multi-pass: optional buffer pass fragment shader path. No-op if backend does not support multipass. */
     virtual void setBufferShaderPath(const QString& path)
     {

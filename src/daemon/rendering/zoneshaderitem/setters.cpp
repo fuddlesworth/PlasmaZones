@@ -532,6 +532,27 @@ void ZoneShaderItem::setUseDepthBuffer(bool use)
     update();
 }
 
+void ZoneShaderItem::setComputeShaderPath(const QString& path)
+{
+    if (m_computeShaderPath == path) {
+        return;
+    }
+    m_computeShaderPath = path;
+    Q_EMIT computeShaderPathChanged();
+    update();
+}
+
+void ZoneShaderItem::setParticleCount(int count)
+{
+    const int clamped = qBound(0, count, 16384);
+    if (m_particleCount == clamped) {
+        return;
+    }
+    m_particleCount = clamped;
+    Q_EMIT particleCountChanged();
+    update();
+}
+
 // ============================================================================
 // Custom Color By Index (for setShaderParams loop)
 // ============================================================================

@@ -297,6 +297,17 @@ void ZoneShaderNodeRhi::prepare()
     // Multi-pass: bake buffer fragment shader(s) when path(s) set
     bakeBufferShaders();
 
+    // Compute shader: bake and ensure pipeline
+    if (!m_computeShaderPath.isEmpty()) {
+        if (!m_computeSupported) {
+            m_computeSupported = rhi->isFeatureSupported(QRhi::Compute);
+        }
+        bakeComputeShader();
+        if (m_computeShaderReady) {
+            ensureComputePipeline();
+        }
+    }
+
     if (!m_shaderReady) {
         return;
     }
@@ -380,14 +391,23 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
         multiBufferMode && m_multiBufferShadersReady && m_multiBufferTextures[0] && m_multiBufferPipelines[0];
     const bool multipassActive = multipassSingle || multipassMulti;
 
-    if (multipassActive) {
+    const bool computeActive =
+        m_computeSupported && m_computeShaderReady && m_computePipeline && m_particleSsbo && m_particleTexture;
+
+    if (computeActive || multipassActive) {
         // The scene graph's batch renderer keeps its render pass active when calling
         // render() on nodes with the NoExternalRendering flag. We must end that pass
         // before beginning our own passes on buffer FBOs. After buffer passes complete,
         // we re-begin a pass on rt for the image pass; the scene graph will endPass()
         // after render() returns, balancing our beginPass(rt).
         cb->endPass();
+    }
 
+    if (computeActive) {
+        dispatchCompute(cb);
+    }
+
+    if (multipassActive) {
         const QColor clearColor(0, 0, 0, 0);
         if (multiBufferMode) {
             const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
@@ -437,6 +457,11 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
         // writing to rt. Drawing inline in the scene graph's pass causes Vulkan error
         // "Texture used with different accesses within the same pass". beginPass(rt)
         // starts a new pass with correct barriers.
+        const QColor mainClear(0, 0, 0, 0);
+        cb->beginPass(rt, mainClear, {1.0f, 0});
+    } else if (computeActive) {
+        // Compute-only (no multipass): we ended the scene graph's pass above for the
+        // compute dispatch, so we must re-begin a pass on rt for the image pass draw.
         const QColor mainClear(0, 0, 0, 0);
         cb->beginPass(rt, mainClear, {1.0f, 0});
     }
