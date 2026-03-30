@@ -305,7 +305,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
 
     if (!m_shaderPreviewWindow || m_shaderPreviewScreen != screen) {
         destroyShaderPreviewWindow();
-        createShaderPreviewWindow(screen);
+        createShaderPreviewWindow(screen, screenId);
     }
 
     if (!m_shaderPreviewWindow) {
@@ -327,7 +327,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
                              << "— layer-shell may have been lost (compositor restart?)."
                              << "Destroying and recreating the window.";
         destroyShaderPreviewWindow();
-        createShaderPreviewWindow(screen);
+        createShaderPreviewWindow(screen, screenId);
         if (!m_shaderPreviewWindow) {
             return;
         }
@@ -431,7 +431,7 @@ void OverlayService::hideShaderPreview()
     destroyShaderPreviewWindow();
 }
 
-void OverlayService::createShaderPreviewWindow(QScreen* screen)
+void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& screenId)
 {
     if (m_shaderPreviewWindow) {
         return;
@@ -453,9 +453,10 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen)
 
     window->setProperty("isShaderOverlay", true);
 
+    const QString scopeId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
     if (!configureLayerSurface(window, screen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
-                               QStringLiteral("plasmazones-shader-preview-%1").arg(Utils::screenIdentifier(screen)))) {
-        qCWarning(lcOverlay) << "Failed to configure layer surface for shader preview on" << screen->name();
+                               QStringLiteral("plasmazones-shader-preview-%1").arg(scopeId))) {
+        qCWarning(lcOverlay) << "Failed to configure layer surface for shader preview on" << scopeId;
         delete window;
         return;
     }

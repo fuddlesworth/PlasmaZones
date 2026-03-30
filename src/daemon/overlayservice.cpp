@@ -124,6 +124,20 @@ OverlayService::OverlayService(QObject* parent)
                 }
             }
 
+            // Check if snap assist or layout picker is on the affected physical screen
+            if (m_snapAssistWindow) {
+                auto* snapScreen = m_snapAssistWindow->screen();
+                if (snapScreen && Utils::screenIdentifier(snapScreen) == physicalScreenId) {
+                    destroySnapAssistWindow();
+                }
+            }
+            if (m_layoutPickerWindow) {
+                auto* pickerScreen = m_layoutPickerWindow->screen();
+                if (pickerScreen && Utils::screenIdentifier(pickerScreen) == physicalScreenId) {
+                    destroyLayoutPickerWindow();
+                }
+            }
+
             // Recreate with new virtual screen config if visible
             if (isVisible()) {
                 auto* mgr2 = ScreenManager::instance();
@@ -634,6 +648,14 @@ void OverlayService::handleScreenRemoved(QScreen* screen)
         if (m_navigationOsdPhysScreens.value(id) == screen) {
             destroyNavigationOsdWindow(id);
         }
+    }
+
+    // Clean up snap assist and layout picker if on the removed screen
+    if (m_snapAssistScreen == screen) {
+        destroySnapAssistWindow();
+    }
+    if (m_layoutPickerScreen == screen) {
+        destroyLayoutPickerWindow();
     }
 }
 

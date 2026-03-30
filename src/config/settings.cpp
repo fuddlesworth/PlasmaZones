@@ -295,7 +295,7 @@ void Settings::reset()
         if (groupName.startsWith(QLatin1String("ZoneSelector:"))
             || groupName.startsWith(QLatin1String("AutotileScreen:"))
             || groupName.startsWith(QLatin1String("SnappingScreen:"))
-            || groupName.startsWith(QLatin1String("VirtualScreen:"))) {
+            || groupName.startsWith(ConfigDefaults::virtualScreenGroupPrefix())) {
             m_configBackend->deleteGroup(groupName);
         }
     }

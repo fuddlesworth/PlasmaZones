@@ -281,6 +281,9 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
                                vsBottomOff + std::max(0, screenH - layout.barHeight));
             break;
         }
+        // Clamp individual margin components to prevent underflow on narrow virtual screens
+        margins = QMargins(qMax(0, margins.left()), qMax(0, margins.top()), qMax(0, margins.right()),
+                           qMax(0, margins.bottom()));
         // Clamp margins to prevent negative window dimensions
         int totalHMargin = margins.left() + margins.right();
         if (totalHMargin >= physGeom.width()) {

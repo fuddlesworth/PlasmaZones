@@ -8,6 +8,8 @@
 #include <QDBusAbstractAdaptor>
 #include <QStringList>
 
+class QScreen;
+
 namespace PlasmaZones {
 
 /**
@@ -50,6 +52,8 @@ Q_SIGNALS:
     void virtualScreensChanged(const QString& physicalScreenId);
 
 private:
+    void handleScreenGeometryChanged(QScreen* screen, const QString& physId);
+
     QString m_primaryScreenOverride;
 };
 

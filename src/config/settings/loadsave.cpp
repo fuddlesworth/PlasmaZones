@@ -779,7 +779,7 @@ void Settings::loadVirtualScreenConfigs(QSettingsConfigBackend* backend)
 {
     m_virtualScreenConfigs.clear();
     const QStringList allGroups = backend->groupList();
-    const QLatin1String prefix("VirtualScreen:");
+    const QString prefix = ConfigDefaults::virtualScreenGroupPrefix();
 
     for (const QString& groupName : allGroups) {
         if (!groupName.startsWith(prefix))
@@ -790,7 +790,7 @@ void Settings::loadVirtualScreenConfigs(QSettingsConfigBackend* backend)
             continue;
 
         auto group = backend->group(groupName);
-        int count = group->readInt(QStringLiteral("count"), 0);
+        int count = group->readInt(ConfigDefaults::virtualScreenCountKey(), 0);
         count = qBound(0, count, 10); // Maximum 10 virtual screens per physical screen
         if (count <= 0) {
             qCWarning(lcConfig) << "VirtualScreen config for" << physId << "has invalid count:" << count;
@@ -806,11 +806,12 @@ void Settings::loadVirtualScreenConfigs(QSettingsConfigBackend* backend)
             vs.physicalScreenId = physId;
             vs.index = i;
             vs.id = VirtualScreenId::make(physId, i);
-            vs.displayName = group->readString(p + QStringLiteral("name"), QStringLiteral("Screen %1").arg(i + 1));
-            qreal x = group->readDouble(p + QStringLiteral("x"), 0.0);
-            qreal y = group->readDouble(p + QStringLiteral("y"), 0.0);
-            qreal w = group->readDouble(p + QStringLiteral("width"), 1.0);
-            qreal h = group->readDouble(p + QStringLiteral("height"), 1.0);
+            vs.displayName =
+                group->readString(p + ConfigDefaults::virtualScreenNameKey(), QStringLiteral("Screen %1").arg(i + 1));
+            qreal x = group->readDouble(p + ConfigDefaults::virtualScreenXKey(), 0.0);
+            qreal y = group->readDouble(p + ConfigDefaults::virtualScreenYKey(), 0.0);
+            qreal w = group->readDouble(p + ConfigDefaults::virtualScreenWidthKey(), 1.0);
+            qreal h = group->readDouble(p + ConfigDefaults::virtualScreenHeightKey(), 1.0);
             vs.region = QRectF(x, y, w, h);
             config.screens.append(vs);
         }
@@ -837,7 +838,7 @@ void Settings::saveVirtualScreenConfigs(QSettingsConfigBackend* backend)
 {
     // Remove old VirtualScreen: groups that are no longer in the config
     const QStringList allGroups = backend->groupList();
-    const QLatin1String prefix("VirtualScreen:");
+    const QString prefix = ConfigDefaults::virtualScreenGroupPrefix();
     for (const QString& groupName : allGroups) {
         if (groupName.startsWith(prefix)) {
             backend->deleteGroup(groupName);
@@ -852,16 +853,16 @@ void Settings::saveVirtualScreenConfigs(QSettingsConfigBackend* backend)
             continue;
 
         auto group = backend->group(prefix + physId);
-        group->writeInt(QStringLiteral("count"), config.screens.size());
+        group->writeInt(ConfigDefaults::virtualScreenCountKey(), config.screens.size());
 
         for (int i = 0; i < config.screens.size(); ++i) {
             const VirtualScreenDef& vs = config.screens[i];
             const QString p = QString::number(i) + QLatin1Char('/');
-            group->writeString(p + QStringLiteral("name"), vs.displayName);
-            group->writeDouble(p + QStringLiteral("x"), vs.region.x());
-            group->writeDouble(p + QStringLiteral("y"), vs.region.y());
-            group->writeDouble(p + QStringLiteral("width"), vs.region.width());
-            group->writeDouble(p + QStringLiteral("height"), vs.region.height());
+            group->writeString(p + ConfigDefaults::virtualScreenNameKey(), vs.displayName);
+            group->writeDouble(p + ConfigDefaults::virtualScreenXKey(), vs.region.x());
+            group->writeDouble(p + ConfigDefaults::virtualScreenYKey(), vs.region.y());
+            group->writeDouble(p + ConfigDefaults::virtualScreenWidthKey(), vs.region.width());
+            group->writeDouble(p + ConfigDefaults::virtualScreenHeightKey(), vs.region.height());
         }
     }
 }

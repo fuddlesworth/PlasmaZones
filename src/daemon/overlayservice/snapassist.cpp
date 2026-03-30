@@ -57,6 +57,14 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     m_snapAssistScreen = screen;
     m_snapAssistScreenId = screenId;
 
+    // Hide zone selectors on this physical screen to avoid overlap
+    for (auto it = m_zoneSelectorWindows.begin(); it != m_zoneSelectorWindows.end(); ++it) {
+        auto physIt = m_zoneSelectorPhysScreens.find(it.key());
+        if (physIt != m_zoneSelectorPhysScreens.end() && physIt.value() == screen) {
+            it.value()->hide();
+        }
+    }
+
     // Parse JSON using shared helper (same format: array of objects)
     const QVariantList zonesList = parseZonesJson(emptyZonesJson, "showSnapAssist:");
     QVariantList candidatesList = parseZonesJson(candidatesJson, "showSnapAssist:");
@@ -315,12 +323,22 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         screenGeom = screen->geometry();
     }
 
+    // Hide zone selectors on this physical screen to avoid overlap
+    for (auto it = m_zoneSelectorWindows.begin(); it != m_zoneSelectorWindows.end(); ++it) {
+        auto physIt = m_zoneSelectorPhysScreens.find(it.key());
+        if (physIt != m_zoneSelectorPhysScreens.end() && physIt.value() == screen) {
+            it.value()->hide();
+        }
+    }
+
     // Always destroy and recreate for fresh state
     destroyLayoutPickerWindow();
     createLayoutPickerWindow(resolvedId, screen, screenGeom);
     if (!m_layoutPickerWindow) {
         return;
     }
+
+    m_layoutPickerScreen = screen;
 
     // Build layouts list (use virtual-aware screen ID for correct layout resolution)
     QVariantList layoutsList = buildLayoutsList(resolvedId);
@@ -389,7 +407,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     QMetaObject::invokeMethod(m_layoutPickerWindow, "show");
     m_layoutPickerWindow->requestActivate();
 
-    qCInfo(lcOverlay) << "showLayoutPicker: screen=" << screen->name() << "layouts=" << layoutsList.size()
+    qCInfo(lcOverlay) << "showLayoutPicker: screen=" << resolvedId << "layouts=" << layoutsList.size()
                       << "active=" << activeId;
 }
 

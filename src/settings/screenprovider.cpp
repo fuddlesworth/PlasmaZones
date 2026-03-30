@@ -65,7 +65,7 @@ QList<ScreenInfo> fetchScreens()
                         info.connectorName = jsonObj[JsonKeys::Name].toString();
                     if (jsonObj.value(QLatin1String("isVirtualScreen")).toBool()) {
                         info.isVirtualScreen = true;
-                        int vsIdx = screenName.lastIndexOf(QLatin1String("/vs:"));
+                        int vsIdx = screenName.indexOf(QLatin1String("/vs:"));
                         if (vsIdx >= 0)
                             info.virtualIndex = QStringView(screenName).mid(vsIdx + 4).toInt();
                         info.virtualDisplayName = jsonObj.value(QLatin1String("virtualDisplayName")).toString();

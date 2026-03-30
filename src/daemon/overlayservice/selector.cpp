@@ -13,6 +13,7 @@
 #include "../../core/utils.h"
 #include "../../core/zoneselectorlayout.h"
 #include "../config/configdefaults.h"
+#include <QCursor>
 #include <QScreen>
 #include <QQuickWindow>
 #include <QQuickItem>
@@ -149,6 +150,15 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
     if (cursorScreenId.isEmpty()) {
         cursorScreenId = Utils::screenIdentifier(screen);
     }
+    // Clear selection highlight on all OTHER zone selector windows when cursor moves
+    // to a different virtual screen, preventing stale highlights from previous screen.
+    for (auto it = m_zoneSelectorWindows.begin(); it != m_zoneSelectorWindows.end(); ++it) {
+        if (it.key() != cursorScreenId && it.value()) {
+            it.value()->setProperty("selectedLayoutId", QString());
+            it.value()->setProperty("selectedZoneIndex", -1);
+        }
+    }
+
     if (auto* window = m_zoneSelectorWindows.value(cursorScreenId)) {
         // Convert global cursor position to window-local coordinates.
         // The zone selector is a small bar (not full-screen), positioned by LayerShellQt.
@@ -382,13 +392,11 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
         return QRect();
     }
     // Delegate to screenId overload for virtual-screen-aware geometry.
-    // Try to find the virtual-aware screen ID from the zone selector's screen map first.
+    // Use cursor position to disambiguate when multiple virtual screens share one QScreen*.
+    auto* mgr = ScreenManager::instance();
     QString screenId;
-    for (auto it = m_zoneSelectorPhysScreens.constBegin(); it != m_zoneSelectorPhysScreens.constEnd(); ++it) {
-        if (it.value() == screen) {
-            screenId = it.key();
-            break;
-        }
+    if (mgr) {
+        screenId = mgr->effectiveScreenAt(QCursor::pos());
     }
     if (screenId.isEmpty()) {
         screenId = Utils::screenIdentifier(screen);

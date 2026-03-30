@@ -12,6 +12,7 @@
 #include "../../core/utils.h"
 #include "../../core/screenmanager.h"
 #include "../rendering/zonelabeltexturebuilder.h"
+#include <QCursor>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QMutexLocker>
@@ -59,21 +60,15 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
     // single-overlay-per-physical-screen contexts (no virtual screens configured).
     // Callers with virtual screen context should use buildZonesList(screenId, physScreen) directly.
 
-    // Aggregate zones for ALL virtual screens on this physical screen to avoid
-    // returning partial results when multiple virtual screens share one QScreen.
-    QVariantList allZones;
-    bool found = false;
-    for (auto it = m_overlayPhysScreens.constBegin(); it != m_overlayPhysScreens.constEnd(); ++it) {
-        if (it.value() == screen) {
-            allZones.append(buildZonesList(it.key(), screen));
-            found = true;
-        }
+    // Use cursor position to disambiguate when multiple virtual screens share one QScreen*.
+    auto* mgr = ScreenManager::instance();
+    QString screenId;
+    if (mgr) {
+        screenId = mgr->effectiveScreenAt(QCursor::pos());
     }
-    if (found) {
-        return allZones;
+    if (screenId.isEmpty()) {
+        screenId = Utils::screenIdentifier(screen);
     }
-    // Fallback: no mapping exists, use physical screen ID
-    QString screenId = Utils::screenIdentifier(screen);
     return buildZonesList(screenId, screen);
 }
 
@@ -109,14 +104,11 @@ QVariantList OverlayService::buildZonesList(const QString& screenId, QScreen* ph
 QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout) const
 {
     // Physical screen overload: delegates to screenId overload.
-    // Try to find the virtual-aware screen ID from the overlay's screen map first.
-    // Callers with virtual screen context should use the screenId overload directly.
+    // Use cursor position to disambiguate when multiple virtual screens share one QScreen*.
+    auto* mgr = ScreenManager::instance();
     QString screenId;
-    for (auto it = m_overlayPhysScreens.constBegin(); it != m_overlayPhysScreens.constEnd(); ++it) {
-        if (it.value() == screen) {
-            screenId = it.key();
-            break;
-        }
+    if (mgr) {
+        screenId = mgr->effectiveScreenAt(QCursor::pos());
     }
     if (screenId.isEmpty()) {
         screenId = Utils::screenIdentifier(screen);

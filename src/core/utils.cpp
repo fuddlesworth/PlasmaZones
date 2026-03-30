@@ -232,16 +232,22 @@ QString screenNameForId(const QString& screenId)
     if (screenId.isEmpty()) {
         return QString();
     }
+
+    // Strip virtual screen suffix before lookup — "/vs:N" is not part of the
+    // physical screen identity and would poison the lastIndexOf('/') fallback.
+    const QString physId =
+        VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId;
+
     for (QScreen* screen : QGuiApplication::screens()) {
-        if (screenIdentifier(screen) == screenId) {
+        if (screenIdentifier(screen) == physId) {
             return screen->name();
         }
     }
     // Fallback: if the ID has a "/connector" suffix, return the connector name
     // only if a screen with that name actually exists
-    int slashPos = screenId.lastIndexOf(QLatin1Char('/'));
+    int slashPos = physId.lastIndexOf(QLatin1Char('/'));
     if (slashPos > 0) {
-        const QString connector = screenId.mid(slashPos + 1);
+        const QString connector = physId.mid(slashPos + 1);
         for (QScreen* screen : QGuiApplication::screens()) {
             if (screen->name() == connector) {
                 return connector;

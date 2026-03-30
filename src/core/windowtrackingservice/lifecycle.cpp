@@ -113,7 +113,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
 
 void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& physicalScreenId)
 {
-    const QString prefix = physicalScreenId + VirtualScreenId::Separator;
+    const QString prefix = physicalScreenId + VirtualScreenId::separator();
     int migrated = 0;
 
     for (auto it = m_windowScreenAssignments.begin(); it != m_windowScreenAssignments.end(); ++it) {
@@ -277,14 +277,30 @@ void WindowTrackingService::onLayoutChanged()
                     << "switched=" << layoutSwitched << "windowAssignments=" << m_windowZoneAssignments.size();
     {
         QVector<ResnapEntry> newBuffer;
-        QVector<Zone*> prevZones = prevLayout->zones();
-        std::sort(prevZones.begin(), prevZones.end(), [](Zone* a, Zone* b) {
-            return a->zoneNumber() < b->zoneNumber();
-        });
-        QHash<QString, int> zoneIdToPosition; // zoneId -> 1-based position
-        for (int i = 0; i < prevZones.size(); ++i) {
-            zoneIdToPosition[prevZones[i]->id().toString()] = i + 1;
-        }
+
+        // Build position map for the global previous layout
+        auto buildPositionMap = [](Layout* layout) -> QHash<QString, int> {
+            QHash<QString, int> map;
+            if (!layout) {
+                return map;
+            }
+            QVector<Zone*> zones = layout->zones();
+            std::sort(zones.begin(), zones.end(), [](Zone* a, Zone* b) {
+                return a->zoneNumber() < b->zoneNumber();
+            });
+            for (int i = 0; i < zones.size(); ++i) {
+                map[zones[i]->id().toString()] = i + 1;
+            }
+            return map;
+        };
+
+        QHash<QString, int> globalZoneIdToPosition = buildPositionMap(prevLayout);
+        int globalPrevZoneCount = prevLayout ? prevLayout->zones().size() : 0;
+
+        // Cache per-screen position maps for screens with per-screen layouts
+        // Key: layout pointer (avoids rebuilding for screens sharing the same layout)
+        QHash<Layout*, QHash<QString, int>> perLayoutPositionMaps;
+
         // Dedup: full windowId for live assignments (supports multi-instance apps),
         // appId for pending entries (avoids double-counting live + pending for same window)
         QSet<QString> addedIds;
@@ -299,9 +315,27 @@ void WindowTrackingService::onLayoutChanged()
             if (addedIds.contains(windowIdOrStableId)) {
                 return;
             }
+
+            // Resolve the position map for this window's screen.
+            // If the screen has a per-screen layout that differs from the global
+            // previous layout, use that layout's zone positions instead.
+            const QHash<QString, int>* posMap = &globalZoneIdToPosition;
+            int prevZoneCount = globalPrevZoneCount;
+            if (!screenId.isEmpty() && m_layoutManager) {
+                Layout* screenLayout = m_layoutManager->resolveLayoutForScreen(screenId);
+                if (screenLayout && screenLayout != prevLayout) {
+                    auto cacheIt = perLayoutPositionMaps.constFind(screenLayout);
+                    if (cacheIt == perLayoutPositionMaps.constEnd()) {
+                        cacheIt = perLayoutPositionMaps.insert(screenLayout, buildPositionMap(screenLayout));
+                    }
+                    posMap = &cacheIt.value();
+                    prevZoneCount = screenLayout->zones().size();
+                }
+            }
+
             // Use primary zone for position mapping
             QString zoneId = zoneIdList.isEmpty() ? QString() : zoneIdList.first();
-            int pos = zoneIdToPosition.value(zoneId, 0);
+            int pos = posMap->value(zoneId, 0);
             if (pos <= 0) {
                 // Handle zoneselector synthetic IDs: "zoneselector-{layoutId}-{index}"
                 if (zoneId.startsWith(QStringLiteral("zoneselector-"))) {
@@ -309,7 +343,7 @@ void WindowTrackingService::onLayoutChanged()
                     if (lastDash > 0) {
                         bool ok = false;
                         int idx = zoneId.mid(lastDash + 1).toInt(&ok);
-                        if (ok && idx >= 0 && idx < prevZones.size()) {
+                        if (ok && idx >= 0 && idx < prevZoneCount) {
                             pos = idx + 1; // 1-based position
                         }
                     }
@@ -328,7 +362,7 @@ void WindowTrackingService::onLayoutChanged()
             // Collect all zone positions for multi-zone resnap
             QList<int> allPositions;
             for (const QString& zid : zoneIdList) {
-                int p = zoneIdToPosition.value(zid, 0);
+                int p = posMap->value(zid, 0);
                 if (p > 0)
                     allPositions.append(p);
             }
@@ -532,6 +566,21 @@ void WindowTrackingService::setLastUsedZone(const QString& zoneId, const QString
 
 bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
 {
+    // Check virtual screens first (covers both virtual and non-subdivided physical screens)
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        const QPoint center = geometry.center();
+        const QStringList ids = mgr->effectiveScreenIds();
+        for (const QString& id : ids) {
+            QRect screenGeo = mgr->screenGeometry(id);
+            if (screenGeo.isValid() && screenGeo.contains(center)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Fallback: physical screens only (no ScreenManager available)
     for (QScreen* screen : Utils::allScreens()) {
         QRect intersection = geometry.intersected(screen->geometry());
         if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
@@ -543,7 +592,47 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
 
 QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
 {
-    // Find nearest screen
+    // Try virtual/effective screens first via ScreenManager
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        const QStringList ids = mgr->effectiveScreenIds();
+        const QPoint center = geometry.center();
+        QRect nearestGeo;
+        int minDist = INT_MAX;
+
+        for (const QString& id : ids) {
+            QRect screenGeo = mgr->screenGeometry(id);
+            if (!screenGeo.isValid()) {
+                continue;
+            }
+            // Manhattan distance from center to screen center
+            QPoint diff = center - screenGeo.center();
+            int dist = qAbs(diff.x()) + qAbs(diff.y());
+            if (dist < minDist) {
+                minDist = dist;
+                nearestGeo = screenGeo;
+            }
+        }
+
+        if (nearestGeo.isValid()) {
+            QRect adjusted = geometry;
+            if (adjusted.right() > nearestGeo.right()) {
+                adjusted.moveRight(nearestGeo.right());
+            }
+            if (adjusted.left() < nearestGeo.left()) {
+                adjusted.moveLeft(nearestGeo.left());
+            }
+            if (adjusted.bottom() > nearestGeo.bottom()) {
+                adjusted.moveBottom(nearestGeo.bottom());
+            }
+            if (adjusted.top() < nearestGeo.top()) {
+                adjusted.moveTop(nearestGeo.top());
+            }
+            return adjusted;
+        }
+    }
+
+    // Fallback: physical screens only
     QScreen* nearest = Utils::findNearestScreen(geometry.center());
     if (!nearest) {
         return geometry;

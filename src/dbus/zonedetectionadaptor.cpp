@@ -11,6 +11,7 @@
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/virtualscreen.h"
+#include <QCursor>
 #include <QGuiApplication>
 #include <QScreen>
 #include <limits>
@@ -237,9 +238,20 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
     // Use virtual-screen-aware resolution: prefer caller-supplied screenId,
     // then ScreenManager geometry, then fall back to QScreen.
     // If the screenId is already a virtual screen ID, pass it through directly.
-    QString resolvedId = screenId.isEmpty()
-        ? screenId
-        : (VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId));
+    // When screenId is empty, resolve to the cursor's current effective screen.
+    QString resolvedId;
+    if (screenId.isEmpty()) {
+        auto* mgrResolve = ScreenManager::instance();
+        if (mgrResolve) {
+            resolvedId = mgrResolve->effectiveScreenAt(QCursor::pos());
+        }
+        if (resolvedId.isEmpty()) {
+            QScreen* primary = QGuiApplication::primaryScreen();
+            resolvedId = primary ? Utils::screenIdentifier(primary) : QString();
+        }
+    } else {
+        resolvedId = VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId);
+    }
     auto* mgr = ScreenManager::instance();
     QRect vsGeom = mgr ? mgr->screenGeometry(resolvedId) : QRect();
     QRectF refGeom;
@@ -316,9 +328,20 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
 
     // Use per-screen layout (falls back to activeLayout via resolveLayoutForScreen)
     // If the screenId is already a virtual screen ID, pass it through directly.
-    QString resolvedId = screenId.isEmpty()
-        ? screenId
-        : (VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId));
+    // When screenId is empty, resolve to the cursor's current effective screen.
+    QString resolvedId;
+    if (screenId.isEmpty()) {
+        auto* mgrResolve = ScreenManager::instance();
+        if (mgrResolve) {
+            resolvedId = mgrResolve->effectiveScreenAt(QCursor::pos());
+        }
+        if (resolvedId.isEmpty()) {
+            QScreen* primary = QGuiApplication::primaryScreen();
+            resolvedId = primary ? Utils::screenIdentifier(primary) : QString();
+        }
+    } else {
+        resolvedId = VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId);
+    }
     Layout* layout = m_layoutManager->resolveLayoutForScreen(resolvedId);
     if (!layout || layout->zones().isEmpty()) {
         return QString();

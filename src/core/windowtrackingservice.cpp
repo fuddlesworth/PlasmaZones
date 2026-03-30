@@ -310,9 +310,14 @@ std::optional<QRect> WindowTrackingService::validatedPreTileGeometry(const QStri
     // where the window currently is, the absolute coordinates are wrong. Preserve
     // the size but center on the current screen.
     if (!storedScreen.isEmpty() && !currentScreenName.isEmpty() && storedScreen != currentScreenName) {
-        QScreen* target = Utils::findScreenByIdOrName(currentScreenName);
+        auto* mgr = ScreenManager::instance();
+        QScreen* target =
+            mgr ? mgr->physicalQScreenFor(currentScreenName) : Utils::findScreenByIdOrName(currentScreenName);
         if (target) {
-            QRect available = target->availableGeometry();
+            // For virtual screens, prefer virtual screen bounds over full physical screen
+            QRect available = (mgr && mgr->screenGeometry(currentScreenName).isValid())
+                ? mgr->screenAvailableGeometry(currentScreenName)
+                : target->availableGeometry();
             QRect adjusted(available.x() + (available.width() - rect.width()) / 2,
                            available.y() + (available.height() - rect.height()) / 2, rect.width(), rect.height());
             qCDebug(lcCore) << "validatedPreTileGeometry: cross-screen adjustment for" << windowId << "from"
@@ -498,8 +503,7 @@ UnfloatResult WindowTrackingService::resolveUnfloatGeometry(const QString& windo
     QString restoreScreen = preFloatScreen(windowId);
     if (!restoreScreen.isEmpty()) {
         // For virtual screens, check if the physical screen still exists
-        auto* mgr = ScreenManager::instance();
-        QScreen* physScreen = mgr ? mgr->physicalQScreenFor(restoreScreen) : Utils::findScreenByIdOrName(restoreScreen);
+        QScreen* physScreen = ScreenManager::resolvePhysicalScreen(restoreScreen);
         if (!physScreen) {
             restoreScreen.clear();
         }

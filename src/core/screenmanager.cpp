@@ -529,11 +529,12 @@ void ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
         }
     }
 
-    // Validate: no two regions overlap (pairwise intersection check)
+    // Validate: no two regions overlap (pairwise intersection check, tolerance-aware)
     for (int i = 0; i < config.screens.size(); ++i) {
         for (int j = i + 1; j < config.screens.size(); ++j) {
             QRectF intersection = config.screens[i].region.intersected(config.screens[j].region);
-            if (!intersection.isEmpty()) {
+            if (intersection.width() > VirtualScreenDef::Tolerance
+                && intersection.height() > VirtualScreenDef::Tolerance) {
                 qCWarning(lcScreen) << "setVirtualScreenConfig: overlapping regions between" << config.screens[i].id
                                     << "and" << config.screens[j].id;
                 return;
@@ -659,14 +660,13 @@ VirtualScreenDef::PhysicalEdges ScreenManager::physicalEdgesFor(const QString& s
     }
 
     QString physId = VirtualScreenId::extractPhysicalId(screenId);
-    int vsIndex = VirtualScreenId::extractIndex(screenId);
     if (!m_virtualConfigs.contains(physId)) {
         return {true, true, true, true};
     }
 
     const auto& config = m_virtualConfigs.value(physId);
     for (const auto& vs : config.screens) {
-        if (vs.index == vsIndex) {
+        if (vs.id == screenId) {
             return vs.physicalEdges();
         }
     }
@@ -728,7 +728,7 @@ void ScreenManager::invalidateVirtualGeometryCache(const QString& physicalScreen
     }
 
     // Remove all cached entries belonging to this physical screen
-    const QString prefix = physicalScreenId + VirtualScreenId::Separator;
+    const QString prefix = physicalScreenId + VirtualScreenId::separator();
     auto it = m_virtualGeometryCache.begin();
     while (it != m_virtualGeometryCache.end()) {
         if (it.key().startsWith(prefix)) {

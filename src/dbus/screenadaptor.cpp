@@ -37,18 +37,7 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
         }
 
         connect(screen, &QScreen::geometryChanged, this, [this, screen]() {
-            const QString physId = Utils::screenIdentifier(screen);
-            Q_EMIT screenGeometryChanged(physId);
-            // Also emit for each virtual screen on this physical screen
-            auto* mgr = ScreenManager::instance();
-            if (mgr) {
-                QStringList vsIds = mgr->virtualScreenIdsFor(physId);
-                for (const QString& vsId : vsIds) {
-                    if (vsId != physId) {
-                        Q_EMIT screenGeometryChanged(vsId);
-                    }
-                }
-            }
+            handleScreenGeometryChanged(screen, Utils::screenIdentifier(screen));
         });
     });
 
@@ -64,10 +53,9 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
                     Q_EMIT screenRemoved(vsId);
                 }
             }
-            // Remove stale virtual screen config for the removed physical screen
-            VirtualScreenConfig emptyConfig;
-            emptyConfig.physicalScreenId = physId;
-            mgr->setVirtualScreenConfig(physId, emptyConfig);
+            // NOTE: Do NOT clear virtual screen config here — the user's
+            // configuration should persist across monitor disconnections so it
+            // is automatically restored when the screen is reconnected.
         }
 
         Q_EMIT screenRemoved(physId);
@@ -76,19 +64,24 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
     // Connect existing screens
     for (auto* screen : Utils::allScreens()) {
         connect(screen, &QScreen::geometryChanged, this, [this, screen]() {
-            const QString physId = Utils::screenIdentifier(screen);
-            Q_EMIT screenGeometryChanged(physId);
-            // Also emit for each virtual screen on this physical screen
-            auto* mgr = ScreenManager::instance();
-            if (mgr) {
-                QStringList vsIds = mgr->virtualScreenIdsFor(physId);
-                for (const QString& vsId : vsIds) {
-                    if (vsId != physId) {
-                        Q_EMIT screenGeometryChanged(vsId);
-                    }
-                }
-            }
+            handleScreenGeometryChanged(screen, Utils::screenIdentifier(screen));
         });
+    }
+}
+
+void ScreenAdaptor::handleScreenGeometryChanged(QScreen* screen, const QString& physId)
+{
+    Q_UNUSED(screen)
+    Q_EMIT screenGeometryChanged(physId);
+    // Also emit for each virtual screen on this physical screen
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        QStringList vsIds = mgr->virtualScreenIdsFor(physId);
+        for (const QString& vsId : vsIds) {
+            if (vsId != physId) {
+                Q_EMIT screenGeometryChanged(vsId);
+            }
+        }
     }
 }
 

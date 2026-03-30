@@ -292,7 +292,7 @@ private:
     void createNavigationOsdWindow(const QString& screenId, QScreen* physScreen);
     void destroyNavigationOsdWindow(const QString& screenId);
 
-    void createShaderPreviewWindow(QScreen* screen);
+    void createShaderPreviewWindow(QScreen* screen, const QString& screenId = QString());
     void destroyShaderPreviewWindow();
 
     void createSnapAssistWindow(const QString& screenId, QScreen* physScreen, const QRect& geom);
