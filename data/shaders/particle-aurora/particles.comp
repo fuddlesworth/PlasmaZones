@@ -1,0 +1,162 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+#include <common.glsl>
+#include <audio.glsl>
+#include <compute.glsl>
+
+/*
+ * PARTICLE AURORA — Compute Shader
+ *
+ * Each thread updates one particle: physics, aging, respawning.
+ * Alive particles are rendered as soft dots into uParticleImage.
+ * Audio modulates spawn rate, velocity, and color intensity.
+ */
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= particles.length()) return;
+
+    Particle p = particles[idx];
+    ivec2 imgSize = imageSize(uParticleImage);
+
+    // ── Clear this thread's stripe of the particle image ───
+    // Each thread clears a vertical stripe proportional to its index.
+    // This distributes the clear across all compute threads.
+    int totalParticles = int(particles.length());
+    int stripWidth = max(1, (imgSize.x + totalParticles - 1) / totalParticles);
+    int stripStart = int(idx) * stripWidth;
+    int stripEnd = min(stripStart + stripWidth, imgSize.x);
+    for (int x = stripStart; x < stripEnd; x++) {
+        for (int y = 0; y < imgSize.y; y++) {
+            imageStore(uParticleImage, ivec2(x, y), vec4(0.0));
+        }
+    }
+
+    // ── Parameters from UBO ────────────────────────────
+    float spawnRate      = max(customParams[0].x, 0.1);
+    float maxLifetime    = max(customParams[0].y, 1.0);
+    float gravity        = customParams[0].z;
+    float turbulence     = customParams[0].w;
+    float particleSize   = max(customParams[1].x, 1.0);
+    float glowIntensity  = max(customParams[1].y, 0.5);
+    float audioReact     = customParams[1].z;
+    float driftSpeed     = customParams[1].w;
+
+    vec3 aurora1 = customColors[1].rgb;
+    vec3 aurora2 = customColors[2].rgb;
+    vec3 aurora3 = customColors[3].rgb;
+
+    // ── Audio ──────────────────────────────────────────
+    // Audio spectrum is at binding 6 as sampler2D (declared in audio.glsl).
+    // In compute shaders we sample it directly with texelFetch since there's
+    // no vTexCoord. The texture is Nx1 RGBA8; .r channel holds the bar value.
+    bool hasAudio = iAudioSpectrumSize > 0;
+    float bass = 0.0, mids = 0.0, treble = 0.0, overall = 0.0;
+    if (hasAudio) {
+        int n = iAudioSpectrumSize;
+        bass = texelFetch(uAudioSpectrum, ivec2(n / 8, 0), 0).r;
+        mids = texelFetch(uAudioSpectrum, ivec2(n / 4, 0), 0).r;
+        treble = texelFetch(uAudioSpectrum, ivec2(n * 3 / 4, 0), 0).r;
+        overall = (bass + mids + treble) / 3.0;
+    }
+    float energy = hasAudio ? overall * audioReact : 0.0;
+
+    float dt = iTimeDelta;
+    float seed = p.seed;
+
+    // ── Respawn dead particles ─────────────────────────
+    if (p.life <= 0.0) {
+        // Spawn probability based on rate + audio
+        float spawnChance = spawnRate * dt * (1.0 + energy);
+        float roll = particleHash(seed, iTime + float(idx) * 0.001);
+        if (roll > spawnChance) {
+            particles[idx] = p;
+            return;
+        }
+
+        // Spawn at random position along bottom third of screen
+        p.pos.x = particleHash(seed, iTime * 1.1 + float(idx) * 0.37);
+        p.pos.y = particleHash(seed, iTime * 0.7 + float(idx) * 0.53) * 0.3;
+        p.vel.x = (particleHash(seed, iTime * 2.3 + float(idx)) - 0.5) * driftSpeed * 0.1;
+        p.vel.y = 0.01 + particleHash(seed, iTime * 3.1 + float(idx)) * 0.03
+                + (hasAudio ? bass * audioReact * 0.02 : 0.0);
+        p.life = maxLifetime;
+        p.age = 0.0;
+        p.size = particleSize / float(imgSize.y);
+
+        // Color: cycle through aurora palette based on position + seed
+        float colorT = p.pos.x + seed;
+        vec3 col;
+        float ct = fract(colorT * 3.0);
+        int ci = int(floor(colorT * 3.0)) % 3;
+        if (ci == 0) col = mix(aurora1, aurora2, ct);
+        else if (ci == 1) col = mix(aurora2, aurora3, ct);
+        else col = mix(aurora3, aurora1, ct);
+        p.color = vec4(col, 1.0);
+    }
+
+    // ── Physics update ─────────────────────────────────
+    // Gravity (negative = upward aurora effect)
+    p.vel.y += gravity * dt;
+
+    // Turbulence: simple sine-based flow field
+    float turbX = sin(p.pos.y * 12.0 + iTime * 1.5) * turbulence * 0.01;
+    float turbY = cos(p.pos.x * 8.0 + iTime * 1.2) * turbulence * 0.005;
+    p.vel.x += turbX * dt;
+    p.vel.y += turbY * dt;
+
+    // Drift
+    p.vel.x += sin(iTime * 0.3 + p.seed * 6.28) * driftSpeed * 0.001 * dt;
+
+    // Damping
+    p.vel *= 0.998;
+
+    // Integrate
+    p.pos += p.vel * dt * 60.0;
+
+    // Wrap horizontally
+    p.pos.x = fract(p.pos.x);
+
+    // Age and kill
+    p.age += dt;
+    p.life -= dt;
+
+    // Fade alpha with age
+    float fadeIn = smoothstep(0.0, 0.3, p.age);
+    float fadeOut = smoothstep(0.0, 1.0, p.life / maxLifetime);
+    float alpha = fadeIn * fadeOut * glowIntensity;
+
+    // Audio boost
+    alpha *= 1.0 + energy * 0.5;
+
+    // ── Render to particle image ───────────────────────
+    if (p.life > 0.0 && alpha > 0.01) {
+        ivec2 center = ivec2(p.pos * vec2(imgSize));
+        int radius = max(1, int(p.size * float(imgSize.y)));
+
+        for (int dy = -radius; dy <= radius; dy++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                ivec2 px = center + ivec2(dx, dy);
+                if (px.x < 0 || px.x >= imgSize.x || px.y < 0 || px.y >= imgSize.y) continue;
+
+                float dist = length(vec2(dx, dy)) / float(radius);
+                if (dist > 1.0) continue;
+
+                // Soft gaussian-ish falloff
+                float falloff = exp(-dist * dist * 3.0);
+                vec4 contrib = vec4(p.color.rgb * alpha * falloff, alpha * falloff);
+
+                // Additive blend via imageLoad + imageStore
+                vec4 existing = imageLoad(uParticleImage, px);
+                imageStore(uParticleImage, px, existing + contrib);
+            }
+        }
+    }
+
+    particles[idx] = p;
+}
