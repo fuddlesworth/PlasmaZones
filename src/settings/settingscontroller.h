@@ -17,6 +17,7 @@
 #include "../core/enums.h"
 #include "../core/modifierutils.h"
 
+#include <QHash>
 #include <QObject>
 #include <QSet>
 #include <QString>
@@ -146,6 +147,7 @@ public:
     Q_SCRIPTABLE void raise();
 
     static const QSet<QString>& validPageNames();
+    static const QHash<QString, QString>& parentPageRedirects();
 
     bool needsSave() const
     {

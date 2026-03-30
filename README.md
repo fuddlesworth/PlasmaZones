@@ -651,7 +651,7 @@ qdbus6 org.plasmazones.Settings.App /SettingsApp setActivePage "tiling-algorithm
 qdbus6 org.plasmazones.Settings.App /SettingsApp raise
 ```
 
-Available page names: `overview`, `layouts`, `snapping`, `snapping-appearance`, `snapping-behavior`, `snapping-zoneselector`, `snapping-effects`, `snapping-assignments`, `snapping-shortcuts`, `tiling`, `tiling-appearance`, `tiling-behavior`, `tiling-algorithm`, `tiling-assignments`, `tiling-shortcuts`, `apprules`, `exclusions`, `editor`, `general`, `about`
+Available page names: `overview`, `layouts`, `snapping-appearance`, `snapping-behavior`, `snapping-zoneselector`, `snapping-effects`, `snapping-assignments`, `snapping-shortcuts`, `tiling-appearance`, `tiling-behavior`, `tiling-algorithm`, `tiling-assignments`, `tiling-shortcuts`, `apprules`, `exclusions`, `editor`, `general`, `about` (parent names `snapping` and `tiling` are also accepted and redirect to their first child page)
 
 Full API documentation: [wiki — D-Bus API](https://github.com/fuddlesworth/PlasmaZones/wiki/D-Bus-API)
 

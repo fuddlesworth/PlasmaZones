@@ -37,7 +37,10 @@ bool activateRunningInstance(const QString& page)
 
     iface.setTimeout(3000); // 3s timeout — avoid long hang if existing instance is frozen
     if (!page.isEmpty()) {
-        iface.call(QStringLiteral("setActivePage"), page);
+        QDBusMessage pageReply = iface.call(QStringLiteral("setActivePage"), page);
+        if (pageReply.type() == QDBusMessage::ErrorMessage) {
+            qCWarning(PlasmaZones::lcCore) << "Failed to forward page to running instance:" << pageReply.errorMessage();
+        }
     }
     QDBusMessage reply = iface.call(QStringLiteral("raise"));
     if (reply.type() == QDBusMessage::ErrorMessage)

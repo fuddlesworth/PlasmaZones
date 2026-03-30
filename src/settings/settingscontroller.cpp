@@ -65,6 +65,12 @@ QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
 
 SettingsController::~SettingsController()
 {
+    // Unregister D-Bus service so a stale name doesn't linger if the
+    // QDBusConnection outlives this object.
+    auto bus = QDBusConnection::sessionBus();
+    bus.unregisterObject(DBus::SettingsApp::ObjectPath);
+    bus.unregisterService(DBus::SettingsApp::ServiceName);
+
     // Disconnect all pending algorithm registration watchers — AlgorithmRegistry
     // is a singleton that outlives this object, so dangling connections would fire
     // into a destroyed SettingsController.
@@ -230,19 +236,30 @@ void SettingsController::dismissUpdate()
     setDismissedUpdateVersion(m_updateChecker.latestVersion());
 }
 
+const QHash<QString, QString>& SettingsController::parentPageRedirects()
+{
+    // Parent sidebar categories have no QML component — resolve them to their
+    // first child so D-Bus / CLI callers get a sensible result.
+    static const QHash<QString, QString> redirects{
+        {QStringLiteral("snapping"), QStringLiteral("snapping-appearance")},
+        {QStringLiteral("tiling"), QStringLiteral("tiling-appearance")},
+    };
+    return redirects;
+}
+
 const QSet<QString>& SettingsController::validPageNames()
 {
+    // Keep in sync with _pageComponents in Main.qml — every entry here must
+    // have a corresponding QML component file in that map.
     static const QSet<QString> pages{
         QStringLiteral("overview"),
         QStringLiteral("layouts"),
-        QStringLiteral("snapping"),
         QStringLiteral("snapping-appearance"),
         QStringLiteral("snapping-behavior"),
         QStringLiteral("snapping-zoneselector"),
         QStringLiteral("snapping-effects"),
         QStringLiteral("snapping-assignments"),
         QStringLiteral("snapping-shortcuts"),
-        QStringLiteral("tiling"),
         QStringLiteral("tiling-appearance"),
         QStringLiteral("tiling-behavior"),
         QStringLiteral("tiling-algorithm"),
@@ -259,12 +276,15 @@ const QSet<QString>& SettingsController::validPageNames()
 
 void SettingsController::setActivePage(const QString& page)
 {
-    if (!validPageNames().contains(page)) {
+    // Resolve parent category names (e.g. "snapping" → "snapping-appearance")
+    const QString resolved = parentPageRedirects().value(page, page);
+
+    if (!validPageNames().contains(resolved)) {
         qCWarning(PlasmaZones::lcCore) << "Unknown settings page:" << page;
         return;
     }
-    if (m_activePage != page) {
-        m_activePage = page;
+    if (m_activePage != resolved) {
+        m_activePage = resolved;
         Q_EMIT activePageChanged();
     }
 }
@@ -290,6 +310,7 @@ void SettingsController::raise()
         w->show();
         w->raise();
         w->requestActivate();
+        break; // Only raise the primary application window
     }
 }
 
