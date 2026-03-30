@@ -81,48 +81,48 @@ ApplicationWindow {
     // Children for each parent
     readonly property var _childItems: ({
         "snapping": [{
-            "name": "snap-appearance",
+            "name": "snapping-appearance",
             "label": i18n("Appearance"),
             "iconName": "preferences-desktop-color"
         }, {
-            "name": "snap-behavior",
+            "name": "snapping-behavior",
             "label": i18n("Behavior"),
             "iconName": "preferences-system"
         }, {
-            "name": "snap-zoneselector",
+            "name": "snapping-zoneselector",
             "label": i18n("Zone Selector"),
             "iconName": "view-choose"
         }, {
-            "name": "snap-effects",
+            "name": "snapping-effects",
             "label": i18n("Effects"),
             "iconName": "preferences-desktop-effects"
         }, {
-            "name": "snap-assignments",
+            "name": "snapping-assignments",
             "label": i18n("Assignments"),
             "iconName": "view-list-details"
         }, {
-            "name": "snap-shortcuts",
+            "name": "snapping-shortcuts",
             "label": i18n("Quick Shortcuts"),
             "iconName": "bookmark"
         }],
         "tiling": [{
-            "name": "tile-appearance",
+            "name": "tiling-appearance",
             "label": i18n("Appearance"),
             "iconName": "preferences-desktop-color"
         }, {
-            "name": "tile-behavior",
+            "name": "tiling-behavior",
             "label": i18n("Behavior"),
             "iconName": "preferences-system"
         }, {
-            "name": "tile-algorithm",
+            "name": "tiling-algorithm",
             "label": i18n("Algorithms"),
             "iconName": "view-grid"
         }, {
-            "name": "tile-assignments",
+            "name": "tiling-assignments",
             "label": i18n("Assignments"),
             "iconName": "view-list-details"
         }, {
-            "name": "tile-shortcuts",
+            "name": "tiling-shortcuts",
             "label": i18n("Quick Shortcuts"),
             "iconName": "bookmark"
         }]
@@ -131,17 +131,17 @@ ApplicationWindow {
     readonly property var _pageComponents: ({
         "overview": "MonitorStatePage.qml",
         "layouts": "LayoutsPage.qml",
-        "snap-appearance": "SnappingAppearancePage.qml",
-        "snap-behavior": "SnappingBehaviorPage.qml",
-        "snap-zoneselector": "SnappingZoneSelectorPage.qml",
-        "snap-effects": "SnappingEffectsPage.qml",
-        "tile-appearance": "TilingAppearancePage.qml",
-        "tile-behavior": "TilingBehaviorPage.qml",
-        "tile-algorithm": "TilingAlgorithmPage.qml",
-        "snap-assignments": "SnappingAssignmentsPage.qml",
-        "snap-shortcuts": "SnappingQuickShortcutsPage.qml",
-        "tile-assignments": "TilingAssignmentsPage.qml",
-        "tile-shortcuts": "TilingQuickShortcutsPage.qml",
+        "snapping-appearance": "SnappingAppearancePage.qml",
+        "snapping-behavior": "SnappingBehaviorPage.qml",
+        "snapping-zoneselector": "SnappingZoneSelectorPage.qml",
+        "snapping-effects": "SnappingEffectsPage.qml",
+        "tiling-appearance": "TilingAppearancePage.qml",
+        "tiling-behavior": "TilingBehaviorPage.qml",
+        "tiling-algorithm": "TilingAlgorithmPage.qml",
+        "snapping-assignments": "SnappingAssignmentsPage.qml",
+        "snapping-shortcuts": "SnappingQuickShortcutsPage.qml",
+        "tiling-assignments": "TilingAssignmentsPage.qml",
+        "tiling-shortcuts": "TilingQuickShortcutsPage.qml",
         "apprules": "AssignmentsAppRulesPage.qml",
         "exclusions": "ExclusionsPage.qml",
         "editor": "EditorPage.qml",

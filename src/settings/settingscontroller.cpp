@@ -233,16 +233,26 @@ void SettingsController::dismissUpdate()
 const QSet<QString>& SettingsController::validPageNames()
 {
     static const QSet<QString> pages{
-        QStringLiteral("overview"),        QStringLiteral("layouts"),
-        QStringLiteral("snapping"),        QStringLiteral("snap-appearance"),
-        QStringLiteral("snap-behavior"),   QStringLiteral("snap-zoneselector"),
-        QStringLiteral("snap-effects"),    QStringLiteral("snap-assignments"),
-        QStringLiteral("snap-shortcuts"),  QStringLiteral("tiling"),
-        QStringLiteral("tile-appearance"), QStringLiteral("tile-behavior"),
-        QStringLiteral("tile-algorithm"),  QStringLiteral("tile-assignments"),
-        QStringLiteral("tile-shortcuts"),  QStringLiteral("apprules"),
-        QStringLiteral("exclusions"),      QStringLiteral("editor"),
-        QStringLiteral("general"),         QStringLiteral("about"),
+        QStringLiteral("overview"),
+        QStringLiteral("layouts"),
+        QStringLiteral("snapping"),
+        QStringLiteral("snapping-appearance"),
+        QStringLiteral("snapping-behavior"),
+        QStringLiteral("snapping-zoneselector"),
+        QStringLiteral("snapping-effects"),
+        QStringLiteral("snapping-assignments"),
+        QStringLiteral("snapping-shortcuts"),
+        QStringLiteral("tiling"),
+        QStringLiteral("tiling-appearance"),
+        QStringLiteral("tiling-behavior"),
+        QStringLiteral("tiling-algorithm"),
+        QStringLiteral("tiling-assignments"),
+        QStringLiteral("tiling-shortcuts"),
+        QStringLiteral("apprules"),
+        QStringLiteral("exclusions"),
+        QStringLiteral("editor"),
+        QStringLiteral("general"),
+        QStringLiteral("about"),
     };
     return pages;
 }

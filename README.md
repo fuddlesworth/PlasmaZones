@@ -551,7 +551,7 @@ Open the settings app:
 ```bash
 plasmazones-settings                    # opens on overview page
 plasmazones-settings -p layouts         # opens directly to layouts page
-plasmazones-settings --page tile-behavior  # opens to tiling behavior page
+plasmazones-settings --page tiling-behavior  # opens to tiling behavior page
 ```
 
 The app is single-instance — launching it again while running raises the existing window and switches to the requested page.
@@ -642,16 +642,16 @@ The settings app is single-instance. Launching it while already running forwards
 ```bash
 # Open settings to a specific page
 plasmazones-settings --page layouts
-plasmazones-settings -p snap-behavior
+plasmazones-settings -p snapping-behavior
 
 # If already running, switch page via D-Bus
-qdbus6 org.plasmazones.Settings.App /SettingsApp setActivePage "tile-algorithm"
+qdbus6 org.plasmazones.Settings.App /SettingsApp setActivePage "tiling-algorithm"
 
 # Raise the settings window
 qdbus6 org.plasmazones.Settings.App /SettingsApp raise
 ```
 
-Available page names: `overview`, `layouts`, `snapping`, `snap-appearance`, `snap-behavior`, `snap-zoneselector`, `snap-effects`, `snap-assignments`, `snap-shortcuts`, `tiling`, `tile-appearance`, `tile-behavior`, `tile-algorithm`, `tile-assignments`, `tile-shortcuts`, `apprules`, `exclusions`, `editor`, `general`, `about`
+Available page names: `overview`, `layouts`, `snapping`, `snapping-appearance`, `snapping-behavior`, `snapping-zoneselector`, `snapping-effects`, `snapping-assignments`, `snapping-shortcuts`, `tiling`, `tiling-appearance`, `tiling-behavior`, `tiling-algorithm`, `tiling-assignments`, `tiling-shortcuts`, `apprules`, `exclusions`, `editor`, `general`, `about`
 
 Full API documentation: [wiki — D-Bus API](https://github.com/fuddlesworth/PlasmaZones/wiki/D-Bus-API)
 
