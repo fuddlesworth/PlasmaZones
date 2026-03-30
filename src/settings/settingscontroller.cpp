@@ -129,6 +129,26 @@ SettingsController::SettingsController(QObject* parent)
         }
     }
 
+    // Editor and fill-on-drop settings lack Q_PROPERTY on Settings, so the
+    // meta-object loop above misses their NOTIFY signals.  Connect explicitly.
+    connect(&m_settings, &Settings::editorDuplicateShortcutChanged, this,
+            &SettingsController::onSettingsPropertyChanged);
+    connect(&m_settings, &Settings::editorSplitHorizontalShortcutChanged, this,
+            &SettingsController::onSettingsPropertyChanged);
+    connect(&m_settings, &Settings::editorSplitVerticalShortcutChanged, this,
+            &SettingsController::onSettingsPropertyChanged);
+    connect(&m_settings, &Settings::editorFillShortcutChanged, this, &SettingsController::onSettingsPropertyChanged);
+    connect(&m_settings, &Settings::editorGridSnappingEnabledChanged, this,
+            &SettingsController::onSettingsPropertyChanged);
+    connect(&m_settings, &Settings::editorEdgeSnappingEnabledChanged, this,
+            &SettingsController::onSettingsPropertyChanged);
+    connect(&m_settings, &Settings::editorSnapIntervalXChanged, this, &SettingsController::onSettingsPropertyChanged);
+    connect(&m_settings, &Settings::editorSnapIntervalYChanged, this, &SettingsController::onSettingsPropertyChanged);
+    connect(&m_settings, &Settings::editorSnapOverrideModifierChanged, this,
+            &SettingsController::onSettingsPropertyChanged);
+    connect(&m_settings, &Settings::fillOnDropEnabledChanged, this, &SettingsController::onSettingsPropertyChanged);
+    connect(&m_settings, &Settings::fillOnDropModifierChanged, this, &SettingsController::onSettingsPropertyChanged);
+
     // Screen helper signals
     m_screenHelper.connectToDaemonSignals();
     m_screenHelper.refreshScreens();

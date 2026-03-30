@@ -123,7 +123,9 @@ Flickable {
             headerText: i18n("Borders")
             showToggle: true
             toggleChecked: appSettings.autotileShowBorder
-            onToggleChanged: appSettings.autotileShowBorder = toggleChecked
+            onToggleClicked: (checked) => {
+                return appSettings.autotileShowBorder = checked;
+            }
             collapsible: true
 
             contentItem: ColumnLayout {

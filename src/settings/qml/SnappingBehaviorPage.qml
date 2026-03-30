@@ -115,7 +115,9 @@ Flickable {
                 showToggle: true
                 toggleChecked: appSettings.zoneSpanEnabled
                 collapsible: true
-                onToggleChanged: appSettings.zoneSpanEnabled = toggleChecked
+                onToggleClicked: (checked) => {
+                    return appSettings.zoneSpanEnabled = checked;
+                }
 
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
@@ -177,7 +179,9 @@ Flickable {
                 showToggle: true
                 toggleChecked: appSettings.snapAssistFeatureEnabled
                 collapsible: true
-                onToggleChanged: appSettings.snapAssistFeatureEnabled = toggleChecked
+                onToggleClicked: (checked) => {
+                    return appSettings.snapAssistFeatureEnabled = checked;
+                }
 
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing

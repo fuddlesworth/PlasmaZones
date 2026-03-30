@@ -98,7 +98,9 @@ Flickable {
                 showToggle: true
                 toggleChecked: appSettings.enableShaderEffects
                 collapsible: true
-                onToggleChanged: appSettings.enableShaderEffects = toggleChecked
+                onToggleClicked: (checked) => {
+                    return appSettings.enableShaderEffects = checked;
+                }
 
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing

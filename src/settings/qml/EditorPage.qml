@@ -266,7 +266,9 @@ Flickable {
                 headerText: i18n("Fill on Drop")
                 showToggle: true
                 toggleChecked: root.settingsBridge.fillOnDropEnabled
-                onToggleChanged: root.settingsBridge.fillOnDropEnabled = toggleChecked
+                onToggleClicked: (checked) => {
+                    return root.settingsBridge.fillOnDropEnabled = checked;
+                }
 
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing

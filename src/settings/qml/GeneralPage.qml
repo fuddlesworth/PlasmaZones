@@ -42,7 +42,9 @@ Flickable {
                 headerText: i18n("Animations")
                 showToggle: true
                 toggleChecked: appSettings.animationsEnabled
-                onToggleChanged: appSettings.animationsEnabled = toggleChecked
+                onToggleClicked: (checked) => {
+                    return appSettings.animationsEnabled = checked;
+                }
                 collapsible: true
 
                 contentItem: ColumnLayout {

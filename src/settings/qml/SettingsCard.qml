@@ -45,7 +45,7 @@ Item {
     property bool showToggle: false
     property bool toggleChecked: false
 
-    signal toggleChanged()
+    signal toggleClicked(bool checked)
 
     onCollapsedChanged: {
         if (collapsed) {
@@ -172,12 +172,7 @@ Item {
                         checked: root.toggleChecked
                         accessibleName: root.headerText
                         Layout.rightMargin: Kirigami.Units.smallSpacing
-                        onToggled: {
-                            if (checked !== root.toggleChecked) {
-                                root.toggleChecked = checked;
-                                root.toggleChanged();
-                            }
-                        }
+                        onToggled: root.toggleClicked(checked)
                     }
 
                     // Collapse chevron

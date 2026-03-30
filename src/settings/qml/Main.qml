@@ -715,8 +715,24 @@ ApplicationWindow {
                                 visible: navDelegate.isActive && settingsController.needsSave && !navDelegate.isDivider && !navDelegate.isBackButton
                                 Layout.alignment: Qt.AlignVCenter
 
-                                Behavior on visible {
-                                    enabled: false
+                                SequentialAnimation on opacity {
+                                    loops: Animation.Infinite
+                                    running: navDelegate.isActive && settingsController.needsSave
+
+                                    NumberAnimation {
+                                        from: 1
+                                        to: 0.4
+                                        duration: 1000
+                                        easing.type: Easing.InOutSine
+                                    }
+
+                                    NumberAnimation {
+                                        from: 0.4
+                                        to: 1
+                                        duration: 1000
+                                        easing.type: Easing.InOutSine
+                                    }
+
                                 }
 
                             }
@@ -927,35 +943,6 @@ ApplicationWindow {
                                 return window._mainItemLabel(settingsController.activePage);
                             }
                             opacity: 0.5
-                        }
-
-                    }
-
-                    // Unsaved changes indicator
-                    Label {
-                        visible: settingsController.needsSave
-                        text: "●"
-                        color: Kirigami.Theme.highlightColor
-                        font: Kirigami.Theme.smallFont
-
-                        SequentialAnimation on opacity {
-                            loops: Animation.Infinite
-                            running: settingsController.needsSave
-
-                            NumberAnimation {
-                                from: 1
-                                to: 0.4
-                                duration: 1000
-                                easing.type: Easing.InOutSine
-                            }
-
-                            NumberAnimation {
-                                from: 0.4
-                                to: 1
-                                duration: 1000
-                                easing.type: Easing.InOutSine
-                            }
-
                         }
 
                     }
@@ -1445,82 +1432,6 @@ ApplicationWindow {
 
             }
 
-            Pane {
-                Layout.fillWidth: true
-                padding: Kirigami.Units.smallSpacing * 1.5
-                topPadding: Kirigami.Units.smallSpacing * 2
-                bottomPadding: Kirigami.Units.smallSpacing * 2
-
-                RowLayout {
-                    anchors.fill: parent
-
-                    Button {
-                        text: i18n("Defaults")
-                        icon.name: "document-revert"
-                        flat: true
-                        onClicked: defaultsConfirmDialog.open()
-                        opacity: 0.7
-                    }
-
-                    Item {
-                        Layout.fillWidth: true
-                    }
-
-                    Button {
-                        id: applyButton
-
-                        text: i18n("Apply")
-                        icon.name: "dialog-ok-apply"
-                        enabled: settingsController.needsSave
-                        highlighted: settingsController.needsSave
-                        onClicked: {
-                            settingsController.save();
-                            toast.show(i18n("Settings applied"));
-                        }
-
-                        // Reset scale when not pulsing
-                        Binding {
-                            target: applyButton
-                            property: "scale"
-                            value: 1
-                            when: !settingsController.needsSave
-                            restoreMode: Binding.RestoreBinding
-                        }
-
-                        // Subtle pulsing glow when changes are pending
-                        SequentialAnimation on scale {
-                            loops: Animation.Infinite
-                            running: settingsController.needsSave
-
-                            NumberAnimation {
-                                from: 1
-                                to: 1.03
-                                duration: 800
-                                easing.type: Easing.InOutSine
-                            }
-
-                            NumberAnimation {
-                                from: 1.03
-                                to: 1
-                                duration: 800
-                                easing.type: Easing.InOutSine
-                            }
-
-                        }
-
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 150
-                            }
-
-                        }
-
-                    }
-
-                }
-
-            }
-
             // -- Unsaved changes notification bar -------------------------
             Item {
                 id: unsavedBar
@@ -1567,6 +1478,13 @@ ApplicationWindow {
                             text: i18n("Unsaved changes")
                             color: Kirigami.Theme.neutralTextColor
                             Layout.fillWidth: true
+                        }
+
+                        Button {
+                            text: i18n("Defaults")
+                            icon.name: "document-revert"
+                            flat: true
+                            onClicked: defaultsConfirmDialog.open()
                         }
 
                         Button {
