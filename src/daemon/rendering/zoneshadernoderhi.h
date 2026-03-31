@@ -116,6 +116,8 @@ private:
     bool ensureComputePipeline();
     void bakeComputeShader();
     void dispatchCompute(QRhiCommandBuffer* cb);
+    bool ensureParticleTexture(QRhi* rhi);
+    void updateCpuParticles();
     void appendParticleTextureBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
     void syncUniformsFromData();
     void uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb);
@@ -280,6 +282,11 @@ private:
 
     std::unique_ptr<QRhiTexture> m_particleTexture;
     std::unique_ptr<QRhiSampler> m_particleSampler;
+
+    // CPU particle fallback (when GPU compute unavailable)
+    QVector<ParticleData> m_cpuParticles;
+    QImage m_cpuParticleImage;
+    bool m_cpuParticlesFallback = false;
 
     // Desktop wallpaper texture (binding 11) — opt-in via metadata "wallpaper": true
     bool m_useWallpaper = false;

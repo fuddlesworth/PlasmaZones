@@ -424,6 +424,9 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_particleSsbo.reset();
     m_particleTexture.reset();
     m_particleSampler.reset();
+    m_cpuParticles.clear();
+    m_cpuParticleImage = QImage();
+    m_cpuParticlesFallback = false;
     m_ubo.reset();
     m_vbo.reset();
     m_vertexShader = QShader();

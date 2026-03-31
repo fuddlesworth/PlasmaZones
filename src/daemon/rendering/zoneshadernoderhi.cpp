@@ -297,14 +297,36 @@ void ZoneShaderNodeRhi::prepare()
     // Multi-pass: bake buffer fragment shader(s) when path(s) set
     bakeBufferShaders();
 
-    // Compute shader: bake and ensure pipeline
-    if (!m_computeShaderPath.isEmpty()) {
-        if (!m_computeSupported) {
+    // Compute shader: bake and ensure pipeline, or fall back to CPU particles
+    if (!m_computeShaderPath.isEmpty() && m_particleCount > 0) {
+        if (!m_computeSupported && !m_cpuParticlesFallback) {
             m_computeSupported = rhi->isFeatureSupported(QRhi::Compute);
+            if (!m_computeSupported) {
+                m_cpuParticlesFallback = true;
+                qCInfo(lcOverlay) << "Compute not supported — using CPU particle fallback"
+                                  << "path:" << m_computeShaderPath << "particles:" << m_particleCount;
+            } else {
+                qCInfo(lcOverlay) << "Compute support: true"
+                                  << "path:" << m_computeShaderPath << "particles:" << m_particleCount;
+            }
         }
-        bakeComputeShader();
-        if (m_computeShaderReady) {
-            ensureComputePipeline();
+        if (m_computeSupported) {
+            bakeComputeShader();
+            if (m_computeShaderReady) {
+                ensureComputePipeline();
+            }
+        } else if (m_cpuParticlesFallback) {
+            // CPU fallback: create particle texture (no compute pipeline needed)
+            ensureParticleTexture(rhi);
+            updateCpuParticles();
+            // Upload the CPU-rendered particle image into the particle texture
+            if (m_particleTexture && !m_cpuParticleImage.isNull()) {
+                QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
+                if (batch) {
+                    batch->uploadTexture(m_particleTexture.get(), m_cpuParticleImage);
+                    cb->resourceUpdate(batch);
+                }
+            }
         }
     }
 
