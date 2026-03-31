@@ -167,9 +167,16 @@ void Settings::load()
     loadPerScreenOverrides(m_configBackend);
 
     // Rendering backend lives in [General] (affects whole graphics pipeline, not just shaders).
+    // QSettings::IniFormat doesn't map ungrouped keys to "General" (unlike KConfig), so
+    // check both the group and the ungrouped root to handle configs written either way.
     {
         auto general = m_configBackend->group(ConfigDefaults::generalGroup());
-        const QString raw = general->readString(ConfigDefaults::renderingBackendKey());
+        QString raw = general->readString(ConfigDefaults::renderingBackendKey());
+        if (raw.isEmpty()) {
+            // Fallback: check ungrouped root (QSettings puts pre-section keys there)
+            QSettings cfg(ConfigDefaults::configFilePath(), QSettings::IniFormat);
+            raw = cfg.value(ConfigDefaults::renderingBackendKey()).toString();
+        }
         m_renderingBackend =
             ConfigDefaults::normalizeRenderingBackend(raw.isEmpty() ? ConfigDefaults::renderingBackend() : raw);
     }
