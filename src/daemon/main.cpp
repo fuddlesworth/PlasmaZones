@@ -77,13 +77,7 @@ int main(int argc, char* argv[])
 
         if (backend == QLatin1String("vulkan")) {
 #if QT_CONFIG(vulkan)
-            // Probe Vulkan availability before committing to the API.
-            // QVulkanInstance::create() calls ensureVulkan() which dlopens
-            // libvulkan — this can SEGFAULT if the Vulkan ICD or loader is
-            // broken. Guard with a QLibrary pre-check so we fail gracefully.
-            // NOTE: this only guards against a missing loader library; a broken
-            // ICD manifest (pointing to a non-existent driver .so) can still
-            // crash inside vkCreateInstance. No portable way to catch that.
+            // Pre-check: can we even load the Vulkan library?
             QLibrary vulkanLib(QStringLiteral("vulkan"), 1);
             bool vulkanLibAvailable = vulkanLib.load();
             if (!vulkanLibAvailable) {
@@ -92,16 +86,12 @@ int main(int argc, char* argv[])
             }
 
             if (vulkanLibAvailable) {
-                vulkanInstance.setApiVersion(PlasmaZones::PzVulkanApiVersion);
-                if (vulkanInstance.create()) {
-                    QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
-                    useVulkan = true;
-                } else {
-                    qCCritical(PlasmaZones::lcDaemon)
-                        << "Failed to create Vulkan instance — falling back to OpenGL."
-                        << "Check that Vulkan drivers are installed (vulkan-icd-loader, mesa-vulkan-drivers, etc.)";
-                    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-                }
+                // Set the graphics API BEFORE QGuiApplication (required by Qt).
+                // The actual QVulkanInstance::create() is deferred to AFTER the
+                // app exists, because Qt 6.11+ accesses the platform integration
+                // inside ensureVulkan(), which is null before QGuiApplication.
+                QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
+                useVulkan = true;
             } else {
                 qCCritical(PlasmaZones::lcDaemon) << "Vulkan library not found — falling back to OpenGL."
                                                   << "Install vulkan-icd-loader or equivalent for your distro.";
@@ -116,14 +106,10 @@ int main(int argc, char* argv[])
             QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
         }
         // "auto" → let Qt choose (default behavior)
-        const char* detail = "(explicit OpenGL)";
-        if (useVulkan)
-            detail = "(Vulkan active)";
-        else if (backend == QLatin1String("vulkan"))
-            detail = "(Vulkan failed, OpenGL fallback)";
-        else if (backend == QLatin1String("auto"))
-            detail = "(Qt default)";
-        qCInfo(PlasmaZones::lcDaemon) << "Rendering backend:" << backend << detail;
+        qCInfo(PlasmaZones::lcDaemon) << "Rendering backend:" << backend
+                                      << (useVulkan                                ? "(Vulkan)"
+                                              : backend == QLatin1String("opengl") ? "(OpenGL)"
+                                                                                   : "(Qt default)");
     }
 
     QGuiApplication app(argc, argv);
@@ -133,7 +119,19 @@ int main(int argc, char* argv[])
 #if QT_CONFIG(vulkan)
     qRegisterMetaType<QVulkanInstance*>();
     if (useVulkan) {
-        app.setProperty(PlasmaZones::PzVulkanInstanceProperty, QVariant::fromValue(&vulkanInstance));
+        // Create the Vulkan instance AFTER QGuiApplication — Qt 6.11+ accesses
+        // QGuiApplicationPrivate::platform_integration in ensureVulkan(), which
+        // is null before app construction (SIGSEGV on NVIDIA 595+).
+        vulkanInstance.setApiVersion(PlasmaZones::PzVulkanApiVersion);
+        if (vulkanInstance.create()) {
+            app.setProperty(PlasmaZones::PzVulkanInstanceProperty, QVariant::fromValue(&vulkanInstance));
+            qCInfo(PlasmaZones::lcDaemon) << "Vulkan instance created successfully";
+        } else {
+            qCCritical(PlasmaZones::lcDaemon)
+                << "Failed to create Vulkan instance after app init — Vulkan windows will not work."
+                << "Check that Vulkan drivers are installed (vulkan-icd-loader, mesa-vulkan-drivers, etc.)";
+            useVulkan = false;
+        }
     }
 #endif
     PlasmaZones::loadTranslations(&app);
