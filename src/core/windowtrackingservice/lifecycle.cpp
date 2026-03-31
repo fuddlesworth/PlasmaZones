@@ -128,6 +128,8 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     if ((m_lastUsedScreenId == physicalScreenId || m_lastUsedScreenId.startsWith(prefix))
         && !virtualScreenIds.isEmpty()) {
         m_lastUsedScreenId = virtualScreenIds.first();
+        // Clear stale zone ID — physical layout zones don't exist in virtual screen layout
+        m_lastUsedZoneId.clear();
     }
 
     // Migrate pre-tile geometry connectorName fields from physical (or old virtual) to new virtual
@@ -323,9 +325,12 @@ void WindowTrackingService::onLayoutChanged()
     // Only replace m_resnapBuffer when we capture at least one window. If user does A->B->C (snapped
     // on A, B has no windows), prev=B yields nothing - we keep the buffer from A->B so resnap on C works.
     Layout* prevLayout = m_layoutManager->previousLayout();
+    if (!prevLayout) {
+        qCInfo(lcCore) << "onLayoutChanged: no previous layout (first launch), skipping resnap buffer";
+        return;
+    }
     const bool layoutSwitched = (prevLayout != newLayout);
-    qCDebug(lcCore) << "onLayoutChanged: newLayout=" << newLayout->name()
-                    << "prevLayout=" << (prevLayout ? prevLayout->name() : QStringLiteral("null"))
+    qCDebug(lcCore) << "onLayoutChanged: newLayout=" << newLayout->name() << "prevLayout=" << prevLayout->name()
                     << "switched=" << layoutSwitched << "windowAssignments=" << m_windowZoneAssignments.size();
     {
         QVector<ResnapEntry> newBuffer;

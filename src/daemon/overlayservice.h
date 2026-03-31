@@ -300,10 +300,10 @@ private:
     /// backed by the given physical screen. Used by both virtualScreensChanged and handleScreenRemoved.
     void destroyAllWindowsForPhysicalScreen(QScreen* screen);
 
-    void createSnapAssistWindow(const QString& screenId, QScreen* physScreen, const QRect& geom);
+    void createSnapAssistWindow(QScreen* physScreen);
     void destroySnapAssistWindow();
 
-    void createLayoutPickerWindow(const QString& screenId, QScreen* physScreen, const QRect& geom);
+    void createLayoutPickerWindow(QScreen* physScreen);
     void destroyLayoutPickerWindow();
 
     /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML. */

@@ -51,22 +51,23 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     // Connect to layout changes for pending restores notification
     connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, &WindowTrackingAdaptor::onLayoutChanged);
 
-    // Connect to ScreenManager for panel geometry readiness
-    // This is needed to delay window restoration until panel positions are known
-    // Use QTimer::singleShot to defer connection until ScreenManager is likely initialized
+    // Deferred: ScreenManager may not be initialized yet during adaptor construction.
+    // If ScreenManager is still unavailable after the first event loop iteration,
+    // virtual screen signals won't be connected until the next daemon restart or
+    // screen change. Window restoration will still work via onLayoutChanged() ->
+    // tryEmitPendingRestoresAvailable(), which emits immediately when
+    // isPanelGeometryReady() returns false (no ScreenManager instance).
     QTimer::singleShot(0, this, [this]() {
-        if (auto* screenMgr = ScreenManager::instance()) {
-            connect(screenMgr, &ScreenManager::panelGeometryReady, this, &WindowTrackingAdaptor::onPanelGeometryReady);
-            // If panel geometry is already ready, trigger the check now
-            if (ScreenManager::isPanelGeometryReady()) {
-                onPanelGeometryReady();
-            }
-        } else {
-            // ScreenManager not available - this is unexpected but we handle it gracefully.
-            // Window restoration will still work via onLayoutChanged() -> tryEmitPendingRestoresAvailable()
-            // which will emit immediately since isPanelGeometryReady() returns false when instance is null.
+        auto* screenMgr = ScreenManager::instance();
+        if (!screenMgr) {
             qCWarning(lcDbusWindow)
                 << "ScreenManager instance not available - window restoration may use incorrect geometry";
+            return;
+        }
+        connect(screenMgr, &ScreenManager::panelGeometryReady, this, &WindowTrackingAdaptor::onPanelGeometryReady);
+        // If panel geometry is already ready, trigger the check now
+        if (ScreenManager::isPanelGeometryReady()) {
+            onPanelGeometryReady();
         }
     });
 

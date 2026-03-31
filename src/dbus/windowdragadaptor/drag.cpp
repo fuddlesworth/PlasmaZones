@@ -27,6 +27,11 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
 {
     Q_UNUSED(mouseButtons); // Only used in dragMoved for dynamic activation
 
+    if (windowId.isEmpty()) {
+        qCWarning(lcDbusWindow) << "dragStarted: empty windowId";
+        return;
+    }
+
     if (!m_settings) {
         return;
     }

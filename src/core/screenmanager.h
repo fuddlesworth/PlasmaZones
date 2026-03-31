@@ -339,6 +339,10 @@ private:
     // Virtual screen configuration per physical screen
     QHash<QString, VirtualScreenConfig> m_virtualConfigs;
 
+    // Cached result for effectiveScreenIds() — invalidated when screens or configs change
+    mutable QStringList m_cachedEffectiveScreenIds;
+    mutable bool m_effectiveScreenIdsDirty = true;
+
     // Cached absolute geometries for virtual screens (invalidated on screen geometry change)
     mutable QHash<QString, QRect> m_virtualGeometryCache;
 

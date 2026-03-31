@@ -144,7 +144,9 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
     return layout;
 }
 
-/// Convenience overload: uses QScreen geometry (for physical screens only)
+/// Convenience overload: uses QScreen geometry (for physical screens only).
+/// @warning This overload uses the full physical screen geometry.
+/// For virtual screens, use the QRect overload with the virtual screen's geometry instead.
 inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& config, QScreen* screen, int layoutCount)
 {
     const QRect screenGeom = screen ? screen->geometry() : QRect(0, 0, 1920, 1080);

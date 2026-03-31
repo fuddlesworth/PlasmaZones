@@ -319,7 +319,7 @@ void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* phy
     if (!configureLayerSurface(window, physScreen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
                                QStringLiteral("plasmazones-layout-osd-%1").arg(screenId))) {
         qCWarning(lcOverlay) << "Failed to configure layer surface for layout OSD on" << screenId;
-        delete window;
+        window->deleteLater();
         return;
     }
 
@@ -512,7 +512,7 @@ void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen*
                                QStringLiteral("plasmazones-navigation-osd-%1").arg(screenId))) {
         qCWarning(lcOverlay) << "Failed to configure layer surface for navigation OSD on" << screenId;
         m_navigationOsdCreationFailed.insert(screenId, true);
-        delete window;
+        window->deleteLater();
         return;
     }
 

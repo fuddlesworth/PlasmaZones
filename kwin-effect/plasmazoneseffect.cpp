@@ -3,7 +3,6 @@
 
 #include "plasmazoneseffect.h"
 
-#include "../src/config/configkeys.h"
 #include <algorithm>
 #include <memory>
 #include <QBuffer>
@@ -50,6 +49,12 @@
 namespace PlasmaZones {
 
 Q_LOGGING_CATEGORY(lcEffect, "plasmazones.effect", QtInfoMsg)
+
+namespace {
+// Duplicated from daemon's configkeys.h — effect cannot include daemon headers
+constexpr QLatin1StringView TriggerModifierField("modifier");
+constexpr QLatin1StringView TriggerMouseButtonField("mouseButton");
+} // namespace
 
 // NavigateDirectivePrefix moved to navigationhandler.cpp to avoid redefinition
 
@@ -1548,8 +1553,8 @@ void PlasmaZonesEffect::loadCachedSettings()
                     map = t.toMap();
                 }
                 ParsedTrigger pt;
-                pt.modifier = map.value(PlasmaZones::ConfigKeys::triggerModifierField(), 0).toInt();
-                pt.mouseButton = map.value(PlasmaZones::ConfigKeys::triggerMouseButtonField(), 0).toInt();
+                pt.modifier = map.value(TriggerModifierField, 0).toInt();
+                pt.mouseButton = map.value(TriggerMouseButtonField, 0).toInt();
                 m_parsedTriggers.append(pt);
             }
 
@@ -1915,10 +1920,12 @@ QString PlasmaZonesEffect::resolveEffectiveScreenId(const QPoint& pos, const KWi
 
     // Fallback: point not in any virtual screen — return physical ID
     // (defensive: stale geometry or rounding gaps)
+    qCWarning(lcEffect) << "resolveEffectiveScreenId: point" << pos << "not in any virtual screen for" << physId
+                        << "- falling back to physical ID";
     return physId;
 }
 
-void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId, int generation)
+void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId, uint64_t generation)
 {
     QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Screen,
                                                       QStringLiteral("getVirtualScreenConfig"));
@@ -1933,11 +1940,11 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 if (!self)
                     return;
                 // Helper lambda: decrement pending counter and fire deferred processing when all done.
-                // Only participates in the startup gate if generation >= 0 (issued by fetchAllVirtualScreenConfigs)
+                // Only participates in the startup gate if generation != 0 (issued by fetchAllVirtualScreenConfigs)
                 // and the generation matches the current one (not stale from a prior fetch cycle).
                 // Captures self by value (QPointer copy) to avoid dangling reference.
                 auto countdownVsGate = [self, generation]() {
-                    if (generation < 0 || !self || self->m_vsConfigGeneration != generation) {
+                    if (generation == 0 || !self || self->m_vsConfigGeneration != generation) {
                         return;
                     }
                     if (self->m_pendingVsConfigReplies > 0 && --self->m_pendingVsConfigReplies == 0) {
@@ -2010,7 +2017,11 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 // are replaced with IDs from the updated boundaries.
                 for (auto it = self->m_trackedScreenPerWindow.begin(); it != self->m_trackedScreenPerWindow.end();
                      ++it) {
-                    if (auto* window = it.key()) {
+                    auto* window = it.key();
+                    if (!window || window->isDeleted()) {
+                        continue;
+                    }
+                    {
                         const QPoint center = window->frameGeometry().center().toPoint();
                         const QString newScreenId = self->resolveEffectiveScreenId(center, window->screen());
                         if (!newScreenId.isEmpty()) {
@@ -2050,7 +2061,7 @@ void PlasmaZonesEffect::fetchAllVirtualScreenConfigs()
     }
 
     // Bump generation so stale callbacks from prior fetches are ignored
-    const int generation = ++m_vsConfigGeneration;
+    const uint64_t generation = ++m_vsConfigGeneration;
     m_pendingVsConfigReplies = physIds.size();
     m_virtualScreensReady = false;
 
@@ -2064,7 +2075,7 @@ void PlasmaZonesEffect::onVirtualScreensChanged(const QString& physicalScreenId)
     qCInfo(lcEffect) << "Virtual screens changed for" << physicalScreenId;
     m_screenIdCache.clear();
     m_lastEffectiveScreenId.clear();
-    fetchVirtualScreenConfig(physicalScreenId); // generation=-1, won't participate in startup gate
+    fetchVirtualScreenConfig(physicalScreenId); // generation=0, won't participate in startup gate
 }
 
 void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& action, const QString& reason,

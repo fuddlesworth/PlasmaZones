@@ -186,9 +186,26 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
         return SnapResult::noSnap();
     }
 
+    // Validate virtual screen still exists — configuration may have changed since last snap.
+    // Fall back to physical screen ID if the virtual screen was removed (mirrors
+    // the E7 check in calculateRestoreFromSession).
+    QString effectiveScreenId = m_lastUsedScreenId;
+    if (VirtualScreenId::isVirtual(effectiveScreenId)) {
+        auto* smgr = ScreenManager::instance();
+        if (smgr) {
+            const QStringList effectiveIds = smgr->effectiveScreenIds();
+            if (!effectiveIds.contains(effectiveScreenId)) {
+                QString physId = VirtualScreenId::extractPhysicalId(effectiveScreenId);
+                qCInfo(lcCore) << "snapToLastZone: virtual screen" << effectiveScreenId
+                               << "no longer exists, falling back to physical screen" << physId;
+                effectiveScreenId = physId;
+            }
+        }
+    }
+
     // Don't cross-screen snap
-    if (!windowScreenId.isEmpty() && !m_lastUsedScreenId.isEmpty()
-        && !Utils::screensMatch(windowScreenId, m_lastUsedScreenId)) {
+    if (!windowScreenId.isEmpty() && !effectiveScreenId.isEmpty()
+        && !Utils::screensMatch(windowScreenId, effectiveScreenId)) {
         return SnapResult::noSnap();
     }
 
@@ -201,7 +218,7 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     }
 
     // Calculate geometry
-    QRect geo = zoneGeometry(m_lastUsedZoneId, m_lastUsedScreenId);
+    QRect geo = zoneGeometry(m_lastUsedZoneId, effectiveScreenId);
     if (!geo.isValid()) {
         return SnapResult::noSnap();
     }
@@ -211,7 +228,7 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     result.geometry = geo;
     result.zoneId = m_lastUsedZoneId;
     result.zoneIds = QStringList{m_lastUsedZoneId};
-    result.screenId = m_lastUsedScreenId;
+    result.screenId = effectiveScreenId;
     return result;
 }
 

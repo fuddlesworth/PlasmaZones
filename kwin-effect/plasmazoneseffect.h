@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -499,7 +500,7 @@ private:
     bool m_daemonReadyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
     bool m_virtualScreensReady = false; ///< set after all fetchVirtualScreenConfig replies arrive
     int m_pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
-    int m_vsConfigGeneration = 0; ///< generation counter for fetchAllVirtualScreenConfigs
+    uint64_t m_vsConfigGeneration = 0; ///< generation counter for fetchAllVirtualScreenConfigs
     bool m_daemonReadyWindowStateProcessed = false; ///< re-entrancy guard for processDaemonReadyWindowState
 
     // Screen ID cache: connector name → EDID screen ID (manufacturer:model:serial).
@@ -590,7 +591,7 @@ private:
     QString resolveEffectiveScreenId(const QPoint& pos, const KWin::LogicalOutput* output) const;
 
     /// Fetch virtual screen config from daemon for a single physical screen
-    void fetchVirtualScreenConfig(const QString& physicalScreenId, int generation = -1);
+    void fetchVirtualScreenConfig(const QString& physicalScreenId, uint64_t generation = 0);
 
     /// Fetch virtual screen configs for all connected physical screens
     void fetchAllVirtualScreenConfigs();

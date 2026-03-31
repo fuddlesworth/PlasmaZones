@@ -300,7 +300,7 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     if (!configureLayerSurface(window, physScreen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityNone,
                                QStringLiteral("plasmazones-selector-%1").arg(screenId), getAnchorsForPosition(pos))) {
         qCWarning(lcOverlay) << "Failed to configure layer surface for zone selector on" << screenId;
-        delete window;
+        window->deleteLater();
         return;
     }
 
@@ -384,7 +384,8 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
         return QRect();
     }
     // Delegate to screenId overload for virtual-screen-aware geometry.
-    // Use cursor position to disambiguate when multiple virtual screens share one QScreen*.
+    // WARNING: QCursor::pos() may be stale on Wayland. Callers should prefer
+    // the getSelectedZoneGeometry(const QString& screenId) overload when possible.
     QString screenId = Utils::effectiveScreenIdAt(QCursor::pos(), screen);
     return getSelectedZoneGeometry(screenId);
 }

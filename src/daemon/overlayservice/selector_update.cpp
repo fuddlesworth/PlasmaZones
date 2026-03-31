@@ -208,12 +208,6 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     // Update computed properties that depend on layout and settings
     updateZoneSelectorComputedProperties(window, screen, screenId, config, m_settings, layout);
 
-    // Schedule QML polish for next render frame (do NOT call processEvents here —
-    // re-entrant event processing during a Wayland drag can deadlock with the
-    // compositor, causing a hard system freeze; see GitHub discussion #152).
-    if (auto* contentRoot = window->contentItem()) {
-        contentRoot->polish();
-    }
     if (auto* layerSurface = LayerSurface::find(window)) {
         const int screenW = screenGeom.width();
         const int screenH = screenGeom.height();

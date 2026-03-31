@@ -86,7 +86,6 @@ enum class AspectRatioClass {
 namespace ScreenClassification {
 // Aspect ratio boundary thresholds (width / height)
 constexpr qreal PortraitMax = 1.0; // AR < 1.0 → portrait
-constexpr qreal StandardMin = 1.0; // AR >= 1.0 and < UltrawideMin → standard
 constexpr qreal UltrawideMin = 1.9; // AR >= 1.9 and < SuperUltrawideMin → ultrawide
 constexpr qreal SuperUltrawideMin = 2.8; // AR >= 2.8 → super-ultrawide
 

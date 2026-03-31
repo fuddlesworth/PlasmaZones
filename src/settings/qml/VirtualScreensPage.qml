@@ -20,10 +20,13 @@ Flickable {
     id: root
 
     // ── Internal state ───────────────────────────────────────────────────
+    // UX cap (C++ maximum is ConfigDefaults::maxVirtualScreensPerPhysical() = 10)
     readonly property int _maxVirtualScreens: 5
     property string _selectedScreen: ""
-    property var _pendingScreens: [] // Local editable state
-    property var _savedScreens: [] // What is actually applied in daemon
+    // Array of {x: real, y: real, width: real, height: real, displayName: string} — staged virtual screen definitions
+    property var _pendingScreens: []
+    // Array of {x: real, y: real, width: real, height: real, displayName: string} — last-saved virtual screen definitions
+    property var _savedScreens: []
     property int _screenWidth: 1920 // Actual pixel width of selected screen
     property int _screenHeight: 1080 // Actual pixel height of selected screen
 

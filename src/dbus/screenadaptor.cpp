@@ -40,12 +40,21 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
             Q_EMIT screenAdded(physId);
         }
 
-        connect(screen, &QScreen::geometryChanged, this, [this, screen]() {
-            handleScreenGeometryChanged(screen, Utils::screenIdentifier(screen));
+        // Cache screen ID now — QScreen may be partially destroyed when
+        // geometryChanged fires during screen hot-unplug sequences.
+        const QString cachedId = physId;
+        connect(screen, &QScreen::geometryChanged, this, [this, screen, cachedId]() {
+            handleScreenGeometryChanged(screen, cachedId);
         });
     });
 
     connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this](QScreen* screen) {
+        // Cache screen identifier before the lambda body executes further QScreen
+        // queries — QScreen may be partially destroyed by the time this fires.
+        // NOTE: We still call Utils::screenIdentifier(screen) here because
+        // screenRemoved is emitted before the QScreen is destroyed. To be fully
+        // safe against future Qt changes, callers that need the identifier after
+        // destruction should cache it at connection time (see geometryChanged below).
         const QString physId = Utils::screenIdentifier(screen);
 
         // Mirror screenAdded: emit virtual IDs OR physical ID, never both.
@@ -69,8 +78,10 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
 
     // Connect existing screens
     for (auto* screen : Utils::allScreens()) {
-        connect(screen, &QScreen::geometryChanged, this, [this, screen]() {
-            handleScreenGeometryChanged(screen, Utils::screenIdentifier(screen));
+        // Cache screen ID at connection time to avoid querying a partially-destroyed QScreen.
+        const QString cachedId = Utils::screenIdentifier(screen);
+        connect(screen, &QScreen::geometryChanged, this, [this, screen, cachedId]() {
+            handleScreenGeometryChanged(screen, cachedId);
         });
     }
 }
@@ -78,17 +89,20 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
 void ScreenAdaptor::handleScreenGeometryChanged(QScreen* screen, const QString& physId)
 {
     Q_UNUSED(screen)
-    Q_EMIT screenGeometryChanged(physId);
-    // Also emit for each virtual screen on this physical screen
+    // Mirror screenAdded/screenRemoved: when virtual screens are configured for this
+    // physical screen, emit only the virtual screen IDs — not the physical ID — so
+    // consumers don't see phantom physical screen entries.
     auto* mgr = ScreenManager::instance();
     if (mgr) {
         QStringList vsIds = mgr->virtualScreenIdsFor(physId);
-        for (const QString& vsId : vsIds) {
-            if (vsId != physId) {
+        if (vsIds.size() > 1 || (!vsIds.isEmpty() && vsIds.first() != physId)) {
+            for (const QString& vsId : vsIds) {
                 Q_EMIT screenGeometryChanged(vsId);
             }
+            return;
         }
     }
+    Q_EMIT screenGeometryChanged(physId);
 }
 
 QStringList ScreenAdaptor::getScreens()
@@ -103,7 +117,9 @@ QStringList ScreenAdaptor::getScreens()
         }
     }
 
-    // Fallback: no ScreenManager or no screens tracked yet
+    // Fallback: no ScreenManager or no screens tracked yet.
+    // Note: when ScreenManager is unavailable, returns physical screen IDs only
+    // (virtual screen IDs require ScreenManager to be initialized).
     QStringList result;
     for (const auto* screen : Utils::allScreens()) {
         result.append(Utils::screenIdentifier(screen));
@@ -203,6 +219,15 @@ QString ScreenAdaptor::getScreenId(const QString& connectorName)
 
 QString ScreenAdaptor::getVirtualScreenConfig(const QString& physicalScreenId)
 {
+    if (physicalScreenId.isEmpty()) {
+        qCWarning(lcDbus) << "getVirtualScreenConfig: empty physicalScreenId";
+        return QString();
+    }
+    if (VirtualScreenId::isVirtual(physicalScreenId)) {
+        qCWarning(lcDbus) << "getVirtualScreenConfig: expected physical screen ID, got virtual:" << physicalScreenId;
+        return QString();
+    }
+
     auto* mgr = ScreenManager::instance();
     if (!mgr) {
         qCWarning(lcDbus) << "getVirtualScreenConfig: no ScreenManager instance";
@@ -233,6 +258,15 @@ QString ScreenAdaptor::getVirtualScreenConfig(const QString& physicalScreenId)
 
 void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, const QString& configJson)
 {
+    if (physicalScreenId.isEmpty()) {
+        qCWarning(lcDbus) << "setVirtualScreenConfig: empty physicalScreenId";
+        return;
+    }
+    if (VirtualScreenId::isVirtual(physicalScreenId)) {
+        qCWarning(lcDbus) << "setVirtualScreenConfig: expected physical screen ID, got virtual:" << physicalScreenId;
+        return;
+    }
+
     auto* mgr = ScreenManager::instance();
     if (!mgr) {
         qCWarning(lcDbus) << "setVirtualScreenConfig: no ScreenManager instance";

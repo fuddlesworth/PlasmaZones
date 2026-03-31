@@ -11,6 +11,7 @@
 #include <QWindow>
 #include <QHash>
 #include <QPointer>
+#include <QSet>
 #include <QTimer>
 #include <QDBusInterface>
 #include <QDBusReply>
@@ -450,6 +451,7 @@ void ScreenManager::onScreenAdded(QScreen* screen)
 
     connectScreenSignals(screen);
     m_trackedScreens.append(screen);
+    m_effectiveScreenIdsDirty = true;
     createGeometrySensor(screen);
     Q_EMIT screenAdded(screen);
 }
@@ -467,6 +469,7 @@ void ScreenManager::onScreenRemoved(QScreen* screen)
     destroyGeometrySensor(screen);
     disconnectScreenSignals(screen);
     m_trackedScreens.removeAll(screen);
+    m_effectiveScreenIdsDirty = true;
 
     // Invalidate EDID cache so a different monitor on this connector gets a fresh read.
     // The daemon also does this, but ScreenManager should be self-contained.
@@ -522,6 +525,7 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
             return true;
         }
         m_virtualConfigs.remove(physicalScreenId);
+        m_effectiveScreenIdsDirty = true;
         invalidateVirtualGeometryCache(physicalScreenId);
         Q_EMIT virtualScreensChanged(physicalScreenId);
         return true;
@@ -547,6 +551,30 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
             qCWarning(lcScreen) << "setVirtualScreenConfig: invalid VirtualScreenDef" << def.id
                                 << "region:" << def.region;
             return false;
+        }
+    }
+
+    // Validate: all def.id values are unique
+    {
+        QSet<QString> seenIds;
+        for (const auto& def : config.screens) {
+            if (seenIds.contains(def.id)) {
+                qCWarning(lcScreen) << "setVirtualScreenConfig: duplicate def.id" << def.id;
+                return false;
+            }
+            seenIds.insert(def.id);
+        }
+    }
+
+    // Validate: all def.index values are unique
+    {
+        QSet<int> seenIndices;
+        for (const auto& def : config.screens) {
+            if (seenIndices.contains(def.index)) {
+                qCWarning(lcScreen) << "setVirtualScreenConfig: duplicate def.index" << def.index;
+                return false;
+            }
+            seenIndices.insert(def.index);
         }
     }
 
@@ -583,6 +611,7 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
     }
 
     m_virtualConfigs.insert(physicalScreenId, config);
+    m_effectiveScreenIdsDirty = true;
     invalidateVirtualGeometryCache(physicalScreenId);
     Q_EMIT virtualScreensChanged(physicalScreenId);
     return true;
@@ -595,6 +624,10 @@ VirtualScreenConfig ScreenManager::virtualScreenConfig(const QString& physicalSc
 
 QStringList ScreenManager::effectiveScreenIds() const
 {
+    if (!m_effectiveScreenIdsDirty) {
+        return m_cachedEffectiveScreenIds;
+    }
+
     QStringList result;
 
     for (auto* screen : m_trackedScreens) {
@@ -609,6 +642,8 @@ QStringList ScreenManager::effectiveScreenIds() const
         }
     }
 
+    m_cachedEffectiveScreenIds = result;
+    m_effectiveScreenIdsDirty = false;
     return result;
 }
 
@@ -726,10 +761,17 @@ QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const 
         return {};
     }
 
+    // Use exclusive-right semantics to match edgeDistance(): a point at x+width
+    // or y+height belongs to the next virtual screen, not this one. QRect::contains()
+    // is inclusive-right and would create boundary ambiguity.
+    auto containsExclusive = [](const QRect& r, const QPoint& p) {
+        return p.x() >= r.x() && p.x() < r.x() + r.width() && p.y() >= r.y() && p.y() < r.y() + r.height();
+    };
+
     QRect physGeom = screen->geometry();
     for (const auto& vs : it->screens) {
         QRect absGeom = vs.absoluteGeometry(physGeom);
-        if (absGeom.contains(globalPos)) {
+        if (containsExclusive(absGeom, globalPos)) {
             return vs.id;
         }
     }

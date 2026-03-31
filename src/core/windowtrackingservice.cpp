@@ -62,15 +62,27 @@ void WindowTrackingService::assignWindowToZone(const QString& windowId, const QS
 void WindowTrackingService::assignWindowToZones(const QString& windowId, const QStringList& zoneIds,
                                                 const QString& screenId, int virtualDesktop)
 {
-    if (windowId.isEmpty() || zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
+    if (windowId.isEmpty() || zoneIds.isEmpty()) {
+        return;
+    }
+
+    // Filter out empty/null zone IDs — callers may pass partially-valid lists
+    QStringList validZoneIds;
+    validZoneIds.reserve(zoneIds.size());
+    for (const auto& id : zoneIds) {
+        if (!id.isEmpty()) {
+            validZoneIds.append(id);
+        }
+    }
+    if (validZoneIds.isEmpty()) {
         return;
     }
 
     // Only emit signal if value actually changed
     QStringList previousZones = m_windowZoneAssignments.value(windowId);
-    bool zoneChanged = (previousZones != zoneIds);
+    bool zoneChanged = (previousZones != validZoneIds);
 
-    m_windowZoneAssignments[windowId] = zoneIds;
+    m_windowZoneAssignments[windowId] = validZoneIds;
     m_windowScreenAssignments[windowId] = screenId;
     m_windowDesktopAssignments[windowId] = virtualDesktop;
 
@@ -80,7 +92,7 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     // windows to auto-restore on open, even when they shouldn't.
 
     if (zoneChanged) {
-        Q_EMIT windowZoneChanged(windowId, zoneIds.first());
+        Q_EMIT windowZoneChanged(windowId, validZoneIds.first());
     }
     scheduleSaveState();
 }

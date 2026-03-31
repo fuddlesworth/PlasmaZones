@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "layoutadaptor.h"
+#include "dbushelpers.h"
 #include "../core/interfaces.h"
 #include "../core/layout.h"
 #include "../core/layoutfactory.h"
@@ -127,18 +128,7 @@ void LayoutAdaptor::notifyLayoutListChanged()
 
 std::optional<QUuid> LayoutAdaptor::parseAndValidateUuid(const QString& id, const QString& operation) const
 {
-    if (id.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot" << operation << "- empty ID";
-        return std::nullopt;
-    }
-
-    auto uuidOpt = Utils::parseUuid(id);
-    if (!uuidOpt) {
-        qCWarning(lcDbusLayout) << "Invalid UUID format for" << operation << ":" << id;
-        return std::nullopt;
-    }
-
-    return uuidOpt;
+    return DbusHelpers::parseAndValidateUuid(id, operation, lcDbusLayout);
 }
 
 Layout* LayoutAdaptor::getValidatedLayout(const QString& id, const QString& operation)
@@ -159,11 +149,7 @@ Layout* LayoutAdaptor::getValidatedLayout(const QString& id, const QString& oper
 
 bool LayoutAdaptor::validateNonEmpty(const QString& value, const QString& paramName, const QString& operation) const
 {
-    if (value.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot" << operation << "- empty" << paramName;
-        return false;
-    }
-    return true;
+    return DbusHelpers::validateNonEmpty(value, paramName, operation, lcDbusLayout);
 }
 
 std::optional<QJsonObject> LayoutAdaptor::parseJsonObject(const QString& jsonString, const QString& operation) const

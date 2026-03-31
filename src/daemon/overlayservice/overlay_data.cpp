@@ -11,6 +11,7 @@
 #include "../../core/geometryutils.h"
 #include "../../core/utils.h"
 #include "../../core/screenmanager.h"
+#include "../../core/virtualscreen.h"
 #include "../rendering/zonelabeltexturebuilder.h"
 #include <QCursor>
 #include <QQuickWindow>
@@ -20,6 +21,24 @@
 #include <QPalette>
 
 namespace PlasmaZones {
+
+namespace {
+// Shader-specific JSON keys (overlay-local, not shared with serialization)
+constexpr QLatin1String NormalizedX{"normalizedX"};
+constexpr QLatin1String NormalizedY{"normalizedY"};
+constexpr QLatin1String NormalizedWidth{"normalizedWidth"};
+constexpr QLatin1String NormalizedHeight{"normalizedHeight"};
+constexpr QLatin1String FillR{"fillR"};
+constexpr QLatin1String FillG{"fillG"};
+constexpr QLatin1String FillB{"fillB"};
+constexpr QLatin1String FillA{"fillA"};
+constexpr QLatin1String BorderR{"borderR"};
+constexpr QLatin1String BorderG{"borderG"};
+constexpr QLatin1String BorderB{"borderB"};
+constexpr QLatin1String BorderA{"borderA"};
+constexpr QLatin1String ShaderBorderRadius{"shaderBorderRadius"};
+constexpr QLatin1String ShaderBorderWidth{"shaderBorderWidth"};
+} // namespace
 
 void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
                                                   Layout* screenLayout)
@@ -64,6 +83,12 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
     // QCursor::pos() is stale on Wayland; the screen center reliably identifies the screen.
     const QPoint screenCenter = screen->geometry().center();
     QString screenId = Utils::effectiveScreenIdAt(screenCenter, screen);
+    if (VirtualScreenId::isVirtual(screenId)) {
+        // This should not happen — callers should use the QString overload for virtual screens.
+        // Screen center disambiguation always picks the same VS, which is non-deterministic.
+        qCWarning(lcOverlay) << "buildZonesList(QScreen*): resolved to virtual screen" << screenId
+                             << "via screen center — caller should use QString overload";
+    }
     return buildZonesList(screenId, screen);
 }
 
@@ -175,7 +200,7 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, const QString& screenId
     relGeoMap[JsonKeys::Y] = relGeo.y();
     relGeoMap[JsonKeys::Width] = relGeo.width();
     relGeoMap[JsonKeys::Height] = relGeo.height();
-    map[QLatin1String("relativeGeometry")] = relGeoMap;
+    map[JsonKeys::RelativeGeometry] = relGeoMap;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Shader-specific data (ZoneDataProvider texture)
@@ -187,32 +212,32 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, const QString& screenId
     const QRectF normGeom = QRectF(overlayGeometry);
     const qreal ow = normGeom.width() > 0 ? normGeom.width() : 1.0;
     const qreal oh = normGeom.height() > 0 ? normGeom.height() : 1.0;
-    map[QLatin1String("normalizedX")] = overlayGeom.x() / ow;
-    map[QLatin1String("normalizedY")] = overlayGeom.y() / oh;
-    map[QLatin1String("normalizedWidth")] = overlayGeom.width() / ow;
-    map[QLatin1String("normalizedHeight")] = overlayGeom.height() / oh;
+    map[NormalizedX] = overlayGeom.x() / ow;
+    map[NormalizedY] = overlayGeom.y() / oh;
+    map[NormalizedWidth] = overlayGeom.width() / ow;
+    map[NormalizedHeight] = overlayGeom.height() / oh;
 
     // Fill color (RGBA premultiplied alpha) for shader
     QColor fillColor = zone->useCustomColors() ? zone->highlightColor()
                                                : (m_settings ? m_settings->highlightColor() : QColor(Qt::blue));
     qreal alpha = zone->useCustomColors() ? zone->activeOpacity() : (m_settings ? m_settings->activeOpacity() : 0.5);
-    map[QLatin1String("fillR")] = fillColor.redF() * alpha;
-    map[QLatin1String("fillG")] = fillColor.greenF() * alpha;
-    map[QLatin1String("fillB")] = fillColor.blueF() * alpha;
-    map[QLatin1String("fillA")] = alpha;
+    map[FillR] = fillColor.redF() * alpha;
+    map[FillG] = fillColor.greenF() * alpha;
+    map[FillB] = fillColor.blueF() * alpha;
+    map[FillA] = alpha;
 
     // Border color (RGBA) for shader
     QColor borderClr =
         zone->useCustomColors() ? zone->borderColor() : (m_settings ? m_settings->borderColor() : QColor(Qt::white));
-    map[QLatin1String("borderR")] = borderClr.redF();
-    map[QLatin1String("borderG")] = borderClr.greenF();
-    map[QLatin1String("borderB")] = borderClr.blueF();
-    map[QLatin1String("borderA")] = borderClr.alphaF();
+    map[BorderR] = borderClr.redF();
+    map[BorderG] = borderClr.greenF();
+    map[BorderB] = borderClr.blueF();
+    map[BorderA] = borderClr.alphaF();
 
     // Shader params: borderRadius, borderWidth (from zone or settings)
-    map[QLatin1String("shaderBorderRadius")] =
+    map[ShaderBorderRadius] =
         zone->useCustomColors() ? zone->borderRadius() : (m_settings ? m_settings->borderRadius() : 8);
-    map[QLatin1String("shaderBorderWidth")] =
+    map[ShaderBorderWidth] =
         zone->useCustomColors() ? zone->borderWidth() : (m_settings ? m_settings->borderWidth() : 2);
 
     return map;

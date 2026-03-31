@@ -342,6 +342,10 @@ public:
      * @param screenId Screen for geometry calculation
      * @param isSticky Whether window is on all desktops
      * @return SnapResult with geometry and zone info
+     *
+     * @note This method peeks at the pending queue but does NOT consume the entry.
+     * Callers MUST call consumePendingAssignment() after acting on a successful result
+     * to prevent duplicate restoration for the next window of the same app class.
      */
     SnapResult calculateRestoreFromSession(const QString& windowId, const QString& screenId, bool isSticky) const;
 

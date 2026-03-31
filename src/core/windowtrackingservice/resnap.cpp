@@ -13,6 +13,7 @@
 #include "../utils.h"
 #include "../logging.h"
 #include <QScreen>
+#include <QSet>
 #include <QUuid>
 #include <algorithm>
 #include <tuple>
@@ -299,6 +300,8 @@ WindowTrackingService::calculateResnapFromAutotileOrder(const QStringList& autot
     // Track which zones have been claimed by original-assignment restoration
     // so positional fallback doesn't double-assign.
     QSet<int> claimedZoneIndices;
+    // Track windows placed in the first pass for O(1) lookup in the second pass
+    QSet<QString> placedWindowIds;
 
     // First pass: restore windows to their ORIGINAL zone assignment (pre-autotile).
     // m_windowZoneAssignments preserves zone IDs from before autotile was activated.
@@ -340,6 +343,7 @@ WindowTrackingService::calculateResnapFromAutotileOrder(const QStringList& autot
                 entry.targetZoneIds = validZoneIds;
             entry.targetGeometry = geo;
             result.append(entry);
+            placedWindowIds.insert(windowId);
             for (int idx : validZoneIndices)
                 claimedZoneIndices.insert(idx);
         }
@@ -351,14 +355,7 @@ WindowTrackingService::calculateResnapFromAutotileOrder(const QStringList& autot
         const QString& windowId = autotileWindowOrder.at(i);
 
         // Skip if already placed by original-zone restoration
-        bool alreadyPlaced = false;
-        for (const auto& entry : result) {
-            if (entry.windowId == windowId) {
-                alreadyPlaced = true;
-                break;
-            }
-        }
-        if (alreadyPlaced)
+        if (placedWindowIds.contains(windowId))
             continue;
 
         // Find next unclaimed zone

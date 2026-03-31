@@ -316,11 +316,6 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     m_shaderPreviewShaderId = shaderId;
     m_shaderPreviewScreenId = screenId;
 
-    // Use ScreenManager geometry (virtual screen aware) with physical fallback
-    auto* mgr = ScreenManager::instance();
-    QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
-    const QRect previewScreenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
-
     auto* layerSurface = LayerSurface::find(m_shaderPreviewWindow);
     if (!layerSurface) {
         qCWarning(lcOverlay) << "showShaderPreview: no LayerSurface for preview window"
@@ -339,12 +334,15 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     }
 
     {
-        const int localX = x - previewScreenGeom.x();
-        const int localY = y - previewScreenGeom.y();
+        // For virtual screens, margins are relative to the physical screen origin,
+        // not the virtual screen origin (LayerShell positions within the physical output).
+        const QRect physGeom = screen->geometry();
+        const int marginLeft = x - physGeom.x();
+        const int marginTop = y - physGeom.y();
         // Batch anchors + margins into a single propertiesChanged() emission
         LayerSurface::BatchGuard batch(layerSurface);
         layerSurface->setAnchors(LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft));
-        layerSurface->setMargins(QMargins(localX, localY, 0, 0));
+        layerSurface->setMargins(QMargins(marginLeft, marginTop, 0, 0));
     }
 
     // Set window size — position is controlled by layer-surface anchors + margins,
@@ -390,20 +388,15 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
     if (width > 0 && height > 0) {
         QScreen* screen = m_shaderPreviewWindow->screen();
         if (screen) {
-            // Use the VS ID saved from showShaderPreview to avoid re-resolving
-            // from QScreen* (which would give the physical screen ID, not the VS ID)
-            auto* mgr = ScreenManager::instance();
-            const QString& sid = m_shaderPreviewScreenId;
-            QRect vsGeom = (!sid.isEmpty() && mgr) ? mgr->screenGeometry(sid) : QRect();
-            const QRect screenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
-
             // Size only — position is controlled by layer-surface anchors + margins.
             m_shaderPreviewWindow->setWidth(width);
             m_shaderPreviewWindow->setHeight(height);
             if (auto* layerSurface = LayerSurface::find(m_shaderPreviewWindow)) {
-                const int localX = x - screenGeom.x();
-                const int localY = y - screenGeom.y();
-                layerSurface->setMargins(QMargins(localX, localY, 0, 0));
+                // Margins are relative to the physical screen origin (LayerShell)
+                const QRect physGeom = screen->geometry();
+                const int marginLeft = x - physGeom.x();
+                const int marginTop = y - physGeom.y();
+                layerSurface->setMargins(QMargins(marginLeft, marginTop, 0, 0));
             }
         }
     }
@@ -457,7 +450,7 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
     if (!configureLayerSurface(window, screen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
                                QStringLiteral("plasmazones-shader-preview-%1").arg(scopeId))) {
         qCWarning(lcOverlay) << "Failed to configure layer surface for shader preview on" << scopeId;
-        delete window;
+        window->deleteLater();
         return;
     }
 

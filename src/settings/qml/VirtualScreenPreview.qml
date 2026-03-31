@@ -43,6 +43,8 @@ Rectangle {
         model: previewRoot.pendingScreens
 
         Rectangle {
+            id: regionRect
+
             required property var modelData
             required property int index
 
@@ -64,7 +66,7 @@ Rectangle {
                     Layout.alignment: Qt.AlignHCenter
                     text: modelData.displayName || i18n("Screen %1", index + 1)
                     font.weight: Font.DemiBold
-                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.7, Math.min(Kirigami.Theme.defaultFont.pixelSize * 1, parent.parent.width / 8))
+                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.7, Math.min(Kirigami.Theme.defaultFont.pixelSize * 1, regionRect.width / 8))
                     color: Kirigami.Theme.textColor
                     elide: Text.ElideRight
                     maximumLineCount: 1
@@ -73,7 +75,7 @@ Rectangle {
                 Label {
                     Layout.alignment: Qt.AlignHCenter
                     text: Math.round(modelData.width * previewRoot.screenWidth) + "px \u00b7 " + Math.round(modelData.width * 100) + "%"
-                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.65, Math.min(Kirigami.Theme.defaultFont.pixelSize * 0.85, parent.parent.width / 10))
+                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.65, Math.min(Kirigami.Theme.defaultFont.pixelSize * 0.85, regionRect.width / 10))
                     color: Kirigami.Theme.disabledTextColor
                 }
 
@@ -97,10 +99,11 @@ Rectangle {
 
                 return 0;
             }
+            readonly property int handleHalfWidth: Math.round(Kirigami.Units.smallSpacing * 1.5)
 
-            x: dividerX - 3
+            x: dividerX - handleHalfWidth
             y: 0
-            width: 7
+            width: handleHalfWidth * 2 + 1
             height: previewRoot.height
             Accessible.name: i18n("Virtual screen divider %1", index + 1)
             Accessible.role: Accessible.Separator
