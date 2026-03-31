@@ -7,6 +7,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.5.1] - 2026-03-30
+
+### Added
+- **Independent autotile sticky window handling**: Separate setting for how autotiling handles sticky windows (on all desktops), independent from the snapping setting. Configurable in Tiling > Behavior.
+
+### Fixed
+- **Editor shader crash**: Null pointer dereference in `ZoneShaderNodeRhi::render()` when switching between multipass shaders — missing null check on `m_multiBufferTextures[i]`.
+- **Editor undo crash**: Guard `m_undoController` dereferences in `setCurrentShaderParams()`, `setShaderParameter()`, `resetShaderParameters()`, and `switchShader()` to match existing pattern.
+- **Arch packaging**: PKGBUILDs referenced `kbuildsycoca.hook` and `plasmazones-refresh-sycoca` as standalone source files instead of using in-tree paths, causing `makepkg` to fail with "cannot stat" errors.
+
 ## [2.5.0] - 2026-03-30
 
 ### Added
