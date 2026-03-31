@@ -66,8 +66,7 @@ bool ZoneShaderNodeRhi::ensureComputePipeline()
 
     // Create particle texture (binding 13: image2D in compute, sampler2D in fragment)
     if (!m_particleTexture || m_particleTexture->pixelSize() != texSize) {
-        m_particleTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, texSize, 1,
-                                                QRhiTexture::UsedWithLoadStore | QRhiTexture::RenderTarget));
+        m_particleTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, texSize, 1, QRhiTexture::UsedWithLoadStore));
         if (!m_particleTexture->create()) {
             qCWarning(lcOverlay) << "Failed to create particle texture";
             return false;
@@ -122,14 +121,22 @@ bool ZoneShaderNodeRhi::ensureComputePipeline()
         }
     }
 
-    // Create compute pipeline
+    // Create compute pipeline (one attempt only — if it fails, disable compute)
     if (!m_computePipeline) {
-        m_computePipeline.reset(rhi->newComputePipeline());
+        auto* pipeline = rhi->newComputePipeline();
+        if (!pipeline) {
+            qCWarning(lcOverlay) << "RHI does not support compute pipelines (backend:" << rhi->backendName() << ")";
+            m_computeSupported = false;
+            return false;
+        }
+        m_computePipeline.reset(pipeline);
         m_computePipeline->setShaderStage({QRhiShaderStage::Compute, m_computeShader});
         m_computePipeline->setShaderResourceBindings(m_computeSrb.get());
         if (!m_computePipeline->create()) {
-            qCWarning(lcOverlay) << "Failed to create compute pipeline";
+            qCWarning(lcOverlay) << "Failed to create compute pipeline — disabling compute"
+                                 << "(backend:" << rhi->backendName() << ")";
             m_computePipeline.reset();
+            m_computeSupported = false;
             return false;
         }
     }

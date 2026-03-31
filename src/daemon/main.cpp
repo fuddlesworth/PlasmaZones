@@ -61,13 +61,19 @@ int main(int argc, char* argv[])
         // both the legacy ungrouped key and the proper [General] key correctly.
         // The custom kconfigIniFormat cannot be used here because it requires the
         // QCoreApplication event loop for QConfFile caching, which doesn't exist yet.
+        // QSettings::IniFormat does NOT map ungrouped keys to "General" (unlike KConfig).
+        // The settings app writes RenderingBackend before any [Section] header, so read
+        // both locations: ungrouped first, then General group as fallback.
         QSettings cfg(PlasmaZones::ConfigDefaults::configFilePath(), QSettings::IniFormat);
-        cfg.beginGroup(PlasmaZones::ConfigDefaults::generalGroup());
-        const QString backend = PlasmaZones::ConfigDefaults::normalizeRenderingBackend(
-            cfg.value(PlasmaZones::ConfigDefaults::renderingBackendKey(),
-                      PlasmaZones::ConfigDefaults::renderingBackend())
-                .toString());
-        cfg.endGroup();
+        QString backendRaw = cfg.value(PlasmaZones::ConfigDefaults::renderingBackendKey()).toString();
+        if (backendRaw.isEmpty()) {
+            cfg.beginGroup(PlasmaZones::ConfigDefaults::generalGroup());
+            backendRaw = cfg.value(PlasmaZones::ConfigDefaults::renderingBackendKey(),
+                                   PlasmaZones::ConfigDefaults::renderingBackend())
+                             .toString();
+            cfg.endGroup();
+        }
+        const QString backend = PlasmaZones::ConfigDefaults::normalizeRenderingBackend(backendRaw);
 
         if (backend == QLatin1String("vulkan")) {
 #if QT_CONFIG(vulkan)
