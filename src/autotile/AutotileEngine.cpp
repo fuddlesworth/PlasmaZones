@@ -434,6 +434,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         auto& entry = m_config->savedAlgorithmSettings[m_algorithmId];
         entry.splitRatio = m_config->splitRatio;
         entry.masterCount = m_config->masterCount;
+        // customParams are preserved — only splitRatio/masterCount are engine-managed
     }
 
     // Look up saved settings AFTER the save above — insertion may rehash the

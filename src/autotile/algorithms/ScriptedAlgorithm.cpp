@@ -9,6 +9,7 @@
 #include "../TilingState.h"
 #include "core/constants.h"
 #include "core/logging.h"
+#include "core/utils.h"
 #include "pz_i18n.h"
 #include <QCoreApplication>
 #include <QFile>
@@ -497,9 +498,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // Look up optional lifecycle hook functions
     m_jsOnWindowAdded = m_engine->globalObject().property(QStringLiteral("onWindowAdded"));
     m_jsOnWindowRemoved = m_engine->globalObject().property(QStringLiteral("onWindowRemoved"));
-    m_jsOnResize = m_engine->globalObject().property(QStringLiteral("onResize"));
-    m_hasLifecycleHooks =
-        m_jsOnWindowAdded.isCallable() || m_jsOnWindowRemoved.isCallable() || m_jsOnResize.isCallable();
+    m_hasLifecycleHooks = m_jsOnWindowAdded.isCallable() || m_jsOnWindowRemoved.isCallable();
 
     m_valid = true;
     // Cache JS override values through guardedCall so that a malicious function
@@ -927,6 +926,26 @@ QJSValue ScriptedAlgorithm::buildJsState(const TilingState* state) const
     jsState.setProperty(QStringLiteral("windowCount"), state->tiledWindowCount());
     jsState.setProperty(QStringLiteral("masterCount"), state->masterCount());
     jsState.setProperty(QStringLiteral("splitRatio"), std::clamp(state->splitRatio(), MinSplitRatio, MaxSplitRatio));
+
+    // Expose per-window appIds so lifecycle hooks can make app-aware decisions
+    const QStringList windows = state->tiledWindows();
+    const QString focusedWin = state->focusedWindow();
+    const int winCount = windows.size();
+    QJSValue jsWindows = m_engine->newArray(static_cast<uint>(winCount));
+    int focusedIdx = -1;
+    for (int i = 0; i < winCount; ++i) {
+        QJSValue entry = m_engine->newObject();
+        entry.setProperty(QStringLiteral("appId"), Utils::extractAppId(windows[i]));
+        const bool focused = (windows[i] == focusedWin);
+        entry.setProperty(QStringLiteral("focused"), focused);
+        if (focused) {
+            focusedIdx = i;
+        }
+        jsWindows.setProperty(static_cast<quint32>(i), entry);
+    }
+    jsState.setProperty(QStringLiteral("windows"), jsWindows);
+    jsState.setProperty(QStringLiteral("focusedIndex"), focusedIdx);
+
     return jsState;
 }
 
@@ -949,17 +968,6 @@ void ScriptedAlgorithm::onWindowRemoved(TilingState* state, int windowIndex) con
     QJSValue jsState = buildJsState(state);
     guardedCall([this, &jsState, windowIndex]() {
         return m_jsOnWindowRemoved.call({jsState, QJSValue(windowIndex)});
-    });
-}
-
-void ScriptedAlgorithm::onResize(TilingState* state, int windowIndex, const QString& edge, int deltaPx) const
-{
-    if (!m_jsOnResize.isCallable() || !state) {
-        return;
-    }
-    QJSValue jsState = buildJsState(state);
-    guardedCall([this, &jsState, windowIndex, &edge, deltaPx]() {
-        return m_jsOnResize.call({jsState, QJSValue(windowIndex), QJSValue(edge), QJSValue(deltaPx)});
     });
 }
 

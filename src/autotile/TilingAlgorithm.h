@@ -315,27 +315,16 @@ public:
      * @brief Called when a window is removed from the tiling before retile
      *
      * The window is still present in @p state when this hook fires; it will
-     * be removed immediately after the hook returns. Algorithms should use
-     * @p windowIndex to identify the departing window but must not assume
-     * the tiled window list will remain unchanged after the call.
+     * be removed immediately after the hook returns. This means
+     * state->tiledWindowCount() still includes the departing window.
+     * Algorithms should use @p windowIndex to identify the departing window
+     * but must not assume the tiled window list will remain unchanged
+     * after the call.
      *
-     * @param state Current tiling state (window still present)
+     * @param state Current tiling state (window still present, count not yet decremented)
      * @param windowIndex Index the window occupied before removal
      */
     virtual void onWindowRemoved(TilingState* state, int windowIndex) const;
-
-    /**
-     * @brief Called during interactive resize of a split boundary
-     *
-     * Memory-based algorithms can use this to adjust individual split
-     * ratios instead of the global splitRatio.
-     *
-     * @param state Current tiling state
-     * @param windowIndex Window being resized
-     * @param edge Edge being dragged ("left", "right", "top", "bottom")
-     * @param deltaPx Pixel delta of the drag
-     */
-    virtual void onResize(TilingState* state, int windowIndex, const QString& edge, int deltaPx) const;
 
 protected:
     /**

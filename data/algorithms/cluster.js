@@ -130,7 +130,7 @@ function calculateZones(params) {
         var scale = availablePrimary / totalAssigned;
         totalAssigned = 0;
         for (var ci = 0; ci < numClusters; ci++) {
-            clusterSizes[ci] = Math.max(1, Math.floor(clusterSizes[ci] * scale));
+            clusterSizes[ci] = Math.max(PZ_MIN_ZONE_SIZE, Math.floor(clusterSizes[ci] * scale));
             totalAssigned += clusterSizes[ci];
         }
         // Give remainder to the last cluster

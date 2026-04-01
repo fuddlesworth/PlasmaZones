@@ -146,8 +146,6 @@ public:
     bool supportsLifecycleHooks() const noexcept override;
     void onWindowAdded(TilingState* state, int windowIndex) const override;
     void onWindowRemoved(TilingState* state, int windowIndex) const override;
-    void onResize(TilingState* state, int windowIndex, const QString& edge, int deltaPx) const override;
-
     /**
      * @brief Get the custom parameter definitions declared by this script
      */
@@ -222,7 +220,6 @@ private:
     // Optional lifecycle hook JS functions
     mutable QJSValue m_jsOnWindowAdded;
     mutable QJSValue m_jsOnWindowRemoved;
-    mutable QJSValue m_jsOnResize;
     bool m_hasLifecycleHooks = false; ///< True if any lifecycle hook is defined
 
     // Cached JS virtual method overrides (loaded once at script load time)
