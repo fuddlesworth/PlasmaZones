@@ -103,6 +103,12 @@ QString detail::loadAndExpandShader(const QString& path, QString* outError)
     return err.isEmpty() ? expanded : QString();
 }
 
+QRhi* ZoneShaderNodeRhi::safeRhi() const
+{
+    return (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window()) ? m_item->window()->rhi()
+                                                                                       : nullptr;
+}
+
 ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
     : m_item(item)
 {

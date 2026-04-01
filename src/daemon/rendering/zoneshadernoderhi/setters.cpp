@@ -13,6 +13,25 @@
 namespace PlasmaZones {
 
 // ============================================================================
+// Normalize helpers for wrap/filter mode strings
+// ============================================================================
+
+// Normalize wrap mode string: only "repeat" is recognized, everything else → "clamp"
+static QString normalizeWrapMode(const QString& wrap)
+{
+    return (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
+}
+
+// Normalize filter mode string: "nearest" and "mipmap" are recognized, everything else → "linear"
+static QString normalizeFilterMode(const QString& filter)
+{
+    if (filter == QLatin1String("nearest") || filter == QLatin1String("mipmap")) {
+        return filter;
+    }
+    return QStringLiteral("linear");
+}
+
+// ============================================================================
 // Zone Data Setters
 // ============================================================================
 
@@ -182,7 +201,7 @@ void ZoneShaderNodeRhi::setUserTextureWrap(int slot, const QString& wrap)
     if (slot < 0 || slot >= kMaxUserTextures) {
         return;
     }
-    const QString use = (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
+    const QString use = normalizeWrapMode(wrap);
     if (m_userTextureWraps[slot] == use) {
         return;
     }
@@ -272,6 +291,11 @@ void ZoneShaderNodeRhi::setComputeShaderPath(const QString& path)
     m_particleSsboNeedsInit = true;
     m_particleTexture.reset();
     m_particleSampler.reset();
+    // Re-probe compute support and clear CPU fallback so a new shader gets a fresh chance
+    m_computeSupported = false;
+    m_cpuParticlesFallback = false;
+    m_cpuParticles.clear();
+    m_cpuParticleImage = QImage();
     resetAllSrbs();
     markDirty(QSGNode::DirtyMaterial);
 }
@@ -420,7 +444,7 @@ void ZoneShaderNodeRhi::setBufferScale(qreal scale)
 
 void ZoneShaderNodeRhi::setBufferWrap(const QString& wrap)
 {
-    const QString use = (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
+    const QString use = normalizeWrapMode(wrap);
     if (m_bufferWrapDefault == use) {
         return;
     }
@@ -436,8 +460,7 @@ void ZoneShaderNodeRhi::setBufferWraps(const QStringList& wraps)
 {
     bool changed = false;
     for (int i = 0; i < kMaxBufferPasses; ++i) {
-        const QString use = (i < wraps.size() && wraps.at(i) == QLatin1String("repeat")) ? QStringLiteral("repeat")
-                                                                                         : m_bufferWrapDefault;
+        const QString use = (i < wraps.size()) ? normalizeWrapMode(wraps.at(i)) : m_bufferWrapDefault;
         if (m_bufferWraps[i] != use) {
             m_bufferWraps[i] = use;
             m_bufferSamplers[i].reset();
@@ -451,12 +474,7 @@ void ZoneShaderNodeRhi::setBufferWraps(const QStringList& wraps)
 
 void ZoneShaderNodeRhi::setBufferFilter(const QString& filter)
 {
-    QString use;
-    if (filter == QLatin1String("nearest") || filter == QLatin1String("mipmap")) {
-        use = filter;
-    } else {
-        use = QStringLiteral("linear");
-    }
+    const QString use = normalizeFilterMode(filter);
     if (m_bufferFilterDefault == use) {
         return;
     }
@@ -472,17 +490,7 @@ void ZoneShaderNodeRhi::setBufferFilters(const QStringList& filters)
 {
     bool changed = false;
     for (int i = 0; i < kMaxBufferPasses; ++i) {
-        QString use;
-        if (i < filters.size()) {
-            const QString& f = filters.at(i);
-            if (f == QLatin1String("nearest") || f == QLatin1String("mipmap")) {
-                use = f;
-            } else {
-                use = QStringLiteral("linear");
-            }
-        } else {
-            use = m_bufferFilterDefault;
-        }
+        const QString use = (i < filters.size()) ? normalizeFilterMode(filters.at(i)) : m_bufferFilterDefault;
         if (m_bufferFilters[i] != use) {
             m_bufferFilters[i] = use;
             m_bufferSamplers[i].reset();

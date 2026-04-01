@@ -129,13 +129,18 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
     // which can crash NVIDIA's EGL driver in beginFrame().
     writeQmlProperty(window, QStringLiteral("shaderSource"), QString());
 
+    // Clear compute/depth/particle props so stale values from the previous shader
+    // don't leak through when the next shader doesn't use them.
+    writeQmlProperty(window, QStringLiteral("computeShaderPath"), QString());
+    writeQmlProperty(window, QStringLiteral("particleCount"), 0);
+    writeQmlProperty(window, QStringLiteral("useDepthBuffer"), false);
+    writeQmlProperty(window, QStringLiteral("bufferWraps"), QVariant::fromValue(QStringList()));
+    writeQmlProperty(window, QStringLiteral("bufferFilter"), QStringLiteral("linear"));
+    writeQmlProperty(window, QStringLiteral("bufferFilters"), QVariant::fromValue(QStringList()));
+
     // Set all auxiliary props BEFORE shaderSource — see shader.cpp comment
     writeQmlProperty(window, QStringLiteral("bufferShaderPath"), info.bufferShaderPath);
-    QVariantList pathList;
-    for (const QString& p : info.bufferShaderPaths) {
-        pathList.append(p);
-    }
-    writeQmlProperty(window, QStringLiteral("bufferShaderPaths"), pathList);
+    writeQmlProperty(window, QStringLiteral("bufferShaderPaths"), QVariant::fromValue(info.bufferShaderPaths));
     writeQmlProperty(window, QStringLiteral("bufferFeedback"), info.bufferFeedback);
     writeQmlProperty(window, QStringLiteral("bufferScale"), info.bufferScale);
     writeQmlProperty(window, QStringLiteral("bufferWrap"), info.bufferWrap);

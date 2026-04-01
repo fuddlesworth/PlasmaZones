@@ -110,6 +110,9 @@ public:
     void invalidateUniforms() override;
 
 private:
+    /** Thread-safe QRhi accessor: returns nullptr when m_item is invalidated or has no window. */
+    QRhi* safeRhi() const;
+
     bool ensurePipeline();
     bool ensureBufferPipeline();
     bool ensureBufferTarget();

@@ -53,6 +53,8 @@ QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo& info) const
     if (!info.bufferFilters.isEmpty()) {
         map[QStringLiteral("bufferFilters")] = QVariant::fromValue(info.bufferFilters);
     }
+    // Keys match metadata.json names ("wallpaper", "depthBuffer"), not Q_PROPERTY names
+    // ("useWallpaper", "useDepthBuffer"). This map goes to D-Bus/settings UI, not QML.
     map[QStringLiteral("wallpaper")] = info.useWallpaper;
     map[QStringLiteral("depthBuffer")] = info.useDepthBuffer;
 

@@ -13,6 +13,24 @@
 
 namespace PlasmaZones {
 
+// Shared particle initialization — used by both GPU (SSBO upload) and CPU fallback paths
+static void initParticle(ParticleData& p, int index, int total)
+{
+    const float seed = static_cast<float>(index) / static_cast<float>(total);
+    p.pos[0] = std::fmod(seed * 127.1f, 1.0f);
+    p.pos[1] = std::fmod(seed * 311.7f, 1.0f);
+    p.vel[0] = 0.0f;
+    p.vel[1] = 0.0f;
+    p.life = 0.0f; // Start dead, respawned by compute/CPU sim
+    p.age = 0.0f;
+    p.seed = seed;
+    p.size = 0.005f;
+    p.color[0] = 1.0f;
+    p.color[1] = 1.0f;
+    p.color[2] = 1.0f;
+    p.color[3] = 1.0f;
+}
+
 void ZoneShaderNodeRhi::bakeComputeShader()
 {
     if (!m_computeShaderDirty || m_computeShaderPath.isEmpty() || !m_computeSupported) {
@@ -30,7 +48,8 @@ void ZoneShaderNodeRhi::bakeComputeShader()
         return;
     }
 
-    // Compute requires GLSL 430+ / GLES 310+
+    // Compute requires GLSL 430+ / GLES 310+ (higher than fragment shader targets which use 330).
+    // SPIR-V 1.3 (version code 130) matches the fragment bake targets for Vulkan 1.1 compatibility.
     static const QList<QShaderBaker::GeneratedShader> computeTargets = {
         {QShader::SpirvShader, QShaderVersion(130)},
         {QShader::GlslShader, QShaderVersion(430)},
@@ -84,8 +103,7 @@ bool ZoneShaderNodeRhi::ensureComputePipeline()
         return false;
     }
 
-    QRhi* rhi =
-        (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window()) ? m_item->window()->rhi() : nullptr;
+    QRhi* rhi = safeRhi();
     if (!rhi) {
         return false;
     }
@@ -161,8 +179,7 @@ void ZoneShaderNodeRhi::dispatchCompute(QRhiCommandBuffer* cb)
         return;
     }
 
-    QRhi* rhi =
-        (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window()) ? m_item->window()->rhi() : nullptr;
+    QRhi* rhi = safeRhi();
     if (!rhi) {
         return;
     }
@@ -171,20 +188,7 @@ void ZoneShaderNodeRhi::dispatchCompute(QRhiCommandBuffer* cb)
     if (m_particleSsboNeedsInit) {
         QVector<ParticleData> initData(m_particleCount);
         for (int i = 0; i < m_particleCount; ++i) {
-            auto& p = initData[i];
-            float seed = static_cast<float>(i) / static_cast<float>(m_particleCount);
-            p.pos[0] = std::fmod(seed * 127.1f, 1.0f);
-            p.pos[1] = std::fmod(seed * 311.7f, 1.0f);
-            p.vel[0] = 0.0f;
-            p.vel[1] = 0.0f;
-            p.life = 0.0f; // Start dead, compute shader will respawn
-            p.age = 0.0f;
-            p.seed = seed;
-            p.size = 0.005f;
-            p.color[0] = 1.0f;
-            p.color[1] = 1.0f;
-            p.color[2] = 1.0f;
-            p.color[3] = 1.0f;
+            initParticle(initData[i], i, m_particleCount);
         }
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
         batch->uploadStaticBuffer(m_particleSsbo.get(), 0, m_particleCount * sizeof(ParticleData),
@@ -227,20 +231,7 @@ void ZoneShaderNodeRhi::updateCpuParticles()
     if (m_cpuParticles.size() != count) {
         m_cpuParticles.resize(count);
         for (int i = 0; i < count; ++i) {
-            auto& p = m_cpuParticles[i];
-            const float seed = static_cast<float>(i) / static_cast<float>(count);
-            p.pos[0] = std::fmod(seed * 127.1f, 1.0f);
-            p.pos[1] = std::fmod(seed * 311.7f, 1.0f);
-            p.vel[0] = 0.0f;
-            p.vel[1] = 0.0f;
-            p.life = 0.0f; // Start dead — will be respawned
-            p.age = 0.0f;
-            p.seed = seed;
-            p.size = 0.005f;
-            p.color[0] = 1.0f;
-            p.color[1] = 1.0f;
-            p.color[2] = 1.0f;
-            p.color[3] = 1.0f;
+            initParticle(m_cpuParticles[i], i, count);
         }
     }
 
@@ -339,6 +330,12 @@ void ZoneShaderNodeRhi::updateCpuParticles()
     for (int i = 0; i < count; ++i) {
         const auto& p = m_cpuParticles[i];
         if (p.life <= 0.0f) {
+            continue;
+        }
+
+        // Skip particles that drifted far outside the visible area to avoid
+        // integer overflow when converting normalized coords to pixel coords
+        if (p.pos[0] < -1.0f || p.pos[0] > 2.0f || p.pos[1] < -1.0f || p.pos[1] > 2.0f) {
             continue;
         }
 

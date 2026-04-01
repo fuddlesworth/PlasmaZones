@@ -61,8 +61,7 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
     if (m_width <= 0 || m_height <= 0) {
         return true;
     }
-    QRhi* rhi =
-        (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window()) ? m_item->window()->rhi() : nullptr;
+    QRhi* rhi = safeRhi();
     if (!rhi) {
         return false;
     }
@@ -97,6 +96,11 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
         }
     }
 
+    // NOTE: When useDepthBuffer is true, the same m_depthTexture is attached to ALL
+    // buffer render targets (single and multi-buffer). In multi-buffer mode, each pass
+    // overwrites the depth attachment — only the final buffer pass's depth output survives
+    // for the image pass to read at binding 12. Shader authors must be aware that only the
+    // last buffer pass's depth data is available in the image pass.
     auto createTextureAndRT = [rhi, bufferSize, this](std::unique_ptr<QRhiTexture>& tex,
                                                       std::unique_ptr<QRhiTextureRenderTarget>& rt,
                                                       std::unique_ptr<QRhiRenderPassDescriptor>& rpd) -> bool {
@@ -255,9 +259,7 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
         if (!m_multiBufferShadersReady || !m_multiBufferTextures[0] || !m_multiBufferRenderTargets[0]) {
             return false;
         }
-        QRhi* rhi = (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window())
-            ? m_item->window()->rhi()
-            : nullptr;
+        QRhi* rhi = safeRhi();
         if (!rhi || !m_bufferSamplers[0]) {
             return false;
         }
@@ -323,8 +325,7 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
     if (m_bufferFeedback && (!m_bufferTextureB || !m_bufferRenderTargetB)) {
         return false;
     }
-    QRhi* rhi =
-        (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window()) ? m_item->window()->rhi() : nullptr;
+    QRhi* rhi = safeRhi();
     if (!rhi) {
         return false;
     }
@@ -401,8 +402,7 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
 
 bool ZoneShaderNodeRhi::ensurePipeline()
 {
-    QRhi* rhi =
-        (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window()) ? m_item->window()->rhi() : nullptr;
+    QRhi* rhi = safeRhi();
     QRhiRenderTarget* rt = renderTarget();
     if (!rhi || !rt || !m_shaderReady) {
         return false;

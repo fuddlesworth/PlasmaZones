@@ -56,14 +56,11 @@ int main(int argc, char* argv[])
     QVulkanInstance vulkanInstance;
 #endif
     {
-        // QSettings::IniFormat is used intentionally — it maps top-level keys (before
-        // any [section] header) into the "General" group automatically, so it reads
-        // both the legacy ungrouped key and the proper [General] key correctly.
-        // The custom kconfigIniFormat cannot be used here because it requires the
-        // QCoreApplication event loop for QConfFile caching, which doesn't exist yet.
         // QSettings::IniFormat does NOT map ungrouped keys to "General" (unlike KConfig).
         // The settings app writes RenderingBackend before any [Section] header, so read
         // both locations: ungrouped first, then General group as fallback.
+        // The custom kconfigIniFormat cannot be used here because it requires the
+        // QCoreApplication event loop for QConfFile caching, which doesn't exist yet.
         QSettings cfg(PlasmaZones::ConfigDefaults::configFilePath(), QSettings::IniFormat);
         QString backendRaw = cfg.value(PlasmaZones::ConfigDefaults::renderingBackendKey()).toString();
         if (backendRaw.isEmpty()) {
