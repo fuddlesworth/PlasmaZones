@@ -52,6 +52,7 @@ class NavigationController;
 class PerScreenConfigResolver;
 class ScreenManager;
 class Settings;
+class QSettingsConfigBackend;
 class SettingsBridge;
 class TilingAlgorithm;
 class TilingState;
@@ -78,7 +79,8 @@ class PLASMAZONES_EXPORT AutotileEngine : public QObject, public IWindowEngine
 
 public:
     explicit AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
-                            ScreenManager* screenManager, QObject* parent = nullptr);
+                            ScreenManager* screenManager, QObject* parent = nullptr,
+                            QSettingsConfigBackend* configBackend = nullptr);
     ~AutotileEngine() override;
 
     // ═══════════════════════════════════════════════════════════════════════════

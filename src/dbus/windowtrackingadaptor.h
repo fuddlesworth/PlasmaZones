@@ -19,6 +19,7 @@ namespace PlasmaZones {
 class AutotileEngine;
 class LayoutManager; // Concrete type needed for signal connections
 class Layout;
+class QSettingsConfigBackend;
 class Zone;
 class IZoneDetector;
 class ISettings;
@@ -39,7 +40,8 @@ class PLASMAZONES_EXPORT WindowTrackingAdaptor : public QDBusAbstractAdaptor
 
 public:
     explicit WindowTrackingAdaptor(LayoutManager* layoutManager, IZoneDetector* zoneDetector, ISettings* settings,
-                                   VirtualDesktopManager* virtualDesktopManager, QObject* parent = nullptr);
+                                   VirtualDesktopManager* virtualDesktopManager, QObject* parent = nullptr,
+                                   QSettingsConfigBackend* configBackend = nullptr);
     ~WindowTrackingAdaptor() override = default;
 
     /**
@@ -937,6 +939,7 @@ private:
     LayoutManager* m_layoutManager;
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;
+    QSettingsConfigBackend* m_configBackend = nullptr;
 
     // Engine references for per-screen routing (set via setEngines())
     // QPointer auto-nulls on engine destruction, guarding against late D-Bus calls

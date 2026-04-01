@@ -23,11 +23,12 @@ namespace PlasmaZones {
 
 WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZoneDetector* zoneDetector,
                                              ISettings* settings, VirtualDesktopManager* virtualDesktopManager,
-                                             QObject* parent)
+                                             QObject* parent, QSettingsConfigBackend* configBackend)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(layoutManager)
     , m_settings(settings)
     , m_virtualDesktopManager(virtualDesktopManager)
+    , m_configBackend(configBackend)
 {
     Q_ASSERT(layoutManager);
     Q_ASSERT(zoneDetector);

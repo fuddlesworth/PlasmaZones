@@ -11,6 +11,7 @@
 namespace PlasmaZones {
 
 class AutotileEngine;
+class QSettingsConfigBackend;
 class Settings;
 
 /**
@@ -32,7 +33,7 @@ class Settings;
 class PLASMAZONES_EXPORT SettingsBridge
 {
 public:
-    explicit SettingsBridge(AutotileEngine* engine);
+    explicit SettingsBridge(AutotileEngine* engine, QSettingsConfigBackend* configBackend = nullptr);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings synchronization
@@ -104,6 +105,7 @@ private:
     void processSettingsRetile();
 
     AutotileEngine* m_engine = nullptr;
+    QSettingsConfigBackend* m_configBackend = nullptr; // non-owned, from daemon
     QPointer<Settings> m_settings;
     QTimer m_settingsRetileTimer;
     bool m_pendingSettingsRetile = false;

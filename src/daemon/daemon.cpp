@@ -57,8 +57,9 @@ Daemon::Daemon(QObject* parent)
     : QObject(parent)
     // Don't pass 'this' as parent for unique_ptr-managed objects.
     // unique_ptr owns lifetime; a Qt parent would double-free.
-    , m_layoutManager(std::make_unique<LayoutManager>(nullptr))
-    , m_settings(std::make_unique<Settings>(nullptr))
+    , m_configBackend(QSettingsConfigBackend::createDefault())
+    , m_layoutManager(std::make_unique<LayoutManager>(m_configBackend.get(), nullptr))
+    , m_settings(std::make_unique<Settings>(m_configBackend.get(), nullptr))
     , m_zoneDetector(std::make_unique<ZoneDetector>(m_settings.get(), nullptr))
     , m_overlayService(std::make_unique<OverlayService>(nullptr))
     , m_screenManager(std::make_unique<ScreenManager>(nullptr))
@@ -305,7 +306,7 @@ bool Daemon::init()
 
     // Window tracking adaptor - window-zone assignments
     m_windowTrackingAdaptor = new WindowTrackingAdaptor(m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
-                                                        m_virtualDesktopManager.get(), this);
+                                                        m_virtualDesktopManager.get(), this, m_configBackend.get());
     m_windowTrackingAdaptor->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
 
     // Reapply window geometries after each geometry batch (processPendingGeometryUpdates).
@@ -331,7 +332,7 @@ bool Daemon::init()
 
     // Initialize autotile engine
     m_autotileEngine = std::make_unique<AutotileEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(),
-                                                        m_screenManager.get(), this);
+                                                        m_screenManager.get(), this, m_configBackend.get());
 
     // Initialize scripted algorithm loader BEFORE syncFromSettings so that
     // user-defined algorithms are registered in AlgorithmRegistry before the

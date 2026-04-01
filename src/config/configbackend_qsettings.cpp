@@ -245,34 +245,12 @@ std::unique_ptr<QSettingsConfigGroup> QSettingsConfigBackend::group(const QStrin
 
 void QSettingsConfigBackend::reparseConfiguration()
 {
-    // Read fresh data directly from disk, bypassing Qt's QConfFile cache.
-    // Qt caches QConfFile by (canonical path, format) with reference counting.
-    // If ANY other QSettings instance in this process points to the same file
-    // (e.g., LayoutManager's QSettingsConfigBackend), the QConfFile stays cached
-    // even after we destroy our QSettings — creating a new QSettings returns the
-    // stale cached entry instead of re-reading from disk. This caused settings
-    // changed by the external settings app (written directly to the file) to be
-    // invisible to the daemon's reload, silently reverting to defaults.
-    //
-    // Solution: read the file ourselves, then overwrite the QSettings cache with
-    // the parsed data. This guarantees we see the latest on-disk state.
+    // Destroy old QSettings BEFORE creating the new one so Qt's QConfFile
+    // cache is released. With the shared-backend refactor, this is the ONLY
+    // QSettings instance for plasmazonesrc in the daemon process, so the
+    // ref count drops to zero and QConfFile::fromName() re-reads from disk.
     m_settings.reset();
     m_settings = std::make_unique<QSettings>(m_filePath, kconfigIniFormat());
-
-    // Overwrite (potentially stale) cached values with fresh disk data.
-    // Use setValue() directly — it replaces existing keys and adds new ones
-    // without the crash-safety risk of clear() + repopulate.
-    QSettings::SettingsMap diskData;
-    QFile f(m_filePath);
-    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        readKConfigIni(f, diskData);
-        f.close();
-        for (auto it = diskData.constBegin(); it != diskData.constEnd(); ++it) {
-            m_settings->setValue(it.key(), it.value());
-        }
-    } else if (QFile::exists(m_filePath)) {
-        qWarning("QSettingsConfigBackend: reparseConfiguration() failed to open %s", qPrintable(m_filePath));
-    }
 }
 
 void QSettingsConfigBackend::sync()

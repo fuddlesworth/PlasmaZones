@@ -26,7 +26,15 @@ namespace PlasmaZones {
 
 Settings::Settings(QObject* parent)
     : ISettings(parent)
-    , m_configBackend(QSettingsConfigBackend::createDefault())
+    , m_ownedBackend(QSettingsConfigBackend::createDefault())
+    , m_configBackend(m_ownedBackend.get())
+{
+    load();
+}
+
+Settings::Settings(QSettingsConfigBackend* backend, QObject* parent)
+    : ISettings(parent)
+    , m_configBackend(backend)
 {
     load();
 }
@@ -151,12 +159,12 @@ void Settings::load()
         auto zones = m_configBackend->group(ConfigDefaults::zonesGroup());
         loadZoneGeometryConfig(*zones);
     }
-    loadBehaviorConfig(m_configBackend.get());
+    loadBehaviorConfig(m_configBackend);
     {
         auto zoneSelector = m_configBackend->group(ConfigDefaults::zoneSelectorGroup());
         loadZoneSelectorConfig(*zoneSelector);
     }
-    loadPerScreenOverrides(m_configBackend.get());
+    loadPerScreenOverrides(m_configBackend);
 
     // Rendering backend lives in [General] (affects whole graphics pipeline, not just shaders).
     {
@@ -187,7 +195,7 @@ void Settings::load()
         auto globalShortcuts = m_configBackend->group(ConfigDefaults::globalShortcutsGroup());
         loadShortcutConfig(*globalShortcuts);
     }
-    loadAutotilingConfig(m_configBackend.get());
+    loadAutotilingConfig(m_configBackend);
     {
         auto editor = m_configBackend->group(ConfigDefaults::editorGroup());
         loadEditorConfig(*editor);
@@ -238,17 +246,17 @@ void Settings::save()
         auto zones = m_configBackend->group(ConfigDefaults::zonesGroup());
         saveZoneGeometryConfig(*zones);
     }
-    saveBehaviorConfig(m_configBackend.get());
+    saveBehaviorConfig(m_configBackend);
     {
         auto zoneSelector = m_configBackend->group(ConfigDefaults::zoneSelectorGroup());
         saveZoneSelectorConfig(*zoneSelector);
     }
-    saveAllPerScreenOverrides(m_configBackend.get());
+    saveAllPerScreenOverrides(m_configBackend);
     {
         auto globalShortcuts = m_configBackend->group(ConfigDefaults::globalShortcutsGroup());
         saveShortcutConfig(*globalShortcuts);
     }
-    saveAutotilingConfig(m_configBackend.get());
+    saveAutotilingConfig(m_configBackend);
     {
         auto editor = m_configBackend->group(ConfigDefaults::editorGroup());
         saveEditorConfig(*editor);

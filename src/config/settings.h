@@ -33,6 +33,18 @@ public:
     /** Maximum number of activation triggers per action (drag, multi-zone, zone span) */
     static constexpr int MaxTriggersPerAction = 4;
 
+    /**
+     * @brief Construct with an external (non-owned) config backend
+     *
+     * Used by the daemon to share a single QSettingsConfigBackend across
+     * Settings, LayoutManager, and other components. Eliminates Qt's
+     * QConfFile cache conflicts from multiple QSettings instances per file.
+     *
+     * @param backend Non-owned backend pointer (must outlive this Settings)
+     * @param parent Parent QObject
+     */
+    Settings(QSettingsConfigBackend* backend, QObject* parent);
+
     // Activation settings
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
                    dragActivationTriggersChanged)
@@ -1549,8 +1561,9 @@ private:
     void saveAutotilingConfig(QSettingsConfigBackend* backend);
     void saveEditorConfig(QSettingsConfigGroup& editor);
 
-    // Config backend (replaces KSharedConfig)
-    std::unique_ptr<QSettingsConfigBackend> m_configBackend;
+    // Config backend — owned (standalone) or non-owned (shared from Daemon)
+    std::unique_ptr<QSettingsConfigBackend> m_ownedBackend;
+    QSettingsConfigBackend* m_configBackend = nullptr; // always valid after construction
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Activation

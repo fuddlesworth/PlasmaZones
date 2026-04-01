@@ -32,8 +32,9 @@ void populatePreviewSavedSettings(AlgorithmRegistry::PreviewParams& params,
 }
 } // anonymous namespace
 
-SettingsBridge::SettingsBridge(AutotileEngine* engine)
+SettingsBridge::SettingsBridge(AutotileEngine* engine, QSettingsConfigBackend* configBackend)
     : m_engine(engine)
+    , m_configBackend(configBackend)
 {
     // Configure settings retile debounce timer
     // Coalesces rapid settings changes (e.g., slider adjustments) into single retile
@@ -345,7 +346,12 @@ void SettingsBridge::syncAlgorithmToSettings(const QString& algoId, qreal splitR
 
 void SettingsBridge::saveState()
 {
-    auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+    // Use shared backend when available (daemon), create temporary otherwise (tests)
+    std::unique_ptr<QSettingsConfigBackend> tempBackend;
+    if (!m_configBackend) {
+        tempBackend = QSettingsConfigBackend::createDefault();
+    }
+    QSettingsConfigBackend* backend = m_configBackend ? m_configBackend : tempBackend.get();
     auto group = backend->group(QStringLiteral("AutoTileState"));
 
     // Save global state (algorithm only — autotile screens are derived from
@@ -382,7 +388,11 @@ void SettingsBridge::saveState()
 
 void SettingsBridge::loadState()
 {
-    auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+    std::unique_ptr<QSettingsConfigBackend> tempBackend;
+    if (!m_configBackend) {
+        tempBackend = QSettingsConfigBackend::createDefault();
+    }
+    QSettingsConfigBackend* backend = m_configBackend ? m_configBackend : tempBackend.get();
     auto group = backend->group(QStringLiteral("AutoTileState"));
 
     if (!group->hasKey(QStringLiteral("algorithm")) && !group->hasKey(QStringLiteral("screenStates"))) {
