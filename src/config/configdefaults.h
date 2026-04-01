@@ -680,7 +680,7 @@ public:
     }
     static constexpr int autotileInnerGap()
     {
-        return 8;
+        return Defaults::ZonePadding;
     }
     static constexpr int autotileInnerGapMin()
     {
@@ -692,7 +692,7 @@ public:
     }
     static constexpr int autotileOuterGap()
     {
-        return 8;
+        return Defaults::OuterGap;
     }
     static constexpr int autotileOuterGapMin()
     {
@@ -708,7 +708,7 @@ public:
     }
     static int autotileOuterGapTop()
     {
-        return 8;
+        return Defaults::OuterGap;
     }
     static constexpr int autotileOuterGapTopMin()
     {
@@ -720,7 +720,7 @@ public:
     }
     static int autotileOuterGapBottom()
     {
-        return 8;
+        return Defaults::OuterGap;
     }
     static constexpr int autotileOuterGapBottomMin()
     {
@@ -732,7 +732,7 @@ public:
     }
     static int autotileOuterGapLeft()
     {
-        return 8;
+        return Defaults::OuterGap;
     }
     static constexpr int autotileOuterGapLeftMin()
     {
@@ -744,7 +744,7 @@ public:
     }
     static int autotileOuterGapRight()
     {
-        return 8;
+        return Defaults::OuterGap;
     }
     static constexpr int autotileOuterGapRightMin()
     {
@@ -860,7 +860,7 @@ public:
     }
     static int autotileBorderWidth()
     {
-        return 2;
+        return Defaults::BorderWidth;
     }
     static constexpr int autotileBorderWidthMin()
     {
@@ -884,13 +884,11 @@ public:
     }
     static QColor autotileBorderColor()
     {
-        // #800078D4
-        return QColor(0x00, 0x78, 0xD4, 0x80);
+        return Defaults::HighlightColor;
     }
     static QColor autotileInactiveBorderColor()
     {
-        // #40808080
-        return QColor(0x80, 0x80, 0x80, 0x40);
+        return Defaults::InactiveColor;
     }
     static bool autotileUseSystemBorderColors()
     {
