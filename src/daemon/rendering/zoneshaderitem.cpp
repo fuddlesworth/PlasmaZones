@@ -221,6 +221,10 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         auto* rhiNode = new ZoneShaderNodeRhi(this);
         m_renderNode = rhiNode;
         node = rhiNode;
+        qCInfo(PlasmaZones::lcOverlay) << "updatePaintNode: created NEW render node (oldNode was null)";
+    } else {
+        qCInfo(PlasmaZones::lcOverlay) << "updatePaintNode: reusing existing node, shaderReady:"
+                                       << node->isShaderReady();
     }
 
     // Sync shader timing uniforms
@@ -307,8 +311,10 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
     // Sync shader source FIRST (must compile before zone data can be used)
     // Load when: item's m_shaderDirty, OR node not ready (e.g. after releaseResources)
-    const bool needLoad = m_shaderDirty.exchange(false)
-        || (m_shaderSource.isValid() && !m_shaderSource.isEmpty() && !node->isShaderReady());
+    const bool wasDirty = m_shaderDirty.exchange(false);
+    const bool needLoad = wasDirty || (m_shaderSource.isValid() && !m_shaderSource.isEmpty() && !node->isShaderReady());
+    qCInfo(PlasmaZones::lcOverlay) << "updatePaintNode: needLoad:" << needLoad << "wasDirty:" << wasDirty
+                                   << "shaderReady:" << node->isShaderReady() << "source:" << m_shaderSource;
     if (needLoad) {
         if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
             QString fragPath = m_shaderSource.toLocalFile();
@@ -458,6 +464,20 @@ void ZoneShaderItem::geometryChange(const QRectF& newGeometry, const QRectF& old
         }
 
         update();
+    }
+}
+
+void ZoneShaderItem::itemChange(ItemChange change, const ItemChangeData& value)
+{
+    QQuickItem::itemChange(change, value);
+
+    if (change == ItemVisibleHasChanged && value.boolValue) {
+        // Item became visible — force scene graph update. On Vulkan, window hide
+        // destroys the swapchain; update() calls during the hidden period are lost.
+        // Without this, updatePaintNode() is never called after re-show.
+        m_shaderDirty = true;
+        update();
+        qCInfo(PlasmaZones::lcOverlay) << "ZoneShaderItem: became visible, forcing update";
     }
 }
 

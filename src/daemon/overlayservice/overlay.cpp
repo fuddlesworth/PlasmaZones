@@ -26,6 +26,8 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
 {
     // Determine if we should show on all monitors (cursorScreen == nullptr means all)
     const bool showOnAllMonitors = (cursorScreen == nullptr);
+    qCInfo(lcOverlay) << "initializeOverlay called, existing windows:" << m_overlayWindows.size()
+                      << "cursorScreen:" << (cursorScreen ? cursorScreen->name() : QStringLiteral("all"));
 
     m_visible = true;
     m_currentOverlayScreen = showOnAllMonitors ? nullptr : cursorScreen;
@@ -71,51 +73,19 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
                                << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
             updateOverlayWindow(screen);
             window->show();
+            // On Vulkan, window->hide() destroys the swapchain and the scene graph
+            // becomes inactive. Property writes (e.g. shaderSource) while hidden queue
+            // update() requests that are lost when the scene graph reinitializes on
+            // show(). Force a content update after show so the scene graph renders.
+            window->update();
         }
     }
 
-    // Check if we need to recreate windows - this handles the case where windows
-    // were created before shaders were ready (e.g., at startup after reboot)
-    // Check per-screen: each monitor's layout may differ in shader usage
-    QList<QScreen*> screensToRecreate;
-
-    for (auto* screen : Utils::allScreens()) {
-        if (!m_overlayWindows.contains(screen)) {
-            continue;
-        }
-        auto* window = m_overlayWindows.value(screen);
-        if (!window) {
-            continue;
-        }
-
-        // Use isShaderOverlay property set at creation time (more reliable than shaderSource
-        // which can be set on non-shader windows by updateOverlayWindow())
-        const bool windowIsShader = window->property("isShaderOverlay").toBool();
-        const bool shouldUseShader = useShaderForScreen(screen);
-        if (windowIsShader != shouldUseShader) {
-            screensToRecreate.append(screen);
-            qCDebug(lcOverlay) << "Overlay window type mismatch detected for screen" << screen->name()
-                               << "(window is shader:" << windowIsShader << "should be:" << shouldUseShader << ")";
-        }
-    }
-
-    // Recreate only the windows with type mismatch
-    if (!screensToRecreate.isEmpty()) {
-        for (QScreen* screen : screensToRecreate) {
-            destroyOverlayWindow(screen);
-        }
-        for (QScreen* screen : screensToRecreate) {
-            if (!isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                                   m_currentActivity)) {
-                createOverlayWindow(screen);
-                updateOverlayWindow(screen);
-                if (auto* window = m_overlayWindows.value(screen)) {
-                    assertWindowOnScreen(window, screen);
-                    window->show();
-                }
-            }
-        }
-    }
+    // Type-mismatch recreation is not needed here: hide() destroys all overlay
+    // windows, so initializeOverlay() always creates fresh windows with the
+    // correct type. The old check compared isShaderOverlay against useShaderForScreen()
+    // and recreated on mismatch, but could trigger runaway loops when both evaluations
+    // raced during window setup.
 
     if (anyScreenUsesShader()) {
         updateZonesForAllWindows(); // Push initial zone data
@@ -372,6 +342,8 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
 
 void OverlayService::destroyOverlayWindow(QScreen* screen)
 {
+    qCInfo(lcOverlay) << "destroyOverlayWindow:" << (screen ? screen->name() : QStringLiteral("null"))
+                      << "remaining:" << (m_overlayWindows.size() - 1);
     if (auto* window = m_overlayWindows.take(screen)) {
         // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
         disconnect(screen, nullptr, window, nullptr);

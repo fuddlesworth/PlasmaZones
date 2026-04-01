@@ -564,6 +564,16 @@ protected:
      */
     void componentComplete() override;
 
+    /**
+     * @brief Handle item state changes (visibility, window attachment)
+     *
+     * On Vulkan, window hide destroys the swapchain and deactivates the scene graph.
+     * When the window is re-shown, pending update() requests from property writes
+     * during the hidden state are lost. Override itemChange to force an update when
+     * the item becomes visible again so updatePaintNode() is called.
+     */
+    void itemChange(ItemChange change, const ItemChangeData& value) override;
+
 private:
     /**
      * @brief Parse zone data from QVariantList to internal structures

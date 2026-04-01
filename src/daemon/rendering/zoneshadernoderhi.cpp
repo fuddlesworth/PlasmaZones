@@ -160,21 +160,25 @@ QRectF ZoneShaderNodeRhi::rect() const
 void ZoneShaderNodeRhi::prepare()
 {
     if (!m_itemValid.load(std::memory_order_acquire) || !m_item || !m_item->window()) {
+        qCInfo(lcOverlay) << "prepare(): bail — itemValid:" << m_itemValid.load() << "item:" << (m_item != nullptr)
+                          << "window:" << (m_item && m_item->window());
         return;
     }
     QRhi* rhi = m_item->window()->rhi();
     if (!rhi) {
+        qCInfo(lcOverlay) << "prepare(): bail — rhi is null";
         return;
     }
     QRhiCommandBuffer* cb = commandBuffer();
     QRhiRenderTarget* rt = renderTarget();
     if (!cb || !rt) {
+        qCInfo(lcOverlay) << "prepare(): bail — cb:" << (cb != nullptr) << "rt:" << (rt != nullptr);
         return;
     }
 
     if (!m_initialized) {
         m_initialized = true;
-        qCInfo(lcOverlay) << "ZoneShaderNodeRhi initializing — RHI backend:" << rhi->backendName()
+        qCInfo(lcOverlay) << "ZoneShaderNodeRhi INIT — backend:" << rhi->backendName()
                           << "driver:" << rhi->driverInfo().deviceName
                           << "Y-up framebuffer:" << rhi->isYUpInFramebuffer();
         // Create VBO (fullscreen quad)
@@ -302,11 +306,18 @@ void ZoneShaderNodeRhi::prepare()
     // Multi-pass: bake buffer fragment shader(s) when path(s) set
     bakeBufferShaders();
 
-    // Compute shader: bake and ensure pipeline, or fall back to CPU particles
+    // Compute shader: bake and ensure pipeline, or fall back to CPU particles.
+    // GPU compute dispatch cannot be used with QSGRenderNode on Vulkan: offscreen passes
+    // (beginComputePass/endComputePass) must happen in prepare() to avoid breaking the
+    // scene graph's render pass, but recording compute dispatches in prepare() crashes
+    // the NVIDIA Vulkan driver during endFrame(). Force CPU fallback on Vulkan.
     if (!m_computeShaderPath.isEmpty() && m_particleCount > 0 && !m_cpuParticlesFallback) {
         if (!m_computeSupported) {
-            m_computeSupported = rhi->isFeatureSupported(QRhi::Compute);
-            if (m_computeSupported) {
+            const bool isVulkan = (rhi->backend() == QRhi::Vulkan);
+            m_computeSupported = !isVulkan && rhi->isFeatureSupported(QRhi::Compute);
+            if (isVulkan) {
+                qCInfo(lcOverlay) << "GPU compute disabled on Vulkan — using CPU particle fallback";
+            } else if (m_computeSupported) {
                 qCInfo(lcOverlay) << "Compute support: true"
                                   << "path:" << m_computeShaderPath << "particles:" << m_particleCount;
             }
@@ -348,28 +359,8 @@ void ZoneShaderNodeRhi::prepare()
         return;
     }
 
-    if (!ensurePipeline()) {
-        return;
-    }
-
-    uploadDirtyTextures(rhi, cb);
-}
-
-// ============================================================================
-// render() — multi-pass + image pass draw commands
-// ============================================================================
-
-void ZoneShaderNodeRhi::render(const RenderState* state)
-{
-    Q_UNUSED(state)
-    if (!m_itemValid.load(std::memory_order_acquire)) {
-        return;
-    }
-    const bool multiBufferMode = m_bufferPaths.size() > 1;
-    const bool bufferReady = multiBufferMode ? m_multiBufferShadersReady : m_bufferShaderReady;
-    // Multi-buffer: create buffer targets and pipelines before the image pass SRB, so
-    // createImageSrbMulti() can bind iChannel0/1/2. If we called ensurePipeline() first,
-    // the image SRB would be created with no channel textures bound -> effect samples black.
+    // Late pipeline recovery: retry buffer target/pipeline creation that may have
+    // failed on a prior frame (e.g., render pass descriptor not yet available).
     if (!m_bufferPath.isEmpty() && bufferReady) {
         if (!multiBufferMode && m_bufferRenderTarget && !m_bufferRenderPassDescriptor
             && !m_bufferRenderTarget->renderPassDescriptor()) {
@@ -400,18 +391,24 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
             ensurePipeline();
         }
     }
-    // Image pass pipeline/SRB (after buffer setup so multi-buffer has textures to bind)
     if (m_shaderReady && (!m_pipeline || !m_srb || (m_bufferFeedback && !m_srbB))) {
         ensurePipeline();
     }
-    if (!m_shaderReady || !m_pipeline || !m_srb) {
+
+    if (!ensurePipeline()) {
         return;
     }
-    QRhiCommandBuffer* cb = commandBuffer();
-    QRhiRenderTarget* rt = renderTarget();
-    if (!cb || !rt) {
-        return;
-    }
+
+    uploadDirtyTextures(rhi, cb);
+
+    // ========================================================================
+    // Offscreen passes: compute dispatch + buffer passes
+    // Recorded in prepare() which runs BEFORE the scene graph opens its render
+    // pass. This avoids ending/restarting the scene graph's VkRenderPass inside
+    // render(), which violates the Qt batch renderer's contract on Vulkan and
+    // causes the overlay to go invisible after the first show.
+    // ========================================================================
+    m_offscreenPassesDone = false;
 
     const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady && m_bufferPipeline
         && m_bufferRenderTarget && m_bufferTexture;
@@ -421,15 +418,6 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
 
     const bool computeActive =
         m_computeSupported && m_computeShaderReady && m_computePipeline && m_particleSsbo && m_particleTexture;
-
-    if (computeActive || multipassActive) {
-        // The scene graph's batch renderer keeps its render pass active when calling
-        // render() on nodes with the NoExternalRendering flag. We must end that pass
-        // before beginning our own passes on buffer FBOs. After buffer passes complete,
-        // we re-begin a pass on rt for the image pass; the scene graph will endPass()
-        // after render() returns, balancing our beginPass(rt).
-        cb->endPass();
-    }
 
     if (computeActive) {
         dispatchCompute(cb);
@@ -481,17 +469,37 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
             cb->draw(4);
             cb->endPass();
         }
-        // Must begin our own pass: multi-pass shaders read from buffer textures while
-        // writing to rt. Drawing inline in the scene graph's pass causes Vulkan error
-        // "Texture used with different accesses within the same pass". beginPass(rt)
-        // starts a new pass with correct barriers.
-        const QColor mainClear(0, 0, 0, 0);
-        cb->beginPass(rt, mainClear, {1.0f, 0});
-    } else if (computeActive) {
-        // Compute-only (no multipass): we ended the scene graph's pass above for the
-        // compute dispatch, so we must re-begin a pass on rt for the image pass draw.
-        const QColor mainClear(0, 0, 0, 0);
-        cb->beginPass(rt, mainClear, {1.0f, 0});
+    }
+
+    m_offscreenPassesDone = computeActive || multipassActive;
+}
+
+// ============================================================================
+// render() — image pass draw (inline within scene graph's active render pass)
+// Offscreen passes (compute, buffer) are recorded in prepare() to avoid
+// ending/restarting the scene graph's VkRenderPass, which breaks Vulkan.
+// ============================================================================
+
+void ZoneShaderNodeRhi::render(const RenderState* state)
+{
+    Q_UNUSED(state)
+    if (!m_itemValid.load(std::memory_order_acquire)) {
+        qCInfo(lcOverlay) << "render(): bail — item invalid";
+        return;
+    }
+    // All offscreen passes (compute dispatch, buffer passes) were recorded in
+    // prepare(), which runs before the scene graph opens its render pass. The
+    // image pass draws inline within the scene graph's active pass — no
+    // endPass/beginPass calls that would break Vulkan.
+    if (!m_shaderReady || !m_pipeline || !m_srb) {
+        qCInfo(lcOverlay) << "render(): bail — shaderReady:" << m_shaderReady << "pipeline:" << (m_pipeline != nullptr)
+                          << "srb:" << (m_srb != nullptr);
+        return;
+    }
+    QRhiCommandBuffer* cb = commandBuffer();
+    QRhiRenderTarget* rt = renderTarget();
+    if (!cb || !rt) {
+        return;
     }
 
     // Use item's rect in render target (device pixels) so we render only within the item,
@@ -525,6 +533,10 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
     }
     cb->setViewport(QRhiViewport(vpX, vpY, vpW, vpH));
     cb->setGraphicsPipeline(m_pipeline.get());
+
+    const bool multiBufferMode = m_bufferPaths.size() > 1;
+    const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady && m_bufferPipeline
+        && m_bufferRenderTarget && m_bufferTexture;
     const int imageWriteIndex = multipassSingle && m_bufferFeedback ? (m_frame % 2) : 0;
     QRhiShaderResourceBindings* imageSrb =
         (multipassSingle && m_bufferFeedback && imageWriteIndex == 1 && m_srbB) ? m_srbB.get() : m_srb.get();
@@ -536,6 +548,7 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
 
 void ZoneShaderNodeRhi::releaseResources()
 {
+    qCInfo(lcOverlay) << "ZoneShaderNodeRhi::releaseResources() called — releasing all RHI resources";
     releaseRhiResources();
 }
 

@@ -205,6 +205,7 @@ private:
     bool m_timeDirty = true;
     bool m_zoneDataDirty = true;
     bool m_didFullUploadOnce = false;
+    bool m_offscreenPassesDone = false; // Set by prepare(), read by render()
 
     ZoneShaderUniforms m_uniforms = {};
     QVector<ZoneData> m_zones;

@@ -446,6 +446,7 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_zoneDataDirty = true;
     m_labelsTextureDirty = true;
     m_audioSpectrumDirty = true;
+    m_offscreenPassesDone = false;
     // Next prepare() will re-create all RHI resources and do a full UBO upload
 }
 

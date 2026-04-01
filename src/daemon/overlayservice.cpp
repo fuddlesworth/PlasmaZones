@@ -274,10 +274,16 @@ void OverlayService::hide()
     // Do NOT invalidate m_shaderTimer - keeps iTime continuous across show/hide
     // so animations feel less predictable and don't restart
 
-    for (auto* window : std::as_const(m_overlayWindows)) {
-        if (window) {
-            window->hide();
-        }
+    // Destroy overlay windows instead of hiding them. On Vulkan with Wayland
+    // layer-shell, window->hide() destroys the wl_surface but the Qt Vulkan
+    // backend doesn't properly reinitialize the VkSwapchainKHR when the window
+    // is re-shown, causing the scene graph render loop to stall. Destroying the
+    // window entirely and creating a fresh one on the next show() avoids this.
+    // initializeOverlay() will call createOverlayWindow() since m_overlayWindows
+    // is now empty.
+    const QList<QScreen*> screens = m_overlayWindows.keys();
+    for (auto* screen : screens) {
+        destroyOverlayWindow(screen);
     }
 
     m_pendingShaderError.clear();
