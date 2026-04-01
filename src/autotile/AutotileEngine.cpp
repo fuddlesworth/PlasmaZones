@@ -1238,16 +1238,16 @@ void AutotileEngine::windowOpened(const QString& windowId, const QString& screen
         return;
     }
 
-    // Store window minimum size from KWin (used by enforceWindowMinSizes)
-    if (minWidth > 0 || minHeight > 0) {
-        m_windowMinSizes[windowId] = QSize(qMax(0, minWidth), qMax(0, minHeight));
-        qCDebug(lcAutotile) << "Stored min size for" << windowId << "-" << minWidth << "x" << minHeight;
-    }
-
-    // Store screen mapping so onWindowAdded uses correct screen
+    // Store screen mapping first so storeWindowMinSize can resolve the screen.
     if (!screenId.isEmpty()) {
         m_windowToStateKey[windowId] = currentKeyForScreen(screenId);
     }
+
+    // Store window minimum size from KWin (used by enforceWindowMinSizes)
+    if (minWidth > 0 || minHeight > 0) {
+        storeWindowMinSize(windowId, minWidth, minHeight);
+    }
+
     onWindowAdded(windowId);
 }
 
@@ -1257,11 +1257,41 @@ void AutotileEngine::windowMinSizeUpdated(const QString& windowId, int minWidth,
         return;
     }
 
+    if (!storeWindowMinSize(windowId, minWidth, minHeight)) {
+        return; // No change
+    }
+
+    // Retile the screen this window is on
+    const auto stateKey = m_windowToStateKey.value(windowId);
+    const QString screenId = stateKey.screenId;
+    if (!screenId.isEmpty() && m_screenStates.contains(stateKey)) {
+        scheduleRetileForScreen(screenId);
+    }
+}
+
+bool AutotileEngine::storeWindowMinSize(const QString& windowId, int minWidth, int minHeight)
+{
+    // Cap min-sizes against the screen geometry to prevent a single window's
+    // min-size from overwhelming the split ratio. Without this cap, a transiently
+    // inflated min-size (e.g., from a browser loading media) can dominate the
+    // master/stack split and get stuck at ~90% or full width.
+    const auto stateKey = m_windowToStateKey.value(windowId);
+    const QString screenId = stateKey.screenId;
+    if (!screenId.isEmpty()) {
+        const QRect screen = screenGeometry(screenId);
+        if (screen.isValid()) {
+            const int maxMinW = static_cast<int>(screen.width() * AutotileDefaults::MaxSplitRatio);
+            const int maxMinH = static_cast<int>(screen.height() * AutotileDefaults::MaxSplitRatio);
+            minWidth = qMin(qMax(0, minWidth), maxMinW);
+            minHeight = qMin(qMax(0, minHeight), maxMinH);
+        }
+    }
+
     const QSize newMin(qMax(0, minWidth), qMax(0, minHeight));
     const QSize oldMin = m_windowMinSizes.value(windowId, QSize(0, 0));
 
     if (newMin == oldMin) {
-        return; // No change
+        return false; // No change
     }
 
     if (newMin.width() > 0 || newMin.height() > 0) {
@@ -1271,13 +1301,7 @@ void AutotileEngine::windowMinSizeUpdated(const QString& windowId, int minWidth,
     }
 
     qCDebug(lcAutotile) << "Updated min size for" << windowId << "-" << oldMin << "->" << newMin;
-
-    // Retile the screen this window is on
-    const auto stateKey = m_windowToStateKey.value(windowId);
-    const QString screenId = stateKey.screenId;
-    if (!screenId.isEmpty() && m_screenStates.contains(stateKey)) {
-        scheduleRetileForScreen(screenId);
-    }
+    return true;
 }
 
 void AutotileEngine::windowClosed(const QString& windowId)

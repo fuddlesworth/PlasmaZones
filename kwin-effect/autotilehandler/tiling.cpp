@@ -383,13 +383,34 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     qCInfo(lcEffect) << "Centering autotile window" << windowId << "actual=" << actual.size()
                      << "zone=" << targetZone.size() << "offset=(" << dx << "," << dy << ")";
 
-    // Window refused to shrink below its actual size — report discovered
-    // min size to daemon so future retiles can account for it. Only report
+    // Window refused to shrink below its actual size — report its declared
+    // minimum to the daemon so future retiles can account for it. Only report
     // when the window is larger than the zone (negative delta = oversized).
+    //
+    // IMPORTANT: Use the window's declared minSize() from the compositor, NOT
+    // the actual frame geometry. The frame geometry is the current size, which
+    // may be transiently larger during resize animations (Wayland configure
+    // round-trips) or media player loading. Reporting the frame geometry as
+    // the min-size creates a feedback loop: inflated min → expanded zone →
+    // window fills expanded zone → inflated min confirmed → ratio stuck.
+    //
+    // When the window doesn't declare a min-size (common for XWayland apps),
+    // fall back to the target zone size as a bounded hint — the window didn't
+    // fit THIS zone, so at minimum it needs this much space. The daemon caps
+    // all received min-sizes against MaxSplitRatio as a secondary safety net.
     if (dw < -MinCenteringDelta || dh < -MinCenteringDelta) {
-        const int discoveredMinW = (dw < -MinCenteringDelta) ? qCeil(actual.width()) : 0;
-        const int discoveredMinH = (dh < -MinCenteringDelta) ? qCeil(actual.height()) : 0;
-        reportDiscoveredMinSize(windowId, discoveredMinW, discoveredMinH);
+        const QSizeF declaredMin = kw->minSize();
+        int discoveredMinW = 0;
+        int discoveredMinH = 0;
+        if (dw < -MinCenteringDelta) {
+            discoveredMinW = (declaredMin.width() > 0) ? qCeil(declaredMin.width()) : targetZone.width();
+        }
+        if (dh < -MinCenteringDelta) {
+            discoveredMinH = (declaredMin.height() > 0) ? qCeil(declaredMin.height()) : targetZone.height();
+        }
+        if (discoveredMinW > 0 || discoveredMinH > 0) {
+            reportDiscoveredMinSize(windowId, discoveredMinW, discoveredMinH);
+        }
     }
 
     // Erase BEFORE moveResize to prevent re-entrancy: moveResize emits

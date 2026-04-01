@@ -7,6 +7,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.5.3] - 2026-04-01
+
+### Fixed
+- **Autotile split ratio feedback loop** ([#273]): The KWin effect reported the window's actual frame geometry as its "minimum size" when a window resisted shrinking (e.g., during browser media loading). This inflated min-size was never cleared, creating a feedback loop that expanded the master zone to ~90% or full width. Now uses the window's declared `minSize()` from the compositor, with zone-size fallback for apps without declared minimums. Daemon caps all received min-sizes at 90% of screen dimension as a secondary safety net.
+- **Overlay/popup focus guard for autotile** ([#272]): Windows with `keepAbove` set (Spectacle, color pickers, screen rulers) were entering the autotile tree and stealing focus when `focusNewWindows` was enabled. Added `keepAbove()` check to `isTileableWindow()` so overlay/utility tools are excluded from autotiling.
+- **"Hold to activate" trigger reset on daemon restart** ([#275]): Qt's QConfFile cache was shared between the Settings and LayoutManager backends (same file, same format). When `reparseConfiguration()` destroyed the Settings QSettings, the LayoutManager's instance kept the stale QConfFile alive, preventing re-read from disk. Settings changed by the external settings app were invisible to the daemon's reload, silently reverting `DragActivationTriggers` to the default (Alt). Now reads the file directly and overwrites the QSettings cache.
+
 ## [2.5.2] - 2026-03-31
 
 ### Fixed
@@ -1087,7 +1094,10 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.0...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.3...HEAD
+[2.5.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.2...v2.5.3
+[2.5.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.1...v2.5.2
+[2.5.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.0...v2.5.1
 [2.5.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.7...v2.5.0
 [2.4.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.6...v2.4.7
 [2.4.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.4.5...v2.4.6
@@ -1270,3 +1280,6 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#268]: https://github.com/fuddlesworth/PlasmaZones/pull/268
 [#269]: https://github.com/fuddlesworth/PlasmaZones/pull/269
 [#270]: https://github.com/fuddlesworth/PlasmaZones/pull/270
+[#272]: https://github.com/fuddlesworth/PlasmaZones/discussions/272
+[#273]: https://github.com/fuddlesworth/PlasmaZones/discussions/273
+[#275]: https://github.com/fuddlesworth/PlasmaZones/discussions/275
