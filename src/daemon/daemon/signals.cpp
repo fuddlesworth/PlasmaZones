@@ -626,24 +626,8 @@ void Daemon::finalizeStartup()
 
     // Show the layout OSD on ALL screens so the user sees what's assigned everywhere.
     // The layoutApplied signal only fires for the focused screen; this covers the rest.
-    if (m_settings && m_settings->showOsdOnLayoutSwitch() && m_layoutManager && m_screenManager) {
-        const int desktop = currentDesktop();
-        const QString activity = currentActivity();
-        const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
-        for (const QString& screenId : effectiveIds) {
-            const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-            if (LayoutId::isAutotile(assignmentId)) {
-                const QString algoId = LayoutId::extractAlgorithmId(assignmentId);
-                auto* algo = AlgorithmRegistry::instance()->algorithm(algoId);
-                const QString displayName = algo ? algo->name() : algoId;
-                showAlgorithmOsdDeferred(algoId, displayName, screenId);
-            } else {
-                Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
-                if (layout) {
-                    showLayoutOsdDeferred(layout->id(), screenId);
-                }
-            }
-        }
+    if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
+        showOsdForAllScreens(currentDesktop(), currentActivity());
     }
 }
 

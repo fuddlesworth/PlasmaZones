@@ -922,6 +922,19 @@ private:
                          int& snapHeight, bool& shouldSnap);
 
     /**
+     * @brief Build a unified window state JSON object for windowStateChanged emission
+     * @param windowId Window identifier
+     * @param zoneId Primary zone ID (may be empty for unsnap)
+     * @param zoneIds All zone IDs (QJsonArray)
+     * @param screenId Screen identifier
+     * @param isFloating Current float state
+     * @param changeType One of: "snapped", "unsnapped", "floated", "unfloated", "screen_changed"
+     * @return QJsonObject ready for serialization
+     */
+    QJsonObject buildStateObject(const QString& windowId, const QString& zoneId, const QJsonArray& zoneIds,
+                                 const QString& screenId, bool isFloating, const QString& changeType) const;
+
+    /**
      * @brief Clear floating state when a window is being snapped
      * @param windowId Window ID being snapped
      * @param screenId Screen where the snap is occurring (for windowFloatingChanged signal)

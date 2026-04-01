@@ -128,7 +128,7 @@ ToolBar {
                 Accessible.name: i18nc("@label", "Layout name")
                 Accessible.description: i18nc("@info", "Enter name for the layout")
                 // Add right padding when counter is visible to prevent text overlap
-                rightPadding: (showCounter || activeFocus) ? 50 : 0
+                rightPadding: (showCounter || activeFocus) ? Kirigami.Units.gridUnit * 3 : 0
                 onEditingFinished: {
                     if (editorController && text !== editorController.layoutName)
                         editorController.layoutName = text;

@@ -117,8 +117,9 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
         return false;
     }
     if (totalArea > 1.01) {
-        qCWarning(lcScreen) << "setVirtualScreenConfig: suspicious total area" << totalArea << "> 1.01 for"
-                            << physicalScreenId;
+        qCWarning(lcScreen) << "setVirtualScreenConfig: excessive coverage for" << physicalScreenId << "- total area"
+                            << totalArea << "> 1.01, rejecting config";
+        return false;
     }
 
     if (m_virtualConfigs.value(physicalScreenId) == config) {

@@ -340,6 +340,14 @@ void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
         || !m_screenManager) {
         return;
     }
+    showOsdForAllScreens(desktop, activity);
+}
+
+void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
+{
+    if (!m_layoutManager || !m_screenManager) {
+        return;
+    }
     // Show OSD on ALL screens — each screen may have a different per-desktop
     // assignment (autotile vs snapping, different layouts/algorithms).
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();

@@ -46,10 +46,14 @@ PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geomet
  * @param innerGap Gap between adjacent zones (zonePadding)
  * @param outerGaps Per-side edge gaps
  * @param useAvailableGeometry If true, calculate relative to available area (excluding panels/taskbars)
+ * @param screenId Optional virtual screen ID for physical-edge lookup.
+ *        When non-empty, used for physicalEdgesFor() so that internal virtual
+ *        screen edges get inner gap instead of outer gap. When empty, falls
+ *        back to Utils::screenIdentifier(screen) (physical ID, all edges outer).
  * @return Geometry with appropriate gaps applied
  */
 PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps,
-                                                  bool useAvailableGeometry = true);
+                                                  bool useAvailableGeometry = true, const QString& screenId = {});
 
 /**
  * @brief Convert zone geometry to overlay-local coordinates using explicit geometry

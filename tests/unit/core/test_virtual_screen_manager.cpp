@@ -19,18 +19,18 @@
 
 #include "core/screenmanager.h"
 #include "core/virtualscreen.h"
+#include "helpers/VirtualScreenTestHelpers.h"
 
 using namespace PlasmaZones;
+using namespace PlasmaZones::TestHelpers;
 
 // Helper to build a simple two-way split config
 static VirtualScreenConfig makeSplitConfig(const QString& physId)
 {
     VirtualScreenConfig config;
     config.physicalScreenId = physId;
-    config.screens.append(
-        VirtualScreenDef{VirtualScreenId::make(physId, 0), physId, QStringLiteral("Left"), QRectF(0, 0, 0.5, 1.0), 0});
-    config.screens.append(VirtualScreenDef{VirtualScreenId::make(physId, 1), physId, QStringLiteral("Right"),
-                                           QRectF(0.5, 0, 0.5, 1.0), 1});
+    config.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0, 0, 0.5, 1.0)));
+    config.screens.append(makeDef(physId, 1, QStringLiteral("Right"), QRectF(0.5, 0, 0.5, 1.0)));
     return config;
 }
 
@@ -39,12 +39,9 @@ static VirtualScreenConfig makeThreeWayConfig(const QString& physId)
 {
     VirtualScreenConfig config;
     config.physicalScreenId = physId;
-    config.screens.append(VirtualScreenDef{VirtualScreenId::make(physId, 0), physId, QStringLiteral("Left"),
-                                           QRectF(0, 0, 0.333, 1.0), 0});
-    config.screens.append(VirtualScreenDef{VirtualScreenId::make(physId, 1), physId, QStringLiteral("Center"),
-                                           QRectF(0.333, 0, 0.334, 1.0), 1});
-    config.screens.append(VirtualScreenDef{VirtualScreenId::make(physId, 2), physId, QStringLiteral("Right"),
-                                           QRectF(0.667, 0, 0.333, 1.0), 2});
+    config.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0, 0, 0.333, 1.0)));
+    config.screens.append(makeDef(physId, 1, QStringLiteral("Center"), QRectF(0.333, 0, 0.334, 1.0)));
+    config.screens.append(makeDef(physId, 2, QStringLiteral("Right"), QRectF(0.667, 0, 0.333, 1.0)));
     return config;
 }
 

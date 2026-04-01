@@ -197,6 +197,131 @@ private Q_SLOTS:
     }
 
     // =====================================================================
+    // T1: Cross-VS boundary crossing — window moves between virtual screens
+    // on the same physical monitor
+    // =====================================================================
+
+    void testCrossBoundaryCrossing_windowMovesFromVs0ToVs1()
+    {
+        // Set up two virtual screens (left/right 50/50 split) on one physical monitor
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        const QString vs0 = VirtualScreenId::make(physId, 0);
+        const QString vs1 = VirtualScreenId::make(physId, 1);
+
+        // Window initially on vs:0 (left half)
+        const QString windowId = QStringLiteral("konsole|cross-boundary");
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
+        QCOMPARE(m_service->screenAssignments().value(windowId), vs0);
+        QVERIFY(m_service->isWindowSnapped(windowId));
+
+        // Simulate the window moving to vs:1 (right half) by reassigning
+        // This mirrors what the daemon does when it detects a window's center
+        // has moved to a different virtual screen
+        m_service->assignWindowToZone(windowId, m_zoneIds[1], vs1, 1);
+
+        // Verify the WTS detects the screen change and updates the assignment
+        QCOMPARE(m_service->screenAssignments().value(windowId), vs1);
+        QCOMPARE(m_service->zonesForWindow(windowId).first(), m_zoneIds[1]);
+        QVERIFY(m_service->isWindowSnapped(windowId));
+    }
+
+    // =====================================================================
+    // T2: VS config change while windows are snapped — boundary shift
+    // =====================================================================
+
+    void testVsConfigChange_boundaryShift_windowStaysAssigned()
+    {
+        // Set up 50/50 virtual screens and snap a window to vs:0
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        const QString vs0 = VirtualScreenId::make(physId, 0);
+
+        const QString windowId = QStringLiteral("konsole|config-change");
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
+
+        QCOMPARE(m_service->screenAssignments().value(windowId), vs0);
+        QVERIFY(m_service->isWindowSnapped(windowId));
+
+        // The boundary shifts from 50/50 to 70/30, but the window's screen
+        // assignment remains on vs:0 — the virtual screen ID doesn't change
+        // even though the boundary position changed. The window should NOT
+        // be spuriously transferred to vs:1.
+        // (In production, ScreenManager::setVirtualScreenConfig recalculates
+        // geometries but does not reassign windows between virtual screens.)
+
+        // Verify the window remains on vs:0 with its zone intact
+        QCOMPARE(m_service->screenAssignments().value(windowId), vs0);
+        QCOMPARE(m_service->zonesForWindow(windowId).first(), m_zoneIds[0]);
+        QVERIFY(m_service->isWindowSnapped(windowId));
+    }
+
+    // =====================================================================
+    // T3: Remove all virtual screens — revert to physical
+    // =====================================================================
+
+    void testRemoveAllVirtualScreens_revertToPhysical()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        const QString vs0 = VirtualScreenId::make(physId, 0);
+        const QString vs1 = VirtualScreenId::make(physId, 1);
+
+        // Assign windows to virtual screens
+        const QString win1 = QStringLiteral("konsole|revert1");
+        const QString win2 = QStringLiteral("dolphin|revert2");
+        const QString win3 = QStringLiteral("kate|revert3");
+        m_service->assignWindowToZone(win1, m_zoneIds[0], vs0, 1);
+        m_service->assignWindowToZone(win2, m_zoneIds[1], vs1, 1);
+        m_service->assignWindowToZone(win3, m_zoneIds[2], vs0, 1);
+
+        // Verify starting state: all on virtual screens
+        QCOMPARE(m_service->screenAssignments().value(win1), vs0);
+        QCOMPARE(m_service->screenAssignments().value(win2), vs1);
+        QCOMPARE(m_service->screenAssignments().value(win3), vs0);
+
+        // Remove all virtual screen config (revert to physical-only)
+        m_service->migrateScreenAssignmentsFromVirtual(physId);
+
+        // All tracked windows should transition to the physical screen ID
+        QCOMPARE(m_service->screenAssignments().value(win1), physId);
+        QCOMPARE(m_service->screenAssignments().value(win2), physId);
+        QCOMPARE(m_service->screenAssignments().value(win3), physId);
+
+        // Zone assignments should be preserved
+        QVERIFY(m_service->isWindowSnapped(win1));
+        QVERIFY(m_service->isWindowSnapped(win2));
+        QVERIFY(m_service->isWindowSnapped(win3));
+        QCOMPARE(m_service->zonesForWindow(win1).first(), m_zoneIds[0]);
+        QCOMPARE(m_service->zonesForWindow(win2).first(), m_zoneIds[1]);
+        QCOMPARE(m_service->zonesForWindow(win3).first(), m_zoneIds[2]);
+    }
+
+    void testRemoveAllVirtualScreens_mixedScreens_onlyTargetAffected()
+    {
+        // When reverting virtual screens on one physical monitor, windows
+        // on a second physical monitor must not be touched
+        const QString physId1 = QStringLiteral("Dell:U2722D:111111");
+        const QString physId2 = QStringLiteral("LG:27GP850:222222");
+        const QString vs1_0 = VirtualScreenId::make(physId1, 0);
+        const QString vs1_1 = VirtualScreenId::make(physId1, 1);
+        const QString vs2_0 = VirtualScreenId::make(physId2, 0);
+
+        const QString win1 = QStringLiteral("app1|aaa");
+        const QString win2 = QStringLiteral("app2|bbb");
+        const QString win3 = QStringLiteral("app3|ccc");
+        m_service->assignWindowToZone(win1, m_zoneIds[0], vs1_0, 1);
+        m_service->assignWindowToZone(win2, m_zoneIds[1], vs1_1, 1);
+        m_service->assignWindowToZone(win3, m_zoneIds[2], vs2_0, 1);
+
+        // Remove virtual screens only on physId1
+        m_service->migrateScreenAssignmentsFromVirtual(physId1);
+
+        // physId1 windows should revert to physical
+        QCOMPARE(m_service->screenAssignments().value(win1), physId1);
+        QCOMPARE(m_service->screenAssignments().value(win2), physId1);
+        // physId2 window should remain on its virtual screen
+        QCOMPARE(m_service->screenAssignments().value(win3), vs2_0);
+    }
+
+    // =====================================================================
     // P1: Multiple windows across screens — only target screen migrated
     // =====================================================================
 

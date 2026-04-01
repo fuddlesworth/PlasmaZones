@@ -2050,6 +2050,11 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                         const QString newScreenId = self->resolveEffectiveScreenId(center, window->screen());
                         if (!newScreenId.isEmpty()) {
                             it.value() = newScreenId;
+                            // Also update the autotile handler's notified screen map
+                            // so slotWindowFrameGeometryChanged does not compare against
+                            // the stale pre-config-change screen ID.
+                            const QString windowId = self->getWindowId(window);
+                            self->m_autotileHandler->updateNotifiedScreen(windowId, newScreenId);
                         }
                     }
                 }

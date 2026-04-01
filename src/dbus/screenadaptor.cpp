@@ -149,8 +149,20 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenId)
                                                {JsonKeys::Y, geom.y()},
                                                {JsonKeys::Width, geom.width()},
                                                {JsonKeys::Height, geom.height()}};
-        info[JsonKeys::PhysicalSize] = QJsonObject{{JsonKeys::Width, screen->physicalSize().width()},
-                                                   {JsonKeys::Height, screen->physicalSize().height()}};
+        // Scale physical size proportionally for virtual screens.
+        // A VS covering width=0.5 of the physical monitor gets half the mm width.
+        QSizeF physSize = screen->physicalSize();
+        if (mgr && VirtualScreenId::isVirtual(screenId)) {
+            QString physId = VirtualScreenId::extractPhysicalId(screenId);
+            VirtualScreenConfig vsConfig = mgr->virtualScreenConfig(physId);
+            int vsIndex = VirtualScreenId::extractIndex(screenId);
+            if (vsIndex >= 0 && vsIndex < vsConfig.screens.size()) {
+                const QRectF& region = vsConfig.screens[vsIndex].region;
+                physSize = QSizeF(physSize.width() * region.width(), physSize.height() * region.height());
+            }
+        }
+        info[JsonKeys::PhysicalSize] =
+            QJsonObject{{JsonKeys::Width, physSize.width()}, {JsonKeys::Height, physSize.height()}};
         info[JsonKeys::DevicePixelRatio] = screen->devicePixelRatio();
         info[JsonKeys::RefreshRate] = screen->refreshRate();
         info[JsonKeys::Depth] = screen->depth();

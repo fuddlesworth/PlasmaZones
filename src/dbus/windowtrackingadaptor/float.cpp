@@ -159,13 +159,9 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     Q_EMIT windowFloatingChanged(windowId, floating, screen);
 
     // Emit unified state change
-    QJsonObject stateObj;
-    stateObj[QLatin1String("windowId")] = windowId;
-    stateObj[QLatin1String("zoneId")] = m_service->zoneForWindow(windowId);
-    stateObj[QLatin1String("screenId")] = screen;
-    stateObj[QLatin1String("isFloating")] = floating;
-    stateObj[QLatin1String("changeType")] = floating ? QStringLiteral("floated") : QStringLiteral("unfloated");
-    stateObj[QLatin1String("zoneIds")] = QJsonArray();
+    QJsonObject stateObj =
+        buildStateObject(windowId, m_service->zoneForWindow(windowId), QJsonArray(), screen, floating,
+                         floating ? QStringLiteral("floated") : QStringLiteral("unfloated"));
     Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 

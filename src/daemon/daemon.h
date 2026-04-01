@@ -244,6 +244,15 @@ private:
     void showDesktopSwitchOsd(int desktop, const QString& activity);
 
     /**
+     * @brief Show per-screen OSD for all effective screens
+     *
+     * Iterates effectiveScreenIds, resolves assignment (autotile vs snapping),
+     * and calls showAlgorithmOsdDeferred or showLayoutOsdDeferred per screen.
+     * DRY helper shared by showDesktopSwitchOsd and settingsChanged handler.
+     */
+    void showOsdForAllScreens(int desktop, const QString& activity);
+
+    /**
      * @brief Recompute which screens use autotile from layout assignments
      *
      * Reads all screen assignments via assignmentIdForScreen(), computes

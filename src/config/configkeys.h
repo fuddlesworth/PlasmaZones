@@ -300,6 +300,30 @@ public:
     PZ_CONFIG_KEY(fillOnDropModifierKey, "FillOnDropModifier")
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Config Group — Window Tracking
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    PZ_CONFIG_GROUP(windowTrackingGroup, "WindowTracking")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Window Tracking (persistence in QSettings)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    PZ_CONFIG_KEY(activeLayoutIdKey, "ActiveLayoutId")
+    PZ_CONFIG_KEY(windowZoneAssignmentsFullKey, "WindowZoneAssignmentsFull")
+    PZ_CONFIG_KEY(pendingRestoreQueuesKey, "PendingRestoreQueues")
+    PZ_CONFIG_KEY(preTileGeometriesFullKey, "PreTileGeometriesFull")
+    PZ_CONFIG_KEY(preTileGeometriesKey, "PreTileGeometries")
+    PZ_CONFIG_KEY(lastUsedZoneIdKey, "LastUsedZoneId")
+    PZ_CONFIG_KEY(lastUsedScreenNameKey, "LastUsedScreenName")
+    PZ_CONFIG_KEY(lastUsedZoneClassKey, "LastUsedZoneClass")
+    PZ_CONFIG_KEY(lastUsedDesktopKey, "LastUsedDesktop")
+    PZ_CONFIG_KEY(floatingWindowsKey, "FloatingWindows")
+    PZ_CONFIG_KEY(preFloatZoneAssignmentsKey, "PreFloatZoneAssignments")
+    PZ_CONFIG_KEY(preFloatScreenAssignmentsKey, "PreFloatScreenAssignments")
+    PZ_CONFIG_KEY(userSnappedClassesKey, "UserSnappedClasses")
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Virtual Screens
     // The "VirtualScreen:" prefix is intentional — parsing must use
     // groupName.mid(prefix.size()) to extract the physical screen ID,

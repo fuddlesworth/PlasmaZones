@@ -222,7 +222,10 @@ void Daemon::handleRetile()
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
         QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
         if (screenId.isEmpty() && !m_autotileEngine->autotileScreens().isEmpty()) {
-            screenId = *m_autotileEngine->autotileScreens().begin();
+            // QSet iteration order is non-deterministic; sort to get a stable fallback
+            QStringList sorted = m_autotileEngine->autotileScreens().values();
+            sorted.sort();
+            screenId = sorted.first();
         }
         m_overlayService->showNavigationOsd(true, QStringLiteral("retile"), QStringLiteral("retiled"), QString(),
                                             QString(), screenId);

@@ -329,12 +329,16 @@ PLASMAZONES_EXPORT QString screenNameForId(const QString& screenId);
 PLASMAZONES_EXPORT bool isConnectorName(const QString& identifier);
 
 /**
- * @brief Format-agnostic screen comparison.
+ * @brief Format-agnostic screen comparison (virtual-screen aware).
  *
- * Returns true if both identifiers refer to the same physical screen,
- * regardless of whether they are connector names ("DP-2") or EDID-based
- * screen IDs ("LG Electronics:LG Ultra HD:115107"). Resolves both to
- * QScreen* via findScreenByIdOrName and compares pointers.
+ * Returns true if both identifiers refer to the same effective screen.
+ * Handles connector names ("DP-2"), EDID-based screen IDs
+ * ("LG Electronics:LG Ultra HD:115107"), and virtual screen IDs
+ * ("Dell:U2722D:115107/vs:0"). Virtual screen IDs are never equal to
+ * each other (unless identical strings) and never equal to their parent
+ * physical screen ID — the physical screen has been subdivided, so the
+ * physical ID no longer represents a usable screen. Resolves non-virtual
+ * identifiers to QScreen* via findScreenByIdOrName and compares pointers.
  */
 PLASMAZONES_EXPORT bool screensMatch(const QString& a, const QString& b);
 

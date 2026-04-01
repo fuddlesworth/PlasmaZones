@@ -147,12 +147,14 @@ QString LayoutAdaptor::getAllScreenAssignments()
 
     for (const QString& screenId : std::as_const(screenIds)) {
         // Derive connector name for the JSON key (KCM compatibility)
-        QScreen* physScreen = Utils::findScreenByIdOrName(
-            VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId);
-        QString connectorName = physScreen ? physScreen->name() : screenId;
-        // For virtual screens, append the virtual screen ID suffix to keep keys unique
+        // Virtual screens use their full ID directly (e.g., "physId/vs:0");
+        // physical screens use the QScreen connector name for KCM parity.
+        QString connectorName;
         if (VirtualScreenId::isVirtual(screenId)) {
             connectorName = screenId;
+        } else {
+            QScreen* physScreen = Utils::findScreenByIdOrName(screenId);
+            connectorName = physScreen ? physScreen->name() : screenId;
         }
         QJsonObject screenObj;
 

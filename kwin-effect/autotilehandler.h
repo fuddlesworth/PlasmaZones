@@ -95,6 +95,23 @@ public:
         return m_notifiedWindows.contains(windowId);
     }
 
+    /**
+     * @brief Update the notified screen ID for a tracked window.
+     *
+     * Called after virtual screen config changes re-resolve window screen IDs,
+     * so that slotWindowFrameGeometryChanged does not compare against stale
+     * screen IDs and trigger spurious cross-VS transfers.
+     *
+     * No-op if the window is not in m_notifiedWindowScreens.
+     */
+    void updateNotifiedScreen(const QString& windowId, const QString& newScreenId)
+    {
+        auto it = m_notifiedWindowScreens.find(windowId);
+        if (it != m_notifiedWindowScreens.end()) {
+            it.value() = newScreenId;
+        }
+    }
+
     // Border rendering accessors
     bool isBorderlessWindow(const QString& windowId) const
     {

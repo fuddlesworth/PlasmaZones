@@ -152,7 +152,7 @@ static QRectF applyGapsToZoneGeometry(const QRectF& zoneGeom, Zone* zone, const 
 }
 
 QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps,
-                               bool useAvailableGeometry)
+                               bool useAvailableGeometry, const QString& screenId)
 {
     if (!zone || !screen) {
         return QRectF();
@@ -171,11 +171,13 @@ QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const 
 
     // Look up physical edges via ScreenManager so virtual screen internal edges
     // get inner gap instead of outer gap, matching the QRect overload behavior.
+    // When the caller provides a virtual screen ID, use it; otherwise fall back
+    // to the physical screen identifier (which yields all-true physical edges).
     VirtualScreenDef::PhysicalEdges physEdges{true, true, true, true};
     auto* mgr = ScreenManager::instance();
     if (mgr) {
-        QString screenId = Utils::screenIdentifier(screen);
-        physEdges = mgr->physicalEdgesFor(screenId);
+        QString resolvedId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
+        physEdges = mgr->physicalEdgesFor(resolvedId);
     }
 
     return applyGapsToZoneGeometry(geom, zone, screenGeom, innerGap, outerGaps, physEdges);
@@ -234,7 +236,7 @@ QRectF getZoneGeometryForScreenF(Zone* zone, QScreen* screen, const QString& scr
         return getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding, outerGaps, useAvail, screenId);
     }
     if (screen) {
-        return getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
+        return getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail, screenId);
     }
     return QRectF();
 }

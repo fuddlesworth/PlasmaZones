@@ -15,8 +15,6 @@ import org.kde.kirigami as Kirigami
  * button is clicked.
  */
 Flickable {
-    // Clamp: don't allow the move — last screen would get negative/tiny width
-
     id: root
 
     // ── Internal state ───────────────────────────────────────────────────
@@ -197,6 +195,16 @@ Flickable {
         function onScreensChanged() {
             root._updateScreenGeometry();
             root._refreshConfig();
+            if (root._selectedScreen === "" && settingsController.screens.length > 0) {
+                var screens = settingsController.screens;
+                for (var i = 0; i < screens.length; i++) {
+                    if (screens[i].isPrimary) {
+                        root._selectedScreen = root._toPhysicalId(screens[i].name || "");
+                        return ;
+                    }
+                }
+                root._selectedScreen = root._toPhysicalId(screens[0].name || "");
+            }
         }
 
         target: settingsController
@@ -226,9 +234,7 @@ Flickable {
             visible: true
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // MONITOR SELECTOR (visual icon bar)
-        // ═══════════════════════════════════════════════════════════════
+        // Monitor selector (visual icon bar)
         MonitorSelectorSection {
             Layout.fillWidth: true
             appSettings: settingsController
@@ -240,9 +246,7 @@ Flickable {
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // VISUAL PREVIEW with draggable dividers
-        // ═══════════════════════════════════════════════════════════════
+        // Visual preview with draggable dividers
         SettingsCard {
             headerText: i18n("Preview")
 
@@ -290,9 +294,7 @@ Flickable {
 
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // PRESETS (populate local state, do NOT apply)
-        // ═══════════════════════════════════════════════════════════════
+        // Presets (populate local state, do NOT apply)
         SettingsCard {
             headerText: i18n("Presets")
 
@@ -350,9 +352,7 @@ Flickable {
 
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // CUSTOM SPLIT EDITOR
-        // ═══════════════════════════════════════════════════════════════
+        // Custom split editor
         SettingsCard {
             headerText: i18n("Custom Split")
 
@@ -375,13 +375,20 @@ Flickable {
 
                         from: 2
                         to: Math.max(root._maxVirtualScreens, root._pendingScreens.length)
-                        value: root._pendingScreens.length > 1 ? root._pendingScreens.length : 2
+                        // No value: binding — set imperatively to avoid binding breakage
                         editable: true
                         enabled: root._selectedScreen !== ""
-                        onValueModified: {
-                            root._redistributeEqual(value);
-                        }
+                        Component.onCompleted: value = root._pendingScreens.length > 1 ? root._pendingScreens.length : 2
+                        onValueModified: root._redistributeEqual(value)
                         Accessible.name: i18n("Number of virtual screens")
+                    }
+
+                    Connections {
+                        function onPendingScreensChanged() {
+                            splitCountSpinBox.value = root._pendingScreens.length > 1 ? root._pendingScreens.length : 2;
+                        }
+
+                        target: root
                     }
 
                     Item {
@@ -465,9 +472,7 @@ Flickable {
 
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // ACTIONS
-        // ═══════════════════════════════════════════════════════════════
+        // Actions
         SettingsCard {
             headerText: i18n("Actions")
 
@@ -485,6 +490,7 @@ Flickable {
                     onClicked: {
                         settingsController.stageVirtualScreenRemoval(root._selectedScreen);
                         root._pendingScreens = [];
+                        root._savedScreens = [];
                     }
                     ToolTip.text: i18n("Remove all virtual screen subdivisions from this monitor")
                     ToolTip.visible: hovered

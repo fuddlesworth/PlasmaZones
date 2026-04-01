@@ -8,6 +8,7 @@
 #include "../core/utils.h"
 #include "../core/assignmententry.h"
 #include "../core/screenmanager.h"
+#include "overlayservice/internal.h"
 #include <QGuiApplication>
 #include <QQuickItem>
 #include <QScreen>
@@ -450,10 +451,7 @@ void ZoneSelectorController::updateProximity()
     }
 
     // Use virtual screen geometry if available, falling back to physical
-    auto* mgr = ScreenManager::instance();
-    const QString screenId = m_screenId;
-    QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
-    const QRectF screenGeometry = vsGeom.isValid() ? QRectF(vsGeom) : QRectF(m_screen->geometry());
+    const QRectF screenGeometry = QRectF(resolveScreenGeometry(m_screenId));
     const qreal distanceFromTop = m_cursorPosition.y() - screenGeometry.top();
 
     // Horizontal zone check: cursor must be within the center area

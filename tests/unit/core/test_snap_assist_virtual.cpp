@@ -307,13 +307,6 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // screensMatch — Virtual screen ID handling
-    // Virtual screen IDs from different indices are distinct screens, even
-    // if they share the same physical parent. A physical ID vs a virtual
-    // ID is also not a match (the physical screen was subdivided).
-    // =====================================================================
-
-    // =====================================================================
     // pruneStaleAssignments
     // =====================================================================
 

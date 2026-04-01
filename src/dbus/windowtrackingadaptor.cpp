@@ -181,13 +181,8 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
     qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to zone" << zoneId << "on screen" << resolvedScreen;
 
     // Emit unified state change
-    QJsonObject stateObj;
-    stateObj[QLatin1String("windowId")] = windowId;
-    stateObj[QLatin1String("zoneId")] = zoneId;
-    stateObj[QLatin1String("zoneIds")] = QJsonArray{zoneId};
-    stateObj[QLatin1String("screenId")] = resolvedScreen;
-    stateObj[QLatin1String("isFloating")] = false;
-    stateObj[QLatin1String("changeType")] = QStringLiteral("snapped");
+    QJsonObject stateObj =
+        buildStateObject(windowId, zoneId, QJsonArray{zoneId}, resolvedScreen, false, QStringLiteral("snapped"));
     Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
@@ -230,16 +225,11 @@ void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, cons
     qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to multi-zone:" << zoneIds << "on screen"
                          << resolvedScreen;
 
-    QJsonObject stateObj;
-    stateObj[QLatin1String("windowId")] = windowId;
-    stateObj[QLatin1String("zoneId")] = primaryZoneId;
     QJsonArray zoneIdsArr;
     for (const QString& zid : zoneIds)
         zoneIdsArr.append(zid);
-    stateObj[QLatin1String("zoneIds")] = zoneIdsArr;
-    stateObj[QLatin1String("screenId")] = resolvedScreen;
-    stateObj[QLatin1String("isFloating")] = false;
-    stateObj[QLatin1String("changeType")] = QStringLiteral("snapped");
+    QJsonObject stateObj =
+        buildStateObject(windowId, primaryZoneId, zoneIdsArr, resolvedScreen, false, QStringLiteral("snapped"));
     Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
@@ -264,13 +254,8 @@ void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
     qCInfo(lcDbusWindow) << "Window" << windowId << "unsnapped from zone" << previousZoneId;
 
     // Emit unified state change
-    QJsonObject stateObj;
-    stateObj[QLatin1String("windowId")] = windowId;
-    stateObj[QLatin1String("zoneId")] = QString();
-    stateObj[QLatin1String("screenId")] = QString();
-    stateObj[QLatin1String("isFloating")] = false;
-    stateObj[QLatin1String("changeType")] = QStringLiteral("unsnapped");
-    stateObj[QLatin1String("zoneIds")] = QJsonArray();
+    QJsonObject stateObj =
+        buildStateObject(windowId, QString(), QJsonArray(), QString(), false, QStringLiteral("unsnapped"));
     Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
@@ -335,13 +320,8 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     m_service->unassignWindow(windowId);
 
     // Emit unified state change for screen-change-triggered unsnap
-    QJsonObject stateObj;
-    stateObj[QLatin1String("windowId")] = windowId;
-    stateObj[QLatin1String("zoneId")] = QString();
-    stateObj[QLatin1String("screenId")] = newScreenId;
-    stateObj[QLatin1String("isFloating")] = false;
-    stateObj[QLatin1String("changeType")] = QStringLiteral("screen_changed");
-    stateObj[QLatin1String("zoneIds")] = QJsonArray();
+    QJsonObject stateObj =
+        buildStateObject(windowId, QString(), QJsonArray(), newScreenId, false, QStringLiteral("screen_changed"));
     Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
@@ -502,6 +482,20 @@ QString WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, c
     }
 
     return GeometryUtils::rectToJson(geo);
+}
+
+QJsonObject WindowTrackingAdaptor::buildStateObject(const QString& windowId, const QString& zoneId,
+                                                    const QJsonArray& zoneIds, const QString& screenId, bool isFloating,
+                                                    const QString& changeType) const
+{
+    QJsonObject obj;
+    obj[QLatin1String("windowId")] = windowId;
+    obj[QLatin1String("zoneId")] = zoneId;
+    obj[QLatin1String("zoneIds")] = zoneIds;
+    obj[QLatin1String("screenId")] = screenId;
+    obj[QLatin1String("isFloating")] = isFloating;
+    obj[QLatin1String("changeType")] = changeType;
+    return obj;
 }
 
 } // namespace PlasmaZones
