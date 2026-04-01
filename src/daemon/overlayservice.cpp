@@ -311,12 +311,13 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
             cursorScreen = Utils::primaryScreen();
         }
 
-        // Check disabled status using the effective (virtual-aware) screen ID,
-        // not just the physical screen, so per-virtual-screen disabling works.
-        QString effectiveId = Utils::effectiveScreenIdAt(QPoint(cursorX, cursorY), cursorScreen);
-        if (!effectiveId.isEmpty()
-            && isContextDisabled(m_settings, effectiveId, m_currentVirtualDesktop, m_currentActivity)) {
-            return;
+        // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
+        // Check both physical and effective (virtual) screen IDs
+        if (cursorScreen && m_settings) {
+            QString effectiveId = Utils::effectiveScreenIdAt(QPoint(cursorX, cursorY), cursorScreen);
+            if (isContextDisabled(m_settings, effectiveId, m_currentVirtualDesktop, m_currentActivity)) {
+                return;
+            }
         }
     }
 

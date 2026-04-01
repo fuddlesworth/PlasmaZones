@@ -71,10 +71,27 @@ Flickable {
 
     function _updateScreenGeometry() {
         var screens = settingsController.screens;
+        // First pass: exact name match (physical screen entry)
         for (var i = 0; i < screens.length; i++) {
             if (screens[i].name === _selectedScreen) {
-                _screenWidth = screens[i].width || 1920;
-                _screenHeight = screens[i].height || 1080;
+                var w = screens[i].width;
+                var h = screens[i].height;
+                if (w && h) {
+                    _screenWidth = w;
+                    _screenHeight = h;
+                    return ;
+                }
+                break;
+            }
+        }
+        // Second pass: if width/height weren't found (e.g. physicalOnly dedup
+        // deleted them), look for a virtual screen child that still has them
+        var prefix = _selectedScreen + "/vs:";
+        for (var j = 0; j < screens.length; j++) {
+            var name = screens[j].name || "";
+            if (name.indexOf(prefix) === 0 && screens[j].width && screens[j].height) {
+                _screenWidth = screens[j].width;
+                _screenHeight = screens[j].height;
                 return ;
             }
         }
@@ -157,7 +174,7 @@ Flickable {
             return false;
 
         for (var i = 0; i < ratios.length; i++) {
-            if (Math.abs(_pendingScreens[i].width - ratios[i] / 100) > 0.005)
+            if (Math.abs(_pendingScreens[i].width - ratios[i] / 100) > 0.01)
                 return false;
 
         }

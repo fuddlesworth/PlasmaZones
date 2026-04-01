@@ -140,7 +140,7 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
         const QString resolvedId = Utils::screenIdForName(screenId);
         Layout* layout = m_layoutManager->resolveLayoutForScreen(resolvedId.isEmpty() ? screenId : resolvedId);
         if (layout) {
-            m_overlayService->showLockedLayoutOsd(layout, screenId);
+            m_overlayService->showLayoutOsd(layout, true, screenId);
             return;
         }
     }

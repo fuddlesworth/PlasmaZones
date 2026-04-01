@@ -479,6 +479,7 @@ private:
     bool m_dragStartedSent = false;
     QString m_pendingDragWindowId;
     QRectF m_pendingDragGeometry;
+    QString m_snapDragStartScreenId; // Virtual screen at snap-mode drag start (for VS crossing on drop)
 
     // Autotile: true when the current drag was started on an autotile screen
 

@@ -60,11 +60,22 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
         return false;
     }
 
-    // Validate: all defs must pass isValid()
+    // Validate: all defs must pass isValid() and have consistent IDs
     for (const auto& def : config.screens) {
         if (!def.isValid()) {
             qCWarning(lcScreen) << "setVirtualScreenConfig: invalid VirtualScreenDef" << def.id
                                 << "region:" << def.region;
+            return false;
+        }
+        if (def.physicalScreenId != physicalScreenId) {
+            qCWarning(lcScreen) << "setVirtualScreenConfig: def.physicalScreenId" << def.physicalScreenId
+                                << "does not match physicalScreenId" << physicalScreenId << "for def" << def.id;
+            return false;
+        }
+        QString expectedId = VirtualScreenId::make(physicalScreenId, def.index);
+        if (def.id != expectedId) {
+            qCWarning(lcScreen) << "setVirtualScreenConfig: def.id" << def.id << "does not match expected" << expectedId
+                                << "for index" << def.index;
             return false;
         }
     }
@@ -188,6 +199,8 @@ QRect ScreenManager::screenGeometry(const QString& screenId) const
         if (cached.isValid()) {
             return cached;
         }
+        qCDebug(lcScreen) << "screenGeometry: virtual screen" << screenId
+                          << "not found in cache, falling back to physical screen";
     }
 
     // Physical screen — try tracked screens first, then fallback

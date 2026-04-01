@@ -202,10 +202,17 @@ bool OverlayService::eventFilter(QObject* obj, QEvent* event)
 void OverlayService::hideSnapAssist()
 {
     bool wasVisible = isSnapAssistVisible();
+    const QString screenId = m_snapAssistScreenId;
     m_thumbnailCache.clear();
     destroySnapAssistWindow();
     if (wasVisible) {
         Q_EMIT snapAssistDismissed();
+    }
+    // Re-show the zone selector that was hidden when snap assist was shown (line 62-64)
+    if (m_zoneSelectorVisible && !screenId.isEmpty()) {
+        if (auto* selectorWindow = m_zoneSelectorWindows.value(screenId)) {
+            selectorWindow->show();
+        }
     }
 }
 
@@ -399,7 +406,14 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
 void OverlayService::hideLayoutPicker()
 {
+    const QString screenId = m_layoutPickerScreenId;
     destroyLayoutPickerWindow();
+    // Re-show the zone selector that was hidden when layout picker was shown (line 322-324)
+    if (m_zoneSelectorVisible && !screenId.isEmpty()) {
+        if (auto* selectorWindow = m_zoneSelectorWindows.value(screenId)) {
+            selectorWindow->show();
+        }
+    }
 }
 
 bool OverlayService::isLayoutPickerVisible() const

@@ -498,11 +498,7 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
 
     // Update settings-based properties on the window itself (QML root)
     if (m_settings) {
-        writeQmlProperty(window, QStringLiteral("highlightColor"), m_settings->highlightColor());
-        writeQmlProperty(window, QStringLiteral("inactiveColor"), m_settings->inactiveColor());
-        writeQmlProperty(window, QStringLiteral("borderColor"), m_settings->borderColor());
-        writeQmlProperty(window, QStringLiteral("activeOpacity"), m_settings->activeOpacity());
-        writeQmlProperty(window, QStringLiteral("inactiveOpacity"), m_settings->inactiveOpacity());
+        writeColorSettings(window, m_settings);
         writeQmlProperty(window, QStringLiteral("borderWidth"), m_settings->borderWidth());
         writeQmlProperty(window, QStringLiteral("borderRadius"), m_settings->borderRadius());
         writeQmlProperty(window, QStringLiteral("enableBlur"), m_settings->enableBlur());

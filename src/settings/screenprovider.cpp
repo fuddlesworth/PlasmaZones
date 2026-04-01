@@ -10,6 +10,7 @@
 #include "../../src/config/settings.h"
 #include "../../src/core/constants.h"
 #include "../../src/core/utils.h"
+#include "../../src/core/virtualscreen.h"
 
 namespace PlasmaZones {
 
@@ -35,8 +36,7 @@ QList<ScreenInfo> fetchScreens()
             ScreenInfo info;
             info.name = screenName;
             // Compare physical parent for virtual screens (primary is always a physical ID)
-            int vsPos = screenName.indexOf(QLatin1String("/vs:"));
-            QString physName = (vsPos >= 0) ? screenName.left(vsPos) : screenName;
+            QString physName = VirtualScreenId::extractPhysicalId(screenName);
             info.isPrimary = (physName == primaryScreenName);
 
             QDBusMessage infoReply =
@@ -65,9 +65,7 @@ QList<ScreenInfo> fetchScreens()
                         info.connectorName = jsonObj[JsonKeys::Name].toString();
                     if (jsonObj.value(JsonKeys::IsVirtualScreen).toBool()) {
                         info.isVirtualScreen = true;
-                        int vsIdx = screenName.indexOf(QLatin1String("/vs:"));
-                        if (vsIdx >= 0)
-                            info.virtualIndex = QStringView(screenName).mid(vsIdx + 4).toInt();
+                        info.virtualIndex = VirtualScreenId::extractIndex(screenName);
                         info.virtualDisplayName = jsonObj.value(JsonKeys::VirtualDisplayName).toString();
                     }
                 } else {

@@ -214,13 +214,6 @@ void WindowTrackingAdaptor::loadState()
     using PendingRestore = WindowTrackingService::PendingRestore;
     QHash<QString, QList<PendingRestore>> pendingQueues;
 
-    // Helper: resolve stored screen value. Returns as-is — mixed formats
-    // (connector names and screen IDs) are handled at comparison points via
-    // Utils::screensMatch() which resolves both to QScreen* pointers.
-    auto resolveScreen = [](const QString& storedScreen) -> QString {
-        return storedScreen;
-    };
-
     // Pending entries derived from active assignments (fallback for KWin restarts where
     // UUIDs change). Collected separately from persisted pending queues so we can do
     // count-based merging — prevents exponential growth while preserving multi-instance entries.
@@ -253,7 +246,7 @@ void WindowTrackingAdaptor::loadState()
                 if (zoneIds.isEmpty()) {
                     continue;
                 }
-                QString screen = resolveScreen(entry[QLatin1String("screen")].toString());
+                QString screen = entry[QLatin1String("screen")].toString();
                 int desktop = entry[QLatin1String("desktop")].toInt(0);
 
                 fullZones[windowId] = zoneIds;
@@ -306,7 +299,7 @@ void WindowTrackingAdaptor::loadState()
                     if (entry.zoneIds.isEmpty()) {
                         continue;
                     }
-                    entry.screenId = resolveScreen(entryObj[QLatin1String("screen")].toString());
+                    entry.screenId = entryObj[QLatin1String("screen")].toString();
                     entry.virtualDesktop = entryObj[QLatin1String("desktop")].toInt(0);
                     entry.layoutId = entryObj[QLatin1String("layout")].toString();
                     for (const QJsonValue& v : entryObj[QLatin1String("zoneNumbers")].toArray()) {
@@ -365,7 +358,7 @@ void WindowTrackingAdaptor::loadState()
     // Load pre-tile geometries (with migration from old split keys)
     using PreTileGeometry = WindowTrackingService::PreTileGeometry;
     QHash<QString, PreTileGeometry> preTileGeometries;
-    auto loadGeometries = [&resolveScreen](const QString& json, QHash<QString, PreTileGeometry>& out) {
+    auto loadGeometries = [](const QString& json, QHash<QString, PreTileGeometry>& out) {
         if (json.isEmpty()) {
             return;
         }
@@ -380,7 +373,7 @@ void WindowTrackingAdaptor::loadState()
                 QRect geom(geomObj[QLatin1String("x")].toInt(), geomObj[QLatin1String("y")].toInt(),
                            geomObj[QLatin1String("width")].toInt(), geomObj[QLatin1String("height")].toInt());
                 if (geom.width() > 0 && geom.height() > 0) {
-                    QString screen = resolveScreen(geomObj[QLatin1String("screen")].toString());
+                    QString screen = geomObj[QLatin1String("screen")].toString();
                     out[it.key()] = PreTileGeometry{geom, screen};
                 }
             }
@@ -406,7 +399,7 @@ void WindowTrackingAdaptor::loadState()
                 QRect geom(entry[QLatin1String("x")].toInt(), entry[QLatin1String("y")].toInt(),
                            entry[QLatin1String("width")].toInt(), entry[QLatin1String("height")].toInt());
                 if (geom.width() > 0 && geom.height() > 0) {
-                    QString screen = resolveScreen(entry[QLatin1String("screen")].toString());
+                    QString screen = entry[QLatin1String("screen")].toString();
                     PreTileGeometry ptg{geom, screen};
                     preTileGeometries[windowId] = ptg;
                     // Also store under appId for fallback (mirrors storePreTileGeometry)

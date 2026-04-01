@@ -13,6 +13,7 @@
 #include "../core/virtualdesktopmanager.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
+#include "../core/virtualscreen.h"
 #include "../core/types.h"
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -309,7 +310,24 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     // to its assigned zone's screen (restore, resnap, snap assist) — keep snapped.
     // If they differ, the user moved the window away — unsnap it.
     QString storedScreen = m_service->screenAssignments().value(windowId);
-    if (Utils::screensMatch(storedScreen, newScreenId)) {
+
+    // KWin reports physical screen names in outputChanged. When the stored screen
+    // is a virtual screen (e.g. "HDMI-1/vs:0"), comparing against the physical name
+    // ("HDMI-1") via screensMatch returns false → spurious unsnap. Resolve the
+    // physical newScreenId to the correct virtual screen using the zone geometry center.
+    QString resolvedNewScreen = newScreenId;
+    if (!VirtualScreenId::isVirtual(newScreenId) && VirtualScreenId::isVirtual(storedScreen)) {
+        // The new screen ID is physical but stored is virtual — resolve via zone geometry
+        QRect zoneGeo = m_service->zoneGeometry(currentZoneId, storedScreen);
+        if (zoneGeo.isValid()) {
+            QString vsId = Utils::effectiveScreenIdAt(zoneGeo.center());
+            if (!vsId.isEmpty()) {
+                resolvedNewScreen = vsId;
+            }
+        }
+    }
+
+    if (Utils::screensMatch(storedScreen, resolvedNewScreen)) {
         qCDebug(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved to assigned screen, keeping snap";
         return;
     }

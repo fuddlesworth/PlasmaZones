@@ -70,9 +70,9 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
     /// Uses Tolerance to handle float serialization precision loss.
     bool isValid() const
     {
-        return !id.isEmpty() && !physicalScreenId.isEmpty() && region.x() >= -Tolerance && region.y() >= -Tolerance
-            && region.width() > 0 && region.height() > 0 && region.x() + region.width() <= 1.0 + Tolerance
-            && region.y() + region.height() <= 1.0 + Tolerance;
+        return !id.isEmpty() && !physicalScreenId.isEmpty() && index >= 0 && region.x() >= -Tolerance
+            && region.y() >= -Tolerance && region.width() > 0 && region.height() > 0
+            && region.x() + region.width() <= 1.0 + Tolerance && region.y() + region.height() <= 1.0 + Tolerance;
     }
 
     bool operator!=(const VirtualScreenDef& other) const

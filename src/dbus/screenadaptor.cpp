@@ -152,14 +152,14 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenId)
         // Scale physical size proportionally for virtual screens.
         // A VS covering width=0.5 of the physical monitor gets half the mm width.
         QSizeF physSize = screen->physicalSize();
-        if (mgr && VirtualScreenId::isVirtual(screenId)) {
-            QString physId = VirtualScreenId::extractPhysicalId(screenId);
-            VirtualScreenConfig vsConfig = mgr->virtualScreenConfig(physId);
-            int vsIndex = VirtualScreenId::extractIndex(screenId);
-            if (vsIndex >= 0 && vsIndex < vsConfig.screens.size()) {
-                const QRectF& region = vsConfig.screens[vsIndex].region;
-                physSize = QSizeF(physSize.width() * region.width(), physSize.height() * region.height());
-            }
+        const bool isVirtual = VirtualScreenId::isVirtual(screenId);
+        const QString physId = isVirtual ? VirtualScreenId::extractPhysicalId(screenId) : QString();
+        const int vsIndex = isVirtual ? VirtualScreenId::extractIndex(screenId) : -1;
+        const VirtualScreenConfig vsConfig =
+            (isVirtual && mgr) ? mgr->virtualScreenConfig(physId) : VirtualScreenConfig();
+        if (isVirtual && vsIndex >= 0 && vsIndex < vsConfig.screens.size()) {
+            const QRectF& region = vsConfig.screens[vsIndex].region;
+            physSize = QSizeF(physSize.width() * region.width(), physSize.height() * region.height());
         }
         info[JsonKeys::PhysicalSize] =
             QJsonObject{{JsonKeys::Width, physSize.width()}, {JsonKeys::Height, physSize.height()}};
@@ -168,17 +168,12 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenId)
         info[JsonKeys::Depth] = screen->depth();
         info[JsonKeys::ScreenId] = screenId;
         info[JsonKeys::SerialNumber] = screen->serialNumber();
-        if (VirtualScreenId::isVirtual(screenId)) {
+        if (isVirtual) {
             info[JsonKeys::IsVirtualScreen] = true;
-            QString physId = VirtualScreenId::extractPhysicalId(screenId);
             info[JsonKeys::PhysicalScreenId] = physId;
             // Include the user-facing display name (e.g. "Left", "Right")
-            if (mgr) {
-                VirtualScreenConfig config = mgr->virtualScreenConfig(physId);
-                int vsIndex = VirtualScreenId::extractIndex(screenId);
-                if (vsIndex >= 0 && vsIndex < config.screens.size()) {
-                    info[JsonKeys::VirtualDisplayName] = config.screens[vsIndex].displayName;
-                }
+            if (vsIndex >= 0 && vsIndex < vsConfig.screens.size()) {
+                info[JsonKeys::VirtualDisplayName] = vsConfig.screens[vsIndex].displayName;
             }
         }
 

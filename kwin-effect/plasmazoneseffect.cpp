@@ -225,6 +225,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 m_dragStartedSent = false;
                 m_pendingDragWindowId = windowId;
                 m_pendingDragGeometry = geometry;
+                m_snapDragStartScreenId = getWindowScreenId(w);
 
                 // Check if zones are needed right now. If so, send dragStarted
                 // immediately and grab keyboard. Otherwise defer until activation
@@ -310,6 +311,22 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     return;
                 }
                 m_dragActivationDetected = false;
+
+                // Virtual screen crossing for snap-mode: KWin's outputChanged
+                // doesn't fire when moving between virtual screens on the same
+                // physical monitor, and the frameGeometryChanged handler skips
+                // during drag. Re-resolve now and notify the daemon if changed.
+                if (!cancelled && w && !m_snapDragStartScreenId.isEmpty()) {
+                    const QString dropScreenId = getWindowScreenId(w);
+                    if (dropScreenId != m_snapDragStartScreenId && !dropScreenId.isEmpty()
+                        && samePhysicalScreen(dropScreenId, m_snapDragStartScreenId)) {
+                        qCInfo(lcEffect) << "Snap drag: virtual screen changed" << m_snapDragStartScreenId << "->"
+                                         << dropScreenId;
+                        fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("windowScreenChanged"),
+                                              {windowId, dropScreenId}, QStringLiteral("snap drag VS crossing"));
+                    }
+                }
+                m_snapDragStartScreenId.clear();
 
                 if (!m_dragStartedSent) {
                     // Drag ended without ever activating zones — no D-Bus state to clean up.
@@ -1022,6 +1039,10 @@ void PlasmaZonesEffect::slotDaemonReady()
     // Fetch virtual screen definitions from daemon — needed before any screen ID
     // resolution so that getWindowScreenId() and cursor tracking return virtual
     // screen IDs when subdivisions are configured.
+    // Clear ready flag immediately to close the race window where stale virtual
+    // screen state from the previous daemon cycle is used before the new fetch
+    // completes.
+    m_virtualScreensReady = false;
     fetchAllVirtualScreenConfigs();
 
     // Re-sync floating windows (async, no QDBusInterface needed).

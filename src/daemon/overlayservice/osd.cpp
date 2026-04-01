@@ -117,12 +117,17 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QScreen*& out
 
 void OverlayService::showLayoutOsd(Layout* layout, const QString& screenId)
 {
+    showLayoutOsd(layout, false, screenId);
+}
+
+void OverlayService::showLayoutOsd(Layout* layout, bool locked, const QString& screenId)
+{
     if (!layout) {
         qCDebug(lcOverlay) << "No layout provided for OSD";
         return;
     }
 
-    if (layout->zones().isEmpty()) {
+    if (!locked && layout->zones().isEmpty()) {
         qCDebug(lcOverlay) << "Skipping OSD for empty layout=" << layout->name();
         return;
     }
@@ -135,7 +140,7 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenId)
         return;
     }
 
-    writeQmlProperty(window, QStringLiteral("locked"), false);
+    writeQmlProperty(window, QStringLiteral("locked"), locked);
     writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
     writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
@@ -150,40 +155,8 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenId)
     qreal layoutAR = ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
     sizeAndCenterOsd(window, physScreen, screenGeom, layoutAR);
     QMetaObject::invokeMethod(window, "show");
-    qCInfo(lcOverlay) << "Layout OSD: layout=" << layout->name() << "screen=" << screenId;
-}
-
-void OverlayService::showLockedLayoutOsd(Layout* layout, const QString& screenId)
-{
-    if (!layout) {
-        return;
-    }
-
-    QQuickWindow* window = nullptr;
-    QScreen* physScreen = nullptr;
-    QRect screenGeom;
-    qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, physScreen, screenGeom, aspectRatio, screenId)) {
-        return;
-    }
-
-    writeQmlProperty(window, QStringLiteral("locked"), true);
-    writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
-    writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
-    writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
-    writeQmlProperty(window, QStringLiteral("aspectRatioClass"),
-                     ScreenClassification::toString(layout->aspectRatioClass()));
-    writeQmlProperty(window, QStringLiteral("category"), static_cast<int>(LayoutCategory::Manual));
-    writeQmlProperty(window, QStringLiteral("autoAssign"), layout->autoAssign());
-    writeQmlProperty(window, QStringLiteral("zones"),
-                     layout->zones().isEmpty() ? QVariantList()
-                                               : LayoutUtils::zonesToVariantList(layout, ZoneField::Full));
-    writeFontProperties(window, m_settings);
-
-    qreal layoutAR = ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
-    sizeAndCenterOsd(window, physScreen, screenGeom, layoutAR);
-    QMetaObject::invokeMethod(window, "show");
-    qCInfo(lcOverlay) << "Locked OSD: layout=" << layout->name() << "screen=" << screenId;
+    qCInfo(lcOverlay) << (locked ? "Locked OSD:" : "Layout OSD:") << "layout=" << layout->name()
+                      << "screen=" << screenId;
 }
 
 void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,

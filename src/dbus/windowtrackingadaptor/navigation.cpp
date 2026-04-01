@@ -45,7 +45,13 @@ static QString resolveNavScreen(const WindowTrackingAdaptor* adaptor, const QStr
                 QString physId = VirtualScreenId::extractPhysicalId(storedScreen);
                 QScreen* physScreen = Utils::findScreenByIdOrName(physId);
                 if (physScreen) {
-                    return storedScreen; // Virtual screen is valid, return as-is
+                    // Physical screen exists — verify the virtual screen itself still
+                    // exists (VS config may have changed, e.g. 3 VS → 2 VS)
+                    auto* mgr = ScreenManager::instance();
+                    if (mgr && mgr->effectiveScreenIds().contains(storedScreen)) {
+                        return storedScreen; // Virtual screen is valid, return as-is
+                    }
+                    // Virtual screen gone (config changed), fall through
                 }
                 // Physical screen gone, fall through to cursor-based resolution
             } else if (Utils::findScreenByIdOrName(storedScreen)) {
