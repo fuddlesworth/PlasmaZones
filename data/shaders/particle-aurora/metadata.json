@@ -22,6 +22,7 @@
         {"id": "auroraColor1", "name": "Aurora Color 1", "group": "Colors", "type": "color", "slot": 1, "default": "#00ff88"},
         {"id": "auroraColor2", "name": "Aurora Color 2", "group": "Colors", "type": "color", "slot": 2, "default": "#0088ff"},
         {"id": "auroraColor3", "name": "Aurora Color 3", "group": "Colors", "type": "color", "slot": 3, "default": "#ff00aa"},
+        {"id": "particleCount", "name": "Particle Count", "group": "Particles", "type": "int", "slot": -1, "default": 8192, "min": 512, "max": 16384},
         {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 8, "default": true}
     ]
 }

@@ -47,6 +47,11 @@ QString ShaderRegistry::ParameterInfo::uniformName() const
         return QString();
     }
 
+    // Special: particleCount maps directly to the particleCount Q_PROPERTY (not a uniform slot)
+    if (type == QLatin1String("int") && id == QLatin1String("particleCount")) {
+        return QStringLiteral("particleCount");
+    }
+
     // Image slots 0-3 → uTexture0-3
     if (type == QLatin1String("image")) {
         if (slot >= 0 && slot < 4) {

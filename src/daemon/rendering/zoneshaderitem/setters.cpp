@@ -411,6 +411,16 @@ void ZoneShaderItem::setShaderParams(const QVariantMap& params)
         }
     }
 
+    // Special property params: particleCount routes to the Q_PROPERTY, not a uniform slot
+    static const QLatin1String particleCountKey("particleCount");
+    if (params.contains(particleCountKey)) {
+        bool ok = false;
+        const int count = params.value(particleCountKey).toInt(&ok);
+        if (ok) {
+            setParticleCount(count);
+        }
+    }
+
     Q_EMIT shaderParamsChanged();
     update();
 }
