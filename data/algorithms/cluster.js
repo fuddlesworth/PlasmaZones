@@ -40,9 +40,15 @@ function calculateZones(params) {
         return fillArea(area, count);
     }
 
-    // Without per-window context, clustering is meaningless — fall back to even columns
+    // Detect portrait orientation (needed before fallback)
+    var portrait = false;
+    if (params.screen) {
+        portrait = !!params.screen.portrait;
+    }
+
+    // Without per-window context, clustering is meaningless — fall back to even split
     if (!params.windows || params.windows.length === 0) {
-        return evenColumns(area, count, gap);
+        return evenSplit(area, count, gap, portrait);
     }
 
     // Read custom params with defaults
@@ -55,12 +61,6 @@ function calculateZones(params) {
         if (typeof params.custom.minClusterRatio === "number") {
             minClusterRatio = params.custom.minClusterRatio;
         }
-    }
-
-    // Detect portrait orientation
-    var portrait = false;
-    if (params.screen) {
-        portrait = !!params.screen.portrait;
     }
 
     // ── Build clusters from window appIds ───────────────────────────────
@@ -163,7 +163,12 @@ function calculateZones(params) {
     }
 
     // ── Lay out clusters and their windows ──────────────────────────────
-    var zones = new Array(count);
+    // Pre-fill with full-area fallback so no index is left undefined if
+    // count and params.windows.length diverge during a transient race.
+    var zones = [];
+    for (var zi = 0; zi < count; zi++) {
+        zones.push({ x: area.x, y: area.y, width: area.width, height: area.height });
+    }
     var primaryPos = primaryStart;
 
     for (var ci = 0; ci < numClusters; ci++) {
@@ -217,23 +222,28 @@ function calculateZones(params) {
 }
 
 /**
- * Even-column fallback for preview mode (no per-window context).
- * Each window gets an equal-width column across the full height.
+ * Even-split fallback for preview mode (no per-window context).
+ * Orientation-aware: columns in landscape, rows in portrait.
  */
-function evenColumns(area, count, gap) {
+function evenSplit(area, count, gap, portrait) {
     var gapSpace = (count > 1) ? (count - 1) * gap : 0;
-    var available = area.width - gapSpace;
+    var total = portrait ? area.height : area.width;
+    var available = total - gapSpace;
     if (available <= 0) {
         return fillArea(area, count);
     }
-    var colWidth = Math.floor(available / count);
-    var remainder = available - colWidth * count;
+    var sliceSize = Math.floor(available / count);
+    var remainder = available - sliceSize * count;
     var zones = [];
-    var x = area.x;
+    var pos = portrait ? area.y : area.x;
     for (var i = 0; i < count; i++) {
-        var w = colWidth + (i < remainder ? 1 : 0);
-        zones.push({ x: x, y: area.y, width: w, height: area.height });
-        x += w + gap;
+        var s = sliceSize + (i < remainder ? 1 : 0);
+        if (portrait) {
+            zones.push({ x: area.x, y: pos, width: area.width, height: s });
+        } else {
+            zones.push({ x: pos, y: area.y, width: s, height: area.height });
+        }
+        pos += s + gap;
     }
     return zones;
 }

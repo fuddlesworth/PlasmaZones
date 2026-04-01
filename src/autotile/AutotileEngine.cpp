@@ -1660,14 +1660,9 @@ void AutotileEngine::recalculateLayout(const QString& screenId)
         const auto it = m_config->savedAlgorithmSettings.constFind(algoId);
         if (it != m_config->savedAlgorithmSettings.constEnd() && !it->customParams.isEmpty()) {
             if (algo->supportsCustomParams()) {
-                const QVariantList defs = algo->customParamDefList();
                 for (auto pit = it->customParams.constBegin(); pit != it->customParams.constEnd(); ++pit) {
-                    const QString& key = pit.key();
-                    const bool declared = std::any_of(defs.cbegin(), defs.cend(), [&key](const QVariant& d) {
-                        return d.toMap().value(QLatin1String("name")).toString() == key;
-                    });
-                    if (declared) {
-                        customParams[key] = pit.value();
+                    if (algo->hasCustomParam(pit.key())) {
+                        customParams[pit.key()] = pit.value();
                     }
                 }
             }

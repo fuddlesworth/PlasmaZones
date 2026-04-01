@@ -84,10 +84,10 @@ struct TilingParams
  * ScriptedAlgorithm (for lifecycle hook JS state). Extracts appId via
  * Utils::extractAppId() and identifies the focused window.
  *
- * @param state Current tiling state (must be non-null)
+ * @param state Current tiling state (may be null — returns empty vector)
  * @param windowCount Number of windows to process (may differ from state->tiledWindowCount())
  * @param[out] focusedIndex Set to the index of the focused window, or -1
- * @return WindowInfo vector (size may be less than windowCount if state has fewer windows)
+ * @return WindowInfo vector (empty if state is null; size may be less than windowCount)
  */
 QVector<WindowInfo> buildWindowInfos(const TilingState* state, int windowCount, int& focusedIndex);
 
@@ -347,7 +347,8 @@ public:
      * state->tiledWindowCount() still includes the departing window.
      * Algorithms should use @p windowIndex to identify the departing window
      * but must not assume the tiled window list will remain unchanged
-     * after the call.
+     * after the call. Hooks must NOT reorder or mutate the tiled window
+     * list — the engine relies on list stability for the subsequent removal.
      *
      * Unlike calculateZones() (which receives a const TilingState*),
      * lifecycle hooks receive a mutable pointer so algorithms can update
@@ -379,6 +380,17 @@ public:
      * @return List of param definition maps, or empty if none declared
      */
     virtual QVariantList customParamDefList() const;
+
+    /**
+     * @brief Check if a named custom parameter is declared by this algorithm
+     *
+     * Lighter-weight alternative to customParamDefList() for filtering stale
+     * params on the retile hot path — avoids QVariantList/QVariantMap allocation.
+     *
+     * @param name Parameter name to check
+     * @return true if the algorithm declares a @param with this name
+     */
+    virtual bool hasCustomParam(const QString& name) const;
 
 protected:
     /**

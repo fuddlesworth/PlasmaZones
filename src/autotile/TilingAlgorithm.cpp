@@ -14,9 +14,11 @@ using namespace AutotileDefaults;
 
 QVector<WindowInfo> buildWindowInfos(const TilingState* state, int windowCount, int& focusedIndex)
 {
-    Q_ASSERT(state);
-    QVector<WindowInfo> infos;
     focusedIndex = -1;
+    if (!state) {
+        return {};
+    }
+    QVector<WindowInfo> infos;
     const QStringList windows = state->tiledWindows();
     const QString focusedWin = state->focusedWindow();
     infos.reserve(windowCount);
@@ -130,6 +132,11 @@ bool TilingAlgorithm::supportsCustomParams() const noexcept
 QVariantList TilingAlgorithm::customParamDefList() const
 {
     return {};
+}
+
+bool TilingAlgorithm::hasCustomParam(const QString& /*name*/) const
+{
+    return false;
 }
 
 QVector<int> TilingAlgorithm::distributeEvenly(int total, int count)

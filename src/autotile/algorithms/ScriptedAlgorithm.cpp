@@ -979,6 +979,14 @@ QVariantList ScriptedAlgorithm::customParamDefList() const
     return result;
 }
 
+bool ScriptedAlgorithm::hasCustomParam(const QString& name) const
+{
+    return std::any_of(m_metadata.customParams.cbegin(), m_metadata.customParams.cend(),
+                       [&name](const ScriptedHelpers::CustomParamDef& def) {
+                           return def.name == name;
+                       });
+}
+
 const QVector<ScriptedHelpers::CustomParamDef>& ScriptedAlgorithm::customParamDefs() const
 {
     return m_metadata.customParams;

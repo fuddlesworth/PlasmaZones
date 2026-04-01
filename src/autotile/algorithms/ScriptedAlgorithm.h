@@ -150,6 +150,7 @@ public:
     // Custom parameters (v2)
     bool supportsCustomParams() const noexcept override;
     QVariantList customParamDefList() const override;
+    bool hasCustomParam(const QString& name) const override;
     /**
      * @brief Get the custom parameter definitions declared by this script
      */
