@@ -344,6 +344,169 @@ private Q_SLOTS:
         QVariantMap first = triggers.first().toMap();
         QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3);
     }
+    // =========================================================================
+    // Stale key purging
+    // =========================================================================
+
+    /**
+     * save() must remove stale keys that are not part of the current schema.
+     * Simulates a refactor where a key was renamed: the old key should be
+     * purged after save(), while all valid keys survive.
+     */
+    void testSave_purgesStaleKeys()
+    {
+        IsolatedConfigGuard guard;
+
+        // Inject stale keys into several groups
+        {
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            {
+                auto g = backend->group(ConfigDefaults::activationGroup());
+                g->writeString(QStringLiteral("ObsoleteActivationKey"), QStringLiteral("stale"));
+            }
+            {
+                auto g = backend->group(ConfigDefaults::displayGroup());
+                g->writeBool(QStringLiteral("OldDisplayToggle"), true);
+            }
+            {
+                auto g = backend->group(ConfigDefaults::appearanceGroup());
+                g->writeInt(QStringLiteral("DeprecatedThemeIndex"), 42);
+            }
+            {
+                auto g = backend->group(ConfigDefaults::autotilingGroup());
+                g->writeString(QStringLiteral("RemovedAutotileSetting"), QStringLiteral("gone"));
+            }
+            backend->sync();
+        }
+
+        // Load picks up the stale keys from disk (but ignores them in members)
+        Settings settings;
+
+        // Mutate one value to ensure save actually writes
+        settings.setZonePadding(99);
+        settings.save();
+
+        // Re-read the file and verify stale keys are gone
+        auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+        {
+            auto g = backend->group(ConfigDefaults::activationGroup());
+            QVERIFY2(!g->hasKey(QStringLiteral("ObsoleteActivationKey")),
+                     "Stale key in Activation group must be purged by save()");
+            // Valid key must survive
+            QVERIFY2(g->hasKey(ConfigDefaults::snappingEnabledKey()), "Valid key SnappingEnabled must survive save()");
+        }
+        {
+            auto g = backend->group(ConfigDefaults::displayGroup());
+            QVERIFY2(!g->hasKey(QStringLiteral("OldDisplayToggle")),
+                     "Stale key in Display group must be purged by save()");
+            QVERIFY2(g->hasKey(ConfigDefaults::showNumbersKey()), "Valid key ShowNumbers must survive save()");
+        }
+        {
+            auto g = backend->group(ConfigDefaults::appearanceGroup());
+            QVERIFY2(!g->hasKey(QStringLiteral("DeprecatedThemeIndex")),
+                     "Stale key in Appearance group must be purged by save()");
+        }
+        {
+            auto g = backend->group(ConfigDefaults::autotilingGroup());
+            QVERIFY2(!g->hasKey(QStringLiteral("RemovedAutotileSetting")),
+                     "Stale key in Autotiling group must be purged by save()");
+            QVERIFY2(g->hasKey(ConfigDefaults::autotileEnabledKey()), "Valid key AutotileEnabled must survive save()");
+        }
+    }
+
+    /**
+     * save() must delete per-screen override groups that it doesn't rewrite,
+     * which removes any stale keys they contain. Groups for screens the
+     * Settings object doesn't know about are deleted entirely.
+     */
+    void testSave_purgesStaleKeysInPerScreenGroups()
+    {
+        IsolatedConfigGuard guard;
+
+        // Inject a per-screen group with a valid key and a stale key
+        {
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            {
+                auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
+                g->writeInt(ConfigDefaults::zoneSelectorPositionKey(), 2);
+                g->writeString(QStringLiteral("ObsoletePerScreenKey"), QStringLiteral("stale"));
+            }
+            backend->sync();
+        }
+
+        Settings settings;
+        settings.save();
+
+        auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+        {
+            auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
+            QVERIFY2(!g->hasKey(QStringLiteral("ObsoletePerScreenKey")),
+                     "Stale key in per-screen group must be purged by save()");
+        }
+    }
+
+    /**
+     * save() must NOT purge groups it doesn't manage (e.g., TilingQuickLayoutSlots,
+     * Updates) — those are written independently and must survive a settings save.
+     */
+    void testSave_preservesUnmanagedGroups()
+    {
+        IsolatedConfigGuard guard;
+
+        // Write to unmanaged groups
+        {
+            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            {
+                auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
+                g->writeString(QStringLiteral("1"), QStringLiteral("some-layout-id"));
+            }
+            {
+                auto g = backend->group(QStringLiteral("Updates"));
+                g->writeString(QStringLiteral("DismissedUpdateVersion"), QStringLiteral("2.0.0"));
+            }
+            backend->sync();
+        }
+
+        Settings settings;
+        settings.save();
+
+        auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+        {
+            auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
+            QCOMPARE(g->readString(QStringLiteral("1")), QStringLiteral("some-layout-id"));
+        }
+        {
+            auto g = backend->group(QStringLiteral("Updates"));
+            QCOMPARE(g->readString(QStringLiteral("DismissedUpdateVersion")), QStringLiteral("2.0.0"));
+        }
+    }
+
+    /**
+     * save() round-trip must preserve all valid settings values even after
+     * stale key purging (regression guard — purging must not corrupt data).
+     */
+    void testSave_purgeDoesNotCorruptValues()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        settings.setZonePadding(42);
+        settings.setBorderWidth(7);
+        settings.setActiveOpacity(0.65);
+        settings.setShowZoneNumbers(false);
+        settings.setAutotileEnabled(true);
+        settings.setAnimationDuration(500);
+        settings.save();
+
+        // Reload from disk
+        Settings reloaded;
+        QCOMPARE(reloaded.zonePadding(), 42);
+        QCOMPARE(reloaded.borderWidth(), 7);
+        QCOMPARE(reloaded.activeOpacity(), 0.65);
+        QCOMPARE(reloaded.showZoneNumbers(), false);
+        QCOMPARE(reloaded.autotileEnabled(), true);
+        QCOMPARE(reloaded.animationDuration(), 500);
+    }
 };
 
 QTEST_MAIN(TestSettingsCore)

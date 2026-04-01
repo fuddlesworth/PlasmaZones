@@ -1561,6 +1561,13 @@ private:
     void saveAutotilingConfig(QSettingsConfigBackend* backend);
     void saveEditorConfig(QSettingsConfigGroup& editor);
 
+    // Groups that save() writes exhaustively (excludes unmanaged groups).
+    static QStringList managedGroupNames();
+    // Delete all per-screen override groups (ZoneSelector:*, AutotileScreen:*, SnappingScreen:*).
+    static void deletePerScreenGroups(QSettingsConfigBackend* backend);
+    // Purge stale keys from all managed groups before save() rewrites them.
+    void purgeStaleKeys();
+
     // Config backend — owned (standalone) or non-owned (shared from Daemon)
     std::unique_ptr<QSettingsConfigBackend> m_ownedBackend;
     QSettingsConfigBackend* m_configBackend = nullptr; // always valid after construction
