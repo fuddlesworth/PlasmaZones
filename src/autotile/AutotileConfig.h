@@ -21,8 +21,8 @@ namespace PlasmaZones {
  */
 struct AlgorithmSettings
 {
-    qreal splitRatio = AutotileDefaults::DefaultSplitRatio;
-    int masterCount = AutotileDefaults::DefaultMasterCount;
+    qreal splitRatio = ConfigDefaults::autotileSplitRatio();
+    int masterCount = ConfigDefaults::autotileMasterCount();
     QVariantMap customParams; ///< Algorithm-declared custom parameter values
     bool operator==(const AlgorithmSettings& other) const
     {
@@ -92,7 +92,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 0.1 to 0.9
      * Default: 0.6 (60% master, 40% stack)
      */
-    qreal splitRatio = AutotileDefaults::DefaultSplitRatio;
+    qreal splitRatio = ConfigDefaults::autotileSplitRatio();
 
     /**
      * @brief Number of windows in master area
@@ -100,7 +100,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 1 to 5
      * Default: 1
      */
-    int masterCount = AutotileDefaults::DefaultMasterCount;
+    int masterCount = ConfigDefaults::autotileMasterCount();
 
     /// Per-algorithm saved settings (split ratio + master count).
     /// Saved when switching away from an algorithm, restored when switching back.
@@ -122,7 +122,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 0 to 50
      * Default: 8
      */
-    int innerGap = AutotileDefaults::DefaultGap;
+    int innerGap = ConfigDefaults::autotileInnerGap();
 
     /**
      * @brief Gap from screen edges in pixels (uniform)
@@ -130,7 +130,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 0 to 50
      * Default: 8
      */
-    int outerGap = AutotileDefaults::DefaultGap;
+    int outerGap = ConfigDefaults::autotileOuterGap();
 
     /**
      * @brief Whether to use per-side outer gaps instead of uniform
@@ -209,7 +209,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 1 to 12
      * Default: 6
      */
-    int maxWindows = AutotileDefaults::DefaultMaxWindows;
+    int maxWindows = ConfigDefaults::autotileMaxWindows();
 
     // ═══════════════════════════════════════════════════════════════════════
     // Comparison and Serialization

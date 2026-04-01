@@ -10,6 +10,7 @@
 #include "autotile/TilingState.h"
 #include "autotile/algorithms/ScriptedAlgorithm.h"
 #include "core/constants.h"
+#include "config/configdefaults.h"
 
 #include "../helpers/ScriptTestHelpers.h"
 #include "../helpers/TilingTestHelpers.h"
@@ -195,8 +196,8 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
         QVERIFY(!algo.supportsMasterCount());
         QVERIFY(!algo.supportsSplitRatio());
-        QCOMPARE(algo.defaultSplitRatio(), AutotileDefaults::DefaultSplitRatio);
-        QCOMPARE(algo.defaultMaxWindows(), AutotileDefaults::DefaultMaxWindows);
+        QCOMPARE(algo.defaultSplitRatio(), ConfigDefaults::autotileSplitRatio());
+        QCOMPARE(algo.defaultMaxWindows(), ConfigDefaults::autotileMaxWindows());
         QCOMPARE(algo.minimumWindows(), 1);
         QCOMPARE(algo.masterZoneIndex(), -1);
         QVERIFY(!algo.producesOverlappingZones());

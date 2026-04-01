@@ -3,6 +3,7 @@
 
 #include "TilingAlgorithm.h"
 #include "TilingState.h"
+#include "config/configdefaults.h"
 #include "core/constants.h"
 #include "core/utils.h"
 #include <algorithm>
@@ -52,7 +53,7 @@ bool TilingAlgorithm::supportsSplitRatio() const
 
 qreal TilingAlgorithm::defaultSplitRatio() const
 {
-    return DefaultSplitRatio;
+    return ConfigDefaults::autotileSplitRatio();
 }
 
 int TilingAlgorithm::minimumWindows() const
@@ -62,7 +63,7 @@ int TilingAlgorithm::minimumWindows() const
 
 int TilingAlgorithm::defaultMaxWindows() const
 {
-    return DefaultMaxWindows;
+    return ConfigDefaults::autotileMaxWindows();
 }
 
 bool TilingAlgorithm::producesOverlappingZones() const

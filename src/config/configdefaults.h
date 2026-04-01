@@ -658,7 +658,7 @@ public:
     {
         return QStringLiteral("bsp");
     }
-    static double autotileSplitRatio()
+    static constexpr qreal autotileSplitRatio()
     {
         return 0.5;
     }
@@ -670,7 +670,7 @@ public:
     {
         return AutotileDefaults::MaxSplitRatio;
     }
-    static int autotileMasterCount()
+    static constexpr int autotileMasterCount()
     {
         return 1;
     }
@@ -682,7 +682,7 @@ public:
     {
         return AutotileDefaults::MaxMasterCount;
     }
-    static int autotileInnerGap()
+    static constexpr int autotileInnerGap()
     {
         return 8;
     }
@@ -694,7 +694,7 @@ public:
     {
         return AutotileDefaults::MaxGap;
     }
-    static int autotileOuterGap()
+    static constexpr int autotileOuterGap()
     {
         return 8;
     }
@@ -758,27 +758,27 @@ public:
     {
         return AutotileDefaults::MaxGap;
     }
-    static bool autotileFocusNewWindows()
+    static constexpr bool autotileFocusNewWindows()
     {
         return true;
     }
-    static bool autotileSmartGaps()
+    static constexpr bool autotileSmartGaps()
     {
         return true;
     }
-    static int autotileInsertPosition()
+    static constexpr int autotileInsertPosition()
     {
         return 0;
     }
     static constexpr int autotileInsertPositionMin()
     {
-        return 0;
+        return AutotileDefaults::MinInsertPosition;
     }
     static constexpr int autotileInsertPositionMax()
     {
-        return 2;
+        return AutotileDefaults::MaxInsertPosition;
     }
-    static int autotileMaxWindows()
+    static constexpr int autotileMaxWindows()
     {
         return 5;
     }
@@ -794,17 +794,17 @@ public:
     {
         return true;
     }
-    static int animationDuration()
+    static constexpr int animationDuration()
     {
         return 300;
     }
     static constexpr int animationDurationMin()
     {
-        return 50;
+        return AutotileDefaults::MinAnimationDuration;
     }
     static constexpr int animationDurationMax()
     {
-        return 500;
+        return AutotileDefaults::MaxAnimationDuration;
     }
     static int animationSequenceMode()
     {

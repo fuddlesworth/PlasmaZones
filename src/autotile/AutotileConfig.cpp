@@ -58,11 +58,11 @@ QHash<QString, AlgorithmSettings> AutotileConfig::perAlgoFromVariantMap(const QV
             continue;
         const QVariantMap entry = it.value().toMap();
         const QVariant ratioVar = entry.value(PerAlgoKeys::SplitRatio);
-        const qreal ratio =
-            std::clamp(ratioVar.isValid() ? ratioVar.toDouble() : DefaultSplitRatio, MinSplitRatio, MaxSplitRatio);
+        const qreal ratio = std::clamp(ratioVar.isValid() ? ratioVar.toDouble() : ConfigDefaults::autotileSplitRatio(),
+                                       MinSplitRatio, MaxSplitRatio);
         const QVariant mcVar = entry.value(PerAlgoKeys::MasterCount);
-        const int masterCount =
-            std::clamp(mcVar.isValid() ? mcVar.toInt() : DefaultMasterCount, MinMasterCount, MaxMasterCount);
+        const int masterCount = std::clamp(mcVar.isValid() ? mcVar.toInt() : ConfigDefaults::autotileMasterCount(),
+                                           MinMasterCount, MaxMasterCount);
         AlgorithmSettings settings{ratio, masterCount, {}};
         // Load custom params if present
         const QVariant customVar = entry.value(PerAlgoKeys::CustomParams);

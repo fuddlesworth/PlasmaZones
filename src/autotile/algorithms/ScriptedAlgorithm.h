@@ -233,7 +233,7 @@ private:
     int m_cachedMinimumWindows = 1;
     int m_cachedDefaultMaxWindows = 6;
     int m_cachedMasterZoneIndex = -1;
-    qreal m_cachedDefaultSplitRatio = AutotileDefaults::DefaultSplitRatio;
+    qreal m_cachedDefaultSplitRatio = ConfigDefaults::autotileSplitRatio();
     bool m_cachedProducesOverlappingZones = false;
     bool m_cachedSupportsMasterCount = false;
     bool m_cachedSupportsSplitRatio = false;

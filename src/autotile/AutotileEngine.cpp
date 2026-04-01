@@ -450,7 +450,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
             m_config->masterCount = it->masterCount;
         } else {
             m_config->splitRatio = algo->defaultSplitRatio();
-            m_config->masterCount = AutotileDefaults::DefaultMasterCount;
+            m_config->masterCount = ConfigDefaults::autotileMasterCount();
         }
     };
 

@@ -236,7 +236,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_cachedValuesLoaded = false;
     m_cachedMasterZoneIndex = -1;
     m_cachedDefaultMaxWindows = 6;
-    m_cachedDefaultSplitRatio = AutotileDefaults::DefaultSplitRatio;
+    m_cachedDefaultSplitRatio = ConfigDefaults::autotileSplitRatio();
     m_cachedMinimumWindows = 1;
     m_cachedSupportsMasterCount = false;
     m_cachedSupportsSplitRatio = false;
@@ -602,8 +602,8 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
         jsParams.setProperty(QStringLiteral("splitRatio"),
                              std::clamp(params.state->splitRatio(), MinSplitRatio, MaxSplitRatio));
     } else {
-        jsParams.setProperty(QStringLiteral("masterCount"), DefaultMasterCount);
-        jsParams.setProperty(QStringLiteral("splitRatio"), DefaultSplitRatio);
+        jsParams.setProperty(QStringLiteral("masterCount"), ConfigDefaults::autotileMasterCount());
+        jsParams.setProperty(QStringLiteral("splitRatio"), ConfigDefaults::autotileSplitRatio());
     }
 
     // Split tree (read-only deep copy for memory-aware scripts)

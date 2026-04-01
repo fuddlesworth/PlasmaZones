@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 
+#include "config/configdefaults.h"
 #include "core/constants.h"
 
 #include <QJsonObject>
@@ -25,7 +26,8 @@ namespace PlasmaZones {
  */
 struct PLASMAZONES_EXPORT SplitNode
 {
-    qreal splitRatio = AutotileDefaults::DefaultSplitRatio; ///< How to divide this node's space (first child fraction)
+    qreal splitRatio =
+        PlasmaZones::ConfigDefaults::autotileSplitRatio(); ///< How to divide this node's space (first child fraction)
     bool splitHorizontal = false; ///< true = top/bottom, false = left/right
     std::unique_ptr<SplitNode> first; ///< First child (left or top)
     std::unique_ptr<SplitNode> second; ///< Second child (right or bottom)
@@ -196,7 +198,7 @@ public:
      * @param defaultSplitRatio Default split ratio for new internal nodes
      */
     void rebuildFromOrder(const QStringList& tiledWindows,
-                          qreal defaultSplitRatio = PlasmaZones::AutotileDefaults::DefaultSplitRatio);
+                          qreal defaultSplitRatio = PlasmaZones::ConfigDefaults::autotileSplitRatio());
 
     // ═══════════════════════════════════════════════════════════════════════
     // Serialization

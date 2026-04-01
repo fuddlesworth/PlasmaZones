@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "config/configdefaults.h"
 #include "plasmazones_export.h"
 #include <QObject>
 #include <QJsonObject>
@@ -430,8 +431,8 @@ private:
     QStringList m_windowOrder;
     QSet<QString> m_floatingWindows;
     QString m_focusedWindow;
-    int m_masterCount = 1;
-    qreal m_splitRatio = 0.6;
+    int m_masterCount = ConfigDefaults::autotileMasterCount();
+    qreal m_splitRatio = ConfigDefaults::autotileSplitRatio();
     QVector<QRect> m_calculatedZones;
     std::unique_ptr<SplitTree> m_splitTree;
 

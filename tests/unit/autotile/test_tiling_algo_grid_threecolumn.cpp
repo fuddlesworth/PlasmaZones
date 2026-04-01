@@ -220,6 +220,7 @@ private Q_SLOTS:
     {
         QRect screen(0, 0, 1920, 1080);
         TilingState state(QStringLiteral("test"));
+        state.setSplitRatio(0.6); // Explicit ratio for deterministic geometry
         auto zones = threeCol()->calculateZones({3, screen, &state, 10, EdgeGaps::uniform(20)});
         QCOMPARE(zones.size(), 3);
         QCOMPARE(zones[0].x(), 402);

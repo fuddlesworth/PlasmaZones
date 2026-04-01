@@ -2025,7 +2025,7 @@ void SettingsController::setCustomParam(const QString& algorithmId, const QStrin
         algoEntry[PerAlgoKeys::SplitRatio] = algo->defaultSplitRatio();
     }
     if (!algoEntry.contains(PerAlgoKeys::MasterCount)) {
-        algoEntry[PerAlgoKeys::MasterCount] = AutotileDefaults::DefaultMasterCount;
+        algoEntry[PerAlgoKeys::MasterCount] = ConfigDefaults::autotileMasterCount();
     }
 
     perAlgo[algorithmId] = algoEntry;

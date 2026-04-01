@@ -9,6 +9,7 @@
 #include "autotile/TilingAlgorithm.h"
 #include "autotile/TilingState.h"
 #include "core/constants.h"
+#include "config/configdefaults.h"
 
 #include "../helpers/TilingTestHelpers.h"
 #include "../helpers/ScriptedAlgoTestSetup.h"
@@ -58,7 +59,7 @@ private Q_SLOTS:
         QVERIFY(algo->supportsMasterCount());
         QVERIFY(algo->supportsSplitRatio());
         QCOMPARE(algo->masterZoneIndex(), 0);
-        QCOMPARE(algo->defaultSplitRatio(), AutotileDefaults::DefaultSplitRatio);
+        QCOMPARE(algo->defaultSplitRatio(), 0.6); // master-stack declares @defaultSplitRatio 0.6
     }
 
     void testMasterStack_oneWindow()
