@@ -42,7 +42,7 @@ function calculateZones(params) {
 
     // Without per-window context, clustering is meaningless — fall back to even columns
     if (!params.windows || params.windows.length === 0) {
-        return fillArea(area, count);
+        return evenColumns(area, count, gap);
     }
 
     // Read custom params with defaults
@@ -213,5 +213,27 @@ function calculateZones(params) {
         primaryPos += clusterPrimary + gap;
     }
 
+    return zones;
+}
+
+/**
+ * Even-column fallback for preview mode (no per-window context).
+ * Each window gets an equal-width column across the full height.
+ */
+function evenColumns(area, count, gap) {
+    var gapSpace = (count > 1) ? (count - 1) * gap : 0;
+    var available = area.width - gapSpace;
+    if (available <= 0) {
+        return fillArea(area, count);
+    }
+    var colWidth = Math.floor(available / count);
+    var remainder = available - colWidth * count;
+    var zones = [];
+    var x = area.x;
+    for (var i = 0; i < count; i++) {
+        var w = colWidth + (i < remainder ? 1 : 0);
+        zones.push({ x: x, y: area.y, width: w, height: area.height });
+        x += w + gap;
+    }
     return zones;
 }

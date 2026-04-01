@@ -3,10 +3,28 @@
 
 #pragma once
 
+#include "autotile/TilingAlgorithm.h"
+
 #include <QRect>
 #include <QVector>
 
 namespace PlasmaZones::TestHelpers {
+
+/**
+ * @brief Construct TilingParams with named fields (avoids -Wmissing-field-initializers).
+ */
+inline TilingParams makeParams(int count, const QRect& screen, const TilingState* state, int gap = 0,
+                               EdgeGaps outerGaps = {}, QVector<QSize> minSizes = {})
+{
+    TilingParams p;
+    p.windowCount = count;
+    p.screenGeometry = screen;
+    p.state = state;
+    p.innerGap = gap;
+    p.outerGaps = outerGaps;
+    p.minSizes = std::move(minSizes);
+    return p;
+}
 
 /**
  * @brief Verify zones have the same total area as the screen.
