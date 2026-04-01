@@ -128,7 +128,8 @@ void SplitTree::splitLeaf(SplitNode* leaf, const QString& newId, qreal ratio)
     leaf->windowId.clear();
     leaf->splitHorizontal = horizontal;
     // Use provided ratio if valid, otherwise use default
-    leaf->splitRatio = (ratio > 0.0) ? std::clamp(ratio, MinSplitRatio, MaxSplitRatio) : DefaultSplitRatio;
+    leaf->splitRatio =
+        (ratio > 0.0) ? std::clamp(ratio, MinSplitRatio, MaxSplitRatio) : ConfigDefaults::autotileSplitRatio();
     leaf->first = std::move(firstChild);
     leaf->second = std::move(secondChild);
 }

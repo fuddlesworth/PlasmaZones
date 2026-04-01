@@ -247,6 +247,19 @@ Flickable {
 
                 }
 
+                // Algorithm description (from script metadata)
+                Label {
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: root.algorithmPreviewWidth
+                    Layout.alignment: Qt.AlignHCenter
+                    text: root.algoCapabilities ? (root.algoCapabilities.description || "") : ""
+                    visible: text !== ""
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    opacity: 0.7
+                    font: Kirigami.Theme.smallFont
+                }
+
                 // Algorithm selection - uses LayoutComboBox with preview thumbnails
                 ColumnLayout {
                     Layout.alignment: Qt.AlignHCenter

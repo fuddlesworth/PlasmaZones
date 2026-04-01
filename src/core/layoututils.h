@@ -66,6 +66,7 @@ struct PLASMAZONES_EXPORT UnifiedLayoutEntry
     bool supportsMasterCount = false; ///< True if algorithm supports configurable master window count
     bool supportsSplitRatio = false; ///< True if algorithm supports configurable split ratio
     bool producesOverlappingZones = false; ///< True if algorithm can produce overlapping zones
+    bool supportsCustomParams = false; ///< True if algorithm declares @param custom parameters
     bool isScripted = false; ///< True if algorithm is loaded from a .js script file
     bool isUserScript = false; ///< True if script is from the user's local directory
 

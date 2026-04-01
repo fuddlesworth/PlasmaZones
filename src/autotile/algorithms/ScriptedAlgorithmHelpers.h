@@ -6,10 +6,48 @@
 #include <QJSValue>
 #include <QRect>
 #include <QString>
+#include <QStringList>
+#include <QVariant>
+#include <QVariantMap>
 #include <QVector>
 
 namespace PlasmaZones {
 namespace ScriptedHelpers {
+
+/**
+ * @brief Definition of a custom algorithm parameter declared via // @param
+ *
+ * Format: // @param name type default "description"
+ * Supported types: number, bool, enum
+ * Enum format: // @param name enum "default" ["opt1","opt2"] "description"
+ */
+struct CustomParamDef
+{
+    QString name; ///< Parameter name (camelCase, used as key in params.custom)
+    QString type; ///< "number", "bool", or "enum"
+    QVariant defaultValue; ///< Default value (qreal for number, bool for bool, QString for enum)
+    QString description; ///< Human-readable description for settings UI
+    qreal minValue = 0.0; ///< Minimum for number type (0.0 if unset)
+    qreal maxValue = 1.0; ///< Maximum for number type (1.0 if unset)
+    QStringList enumOptions; ///< Valid options for enum type
+
+    /// Convert to QVariantMap for QML consumption (name, type, defaultValue, description, etc.)
+    QVariantMap toVariantMap() const
+    {
+        QVariantMap m;
+        m[QLatin1String("name")] = name;
+        m[QLatin1String("type")] = type;
+        m[QLatin1String("defaultValue")] = defaultValue;
+        m[QLatin1String("description")] = description;
+        if (type == QLatin1String("number")) {
+            m[QLatin1String("minValue")] = minValue;
+            m[QLatin1String("maxValue")] = maxValue;
+        } else if (type == QLatin1String("enum")) {
+            m[QLatin1String("enumOptions")] = QVariant(enumOptions);
+        }
+        return m;
+    }
+};
 
 /**
  * @brief Parsed script metadata from // @key value comment lines
@@ -30,6 +68,7 @@ struct ScriptMetadata
     bool centerLayout = false;
     bool supportsMinSizes = true; ///< Default true — most algorithms support min sizes
     QString builtinId; ///< Optional: register as built-in algorithm ID instead of "script:filename"
+    QVector<CustomParamDef> customParams; ///< Algorithm-declared custom parameters
 };
 
 /**

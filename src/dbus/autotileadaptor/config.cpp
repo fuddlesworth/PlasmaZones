@@ -5,6 +5,7 @@
 
 #include "autotile/AutotileConfig.h"
 #include "autotile/AutotileEngine.h"
+#include "config/configdefaults.h"
 
 #include "core/constants.h"
 #include "core/logging.h"
@@ -44,7 +45,7 @@ bool AutotileAdaptor::ensureEngineAndConfig(const char* methodName) const
 double AutotileAdaptor::masterRatio() const
 {
     if (!m_engine || !m_engine->config()) {
-        return AutotileDefaults::DefaultSplitRatio;
+        return ConfigDefaults::autotileSplitRatio();
     }
     return m_engine->config()->splitRatio;
 }
@@ -68,7 +69,7 @@ void AutotileAdaptor::setMasterRatio(double ratio)
 int AutotileAdaptor::masterCount() const
 {
     if (!m_engine || !m_engine->config()) {
-        return AutotileDefaults::DefaultMasterCount;
+        return ConfigDefaults::autotileMasterCount();
     }
     return m_engine->config()->masterCount;
 }
@@ -89,7 +90,7 @@ void AutotileAdaptor::setMasterCount(int count)
 int AutotileAdaptor::innerGap() const
 {
     if (!m_engine || !m_engine->config()) {
-        return AutotileDefaults::DefaultGap;
+        return ConfigDefaults::autotileInnerGap();
     }
     return m_engine->config()->innerGap;
 }
@@ -109,7 +110,7 @@ void AutotileAdaptor::setInnerGap(int gap)
 int AutotileAdaptor::outerGap() const
 {
     if (!m_engine || !m_engine->config()) {
-        return AutotileDefaults::DefaultGap;
+        return ConfigDefaults::autotileOuterGap();
     }
     return m_engine->config()->outerGap;
 }
@@ -129,7 +130,7 @@ void AutotileAdaptor::setOuterGap(int gap)
 bool AutotileAdaptor::smartGaps() const
 {
     if (!m_engine || !m_engine->config()) {
-        return AutotileDefaults::DefaultSmartGaps;
+        return ConfigDefaults::autotileSmartGaps();
     }
     return m_engine->config()->smartGaps;
 }
@@ -149,7 +150,7 @@ void AutotileAdaptor::setSmartGaps(bool enabled)
 bool AutotileAdaptor::focusNewWindows() const
 {
     if (!m_engine || !m_engine->config()) {
-        return AutotileDefaults::DefaultFocusNewWindows;
+        return ConfigDefaults::autotileFocusNewWindows();
     }
     return m_engine->config()->focusNewWindows;
 }

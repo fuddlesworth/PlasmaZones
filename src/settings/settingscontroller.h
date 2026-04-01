@@ -554,6 +554,31 @@ public:
     Q_INVOKABLE bool duplicateAlgorithm(const QString& algorithmId);
     Q_INVOKABLE bool exportAlgorithm(const QString& algorithmId, const QString& destPath);
 
+    /**
+     * @brief Get current custom param values for an algorithm, merged with defaults
+     *
+     * Returns a list of {name, type, value, defaultValue, description, minValue, maxValue, enumOptions}
+     * maps. The "value" field is the currently saved value, falling back to the declared default.
+     *
+     * @param algorithmId Algorithm to query
+     * @return List of param value maps, or empty if no custom params declared
+     */
+    Q_INVOKABLE QVariantList customParamsForAlgorithm(const QString& algorithmId) const;
+
+    /**
+     * @brief Set a custom parameter value for an algorithm
+     *
+     * Saves the value into autotilePerAlgorithmSettings (staged — applied
+     * on save, like all other settings). The value is coerced and validated
+     * against the algorithm's @param declaration: numbers are clamped to
+     * [min, max], bools are coerced, enums are checked against the options list.
+     *
+     * @param algorithmId Algorithm to configure
+     * @param paramName Parameter name (must match a declared @param)
+     * @param value New value (coerced to the declared type)
+     */
+    Q_INVOKABLE void setCustomParam(const QString& algorithmId, const QString& paramName, const QVariant& value);
+
     // ── Per-screen autotile overrides ────────────────────────────────────────
     Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenName) const;
     Q_INVOKABLE void setPerScreenAutotileSetting(const QString& screenName, const QString& key, const QVariant& value);
@@ -588,6 +613,7 @@ Q_SIGNALS:
     void layoutsChanged();
     void layoutAdded(const QString& layoutId);
     void availableAlgorithmsChanged();
+    void customParamChanged(const QString& algorithmId, const QString& paramName);
     void algorithmCreated(const QString& algorithmId);
     void algorithmOperationFailed(const QString& reason);
     void layoutOperationFailed(const QString& reason);
@@ -638,6 +664,9 @@ private Q_SLOTS:
     void onScreenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
 
 private:
+    /// Resolve saved custom params for the given algorithm from per-algorithm settings
+    QVariantMap savedCustomParams(const QString& algorithmId) const;
+
     QString scriptedFilePath(const QString& algorithmId) const;
     void watchForAlgorithmRegistration(const QString& expectedId);
     void cancelAlgorithmWatcher(const QString& expectedId);

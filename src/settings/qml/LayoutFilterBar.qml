@@ -40,6 +40,7 @@ RowLayout {
     property bool showSplitRatio: true
     property bool showOverlapping: true
     property bool showPersistent: true
+    property bool showCustomParams: true
     // Whether any non-default filter is active (drives badge visibility)
     readonly property bool hasActiveFilters: {
         if (filterText.length > 0)
@@ -48,7 +49,7 @@ RowLayout {
         if (root.viewMode === 0)
             return !showAspectAny || !showAspectStandard || !showAspectUltrawide || !showAspectSuperUltrawide || !showAspectPortrait || showHidden || !showAutoLayouts || !showManualLayouts || !showBuiltInLayouts || !showUserLayouts;
         else
-            return !showBuiltInAlgorithms || !showUserAlgorithms || showHidden || !showMasterCount || !showSplitRatio || !showOverlapping || !showPersistent;
+            return !showBuiltInAlgorithms || !showUserAlgorithms || showHidden || !showMasterCount || !showSplitRatio || !showOverlapping || !showPersistent || !showCustomParams;
     }
     // ── Group-by index constants (must match model order below) ───────────
     // Snapping
@@ -66,7 +67,7 @@ RowLayout {
     readonly property var snappingGroupModel: [i18n("Aspect Ratio"), i18n("Zone Count"), i18n("Auto / Manual"), i18n("Source"), i18n("None")]
     readonly property var tilingGroupModel: [i18n("Capability"), i18n("Source"), i18n("Persistent"), i18n("None")]
     readonly property var snappingSortModel: [i18n("Name"), i18n("Zone Count")]
-    readonly property var tilingSortModel: [i18n("Name")]
+    readonly property var tilingSortModel: [i18n("Name"), i18n("Zone Count")]
     // Guard to suppress redundant filterSettingsChanged during batch resets
     property bool _resetting: false
     property int _previousViewMode: 0
@@ -75,7 +76,7 @@ RowLayout {
     // NOTE: when adding a filter, also update: property declarations,
     // _defaultValues, _snappingStateMap or _tilingStateMap, and persistedState.
     readonly property var _snappingStateMap: [["groupByIndex", "snappingGroupByIndex"], ["sortByIndex", "snappingSortByIndex"], ["sortAscending", "snappingSortAscending"], ["showHidden", "snappingShowHidden"], ["showAspectAny", "snappingShowAspectAny"], ["showAspectStandard", "snappingShowAspectStandard"], ["showAspectUltrawide", "snappingShowAspectUltrawide"], ["showAspectSuperUltrawide", "snappingShowAspectSuperUltrawide"], ["showAspectPortrait", "snappingShowAspectPortrait"], ["showAutoLayouts", "snappingShowAutoLayouts"], ["showManualLayouts", "snappingShowManualLayouts"], ["showBuiltInLayouts", "snappingShowBuiltInLayouts"], ["showUserLayouts", "snappingShowUserLayouts"]]
-    readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"]]
+    readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"], ["showCustomParams", "tilingShowCustomParams"]]
     // Default values for all resettable filter properties (not group/sort).
     // Adding a filter requires updating: property declaration, _defaultValues,
     // the relevant state map, persistedState, hasActiveFilters, menu item, and JS logic.
@@ -95,7 +96,8 @@ RowLayout {
         "showMasterCount": true,
         "showSplitRatio": true,
         "showOverlapping": true,
-        "showPersistent": true
+        "showPersistent": true,
+        "showCustomParams": true
     }
 
     signal filterSettingsChanged()
@@ -429,6 +431,12 @@ RowLayout {
             checked: root.showPersistent
         }
 
+        FilterMenuItem {
+            text: i18n("Custom Parameters")
+            filterProperty: "showCustomParams"
+            checked: root.showCustomParams
+        }
+
         MenuSeparator {
         }
 
@@ -475,6 +483,7 @@ RowLayout {
         property bool tilingShowSplitRatio: true
         property bool tilingShowOverlapping: true
         property bool tilingShowPersistent: true
+        property bool tilingShowCustomParams: true
 
         category: "LayoutsPageFilterBar"
     }

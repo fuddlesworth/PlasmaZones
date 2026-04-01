@@ -86,7 +86,10 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
         // Pre-populate saved settings for centered-master
-        engine.config()->savedAlgorithmSettings[QStringLiteral("centered-master")] = {0.45, 2};
+        AlgorithmSettings cmSaved;
+        cmSaved.splitRatio = 0.45;
+        cmSaved.masterCount = 2;
+        engine.config()->savedAlgorithmSettings[QStringLiteral("centered-master")] = cmSaved;
 
         engine.setAlgorithm(QLatin1String("master-stack"));
 

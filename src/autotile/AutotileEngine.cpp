@@ -38,6 +38,7 @@ namespace {
 // If windows fail to open (e.g., app crash during startup), this prevents
 // m_pendingInitialOrders from leaking state indefinitely.
 constexpr int PendingOrderTimeoutMs = 10000;
+
 } // namespace
 
 AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
@@ -431,7 +432,10 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // Only save after the first setAlgorithm() call has completed, to avoid
     // persisting uninitialised struct defaults from the constructor.
     if (m_algorithmEverSet && oldAlgo) {
-        m_config->savedAlgorithmSettings[m_algorithmId] = {m_config->splitRatio, m_config->masterCount};
+        auto& entry = m_config->savedAlgorithmSettings[m_algorithmId];
+        entry.splitRatio = m_config->splitRatio;
+        entry.masterCount = m_config->masterCount;
+        // customParams are not touched here — only splitRatio/masterCount are engine-managed
     }
 
     // Look up saved settings AFTER the save above — insertion may rehash the
@@ -446,7 +450,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
             m_config->masterCount = it->masterCount;
         } else {
             m_config->splitRatio = algo->defaultSplitRatio();
-            m_config->masterCount = AutotileDefaults::DefaultMasterCount;
+            m_config->masterCount = ConfigDefaults::autotileMasterCount();
         }
     };
 
@@ -1403,6 +1407,14 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     }
 
     if (inserted) {
+        // Notify algorithm via lifecycle hook before retile
+        TilingAlgorithm* algo = effectiveAlgorithm(screenId);
+        if (algo && algo->supportsLifecycleHooks() && state) {
+            const int idx = state->tiledWindows().indexOf(windowId);
+            if (idx >= 0) {
+                algo->onWindowAdded(state, idx);
+            }
+        }
         scheduleRetileForScreen(screenId);
     }
 }
@@ -1412,6 +1424,19 @@ void AutotileEngine::onWindowRemoved(const QString& windowId)
     const QString screenId = m_windowToStateKey.value(windowId).screenId;
     if (screenId.isEmpty()) {
         return;
+    }
+
+    // Notify algorithm via lifecycle hook before removal
+    TilingState* state = stateForScreen(screenId);
+    TilingAlgorithm* algo = effectiveAlgorithm(screenId);
+    if (algo && algo->supportsLifecycleHooks() && state) {
+        const int idx = state->tiledWindows().indexOf(windowId);
+        if (idx >= 0) {
+            algo->onWindowRemoved(state, idx);
+        } else {
+            qCDebug(lcAutotile) << "onWindowRemoved: window" << windowId
+                                << "not found in tiling state — lifecycle hook skipped";
+        }
     }
 
     removeWindow(windowId);
@@ -1635,13 +1660,58 @@ void AutotileEngine::recalculateLayout(const QString& screenId)
         }
     }
 
+    // Build per-window metadata for algorithm context
+    int focusedIndex = -1;
+    QVector<WindowInfo> windowInfos = buildWindowInfos(state, windowCount, focusedIndex);
+
+    // Build screen metadata for orientation-aware algorithms
+    TilingScreenInfo screenInfo;
+    screenInfo.id = screenId;
+    {
+        QScreen* qscreen = Utils::findScreenByIdOrName(screenId);
+        if (qscreen) {
+            const QRect geom = qscreen->geometry();
+            screenInfo.portrait = geom.height() > geom.width();
+            screenInfo.aspectRatio = Utils::screenAspectRatio(qscreen);
+        }
+    }
+
+    // Resolve custom params for this algorithm from saved settings.
+    // Filter out stale params that no longer match the algorithm's declarations
+    // (e.g., user edited the JS file and renamed/removed a @param).
+    QVariantMap customParams;
+    if (m_config) {
+        const auto it = m_config->savedAlgorithmSettings.constFind(algoId);
+        if (it != m_config->savedAlgorithmSettings.constEnd() && !it->customParams.isEmpty()) {
+            if (algo->supportsCustomParams()) {
+                for (auto pit = it->customParams.constBegin(); pit != it->customParams.constEnd(); ++pit) {
+                    if (algo->hasCustomParam(pit.key())) {
+                        customParams[pit.key()] = pit.value();
+                    }
+                }
+            }
+            // else: algorithm doesn't support custom params — don't pass any
+        }
+    }
+
     // Let memory-based algorithms prepare their state (e.g., lazily create a SplitTree)
     // before calculateZones(). Virtual dispatch avoids concrete type casts here.
     algo->prepareTilingState(state);
 
     // Pass minSizes to algorithm so it can incorporate them directly into zone
     // calculations using its topology knowledge (split tree, column structure, etc.)
-    QVector<QRect> zones = algo->calculateZones({windowCount, screen, state, innerGap, outerGaps, minSizes});
+    TilingParams tilingParams;
+    tilingParams.windowCount = windowCount;
+    tilingParams.screenGeometry = screen;
+    tilingParams.state = state;
+    tilingParams.innerGap = innerGap;
+    tilingParams.outerGaps = outerGaps;
+    tilingParams.minSizes = minSizes;
+    tilingParams.windowInfos = windowInfos;
+    tilingParams.focusedIndex = focusedIndex;
+    tilingParams.screenInfo = screenInfo;
+    tilingParams.customParams = customParams;
+    QVector<QRect> zones = algo->calculateZones(tilingParams);
 
     // Validate algorithm returned correct number of zones
     if (zones.size() != windowCount) {

@@ -24,10 +24,14 @@ void populatePreviewSavedSettings(AlgorithmRegistry::PreviewParams& params,
                                   const QHash<QString, AlgorithmSettings>& savedSettings)
 {
     for (auto it = savedSettings.constBegin(); it != savedSettings.constEnd(); ++it) {
-        params.savedAlgorithmSettings[it.key()] = QVariantMap{
+        QVariantMap entry{
             {PerAlgoKeys::MasterCount, it.value().masterCount},
             {PerAlgoKeys::SplitRatio, it.value().splitRatio},
         };
+        if (!it.value().customParams.isEmpty()) {
+            entry[PerAlgoKeys::CustomParams] = it.value().customParams;
+        }
+        params.savedAlgorithmSettings[it.key()] = entry;
     }
 }
 } // anonymous namespace

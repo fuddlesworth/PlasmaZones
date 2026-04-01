@@ -38,11 +38,13 @@
 #include <QTimer>
 #include <QUrl>
 
+#include <algorithm>
 #include <memory>
 
 namespace PlasmaZones {
 
 namespace {
+
 QString userAlgorithmsDir()
 {
     return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
@@ -1928,10 +1930,124 @@ QVariantList SettingsController::availableAlgorithms() const
             algoMap[QLatin1String("producesOverlappingZones")] = algo->producesOverlappingZones();
             algoMap[QLatin1String("zoneNumberDisplay")] = algo->zoneNumberDisplay();
             algoMap[QLatin1String("centerLayout")] = algo->centerLayout();
+
+            // Expose whether this algorithm declares custom parameters.
+            // The full definitions are retrieved via customParamsForAlgorithm().
+            algoMap[QLatin1String("supportsCustomParams")] = algo->supportsCustomParams();
+
             algorithms.append(algoMap);
         }
     }
     return algorithms;
+}
+
+QVariantList SettingsController::customParamsForAlgorithm(const QString& algorithmId) const
+{
+    auto* registry = AlgorithmRegistry::instance();
+    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    if (!algo || !algo->supportsCustomParams()) {
+        return {};
+    }
+
+    const QVariantMap savedCustom = savedCustomParams(algorithmId);
+    const QVariantList defs = algo->customParamDefList();
+
+    QVariantList result;
+    for (const auto& defVar : defs) {
+        QVariantMap paramMap = defVar.toMap();
+        const QString name = paramMap.value(QLatin1String("name")).toString();
+        // Current value: saved value if exists, else default
+        if (savedCustom.contains(name)) {
+            paramMap[QLatin1String("value")] = savedCustom.value(name);
+        } else {
+            paramMap[QLatin1String("value")] = paramMap.value(QLatin1String("defaultValue"));
+        }
+        result.append(paramMap);
+    }
+    return result;
+}
+
+void SettingsController::setCustomParam(const QString& algorithmId, const QString& paramName, const QVariant& value)
+{
+    if (algorithmId.isEmpty() || paramName.isEmpty()) {
+        return;
+    }
+
+    // Validate paramName exists in the algorithm's declared custom params
+    auto* registry = AlgorithmRegistry::instance();
+    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    if (!algo || !algo->supportsCustomParams()) {
+        return;
+    }
+    const QVariantList defs = algo->customParamDefList();
+    auto defIt = std::find_if(defs.cbegin(), defs.cend(), [&paramName](const QVariant& v) {
+        return v.toMap().value(QLatin1String("name")).toString() == paramName;
+    });
+    if (defIt == defs.cend()) {
+        qCWarning(lcCore) << "setCustomParam: unknown param" << paramName << "for algorithm" << algorithmId;
+        return;
+    }
+    const QVariantMap defMap = defIt->toMap();
+    const QString defType = defMap.value(QLatin1String("type")).toString();
+
+    // Coerce value to the declared type so QML callers can't persist wrong types
+    QVariant coerced = value;
+    if (defType == QLatin1String("number")) {
+        bool ok = false;
+        const qreal num = value.toDouble(&ok);
+        if (!ok) {
+            qCWarning(lcCore) << "setCustomParam: value" << value << "is not a valid number for" << paramName;
+            return;
+        }
+        const qreal minVal = defMap.value(QLatin1String("minValue")).toDouble();
+        const qreal maxVal = defMap.value(QLatin1String("maxValue")).toDouble();
+        coerced = std::clamp(num, minVal, maxVal);
+    } else if (defType == QLatin1String("bool")) {
+        coerced = value.toBool();
+    } else if (defType == QLatin1String("enum")) {
+        const QString str = value.toString();
+        const QStringList options = defMap.value(QLatin1String("enumOptions")).toStringList();
+        if (!options.contains(str)) {
+            qCWarning(lcCore) << "setCustomParam: value" << str << "not in enum options for" << paramName
+                              << "(valid:" << options << ")";
+            return;
+        }
+        coerced = str;
+    } else {
+        qCWarning(lcCore) << "setCustomParam: unknown param type" << defType << "for" << paramName;
+        return;
+    }
+
+    QVariantMap perAlgo = m_settings.autotilePerAlgorithmSettings();
+    QVariantMap algoEntry = perAlgo.value(algorithmId).toMap();
+    QVariantMap customParams = algoEntry.value(PerAlgoKeys::CustomParams).toMap();
+    customParams[paramName] = coerced;
+    algoEntry[PerAlgoKeys::CustomParams] = customParams;
+
+    // Preserve existing splitRatio/masterCount if not already in the entry
+    if (!algoEntry.contains(PerAlgoKeys::SplitRatio)) {
+        algoEntry[PerAlgoKeys::SplitRatio] = algo->defaultSplitRatio();
+    }
+    if (!algoEntry.contains(PerAlgoKeys::MasterCount)) {
+        algoEntry[PerAlgoKeys::MasterCount] = ConfigDefaults::autotileMasterCount();
+    }
+
+    perAlgo[algorithmId] = algoEntry;
+    m_settings.setAutotilePerAlgorithmSettings(perAlgo);
+    Q_EMIT customParamChanged(algorithmId, paramName);
+}
+
+QVariantMap SettingsController::savedCustomParams(const QString& algorithmId) const
+{
+    const QVariantMap perAlgo = m_settings.autotilePerAlgorithmSettings();
+    const QVariant algoEntry = perAlgo.value(algorithmId);
+    if (algoEntry.isValid()) {
+        const QVariant customVar = algoEntry.toMap().value(PerAlgoKeys::CustomParams);
+        if (customVar.isValid()) {
+            return customVar.toMap();
+        }
+    }
+    return {};
 }
 
 QVariantList SettingsController::generateAlgorithmPreview(const QString& algorithmId, int windowCount,
@@ -1951,7 +2067,12 @@ QVariantList SettingsController::generateAlgorithmPreview(const QString& algorit
     state.setSplitRatio(splitRatio);
 
     const int count = qMax(1, windowCount);
-    QVector<QRect> zones = algo->calculateZones({count, previewRect, &state, 0, {}});
+    TilingParams params = TilingParams::forPreview(count, previewRect, &state);
+
+    // Include saved custom params so preview reflects user configuration
+    params.customParams = savedCustomParams(algorithmId);
+
+    QVector<QRect> zones = algo->calculateZones(params);
 
     return AlgorithmRegistry::zonesToRelativeGeometry(zones, previewRect);
 }

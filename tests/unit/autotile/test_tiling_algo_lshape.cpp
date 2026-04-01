@@ -56,13 +56,14 @@ private Q_SLOTS:
     void testCornerMaster_zeroWindows()
     {
         TilingState state(QStringLiteral("test"));
-        QVERIFY(cornerMaster()->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
+        QVERIFY(
+            cornerMaster()->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0))).isEmpty());
     }
 
     void testCornerMaster_singleWindow()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = cornerMaster()->calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = cornerMaster()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
@@ -75,7 +76,7 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
-        auto zones = cornerMaster()->calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = cornerMaster()->calculateZones(makeParams(2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 2);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -90,7 +91,7 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
-        auto zones = cornerMaster()->calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = cornerMaster()->calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -113,7 +114,7 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
-        auto zones = cornerMaster()->calculateZones({4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = cornerMaster()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -123,7 +124,7 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
-        auto zones = cornerMaster()->calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = cornerMaster()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 5);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -137,7 +138,7 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
-        auto zones = cornerMaster()->calculateZones({4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = cornerMaster()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QCOMPARE(zones[0].x(), 0);
         QCOMPARE(zones[0].y(), 0);
     }
@@ -151,12 +152,12 @@ private Q_SLOTS:
         TilingState smallRatioState(QStringLiteral("test"));
         smallRatioState.setSplitRatio(0.3);
         auto smallZones =
-            cornerMaster()->calculateZones({3, m_screenGeometry, &smallRatioState, 0, EdgeGaps::uniform(0)});
+            cornerMaster()->calculateZones(makeParams(3, m_screenGeometry, &smallRatioState, 0, EdgeGaps::uniform(0)));
 
         TilingState largeRatioState(QStringLiteral("test"));
         largeRatioState.setSplitRatio(0.7);
         auto largeZones =
-            cornerMaster()->calculateZones({3, m_screenGeometry, &largeRatioState, 0, EdgeGaps::uniform(0)});
+            cornerMaster()->calculateZones(makeParams(3, m_screenGeometry, &largeRatioState, 0, EdgeGaps::uniform(0)));
 
         // Larger splitRatio should produce a wider and taller master
         QVERIFY2(largeZones[0].width() > smallZones[0].width(),
@@ -177,7 +178,7 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
-        auto zones = cornerMaster()->calculateZones({4, m_screenGeometry, &state, 10, EdgeGaps::uniform(0)});
+        auto zones = cornerMaster()->calculateZones(makeParams(4, m_screenGeometry, &state, 10, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -192,7 +193,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
         QRect tiny(0, 0, 50, 50);
-        auto zones = cornerMaster()->calculateZones({3, tiny, &state, 10, EdgeGaps::uniform(0)});
+        auto zones = cornerMaster()->calculateZones(makeParams(3, tiny, &state, 10, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         for (const QRect& zone : zones) {
             QVERIFY(zone.width() > 0);
@@ -221,13 +222,16 @@ private Q_SLOTS:
     void testQuadrantPriority_zeroWindows()
     {
         TilingState state(QStringLiteral("test"));
-        QVERIFY(quadrantPriority()->calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
+        QVERIFY(quadrantPriority()
+                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)))
+                    .isEmpty());
     }
 
     void testQuadrantPriority_singleWindow()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = quadrantPriority()->calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones =
+            quadrantPriority()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
@@ -240,7 +244,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
-        auto zones = quadrantPriority()->calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones =
+            quadrantPriority()->calculateZones(makeParams(2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 2);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -253,7 +258,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
-        auto zones = quadrantPriority()->calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones =
+            quadrantPriority()->calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -263,7 +269,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
-        auto zones = quadrantPriority()->calculateZones({4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones =
+            quadrantPriority()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -273,7 +280,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
-        auto zones = quadrantPriority()->calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones =
+            quadrantPriority()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 5);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -288,12 +296,12 @@ private Q_SLOTS:
         TilingState smallState(QStringLiteral("test"));
         smallState.setSplitRatio(0.3);
         auto smallZones =
-            quadrantPriority()->calculateZones({3, m_screenGeometry, &smallState, 0, EdgeGaps::uniform(0)});
+            quadrantPriority()->calculateZones(makeParams(3, m_screenGeometry, &smallState, 0, EdgeGaps::uniform(0)));
 
         TilingState largeState(QStringLiteral("test"));
         largeState.setSplitRatio(0.7);
         auto largeZones =
-            quadrantPriority()->calculateZones({3, m_screenGeometry, &largeState, 0, EdgeGaps::uniform(0)});
+            quadrantPriority()->calculateZones(makeParams(3, m_screenGeometry, &largeState, 0, EdgeGaps::uniform(0)));
 
         QVERIFY2(largeZones[0].width() > smallZones[0].width(),
                  qPrintable(QStringLiteral("Large ratio master width (%1) should be > small ratio (%2)")
@@ -309,7 +317,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
-        auto zones = quadrantPriority()->calculateZones({4, m_screenGeometry, &state, 10, EdgeGaps::uniform(0)});
+        auto zones =
+            quadrantPriority()->calculateZones(makeParams(4, m_screenGeometry, &state, 10, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -324,7 +333,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
         QRect tiny(0, 0, 50, 50);
-        auto zones = quadrantPriority()->calculateZones({3, tiny, &state, 10, EdgeGaps::uniform(0)});
+        auto zones = quadrantPriority()->calculateZones(makeParams(3, tiny, &state, 10, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         for (const QRect& zone : zones) {
             QVERIFY(zone.width() > 0);

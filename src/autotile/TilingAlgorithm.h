@@ -9,11 +9,38 @@
 #include <QRect>
 #include <QString>
 #include <QSize>
+#include <QVariant>
+#include <QVariantMap>
 #include <QVector>
 
 namespace PlasmaZones {
 
 class TilingState;
+
+/**
+ * @brief Per-window metadata passed to algorithms
+ *
+ * Provides identity and state for each tiled window so algorithms
+ * can make app-aware layout decisions (e.g., "browser always master").
+ */
+struct WindowInfo
+{
+    QString appId; ///< Application identifier (e.g., "firefox", "org.kde.dolphin")
+    bool focused = false; ///< Whether this window currently has focus
+};
+
+/**
+ * @brief Screen metadata passed to tiling algorithms
+ *
+ * Provides physical screen context so algorithms can adapt to
+ * monitor orientation and multi-monitor setups.
+ */
+struct TilingScreenInfo
+{
+    QString id; ///< Screen connector name (e.g., "HDMI-1", "DP-2")
+    bool portrait = false; ///< True if height > width (portrait orientation)
+    qreal aspectRatio = 0.0; ///< width/height (e.g., 1.78 for 16:9, 0.56 for portrait)
+};
 
 /**
  * @brief Parameters for zone calculation
@@ -32,7 +59,37 @@ struct TilingParams
     int innerGap = 0; ///< Gap between adjacent zones in pixels
     EdgeGaps outerGaps; ///< Gaps at screen edges in pixels (per-side)
     QVector<QSize> minSizes = {}; ///< Per-window minimum sizes (may be empty)
+
+    // ── Enriched context (v2) ──────────────────────────────────────────
+    QVector<WindowInfo> windowInfos; ///< Per-window metadata (parallel to window list)
+    int focusedIndex = -1; ///< Index of focused window in tiled list (-1 = unknown)
+    TilingScreenInfo screenInfo; ///< Physical screen metadata
+    QVariantMap customParams; ///< Algorithm-declared custom parameters
+
+    /// Create minimal params for preview rendering (no per-window/screen context)
+    static TilingParams forPreview(int count, const QRect& rect, const TilingState* state)
+    {
+        TilingParams p;
+        p.windowCount = count;
+        p.screenGeometry = rect;
+        p.state = state;
+        return p;
+    }
 };
+
+/**
+ * @brief Build per-window metadata from a TilingState
+ *
+ * Shared between AutotileEngine (for TilingParams construction) and
+ * ScriptedAlgorithm (for lifecycle hook JS state). Extracts appId via
+ * Utils::extractAppId() and identifies the focused window.
+ *
+ * @param state Current tiling state (may be null — returns empty vector)
+ * @param windowCount Number of windows to process (may differ from state->tiledWindowCount())
+ * @param[out] focusedIndex Set to the index of the focused window, or -1
+ * @return WindowInfo vector (empty if state is null; size may be less than windowCount)
+ */
+QVector<WindowInfo> buildWindowInfos(const TilingState* state, int windowCount, int& focusedIndex);
 
 /**
  * @brief Abstract base class for tiling algorithms
@@ -253,6 +310,87 @@ public:
      * @return true if loaded from user's writable data directory (default: false)
      */
     virtual bool isUserScript() const noexcept;
+
+    // ── Lifecycle Hooks (optional, v2) ──────────────────────────────────
+
+    /**
+     * @brief Whether this algorithm implements any lifecycle hooks
+     *
+     * When true, the engine calls onWindowAdded/onWindowRemoved before
+     * the next calculateZones() call, giving the algorithm a chance to
+     * update internal state incrementally.
+     *
+     * @return true if the algorithm defines lifecycle hooks (default: false)
+     */
+    virtual bool supportsLifecycleHooks() const noexcept;
+
+    /**
+     * @brief Called when a window is added to the tiling before retile
+     *
+     * Algorithms can use this to update internal state (e.g., BSP tree
+     * insertion) instead of rebuilding from scratch in calculateZones().
+     *
+     * Unlike calculateZones() (which receives a const TilingState*),
+     * lifecycle hooks receive a mutable pointer so algorithms can update
+     * internal structures (e.g., split trees) incrementally.
+     *
+     * @param state Current tiling state (mutable for tree updates)
+     * @param windowIndex Index where the window was inserted
+     */
+    virtual void onWindowAdded(TilingState* state, int windowIndex);
+
+    /**
+     * @brief Called when a window is removed from the tiling before retile
+     *
+     * The window is still present in @p state when this hook fires; it will
+     * be removed immediately after the hook returns. This means
+     * state->tiledWindowCount() still includes the departing window.
+     * Algorithms should use @p windowIndex to identify the departing window
+     * but must not assume the tiled window list will remain unchanged
+     * after the call. Hooks must NOT reorder or mutate the tiled window
+     * list — the engine relies on list stability for the subsequent removal.
+     *
+     * Unlike calculateZones() (which receives a const TilingState*),
+     * lifecycle hooks receive a mutable pointer so algorithms can update
+     * internal structures (e.g., split trees) incrementally.
+     *
+     * @param state Current tiling state (window still present, count not yet decremented)
+     * @param windowIndex Index the window occupied before removal
+     */
+    virtual void onWindowRemoved(TilingState* state, int windowIndex);
+
+    // ── Custom Parameters (optional, v2) ──────────────────────────────────
+
+    /**
+     * @brief Whether this algorithm declares custom parameters
+     *
+     * Algorithms that support custom parameters (e.g., scripted algorithms
+     * with @param declarations) return true. Used to avoid downcasting.
+     *
+     * @return true if the algorithm has custom parameter definitions (default: false)
+     */
+    virtual bool supportsCustomParams() const noexcept;
+
+    /**
+     * @brief Get custom parameter definitions as a QVariantList for QML
+     *
+     * Each entry is a QVariantMap with keys: name, type, defaultValue,
+     * description, minValue, maxValue, enumOptions (as applicable).
+     *
+     * @return List of param definition maps, or empty if none declared
+     */
+    virtual QVariantList customParamDefList() const;
+
+    /**
+     * @brief Check if a named custom parameter is declared by this algorithm
+     *
+     * Lighter-weight alternative to customParamDefList() for filtering stale
+     * params on the retile hot path — avoids QVariantList/QVariantMap allocation.
+     *
+     * @param name Parameter name to check
+     * @return true if the algorithm declares a @param with this name
+     */
+    virtual bool hasCustomParam(const QString& name) const;
 
 protected:
     /**

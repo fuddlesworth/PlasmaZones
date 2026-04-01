@@ -14,8 +14,10 @@
 #include "core/constants.h"
 
 #include "../helpers/ScriptedAlgoTestSetup.h"
+#include "../helpers/TilingTestHelpers.h"
 
 using namespace PlasmaZones;
+using namespace PlasmaZones::TestHelpers;
 
 /**
  * @brief Unit tests for AlgorithmRegistry: singleton, built-in algorithms,
@@ -247,7 +249,7 @@ private Q_SLOTS:
         for (const auto& id : allIds) {
             auto* algo = registry->algorithm(id);
             QVERIFY2(algo != nullptr, qPrintable(QStringLiteral("Null algorithm: ") + id));
-            auto zones = algo->calculateZones({3, screen, &state, 0, EdgeGaps::uniform(0)});
+            auto zones = algo->calculateZones(makeParams(3, screen, &state, 0, EdgeGaps::uniform(0)));
             QVERIFY2(!zones.isEmpty(), qPrintable(QStringLiteral("No zones from: ") + id));
             if (algo->producesOverlappingZones()) {
                 QVERIFY2(zones.size() >= 1 && zones.size() <= 3,
@@ -374,8 +376,8 @@ private Q_SLOTS:
         for (const auto& id : algoIds) {
             auto* algo = registry->algorithm(id);
             QVERIFY2(algo != nullptr, qPrintable(QStringLiteral("Missing algorithm: ") + id));
-            auto zones1 = algo->calculateZones({5, screen, &state, 10, EdgeGaps::uniform(0)});
-            auto zones2 = algo->calculateZones({5, screen, &state, 10, EdgeGaps::uniform(0)});
+            auto zones1 = algo->calculateZones(makeParams(5, screen, &state, 10, EdgeGaps::uniform(0)));
+            auto zones2 = algo->calculateZones(makeParams(5, screen, &state, 10, EdgeGaps::uniform(0)));
             QVERIFY2(
                 zones1 == zones2,
                 qPrintable(QStringLiteral("Algorithm '%1' non-deterministic — frozen globals may be mutable").arg(id)));
