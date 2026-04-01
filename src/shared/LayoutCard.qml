@@ -46,8 +46,7 @@ Item {
     property color zoneBorderColor: Kirigami.Theme.textColor
     property real hoverScale: 1
     // Autotile algorithm metadata
-    property bool isAutotile: false
-    property bool supportsMasterCount: false
+    property bool showMasterDot: false
     // Theme colors
     property color highlightColor: Kirigami.Theme.highlightColor
     property color textColor: Kirigami.Theme.textColor
@@ -340,33 +339,11 @@ Item {
             fontItalic: root.fontItalic
             fontUnderline: root.fontUnderline
             fontStrikeout: root.fontStrikeout
+            showMasterDot: root.showMasterDot
             animationDuration: root.animationDuration
             onZoneHovered: function(index) {
                 root.zoneHovered(index);
             }
-        }
-
-        // Master indicator dots overlaid on master windows (for autotile algorithms)
-        Repeater {
-            model: root.layoutData.zones || []
-
-            Rectangle {
-                required property var modelData
-                required property int index
-                readonly property real relX: (modelData.relativeGeometry && modelData.relativeGeometry.x) || 0
-                readonly property real relY: (modelData.relativeGeometry && modelData.relativeGeometry.y) || 0
-                readonly property real leftOffset: relX < 0.01 ? zonePreview.edgeGap : zonePreview.zonePadding / 2
-                readonly property real topOffset: relY < 0.01 ? zonePreview.edgeGap : zonePreview.zonePadding / 2
-
-                visible: root.isAutotile && root.supportsMasterCount && index < 1
-                x: zonePreview.x + relX * zonePreview.width + leftOffset + Kirigami.Units.smallSpacing
-                y: zonePreview.y + relY * zonePreview.height + topOffset + Kirigami.Units.smallSpacing
-                width: Kirigami.Units.smallSpacing * 2
-                height: Kirigami.Units.smallSpacing * 2
-                radius: Kirigami.Units.smallSpacing
-                color: Kirigami.Theme.positiveTextColor
-            }
-
         }
 
     }

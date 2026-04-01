@@ -38,6 +38,18 @@ inline void writeFontProperties(QObject* window, const IZoneVisualizationSetting
     writeQmlProperty(window, QStringLiteral("fontStrikeout"), settings->labelFontStrikeout());
 }
 
+inline void writeAutotileMetadata(QObject* window, bool showMasterDot, bool producesOverlappingZones,
+                                  const QString& zoneNumberDisplay = QStringLiteral("all"), int masterCount = 1)
+{
+    if (!window) {
+        return;
+    }
+    writeQmlProperty(window, QStringLiteral("showMasterDot"), showMasterDot);
+    writeQmlProperty(window, QStringLiteral("producesOverlappingZones"), producesOverlappingZones);
+    writeQmlProperty(window, QStringLiteral("zoneNumberDisplay"), zoneNumberDisplay);
+    writeQmlProperty(window, QStringLiteral("masterCount"), masterCount);
+}
+
 // Fallback config when ISettings* is null (e.g. during teardown).
 // Uses ConfigDefaults to stay in sync with the .kcfg single source of truth.
 inline ZoneSelectorConfig defaultZoneSelectorConfig()

@@ -131,7 +131,9 @@ public:
     // screenId: target screen (empty = screen under cursor, fallback to primary)
     void showLayoutOsd(Layout* layout, const QString& screenId = QString());
     void showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
-                       bool autoAssign = false, const QString& screenId = QString());
+                       bool autoAssign = false, const QString& screenId = QString(), bool showMasterDot = false,
+                       bool producesOverlappingZones = false, const QString& zoneNumberDisplay = QStringLiteral("all"),
+                       int masterCount = 1);
     void showLockedLayoutOsd(Layout* layout, const QString& screenId = QString());
 
     /**

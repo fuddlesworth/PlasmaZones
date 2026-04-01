@@ -109,32 +109,9 @@ Item {
         zonePadding: 1
         edgeGap: 0
         minZoneSize: 4
+        showMasterDot: root._currentAlgoSupportsMasterCount && root.algorithmId !== ""
+        masterCount: root.masterCount
         animationDuration: 0
-    }
-
-    // Master indicator dots overlaid on master windows
-    Repeater {
-        model: root.zones
-
-        Rectangle {
-            required property var modelData
-            required property int index
-            // Position relative to ZonePreview, accounting for its internal zone padding/edgeGap offsets.
-            // Edge zones get edgeGap offset, non-edge zones get zonePadding/2.
-            readonly property real relX: (modelData.relativeGeometry && modelData.relativeGeometry.x) || 0
-            readonly property real relY: (modelData.relativeGeometry && modelData.relativeGeometry.y) || 0
-            readonly property real leftOffset: relX < 0.01 ? zonePreview.edgeGap : zonePreview.zonePadding / 2
-            readonly property real topOffset: relY < 0.01 ? zonePreview.edgeGap : zonePreview.zonePadding / 2
-
-            visible: root.appSettings && root.appSettings.generateAlgorithmPreview && root.algorithmId !== "" && index < root.masterCount && root._currentAlgoSupportsMasterCount
-            x: zonePreview.x + relX * zonePreview.width + leftOffset + Kirigami.Units.smallSpacing
-            y: zonePreview.y + relY * zonePreview.height + topOffset + Kirigami.Units.smallSpacing
-            width: Kirigami.Units.smallSpacing * 2
-            height: Kirigami.Units.smallSpacing * 2
-            radius: Kirigami.Units.smallSpacing
-            color: Kirigami.Theme.positiveTextColor
-        }
-
     }
 
     Label {
