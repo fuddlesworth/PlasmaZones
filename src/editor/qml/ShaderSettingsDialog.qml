@@ -234,7 +234,13 @@ Kirigami.Dialog {
             "bufferFeedback": info.bufferFeedback || false,
             "bufferScale": info.bufferScale !== undefined ? info.bufferScale : 1,
             "bufferWrap": info.bufferWrap || "clamp",
+            "bufferWraps": info.bufferWraps || [],
+            "bufferFilter": info.bufferFilter || "linear",
+            "bufferFilters": info.bufferFilters || [],
             "useWallpaper": useWallpaper,
+            "useDepthBuffer": info.depthBuffer || false,
+            "computeShaderPath": info.computeShaderPath || "",
+            "particleCount": info.particleCount || 0,
             "zones": zones,
             "shaderParams": params,
             "labelsTexture": labelsImg,
@@ -987,6 +993,58 @@ Kirigami.Dialog {
                     onClicked: root.randomizeParameters()
                 }
 
+                // Metadata presets menu (from shader's metadata.json)
+                ToolButton {
+                    id: metadataPresetButton
+
+                    icon.name: "bookmarks"
+                    display: ToolButton.IconOnly
+                    visible: {
+                        var info = root.currentShaderInfo;
+                        return info && info.presets && info.presets.length > 0;
+                    }
+                    ToolTip.text: i18nc("@info:tooltip", "Apply a built-in preset")
+                    Accessible.name: i18nc("@action:button", "Presets")
+                    Accessible.description: ToolTip.text
+                    onClicked: metadataPresetMenu.open()
+
+                    Menu {
+                        id: metadataPresetMenu
+
+                        y: metadataPresetButton.height
+
+                        Instantiator {
+                            model: {
+                                var info = root.currentShaderInfo;
+                                return (info && info.presets) ? info.presets : [];
+                            }
+                            onObjectAdded: function(index, object) {
+                                metadataPresetMenu.insertItem(index, object);
+                            }
+                            onObjectRemoved: function(index, object) {
+                                metadataPresetMenu.removeItem(object);
+                            }
+
+                            delegate: MenuItem {
+                                text: modelData.name
+                                onTriggered: {
+                                    if (!editorController)
+                                        return ;
+
+                                    var presetParams = editorController.presetParams(root.pendingShaderId, modelData.name);
+                                    if (presetParams && Object.keys(presetParams).length > 0) {
+                                        root.pendingParams = presetParams;
+                                        root.updatePreview();
+                                    }
+                                }
+                            }
+
+                        }
+
+                    }
+
+                }
+
             }
 
             // Message when shader has no parameters
@@ -1294,6 +1352,12 @@ Kirigami.Dialog {
                         bufferFeedback: previewBackground.cfg.bufferFeedback || false
                         bufferScale: previewBackground.cfg.bufferScale !== undefined ? previewBackground.cfg.bufferScale : 1
                         bufferWrap: previewBackground.cfg.bufferWrap || "clamp"
+                        bufferWraps: previewBackground.cfg.bufferWraps || []
+                        bufferFilter: previewBackground.cfg.bufferFilter || "linear"
+                        bufferFilters: previewBackground.cfg.bufferFilters || []
+                        useDepthBuffer: previewBackground.cfg.useDepthBuffer || false
+                        computeShaderPath: previewBackground.cfg.computeShaderPath || ""
+                        particleCount: previewBackground.cfg.particleCount || 0
                         zones: previewBackground.cfg.zones || []
                         shaderParams: previewBackground.cfg.shaderParams || ({
                         })
