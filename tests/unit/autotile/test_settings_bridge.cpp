@@ -134,13 +134,18 @@ private Q_SLOTS:
         engine.setAlgorithm(QLatin1String("master-stack"));
 
         // Store saved settings for centered-master in the per-algorithm map
-        engine.config()->savedAlgorithmSettings[QStringLiteral("centered-master")] = {0.45, 2};
+        AlgorithmSettings cmSaved;
+        cmSaved.splitRatio = 0.45;
+        cmSaved.masterCount = 2;
+        engine.config()->savedAlgorithmSettings[QStringLiteral("centered-master")] = cmSaved;
 
         // Capture the master-stack ratio before mutation
         const qreal masterStackRatio = engine.config()->splitRatio;
 
         // Mutate the saved centered-master ratio — should NOT affect the active ratio
-        engine.config()->savedAlgorithmSettings[QStringLiteral("centered-master")] = {0.35, 3};
+        cmSaved.splitRatio = 0.35;
+        cmSaved.masterCount = 3;
+        engine.config()->savedAlgorithmSettings[QStringLiteral("centered-master")] = cmSaved;
         QVERIFY(qFuzzyCompare(engine.config()->splitRatio, masterStackRatio));
 
         // Now switch to centered-master — saved settings should be applied

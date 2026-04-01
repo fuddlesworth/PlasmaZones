@@ -10,6 +10,7 @@
 #include "autotile/TilingState.h"
 #include "autotile/algorithms/ScriptedAlgorithm.h"
 #include "core/constants.h"
+#include "config/configdefaults.h"
 
 #include "../helpers/ScriptTestHelpers.h"
 #include "../helpers/TilingTestHelpers.h"
@@ -195,8 +196,8 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
         QVERIFY(!algo.supportsMasterCount());
         QVERIFY(!algo.supportsSplitRatio());
-        QCOMPARE(algo.defaultSplitRatio(), AutotileDefaults::DefaultSplitRatio);
-        QCOMPARE(algo.defaultMaxWindows(), AutotileDefaults::DefaultMaxWindows);
+        QCOMPARE(algo.defaultSplitRatio(), ConfigDefaults::autotileSplitRatio());
+        QCOMPARE(algo.defaultMaxWindows(), ConfigDefaults::autotileMaxWindows());
         QCOMPARE(algo.minimumWindows(), 1);
         QCOMPARE(algo.masterZoneIndex(), -1);
         QVERIFY(!algo.producesOverlappingZones());
@@ -278,7 +279,7 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
 
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
 
         verifyAllZonesPositive(zones);
@@ -298,7 +299,7 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
 
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QVERIFY(zones.isEmpty());
     }
 
@@ -312,7 +313,7 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
 
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
@@ -343,7 +344,7 @@ private Q_SLOTS:
         state.setMasterCount(3);
         state.setSplitRatio(0.75);
 
-        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 12, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(5, m_screenGeometry, &state, 12, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0].x(), 5); // windowCount
         QCOMPARE(zones[0].y(), 3); // masterCount
@@ -369,7 +370,7 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
 
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QVERIFY(zones.isEmpty());
     }
 
@@ -392,7 +393,7 @@ private Q_SLOTS:
 
         TilingState state(QStringLiteral("test"));
         // Pass outer gaps of 10px on each side
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(10)});
+        auto zones = algo.calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(10)));
         QCOMPARE(zones.size(), 1);
         // Area should be screen minus outer gaps: 1920 - 20 = 1900, 1080 - 20 = 1060
         QCOMPARE(zones[0].x(), 10);
@@ -495,7 +496,7 @@ private Q_SLOTS:
 
         // Test window counts 1..6 with no gap
         for (int n = 1; n <= 6; ++n) {
-            auto zones = algo.calculateZones({n, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+            auto zones = algo.calculateZones(makeParams(n, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
             if (overlapping) {
                 QVERIFY2(zones.size() >= 1 && zones.size() <= n,
                          qPrintable(QStringLiteral("Expected 1-%1 zones, got %2 for %3 (gap=0)")
@@ -514,7 +515,7 @@ private Q_SLOTS:
 
         // Test window counts 1..6 with moderate gap (innerGap = 10)
         for (int n = 1; n <= 6; ++n) {
-            auto zones = algo.calculateZones({n, m_screenGeometry, &state, 10, EdgeGaps::uniform(0)});
+            auto zones = algo.calculateZones(makeParams(n, m_screenGeometry, &state, 10, EdgeGaps::uniform(0)));
             if (overlapping) {
                 QVERIFY2(zones.size() >= 1 && zones.size() <= n,
                          qPrintable(QStringLiteral("Expected 1-%1 zones, got %2 for %3 (gap=10)")
@@ -533,7 +534,7 @@ private Q_SLOTS:
 
         // Degenerate gap stress: gap larger than screen dimensions
         for (int n = 1; n <= 4; ++n) {
-            auto zones = algo.calculateZones({n, m_screenGeometry, &state, 2000, EdgeGaps::uniform(0)});
+            auto zones = algo.calculateZones(makeParams(n, m_screenGeometry, &state, 2000, EdgeGaps::uniform(0)));
             QVERIFY2(zones.size() >= 1 && zones.size() <= n,
                      qPrintable(QStringLiteral("Expected 1-%1 zones, got %2 for %3 (gap=2000)")
                                     .arg(n)
@@ -564,7 +565,7 @@ private Q_SLOTS:
         timer.start();
 
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
 
         QVERIFY(zones.isEmpty()); // Watchdog killed it — no zones returned
         // Generous threshold: the watchdog should interrupt within ~100ms,
@@ -587,7 +588,7 @@ private Q_SLOTS:
         QVERIFY(algo.isValid()); // Loads fine, error is at runtime
 
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QVERIFY(zones.isEmpty()); // Runtime error = empty result
     }
 
@@ -606,7 +607,7 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
 
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QVERIFY(zones[0].x() >= 0);
         QVERIFY(zones[0].y() >= 0);
@@ -633,7 +634,7 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
 
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({300, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(300, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         QVERIFY(zones.size() <= 256);
     }
 
@@ -674,7 +675,7 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
 
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         // NaN toInt() returns 0; x is clamped to >= 0, width/height to >= 1
         QCOMPARE(zones.size(), 1);
         QVERIFY(zones[0].x() >= 0);
@@ -697,7 +698,7 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
 
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         // Infinity toInt() returns 0, clamped to >= 1; then clampZonesToArea bounds it
         QCOMPARE(zones.size(), 1);
         QVERIFY(zones[0].width() >= 1);
@@ -767,7 +768,7 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
 
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
 
         // The script should either fail (no zones) or succeed but not affect other scripts
         if (!zones.isEmpty()) {
@@ -785,7 +786,8 @@ private Q_SLOTS:
             ScriptedAlgorithm cleanAlgo(cleanPath);
             QVERIFY(cleanAlgo.isValid());
 
-            auto cleanZones = cleanAlgo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+            auto cleanZones =
+                cleanAlgo.calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
             QVERIFY2(!cleanZones.isEmpty(), "Prototype pollution leaked between script instances");
         }
     }
@@ -814,7 +816,7 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
 
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         // V4 known limitation: direct eval may bypass sandbox. Verify no crash
         // and that the result is structurally valid (either blocked or allowed).
         QVERIFY(zones.isEmpty() || zones.size() == 1);
@@ -845,7 +847,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         QElapsedTimer timer;
         timer.start();
-        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         // Two valid outcomes:
         // 1. IIFE wrapper blocked eval → TypeError thrown instantly → zones empty (fast)
         // 2. V4 bypassed IIFE → eval ran → watchdog interrupted → zones empty (~100ms)
@@ -874,7 +876,7 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
 
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         // V4 known limitation: Function() may bypass sandbox.
         QVERIFY(zones.isEmpty() || zones.size() == 1);
         if (!zones.isEmpty()) {
@@ -904,7 +906,7 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
 
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
         // V4 known limitation: constructor chain may bypass sandbox.
         QVERIFY(zones.isEmpty() || zones.size() == 1);
         if (!zones.isEmpty()) {
@@ -1051,7 +1053,7 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
 
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zones = algo.calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
 
         // The frozen equalColumnsLayout should still work — 3 columns expected
         QVERIFY2(

@@ -3,6 +3,7 @@
 
 #include "TilingState.h"
 #include "SplitTree.h"
+#include "config/configdefaults.h"
 #include "core/constants.h"
 #include "core/logging.h"
 #include <QJsonArray>
@@ -88,10 +89,19 @@ TilingState* TilingState::fromJson(const QJsonObject& json, QObject* parent)
 
     // Master count — clamp to absolute limits only (not against current window count).
     // Algorithms clamp operationally when they calculate zones.
-    state->m_masterCount = clampMasterCount(json[MasterCount].toInt(DefaultMasterCount));
+    state->m_masterCount = clampMasterCount(json[MasterCount].toInt(ConfigDefaults::autotileMasterCount()));
 
-    // Split ratio with clamping
-    state->m_splitRatio = clampSplitRatio(json[SplitRatio].toDouble(DefaultSplitRatio));
+    // Split ratio with clamping and sanity check for obviously corrupted values
+    // (e.g., values near 1.0 that indicate state corruption rather than user intent).
+    // Only apply the reset to values WITHIN the valid range but suspiciously close to max,
+    // not to completely out-of-range values (those get clamped normally per the test).
+    qreal loadedRatio = json[SplitRatio].toDouble(ConfigDefaults::autotileSplitRatio());
+    const bool withinRange = (loadedRatio >= MinSplitRatio && loadedRatio <= MaxSplitRatio);
+    if (withinRange && loadedRatio > MaxSplitRatio - 0.05) {
+        qCDebug(lcAutotile) << "SplitRatio suspiciously high, resetting to default:" << loadedRatio;
+        loadedRatio = ConfigDefaults::autotileSplitRatio();
+    }
+    state->m_splitRatio = clampSplitRatio(loadedRatio);
 
     if (json.contains(AutotileJsonKeys::SplitTreeKey)) {
         state->m_splitTree = SplitTree::fromJson(json[AutotileJsonKeys::SplitTreeKey].toObject());
@@ -135,8 +145,9 @@ void TilingState::clear()
     const int oldMasterCount = m_masterCount;
     const qreal oldSplitRatio = m_splitRatio;
 
-    if (!hadWindows && !hadFocused && m_calculatedZones.isEmpty() && oldMasterCount == DefaultMasterCount
-        && qFuzzyCompare(1.0 + oldSplitRatio, 1.0 + DefaultSplitRatio) && !m_splitTree) {
+    if (!hadWindows && !hadFocused && m_calculatedZones.isEmpty()
+        && oldMasterCount == ConfigDefaults::autotileMasterCount()
+        && qFuzzyCompare(1.0 + oldSplitRatio, 1.0 + ConfigDefaults::autotileSplitRatio()) && !m_splitTree) {
         return; // Already at defaults, nothing to do
     }
 
@@ -145,8 +156,8 @@ void TilingState::clear()
     m_floatingWindows.clear();
     m_focusedWindow.clear();
     m_calculatedZones.clear();
-    m_masterCount = DefaultMasterCount;
-    m_splitRatio = DefaultSplitRatio;
+    m_masterCount = ConfigDefaults::autotileMasterCount();
+    m_splitRatio = ConfigDefaults::autotileSplitRatio();
     m_splitTree.reset();
 
     // Only emit signals for fields that actually changed
@@ -157,10 +168,10 @@ void TilingState::clear()
     if (hadFocused) {
         Q_EMIT focusedWindowChanged();
     }
-    if (oldMasterCount != DefaultMasterCount) {
+    if (oldMasterCount != ConfigDefaults::autotileMasterCount()) {
         Q_EMIT masterCountChanged();
     }
-    if (!qFuzzyCompare(1.0 + oldSplitRatio, 1.0 + DefaultSplitRatio)) {
+    if (!qFuzzyCompare(1.0 + oldSplitRatio, 1.0 + ConfigDefaults::autotileSplitRatio())) {
         Q_EMIT splitRatioChanged();
     }
     notifyStateChanged();

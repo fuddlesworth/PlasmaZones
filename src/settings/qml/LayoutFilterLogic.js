@@ -79,6 +79,8 @@ function applyTilingFilters(items, search, f) {
             return false;
         if (!f.showPersistent && item.memory === true)
             return false;
+        if (!f.showCustomParams && item.supportsCustomParams === true)
+            return false;
         return true;
     });
 }

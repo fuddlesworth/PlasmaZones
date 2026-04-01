@@ -34,6 +34,12 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
         </method>
+        <method name="notifyDragOutUnsnap">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify that a snapped window was dragged without the activation trigger. Saves pre-float zone, marks floating, and clears zone assignment so the window does not auto-restore to the zone on close/reopen."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID from the effect."/>
+            </arg>
+        </method>
         <method name="windowsSnappedBatch">
             <annotation name="org.gtk.GDBus.DocString" value="Batch snap confirmations: process multiple windowSnapped/windowUnsnapped in one D-Bus call. Used by the KWin effect after resnap stagger completes. JSON array of {windowId, zoneId, screenId, isRestore}."/>
             <arg name="batchJson" type="s" direction="in">

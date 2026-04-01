@@ -35,6 +35,7 @@ class PLASMAZONES_EXPORT LayoutManager : public QObject, public ILayoutManager
 
 public:
     explicit LayoutManager(QObject* parent = nullptr);
+    LayoutManager(QSettingsConfigBackend* backend, QObject* parent);
     ~LayoutManager();
 
     // No singleton - use dependency injection instead
@@ -259,7 +260,8 @@ private:
     QJsonObject loadAllAutotileOverrides() const;
     void saveAllAutotileOverrides(const QJsonObject& all);
     ISettings* m_settings = nullptr;
-    std::unique_ptr<QSettingsConfigBackend> m_configBackend;
+    std::unique_ptr<QSettingsConfigBackend> m_ownedBackend;
+    QSettingsConfigBackend* m_configBackend = nullptr; // always valid after construction
     QString m_layoutDirectory;
     QVector<Layout*> m_layouts;
     Layout* m_activeLayout = nullptr;

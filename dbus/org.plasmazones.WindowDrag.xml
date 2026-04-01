@@ -5,7 +5,7 @@
     <interface name="org.plasmazones.WindowDrag">
         <annotation name="org.gtk.GDBus.DocString" value="Window drag handling: KWin script calls dragStarted/dragMoved/dragStopped; daemon returns snap geometry. Uses double for window rect (KWin QML) and int for cursor/modifiers."/>
         <method name="dragStarted">
-            <annotation name="org.gtk.GDBus.DocString" value="Called when a window drag begins. Window rect and app/window class for exclusion checks. Coordinates are double (KWin QML)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Called when a window drag begins. Coordinates are double (KWin QML)."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -20,12 +20,6 @@
             </arg>
             <arg name="height" type="d" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window height (double)."/>
-            </arg>
-            <arg name="appName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Application name (for exclusions)."/>
-            </arg>
-            <arg name="windowClass" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window class (for exclusions)."/>
             </arg>
             <arg name="mouseButtons" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Qt::MouseButtons flags for the button(s) that started the drag (0=None, 2=Right, 4=Middle, 8=Back, 16=Forward, etc.). Used for activation-by-mouse-button."/>
@@ -108,21 +102,13 @@
             <annotation name="org.gtk.GDBus.DocString" value="Cancel the current snap operation (e.g. user pressed Escape)."/>
         </method>
 
-        <signal name="windowSnapped">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window is snapped to a zone after drag."/>
-            <arg name="windowId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+        <method name="handleWindowClosed">
+            <annotation name="org.gtk.GDBus.DocString" value="Called when a window is closed during or after a drag operation. Cleans up any drag state associated with this window."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID that was closed."/>
             </arg>
-            <arg name="zoneId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
-            </arg>
-        </signal>
-        <signal name="snapCancelled">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the snap was cancelled."/>
-            <arg name="windowId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
-            </arg>
-        </signal>
+        </method>
+
         <signal name="zoneGeometryDuringDragChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when the zone geometry under the cursor changes during drag. KWin effect applies the geometry immediately for snap-on-hover behavior."/>
             <arg name="windowId" type="s">

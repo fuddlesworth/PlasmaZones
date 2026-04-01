@@ -2,12 +2,37 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "TilingAlgorithm.h"
+#include "TilingState.h"
+#include "config/configdefaults.h"
 #include "core/constants.h"
+#include "core/utils.h"
 #include <algorithm>
 
 namespace PlasmaZones {
 
 using namespace AutotileDefaults;
+
+QVector<WindowInfo> buildWindowInfos(const TilingState* state, int windowCount, int& focusedIndex)
+{
+    focusedIndex = -1;
+    if (!state) {
+        return {};
+    }
+    QVector<WindowInfo> infos;
+    const QStringList windows = state->tiledWindows();
+    const QString focusedWin = state->focusedWindow();
+    infos.reserve(windowCount);
+    for (int i = 0; i < windowCount && i < windows.size(); ++i) {
+        WindowInfo info;
+        info.appId = Utils::extractAppId(windows[i]);
+        info.focused = (windows[i] == focusedWin);
+        if (info.focused) {
+            focusedIndex = i;
+        }
+        infos.append(info);
+    }
+    return infos;
+}
 
 TilingAlgorithm::TilingAlgorithm(QObject* parent)
     : QObject(parent)
@@ -31,7 +56,7 @@ bool TilingAlgorithm::supportsSplitRatio() const
 
 qreal TilingAlgorithm::defaultSplitRatio() const
 {
-    return DefaultSplitRatio;
+    return ConfigDefaults::autotileSplitRatio();
 }
 
 int TilingAlgorithm::minimumWindows() const
@@ -41,7 +66,7 @@ int TilingAlgorithm::minimumWindows() const
 
 int TilingAlgorithm::defaultMaxWindows() const
 {
-    return DefaultMaxWindows;
+    return ConfigDefaults::autotileMaxWindows();
 }
 
 bool TilingAlgorithm::producesOverlappingZones() const
@@ -82,6 +107,36 @@ bool TilingAlgorithm::supportsMemory() const noexcept
 void TilingAlgorithm::prepareTilingState(TilingState* /*state*/) const
 {
     // Default no-op. Memory-based algorithms override to ensure their SplitTree exists.
+}
+
+bool TilingAlgorithm::supportsLifecycleHooks() const noexcept
+{
+    return false;
+}
+
+void TilingAlgorithm::onWindowAdded(TilingState* /*state*/, int /*windowIndex*/)
+{
+    // Default no-op. Algorithms with lifecycle hooks override.
+}
+
+void TilingAlgorithm::onWindowRemoved(TilingState* /*state*/, int /*windowIndex*/)
+{
+    // Default no-op. Algorithms with lifecycle hooks override.
+}
+
+bool TilingAlgorithm::supportsCustomParams() const noexcept
+{
+    return false;
+}
+
+QVariantList TilingAlgorithm::customParamDefList() const
+{
+    return {};
+}
+
+bool TilingAlgorithm::hasCustomParam(const QString& /*name*/) const
+{
+    return false;
 }
 
 QVector<int> TilingAlgorithm::distributeEvenly(int total, int count)

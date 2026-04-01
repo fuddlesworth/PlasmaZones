@@ -419,6 +419,12 @@ void Settings::loadAutotilingConfig(QSettingsConfigBackend* backend)
                          ConfigDefaults::autotileInsertPosition(), ConfigDefaults::autotileInsertPositionMin(),
                          ConfigDefaults::autotileInsertPositionMax(), "autotile insert position"));
 
+    int autotileStickyHandling = autotiling->readInt(ConfigDefaults::autotileStickyWindowHandlingKey(),
+                                                     ConfigDefaults::autotileStickyWindowHandling());
+    m_autotileStickyWindowHandling = static_cast<StickyWindowHandling>(
+        qBound(static_cast<int>(StickyWindowHandling::TreatAsNormal), autotileStickyHandling,
+               static_cast<int>(StickyWindowHandling::IgnoreAll)));
+
     // Release autotiling group before accessing animations group
     autotiling.reset();
 
@@ -743,6 +749,8 @@ void Settings::saveAutotilingConfig(QSettingsConfigBackend* backend)
         autotiling->writeColor(ConfigDefaults::autotileBorderColorKey(), m_autotileBorderColor);
         autotiling->writeColor(ConfigDefaults::autotileInactiveBorderColorKey(), m_autotileInactiveBorderColor);
         autotiling->writeBool(ConfigDefaults::autotileUseSystemBorderColorsKey(), m_autotileUseSystemBorderColors);
+        autotiling->writeInt(ConfigDefaults::autotileStickyWindowHandlingKey(),
+                             static_cast<int>(m_autotileStickyWindowHandling));
         autotiling->writeString(ConfigDefaults::lockedScreensKey(), m_lockedScreens.join(QLatin1Char(',')));
     }
 

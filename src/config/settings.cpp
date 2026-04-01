@@ -26,7 +26,15 @@ namespace PlasmaZones {
 
 Settings::Settings(QObject* parent)
     : ISettings(parent)
-    , m_configBackend(QSettingsConfigBackend::createDefault())
+    , m_ownedBackend(QSettingsConfigBackend::createDefault())
+    , m_configBackend(m_ownedBackend.get())
+{
+    load();
+}
+
+Settings::Settings(QSettingsConfigBackend* backend, QObject* parent)
+    : ISettings(parent)
+    , m_configBackend(backend)
 {
     load();
 }
@@ -151,13 +159,13 @@ void Settings::load()
         auto zones = m_configBackend->group(ConfigDefaults::zonesGroup());
         loadZoneGeometryConfig(*zones);
     }
-    loadBehaviorConfig(m_configBackend.get());
+    loadBehaviorConfig(m_configBackend);
     {
         auto zoneSelector = m_configBackend->group(ConfigDefaults::zoneSelectorGroup());
         loadZoneSelectorConfig(*zoneSelector);
     }
-    loadPerScreenOverrides(m_configBackend.get());
-    loadVirtualScreenConfigs(m_configBackend.get());
+    loadPerScreenOverrides(m_configBackend);
+    loadVirtualScreenConfigs(m_configBackend);
 
     // Rendering backend lives in [General] (affects whole graphics pipeline, not just shaders).
     {
@@ -188,7 +196,7 @@ void Settings::load()
         auto globalShortcuts = m_configBackend->group(ConfigDefaults::globalShortcutsGroup());
         loadShortcutConfig(*globalShortcuts);
     }
-    loadAutotilingConfig(m_configBackend.get());
+    loadAutotilingConfig(m_configBackend);
     {
         auto editor = m_configBackend->group(ConfigDefaults::editorGroup());
         loadEditorConfig(*editor);
@@ -221,8 +229,51 @@ void Settings::load()
 
 // ── save() dispatcher ────────────────────────────────────────────────────────
 
+// Groups that save() writes exhaustively — shared by purgeStaleKeys() and reset().
+// Does NOT include unmanaged groups (TilingQuickLayoutSlots, Updates) which are
+// written independently and must survive a normal save.
+QStringList Settings::managedGroupNames()
+{
+    return {
+        ConfigDefaults::generalGroup(),    ConfigDefaults::activationGroup(),
+        ConfigDefaults::displayGroup(),    ConfigDefaults::appearanceGroup(),
+        ConfigDefaults::zonesGroup(),      ConfigDefaults::behaviorGroup(),
+        ConfigDefaults::exclusionsGroup(), ConfigDefaults::zoneSelectorGroup(),
+        ConfigDefaults::shadersGroup(),    ConfigDefaults::globalShortcutsGroup(),
+        ConfigDefaults::autotilingGroup(), ConfigDefaults::autotileShortcutsGroup(),
+        ConfigDefaults::animationsGroup(), ConfigDefaults::editorGroup(),
+    };
+}
+
+void Settings::deletePerScreenGroups(QSettingsConfigBackend* backend)
+{
+    const QStringList allGroups = backend->groupList();
+    for (const QString& groupName : allGroups) {
+        if (groupName.startsWith(QLatin1String("ZoneSelector:"))
+            || groupName.startsWith(QLatin1String("AutotileScreen:"))
+            || groupName.startsWith(QLatin1String("SnappingScreen:"))
+            || groupName.startsWith(ConfigDefaults::virtualScreenGroupPrefix())) {
+            backend->deleteGroup(groupName);
+        }
+    }
+}
+
+void Settings::purgeStaleKeys()
+{
+    // Delete all groups that save() writes exhaustively.
+    // After deletion, save() rewrites only currently-valid keys,
+    // so any stale keys from past refactors are culled.
+    // Per-screen groups are not purged here — savePerScreenOverrides()
+    // already deletes and rewrites them individually.
+    for (const QString& groupName : managedGroupNames()) {
+        m_configBackend->deleteGroup(groupName);
+    }
+}
+
 void Settings::save()
 {
+    purgeStaleKeys();
+
     {
         auto activation = m_configBackend->group(ConfigDefaults::activationGroup());
         saveActivationConfig(*activation);
@@ -239,18 +290,18 @@ void Settings::save()
         auto zones = m_configBackend->group(ConfigDefaults::zonesGroup());
         saveZoneGeometryConfig(*zones);
     }
-    saveBehaviorConfig(m_configBackend.get());
+    saveBehaviorConfig(m_configBackend);
     {
         auto zoneSelector = m_configBackend->group(ConfigDefaults::zoneSelectorGroup());
         saveZoneSelectorConfig(*zoneSelector);
     }
-    saveAllPerScreenOverrides(m_configBackend.get());
-    saveVirtualScreenConfigs(m_configBackend.get());
+    saveAllPerScreenOverrides(m_configBackend);
+    saveVirtualScreenConfigs(m_configBackend);
     {
         auto globalShortcuts = m_configBackend->group(ConfigDefaults::globalShortcutsGroup());
         saveShortcutConfig(*globalShortcuts);
     }
-    saveAutotilingConfig(m_configBackend.get());
+    saveAutotilingConfig(m_configBackend);
     {
         auto editor = m_configBackend->group(ConfigDefaults::editorGroup());
         saveEditorConfig(*editor);
@@ -278,27 +329,13 @@ void Settings::save()
 
 void Settings::reset()
 {
-    const QStringList groups = {ConfigDefaults::generalGroup(),    ConfigDefaults::activationGroup(),
-                                ConfigDefaults::displayGroup(),    ConfigDefaults::appearanceGroup(),
-                                ConfigDefaults::zonesGroup(),      ConfigDefaults::behaviorGroup(),
-                                ConfigDefaults::exclusionsGroup(), ConfigDefaults::zoneSelectorGroup(),
-                                ConfigDefaults::shadersGroup(),    ConfigDefaults::globalShortcutsGroup(),
-                                ConfigDefaults::autotilingGroup(), ConfigDefaults::autotileShortcutsGroup(),
-                                ConfigDefaults::animationsGroup(), ConfigDefaults::updatesGroup(),
-                                ConfigDefaults::editorGroup(),     ConfigDefaults::tilingQuickLayoutSlotsGroup()};
-    for (const QString& groupName : groups) {
+    // Delete all managed groups plus unmanaged groups (reset nukes everything)
+    for (const QString& groupName : managedGroupNames()) {
         m_configBackend->deleteGroup(groupName);
     }
-    // Also delete per-screen override groups
-    const QStringList allGroups = m_configBackend->groupList();
-    for (const QString& groupName : allGroups) {
-        if (groupName.startsWith(QLatin1String("ZoneSelector:"))
-            || groupName.startsWith(QLatin1String("AutotileScreen:"))
-            || groupName.startsWith(QLatin1String("SnappingScreen:"))
-            || groupName.startsWith(ConfigDefaults::virtualScreenGroupPrefix())) {
-            m_configBackend->deleteGroup(groupName);
-        }
-    }
+    m_configBackend->deleteGroup(ConfigDefaults::updatesGroup());
+    m_configBackend->deleteGroup(ConfigDefaults::tilingQuickLayoutSlotsGroup());
+    deletePerScreenGroups(m_configBackend);
     m_configBackend->sync();
     load();
     qCInfo(lcConfig) << "Settings reset to defaults";

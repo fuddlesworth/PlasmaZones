@@ -142,6 +142,20 @@ public:
     bool isUserScript() const noexcept override;
     void prepareTilingState(TilingState* state) const override;
 
+    // Lifecycle hooks (v2)
+    bool supportsLifecycleHooks() const noexcept override;
+    void onWindowAdded(TilingState* state, int windowIndex) override;
+    void onWindowRemoved(TilingState* state, int windowIndex) override;
+
+    // Custom parameters (v2)
+    bool supportsCustomParams() const noexcept override;
+    QVariantList customParamDefList() const override;
+    bool hasCustomParam(const QString& name) const override;
+    /**
+     * @brief Get the custom parameter definitions declared by this script
+     */
+    const QVector<ScriptedHelpers::CustomParamDef>& customParamDefs() const;
+
 private:
     /**
      * @brief Load and validate a JavaScript file
@@ -172,6 +186,12 @@ private:
      */
     template<typename T>
     T resolveJsOverrideClamped(const QJSValue& jsFn, T cachedValue, T metadataFallback, T minVal, T maxVal) const;
+
+    /// Build a JS state object from TilingState for lifecycle hook calls
+    QJSValue buildJsState(const TilingState* state) const;
+
+    /// Build a JS array of {appId, focused} objects
+    QJSValue buildJsWindowArray(const QVector<WindowInfo>& infos, int cap) const;
 
     /// Arms watchdog, calls fn(), disarms, checks for timeout. Returns error on timeout.
     QJSValue guardedCall(const std::function<QJSValue()>& fn) const;
@@ -205,11 +225,16 @@ private:
     mutable QJSValue m_jsProducesOverlappingZones;
     mutable QJSValue m_jsCenterLayout;
 
+    // Optional lifecycle hook JS functions
+    mutable QJSValue m_jsOnWindowAdded;
+    mutable QJSValue m_jsOnWindowRemoved;
+    bool m_hasLifecycleHooks = false; ///< True if any lifecycle hook is defined
+
     // Cached JS virtual method overrides (loaded once at script load time)
     int m_cachedMinimumWindows = 1;
     int m_cachedDefaultMaxWindows = 6;
     int m_cachedMasterZoneIndex = -1;
-    qreal m_cachedDefaultSplitRatio = AutotileDefaults::DefaultSplitRatio;
+    qreal m_cachedDefaultSplitRatio = ConfigDefaults::autotileSplitRatio();
     bool m_cachedProducesOverlappingZones = false;
     bool m_cachedSupportsMasterCount = false;
     bool m_cachedSupportsSplitRatio = false;

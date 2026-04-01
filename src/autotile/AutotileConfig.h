@@ -21,11 +21,44 @@ namespace PlasmaZones {
  */
 struct AlgorithmSettings
 {
-    qreal splitRatio = 0.5;
-    int masterCount = 1;
+    qreal splitRatio = ConfigDefaults::autotileSplitRatio();
+    int masterCount = ConfigDefaults::autotileMasterCount();
+    QVariantMap customParams; ///< Algorithm-declared custom parameter values
     bool operator==(const AlgorithmSettings& other) const
     {
-        return masterCount == other.masterCount && qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio);
+        if (masterCount != other.masterCount || !qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio)) {
+            return false;
+        }
+        if (customParams.size() != other.customParams.size()) {
+            return false;
+        }
+        // Fuzzy-compare numeric custom param values to match splitRatio semantics.
+        // After JSON round-trip, numbers may arrive as Int/LongLong rather than Double,
+        // so check canConvert<double> rather than requiring exact QMetaType::Double.
+        for (auto it = customParams.constBegin(); it != customParams.constEnd(); ++it) {
+            auto oit = other.customParams.constFind(it.key());
+            if (oit == other.customParams.constEnd()) {
+                return false;
+            }
+            const QVariant& a = it.value();
+            const QVariant& b = oit.value();
+            const bool aNumeric = AutotileDefaults::isNumericMetaType(a.typeId());
+            const bool bNumeric = AutotileDefaults::isNumericMetaType(b.typeId());
+            const bool aBool = a.typeId() == QMetaType::Bool;
+            const bool bBool = b.typeId() == QMetaType::Bool;
+            if (aNumeric && bNumeric) {
+                if (!qFuzzyCompare(1.0 + a.toDouble(), 1.0 + b.toDouble())) {
+                    return false;
+                }
+            } else if (aBool && bBool) {
+                if (a.toBool() != b.toBool()) {
+                    return false;
+                }
+            } else if (a != b) {
+                return false;
+            }
+        }
+        return true;
     }
 };
 
@@ -66,7 +99,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 0.1 to 0.9
      * Default: 0.6 (60% master, 40% stack)
      */
-    qreal splitRatio = AutotileDefaults::DefaultSplitRatio;
+    qreal splitRatio = ConfigDefaults::autotileSplitRatio();
 
     /**
      * @brief Number of windows in master area
@@ -74,7 +107,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 1 to 5
      * Default: 1
      */
-    int masterCount = AutotileDefaults::DefaultMasterCount;
+    int masterCount = ConfigDefaults::autotileMasterCount();
 
     /// Per-algorithm saved settings (split ratio + master count).
     /// Saved when switching away from an algorithm, restored when switching back.
@@ -96,7 +129,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 0 to 50
      * Default: 8
      */
-    int innerGap = AutotileDefaults::DefaultGap;
+    int innerGap = ConfigDefaults::autotileInnerGap();
 
     /**
      * @brief Gap from screen edges in pixels (uniform)
@@ -104,7 +137,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 0 to 50
      * Default: 8
      */
-    int outerGap = AutotileDefaults::DefaultGap;
+    int outerGap = ConfigDefaults::autotileOuterGap();
 
     /**
      * @brief Whether to use per-side outer gaps instead of uniform
@@ -183,7 +216,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Range: 1 to 12
      * Default: 6
      */
-    int maxWindows = AutotileDefaults::DefaultMaxWindows;
+    int maxWindows = ConfigDefaults::autotileMaxWindows();
 
     // ═══════════════════════════════════════════════════════════════════════
     // Comparison and Serialization

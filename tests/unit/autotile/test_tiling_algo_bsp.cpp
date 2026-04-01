@@ -42,7 +42,7 @@ private:
             return {};
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(splitRatio);
-        return algo->calculateZones({windowCount, screen, &state, gap, EdgeGaps::uniform(0)});
+        return algo->calculateZones(makeParams(windowCount, screen, &state, gap, EdgeGaps::uniform(0)));
     }
 
 private Q_SLOTS:

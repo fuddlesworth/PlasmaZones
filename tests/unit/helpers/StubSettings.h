@@ -662,6 +662,13 @@ public:
     void setAutotileUseSystemBorderColors(bool) override
     {
     }
+    StickyWindowHandling autotileStickyWindowHandling() const override
+    {
+        return StickyWindowHandling::TreatAsNormal;
+    }
+    void setAutotileStickyWindowHandling(StickyWindowHandling) override
+    {
+    }
     QStringList lockedScreens() const override
     {
         return {};

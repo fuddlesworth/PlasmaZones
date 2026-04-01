@@ -52,6 +52,7 @@ class NavigationController;
 class PerScreenConfigResolver;
 class ScreenManager;
 class Settings;
+class QSettingsConfigBackend;
 class SettingsBridge;
 class TilingAlgorithm;
 class TilingState;
@@ -78,7 +79,8 @@ class PLASMAZONES_EXPORT AutotileEngine : public QObject, public IWindowEngine
 
 public:
     explicit AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
-                            ScreenManager* screenManager, QObject* parent = nullptr);
+                            ScreenManager* screenManager, QSettingsConfigBackend* configBackend = nullptr,
+                            QObject* parent = nullptr);
     ~AutotileEngine() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -773,6 +775,7 @@ private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
     void removeWindow(const QString& windowId);
+    bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
     void recalculateLayout(const QString& screenId);
     void applyTiling(const QString& screenId);
     bool shouldTileWindow(const QString& windowId) const;

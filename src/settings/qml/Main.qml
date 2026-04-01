@@ -723,7 +723,7 @@ ApplicationWindow {
                                 SequentialAnimation {
                                     id: dirtyBadgePulse
 
-                                    property Item target: dirtyBadgePulse.parent
+                                    property Item target: parent
 
                                     loops: Animation.Infinite
                                     running: navDelegate.isActive && settingsController.needsSave
@@ -814,7 +814,7 @@ ApplicationWindow {
                             SequentialAnimation {
                                 id: daemonPulse
 
-                                property Item target: daemonPulse.parent
+                                property Item target: parent
 
                                 loops: settingsController.daemonRunning ? Animation.Infinite : 0
                                 running: settingsController.daemonRunning

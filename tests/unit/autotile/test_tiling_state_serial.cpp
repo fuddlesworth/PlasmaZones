@@ -9,6 +9,7 @@
 
 #include "autotile/TilingState.h"
 #include "core/constants.h"
+#include "config/configdefaults.h"
 
 using namespace PlasmaZones;
 
@@ -180,8 +181,8 @@ private Q_SLOTS:
         QVERIFY(!restored.isNull());
         QCOMPARE(restored->screenId(), QStringLiteral("empty"));
         QCOMPARE(restored->windowCount(), 0);
-        QCOMPARE(restored->masterCount(), AutotileDefaults::DefaultMasterCount);
-        QVERIFY(qFuzzyCompare(restored->splitRatio(), AutotileDefaults::DefaultSplitRatio));
+        QCOMPARE(restored->masterCount(), ConfigDefaults::autotileMasterCount());
+        QVERIFY(qFuzzyCompare(restored->splitRatio(), ConfigDefaults::autotileSplitRatio()));
     }
 
     void testSerialization_invalidJson()
@@ -252,8 +253,8 @@ private Q_SLOTS:
         QVERIFY(state.windowOrder().isEmpty());
         QVERIFY(state.floatingWindows().isEmpty());
         QVERIFY(state.focusedWindow().isEmpty());
-        QCOMPARE(state.masterCount(), AutotileDefaults::DefaultMasterCount);
-        QVERIFY(qFuzzyCompare(state.splitRatio(), AutotileDefaults::DefaultSplitRatio));
+        QCOMPARE(state.masterCount(), ConfigDefaults::autotileMasterCount());
+        QVERIFY(qFuzzyCompare(state.splitRatio(), ConfigDefaults::autotileSplitRatio()));
     }
 
     void testClear_emitsSignals()

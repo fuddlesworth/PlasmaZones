@@ -425,7 +425,8 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
         if (multiBufferMode) {
             const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
             for (int i = 0; i < n; ++i) {
-                if (!m_multiBufferRenderTargets[i] || !m_multiBufferPipelines[i] || !m_multiBufferSrbs[i]) {
+                if (!m_multiBufferTextures[i] || !m_multiBufferRenderTargets[i] || !m_multiBufferPipelines[i]
+                    || !m_multiBufferSrbs[i]) {
                     continue;
                 }
                 QSize ps = m_multiBufferTextures[i]->pixelSize();

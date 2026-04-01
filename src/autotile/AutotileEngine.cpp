@@ -20,6 +20,7 @@
 #include "PerScreenConfigResolver.h"
 #include "SettingsBridge.h"
 #include "TilingAlgorithm.h"
+#include "config/settings.h"
 // DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on TilingAlgorithm
 #include "TilingState.h"
 #include "core/constants.h"
@@ -38,10 +39,11 @@ namespace {
 // If windows fail to open (e.g., app crash during startup), this prevents
 // m_pendingInitialOrders from leaking state indefinitely.
 constexpr int PendingOrderTimeoutMs = 10000;
+
 } // namespace
 
 AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
-                               ScreenManager* screenManager, QObject* parent)
+                               ScreenManager* screenManager, QSettingsConfigBackend* configBackend, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)
@@ -49,7 +51,7 @@ AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingServi
     , m_config(std::make_unique<AutotileConfig>())
     , m_configResolver(std::make_unique<PerScreenConfigResolver>(this))
     , m_navigation(std::make_unique<NavigationController>(this))
-    , m_settingsBridge(std::make_unique<SettingsBridge>(this))
+    , m_settingsBridge(std::make_unique<SettingsBridge>(this, configBackend))
     , m_algorithmId(AlgorithmRegistry::defaultAlgorithmId())
 {
     connectSignals();
@@ -450,7 +452,10 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // Only save after the first setAlgorithm() call has completed, to avoid
     // persisting uninitialised struct defaults from the constructor.
     if (m_algorithmEverSet && oldAlgo) {
-        m_config->savedAlgorithmSettings[m_algorithmId] = {m_config->splitRatio, m_config->masterCount};
+        auto& entry = m_config->savedAlgorithmSettings[m_algorithmId];
+        entry.splitRatio = m_config->splitRatio;
+        entry.masterCount = m_config->masterCount;
+        // customParams are not touched here — only splitRatio/masterCount are engine-managed
     }
 
     // Look up saved settings AFTER the save above — insertion may rehash the
@@ -465,7 +470,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
             m_config->masterCount = it->masterCount;
         } else {
             m_config->splitRatio = algo->defaultSplitRatio();
-            m_config->masterCount = AutotileDefaults::DefaultMasterCount;
+            m_config->masterCount = ConfigDefaults::autotileMasterCount();
         }
     };
 
@@ -1266,16 +1271,16 @@ void AutotileEngine::windowOpened(const QString& windowId, const QString& screen
         return;
     }
 
-    // Store window minimum size from KWin (used by enforceWindowMinSizes)
-    if (minWidth > 0 || minHeight > 0) {
-        m_windowMinSizes[windowId] = QSize(qMax(0, minWidth), qMax(0, minHeight));
-        qCDebug(lcAutotile) << "Stored min size for" << windowId << "-" << minWidth << "x" << minHeight;
-    }
-
-    // Store screen mapping so onWindowAdded uses correct screen
+    // Store screen mapping first so storeWindowMinSize can resolve the screen.
     if (!screenId.isEmpty()) {
         m_windowToStateKey[windowId] = currentKeyForScreen(screenId);
     }
+
+    // Store window minimum size from KWin (used by enforceWindowMinSizes)
+    if (minWidth > 0 || minHeight > 0) {
+        storeWindowMinSize(windowId, minWidth, minHeight);
+    }
+
     onWindowAdded(windowId);
 }
 
@@ -1285,11 +1290,41 @@ void AutotileEngine::windowMinSizeUpdated(const QString& windowId, int minWidth,
         return;
     }
 
+    if (!storeWindowMinSize(windowId, minWidth, minHeight)) {
+        return; // No change
+    }
+
+    // Retile the screen this window is on
+    const auto stateKey = m_windowToStateKey.value(windowId);
+    const QString screenId = stateKey.screenId;
+    if (!screenId.isEmpty() && m_screenStates.contains(stateKey)) {
+        scheduleRetileForScreen(screenId);
+    }
+}
+
+bool AutotileEngine::storeWindowMinSize(const QString& windowId, int minWidth, int minHeight)
+{
+    // Cap min-sizes against the screen geometry to prevent a single window's
+    // min-size from overwhelming the split ratio. Without this cap, a transiently
+    // inflated min-size (e.g., from a browser loading media) can dominate the
+    // master/stack split and get stuck at ~90% or full width.
+    const auto stateKey = m_windowToStateKey.value(windowId);
+    const QString screenId = stateKey.screenId;
+    if (!screenId.isEmpty()) {
+        const QRect screen = screenGeometry(screenId);
+        if (screen.isValid()) {
+            const int maxMinW = static_cast<int>(screen.width() * AutotileDefaults::MaxSplitRatio);
+            const int maxMinH = static_cast<int>(screen.height() * AutotileDefaults::MaxSplitRatio);
+            minWidth = qMin(qMax(0, minWidth), maxMinW);
+            minHeight = qMin(qMax(0, minHeight), maxMinH);
+        }
+    }
+
     const QSize newMin(qMax(0, minWidth), qMax(0, minHeight));
     const QSize oldMin = m_windowMinSizes.value(windowId, QSize(0, 0));
 
     if (newMin == oldMin) {
-        return; // No change
+        return false; // No change
     }
 
     if (newMin.width() > 0 || newMin.height() > 0) {
@@ -1299,13 +1334,7 @@ void AutotileEngine::windowMinSizeUpdated(const QString& windowId, int minWidth,
     }
 
     qCDebug(lcAutotile) << "Updated min size for" << windowId << "-" << oldMin << "->" << newMin;
-
-    // Retile the screen this window is on
-    const auto stateKey = m_windowToStateKey.value(windowId);
-    const QString screenId = stateKey.screenId;
-    if (!screenId.isEmpty() && m_screenStates.contains(stateKey)) {
-        scheduleRetileForScreen(screenId);
-    }
+    return true;
 }
 
 void AutotileEngine::windowClosed(const QString& windowId)
@@ -1411,6 +1440,14 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     }
 
     if (inserted) {
+        // Notify algorithm via lifecycle hook before retile
+        TilingAlgorithm* algo = effectiveAlgorithm(screenId);
+        if (algo && algo->supportsLifecycleHooks() && state) {
+            const int idx = state->tiledWindows().indexOf(windowId);
+            if (idx >= 0) {
+                algo->onWindowAdded(state, idx);
+            }
+        }
         scheduleRetileForScreen(screenId);
     }
 }
@@ -1420,6 +1457,19 @@ void AutotileEngine::onWindowRemoved(const QString& windowId)
     const QString screenId = m_windowToStateKey.value(windowId).screenId;
     if (screenId.isEmpty()) {
         return;
+    }
+
+    // Notify algorithm via lifecycle hook before removal
+    TilingState* state = stateForScreen(screenId);
+    TilingAlgorithm* algo = effectiveAlgorithm(screenId);
+    if (algo && algo->supportsLifecycleHooks() && state) {
+        const int idx = state->tiledWindows().indexOf(windowId);
+        if (idx >= 0) {
+            algo->onWindowRemoved(state, idx);
+        } else {
+            qCDebug(lcAutotile) << "onWindowRemoved: window" << windowId
+                                << "not found in tiling state — lifecycle hook skipped";
+        }
     }
 
     removeWindow(windowId);
@@ -1643,13 +1693,58 @@ void AutotileEngine::recalculateLayout(const QString& screenId)
         }
     }
 
+    // Build per-window metadata for algorithm context
+    int focusedIndex = -1;
+    QVector<WindowInfo> windowInfos = buildWindowInfos(state, windowCount, focusedIndex);
+
+    // Build screen metadata for orientation-aware algorithms
+    TilingScreenInfo screenInfo;
+    screenInfo.id = screenId;
+    {
+        QScreen* qscreen = Utils::findScreenByIdOrName(screenId);
+        if (qscreen) {
+            const QRect geom = qscreen->geometry();
+            screenInfo.portrait = geom.height() > geom.width();
+            screenInfo.aspectRatio = Utils::screenAspectRatio(qscreen);
+        }
+    }
+
+    // Resolve custom params for this algorithm from saved settings.
+    // Filter out stale params that no longer match the algorithm's declarations
+    // (e.g., user edited the JS file and renamed/removed a @param).
+    QVariantMap customParams;
+    if (m_config) {
+        const auto it = m_config->savedAlgorithmSettings.constFind(algoId);
+        if (it != m_config->savedAlgorithmSettings.constEnd() && !it->customParams.isEmpty()) {
+            if (algo->supportsCustomParams()) {
+                for (auto pit = it->customParams.constBegin(); pit != it->customParams.constEnd(); ++pit) {
+                    if (algo->hasCustomParam(pit.key())) {
+                        customParams[pit.key()] = pit.value();
+                    }
+                }
+            }
+            // else: algorithm doesn't support custom params — don't pass any
+        }
+    }
+
     // Let memory-based algorithms prepare their state (e.g., lazily create a SplitTree)
     // before calculateZones(). Virtual dispatch avoids concrete type casts here.
     algo->prepareTilingState(state);
 
     // Pass minSizes to algorithm so it can incorporate them directly into zone
     // calculations using its topology knowledge (split tree, column structure, etc.)
-    QVector<QRect> zones = algo->calculateZones({windowCount, screen, state, innerGap, outerGaps, minSizes});
+    TilingParams tilingParams;
+    tilingParams.windowCount = windowCount;
+    tilingParams.screenGeometry = screen;
+    tilingParams.state = state;
+    tilingParams.innerGap = innerGap;
+    tilingParams.outerGaps = outerGaps;
+    tilingParams.minSizes = minSizes;
+    tilingParams.windowInfos = windowInfos;
+    tilingParams.focusedIndex = focusedIndex;
+    tilingParams.screenInfo = screenInfo;
+    tilingParams.customParams = customParams;
+    QVector<QRect> zones = algo->calculateZones(tilingParams);
 
     // Validate algorithm returned correct number of zones
     if (zones.size() != windowCount) {
@@ -1774,6 +1869,22 @@ bool AutotileEngine::shouldTileWindow(const QString& windowId) const
 {
     if (windowId.isEmpty()) {
         return false;
+    }
+
+    // Respect autotile-specific sticky window handling setting.
+    // IgnoreAll: sticky windows are never autotiled.
+    // RestoreOnly: sticky windows are not auto-managed (autotiling is active management).
+    // TreatAsNormal: sticky windows are tiled like any other window.
+    if (m_windowTracker && m_windowTracker->isWindowSticky(windowId)) {
+        Settings* settings = m_settingsBridge ? m_settingsBridge->settings() : nullptr;
+        if (settings) {
+            auto handling = settings->autotileStickyWindowHandling();
+            if (handling == StickyWindowHandling::IgnoreAll || handling == StickyWindowHandling::RestoreOnly) {
+                qCDebug(lcAutotile) << "Window" << windowId << "is sticky, handling=" << static_cast<int>(handling)
+                                    << ", skipping tile";
+                return false;
+            }
+        }
     }
 
     // Check if window is floating in any screen's TilingState

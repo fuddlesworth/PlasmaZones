@@ -34,6 +34,18 @@ public:
     /** Maximum number of activation triggers per action (drag, multi-zone, zone span) */
     static constexpr int MaxTriggersPerAction = 4;
 
+    /**
+     * @brief Construct with an external (non-owned) config backend
+     *
+     * Used by the daemon to share a single QSettingsConfigBackend across
+     * Settings, LayoutManager, and other components. Eliminates Qt's
+     * QConfFile cache conflicts from multiple QSettings instances per file.
+     *
+     * @param backend Non-owned backend pointer (must outlive this Settings)
+     * @param parent Parent QObject
+     */
+    Settings(QSettingsConfigBackend* backend, QObject* parent);
+
     // Activation settings
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
                    dragActivationTriggersChanged)
@@ -221,6 +233,8 @@ public:
                    NOTIFY autotileInactiveBorderColorChanged)
     Q_PROPERTY(bool autotileUseSystemBorderColors READ autotileUseSystemBorderColors WRITE
                    setAutotileUseSystemBorderColors NOTIFY autotileUseSystemBorderColorsChanged)
+    Q_PROPERTY(int autotileStickyWindowHandling READ autotileStickyWindowHandlingInt WRITE
+                   setAutotileStickyWindowHandlingInt NOTIFY autotileStickyWindowHandlingChanged)
     // Autotile Shortcuts
     Q_PROPERTY(QString autotileToggleShortcut READ autotileToggleShortcut WRITE setAutotileToggleShortcut NOTIFY
                    autotileToggleShortcutChanged)
@@ -1076,6 +1090,17 @@ public:
     }
     void setAutotileUseSystemBorderColors(bool use) override;
 
+    StickyWindowHandling autotileStickyWindowHandling() const override
+    {
+        return m_autotileStickyWindowHandling;
+    }
+    void setAutotileStickyWindowHandling(StickyWindowHandling handling) override;
+    int autotileStickyWindowHandlingInt() const
+    {
+        return static_cast<int>(m_autotileStickyWindowHandling);
+    }
+    void setAutotileStickyWindowHandlingInt(int handling);
+
     QStringList lockedScreens() const override
     {
         return m_lockedScreens;
@@ -1546,8 +1571,16 @@ private:
     void saveEditorConfig(QSettingsConfigGroup& editor);
     void saveVirtualScreenConfigs(QSettingsConfigBackend* backend);
 
-    // Config backend (replaces KSharedConfig)
-    std::unique_ptr<QSettingsConfigBackend> m_configBackend;
+    // Groups that save() writes exhaustively (excludes unmanaged groups).
+    static QStringList managedGroupNames();
+    // Delete all per-screen override groups (ZoneSelector:*, AutotileScreen:*, SnappingScreen:*).
+    static void deletePerScreenGroups(QSettingsConfigBackend* backend);
+    // Purge stale keys from all managed groups before save() rewrites them.
+    void purgeStaleKeys();
+
+    // Config backend — owned (standalone) or non-owned (shared from Daemon)
+    std::unique_ptr<QSettingsConfigBackend> m_ownedBackend;
+    QSettingsConfigBackend* m_configBackend = nullptr; // always valid after construction
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Activation
@@ -1686,6 +1719,7 @@ private:
     QColor m_autotileBorderColor = QColor(0, 120, 212, 128); // #800078D4 — same as highlightColor
     QColor m_autotileInactiveBorderColor = QColor(128, 128, 128, 64); // #40808080 — same as inactiveColor
     bool m_autotileUseSystemBorderColors = ConfigDefaults::autotileUseSystemBorderColors();
+    StickyWindowHandling m_autotileStickyWindowHandling = StickyWindowHandling::TreatAsNormal;
     QStringList m_lockedScreens;
     // Autotile Shortcuts (defaults from ConfigDefaults, canonical source)
     QString m_autotileToggleShortcut = ConfigDefaults::autotileToggleShortcut();

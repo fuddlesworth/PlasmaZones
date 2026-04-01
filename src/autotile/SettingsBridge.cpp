@@ -24,16 +24,21 @@ void populatePreviewSavedSettings(AlgorithmRegistry::PreviewParams& params,
                                   const QHash<QString, AlgorithmSettings>& savedSettings)
 {
     for (auto it = savedSettings.constBegin(); it != savedSettings.constEnd(); ++it) {
-        params.savedAlgorithmSettings[it.key()] = QVariantMap{
+        QVariantMap entry{
             {PerAlgoKeys::MasterCount, it.value().masterCount},
             {PerAlgoKeys::SplitRatio, it.value().splitRatio},
         };
+        if (!it.value().customParams.isEmpty()) {
+            entry[PerAlgoKeys::CustomParams] = it.value().customParams;
+        }
+        params.savedAlgorithmSettings[it.key()] = entry;
     }
 }
 } // anonymous namespace
 
-SettingsBridge::SettingsBridge(AutotileEngine* engine)
+SettingsBridge::SettingsBridge(AutotileEngine* engine, QSettingsConfigBackend* configBackend)
     : m_engine(engine)
+    , m_configBackend(configBackend)
 {
     // Configure settings retile debounce timer
     // Coalesces rapid settings changes (e.g., slider adjustments) into single retile
@@ -345,7 +350,8 @@ void SettingsBridge::syncAlgorithmToSettings(const QString& algoId, qreal splitR
 
 void SettingsBridge::saveState()
 {
-    auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+    std::unique_ptr<QSettingsConfigBackend> fallback;
+    QSettingsConfigBackend* backend = QSettingsConfigBackend::resolveBackend(m_configBackend, fallback);
     auto group = backend->group(QStringLiteral("AutoTileState"));
 
     // Save global state (algorithm only — autotile screens are derived from
@@ -382,7 +388,8 @@ void SettingsBridge::saveState()
 
 void SettingsBridge::loadState()
 {
-    auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+    std::unique_ptr<QSettingsConfigBackend> fallback;
+    QSettingsConfigBackend* backend = QSettingsConfigBackend::resolveBackend(m_configBackend, fallback);
     auto group = backend->group(QStringLiteral("AutoTileState"));
 
     if (!group->hasKey(QStringLiteral("algorithm")) && !group->hasKey(QStringLiteral("screenStates"))) {

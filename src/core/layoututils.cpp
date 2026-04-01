@@ -228,6 +228,7 @@ static void appendAutotileEntries(QVector<UnifiedLayoutEntry>& list)
         entry.supportsMasterCount = algo->supportsMasterCount();
         entry.supportsSplitRatio = algo->supportsSplitRatio();
         entry.producesOverlappingZones = algo->producesOverlappingZones();
+        entry.supportsCustomParams = algo->supportsCustomParams();
         entry.isScripted = algo->isScripted();
         entry.isUserScript = algo->isUserScript();
 
@@ -381,6 +382,7 @@ QVariantMap toVariantMap(const UnifiedLayoutEntry& entry)
         map[QLatin1String("supportsMasterCount")] = entry.supportsMasterCount;
         map[QLatin1String("supportsSplitRatio")] = entry.supportsSplitRatio;
         map[QLatin1String("producesOverlappingZones")] = entry.producesOverlappingZones;
+        map[QLatin1String("supportsCustomParams")] = entry.supportsCustomParams;
     }
     if (entry.referenceAspectRatio > 0.0) {
         map[QLatin1String("referenceAspectRatio")] = entry.referenceAspectRatio;
@@ -444,6 +446,7 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
         json[QLatin1String("supportsMasterCount")] = entry.supportsMasterCount;
         json[QLatin1String("supportsSplitRatio")] = entry.supportsSplitRatio;
         json[QLatin1String("producesOverlappingZones")] = entry.producesOverlappingZones;
+        json[QLatin1String("supportsCustomParams")] = entry.supportsCustomParams;
     }
 
     // hiddenFromSelector is added by callers that have access to the Layout*

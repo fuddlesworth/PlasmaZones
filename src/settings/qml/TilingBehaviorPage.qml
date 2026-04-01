@@ -99,6 +99,33 @@ Flickable {
 
                 }
 
+                SettingsSeparator {
+                }
+
+                SettingsRow {
+                    title: i18n("Sticky windows")
+                    description: i18n("How to handle windows that appear on all desktops")
+
+                    WideComboBox {
+                        Accessible.name: i18n("Sticky windows")
+                        textRole: "text"
+                        valueRole: "value"
+                        model: [{
+                            "text": i18n("Treat as normal"),
+                            "value": 0
+                        }, {
+                            "text": i18n("Restore only"),
+                            "value": 1
+                        }, {
+                            "text": i18n("Ignore all"),
+                            "value": 2
+                        }]
+                        currentIndex: Math.max(0, indexOfValue(appSettings.autotileStickyWindowHandling))
+                        onActivated: appSettings.autotileStickyWindowHandling = currentValue
+                    }
+
+                }
+
             }
 
         }

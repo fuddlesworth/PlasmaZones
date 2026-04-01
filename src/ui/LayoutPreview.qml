@@ -20,6 +20,10 @@ Rectangle {
     property var zones: [] // Array of zone objects with relativeGeometry
     property int category: 0 // 0=Manual (matches LayoutCategory in C++)
     property bool autoAssign: false
+    // Autotile algorithm metadata
+    property bool showMasterDot: false
+    property bool producesOverlappingZones: false
+    property string zoneNumberDisplay: "all"
     // State
     property bool isActive: false
     property bool isHovered: false
@@ -93,6 +97,8 @@ Rectangle {
         edgeGap: 1
         minZoneSize: 8
         showZoneNumbers: true
+        zoneNumberDisplay: root.zoneNumberDisplay
+        producesOverlappingZones: root.producesOverlappingZones
         inactiveOpacity: root.inactiveOpacity
         activeOpacity: root.hoverOpacity
         fontFamily: root.fontFamily
@@ -101,6 +107,7 @@ Rectangle {
         fontItalic: root.fontItalic
         fontUnderline: root.fontUnderline
         fontStrikeout: root.fontStrikeout
+        showMasterDot: root.showMasterDot
         animationDuration: constants.animationDuration
     }
 

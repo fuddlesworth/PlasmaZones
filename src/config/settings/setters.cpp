@@ -567,6 +567,13 @@ void Settings::setAutotileUseSystemBorderColors(bool use)
     }
 }
 
+SETTINGS_SETTER(StickyWindowHandling, AutotileStickyWindowHandling, m_autotileStickyWindowHandling,
+                autotileStickyWindowHandlingChanged)
+
+SETTINGS_SETTER_ENUM_INT(AutotileStickyWindowHandling, StickyWindowHandling,
+                         static_cast<int>(StickyWindowHandling::TreatAsNormal),
+                         static_cast<int>(StickyWindowHandling::IgnoreAll))
+
 void Settings::setLockedScreens(const QStringList& screens)
 {
     if (m_lockedScreens != screens) {

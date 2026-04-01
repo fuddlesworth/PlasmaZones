@@ -92,6 +92,8 @@ public:
     virtual void setAutotileInactiveBorderColor(const QColor& color) = 0;
     virtual bool autotileUseSystemBorderColors() const = 0;
     virtual void setAutotileUseSystemBorderColors(bool use) = 0;
+    virtual StickyWindowHandling autotileStickyWindowHandling() const = 0;
+    virtual void setAutotileStickyWindowHandling(StickyWindowHandling handling) = 0;
 
     // Rendering backend (pipeline-level, not specific to any sub-interface)
     virtual QString renderingBackend() const = 0;
@@ -273,6 +275,7 @@ Q_SIGNALS:
     void autotileBorderColorChanged();
     void autotileInactiveBorderColorChanged();
     void autotileUseSystemBorderColorsChanged();
+    void autotileStickyWindowHandlingChanged();
     void lockedScreensChanged();
     void virtualScreenConfigsChanged();
     // Animation settings (general)

@@ -10,8 +10,10 @@
 #include "core/constants.h"
 
 #include "../helpers/ScriptedAlgoTestSetup.h"
+#include "../helpers/TilingTestHelpers.h"
 
 using namespace PlasmaZones;
+using namespace PlasmaZones::TestHelpers;
 
 /**
  * @brief Simple test algorithm for registration/unregistration tests
@@ -273,7 +275,7 @@ private Q_SLOTS:
             auto* algo = registry->algorithm(id);
             QVERIFY(algo != nullptr);
 
-            auto zones = algo->calculateZones({4, screen, &state, 0, EdgeGaps::uniform(0)});
+            auto zones = algo->calculateZones(makeParams(4, screen, &state, 0, EdgeGaps::uniform(0)));
             if (algo->producesOverlappingZones()) {
                 QVERIFY2(zones.size() >= 1 && zones.size() <= 4,
                          qPrintable(QStringLiteral("Expected 1-4 zones from overlapping algo: ") + id

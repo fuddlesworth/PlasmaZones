@@ -306,6 +306,9 @@ Window {
                             isActive: layoutCard.isActive
                             isSelected: layoutCard.isSelected
                             isHovered: layoutCard.isHovered
+                            showMasterDot: layoutCard.layoutData.isAutotile === true && layoutCard.layoutData.supportsMasterCount === true
+                            producesOverlappingZones: layoutCard.layoutData.producesOverlappingZones === true
+                            zoneNumberDisplay: layoutCard.layoutData.zoneNumberDisplay || "all"
                             previewWidth: root.previewWidth
                             previewHeight: root.previewHeight
                             // Layout picker features

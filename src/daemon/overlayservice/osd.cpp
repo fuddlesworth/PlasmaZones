@@ -148,6 +148,7 @@ void OverlayService::showLayoutOsd(Layout* layout, bool locked, const QString& s
                      ScreenClassification::toString(layout->aspectRatioClass()));
     writeQmlProperty(window, QStringLiteral("category"), static_cast<int>(LayoutCategory::Manual));
     writeQmlProperty(window, QStringLiteral("autoAssign"), layout->autoAssign());
+    writeAutotileMetadata(window, false, false);
     writeQmlProperty(window, QStringLiteral("zones"), LayoutUtils::zonesToVariantList(layout, ZoneField::Full));
     writeFontProperties(window, m_settings);
 
@@ -160,7 +161,8 @@ void OverlayService::showLayoutOsd(Layout* layout, bool locked, const QString& s
 }
 
 void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
-                                   bool autoAssign, const QString& screenId)
+                                   bool autoAssign, const QString& screenId, bool showMasterDot,
+                                   bool producesOverlappingZones, const QString& zoneNumberDisplay, int masterCount)
 {
     if (zones.isEmpty()) {
         qCDebug(lcOverlay) << "Skipping OSD for empty layout=" << name;
@@ -195,6 +197,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     }
     writeQmlProperty(window, QStringLiteral("category"), category);
     writeQmlProperty(window, QStringLiteral("autoAssign"), autoAssign);
+    writeAutotileMetadata(window, showMasterDot, producesOverlappingZones, zoneNumberDisplay, masterCount);
     writeQmlProperty(window, QStringLiteral("zones"), zones);
     writeFontProperties(window, m_settings);
 

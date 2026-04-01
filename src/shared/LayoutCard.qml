@@ -39,10 +39,14 @@ Item {
     property real activeOpacity: 0.5
     property real inactiveOpacity: 0.3
     property bool showZoneNumbers: true
+    property string zoneNumberDisplay: "all"
+    property bool producesOverlappingZones: false
     property color zoneHighlightColor: Kirigami.Theme.highlightColor
     property color zoneInactiveColor: Kirigami.Theme.textColor
     property color zoneBorderColor: Kirigami.Theme.textColor
     property real hoverScale: 1
+    // Autotile algorithm metadata
+    property bool showMasterDot: false
     // Theme colors
     property color highlightColor: Kirigami.Theme.highlightColor
     property color textColor: Kirigami.Theme.textColor
@@ -307,11 +311,15 @@ Item {
 
         // Zone rectangles — fill the fitted preview background, not the bounding box
         ZonePreview {
+            id: zonePreview
+
             anchors.fill: previewBackground
             anchors.margins: root.showCardBackground ? Kirigami.Units.smallSpacing : 0
             zones: root.layoutData.zones || []
             interactive: root.interactive
             showZoneNumbers: root.showZoneNumbers
+            zoneNumberDisplay: root.zoneNumberDisplay
+            producesOverlappingZones: root.producesOverlappingZones
             highlightAllZones: false
             selectedZoneIndex: root.selectedZoneIndex
             isHovered: root.isHovered || root.isSelected
@@ -331,6 +339,7 @@ Item {
             fontItalic: root.fontItalic
             fontUnderline: root.fontUnderline
             fontStrikeout: root.fontStrikeout
+            showMasterDot: root.showMasterDot
             animationDuration: root.animationDuration
             onZoneHovered: function(index) {
                 root.zoneHovered(index);

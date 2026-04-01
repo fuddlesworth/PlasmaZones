@@ -437,6 +437,18 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("autotileUseSystemBorderColors", autotileUseSystemBorderColors,
                           setAutotileUseSystemBorderColors)
     REGISTER_BOOL_SETTING("autotileFocusFollowsMouse", autotileFocusFollowsMouse, setAutotileFocusFollowsMouse)
+    m_getters[QStringLiteral("autotileStickyWindowHandling")] = [this]() {
+        return static_cast<int>(m_settings->autotileStickyWindowHandling());
+    };
+    m_setters[QStringLiteral("autotileStickyWindowHandling")] = [this](const QVariant& v) {
+        int val = v.toInt();
+        if (val >= 0 && val <= 2) {
+            m_settings->setAutotileStickyWindowHandling(static_cast<StickyWindowHandling>(val));
+            return true;
+        }
+        return false;
+    };
+    m_schemas[QStringLiteral("autotileStickyWindowHandling")] = QStringLiteral("int");
     REGISTER_STRINGLIST_SETTING("lockedScreens", lockedScreens, setLockedScreens)
 
     // Autotile shortcuts (concrete Settings only)

@@ -145,6 +145,13 @@ ColumnLayout {
                     "test": (a) => {
                         return a.memory === true;
                     }
+                }, {
+                    "key": "customParams",
+                    "label": i18n("Custom Parameters"),
+                    "order": 4,
+                    "test": (a) => {
+                        return a.supportsCustomParams === true;
+                    }
                 }]
 
                 function rebuildModel() {

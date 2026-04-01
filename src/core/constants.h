@@ -179,22 +179,17 @@ inline bool matches(AspectRatioClass layoutClass, AspectRatioClass screenClass)
  * @brief Auto-tiling algorithm defaults
  */
 namespace AutotileDefaults {
+// Min/max constraints — default values live in ConfigDefaults (single source of truth)
 constexpr qreal MinSplitRatio = 0.1;
 constexpr qreal MaxSplitRatio = 0.9;
-constexpr qreal DefaultSplitRatio = 0.6;
 constexpr int MinMasterCount = 1;
 constexpr int MaxMasterCount = 5;
-constexpr int DefaultMasterCount = 1;
 constexpr int MinGap = 0;
 constexpr int MaxGap = 50;
-constexpr int DefaultGap = 8; // Intentionally independent from Defaults::OuterGap
 constexpr int MinZoneSizePx = 50;
 constexpr int GapEdgeThresholdPx = 5;
-constexpr bool DefaultSmartGaps = true;
-constexpr bool DefaultFocusNewWindows = true;
 constexpr int MinMaxWindows = 1;
 constexpr int MaxMaxWindows = 12;
-constexpr int DefaultMaxWindows = 6;
 constexpr int MaxZones = 256;
 constexpr int MaxRuntimeTreeDepth = 50; ///< Maximum recursion depth for split tree operations
 constexpr qreal SplitRatioHysteresis = 0.05; ///< Band within which algorithm-switch ratio reset is suppressed
@@ -206,7 +201,14 @@ constexpr int MinAnimationDuration = 50;
 constexpr int MaxAnimationDuration = 500;
 constexpr int MinAnimationStaggerIntervalMs = 10;
 constexpr int MaxAnimationStaggerIntervalMs = 200;
-constexpr int DefaultAnimationDuration = 150;
+
+/// Returns true if typeId is a numeric QMetaType (Double, Float, Int, UInt, LongLong, ULongLong).
+/// Used for fuzzy-comparing QVariant values after JSON round-trip type drift.
+constexpr bool isNumericMetaType(int typeId)
+{
+    return typeId == QMetaType::Double || typeId == QMetaType::Float || typeId == QMetaType::Int
+        || typeId == QMetaType::UInt || typeId == QMetaType::LongLong || typeId == QMetaType::ULongLong;
+}
 }
 
 /**
@@ -242,7 +244,7 @@ constexpr qreal GeometryBoundsTolerance = 0.001; // Tolerance for coordinate bou
 // Default zone colors (hex strings for QML compatibility)
 inline constexpr QLatin1String DefaultHighlightColor{"#800078D4"};
 inline constexpr QLatin1String DefaultInactiveColor{"#40808080"};
-inline constexpr QLatin1String DefaultBorderColor{"#CCFFFFFF"};
+inline constexpr QLatin1String DefaultBorderColor{"#C8FFFFFF"};
 }
 
 /**
@@ -375,6 +377,7 @@ inline constexpr QLatin1String FloatingWindows{"floatingWindows"};
 inline constexpr QLatin1String FocusedWindow{"focusedWindow"};
 inline constexpr QLatin1String MasterCount{"masterCount"};
 inline constexpr QLatin1String SplitRatio{"splitRatio"};
+inline constexpr QLatin1String CustomParams{"customParams"};
 
 // AutotileConfig keys
 inline constexpr QLatin1String PerAlgorithmSettings{"perAlgorithmSettings"};

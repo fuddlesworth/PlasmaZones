@@ -353,9 +353,12 @@ void EditorController::setCurrentShaderIdDirect(const QString& id)
 void EditorController::setCurrentShaderParams(const QVariantMap& params)
 {
     if (m_currentShaderParams != params) {
-        // Create undo command for batch params change
         auto* cmd = new UpdateShaderParamsCommand(this, m_currentShaderParams, params);
-        m_undoController->push(cmd);
+        if (m_undoController) {
+            m_undoController->push(cmd);
+        } else {
+            delete cmd;
+        }
     }
 }
 
@@ -371,10 +374,13 @@ void EditorController::setCurrentShaderParamsDirect(const QVariantMap& params)
 void EditorController::setShaderParameter(const QString& key, const QVariant& value)
 {
     if (m_currentShaderParams.value(key) != value) {
-        // Create undo command for single param change (supports merging)
         QVariant oldValue = m_currentShaderParams.value(key);
         auto* cmd = new UpdateShaderParamsCommand(this, key, oldValue, value);
-        m_undoController->push(cmd);
+        if (m_undoController) {
+            m_undoController->push(cmd);
+        } else {
+            delete cmd;
+        }
     }
 }
 
@@ -390,10 +396,13 @@ void EditorController::setShaderParameterDirect(const QString& key, const QVaria
 void EditorController::resetShaderParameters()
 {
     if (!m_currentShaderParams.isEmpty()) {
-        // Create undo command for reset (batch change to empty)
         auto* cmd = new UpdateShaderParamsCommand(this, m_currentShaderParams, QVariantMap(),
                                                   PzI18n::tr("Reset Shader Parameters", "@action"));
-        m_undoController->push(cmd);
+        if (m_undoController) {
+            m_undoController->push(cmd);
+        } else {
+            delete cmd;
+        }
     }
 }
 
@@ -403,10 +412,14 @@ void EditorController::switchShader(const QString& id, const QVariantMap& params
         return;
     }
 
-    m_undoController->beginMacro(PzI18n::tr("Switch Shader Effect", "@action"));
+    if (m_undoController) {
+        m_undoController->beginMacro(PzI18n::tr("Switch Shader Effect", "@action"));
+    }
     setCurrentShaderId(id);
     setCurrentShaderParams(params);
-    m_undoController->endMacro();
+    if (m_undoController) {
+        m_undoController->endMacro();
+    }
 }
 
 QVariantMap EditorController::stripStaleShaderParams(const QVariantMap& params) const

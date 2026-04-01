@@ -86,6 +86,10 @@ Item {
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
+    /// Whether to show master indicator dots on master zone(s)
+    property bool showMasterDot: false
+    /// Number of master zones to mark with indicator dots
+    property int masterCount: 1
 
     /// Emitted when a zone is hovered
     signal zoneHovered(int index)
@@ -264,6 +268,32 @@ Item {
 
             }
 
+        }
+
+    }
+
+    // Master indicator dots overlaid on master zone(s) for autotile algorithms
+    Repeater {
+        model: root.showMasterDot ? (root.zones || []) : []
+
+        Rectangle {
+            required property var modelData
+            required property int index
+            readonly property var relGeo: modelData.relativeGeometry || ({
+            })
+            readonly property real relX: relGeo.x || 0
+            readonly property real relY: relGeo.y || 0
+            readonly property real leftOffset: relX < 0.01 ? root.edgeGap : root.zonePadding / 2
+            readonly property real topOffset: relY < 0.01 ? root.edgeGap : root.zonePadding / 2
+
+            visible: index < root.masterCount
+            Accessible.ignored: true
+            x: relX * root.width + leftOffset + Kirigami.Units.smallSpacing
+            y: relY * root.height + topOffset + Kirigami.Units.smallSpacing
+            width: Kirigami.Units.smallSpacing * 2
+            height: Kirigami.Units.smallSpacing * 2
+            radius: Kirigami.Units.smallSpacing
+            color: Kirigami.Theme.positiveTextColor
         }
 
     }

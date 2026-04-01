@@ -179,16 +179,19 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
     case OsdStyle::Preview:
         if (m_overlayService) {
             int windowCount = 0;
+            int masterCount = 1;
             if (m_autotileEngine) {
                 TilingState* state = m_autotileEngine->stateForScreen(screenId);
                 if (state) {
                     windowCount = state->tiledWindowCount();
+                    masterCount = state->masterCount();
                 }
             }
             QVariantList zones = AlgorithmRegistry::generatePreviewZones(algo, windowCount > 0 ? windowCount : -1);
             QString layoutId = LayoutId::makeAutotileId(algorithmId);
             m_overlayService->showLayoutOsd(layoutId, displayName, zones, static_cast<int>(LayoutCategory::Autotile),
-                                            false, screenId);
+                                            false, screenId, algo->supportsMasterCount(),
+                                            algo->producesOverlappingZones(), algo->zoneNumberDisplay(), masterCount);
             qCInfo(lcDaemon) << "Preview OSD: algorithm=" << displayName << "screen=" << screenId;
         } else {
             qCWarning(lcDaemon) << "Overlay service not available for preview OSD";

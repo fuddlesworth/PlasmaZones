@@ -18,9 +18,20 @@ namespace PlasmaZones {
 LayoutManager::LayoutManager(QObject* parent)
     : QObject(parent)
     , ILayoutManager()
-    , m_configBackend(QSettingsConfigBackend::createDefault())
+    , m_ownedBackend(QSettingsConfigBackend::createDefault())
+    , m_configBackend(m_ownedBackend.get())
 {
     // Default layout directory
+    m_layoutDirectory =
+        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/layouts");
+    ensureLayoutDirectory();
+}
+
+LayoutManager::LayoutManager(QSettingsConfigBackend* backend, QObject* parent)
+    : QObject(parent)
+    , ILayoutManager()
+    , m_configBackend(backend)
+{
     m_layoutDirectory =
         QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/layouts");
     ensureLayoutDirectory();

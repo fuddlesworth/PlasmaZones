@@ -265,6 +265,9 @@ Rectangle {
                     layoutName: modelData.name || i18n("Layout %1", index + 1)
                     zones: modelData.zones || []
                     category: modelData.category !== undefined ? modelData.category : 0
+                    showMasterDot: modelData.isAutotile === true && modelData.supportsMasterCount === true
+                    producesOverlappingZones: modelData.producesOverlappingZones === true
+                    zoneNumberDisplay: modelData.zoneNumberDisplay || "all"
                     isActive: layoutId === root.activeLayoutId
                     isHovered: layoutId === root.hoveredLayoutId
                     previewWidth: root.previewWidth

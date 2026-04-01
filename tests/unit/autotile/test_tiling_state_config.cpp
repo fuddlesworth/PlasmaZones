@@ -6,6 +6,7 @@
 
 #include "autotile/TilingState.h"
 #include "core/constants.h"
+#include "config/configdefaults.h"
 
 using namespace PlasmaZones;
 
@@ -44,7 +45,7 @@ private Q_SLOTS:
     void testMasterCount_default()
     {
         TilingState state(QStringLiteral("test"));
-        QCOMPARE(state.masterCount(), AutotileDefaults::DefaultMasterCount);
+        QCOMPARE(state.masterCount(), ConfigDefaults::autotileMasterCount());
     }
 
     void testMasterCount_setAndGet()
@@ -160,7 +161,7 @@ private Q_SLOTS:
     void testSplitRatio_default()
     {
         TilingState state(QStringLiteral("test"));
-        QCOMPARE(state.splitRatio(), AutotileDefaults::DefaultSplitRatio);
+        QCOMPARE(state.splitRatio(), ConfigDefaults::autotileSplitRatio());
     }
 
     void testSplitRatio_setAndGet()
@@ -214,9 +215,9 @@ private Q_SLOTS:
     void testSplitRatio_noSignalOnSameValue()
     {
         TilingState state(QStringLiteral("test"));
-        // Default is 0.6
+        // Default comes from ConfigDefaults::autotileSplitRatio()
         QSignalSpy ratioSpy(&state, &TilingState::splitRatioChanged);
-        state.setSplitRatio(0.6);
+        state.setSplitRatio(ConfigDefaults::autotileSplitRatio());
         QCOMPARE(ratioSpy.count(), 0);
     }
 

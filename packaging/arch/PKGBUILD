@@ -54,8 +54,8 @@ package() {
     DESTDIR="$pkgdir" cmake --install build
 
     # Install pacman hook to auto-refresh sycoca cache
-    install -Dm644 kbuildsycoca.hook \
+    install -Dm644 "PlasmaZones-$pkgver/packaging/arch/kbuildsycoca.hook" \
         "$pkgdir/usr/share/libalpm/hooks/plasmazones-kbuildsycoca.hook"
-    install -Dm755 plasmazones-refresh-sycoca \
+    install -Dm755 "PlasmaZones-$pkgver/packaging/arch/plasmazones-refresh-sycoca" \
         "$pkgdir/usr/share/libalpm/scripts/plasmazones-refresh-sycoca"
 }

@@ -133,27 +133,23 @@ public:
     }
     static QColor highlightColor()
     {
-        // #AARRGGBB: #800078D4 → A=0x80, R=0x00, G=0x78, B=0xD4
-        return QColor(0x00, 0x78, 0xD4, 0x80);
+        return Defaults::HighlightColor;
     }
     static QColor inactiveColor()
     {
-        // #40808080
-        return QColor(0x80, 0x80, 0x80, 0x40);
+        return Defaults::InactiveColor;
     }
     static QColor borderColor()
     {
-        // #C8FFFFFF
-        return QColor(0xFF, 0xFF, 0xFF, 0xC8);
+        return Defaults::BorderColor;
     }
     static QColor labelFontColor()
     {
-        // #FFFFFFFF
-        return QColor(0xFF, 0xFF, 0xFF, 0xFF);
+        return Defaults::LabelFontColor;
     }
     static double activeOpacity()
     {
-        return 0.5;
+        return Defaults::Opacity;
     }
     static constexpr qreal activeOpacityMin()
     {
@@ -165,7 +161,7 @@ public:
     }
     static double inactiveOpacity()
     {
-        return 0.3;
+        return Defaults::InactiveOpacity;
     }
     static constexpr qreal inactiveOpacityMin()
     {
@@ -177,7 +173,7 @@ public:
     }
     static int borderWidth()
     {
-        return 2;
+        return Defaults::BorderWidth;
     }
     static constexpr int borderWidthMin()
     {
@@ -189,7 +185,7 @@ public:
     }
     static int borderRadius()
     {
-        return 8;
+        return Defaults::BorderRadius;
     }
     static constexpr int borderRadiusMin()
     {
@@ -250,7 +246,7 @@ public:
 
     static int zonePadding()
     {
-        return 8;
+        return Defaults::ZonePadding;
     }
     static constexpr int zonePaddingMin()
     {
@@ -258,11 +254,11 @@ public:
     }
     static constexpr int zonePaddingMax()
     {
-        return 50;
+        return Defaults::MaxGap;
     }
     static int outerGap()
     {
-        return 8;
+        return Defaults::OuterGap;
     }
     static constexpr int outerGapMin()
     {
@@ -270,7 +266,7 @@ public:
     }
     static constexpr int outerGapMax()
     {
-        return 50;
+        return Defaults::MaxGap;
     }
     static bool usePerSideOuterGap()
     {
@@ -278,7 +274,7 @@ public:
     }
     static int outerGapTop()
     {
-        return 8;
+        return Defaults::OuterGap;
     }
     static constexpr int outerGapTopMin()
     {
@@ -286,11 +282,11 @@ public:
     }
     static constexpr int outerGapTopMax()
     {
-        return 50;
+        return Defaults::MaxGap;
     }
     static int outerGapBottom()
     {
-        return 8;
+        return Defaults::OuterGap;
     }
     static constexpr int outerGapBottomMin()
     {
@@ -298,11 +294,11 @@ public:
     }
     static constexpr int outerGapBottomMax()
     {
-        return 50;
+        return Defaults::MaxGap;
     }
     static int outerGapLeft()
     {
-        return 8;
+        return Defaults::OuterGap;
     }
     static constexpr int outerGapLeftMin()
     {
@@ -310,11 +306,11 @@ public:
     }
     static constexpr int outerGapLeftMax()
     {
-        return 50;
+        return Defaults::MaxGap;
     }
     static int outerGapRight()
     {
-        return 8;
+        return Defaults::OuterGap;
     }
     static constexpr int outerGapRightMin()
     {
@@ -322,11 +318,11 @@ public:
     }
     static constexpr int outerGapRightMax()
     {
-        return 50;
+        return Defaults::MaxGap;
     }
     static int adjacentThreshold()
     {
-        return 20;
+        return Defaults::AdjacentThreshold;
     }
     static constexpr int adjacentThresholdMin()
     {
@@ -343,7 +339,7 @@ public:
 
     static int pollIntervalMs()
     {
-        return 50;
+        return Defaults::PollIntervalMs;
     }
     static constexpr int pollIntervalMsMin()
     {
@@ -355,7 +351,7 @@ public:
     }
     static int minimumZoneSizePx()
     {
-        return 100;
+        return Defaults::MinimumZoneSizePx;
     }
     static constexpr int minimumZoneSizePxMin()
     {
@@ -367,7 +363,7 @@ public:
     }
     static int minimumZoneDisplaySizePx()
     {
-        return 10;
+        return Defaults::MinimumZoneDisplaySizePx;
     }
     static constexpr int minimumZoneDisplaySizePxMin()
     {
@@ -658,7 +654,7 @@ public:
     {
         return QStringLiteral("bsp");
     }
-    static double autotileSplitRatio()
+    static constexpr qreal autotileSplitRatio()
     {
         return 0.5;
     }
@@ -670,7 +666,7 @@ public:
     {
         return AutotileDefaults::MaxSplitRatio;
     }
-    static int autotileMasterCount()
+    static constexpr int autotileMasterCount()
     {
         return 1;
     }
@@ -682,9 +678,9 @@ public:
     {
         return AutotileDefaults::MaxMasterCount;
     }
-    static int autotileInnerGap()
+    static constexpr int autotileInnerGap()
     {
-        return 8;
+        return Defaults::ZonePadding;
     }
     static constexpr int autotileInnerGapMin()
     {
@@ -694,9 +690,9 @@ public:
     {
         return AutotileDefaults::MaxGap;
     }
-    static int autotileOuterGap()
+    static constexpr int autotileOuterGap()
     {
-        return 8;
+        return Defaults::OuterGap;
     }
     static constexpr int autotileOuterGapMin()
     {
@@ -712,7 +708,7 @@ public:
     }
     static int autotileOuterGapTop()
     {
-        return 8;
+        return Defaults::OuterGap;
     }
     static constexpr int autotileOuterGapTopMin()
     {
@@ -724,7 +720,7 @@ public:
     }
     static int autotileOuterGapBottom()
     {
-        return 8;
+        return Defaults::OuterGap;
     }
     static constexpr int autotileOuterGapBottomMin()
     {
@@ -736,7 +732,7 @@ public:
     }
     static int autotileOuterGapLeft()
     {
-        return 8;
+        return Defaults::OuterGap;
     }
     static constexpr int autotileOuterGapLeftMin()
     {
@@ -748,7 +744,7 @@ public:
     }
     static int autotileOuterGapRight()
     {
-        return 8;
+        return Defaults::OuterGap;
     }
     static constexpr int autotileOuterGapRightMin()
     {
@@ -758,27 +754,27 @@ public:
     {
         return AutotileDefaults::MaxGap;
     }
-    static bool autotileFocusNewWindows()
+    static constexpr bool autotileFocusNewWindows()
     {
         return true;
     }
-    static bool autotileSmartGaps()
+    static constexpr bool autotileSmartGaps()
     {
         return true;
     }
-    static int autotileInsertPosition()
+    static constexpr int autotileInsertPosition()
     {
         return 0;
     }
     static constexpr int autotileInsertPositionMin()
     {
-        return 0;
+        return AutotileDefaults::MinInsertPosition;
     }
     static constexpr int autotileInsertPositionMax()
     {
-        return 2;
+        return AutotileDefaults::MaxInsertPosition;
     }
-    static int autotileMaxWindows()
+    static constexpr int autotileMaxWindows()
     {
         return 5;
     }
@@ -794,17 +790,17 @@ public:
     {
         return true;
     }
-    static int animationDuration()
+    static constexpr int animationDuration()
     {
         return 300;
     }
     static constexpr int animationDurationMin()
     {
-        return 50;
+        return AutotileDefaults::MinAnimationDuration;
     }
     static constexpr int animationDurationMax()
     {
-        return 500;
+        return AutotileDefaults::MaxAnimationDuration;
     }
     static int animationSequenceMode()
     {
@@ -864,7 +860,7 @@ public:
     }
     static int autotileBorderWidth()
     {
-        return 2;
+        return Defaults::BorderWidth;
     }
     static constexpr int autotileBorderWidthMin()
     {
@@ -888,17 +884,19 @@ public:
     }
     static QColor autotileBorderColor()
     {
-        // #800078D4
-        return QColor(0x00, 0x78, 0xD4, 0x80);
+        return Defaults::HighlightColor;
     }
     static QColor autotileInactiveBorderColor()
     {
-        // #40808080
-        return QColor(0x80, 0x80, 0x80, 0x40);
+        return Defaults::InactiveColor;
     }
     static bool autotileUseSystemBorderColors()
     {
         return true;
+    }
+    static int autotileStickyWindowHandling()
+    {
+        return 0;
     }
     static QStringList lockedScreens()
     {

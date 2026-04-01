@@ -7,6 +7,7 @@
 #include <QJSValue>
 #include <QRegularExpression>
 #include <QStringView>
+#include <QVariantMap>
 #include <algorithm>
 
 namespace PlasmaZones {
@@ -154,6 +155,72 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
                                       << filePath;
             } else {
                 meta.builtinId = value.left(64);
+            }
+        } else if (key == QLatin1String("param")) {
+            // Format: // @param name type [typeArgs...] "description"
+            // number: // @param name number default min max "description"
+            // bool:   // @param name bool default "description"
+            // enum:   // @param name enum "default" ["opt1","opt2"] "description"
+            static const QRegularExpression paramNumberRe(QStringLiteral(
+                R"RX(^(\w+)\s+number\s+([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s+([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s+([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s+"([^"]*)")RX"));
+            static const QRegularExpression paramBoolRe(
+                QStringLiteral(R"RX(^(\w+)\s+bool\s+(true|false)\s+"([^"]*)")RX"));
+            static const QRegularExpression paramEnumRe(
+                QStringLiteral(R"RX(^(\w+)\s+enum\s+"([^"]*)"\s+\[([^\]]*)\]\s+"([^"]*)")RX"));
+
+            CustomParamDef param;
+            QRegularExpressionMatch pm = paramNumberRe.match(value);
+            if (pm.hasMatch()) {
+                param.name = pm.captured(1).left(64);
+                param.type = QStringLiteral("number");
+                param.defaultValue = pm.captured(2).toDouble();
+                param.minValue = pm.captured(3).toDouble();
+                param.maxValue = pm.captured(4).toDouble();
+                param.description = pm.captured(5).left(200).toHtmlEscaped();
+                if (param.minValue > param.maxValue) {
+                    qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: @param number min" << param.minValue
+                                          << "> max" << param.maxValue << "for" << param.name << "in" << filePath;
+                    std::swap(param.minValue, param.maxValue);
+                }
+                meta.customParams.append(param);
+            } else if ((pm = paramBoolRe.match(value)).hasMatch()) {
+                param.name = pm.captured(1).left(64);
+                param.type = QStringLiteral("bool");
+                param.defaultValue = (pm.captured(2) == QLatin1String("true"));
+                param.description = pm.captured(3).left(200).toHtmlEscaped();
+                meta.customParams.append(param);
+            } else if ((pm = paramEnumRe.match(value)).hasMatch()) {
+                param.name = pm.captured(1).left(64);
+                param.type = QStringLiteral("enum");
+                param.defaultValue = pm.captured(2);
+                // Parse ["opt1","opt2"] — split on comma, strip quotes
+                const QString optionsStr = pm.captured(3);
+                const auto optParts = QStringView(optionsStr).split(QLatin1Char(','));
+                for (const auto& opt : optParts) {
+                    QString trimmed = opt.trimmed().toString();
+                    if (trimmed.startsWith(QLatin1Char('"')) && trimmed.endsWith(QLatin1Char('"'))) {
+                        trimmed = trimmed.mid(1, trimmed.size() - 2);
+                    }
+                    if (!trimmed.isEmpty()) {
+                        param.enumOptions.append(trimmed.left(64));
+                    }
+                }
+                param.description = pm.captured(4).left(200).toHtmlEscaped();
+                if (param.enumOptions.isEmpty()) {
+                    qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: @param enum has no valid options for"
+                                          << param.name << "in" << filePath;
+                } else {
+                    if (!param.enumOptions.contains(param.defaultValue.toString())) {
+                        qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: @param enum default"
+                                              << param.defaultValue.toString() << "not in options list for"
+                                              << param.name << "in" << filePath << "— falling back to first option";
+                        param.defaultValue = param.enumOptions.first();
+                    }
+                    meta.customParams.append(param);
+                }
+            } else {
+                qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: malformed @param" << value << "in"
+                                      << filePath;
             }
         } else if (key != QLatin1String("icon")) {
             qCDebug(lcAutotile) << "ScriptedAlgorithm::parseMetadata: unknown metadata key" << key << "in" << filePath;
