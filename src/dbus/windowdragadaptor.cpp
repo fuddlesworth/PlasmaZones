@@ -79,6 +79,22 @@ QString WindowDragAdaptor::effectiveScreenIdAt(int x, int y) const
     return Utils::effectiveScreenIdAt(QPoint(x, y));
 }
 
+WindowDragAdaptor::ScreenResolution WindowDragAdaptor::resolveScreenAt(const QPointF& globalPos) const
+{
+    ScreenResolution result;
+    result.screenId = effectiveScreenIdAt(qRound(globalPos.x()), qRound(globalPos.y()));
+    result.physicalId = VirtualScreenId::extractPhysicalId(result.screenId);
+    result.qscreen = ScreenManager::resolvePhysicalScreen(result.physicalId);
+    if (!result.qscreen) {
+        result.qscreen = screenAtPoint(qRound(globalPos.x()), qRound(globalPos.y()));
+        if (result.qscreen) {
+            result.screenId = Utils::screenIdentifier(result.qscreen);
+            result.physicalId = result.screenId;
+        }
+    }
+    return result;
+}
+
 bool WindowDragAdaptor::checkModifier(int modifierSetting, Qt::KeyboardModifiers mods) const
 {
     bool shiftHeld = mods.testFlag(Qt::ShiftModifier);
@@ -263,14 +279,9 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     }
 
     // Resolve effective (virtual-aware) screen ID for disabled-monitor check
-    QString selectorScreenId = effectiveScreenIdAt(cursorX, cursorY);
-    QScreen* screen = Utils::findScreenByIdOrName(VirtualScreenId::extractPhysicalId(selectorScreenId));
-    if (!screen) {
-        screen = screenAtPoint(cursorX, cursorY);
-    }
-    if (selectorScreenId.isEmpty() && screen) {
-        selectorScreenId = Utils::screenIdentifier(screen);
-    }
+    auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
+    QString selectorScreenId = resolved.screenId;
+    QScreen* screen = resolved.qscreen;
     if (screen
         && isContextDisabled(m_settings, selectorScreenId, m_layoutManager->currentVirtualDesktop(),
                              m_layoutManager->currentActivity())) {

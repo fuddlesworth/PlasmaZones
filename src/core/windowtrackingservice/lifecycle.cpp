@@ -48,7 +48,10 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
 
         // Try per-virtual-screen layouts first: if a VS has its own layout
         // assignment, the zone may belong to that layout rather than the
-        // physical screen's layout.
+        // physical screen's layout.  Collect ALL matches — when multiple
+        // virtual screens share the same layout the zone appears in all of
+        // them, so we must fall through to center-point resolution.
+        QStringList candidates;
         for (const QString& vsId : virtualScreenIds) {
             Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(vsId);
             if (!vsLayout) {
@@ -56,9 +59,13 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             }
             Zone* zone = vsLayout->zoneById(*uuidOpt);
             if (zone) {
-                return vsId;
+                candidates.append(vsId);
             }
         }
+        if (candidates.size() == 1) {
+            return candidates.first();
+        }
+        // Multiple matches (shared layout) or no matches — fall through to center-point
 
         // Fall back to the physical screen's layout and center-point mapping
         Layout* layout = m_layoutManager->resolveLayoutForScreen(physicalScreenId);
@@ -127,15 +134,29 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     }
 
     // Migrate m_lastUsedScreenId: if it matches the physical screen or an old virtual
-    // screen on it, update to the first virtual screen so last-zone-snap resolves correctly.
+    // screen on it, determine which VS the last-used zone belongs to.
     if ((m_lastUsedScreenId == physicalScreenId || m_lastUsedScreenId.startsWith(prefix))
         && !virtualScreenIds.isEmpty()) {
-        m_lastUsedScreenId = virtualScreenIds.first();
+        // Determine which VS the last-used zone falls in
+        QString targetVs = virtualScreenIds.first(); // default
+        if (!m_lastUsedZoneId.isEmpty() && m_layoutManager) {
+            for (const QString& vsId : virtualScreenIds) {
+                Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(vsId);
+                if (vsLayout) {
+                    auto uuidOpt = Utils::parseUuid(m_lastUsedZoneId);
+                    if (uuidOpt && vsLayout->zoneById(*uuidOpt)) {
+                        targetVs = vsId;
+                        break;
+                    }
+                }
+            }
+        }
+        m_lastUsedScreenId = targetVs;
         // Only clear the zone ID if it doesn't exist in the target virtual screen's layout.
         // If the zone is still valid in the new layout, preserve it for last-zone-snap.
         bool zoneStillValid = false;
         if (!m_lastUsedZoneId.isEmpty() && m_layoutManager) {
-            Layout* targetLayout = m_layoutManager->resolveLayoutForScreen(virtualScreenIds.first());
+            Layout* targetLayout = m_layoutManager->resolveLayoutForScreen(targetVs);
             if (targetLayout) {
                 auto uuidOpt = Utils::parseUuid(m_lastUsedZoneId);
                 if (uuidOpt && targetLayout->zoneById(*uuidOpt)) {
@@ -211,6 +232,33 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         if (VirtualScreenId::isVirtual(it->connectorName)
             && VirtualScreenId::extractPhysicalId(it->connectorName) == physicalScreenId) {
             it->connectorName = physicalScreenId;
+        }
+    }
+
+    // Validate zone assignments against the physical screen's layout.
+    // Virtual screen layouts may have zones that don't exist in the physical
+    // screen's layout, so remove any assignments referencing invalid zone IDs.
+    Layout* physLayout = m_layoutManager ? m_layoutManager->resolveLayoutForScreen(physicalScreenId) : nullptr;
+    if (physLayout) {
+        QStringList windowsToRemove;
+        for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
+            if (m_windowScreenAssignments.value(it.key()) != physicalScreenId) {
+                continue;
+            }
+            bool allValid = true;
+            for (const QString& zoneId : it.value()) {
+                auto uuid = Utils::parseUuid(zoneId);
+                if (!uuid || !physLayout->zoneById(*uuid)) {
+                    allValid = false;
+                    break;
+                }
+            }
+            if (!allValid) {
+                windowsToRemove.append(it.key());
+            }
+        }
+        for (const QString& wId : windowsToRemove) {
+            m_windowZoneAssignments.remove(wId);
         }
     }
 
@@ -356,21 +404,7 @@ void WindowTrackingService::onLayoutChanged()
     {
         QVector<ResnapEntry> newBuffer;
 
-        // Build position map for the global previous layout
-        auto buildPositionMap = [](Layout* layout) -> QHash<QString, int> {
-            QHash<QString, int> map;
-            if (!layout) {
-                return map;
-            }
-            QVector<Zone*> zones = layout->zones();
-            sortZonesByNumber(zones);
-            for (int i = 0; i < zones.size(); ++i) {
-                map[zones[i]->id().toString()] = i + 1;
-            }
-            return map;
-        };
-
-        QHash<QString, int> globalZoneIdToPosition = buildPositionMap(prevLayout);
+        QHash<QString, int> globalZoneIdToPosition = buildZonePositionMap(prevLayout);
         int globalPrevZoneCount = prevLayout ? prevLayout->zones().size() : 0;
 
         // Cache per-screen position maps for screens with per-screen layouts
@@ -402,7 +436,7 @@ void WindowTrackingService::onLayoutChanged()
                 if (screenLayout && screenLayout != prevLayout) {
                     auto cacheIt = perLayoutPositionMaps.constFind(screenLayout);
                     if (cacheIt == perLayoutPositionMaps.constEnd()) {
-                        cacheIt = perLayoutPositionMaps.insert(screenLayout, buildPositionMap(screenLayout));
+                        cacheIt = perLayoutPositionMaps.insert(screenLayout, buildZonePositionMap(screenLayout));
                     }
                     posMap = &cacheIt.value();
                     prevZoneCount = screenLayout->zones().size();

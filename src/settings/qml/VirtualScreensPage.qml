@@ -111,7 +111,7 @@ Flickable {
         _stageCurrentConfig();
     }
 
-    // Clamp divider move: ensure both adjacent regions have at least 10%
+    // Clamp divider move: ensure all regions have at least 5% width
     function _moveDivider(dividerIndex, newFraction) {
         if (dividerIndex < 0 || dividerIndex >= _pendingScreens.length - 1)
             return ;
@@ -121,20 +121,28 @@ Flickable {
         var rightIdx = dividerIndex + 1;
         var leftStart = screens[leftIdx].x;
         var rightEnd = screens[rightIdx].x + screens[rightIdx].width;
-        var minW = 0.1; // 10% minimum
-        var newDivPos = Math.max(leftStart + minW, Math.min(rightEnd - minW, newFraction));
+        var minW = 0.05; // 5% minimum
+        // Clamp the new divider position
+        var minX = leftStart + minW;
+        var maxX = rightEnd - minW;
+        var newDivPos = Math.max(minX, Math.min(maxX, newFraction));
+        // Update left screen width
         screens[leftIdx].width = newDivPos - leftStart;
+        // Update right screen x and width
         screens[rightIdx].x = newDivPos;
         screens[rightIdx].width = rightEnd - newDivPos;
-        // Normalize: ensure total width is exactly 1.0
-        var total = 0;
-        for (var k = 0; k < screens.length - 1; k++) {
-            total += screens[k].width;
+        // Cascade x positions for all screens after rightIdx
+        for (var k = rightIdx + 1; k < screens.length; k++) {
+            screens[k].x = screens[k - 1].x + screens[k - 1].width;
         }
-        var lastWidth = 1 - total;
-        screens[screens.length - 1].width = lastWidth;
-        // Also fix the x position of the last screen
-        screens[screens.length - 1].x = total;
+        // Normalize: ensure last screen extends to 1.0
+        var total = 0;
+        for (var m = 0; m < screens.length - 1; m++) {
+            total += screens[m].width;
+        }
+        var lastIdx = screens.length - 1;
+        screens[lastIdx].x = total;
+        screens[lastIdx].width = Math.max(minW, 1 - total);
         // Validate ALL screens against minimum width — reject the move if any violates
         for (var j = 0; j < screens.length; j++) {
             if (screens[j].width < minW)
@@ -460,18 +468,31 @@ Flickable {
         // ═══════════════════════════════════════════════════════════════
         // ACTIONS
         // ═══════════════════════════════════════════════════════════════
-        Button {
-            text: i18n("Remove Subdivisions")
-            icon.name: "edit-delete"
-            palette.buttonText: Kirigami.Theme.negativeTextColor
-            enabled: root._selectedScreen !== "" && (root._pendingScreens.length > 0 || root._savedScreens.length > 0)
-            onClicked: {
-                settingsController.stageVirtualScreenRemoval(root._selectedScreen);
-                root._pendingScreens = [];
+        SettingsCard {
+            headerText: i18n("Actions")
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                Button {
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    Layout.bottomMargin: Kirigami.Units.largeSpacing
+                    text: i18n("Remove Subdivisions")
+                    icon.name: "edit-delete"
+                    palette.buttonText: Kirigami.Theme.negativeTextColor
+                    enabled: root._selectedScreen !== "" && (root._pendingScreens.length > 0 || root._savedScreens.length > 0)
+                    onClicked: {
+                        settingsController.stageVirtualScreenRemoval(root._selectedScreen);
+                        root._pendingScreens = [];
+                    }
+                    ToolTip.text: i18n("Remove all virtual screen subdivisions from this monitor")
+                    ToolTip.visible: hovered
+                    Accessible.name: i18n("Remove virtual screen subdivisions")
+                }
+
             }
-            ToolTip.text: i18n("Remove all virtual screen subdivisions from this monitor")
-            ToolTip.visible: hovered
-            Accessible.name: i18n("Remove virtual screen subdivisions")
+
         }
 
     }

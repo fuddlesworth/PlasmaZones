@@ -62,6 +62,19 @@ QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
     }
     return QString();
 }
+/// Convert a QVariantMap (from QML virtual screen editor) to a VirtualScreenDef.
+/// Used by both the save path (staging → KConfig) and the D-Bus apply path.
+VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map, const QString& physicalScreenId, int index)
+{
+    VirtualScreenDef def;
+    def.physicalScreenId = physicalScreenId;
+    def.index = index;
+    def.displayName = map.value(QStringLiteral("displayName")).toString();
+    def.region = QRectF(map.value(QStringLiteral("x")).toDouble(), map.value(QStringLiteral("y")).toDouble(),
+                        map.value(QStringLiteral("width")).toDouble(), map.value(QStringLiteral("height")).toDouble());
+    def.id = VirtualScreenId::make(physicalScreenId, index);
+    return def;
+}
 } // anonymous namespace
 
 SettingsController::~SettingsController()
@@ -380,16 +393,7 @@ void SettingsController::save()
             vsConfig.physicalScreenId = it.key();
             if (!it.value().isEmpty()) {
                 for (int i = 0; i < it.value().size(); ++i) {
-                    const QVariantMap screenData = it.value()[i].toMap();
-                    VirtualScreenDef def;
-                    def.physicalScreenId = it.key();
-                    def.index = i;
-                    def.displayName = screenData.value(QStringLiteral("displayName")).toString();
-                    def.region = QRectF(screenData.value(QStringLiteral("x")).toDouble(),
-                                        screenData.value(QStringLiteral("y")).toDouble(),
-                                        screenData.value(QStringLiteral("width")).toDouble(),
-                                        screenData.value(QStringLiteral("height")).toDouble());
-                    def.id = VirtualScreenId::make(it.key(), i);
+                    VirtualScreenDef def = variantMapToVirtualScreenDef(it.value()[i].toMap(), it.key(), i);
                     if (!def.isValid()) {
                         qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << it.key() << "index" << i
                                             << "region:" << def.region;
@@ -2924,15 +2928,14 @@ void SettingsController::applyVirtualScreenConfig(const QString& physicalScreenI
 
     QJsonArray screensArr;
     for (int i = 0; i < screens.size(); ++i) {
-        QVariantMap screenData = screens[i].toMap();
+        VirtualScreenDef def = variantMapToVirtualScreenDef(screens[i].toMap(), physicalScreenId, i);
         QJsonObject screenObj;
-        screenObj[QLatin1String("index")] = i;
-        screenObj[QLatin1String("displayName")] = screenData.value(QStringLiteral("displayName")).toString();
-        screenObj[QLatin1String("region")] =
-            QJsonObject{{JsonKeys::X, screenData.value(QStringLiteral("x")).toDouble()},
-                        {JsonKeys::Y, screenData.value(QStringLiteral("y")).toDouble()},
-                        {JsonKeys::Width, screenData.value(QStringLiteral("width")).toDouble()},
-                        {JsonKeys::Height, screenData.value(QStringLiteral("height")).toDouble()}};
+        screenObj[QLatin1String("index")] = def.index;
+        screenObj[QLatin1String("displayName")] = def.displayName;
+        screenObj[QLatin1String("region")] = QJsonObject{{JsonKeys::X, def.region.x()},
+                                                         {JsonKeys::Y, def.region.y()},
+                                                         {JsonKeys::Width, def.region.width()},
+                                                         {JsonKeys::Height, def.region.height()}};
         screensArr.append(screenObj);
     }
     root[QLatin1String("screens")] = screensArr;

@@ -1918,10 +1918,34 @@ QString PlasmaZonesEffect::resolveEffectiveScreenId(const QPoint& pos, const KWi
         }
     }
 
-    // Fallback: point not in any virtual screen — return physical ID
-    // (defensive: stale geometry or rounding gaps)
-    qCWarning(lcEffect) << "resolveEffectiveScreenId: point" << pos << "not in any virtual screen for" << physId
-                        << "- falling back to physical ID";
+    // Fallback: pick nearest virtual screen (covers rounding gaps)
+    QString nearestVsId;
+    int minDist = INT_MAX;
+    for (const auto& vs : *it) {
+        // Manhattan distance from point to nearest edge of the rect
+        int dx = 0;
+        int dy = 0;
+        if (pos.x() < vs.geometry.left()) {
+            dx = vs.geometry.left() - pos.x();
+        } else if (pos.x() > vs.geometry.right()) {
+            dx = pos.x() - vs.geometry.right();
+        }
+        if (pos.y() < vs.geometry.top()) {
+            dy = vs.geometry.top() - pos.y();
+        } else if (pos.y() > vs.geometry.bottom()) {
+            dy = pos.y() - vs.geometry.bottom();
+        }
+        int dist = dx + dy;
+        if (dist < minDist) {
+            minDist = dist;
+            nearestVsId = vs.id;
+        }
+    }
+    if (!nearestVsId.isEmpty()) {
+        return nearestVsId;
+    }
+    // Ultimate fallback (should never reach here)
+    qCWarning(lcEffect) << "resolveEffectiveScreenId: no virtual screens found for" << physId;
     return physId;
 }
 

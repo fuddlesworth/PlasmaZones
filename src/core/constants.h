@@ -240,9 +240,9 @@ constexpr qreal ExpansionStep = 0.01; // 1% increment for fill expansion
 constexpr qreal GeometryBoundsTolerance = 0.001; // Tolerance for coordinate bounds checking
 
 // Default zone colors (hex strings for QML compatibility)
-inline constexpr const char* DefaultHighlightColor = "#800078D4";
-inline constexpr const char* DefaultInactiveColor = "#40808080";
-inline constexpr const char* DefaultBorderColor = "#CCFFFFFF";
+inline constexpr QLatin1String DefaultHighlightColor{"#800078D4"};
+inline constexpr QLatin1String DefaultInactiveColor{"#40808080"};
+inline constexpr QLatin1String DefaultBorderColor{"#CCFFFFFF"};
 }
 
 /**

@@ -11,6 +11,7 @@
 #include "../../core/geometryutils.h"
 #include "../../core/screenmanager.h"
 #include "../../core/utils.h"
+#include "../../core/virtualscreen.h"
 #include "../../core/zoneselectorlayout.h"
 #include "../config/configdefaults.h"
 #include <QCursor>
@@ -306,7 +307,7 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
 
     // For virtual screens, add margins to confine the zone selector within
     // the virtual screen region of the physical monitor
-    const bool isVirtualScreen = (screenGeom != physScreen->geometry());
+    const bool isVirtualScreen = VirtualScreenId::isVirtual(screenId);
     if (isVirtualScreen) {
         auto* layerSurface = LayerSurface::find(window);
         if (layerSurface) {

@@ -248,6 +248,15 @@ private:
     void checkZoneSelectorTrigger(int cursorX, int cursorY);
     bool isNearTriggerEdge(QScreen* screen, int cursorX, int cursorY, const QString& screenId = QString()) const;
 
+    // Screen resolution helper (DRY: used by prepareHandlerContext, dragStopped, checkZoneSelectorTrigger)
+    struct ScreenResolution
+    {
+        QString screenId; // effective (possibly virtual) screen ID
+        QString physicalId; // physical screen ID
+        QScreen* qscreen; // physical QScreen pointer
+    };
+    ScreenResolution resolveScreenAt(const QPointF& globalPos) const;
+
     // dragStopped() helpers
     void hideOverlayAndSelector();
     void resetDragState(bool keepEscapeShortcut = false);

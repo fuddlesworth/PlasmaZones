@@ -151,10 +151,9 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     // Build a global zoneId → (layoutId, position) map from all layouts
     QHash<QString, int> globalZoneIdToPosition;
     for (Layout* layout : m_layoutManager->layouts()) {
-        QVector<Zone*> zones = layout->zones();
-        sortZonesByNumber(zones);
-        for (int i = 0; i < zones.size(); ++i) {
-            globalZoneIdToPosition[zones[i]->id().toString()] = i + 1; // 1-based
+        QHash<QString, int> layoutMap = buildZonePositionMap(layout);
+        for (auto it = layoutMap.constBegin(); it != layoutMap.constEnd(); ++it) {
+            globalZoneIdToPosition[it.key()] = it.value();
         }
     }
 

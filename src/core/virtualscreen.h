@@ -170,8 +170,8 @@ inline int extractIndex(const QString& screenId)
 /// @pre index must be >= 0; negative indices return an empty string
 inline QString make(const QString& physicalScreenId, int index)
 {
-    if (index < 0) {
-        return QString();
+    if (physicalScreenId.isEmpty() || index < 0) {
+        return {};
     }
     return physicalScreenId + separator() + QString::number(index);
 }

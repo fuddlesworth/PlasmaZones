@@ -43,14 +43,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Release screen: use cursor position passed from effect (at release time), not last dragMoved.
     // Resolve the effective (virtual-aware) screen ID so zones are calculated against
     // virtual screen bounds, not physical screen bounds.
-    QString releaseScreenId = effectiveScreenIdAt(cursorX, cursorY);
-    QScreen* releaseScreen = Utils::findScreenByIdOrName(VirtualScreenId::extractPhysicalId(releaseScreenId));
-    if (!releaseScreen) {
-        releaseScreen = screenAtPoint(cursorX, cursorY);
-    }
-    if (releaseScreenId.isEmpty() && releaseScreen) {
-        releaseScreenId = Utils::screenIdentifier(releaseScreen);
-    }
+    auto releaseResolved = resolveScreenAt(QPointF(cursorX, cursorY));
+    QString releaseScreenId = releaseResolved.screenId;
+    QScreen* releaseScreen = releaseResolved.qscreen;
     QString releaseScreenName = releaseScreen ? releaseScreen->name() : QString();
     releaseScreenIdOut = releaseScreenId;
     qCDebug(lcDbusWindow) << "dragStopped: cursor=" << cursorX << "," << cursorY
@@ -103,12 +98,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         && m_overlayService->hasSelectedZone()) {
         QString selectedLayoutId = m_overlayService->selectedLayoutId();
         // Resolve virtual-aware screen ID for the zone selector position
-        QString selectorScreenId = effectiveScreenIdAt(cursorX, cursorY);
-        QScreen* screen = Utils::findScreenByIdOrName(VirtualScreenId::extractPhysicalId(selectorScreenId));
-        if (!screen)
-            screen = screenAtPoint(cursorX, cursorY);
-        if (selectorScreenId.isEmpty() && screen)
-            selectorScreenId = Utils::screenIdentifier(screen);
+        auto selectorResolved = resolveScreenAt(QPointF(cursorX, cursorY));
+        QString selectorScreenId = selectorResolved.screenId;
+        QScreen* screen = selectorResolved.qscreen;
 
         // Block entire zone selector snap path when screen is locked for its current mode
         bool selectorScreenLocked = false;

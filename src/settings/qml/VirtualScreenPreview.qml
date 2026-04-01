@@ -24,6 +24,8 @@ Rectangle {
     // ── Signals ─────────────────────────────────────────────────────────
     signal dividerMoved(int dividerIndex, real newFraction)
 
+    Accessible.role: Accessible.Graphic
+    Accessible.name: i18n("Virtual screen preview")
     color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
     border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
     border.width: 1

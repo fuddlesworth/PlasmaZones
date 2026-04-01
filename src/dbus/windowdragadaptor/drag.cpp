@@ -129,19 +129,13 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
 Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScreen, QString& outScreenId)
 {
     // Resolve effective (virtual-aware) screen ID
-    QString screenId = effectiveScreenIdAt(x, y);
-    outScreen = Utils::findScreenByIdOrName(VirtualScreenId::extractPhysicalId(screenId));
-    if (!outScreen) {
-        outScreen = screenAtPoint(x, y);
-    }
+    auto resolved = resolveScreenAt(QPointF(x, y));
+    outScreen = resolved.qscreen;
     if (!outScreen) {
         return nullptr;
     }
-    if (screenId.isEmpty()) {
-        screenId = Utils::screenIdentifier(outScreen);
-    }
-    outScreenId = screenId;
-    if (isContextDisabled(m_settings, screenId, m_layoutManager->currentVirtualDesktop(),
+    outScreenId = resolved.screenId;
+    if (isContextDisabled(m_settings, outScreenId, m_layoutManager->currentVirtualDesktop(),
                           m_layoutManager->currentActivity())) {
         if (m_overlayShown && m_overlayService) {
             m_overlayService->hide();
@@ -153,7 +147,7 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
     }
 
     // Skip overlay and zone detection on autotile-managed screens
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(outScreenId)) {
         if (m_overlayShown && m_overlayService) {
             m_overlayService->hide();
             m_overlayShown = false;
@@ -167,15 +161,15 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
         m_overlayService->showAtPosition(x, y);
         m_overlayShown = true;
         m_overlayScreen = outScreen;
-        m_overlayScreenId = screenId;
-    } else if (m_settings && !m_settings->showZonesOnAllMonitors() && m_overlayScreenId != screenId) {
+        m_overlayScreenId = outScreenId;
+    } else if (m_settings && !m_settings->showZonesOnAllMonitors() && m_overlayScreenId != outScreenId) {
         // Cursor moved to different screen (physical or virtual) - switch overlay to follow (fixes #136)
         m_overlayService->showAtPosition(x, y);
         m_overlayScreen = outScreen;
-        m_overlayScreenId = screenId;
+        m_overlayScreenId = outScreenId;
     }
 
-    auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    auto* layout = m_layoutManager->resolveLayoutForScreen(outScreenId);
     if (!layout) {
         return nullptr;
     }
@@ -184,12 +178,12 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
     auto* mgr = ScreenManager::instance();
     QRectF effectiveGeom;
     if (mgr) {
-        QRect vsGeom = mgr->screenGeometry(screenId);
+        QRect vsGeom = mgr->screenGeometry(outScreenId);
         if (vsGeom.isValid()) {
             if (layout->useFullScreenGeometry()) {
                 effectiveGeom = QRectF(vsGeom);
             } else {
-                QRect vsAvailGeom = mgr->screenAvailableGeometry(screenId);
+                QRect vsAvailGeom = mgr->screenAvailableGeometry(outScreenId);
                 effectiveGeom = vsAvailGeom.isValid() ? QRectF(vsAvailGeom) : QRectF(vsGeom);
             }
         }

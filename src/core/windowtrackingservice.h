@@ -797,6 +797,9 @@ private:
     /// when multiple zones share the same number.
     static void sortZonesByNumber(QVector<Zone*>& zones);
 
+    /// Build a map from zone ID (toString) to 1-based position in sorted-by-zoneNumber order.
+    static QHash<QString, int> buildZonePositionMap(Layout* layout);
+
     /// Resolve zone geometry: combined geometry for multi-zone, single for single zone.
     /// Avoids repeating the (size>1) ? multiZoneGeometry : zoneGeometry ternary.
     QRect resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const;

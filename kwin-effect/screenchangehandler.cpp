@@ -91,8 +91,15 @@ void ScreenChangeHandler::applyScreenGeometryChange()
     }
 
     if (!sizeChanged) {
-        qCDebug(lcScreenChange) << "Virtual screen size unchanged, skipping window repositioning";
-        return;
+        // Even when physical size is unchanged, virtual screen split ratio changes
+        // require window repositioning. If the daemon has VS configs for any screen,
+        // trigger a reposition so windows on old VS boundaries get updated.
+        if (m_effect->m_daemonServiceRegistered && !m_effect->m_virtualScreenDefs.isEmpty()) {
+            qCDebug(lcScreenChange) << "Virtual screen size unchanged but VS configs present, repositioning windows";
+        } else {
+            qCDebug(lcScreenChange) << "Virtual screen size unchanged, skipping window repositioning";
+            return;
+        }
     }
 
     if (m_reapplyInProgress) {

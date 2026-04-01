@@ -138,7 +138,17 @@ static QRectF applyGapsToZoneGeometry(const QRectF& zoneGeom, Zone* zone, const 
     qreal bottomAdj = (edges.bottom && physEdges.bottom) ? outerGaps.bottom : (innerGap / 2.0);
 
     // Apply the adjustments (positive inset from edges)
-    return zoneGeom.adjusted(leftAdj, topAdj, -rightAdj, -bottomAdj);
+    QRectF geoF = zoneGeom.adjusted(leftAdj, topAdj, -rightAdj, -bottomAdj);
+
+    // Ensure gaps don't collapse the zone to negative dimensions
+    if (geoF.width() < 1.0) {
+        geoF.setWidth(1.0);
+    }
+    if (geoF.height() < 1.0) {
+        geoF.setHeight(1.0);
+    }
+
+    return geoF;
 }
 
 QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps,
@@ -424,25 +434,32 @@ static QString buildEmptyZonesJsonImpl(Layout* layout, const std::optional<QRect
                                        const QRect& overlayOriginRect, QScreen* physScreen,
                                        const std::function<bool(const Zone*)>& isZoneEmpty)
 {
-    Q_ASSERT(physScreen || screenGeometry.has_value());
+    // Resolve screen geometry upfront so zone calculation uses a single code path.
+    // Physical screen callers pass physScreen with no screenGeometry; virtual screen
+    // callers pass screenGeometry with no physScreen. Both produce QRect pairs.
+    QRect resolvedScreenGeom;
+    QRect resolvedAvailGeom;
+    QRect resolvedOverlayOrigin;
+    if (screenGeometry.has_value()) {
+        resolvedScreenGeom = *screenGeometry;
+        resolvedAvailGeom = availableGeometry.isValid() ? availableGeometry : resolvedScreenGeom;
+        resolvedOverlayOrigin = overlayOriginRect;
+    } else if (physScreen) {
+        resolvedScreenGeom = physScreen->geometry();
+        resolvedAvailGeom = ScreenManager::actualAvailableGeometry(physScreen);
+        resolvedOverlayOrigin = physScreen->geometry();
+    } else {
+        return QStringLiteral("[]");
+    }
+
     QJsonArray arr;
     for (Zone* zone : layout->zones()) {
         if (!isZoneEmpty(zone)) {
             continue;
         }
-        QRectF geom;
-        if (physScreen && !screenGeometry.has_value()) {
-            // Physical screen path — use QScreen* overload
-            geom = getZoneGeometryWithGaps(zone, physScreen, zonePadding, outerGaps, useAvail);
-        } else {
-            QRect sg = screenGeometry.value();
-            QRect availGeom = availableGeometry.isValid() ? availableGeometry : sg;
-            geom = getZoneGeometryWithGaps(zone, sg, availGeom, zonePadding, outerGaps, useAvail, screenId);
-        }
-        QRectF overlayGeom = (physScreen && !screenGeometry.has_value())
-            ? availableAreaToOverlayCoordinates(geom, physScreen)
-            : availableAreaToOverlayCoordinates(geom, overlayOriginRect);
-
+        QRectF geom = getZoneGeometryWithGaps(zone, resolvedScreenGeom, resolvedAvailGeom, zonePadding, outerGaps,
+                                              useAvail, screenId);
+        QRectF overlayGeom = availableAreaToOverlayCoordinates(geom, resolvedOverlayOrigin);
         arr.append(zoneToEmptyZoneJson(zone, overlayGeom, settings));
     }
     return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));

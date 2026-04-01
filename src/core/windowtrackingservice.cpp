@@ -613,6 +613,20 @@ void WindowTrackingService::sortZonesByNumber(QVector<Zone*>& zones)
     });
 }
 
+QHash<QString, int> WindowTrackingService::buildZonePositionMap(Layout* layout)
+{
+    QHash<QString, int> map;
+    if (!layout) {
+        return map;
+    }
+    QVector<Zone*> zones = layout->zones();
+    sortZonesByNumber(zones);
+    for (int i = 0; i < zones.size(); ++i) {
+        map[zones[i]->id().toString()] = i + 1;
+    }
+    return map;
+}
+
 QRect WindowTrackingService::resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const
 {
     if (zoneIds.isEmpty()) {

@@ -9,6 +9,7 @@
 #include "../../core/zone.h"
 #include "../../core/geometryutils.h"
 #include "../../core/utils.h"
+#include "../../core/virtualscreen.h"
 #include "../../core/screenmanager.h"
 #include "../../core/shaderregistry.h"
 #include <QQuickWindow>
@@ -286,12 +287,22 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
         return;
     }
 
-    // Update mouse position on all overlay windows for shader effects
-    for (auto* window : std::as_const(m_overlayWindows)) {
-        if (window) {
-            // Convert global cursor position to window-local coordinates
-            const QPoint localPos = window->mapFromGlobal(QPoint(cursorX, cursorY));
-            window->setProperty("mousePosition", QPointF(localPos.x(), localPos.y()));
+    // Update mouse position on all overlay windows for shader effects.
+    // Use m_overlayGeometries for coordinate translation instead of
+    // window->mapFromGlobal(), which may return wrong coordinates before the
+    // first frame because QWindow::geometry() doesn't reflect LayerShell
+    // positioning yet.
+    for (auto it = m_overlayWindows.constBegin(); it != m_overlayWindows.constEnd(); ++it) {
+        if (it.value()) {
+            const QRect targetGeom = m_overlayGeometries.value(it.key());
+            QPointF local;
+            if (targetGeom.isValid()) {
+                local = QPointF(cursorX - targetGeom.x(), cursorY - targetGeom.y());
+            } else {
+                const QPoint mapped = it.value()->mapFromGlobal(QPoint(cursorX, cursorY));
+                local = QPointF(mapped.x(), mapped.y());
+            }
+            it.value()->setProperty("mousePosition", local);
         }
     }
 }
@@ -383,7 +394,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
 
     // Connect to physical screen geometry changes (only for physical screens;
     // virtual screen geometry changes are handled via ScreenManager signals)
-    const bool isVirtualScreen = (geometry != physScreen->geometry());
+    const bool isVirtualScreen = VirtualScreenId::isVirtual(screenId);
     if (!isVirtualScreen) {
         QPointer<QScreen> screenPtr = physScreen;
         const QString sid = screenId; // Capture by value for lambda

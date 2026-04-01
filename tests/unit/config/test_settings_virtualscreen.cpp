@@ -444,25 +444,25 @@ private Q_SLOTS:
             auto group = backend->group(ConfigDefaults::virtualScreenGroupPrefix() + physId);
             group->writeInt(ConfigDefaults::virtualScreenCountKey(), 3);
 
-            // Screen 0: valid (left third)
+            // Screen 0: valid (left half)
             group->writeString(QStringLiteral("0/") + ConfigDefaults::virtualScreenNameKey(), QStringLiteral("Left"));
             group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenXKey(), 0.0);
             group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenYKey(), 0.0);
-            group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenWidthKey(), 0.333);
+            group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenWidthKey(), 0.5);
             group->writeDouble(QStringLiteral("0/") + ConfigDefaults::virtualScreenHeightKey(), 1.0);
 
             // Screen 1: invalid — x=1.5 exceeds [0,1] bounds
             group->writeString(QStringLiteral("1/") + ConfigDefaults::virtualScreenNameKey(), QStringLiteral("Bad"));
             group->writeDouble(QStringLiteral("1/") + ConfigDefaults::virtualScreenXKey(), 1.5);
             group->writeDouble(QStringLiteral("1/") + ConfigDefaults::virtualScreenYKey(), 0.0);
-            group->writeDouble(QStringLiteral("1/") + ConfigDefaults::virtualScreenWidthKey(), 0.333);
+            group->writeDouble(QStringLiteral("1/") + ConfigDefaults::virtualScreenWidthKey(), 0.5);
             group->writeDouble(QStringLiteral("1/") + ConfigDefaults::virtualScreenHeightKey(), 1.0);
 
-            // Screen 2: valid (right third)
+            // Screen 2: valid (right half)
             group->writeString(QStringLiteral("2/") + ConfigDefaults::virtualScreenNameKey(), QStringLiteral("Right"));
-            group->writeDouble(QStringLiteral("2/") + ConfigDefaults::virtualScreenXKey(), 0.667);
+            group->writeDouble(QStringLiteral("2/") + ConfigDefaults::virtualScreenXKey(), 0.5);
             group->writeDouble(QStringLiteral("2/") + ConfigDefaults::virtualScreenYKey(), 0.0);
-            group->writeDouble(QStringLiteral("2/") + ConfigDefaults::virtualScreenWidthKey(), 0.333);
+            group->writeDouble(QStringLiteral("2/") + ConfigDefaults::virtualScreenWidthKey(), 0.5);
             group->writeDouble(QStringLiteral("2/") + ConfigDefaults::virtualScreenHeightKey(), 1.0);
 
             group.reset();
@@ -475,7 +475,10 @@ private Q_SLOTS:
         QVERIFY2(!loaded.isEmpty(), "Config with 2 valid screens after invalidation must be kept");
         QCOMPARE(loaded.screens.size(), 2);
         QCOMPARE(loaded.screens[0].displayName, QStringLiteral("Left"));
+        QVERIFY(qAbs(loaded.screens[0].region.width() - 0.5) < 1e-6);
         QCOMPARE(loaded.screens[1].displayName, QStringLiteral("Right"));
+        QVERIFY(qAbs(loaded.screens[1].region.x() - 0.5) < 1e-6);
+        QVERIFY(qAbs(loaded.screens[1].region.width() - 0.5) < 1e-6);
     }
 
     // =========================================================================
@@ -497,12 +500,21 @@ private Q_SLOTS:
             auto group = backend->group(ConfigDefaults::virtualScreenGroupPrefix() + physId);
             group->writeInt(ConfigDefaults::virtualScreenCountKey(), 11);
 
-            // Write 11 equal-width screens
+            // Write 11 screens: first 10 cover the full width equally,
+            // the 11th overlaps and will be dropped by the count cap
             for (int i = 0; i < 11; ++i) {
                 const QString p = QString::number(i) + QLatin1Char('/');
-                const qreal w = 1.0 / 11.0;
+                qreal x, w;
+                if (i < 10) {
+                    w = 1.0 / 10.0;
+                    x = i * w;
+                } else {
+                    // This screen will be dropped by the count cap
+                    w = 0.05;
+                    x = 0.95;
+                }
                 group->writeString(p + ConfigDefaults::virtualScreenNameKey(), QStringLiteral("Screen %1").arg(i + 1));
-                group->writeDouble(p + ConfigDefaults::virtualScreenXKey(), i * w);
+                group->writeDouble(p + ConfigDefaults::virtualScreenXKey(), x);
                 group->writeDouble(p + ConfigDefaults::virtualScreenYKey(), 0.0);
                 group->writeDouble(p + ConfigDefaults::virtualScreenWidthKey(), w);
                 group->writeDouble(p + ConfigDefaults::virtualScreenHeightKey(), 1.0);
@@ -554,13 +566,13 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // E9: Overlapping regions — accepted (no overlap validation)
+    // E9: Overlapping regions — rejected (overlap validation IS performed)
     // =========================================================================
 
     /**
      * Create a 2-screen config with overlapping regions. The loader validates
-     * individual region bounds via isValid() but does NOT check for overlap
-     * between regions. Both screens should survive the load.
+     * individual region bounds via isValid() AND checks for overlap between
+     * regions. Overlapping configs are rejected.
      */
     void testOverlappingRegions()
     {
@@ -580,14 +592,10 @@ private Q_SLOTS:
             settings.save();
         }
 
-        // Overlapping regions are individually valid, so both survive
+        // Overlapping regions are rejected by the loader
         Settings settings;
         VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
-        QVERIFY2(!loaded.isEmpty(), "Overlapping but individually valid regions must be accepted");
-        QCOMPARE(loaded.screens.size(), 2);
-        QVERIFY(qAbs(loaded.screens[0].region.width() - 0.6) < 1e-6);
-        QVERIFY(qAbs(loaded.screens[1].region.x() - 0.4) < 1e-6);
-        QVERIFY(qAbs(loaded.screens[1].region.width() - 0.6) < 1e-6);
+        QVERIFY2(loaded.isEmpty(), "Overlapping regions must be rejected by the loader");
     }
 };
 
