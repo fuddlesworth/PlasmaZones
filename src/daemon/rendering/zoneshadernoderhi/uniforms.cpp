@@ -278,6 +278,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             }
             m_srb.reset();
             m_srbB.reset();
+            m_computeSrb.reset(); // Compute SRB also references audio texture
             if (!ensurePipeline()) {
                 return;
             }

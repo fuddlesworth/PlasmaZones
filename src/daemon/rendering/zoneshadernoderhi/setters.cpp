@@ -321,6 +321,7 @@ void ZoneShaderNodeRhi::resetAllSrbs()
     m_srbB.reset();
     m_bufferSrb.reset();
     m_bufferSrbB.reset();
+    m_computeSrb.reset();
     for (int i = 0; i < kMaxBufferPasses; ++i) {
         m_multiBufferSrbs[i].reset();
     }

@@ -160,19 +160,19 @@ QRectF ZoneShaderNodeRhi::rect() const
 void ZoneShaderNodeRhi::prepare()
 {
     if (!m_itemValid.load(std::memory_order_acquire) || !m_item || !m_item->window()) {
-        qCInfo(lcOverlay) << "prepare(): bail — itemValid:" << m_itemValid.load() << "item:" << (m_item != nullptr)
-                          << "window:" << (m_item && m_item->window());
+        qCDebug(lcOverlay) << "prepare(): bail — itemValid:" << m_itemValid.load() << "item:" << (m_item != nullptr)
+                           << "window:" << (m_item && m_item->window());
         return;
     }
     QRhi* rhi = m_item->window()->rhi();
     if (!rhi) {
-        qCInfo(lcOverlay) << "prepare(): bail — rhi is null";
+        qCDebug(lcOverlay) << "prepare(): bail — rhi is null";
         return;
     }
     QRhiCommandBuffer* cb = commandBuffer();
     QRhiRenderTarget* rt = renderTarget();
     if (!cb || !rt) {
-        qCInfo(lcOverlay) << "prepare(): bail — cb:" << (cb != nullptr) << "rt:" << (rt != nullptr);
+        qCDebug(lcOverlay) << "prepare(): bail — cb:" << (cb != nullptr) << "rt:" << (rt != nullptr);
         return;
     }
 
@@ -306,18 +306,11 @@ void ZoneShaderNodeRhi::prepare()
     // Multi-pass: bake buffer fragment shader(s) when path(s) set
     bakeBufferShaders();
 
-    // Compute shader: bake and ensure pipeline, or fall back to CPU particles.
-    // GPU compute dispatch cannot be used with QSGRenderNode on Vulkan: offscreen passes
-    // (beginComputePass/endComputePass) must happen in prepare() to avoid breaking the
-    // scene graph's render pass, but recording compute dispatches in prepare() crashes
-    // the NVIDIA Vulkan driver during endFrame(). Force CPU fallback on Vulkan.
+    // Compute shader: bake and ensure pipeline, or fall back to CPU particles
     if (!m_computeShaderPath.isEmpty() && m_particleCount > 0 && !m_cpuParticlesFallback) {
         if (!m_computeSupported) {
-            const bool isVulkan = (rhi->backend() == QRhi::Vulkan);
-            m_computeSupported = !isVulkan && rhi->isFeatureSupported(QRhi::Compute);
-            if (isVulkan) {
-                qCInfo(lcOverlay) << "GPU compute disabled on Vulkan — using CPU particle fallback";
-            } else if (m_computeSupported) {
+            m_computeSupported = rhi->isFeatureSupported(QRhi::Compute);
+            if (m_computeSupported) {
                 qCInfo(lcOverlay) << "Compute support: true"
                                   << "path:" << m_computeShaderPath << "particles:" << m_particleCount;
             }
@@ -402,26 +395,16 @@ void ZoneShaderNodeRhi::prepare()
     uploadDirtyTextures(rhi, cb);
 
     // ========================================================================
-    // Offscreen passes: compute dispatch + buffer passes
-    // Recorded in prepare() which runs BEFORE the scene graph opens its render
-    // pass. This avoids ending/restarting the scene graph's VkRenderPass inside
-    // render(), which violates the Qt batch renderer's contract on Vulkan and
-    // causes the overlay to go invisible after the first show.
+    // Multipass buffer passes recorded in prepare() — safe because prepare()
+    // runs BEFORE the scene graph opens its render pass. Buffer passes use
+    // offscreen FBOs (their own render targets), not the main RT.
+    // Compute dispatch stays in render() — see render() comment.
     // ========================================================================
-    m_offscreenPassesDone = false;
-
     const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady && m_bufferPipeline
         && m_bufferRenderTarget && m_bufferTexture;
     const bool multipassMulti =
         multiBufferMode && m_multiBufferShadersReady && m_multiBufferTextures[0] && m_multiBufferPipelines[0];
     const bool multipassActive = multipassSingle || multipassMulti;
-
-    const bool computeActive =
-        m_computeSupported && m_computeShaderReady && m_computePipeline && m_particleSsbo && m_particleTexture;
-
-    if (computeActive) {
-        dispatchCompute(cb);
-    }
 
     if (multipassActive) {
         const QColor clearColor(0, 0, 0, 0);
@@ -470,36 +453,49 @@ void ZoneShaderNodeRhi::prepare()
             cb->endPass();
         }
     }
-
-    m_offscreenPassesDone = computeActive || multipassActive;
 }
 
 // ============================================================================
-// render() — image pass draw (inline within scene graph's active render pass)
-// Offscreen passes (compute, buffer) are recorded in prepare() to avoid
-// ending/restarting the scene graph's VkRenderPass, which breaks Vulkan.
+// render() — compute dispatch + image pass draw
+// Buffer passes are recorded in prepare() (offscreen FBOs, safe before the
+// scene graph's render pass). Compute dispatch must happen here because
+// beginComputePass() requires no active render pass — we end the scene
+// graph's pass, dispatch compute, then re-begin the pass for the image draw.
+// Overlay windows are destroyed on hide (not just hidden), so the
+// endPass/beginPass on the main RT is safe — each window lives for one
+// show cycle only.
 // ============================================================================
 
 void ZoneShaderNodeRhi::render(const RenderState* state)
 {
     Q_UNUSED(state)
     if (!m_itemValid.load(std::memory_order_acquire)) {
-        qCInfo(lcOverlay) << "render(): bail — item invalid";
+        qCDebug(lcOverlay) << "render(): bail — item invalid";
         return;
     }
-    // All offscreen passes (compute dispatch, buffer passes) were recorded in
-    // prepare(), which runs before the scene graph opens its render pass. The
-    // image pass draws inline within the scene graph's active pass — no
-    // endPass/beginPass calls that would break Vulkan.
     if (!m_shaderReady || !m_pipeline || !m_srb) {
-        qCInfo(lcOverlay) << "render(): bail — shaderReady:" << m_shaderReady << "pipeline:" << (m_pipeline != nullptr)
-                          << "srb:" << (m_srb != nullptr);
+        qCDebug(lcOverlay) << "render(): bail — shaderReady:" << m_shaderReady << "pipeline:" << (m_pipeline != nullptr)
+                           << "srb:" << (m_srb != nullptr);
         return;
     }
     QRhiCommandBuffer* cb = commandBuffer();
     QRhiRenderTarget* rt = renderTarget();
     if (!cb || !rt) {
         return;
+    }
+
+    // GPU compute dispatch: must happen outside any render pass (Vulkan requirement).
+    // On OpenGL, compute dispatch is safe in prepare() (no render pass concept).
+    // On Vulkan, GPU compute is disabled (NVIDIA 595.x driver bug) — CPU fallback is used.
+    // If a future driver fixes this, compute dispatch can be restored here with:
+    //   cb->endPass(); dispatchCompute(cb); cb->beginPass(rt, clear, {1.0f, 0});
+    const bool computeActive =
+        m_computeSupported && m_computeShaderReady && m_computePipeline && m_particleSsbo && m_particleTexture;
+    if (computeActive) {
+        cb->endPass();
+        dispatchCompute(cb);
+        const QColor mainClear(0, 0, 0, 0);
+        cb->beginPass(rt, mainClear, {1.0f, 0});
     }
 
     // Use item's rect in render target (device pixels) so we render only within the item,

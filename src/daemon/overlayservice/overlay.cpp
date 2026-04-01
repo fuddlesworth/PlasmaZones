@@ -26,8 +26,6 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
 {
     // Determine if we should show on all monitors (cursorScreen == nullptr means all)
     const bool showOnAllMonitors = (cursorScreen == nullptr);
-    qCInfo(lcOverlay) << "initializeOverlay called, existing windows:" << m_overlayWindows.size()
-                      << "cursorScreen:" << (cursorScreen ? cursorScreen->name() : QStringLiteral("all"));
 
     m_visible = true;
     m_currentOverlayScreen = showOnAllMonitors ? nullptr : cursorScreen;
@@ -342,8 +340,6 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
 
 void OverlayService::destroyOverlayWindow(QScreen* screen)
 {
-    qCInfo(lcOverlay) << "destroyOverlayWindow:" << (screen ? screen->name() : QStringLiteral("null"))
-                      << "remaining:" << (m_overlayWindows.size() - 1);
     if (auto* window = m_overlayWindows.take(screen)) {
         // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
         disconnect(screen, nullptr, window, nullptr);

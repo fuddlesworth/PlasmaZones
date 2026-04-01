@@ -48,10 +48,10 @@ void ZoneShaderNodeRhi::bakeComputeShader()
         return;
     }
 
-    // Compute requires GLSL 430+ / GLES 310+ (higher than fragment shader targets which use 330).
-    // Include BOTH SPIR-V 1.0 (version 100) for Qt's QRhi pipeline lookup AND SPIR-V 1.3
-    // (version 130) for compute features (imageStore, SSBOs with std430) that may require
-    // higher SPIR-V capabilities. QShaderBaker generates both; QRhi picks the best match.
+    // Compute requires GLSL 430+ / GLES 310+. Include both SPIR-V versions:
+    // - 1.0 (version 100): required by Qt 6.11's QRhi Vulkan backend for pipeline lookup
+    // - 1.3 (version 130): provides full compute capabilities (imageStore, std430 SSBOs)
+    // QShaderBaker generates both; the driver should use the highest compatible version.
     static const QList<QShaderBaker::GeneratedShader> computeTargets = {
         {QShader::SpirvShader, QShaderVersion(100)},
         {QShader::SpirvShader, QShaderVersion(130)},
@@ -77,8 +77,12 @@ bool ZoneShaderNodeRhi::ensureParticleTexture(QRhi* rhi)
     const int h = qMax(1, static_cast<int>(m_height));
     const QSize texSize(w, h);
 
-    // For GPU compute, texture needs UsedWithLoadStore; for CPU fallback, plain RGBA8 suffices.
-    const QRhiTexture::Flags texFlags = m_computeSupported ? QRhiTexture::UsedWithLoadStore : QRhiTexture::Flags{};
+    // For GPU compute, texture needs UsedWithLoadStore + RenderTarget. The RenderTarget flag
+    // adds VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT which NVIDIA's Vulkan driver requires for
+    // correct barrier handling when a storage image (compute imageStore) also transitions to
+    // SHADER_READ_ONLY layout for fragment sampling. For CPU fallback, plain RGBA8 suffices.
+    const QRhiTexture::Flags texFlags =
+        m_computeSupported ? (QRhiTexture::UsedWithLoadStore | QRhiTexture::RenderTarget) : QRhiTexture::Flags{};
 
     if (!m_particleTexture || m_particleTexture->pixelSize() != texSize) {
         m_particleTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, texSize, 1, texFlags));
@@ -134,6 +138,9 @@ bool ZoneShaderNodeRhi::ensureComputePipeline()
         // binding 0: UBO
         bindings.append(
             QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::ComputeStage, m_ubo.get()));
+        // NOTE: common.glsl declares binding 1 (uZoneLabels) and audio.glsl declares
+        // binding 6 (uAudioSpectrum), but the SPIR-V compiler strips unused bindings.
+        // Only bind what the compute shader actually uses.
         // binding 6: audio spectrum (for audio-reactive particles)
         if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
             bindings.append(QRhiShaderResourceBinding::sampledTexture(6, QRhiShaderResourceBinding::ComputeStage,
@@ -187,20 +194,22 @@ void ZoneShaderNodeRhi::dispatchCompute(QRhiCommandBuffer* cb)
         return;
     }
 
-    // Initialize SSBO with random particle data on first frame
+    // Initialize SSBO with random particle data on first frame.
+    // Pass the upload batch to beginComputePass() instead of standalone cb->resourceUpdate()
+    // so QRhi applies it with correct Vulkan pipeline barriers at pass start.
+    QRhiResourceUpdateBatch* initBatch = nullptr;
     if (m_particleSsboNeedsInit) {
         QVector<ParticleData> initData(m_particleCount);
         for (int i = 0; i < m_particleCount; ++i) {
             initParticle(initData[i], i, m_particleCount);
         }
-        QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
-        batch->uploadStaticBuffer(m_particleSsbo.get(), 0, m_particleCount * sizeof(ParticleData),
-                                  initData.constData());
-        cb->resourceUpdate(batch);
+        initBatch = rhi->nextResourceUpdateBatch();
+        initBatch->uploadStaticBuffer(m_particleSsbo.get(), 0, m_particleCount * sizeof(ParticleData),
+                                      initData.constData());
         m_particleSsboNeedsInit = false;
     }
 
-    cb->beginComputePass();
+    cb->beginComputePass(initBatch);
     cb->setComputePipeline(m_computePipeline.get());
     cb->setShaderResources(m_computeSrb.get());
     // 64 threads per workgroup
