@@ -14,7 +14,10 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
  *
  * Each thread updates one particle: physics, aging, respawning.
  * Alive particles are rendered as soft dots into uParticleImage.
- * Audio modulates spawn rate, velocity, and color intensity.
+ * Multi-layer system: particles belong to foreground/mid/background layers
+ * based on seed, each with different speed, size, and alpha.
+ * Aurora column attractors create curtain-like clustering.
+ * Audio modulates spawn rate, velocity, color, and creates bass-burst novas.
  */
 
 void main() {
@@ -25,8 +28,6 @@ void main() {
     ivec2 imgSize = imageSize(uParticleImage);
 
     // ── Clear this thread's stripe of the particle image ───
-    // Each thread clears a vertical stripe proportional to its index.
-    // This distributes the clear across all compute threads.
     int totalParticles = int(particles.length());
     int stripWidth = max(1, (imgSize.x + totalParticles - 1) / totalParticles);
     int stripStart = int(idx) * stripWidth;
@@ -42,9 +43,6 @@ void main() {
     float maxLifetime    = max(customParams[0].y, 1.0);
     float gravity        = customParams[0].z;
     float turbulence     = customParams[0].w;
-    // Scale particle size relative to image height so appearance is consistent
-    // across resolutions (editor preview ~300px vs overlay ~1800px).
-    // The user-facing value (1-8) is treated as a percentage of height / 100.
     float particleSizeRaw = max(customParams[1].x, 1.0);
     float particleSize    = particleSizeRaw * float(imgSize.y) / 300.0;
     float glowIntensity  = max(customParams[1].y, 0.5);
@@ -56,9 +54,6 @@ void main() {
     vec3 aurora3 = customColors[3].rgb;
 
     // ── Audio ──────────────────────────────────────────
-    // Audio spectrum is at binding 6 as sampler2D (declared in audio.glsl).
-    // In compute shaders we sample it directly with texelFetch since there's
-    // no vTexCoord. The texture is Nx1 RGBA8; .r channel holds the bar value.
     bool hasAudio = iAudioSpectrumSize > 0;
     float bass = 0.0, mids = 0.0, treble = 0.0, overall = 0.0;
     if (hasAudio) {
@@ -73,28 +68,75 @@ void main() {
     float dt = iTimeDelta;
     float seed = p.seed;
 
+    // ── Multi-layer assignment based on seed ────────────
+    // Layer 0: background (slow, large, dim) ~33%
+    // Layer 1: midground (medium speed/size)  ~34%
+    // Layer 2: foreground (fast, small, bright) ~33%
+    int layer = int(floor(fract(seed * 7.31) * 3.0));
+    float layerSpeedMul = (layer == 0) ? 0.4 : (layer == 1) ? 1.0 : 1.8;
+    float layerSizeMul  = (layer == 0) ? 1.8 : (layer == 1) ? 1.0 : 0.6;
+    float layerAlphaMul = (layer == 0) ? 0.4 : (layer == 1) ? 0.8 : 1.0;
+
     // ── Respawn dead particles ─────────────────────────
     if (p.life <= 0.0) {
-        // Spawn probability based on rate + audio
         float spawnChance = spawnRate * dt * (1.0 + energy);
+
+        // ── Audio-reactive burst spawn ─────────────────
+        // Bass hits concentrate spawns in a small spatial nova
+        bool bassNova = false;
+        vec2 novaCenter = vec2(0.5);
+        if (hasAudio && bass > 0.6) {
+            // Increase spawn probability significantly during bass hits
+            float novaPower = (bass - 0.6) * 2.5 * audioReact;
+            spawnChance += novaPower * dt * 3.0;
+            // Nova center: deterministic per-frame so burst is spatially coherent
+            float novaHash = particleHash(floor(iTime * 4.0), 42.0);
+            novaCenter = vec2(
+                0.15 + novaHash * 0.7,
+                0.1 + particleHash(floor(iTime * 4.0), 99.0) * 0.3
+            );
+            bassNova = true;
+        }
+
         float roll = particleHash(seed, iTime + float(idx) * 0.001);
         if (roll > spawnChance) {
             particles[idx] = p;
             return;
         }
 
-        // Spawn at random position along bottom third of screen
-        p.pos.x = particleHash(seed, iTime * 1.1 + float(idx) * 0.37);
-        p.pos.y = particleHash(seed, iTime * 0.7 + float(idx) * 0.53) * 0.3;
-        p.vel.x = (particleHash(seed, iTime * 2.3 + float(idx)) - 0.5) * driftSpeed * 0.1;
-        p.vel.y = 0.01 + particleHash(seed, iTime * 3.1 + float(idx)) * 0.03
-                + (hasAudio ? bass * audioReact * 0.02 : 0.0);
-        p.life = maxLifetime;
-        p.age = 0.0;
-        p.size = particleSize / float(imgSize.y);
+        if (bassNova && particleHash(seed, iTime * 5.5 + float(idx)) < 0.6) {
+            // Nova spawn: concentrated near novaCenter with radial velocity
+            float novaAngle = particleHash(seed, iTime * 3.7 + float(idx)) * TAU;
+            float novaRadius = particleHash(seed, iTime * 2.9 + float(idx)) * 0.08;
+            p.pos = novaCenter + vec2(cos(novaAngle), sin(novaAngle)) * novaRadius;
+            p.vel.x = cos(novaAngle) * 0.04 * (1.0 + bass);
+            p.vel.y = sin(novaAngle) * 0.04 + 0.02;
+            p.life = maxLifetime * 0.5; // Shorter-lived nova particles
+        } else {
+            // Normal spawn along bottom third, clustered in aurora columns
+            float rawX = particleHash(seed, iTime * 1.1 + float(idx) * 0.37);
 
-        // Color: cycle through aurora palette based on position + seed
-        float colorT = p.pos.x + seed;
+            // Aurora column attractor: sine-wave clustering along X axis
+            // Creates natural curtain/column patterns
+            float columnFreq = 4.0 + seed * 2.0;
+            float columnCenter = 0.5 + sin(rawX * columnFreq * TAU + iTime * 0.2) * 0.15;
+            float columnPull = 0.3; // How strongly particles cluster
+            p.pos.x = mix(rawX, columnCenter, columnPull);
+            p.pos.y = particleHash(seed, iTime * 0.7 + float(idx) * 0.53) * 0.3;
+
+            p.vel.x = (particleHash(seed, iTime * 2.3 + float(idx)) - 0.5)
+                     * driftSpeed * 0.1 * layerSpeedMul;
+            p.vel.y = (0.01 + particleHash(seed, iTime * 3.1 + float(idx)) * 0.03)
+                     * layerSpeedMul
+                     + (hasAudio ? bass * audioReact * 0.02 : 0.0);
+            p.life = maxLifetime * (0.7 + 0.3 * layerSizeMul);
+        }
+
+        p.age = 0.0;
+        p.size = particleSize * layerSizeMul / float(imgSize.y);
+
+        // Color: cycle through aurora palette based on position + seed + layer
+        float colorT = p.pos.x + seed + float(layer) * 0.33;
         vec3 col;
         float ct = fract(colorT * 3.0);
         int ci = int(floor(colorT * 3.0)) % 3;
@@ -106,19 +148,48 @@ void main() {
 
     // ── Physics update ─────────────────────────────────
     // Gravity (negative = upward aurora effect)
-    p.vel.y += gravity * dt;
+    p.vel.y += gravity * dt * layerSpeedMul;
 
-    // Turbulence: simple sine-based flow field
-    float turbX = sin(p.pos.y * 12.0 + iTime * 1.5) * turbulence * 0.01;
-    float turbY = cos(p.pos.x * 8.0 + iTime * 1.2) * turbulence * 0.005;
+    // Turbulence: domain-warped flow field for organic movement
+    float turbX = sin(p.pos.y * 12.0 + iTime * 1.5 * layerSpeedMul)
+                * turbulence * 0.01;
+    float turbY = cos(p.pos.x * 8.0 + iTime * 1.2 * layerSpeedMul)
+                * turbulence * 0.005;
+    // Secondary turbulence: cross-frequency for complexity
+    turbX += sin(p.pos.y * 20.0 - iTime * 0.8) * turbulence * 0.003;
+    turbY += cos(p.pos.x * 15.0 + iTime * 0.6) * turbulence * 0.002;
     p.vel.x += turbX * dt;
     p.vel.y += turbY * dt;
 
-    // Drift
-    p.vel.x += sin(iTime * 0.3 + p.seed * 6.28) * driftSpeed * 0.001 * dt;
+    // ── Aurora column attractor ────────────────────────
+    // Particles gently pulled toward vertical column lines
+    // creating the characteristic aurora curtain structure
+    float columnFreq = 4.0 + seed * 2.0;
+    float nearestColumn = round(p.pos.x * columnFreq) / columnFreq;
+    float columnDist = p.pos.x - nearestColumn;
+    float columnForce = -columnDist * 0.005 * dt; // Gentle pull toward column center
+    p.vel.x += columnForce;
 
-    // Damping
-    p.vel *= 0.998;
+    // Drift
+    p.vel.x += sin(iTime * 0.3 + p.seed * TAU) * driftSpeed * 0.001 * dt * layerSpeedMul;
+
+    // ── Mouse attractor ────────────────────────────────
+    // iMouse.zw = normalized 0-1 coords
+    vec2 mouseNorm = iMouse.zw;
+    if (mouseNorm.x > 0.0 && mouseNorm.y > 0.0) {
+        vec2 toMouse = mouseNorm - p.pos;
+        float mouseDist = length(toMouse);
+        float mouseRadius = 0.15;
+        if (mouseDist < mouseRadius && mouseDist > 0.001) {
+            // Gentle gravitational pull
+            float mouseForce = (1.0 - mouseDist / mouseRadius) * 0.02 * dt;
+            p.vel += normalize(toMouse) * mouseForce;
+        }
+    }
+
+    // Damping (background layer damps more for slower movement)
+    float damping = (layer == 0) ? 0.995 : (layer == 1) ? 0.998 : 0.997;
+    p.vel *= damping;
 
     // Integrate
     p.pos += p.vel * dt * 60.0;
@@ -130,13 +201,16 @@ void main() {
     p.age += dt;
     p.life -= dt;
 
-    // Fade alpha with age
+    // Fade alpha with age (layer-adjusted)
     float fadeIn = smoothstep(0.0, 0.3, p.age);
     float fadeOut = smoothstep(0.0, 1.0, p.life / maxLifetime);
-    float alpha = fadeIn * fadeOut * glowIntensity;
+    float alpha = fadeIn * fadeOut * glowIntensity * layerAlphaMul;
 
-    // Audio boost
+    // Audio boost (mids lift midground, treble lifts foreground sparkle)
     alpha *= 1.0 + energy * 0.5;
+    if (layer == 2 && hasAudio) {
+        alpha *= 1.0 + treble * audioReact * 0.3;
+    }
 
     // ── Render to particle image ───────────────────────
     if (p.life > 0.0 && alpha > 0.01) {
