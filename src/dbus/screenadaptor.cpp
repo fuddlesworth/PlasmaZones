@@ -39,10 +39,10 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
             handleScreenGeometryChanged(screen, cachedId);
         });
 
-        // Connect screenRemoved with the cached physical ID so we never query
-        // a potentially-destroyed QScreen. The filter ensures this lambda only
-        // fires for the screen that was added in this invocation.
-        connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this, screen, cachedId](QScreen* removedScreen) {
+        // Use screen as the context object so the connection is automatically
+        // destroyed when Qt deletes the QScreen on removal. This prevents dead
+        // lambda accumulation on repeated dock/undock cycles.
+        connect(qGuiApp, &QGuiApplication::screenRemoved, screen, [this, screen, cachedId](QScreen* removedScreen) {
             if (removedScreen != screen) {
                 return;
             }
@@ -59,7 +59,7 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
         connect(screen, &QScreen::geometryChanged, this, [this, screen, cachedId]() {
             handleScreenGeometryChanged(screen, cachedId);
         });
-        connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this, screen, cachedId](QScreen* removedScreen) {
+        connect(qGuiApp, &QGuiApplication::screenRemoved, screen, [this, screen, cachedId](QScreen* removedScreen) {
             if (removedScreen != screen) {
                 return;
             }

@@ -487,17 +487,17 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
 
     // Update settings-based properties on the window itself (QML root)
     if (m_settings) {
-        window->setProperty("highlightColor", m_settings->highlightColor());
-        window->setProperty("inactiveColor", m_settings->inactiveColor());
-        window->setProperty("borderColor", m_settings->borderColor());
-        window->setProperty("activeOpacity", m_settings->activeOpacity());
-        window->setProperty("inactiveOpacity", m_settings->inactiveOpacity());
-        window->setProperty("borderWidth", m_settings->borderWidth());
-        window->setProperty("borderRadius", m_settings->borderRadius());
-        window->setProperty("enableBlur", m_settings->enableBlur());
+        writeQmlProperty(window, QStringLiteral("highlightColor"), m_settings->highlightColor());
+        writeQmlProperty(window, QStringLiteral("inactiveColor"), m_settings->inactiveColor());
+        writeQmlProperty(window, QStringLiteral("borderColor"), m_settings->borderColor());
+        writeQmlProperty(window, QStringLiteral("activeOpacity"), m_settings->activeOpacity());
+        writeQmlProperty(window, QStringLiteral("inactiveOpacity"), m_settings->inactiveOpacity());
+        writeQmlProperty(window, QStringLiteral("borderWidth"), m_settings->borderWidth());
+        writeQmlProperty(window, QStringLiteral("borderRadius"), m_settings->borderRadius());
+        writeQmlProperty(window, QStringLiteral("enableBlur"), m_settings->enableBlur());
         // Global setting is a master switch; per-layout setting can only further restrict
         bool showNumbers = m_settings->showZoneNumbers() && (!screenLayout || screenLayout->showZoneNumbers());
-        window->setProperty("showNumbers", showNumbers);
+        writeQmlProperty(window, QStringLiteral("showNumbers"), showNumbers);
         writeFontProperties(window, m_settings);
     }
 

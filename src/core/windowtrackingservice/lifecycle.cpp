@@ -131,8 +131,21 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     if ((m_lastUsedScreenId == physicalScreenId || m_lastUsedScreenId.startsWith(prefix))
         && !virtualScreenIds.isEmpty()) {
         m_lastUsedScreenId = virtualScreenIds.first();
-        // Clear stale zone ID — physical layout zones don't exist in virtual screen layout
-        m_lastUsedZoneId.clear();
+        // Only clear the zone ID if it doesn't exist in the target virtual screen's layout.
+        // If the zone is still valid in the new layout, preserve it for last-zone-snap.
+        bool zoneStillValid = false;
+        if (!m_lastUsedZoneId.isEmpty() && m_layoutManager) {
+            Layout* targetLayout = m_layoutManager->resolveLayoutForScreen(virtualScreenIds.first());
+            if (targetLayout) {
+                auto uuidOpt = Utils::parseUuid(m_lastUsedZoneId);
+                if (uuidOpt && targetLayout->zoneById(*uuidOpt)) {
+                    zoneStillValid = true;
+                }
+            }
+        }
+        if (!zoneStillValid) {
+            m_lastUsedZoneId.clear();
+        }
     }
 
     // Migrate pre-tile geometry connectorName fields from physical (or old virtual) to new virtual
@@ -742,7 +755,17 @@ QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId)
         return screenId;
     }
 
+    // The stored virtual screen no longer exists. Try to find another virtual screen
+    // on the same physical monitor, so the window stays in the virtual-screen domain
+    // (screensMatch() returns false for physical-vs-virtual comparisons).
     QString physId = VirtualScreenId::extractPhysicalId(screenId);
+    const QStringList vsIds = smgr->virtualScreenIdsFor(physId);
+    if (!vsIds.isEmpty()) {
+        qCInfo(lcCore) << "Virtual screen" << screenId << "no longer exists, falling back to" << vsIds.first()
+                       << "on same physical monitor" << physId;
+        return vsIds.first();
+    }
+
     qCWarning(lcCore) << "Virtual screen" << screenId << "no longer exists, falling back to physical screen" << physId;
     return physId;
 }

@@ -202,6 +202,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
         return;
     }
 
+    writeQmlProperty(window, QStringLiteral("locked"), false);
     writeQmlProperty(window, QStringLiteral("layoutId"), id);
     writeQmlProperty(window, QStringLiteral("layoutName"), name);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);

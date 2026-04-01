@@ -5,15 +5,15 @@
     <interface name="org.plasmazones.Screen">
         <annotation name="org.gtk.GDBus.DocString" value="Screen enumeration and metadata (geometry, scale, refresh). Notifications when screens are added, removed, or geometry changes."/>
         <method name="getScreens">
-            <annotation name="org.gtk.GDBus.DocString" value="Return the list of screen names (e.g. DP-1, HDMI-1)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return the list of effective screen identifiers (EDID-based physical IDs like Dell:U2722D:115107, or virtual screen IDs like Dell:U2722D:115107/vs:0 when subdivided)."/>
             <arg name="screens" type="as" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="List of screen names."/>
+                <annotation name="org.gtk.GDBus.DocString" value="List of effective screen identifiers."/>
             </arg>
         </method>
         <method name="getScreenInfo">
             <annotation name="org.gtk.GDBus.DocString" value="Return detailed info for a screen as JSON (geometry, scale, refresh rate, etc.)."/>
             <arg name="screenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Screen identifier (EDID-based like Dell:U2722D:115107, or virtual like Dell:U2722D:115107/vs:0)."/>
             </arg>
             <arg name="screenJson" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen info as JSON."/>
@@ -29,33 +29,33 @@
             </arg>
         </method>
         <method name="getPrimaryScreen">
-            <annotation name="org.gtk.GDBus.DocString" value="Return the name of the primary screen. Prefers KWin output order over QGuiApplication::primaryScreen()."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return the EDID-based identifier of the primary screen. Prefers KWin output order over QGuiApplication::primaryScreen()."/>
             <arg name="screenName" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Primary screen name."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Primary screen identifier (e.g. Dell:U2722D:115107)."/>
             </arg>
         </method>
         <method name="setPrimaryScreenFromKWin">
             <annotation name="org.gtk.GDBus.DocString" value="Override the primary screen with the KWin compositor's output order primary. Called by the KWin effect on daemon ready."/>
             <arg name="screenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen name from Workspace::outputOrder().first()."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Connector name from Workspace::outputOrder().first() (e.g. DP-1). Resolved to EDID-based identifier internally."/>
             </arg>
         </method>
         <signal name="screenAdded">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a new screen is connected."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a new screen is connected. For subdivided screens, emits once per virtual screen."/>
             <arg name="screenName" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Effective screen identifier (e.g. Dell:U2722D:115107 or Dell:U2722D:115107/vs:0)."/>
             </arg>
         </signal>
         <signal name="screenRemoved">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a screen is disconnected."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a screen is disconnected. For subdivided screens, emits once per virtual screen."/>
             <arg name="screenName" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Effective screen identifier (e.g. Dell:U2722D:115107 or Dell:U2722D:115107/vs:0)."/>
             </arg>
         </signal>
         <signal name="screenGeometryChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when a screen's resolution or position changes."/>
             <arg name="screenName" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen whose geometry changed."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Effective screen identifier whose geometry changed."/>
             </arg>
         </signal>
         <method name="getVirtualScreenConfig">

@@ -57,12 +57,10 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     m_snapAssistScreen = screen;
     m_snapAssistScreenId = screenId;
 
-    // Hide zone selectors on this physical screen to avoid overlap
-    for (auto it = m_zoneSelectorWindows.begin(); it != m_zoneSelectorWindows.end(); ++it) {
-        auto physIt = m_zoneSelectorPhysScreens.find(it.key());
-        if (physIt != m_zoneSelectorPhysScreens.end() && physIt.value() == screen) {
-            it.value()->hide();
-        }
+    // Hide the zone selector for this specific virtual screen to avoid overlap.
+    // Only hide the selector keyed by screenId, not all selectors on the physical monitor.
+    if (auto* selectorWindow = m_zoneSelectorWindows.value(screenId)) {
+        selectorWindow->hide();
     }
 
     // Parse JSON using shared helper (same format: array of objects)
@@ -319,12 +317,10 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         screenGeom = screen->geometry();
     }
 
-    // Hide zone selectors on this physical screen to avoid overlap
-    for (auto it = m_zoneSelectorWindows.begin(); it != m_zoneSelectorWindows.end(); ++it) {
-        auto physIt = m_zoneSelectorPhysScreens.find(it.key());
-        if (physIt != m_zoneSelectorPhysScreens.end() && physIt.value() == screen) {
-            it.value()->hide();
-        }
+    // Hide the zone selector for this specific virtual screen to avoid overlap.
+    // Only hide the selector keyed by resolvedId, not all selectors on the physical monitor.
+    if (auto* selectorWindow = m_zoneSelectorWindows.value(resolvedId)) {
+        selectorWindow->hide();
     }
 
     // Always destroy and recreate for fresh state

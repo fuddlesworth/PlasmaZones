@@ -11,6 +11,7 @@
 #include "../screenmanager.h"
 #include "../zone.h"
 #include "../layoutmanager.h"
+#include "../virtualdesktopmanager.h"
 #include "../utils.h"
 #include "../logging.h"
 #include <QScreen>
@@ -65,13 +66,13 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
     return occupiedZoneIds;
 }
 
-QString WindowTrackingService::findEmptyZoneInLayout(Layout* layout, const QString& screenId) const
+QString WindowTrackingService::findEmptyZoneInLayout(Layout* layout, const QString& screenId, int desktopFilter) const
 {
     if (!layout) {
         return QString();
     }
 
-    QSet<QUuid> occupiedZoneIds = buildOccupiedZoneSet(screenId);
+    QSet<QUuid> occupiedZoneIds = buildOccupiedZoneSet(screenId, desktopFilter);
 
     // Sort by zone number so "first empty" is the lowest-numbered empty zone
     QVector<Zone*> sortedZones = layout->zones();
@@ -88,7 +89,8 @@ QString WindowTrackingService::findEmptyZoneInLayout(Layout* layout, const QStri
 QString WindowTrackingService::findEmptyZone(const QString& screenId) const
 {
     Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
-    return findEmptyZoneInLayout(layout, screenId);
+    int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    return findEmptyZoneInLayout(layout, screenId, desktopFilter);
 }
 
 QString WindowTrackingService::getEmptyZonesJson(const QString& screenId) const
@@ -104,9 +106,10 @@ QString WindowTrackingService::getEmptyZonesJson(const QString& screenId) const
         return QStringLiteral("[]");
     }
 
-    // Use screen-filtered occupancy check — without this, zones occupied on
-    // screen A appear occupied on screen B when both use the same layout (same zone IDs).
-    QSet<QUuid> occupied = buildOccupiedZoneSet(screenId);
+    // Use screen-filtered and desktop-filtered occupancy check — without this, zones
+    // occupied on screen A (or other desktops) appear occupied on screen B / current desktop.
+    int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    QSet<QUuid> occupied = buildOccupiedZoneSet(screenId, desktopFilter);
     return GeometryUtils::buildEmptyZonesJson(layout, screenId, screen, m_settings, [&occupied](const Zone* z) {
         return !occupied.contains(z->id());
     });

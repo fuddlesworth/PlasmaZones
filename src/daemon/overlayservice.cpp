@@ -83,8 +83,19 @@ OverlayService::OverlayService(QObject* parent)
             // zone geometry from the old virtual screen config and would be stale.
             clearSelectedZone();
 
+            // Track whether zone selectors were visible before destruction so we can
+            // recreate them for the new virtual screen configuration.
+            const bool hadZoneSelector = m_zoneSelectorVisible;
+
             // Destroy all window types (overlays, selectors, OSDs, snap assist, layout picker)
             destroyAllWindowsForPhysicalScreen(physScreen);
+
+            // Reset zone selector flag — the windows were destroyed, so the flag
+            // must be cleared to allow re-showing. Without this, the guard at the
+            // top of showZoneSelector() prevents recreation.
+            if (hadZoneSelector) {
+                m_zoneSelectorVisible = false;
+            }
 
             // Recreate with new virtual screen config if visible
             if (isVisible()) {
@@ -99,6 +110,11 @@ OverlayService::OverlayService(QObject* parent)
                 } else {
                     createOverlayWindow(physScreen);
                 }
+            }
+
+            // Recreate zone selectors for the new virtual screen configuration
+            if (hadZoneSelector) {
+                showZoneSelector();
             }
         });
     }

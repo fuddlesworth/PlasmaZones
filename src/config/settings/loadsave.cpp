@@ -828,9 +828,62 @@ void Settings::loadVirtualScreenConfigs(QSettingsConfigBackend* backend)
         config.screens = validScreens;
 
         // Need at least 2 screens for a meaningful subdivision
-        if (config.screens.size() >= 2) {
-            m_virtualScreenConfigs.insert(physId, config);
+        if (config.screens.size() < 2)
+            continue;
+
+        // Validate unique indices
+        {
+            QSet<int> seenIndices;
+            bool duplicateIndex = false;
+            for (const auto& vs : config.screens) {
+                if (seenIndices.contains(vs.index)) {
+                    qCWarning(lcConfig) << "loadVirtualScreenConfigs: duplicate index" << vs.index << "for" << physId
+                                        << "- skipping config";
+                    duplicateIndex = true;
+                    break;
+                }
+                seenIndices.insert(vs.index);
+            }
+            if (duplicateIndex)
+                continue;
         }
+
+        // Validate no overlapping regions (pairwise intersection, tolerance-aware)
+        {
+            bool hasOverlap = false;
+            for (int i = 0; i < config.screens.size(); ++i) {
+                for (int j = i + 1; j < config.screens.size(); ++j) {
+                    QRectF intersection = config.screens[i].region.intersected(config.screens[j].region);
+                    if (intersection.width() > VirtualScreenDef::Tolerance
+                        && intersection.height() > VirtualScreenDef::Tolerance) {
+                        qCWarning(lcConfig)
+                            << "loadVirtualScreenConfigs: overlapping regions between" << config.screens[i].id << "and"
+                            << config.screens[j].id << "for" << physId << "- skipping config";
+                        hasOverlap = true;
+                        break;
+                    }
+                }
+                if (hasOverlap)
+                    break;
+            }
+            if (hasOverlap)
+                continue;
+        }
+
+        // Validate total area coverage is approximately 1.0
+        {
+            qreal totalArea = 0.0;
+            for (const auto& vs : config.screens) {
+                totalArea += vs.region.width() * vs.region.height();
+            }
+            if (totalArea < 0.99 || totalArea > 1.01) {
+                qCWarning(lcConfig) << "loadVirtualScreenConfigs: total area" << totalArea << "outside [0.99, 1.01] for"
+                                    << physId << "- skipping config";
+                continue;
+            }
+        }
+
+        m_virtualScreenConfigs.insert(physId, config);
     }
 }
 
@@ -845,7 +898,9 @@ void Settings::saveVirtualScreenConfigs(QSettingsConfigBackend* backend)
         }
     }
 
-    // Write current configs
+    // Write current configs — normalize indices to be contiguous (0..N-1) so that
+    // the load path (which reconstructs index and id from the loop counter) produces
+    // identical IDs to what was saved.
     for (auto it = m_virtualScreenConfigs.constBegin(); it != m_virtualScreenConfigs.constEnd(); ++it) {
         const QString& physId = it.key();
         const VirtualScreenConfig& config = it.value();
@@ -856,7 +911,10 @@ void Settings::saveVirtualScreenConfigs(QSettingsConfigBackend* backend)
         group->writeInt(ConfigDefaults::virtualScreenCountKey(), config.screens.size());
 
         for (int i = 0; i < config.screens.size(); ++i) {
-            const VirtualScreenDef& vs = config.screens[i];
+            VirtualScreenDef vs = config.screens[i];
+            // Normalize index and id to match the save position so round-trip is stable
+            vs.index = i;
+            vs.id = VirtualScreenId::make(physId, i);
             const QString p = QString::number(i) + QLatin1Char('/');
             group->writeString(p + ConfigDefaults::virtualScreenNameKey(), vs.displayName);
             group->writeDouble(p + ConfigDefaults::virtualScreenXKey(), vs.region.x());

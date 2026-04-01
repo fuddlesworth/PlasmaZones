@@ -159,7 +159,16 @@ QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const 
     // Detect which edges are at screen boundaries
     QRectF screenGeom = useAvailableGeometry ? ScreenManager::actualAvailableGeometry(screen) : screen->geometry();
 
-    return applyGapsToZoneGeometry(geom, zone, screenGeom, innerGap, outerGaps);
+    // Look up physical edges via ScreenManager so virtual screen internal edges
+    // get inner gap instead of outer gap, matching the QRect overload behavior.
+    VirtualScreenDef::PhysicalEdges physEdges{true, true, true, true};
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        QString screenId = Utils::screenIdentifier(screen);
+        physEdges = mgr->physicalEdgesFor(screenId);
+    }
+
+    return applyGapsToZoneGeometry(geom, zone, screenGeom, innerGap, outerGaps, physEdges);
 }
 
 QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, const QRect& overlayGeometry)

@@ -361,13 +361,13 @@ std::optional<QRect> WindowTrackingService::validatedPreTileGeometry(const QStri
         return std::nullopt;
     }
 
-    // Cross-screen check: if the geometry was captured on a different physical screen
-    // than where the window currently is, the absolute coordinates are wrong. Preserve
-    // the size but center on the current screen. Use physical ID comparison so that
-    // virtual screens on the same physical monitor (e.g. DP-1/vs:0 vs DP-1/vs:1) do
-    // not incorrectly trigger cross-screen centering.
-    if (!storedScreen.isEmpty() && !currentScreenName.isEmpty()
-        && VirtualScreenId::extractPhysicalId(storedScreen) != VirtualScreenId::extractPhysicalId(currentScreenName)) {
+    // Cross-screen check: if the geometry was captured on a different screen than where
+    // the window currently is, the absolute coordinates are wrong. Preserve the size
+    // but center on the current screen. This triggers for:
+    // 1. Different physical monitors (e.g. DP-1 vs HDMI-1)
+    // 2. Different virtual screens on the same physical monitor (e.g. DP-1/vs:0 vs DP-1/vs:1)
+    //    — the virtual screens have different geometry bounds, so coordinates are wrong.
+    if (!storedScreen.isEmpty() && !currentScreenName.isEmpty() && storedScreen != currentScreenName) {
         auto* mgr = ScreenManager::instance();
         QScreen* target =
             mgr ? mgr->physicalQScreenFor(currentScreenName) : Utils::findScreenByIdOrName(currentScreenName);

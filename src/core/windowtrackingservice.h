@@ -787,7 +787,7 @@ private:
     bool isGeometryOnScreen(const QRect& geometry) const;
     QRect adjustGeometryToScreen(const QRect& geometry) const;
     Zone* findZoneById(const QString& zoneId) const;
-    QString findEmptyZoneInLayout(Layout* layout, const QString& screenId) const;
+    QString findEmptyZoneInLayout(Layout* layout, const QString& screenId, int desktopFilter = 0) const;
 
     /// Resolve a screen ID to an effective screen ID, falling back to the physical
     /// screen ID if a virtual screen no longer exists in the current configuration.

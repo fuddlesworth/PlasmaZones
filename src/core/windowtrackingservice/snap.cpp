@@ -54,8 +54,9 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
         // Determine which screen to resolve the zone on
         QString effectiveScreen = match.targetScreen.isEmpty() ? resolvedScreen : match.targetScreen;
 
-        // Validate that the target screen exists (may be connector name or screen ID)
-        QScreen* screen = Utils::findScreenByIdOrName(effectiveScreen);
+        // Validate that the target screen exists. Use ScreenManager::resolvePhysicalScreen
+        // which properly handles virtual screen IDs (resolving to backing QScreen*).
+        QScreen* screen = ScreenManager::resolvePhysicalScreen(effectiveScreen);
         if (!screen) {
             qCInfo(lcCore) << "App rule: screen" << effectiveScreen << "not found for" << windowClass
                            << (match.targetScreen.isEmpty() ? "(current screen)" : "(target screen)") << ", skipping";
@@ -248,8 +249,10 @@ SnapResult WindowTrackingService::calculateSnapToEmptyZone(const QString& window
         return SnapResult::noSnap();
     }
 
-    // Reuse findEmptyZoneInLayout() with already-resolved layout to avoid double resolution
-    QString emptyZoneId = findEmptyZoneInLayout(layout, windowScreenId);
+    // Reuse findEmptyZoneInLayout() with already-resolved layout to avoid double resolution.
+    // Pass current desktop filter so zones occupied on other desktops aren't counted.
+    int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    QString emptyZoneId = findEmptyZoneInLayout(layout, windowScreenId, desktopFilter);
     if (emptyZoneId.isEmpty()) {
         qCDebug(lcCore) << "snapToEmptyZone: no empty zone on" << windowScreenId;
         return SnapResult::noSnap();
@@ -438,16 +441,22 @@ void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QStr
 
 bool WindowTrackingService::clearStalePendingAssignment(const QString& windowId)
 {
-    // When a user explicitly snaps a window, clear any stale pending assignment
-    // from a previous session. This prevents the window from restoring to the
-    // wrong zone if it's closed and reopened.
+    // When a user explicitly snaps a window, clear ONE stale pending assignment
+    // from a previous session (FIFO, mirroring consumePendingAssignment). Only the
+    // first entry is removed so multi-instance apps retain entries for other windows.
     QString appId = Utils::extractAppId(windowId);
-    bool hadPending = m_pendingRestoreQueues.remove(appId) > 0;
-    if (hadPending) {
-        qCDebug(lcCore) << "Cleared stale pending assignments for" << appId;
-        scheduleSaveState();
+    auto it = m_pendingRestoreQueues.find(appId);
+    if (it == m_pendingRestoreQueues.end() || it->isEmpty()) {
+        return false;
     }
-    return hadPending;
+    it->removeFirst();
+    if (it->isEmpty()) {
+        m_pendingRestoreQueues.erase(it);
+    }
+    qCDebug(lcCore) << "Cleared one stale pending assignment for" << appId
+                    << "remaining:" << m_pendingRestoreQueues.value(appId).size();
+    scheduleSaveState();
+    return true;
 }
 
 void WindowTrackingService::markWindowReported(const QString& windowId)

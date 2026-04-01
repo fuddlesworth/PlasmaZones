@@ -148,8 +148,8 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
     // to a different virtual screen, preventing stale highlights from previous screen.
     for (auto it = m_zoneSelectorWindows.begin(); it != m_zoneSelectorWindows.end(); ++it) {
         if (it.key() != cursorScreenId && it.value()) {
-            it.value()->setProperty("selectedLayoutId", QString());
-            it.value()->setProperty("selectedZoneIndex", -1);
+            writeQmlProperty(it.value(), QStringLiteral("selectedLayoutId"), QString());
+            writeQmlProperty(it.value(), QStringLiteral("selectedZoneIndex"), -1);
         }
     }
 
@@ -160,8 +160,8 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         int localX = localPos.x();
         int localY = localPos.y();
 
-        window->setProperty("cursorX", localX);
-        window->setProperty("cursorY", localY);
+        writeQmlProperty(window, QStringLiteral("cursorX"), localX);
+        writeQmlProperty(window, QStringLiteral("cursorY"), localY);
 
         // Get layouts from QML window
         QVariantList layouts = window->property("layouts").toList();
@@ -247,8 +247,8 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                             m_selectedLayoutId = layoutId;
                             m_selectedZoneIndex = z;
                             m_selectedZoneRelGeo = QRectF(rx, ry, rw, rh);
-                            window->setProperty("selectedLayoutId", layoutId);
-                            window->setProperty("selectedZoneIndex", z);
+                            writeQmlProperty(window, QStringLiteral("selectedLayoutId"), layoutId);
+                            writeQmlProperty(window, QStringLiteral("selectedZoneIndex"), z);
                         }
                         return;
                     }
@@ -260,8 +260,8 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                     m_selectedLayoutId.clear();
                     m_selectedZoneIndex = -1;
                     m_selectedZoneRelGeo = QRectF();
-                    window->setProperty("selectedLayoutId", QString());
-                    window->setProperty("selectedZoneIndex", -1);
+                    writeQmlProperty(window, QStringLiteral("selectedLayoutId"), QString());
+                    writeQmlProperty(window, QStringLiteral("selectedZoneIndex"), -1);
                 }
                 return;
             }
@@ -272,8 +272,8 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
             m_selectedLayoutId.clear();
             m_selectedZoneIndex = -1;
             m_selectedZoneRelGeo = QRectF();
-            window->setProperty("selectedLayoutId", QString());
-            window->setProperty("selectedZoneIndex", -1);
+            writeQmlProperty(window, QStringLiteral("selectedLayoutId"), QString());
+            writeQmlProperty(window, QStringLiteral("selectedZoneIndex"), -1);
         }
     }
 }
