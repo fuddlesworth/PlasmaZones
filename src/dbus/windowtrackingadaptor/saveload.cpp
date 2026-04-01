@@ -50,11 +50,8 @@ static QHash<QString, QStringList> parseZoneListMap(const QString& json)
 
 void WindowTrackingAdaptor::saveState()
 {
-    std::unique_ptr<QSettingsConfigBackend> tempBackend;
-    if (!m_configBackend) {
-        tempBackend = QSettingsConfigBackend::createDefault();
-    }
-    QSettingsConfigBackend* backend = m_configBackend ? m_configBackend : tempBackend.get();
+    std::unique_ptr<QSettingsConfigBackend> fallback;
+    QSettingsConfigBackend* backend = QSettingsConfigBackend::resolveBackend(m_configBackend, fallback);
     auto tracking = backend->group(QStringLiteral("WindowTracking"));
 
     // Save active layout ID so we can restore it after daemon restart.
@@ -199,11 +196,14 @@ void WindowTrackingAdaptor::loadState()
 {
     // Read config as a flat key map for structured parsing below.
     // readConfigFromDisk() reads the file directly, bypassing QSettings cache.
-    // This was originally needed because multiple QSettings instances caused
-    // stale QConfFile cache reads. With the shared backend refactor (single
-    // QSettings per file), cache staleness is eliminated — but the direct-read
-    // approach is kept here because QSettingsConfigGroup doesn't expose key
-    // enumeration, and the flat map is convenient for this function's pattern.
+    // QSettingsConfigGroup doesn't expose key enumeration, and the flat map is
+    // convenient for this function's parsing pattern.
+    //
+    // Sync the shared backend first so any in-memory writes (e.g., from a
+    // concurrent saveState()) are flushed to disk before we read the file.
+    if (m_configBackend) {
+        m_configBackend->sync();
+    }
     const auto configMap = PlasmaZones::QSettingsConfigBackend::readConfigFromDisk();
     const QString wt = QStringLiteral("WindowTracking");
     auto readVal = [&](const QString& key, const QString& def = QString()) -> QString {

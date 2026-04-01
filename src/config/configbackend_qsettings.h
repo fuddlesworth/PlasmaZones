@@ -12,8 +12,11 @@
 #include <QString>
 #include <QStringList>
 #include <memory>
+#include <atomic>
 
 namespace PlasmaZones {
+
+class QSettingsConfigBackend; // forward declare for group back-pointer
 
 /// A view into a single config group (e.g., [Activation], [Display]).
 ///
@@ -24,7 +27,7 @@ namespace PlasmaZones {
 class PLASMAZONES_EXPORT QSettingsConfigGroup
 {
 public:
-    QSettingsConfigGroup(QSettings* settings, const QString& groupName);
+    QSettingsConfigGroup(QSettings* settings, const QString& groupName, QSettingsConfigBackend* backend);
     ~QSettingsConfigGroup();
 
     QSettingsConfigGroup(const QSettingsConfigGroup&) = delete;
@@ -53,6 +56,7 @@ public:
 private:
     QSettings* m_settings; // not owned
     QString m_group;
+    QSettingsConfigBackend* m_backend; // not owned, for group-count tracking
 };
 
 /// Top-level config backend.  Owns the connection to the config store
@@ -61,7 +65,7 @@ class PLASMAZONES_EXPORT QSettingsConfigBackend
 {
 public:
     explicit QSettingsConfigBackend(const QString& filePath);
-    ~QSettingsConfigBackend() = default;
+    ~QSettingsConfigBackend();
 
     /// Get a group view.  Caller owns the returned pointer.
     std::unique_ptr<QSettingsConfigGroup> group(const QString& name);
@@ -85,9 +89,17 @@ public:
     /// Returns a QSettings::SettingsMap (QMap<QString, QVariant>) with all keys.
     static QMap<QString, QVariant> readConfigFromDisk();
 
+    /// Resolve a shared or fallback backend. If @p shared is non-null it is
+    /// returned directly; otherwise a new default backend is created into
+    /// @p fallback and returned.  Eliminates repeated resolve boilerplate.
+    static QSettingsConfigBackend* resolveBackend(QSettingsConfigBackend* shared,
+                                                  std::unique_ptr<QSettingsConfigBackend>& fallback);
+
 private:
+    friend class QSettingsConfigGroup; // for group-count tracking
     QString m_filePath;
     std::unique_ptr<QSettings> m_settings;
+    std::atomic<int> m_activeGroupCount{0};
 };
 
 } // namespace PlasmaZones

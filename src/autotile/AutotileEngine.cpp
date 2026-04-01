@@ -42,7 +42,7 @@ constexpr int PendingOrderTimeoutMs = 10000;
 } // namespace
 
 AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
-                               ScreenManager* screenManager, QObject* parent, QSettingsConfigBackend* configBackend)
+                               ScreenManager* screenManager, QSettingsConfigBackend* configBackend, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)

@@ -350,12 +350,8 @@ void SettingsBridge::syncAlgorithmToSettings(const QString& algoId, qreal splitR
 
 void SettingsBridge::saveState()
 {
-    // Use shared backend when available (daemon), create temporary otherwise (tests)
-    std::unique_ptr<QSettingsConfigBackend> tempBackend;
-    if (!m_configBackend) {
-        tempBackend = QSettingsConfigBackend::createDefault();
-    }
-    QSettingsConfigBackend* backend = m_configBackend ? m_configBackend : tempBackend.get();
+    std::unique_ptr<QSettingsConfigBackend> fallback;
+    QSettingsConfigBackend* backend = QSettingsConfigBackend::resolveBackend(m_configBackend, fallback);
     auto group = backend->group(QStringLiteral("AutoTileState"));
 
     // Save global state (algorithm only — autotile screens are derived from
@@ -392,11 +388,8 @@ void SettingsBridge::saveState()
 
 void SettingsBridge::loadState()
 {
-    std::unique_ptr<QSettingsConfigBackend> tempBackend;
-    if (!m_configBackend) {
-        tempBackend = QSettingsConfigBackend::createDefault();
-    }
-    QSettingsConfigBackend* backend = m_configBackend ? m_configBackend : tempBackend.get();
+    std::unique_ptr<QSettingsConfigBackend> fallback;
+    QSettingsConfigBackend* backend = QSettingsConfigBackend::resolveBackend(m_configBackend, fallback);
     auto group = backend->group(QStringLiteral("AutoTileState"));
 
     if (!group->hasKey(QStringLiteral("algorithm")) && !group->hasKey(QStringLiteral("screenStates"))) {

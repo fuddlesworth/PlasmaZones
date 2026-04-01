@@ -6,6 +6,8 @@
 #include <QColor>
 #include <QDir>
 #include <QFile>
+#include <QHash>
+#include <QMutex>
 #include <QStandardPaths>
 #include <QTextStream>
 
@@ -113,18 +115,26 @@ static QSettings::Format kconfigIniFormat()
 
 // ── QSettingsConfigGroup ─────────────────────────────────────────────────────
 
-QSettingsConfigGroup::QSettingsConfigGroup(QSettings* settings, const QString& groupName)
+QSettingsConfigGroup::QSettingsConfigGroup(QSettings* settings, const QString& groupName,
+                                           QSettingsConfigBackend* backend)
     : m_settings(settings)
     , m_group(groupName)
+    , m_backend(backend)
 {
     Q_ASSERT_X(m_settings->group().isEmpty(), "QSettingsConfigGroup",
                "Another ConfigGroup is still active — destroy it before creating a new one");
     m_settings->beginGroup(m_group);
+    if (m_backend) {
+        m_backend->m_activeGroupCount.fetch_add(1, std::memory_order_relaxed);
+    }
 }
 
 QSettingsConfigGroup::~QSettingsConfigGroup()
 {
     m_settings->endGroup();
+    if (m_backend) {
+        m_backend->m_activeGroupCount.fetch_sub(1, std::memory_order_relaxed);
+    }
 }
 
 QString QSettingsConfigGroup::readString(const QString& key, const QString& defaultValue) const
@@ -230,21 +240,59 @@ void QSettingsConfigGroup::deleteKey(const QString& key)
     m_settings->remove(key);
 }
 
+// ── Instance tracking (debug builds) ────────────────────────────────────────
+// Warns when >1 QSettingsConfigBackend is created for the same config file.
+// The shared-backend refactor relies on exactly one QSettings per file;
+// a second instance silently reintroduces the QConfFile cache bug (#275).
+
+#ifndef NDEBUG
+using InstanceCountMap = QHash<QString, int>;
+Q_GLOBAL_STATIC(QMutex, s_instanceMutex)
+Q_GLOBAL_STATIC(InstanceCountMap, s_instanceCounts)
+#endif
+
 // ── QSettingsConfigBackend ───────────────────────────────────────────────────
 
 QSettingsConfigBackend::QSettingsConfigBackend(const QString& filePath)
     : m_filePath(filePath)
     , m_settings(std::make_unique<QSettings>(filePath, kconfigIniFormat()))
 {
+#ifndef NDEBUG
+    QMutexLocker lock(s_instanceMutex());
+    int& count = (*s_instanceCounts())[m_filePath];
+    ++count;
+    if (count > 1) {
+        qWarning(
+            "QSettingsConfigBackend: %d instances for \"%s\" — shared-backend "
+            "refactor expects exactly one per config file",
+            count, qPrintable(m_filePath));
+    }
+#endif
+}
+
+QSettingsConfigBackend::~QSettingsConfigBackend()
+{
+#ifndef NDEBUG
+    QMutexLocker lock(s_instanceMutex());
+    int& count = (*s_instanceCounts())[m_filePath];
+    --count;
+    if (count <= 0) {
+        s_instanceCounts()->remove(m_filePath);
+    }
+#endif
 }
 
 std::unique_ptr<QSettingsConfigGroup> QSettingsConfigBackend::group(const QString& name)
 {
-    return std::make_unique<QSettingsConfigGroup>(m_settings.get(), name);
+    return std::make_unique<QSettingsConfigGroup>(m_settings.get(), name, this);
 }
 
 void QSettingsConfigBackend::reparseConfiguration()
 {
+    Q_ASSERT_X(m_activeGroupCount.load(std::memory_order_relaxed) == 0, "QSettingsConfigBackend::reparseConfiguration",
+               "Cannot reparse while QSettingsConfigGroup instances are alive — "
+               "they hold a raw QSettings* that would be destroyed");
+
     // Destroy old QSettings BEFORE creating the new one so Qt's QConfFile
     // cache is released. With the shared-backend refactor, this is the ONLY
     // QSettings instance for plasmazonesrc in the daemon process, so the
@@ -287,6 +335,16 @@ QMap<QString, QVariant> QSettingsConfigBackend::readConfigFromDisk()
         readKConfigIni(f, map);
     }
     return map;
+}
+
+QSettingsConfigBackend* QSettingsConfigBackend::resolveBackend(QSettingsConfigBackend* shared,
+                                                               std::unique_ptr<QSettingsConfigBackend>& fallback)
+{
+    if (shared) {
+        return shared;
+    }
+    fallback = createDefault();
+    return fallback.get();
 }
 
 } // namespace PlasmaZones

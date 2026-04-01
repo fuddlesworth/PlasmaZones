@@ -79,8 +79,8 @@ class PLASMAZONES_EXPORT AutotileEngine : public QObject, public IWindowEngine
 
 public:
     explicit AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
-                            ScreenManager* screenManager, QObject* parent = nullptr,
-                            QSettingsConfigBackend* configBackend = nullptr);
+                            ScreenManager* screenManager, QSettingsConfigBackend* configBackend = nullptr,
+                            QObject* parent = nullptr);
     ~AutotileEngine() override;
 
     // ═══════════════════════════════════════════════════════════════════════════

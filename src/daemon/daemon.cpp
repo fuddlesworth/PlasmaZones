@@ -306,7 +306,7 @@ bool Daemon::init()
 
     // Window tracking adaptor - window-zone assignments
     m_windowTrackingAdaptor = new WindowTrackingAdaptor(m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
-                                                        m_virtualDesktopManager.get(), this, m_configBackend.get());
+                                                        m_virtualDesktopManager.get(), m_configBackend.get(), this);
     m_windowTrackingAdaptor->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
 
     // Reapply window geometries after each geometry batch (processPendingGeometryUpdates).
@@ -332,7 +332,7 @@ bool Daemon::init()
 
     // Initialize autotile engine
     m_autotileEngine = std::make_unique<AutotileEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(),
-                                                        m_screenManager.get(), this, m_configBackend.get());
+                                                        m_screenManager.get(), m_configBackend.get(), this);
 
     // Initialize scripted algorithm loader BEFORE syncFromSettings so that
     // user-defined algorithms are registered in AlgorithmRegistry before the
