@@ -25,19 +25,11 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
 
         // When virtual screens exist for this physical screen, emit only the
         // virtual screen IDs — not the physical ID — to avoid phantom entries.
-        auto* mgr = ScreenManager::instance();
-        if (mgr) {
-            QStringList vsIds = mgr->virtualScreenIdsFor(physId);
-            if (vsIds.size() > 1 || (!vsIds.isEmpty() && vsIds.first() != physId)) {
-                for (const QString& vsId : vsIds) {
-                    Q_EMIT screenAdded(vsId);
-                }
-                Q_EMIT virtualScreensChanged(physId);
-            } else {
-                Q_EMIT screenAdded(physId);
-            }
-        } else {
-            Q_EMIT screenAdded(physId);
+        bool hadVirtual = emitForEffectiveScreens(physId, [this](const QString& id) {
+            Q_EMIT screenAdded(id);
+        });
+        if (hadVirtual) {
+            Q_EMIT virtualScreensChanged(physId);
         }
 
         // Cache screen ID now — QScreen may be partially destroyed when
@@ -46,34 +38,18 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
         connect(screen, &QScreen::geometryChanged, this, [this, screen, cachedId]() {
             handleScreenGeometryChanged(screen, cachedId);
         });
-    });
 
-    connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this](QScreen* screen) {
-        // Cache screen identifier before the lambda body executes further QScreen
-        // queries — QScreen may be partially destroyed by the time this fires.
-        // NOTE: We still call Utils::screenIdentifier(screen) here because
-        // screenRemoved is emitted before the QScreen is destroyed. To be fully
-        // safe against future Qt changes, callers that need the identifier after
-        // destruction should cache it at connection time (see geometryChanged below).
-        const QString physId = Utils::screenIdentifier(screen);
-
-        // Mirror screenAdded: emit virtual IDs OR physical ID, never both.
-        auto* mgr = ScreenManager::instance();
-        if (mgr) {
-            QStringList vsIds = mgr->virtualScreenIdsFor(physId);
-            if (vsIds.size() > 1 || (!vsIds.isEmpty() && vsIds.first() != physId)) {
-                for (const QString& vsId : vsIds) {
-                    Q_EMIT screenRemoved(vsId);
-                }
-                // NOTE: Do NOT clear virtual screen config here — the user's
-                // configuration should persist across monitor disconnections so it
-                // is automatically restored when the screen is reconnected.
-            } else {
-                Q_EMIT screenRemoved(physId);
+        // Connect screenRemoved with the cached physical ID so we never query
+        // a potentially-destroyed QScreen. The filter ensures this lambda only
+        // fires for the screen that was added in this invocation.
+        connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this, screen, cachedId](QScreen* removedScreen) {
+            if (removedScreen != screen) {
+                return;
             }
-        } else {
-            Q_EMIT screenRemoved(physId);
-        }
+            emitForEffectiveScreens(cachedId, [this](const QString& id) {
+                Q_EMIT screenRemoved(id);
+            });
+        });
     });
 
     // Connect existing screens
@@ -83,26 +59,39 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
         connect(screen, &QScreen::geometryChanged, this, [this, screen, cachedId]() {
             handleScreenGeometryChanged(screen, cachedId);
         });
+        connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this, screen, cachedId](QScreen* removedScreen) {
+            if (removedScreen != screen) {
+                return;
+            }
+            emitForEffectiveScreens(cachedId, [this](const QString& id) {
+                Q_EMIT screenRemoved(id);
+            });
+        });
     }
 }
 
 void ScreenAdaptor::handleScreenGeometryChanged(QScreen* screen, const QString& physId)
 {
     Q_UNUSED(screen)
-    // Mirror screenAdded/screenRemoved: when virtual screens are configured for this
-    // physical screen, emit only the virtual screen IDs — not the physical ID — so
-    // consumers don't see phantom physical screen entries.
+    emitForEffectiveScreens(physId, [this](const QString& id) {
+        Q_EMIT screenGeometryChanged(id);
+    });
+}
+
+bool ScreenAdaptor::emitForEffectiveScreens(const QString& physId, const std::function<void(const QString&)>& emitFn)
+{
     auto* mgr = ScreenManager::instance();
     if (mgr) {
         QStringList vsIds = mgr->virtualScreenIdsFor(physId);
         if (vsIds.size() > 1 || (!vsIds.isEmpty() && vsIds.first() != physId)) {
             for (const QString& vsId : vsIds) {
-                Q_EMIT screenGeometryChanged(vsId);
+                emitFn(vsId);
             }
-            return;
+            return true;
         }
     }
-    Q_EMIT screenGeometryChanged(physId);
+    emitFn(physId);
+    return false;
 }
 
 QStringList ScreenAdaptor::getScreens()
@@ -305,7 +294,8 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
         const qreal ry = def.region.y();
         const qreal rw = def.region.width();
         const qreal rh = def.region.height();
-        if (rx < -tolerance || ry < -tolerance || rw < -tolerance || rh < -tolerance || rx + rw > 1.0 + tolerance
+        constexpr qreal minSize = 0.01;
+        if (rx < -tolerance || ry < -tolerance || rw < minSize || rh < minSize || rx + rw > 1.0 + tolerance
             || ry + rh > 1.0 + tolerance) {
             qCWarning(lcDbus) << "setVirtualScreenConfig: dropping virtual screen" << def.index << "for"
                               << physicalScreenId << "- invalid region: x=" << rx << "y=" << ry << "w=" << rw

@@ -24,7 +24,7 @@ namespace PlasmaZones {
 // Navigation Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFilter) const
+QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFilter, int desktopFilter) const
 {
     QSet<QUuid> occupiedZoneIds;
     for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
@@ -39,6 +39,16 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
         if (!screenFilter.isEmpty()) {
             QString windowScreen = m_windowScreenAssignments.value(it.key());
             if (!Utils::screensMatch(windowScreen, screenFilter)) {
+                continue;
+            }
+        }
+        // When desktop filter is set, only count zones from windows on that desktop.
+        // Desktop 0 means "all desktops" (pinned window) — always include those.
+        // With virtual screens, windows on different virtual desktops sharing the same
+        // layout should not mark zones as occupied on the target desktop.
+        if (desktopFilter > 0) {
+            int windowDesktop = m_windowDesktopAssignments.value(it.key(), 0);
+            if (windowDesktop != 0 && windowDesktop != desktopFilter) {
                 continue;
             }
         }

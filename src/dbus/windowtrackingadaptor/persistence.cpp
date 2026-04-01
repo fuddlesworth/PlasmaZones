@@ -276,15 +276,14 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
             if (!effGeom.isValid()) {
                 continue;
             }
-            // Use string-based overload for virtual screens so the reference
-            // geometry matches the virtual bounds, not the full physical monitor
-            QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, sid);
-            if (!refGeom.isValid()) {
-                refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
-            }
-            QRectF normGeom = zone->normalizedGeometry(refGeom);
-            QPoint zoneCenter(refGeom.x() + qRound(normGeom.center().x() * refGeom.width()),
-                              refGeom.y() + qRound(normGeom.center().y() * refGeom.height()));
+            // Use effGeom consistently for both normalization and containment
+            // so the zone center projection matches the containment bounds.
+            // Using different geometries causes mismatches when available
+            // geometry differs from full geometry.
+            QRectF effGeomF(effGeom);
+            QRectF normGeom = zone->normalizedGeometry(effGeomF);
+            QPoint zoneCenter(effGeom.x() + qRound(normGeom.center().x() * effGeom.width()),
+                              effGeom.y() + qRound(normGeom.center().y() * effGeom.height()));
             if (effGeom.contains(zoneCenter)) {
                 return sid;
             }

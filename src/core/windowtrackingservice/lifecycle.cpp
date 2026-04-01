@@ -88,6 +88,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     };
 
     int migrated = 0;
+    bool anyStateMigrated = false;
     // Match both the physical screen ID and any existing virtual screen IDs on it,
     // so re-configuration (VS config changed) re-migrates windows from old virtual IDs to new ones.
     const QString prefix = physicalScreenId + VirtualScreenId::separator();
@@ -111,6 +112,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         // Pre-float entries may have zone info too; try to resolve
         QStringList zoneIds = m_preFloatZoneAssignments.value(it.key());
         it.value() = resolveVirtualScreen(zoneIds);
+        anyStateMigrated = true;
     }
 
     // Also migrate pending restore queues — these have screenId per entry
@@ -120,6 +122,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
                 continue;
             }
             entry.screenId = resolveVirtualScreen(entry.zoneIds);
+            anyStateMigrated = true;
         }
     }
 
@@ -141,7 +144,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         }
     }
 
-    if (migrated > 0) {
+    if (migrated > 0 || anyStateMigrated) {
         qCInfo(lcCore) << "Migrated" << migrated << "window screen assignments from" << physicalScreenId
                        << "to virtual screens";
         scheduleSaveState();
@@ -155,6 +158,7 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
 
     const QString prefix = physicalScreenId + VirtualScreenId::separator();
     int migrated = 0;
+    bool anyStateMigrated = false;
 
     for (auto it = m_windowScreenAssignments.begin(); it != m_windowScreenAssignments.end(); ++it) {
         if (it.value().startsWith(prefix)) {
@@ -167,6 +171,7 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
     for (auto it = m_preFloatScreenAssignments.begin(); it != m_preFloatScreenAssignments.end(); ++it) {
         if (it.value().startsWith(prefix)) {
             it.value() = physicalScreenId;
+            anyStateMigrated = true;
         }
     }
 
@@ -175,6 +180,7 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         for (PendingRestore& entry : queueIt.value()) {
             if (entry.screenId.startsWith(prefix)) {
                 entry.screenId = physicalScreenId;
+                anyStateMigrated = true;
             }
         }
     }
@@ -183,6 +189,8 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
     if (VirtualScreenId::isVirtual(m_lastUsedScreenId)
         && VirtualScreenId::extractPhysicalId(m_lastUsedScreenId) == physicalScreenId) {
         m_lastUsedScreenId = physicalScreenId;
+        // Clear stale zone ID — virtual screen layout zones don't exist in physical screen layout
+        m_lastUsedZoneId.clear();
     }
 
     // B3: Migrate pre-tile geometry connectorName fields
@@ -193,7 +201,7 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         }
     }
 
-    if (migrated > 0) {
+    if (migrated > 0 || anyStateMigrated) {
         qCInfo(lcCore) << "Migrated" << migrated << "window screen assignments from virtual screens back to"
                        << physicalScreenId;
         scheduleSaveState();
@@ -716,6 +724,27 @@ QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
     }
 
     return adjusted;
+}
+
+QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId) const
+{
+    if (!VirtualScreenId::isVirtual(screenId)) {
+        return screenId;
+    }
+
+    auto* smgr = ScreenManager::instance();
+    if (!smgr) {
+        return screenId;
+    }
+
+    const QStringList effectiveIds = smgr->effectiveScreenIds();
+    if (effectiveIds.contains(screenId)) {
+        return screenId;
+    }
+
+    QString physId = VirtualScreenId::extractPhysicalId(screenId);
+    qCWarning(lcCore) << "Virtual screen" << screenId << "no longer exists, falling back to physical screen" << physId;
+    return physId;
 }
 
 Zone* WindowTrackingService::findZoneById(const QString& zoneId) const

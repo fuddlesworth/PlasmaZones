@@ -571,8 +571,6 @@ public:
     Q_INVOKABLE QVariantList getVirtualScreenConfig(const QString& physicalScreenId) const;
     Q_INVOKABLE void applyVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens);
     Q_INVOKABLE void removeVirtualScreenConfig(const QString& physicalScreenId);
-    Q_INVOKABLE void applyVirtualScreenPreset(const QString& physicalScreenId, const QString& preset);
-
     // ── Staged virtual screen configuration (flushed on Apply) ──────────────
     Q_INVOKABLE void stageVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens);
     Q_INVOKABLE void stageVirtualScreenRemoval(const QString& physicalScreenId);

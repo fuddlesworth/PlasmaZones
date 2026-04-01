@@ -132,12 +132,15 @@ Flickable {
             total += screens[k].width;
         }
         var lastWidth = 1 - total;
-        if (lastWidth < minW)
-            return ;
-
         screens[screens.length - 1].width = lastWidth;
         // Also fix the x position of the last screen
         screens[screens.length - 1].x = total;
+        // Validate ALL screens against minimum width — reject the move if any violates
+        for (var j = 0; j < screens.length; j++) {
+            if (screens[j].width < minW)
+                return ;
+
+        }
         _pendingScreens = screens;
         _stageCurrentConfig();
     }
@@ -363,7 +366,7 @@ Flickable {
                         id: splitCountSpinBox
 
                         from: 2
-                        to: root._maxVirtualScreens
+                        to: Math.max(root._maxVirtualScreens, root._pendingScreens.length)
                         value: root._pendingScreens.length > 1 ? root._pendingScreens.length : 2
                         editable: true
                         enabled: root._selectedScreen !== ""

@@ -24,8 +24,10 @@
 #include <QVariantMap>
 
 #include "core/virtualscreen.h"
+#include "../helpers/VirtualScreenTestHelpers.h"
 
 using namespace PlasmaZones;
+using PlasmaZones::TestHelpers::makeDef;
 
 class TestVirtualScreenStaged : public QObject
 {
@@ -110,18 +112,6 @@ private:
         }
 
         return config;
-    }
-
-    /// Helper: create a VirtualScreenDef
-    static VirtualScreenDef makeDef(const QString& physId, int index, const QString& name, const QRectF& region)
-    {
-        VirtualScreenDef def;
-        def.id = VirtualScreenId::make(physId, index);
-        def.physicalScreenId = physId;
-        def.displayName = name;
-        def.region = region;
-        def.index = index;
-        return def;
     }
 
 private Q_SLOTS:

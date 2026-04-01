@@ -21,27 +21,17 @@
 #include "../../../src/config/settings.h"
 #include "../../../src/core/virtualscreen.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/VirtualScreenTestHelpers.h"
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
+using PlasmaZones::TestHelpers::makeDef;
 
 class TestSettingsVirtualScreen : public QObject
 {
     Q_OBJECT
 
 private:
-    /// Helper: create a VirtualScreenDef with the given parameters
-    static VirtualScreenDef makeDef(const QString& physId, int index, const QString& name, const QRectF& region)
-    {
-        VirtualScreenDef def;
-        def.id = VirtualScreenId::make(physId, index);
-        def.physicalScreenId = physId;
-        def.displayName = name;
-        def.region = region;
-        def.index = index;
-        return def;
-    }
-
     /// Helper: create a two-screen 50/50 split config
     static VirtualScreenConfig makeTwoScreenConfig(const QString& physId)
     {

@@ -355,15 +355,7 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
 
 void OverlayService::destroyZoneSelectorWindow(const QString& screenId)
 {
-    if (auto* window = m_zoneSelectorWindows.take(screenId)) {
-        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
-        if (auto* physScreen = m_zoneSelectorPhysScreens.value(screenId)) {
-            disconnect(physScreen, nullptr, window, nullptr);
-        }
-        window->close();
-        window->deleteLater();
-    }
-    m_zoneSelectorPhysScreens.remove(screenId);
+    destroyManagedWindow(m_zoneSelectorWindows, m_zoneSelectorPhysScreens, screenId);
 }
 
 bool OverlayService::hasSelectedZone() const

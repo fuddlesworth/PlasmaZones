@@ -334,15 +334,7 @@ void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* phy
 
 void OverlayService::destroyLayoutOsdWindow(const QString& screenId)
 {
-    if (auto* window = m_layoutOsdWindows.take(screenId)) {
-        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
-        if (auto* physScreen = m_layoutOsdPhysScreens.value(screenId)) {
-            disconnect(physScreen, nullptr, window, nullptr);
-        }
-        window->close();
-        window->deleteLater();
-    }
-    m_layoutOsdPhysScreens.remove(screenId);
+    destroyManagedWindow(m_layoutOsdWindows, m_layoutOsdPhysScreens, screenId);
 }
 
 void OverlayService::showNavigationOsd(bool success, const QString& action, const QString& reason,
@@ -528,16 +520,7 @@ void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen*
 
 void OverlayService::destroyNavigationOsdWindow(const QString& screenId)
 {
-    if (auto* window = m_navigationOsdWindows.take(screenId)) {
-        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
-        if (auto* physScreen = m_navigationOsdPhysScreens.value(screenId)) {
-            disconnect(physScreen, nullptr, window, nullptr);
-        }
-        window->close();
-        window->deleteLater();
-    }
-    m_navigationOsdPhysScreens.remove(screenId);
-    // Clear failed flag when destroying window
+    destroyManagedWindow(m_navigationOsdWindows, m_navigationOsdPhysScreens, screenId);
     m_navigationOsdCreationFailed.remove(screenId);
 }
 

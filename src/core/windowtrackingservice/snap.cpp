@@ -187,21 +187,8 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     }
 
     // Validate virtual screen still exists — configuration may have changed since last snap.
-    // Fall back to physical screen ID if the virtual screen was removed (mirrors
-    // the E7 check in calculateRestoreFromSession).
-    QString effectiveScreenId = m_lastUsedScreenId;
-    if (VirtualScreenId::isVirtual(effectiveScreenId)) {
-        auto* smgr = ScreenManager::instance();
-        if (smgr) {
-            const QStringList effectiveIds = smgr->effectiveScreenIds();
-            if (!effectiveIds.contains(effectiveScreenId)) {
-                QString physId = VirtualScreenId::extractPhysicalId(effectiveScreenId);
-                qCInfo(lcCore) << "snapToLastZone: virtual screen" << effectiveScreenId
-                               << "no longer exists, falling back to physical screen" << physId;
-                effectiveScreenId = physId;
-            }
-        }
-    }
+    // Fall back to physical screen ID if the virtual screen was removed.
+    QString effectiveScreenId = resolveEffectiveScreenId(m_lastUsedScreenId);
 
     // Don't cross-screen snap
     if (!windowScreenId.isEmpty() && !effectiveScreenId.isEmpty()
@@ -333,18 +320,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
 
     // E7: Validate virtual screen still exists — configuration may have changed since save.
     // Fall back to physical screen ID if the virtual screen was removed.
-    if (VirtualScreenId::isVirtual(savedScreen)) {
-        auto* smgr = ScreenManager::instance();
-        if (smgr) {
-            const QStringList effectiveIds = smgr->effectiveScreenIds();
-            if (!effectiveIds.contains(savedScreen)) {
-                QString physId = VirtualScreenId::extractPhysicalId(savedScreen);
-                qCInfo(lcCore) << "sessionRestore:" << appId << "saved virtual screen" << savedScreen
-                               << "no longer exists, falling back to physical screen" << physId;
-                savedScreen = physId;
-            }
-        }
-    }
+    savedScreen = resolveEffectiveScreenId(savedScreen);
 
     // BUG FIX: Verify layout context matches before restoring
     // Without this check, windows would restore even if the current layout is different

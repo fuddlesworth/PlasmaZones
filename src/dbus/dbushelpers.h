@@ -7,13 +7,9 @@
 #include "../core/interfaces.h"
 #include "../core/layout.h"
 #include "../core/zone.h"
-#include "../core/geometryutils.h"
-#include "../core/screenmanager.h"
 #include "../core/utils.h"
-#include "../core/virtualscreen.h"
 #include "../core/logging.h"
-#include <QCursor>
-#include <QGuiApplication>
+#include <QRectF>
 #include <QScreen>
 #include <QUuid>
 #include <QString>
@@ -291,7 +287,7 @@ inline bool validateNonEmpty(const QString& value, const QString& paramName, con
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Screen ID Resolution
+// Screen ID Resolution (implemented in dbushelpers.cpp to reduce header weight)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
@@ -301,24 +297,10 @@ inline bool validateNonEmpty(const QString& value, const QString& paramName, con
  * When non-empty, passes virtual screen IDs through and resolves physical names
  * via Utils::screenIdForName.
  */
-inline QString resolveScreenId(const QString& screenId)
-{
-    if (screenId.isEmpty()) {
-        auto* mgr = ScreenManager::instance();
-        if (mgr) {
-            const QString cursorScreen = mgr->effectiveScreenAt(QCursor::pos());
-            if (!cursorScreen.isEmpty()) {
-                return cursorScreen;
-            }
-        }
-        QScreen* primary = QGuiApplication::primaryScreen();
-        return primary ? Utils::screenIdentifier(primary) : QString();
-    }
-    return VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId);
-}
+QString resolveScreenId(const QString& screenId);
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Screen Geometry Resolution
+// Screen Geometry Resolution (implemented in dbushelpers.cpp to reduce header weight)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
@@ -328,24 +310,7 @@ inline QString resolveScreenId(const QString& screenId)
  * falls back to resolving the physical QScreen and using the QScreen overload.
  * Returns an invalid QRectF if no geometry can be resolved.
  */
-inline QRectF resolveScreenGeometry(Layout* layout, const QString& screenId)
-{
-    auto* mgr = ScreenManager::instance();
-    if (mgr) {
-        const QRect geom = mgr->screenGeometry(screenId);
-        if (geom.isValid()) {
-            return GeometryUtils::effectiveScreenGeometry(layout, screenId);
-        }
-    }
-    QScreen* screen = Utils::findScreenByIdOrName(VirtualScreenId::extractPhysicalId(screenId));
-    if (!screen) {
-        screen = ScreenManager::resolvePhysicalScreen(screenId);
-    }
-    if (screen) {
-        return GeometryUtils::effectiveScreenGeometry(layout, screen);
-    }
-    return {};
-}
+QRectF resolveScreenGeometry(Layout* layout, const QString& screenId);
 
 } // namespace DbusHelpers
 } // namespace PlasmaZones

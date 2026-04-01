@@ -79,18 +79,20 @@ void ScreenChangeHandler::applyScreenGeometryChange()
     // Position-only changes (e.g. exiting KDE panel edit mode) should not move windows.
     const QSize previousSize = m_lastVirtualScreenGeometry.size();
     const QSize currentSize = currentGeometry.size();
-    if (previousSize == currentSize) {
-        qCDebug(lcScreenChange) << "Virtual screen size unchanged, skipping window repositioning";
-        m_lastVirtualScreenGeometry = currentGeometry;
-        return;
-    }
+    const bool sizeChanged = (previousSize != currentSize);
 
     m_lastVirtualScreenGeometry = currentGeometry;
 
-    // Refresh virtual screen definitions — physical screen geometry changed, so
-    // virtual screen absolute coordinates need recalculation from the daemon.
+    // Always refresh virtual screen definitions — physical screen geometry
+    // (including position) changed, so virtual screen absolute coordinates
+    // need recalculation from the daemon.
     if (m_effect->m_daemonServiceRegistered) {
         m_effect->fetchAllVirtualScreenConfigs();
+    }
+
+    if (!sizeChanged) {
+        qCDebug(lcScreenChange) << "Virtual screen size unchanged, skipping window repositioning";
+        return;
     }
 
     if (m_reapplyInProgress) {

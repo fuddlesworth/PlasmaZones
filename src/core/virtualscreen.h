@@ -167,8 +167,12 @@ inline int extractIndex(const QString& screenId)
 }
 
 /// Construct a virtual screen ID from physical ID and index
+/// @pre index must be >= 0; negative indices return an empty string
 inline QString make(const QString& physicalScreenId, int index)
 {
+    if (index < 0) {
+        return QString();
+    }
     return physicalScreenId + separator() + QString::number(index);
 }
 

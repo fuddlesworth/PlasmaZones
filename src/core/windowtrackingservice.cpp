@@ -560,7 +560,9 @@ UnfloatResult WindowTrackingService::resolveUnfloatGeometry(const QString& windo
     // Validate saved screen — fall back to caller's screen if monitor is gone
     QString restoreScreen = preFloatScreen(windowId);
     if (!restoreScreen.isEmpty()) {
-        // For virtual screens, check if the physical screen still exists
+        // Validate virtual screen still exists — configuration may have changed since float
+        restoreScreen = resolveEffectiveScreenId(restoreScreen);
+        // Check if the physical screen still exists
         QScreen* physScreen = ScreenManager::resolvePhysicalScreen(restoreScreen);
         if (!physScreen) {
             restoreScreen.clear();

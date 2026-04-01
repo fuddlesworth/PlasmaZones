@@ -68,9 +68,6 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     const QRect capturedOriginalGeometry = m_originalGeometry;
     const bool capturedSnapCancelled = m_snapCancelled;
     const bool capturedZoneSelectorShown = m_zoneSelectorShown;
-    const int capturedLastCursorX = m_lastCursorX;
-    const int capturedLastCursorY = m_lastCursorY;
-
     // Release on a disabled context: do not snap to overlay zone
     bool useOverlayZone = true;
     int curDesktopDrop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
@@ -106,10 +103,10 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         && m_overlayService->hasSelectedZone()) {
         QString selectedLayoutId = m_overlayService->selectedLayoutId();
         // Resolve virtual-aware screen ID for the zone selector position
-        QString selectorScreenId = effectiveScreenIdAt(capturedLastCursorX, capturedLastCursorY);
+        QString selectorScreenId = effectiveScreenIdAt(cursorX, cursorY);
         QScreen* screen = Utils::findScreenByIdOrName(VirtualScreenId::extractPhysicalId(selectorScreenId));
         if (!screen)
-            screen = screenAtPoint(capturedLastCursorX, capturedLastCursorY);
+            screen = screenAtPoint(cursorX, cursorY);
         if (selectorScreenId.isEmpty() && screen)
             selectorScreenId = Utils::screenIdentifier(screen);
 

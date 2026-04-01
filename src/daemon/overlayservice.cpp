@@ -481,7 +481,12 @@ void OverlayService::setupForScreen(QScreen* screen)
         for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
             if (!m_overlayWindows.contains(vsId)) {
                 QRect vsGeom = mgr->screenGeometry(vsId);
-                createOverlayWindow(vsId, screen, vsGeom.isValid() ? vsGeom : screen->geometry());
+                if (!vsGeom.isValid()) {
+                    qCWarning(lcOverlay) << "setupForScreen: invalid geometry for virtual screen" << vsId
+                                         << "— skipping overlay creation";
+                    continue;
+                }
+                createOverlayWindow(vsId, screen, vsGeom);
             }
         }
     } else {
@@ -520,9 +525,6 @@ void OverlayService::handleScreenAdded(QScreen* screen)
         return;
     }
     const QString physScreenId = Utils::screenIdentifier(screen);
-    if (isContextDisabled(m_settings, physScreenId, m_currentVirtualDesktop, m_currentActivity)) {
-        return;
-    }
 
     auto* mgr = ScreenManager::instance();
     if (mgr && mgr->hasVirtualScreens(physScreenId)) {

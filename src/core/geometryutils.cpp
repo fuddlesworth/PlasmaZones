@@ -20,6 +20,23 @@ namespace PlasmaZones {
 
 namespace GeometryUtils {
 
+namespace {
+struct ScreenGeometries
+{
+    QRect geometry;
+    QRect availableGeometry;
+};
+
+ScreenGeometries resolveScreenGeometries(const QString& screenId)
+{
+    auto* mgr = ScreenManager::instance();
+    if (!mgr) {
+        return {};
+    }
+    return {mgr->screenGeometry(screenId), mgr->screenAvailableGeometry(screenId)};
+}
+} // anonymous namespace
+
 static QRectF calculateZoneGeometry(Zone* zone, QScreen* screen)
 {
     if (!zone || !screen) {
@@ -191,9 +208,7 @@ QRectF getZoneGeometryForScreenF(Zone* zone, QScreen* screen, const QString& scr
     EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, screenId);
     bool useAvail = !(layout && layout->useFullScreenGeometry());
 
-    auto* mgr = ScreenManager::instance();
-    QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
-    QRect vsAvailGeom = mgr ? mgr->screenAvailableGeometry(screenId) : QRect();
+    auto [vsGeom, vsAvailGeom] = resolveScreenGeometries(screenId);
 
     if (vsGeom.isValid()) {
         QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
@@ -340,16 +355,12 @@ QRectF effectiveScreenGeometry(Layout* layout, QScreen* screen)
 
 QRectF effectiveScreenGeometry(Layout* layout, const QString& screenId)
 {
-    auto* mgr = ScreenManager::instance();
-    if (mgr) {
-        QRect geom = mgr->screenGeometry(screenId);
-        if (geom.isValid()) {
-            if (layout && layout->useFullScreenGeometry()) {
-                return QRectF(geom);
-            }
-            QRect availGeom = mgr->screenAvailableGeometry(screenId);
-            return availGeom.isValid() ? QRectF(availGeom) : QRectF(geom);
+    auto [geom, availGeom] = resolveScreenGeometries(screenId);
+    if (geom.isValid()) {
+        if (layout && layout->useFullScreenGeometry()) {
+            return QRectF(geom);
         }
+        return availGeom.isValid() ? QRectF(availGeom) : QRectF(geom);
     }
     // Fallback to physical screen
     QScreen* screen = Utils::findScreenByIdOrName(screenId);
@@ -490,9 +501,7 @@ QString buildEmptyZonesJson(Layout* layout, const QString& screenId, QScreen* ph
     }
 
     // Use virtual screen geometry when available
-    auto* mgr = ScreenManager::instance();
-    QRect vsGeom = mgr ? mgr->screenGeometry(screenId) : QRect();
-    QRect vsAvailGeom = mgr ? mgr->screenAvailableGeometry(screenId) : QRect();
+    auto [vsGeom, vsAvailGeom] = resolveScreenGeometries(screenId);
 
     if (vsGeom.isValid()) {
         bool useAvail = !layout->useFullScreenGeometry();

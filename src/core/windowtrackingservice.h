@@ -789,6 +789,10 @@ private:
     Zone* findZoneById(const QString& zoneId) const;
     QString findEmptyZoneInLayout(Layout* layout, const QString& screenId) const;
 
+    /// Resolve a screen ID to an effective screen ID, falling back to the physical
+    /// screen ID if a virtual screen no longer exists in the current configuration.
+    QString resolveEffectiveScreenId(const QString& screenId) const;
+
     /// Sort zones by zone number ascending, with UUID tie-breaker for determinism
     /// when multiple zones share the same number.
     static void sortZonesByNumber(QVector<Zone*>& zones);
@@ -798,9 +802,11 @@ private:
     QRect resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const;
 
 public:
-    /// Build set of occupied zone UUIDs, optionally filtered by screen.
+    /// Build set of occupied zone UUIDs, optionally filtered by screen and virtual desktop.
     /// Uses Utils::screensMatch() for format-agnostic screen comparison.
-    QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString()) const;
+    /// When @p desktopFilter is positive, only windows on that desktop (or desktop 0 = all)
+    /// are included. Pass 0 or omit to disable desktop filtering.
+    QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString(), int desktopFilter = 0) const;
 
 private:
     // Dependencies

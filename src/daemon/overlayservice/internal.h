@@ -5,6 +5,9 @@
 
 #include <optional>
 
+#include <QFont>
+#include <QGuiApplication>
+#include <QPalette>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QScreen>
@@ -25,6 +28,38 @@ namespace PlasmaZones {
 // ensureShaderTimerStarted, getAnchorsForPosition) are in overlay_helpers.h
 // so tests can include them without pulling in ConfigDefaults/ShaderRegistry.
 // ═══════════════════════════════════════════════════════════════════════════════
+
+/// Extracted label font/color settings from IZoneVisualizationSettings with fallback defaults.
+/// Used by both updateLabelsTextureForWindow (overlay_data.cpp) and
+/// buildLabelsImageForPreviewZones (shader.cpp) to avoid duplicating the 8+ settings reads.
+struct LabelFontSettings
+{
+    QColor fontColor = Qt::white;
+    QColor backgroundColor = Qt::black;
+    QString fontFamily;
+    qreal fontSizeScale = 1.0;
+    int fontWeight = QFont::Bold;
+    bool fontItalic = false;
+    bool fontUnderline = false;
+    bool fontStrikeout = false;
+};
+
+inline LabelFontSettings extractLabelFontSettings(const IZoneVisualizationSettings* settings)
+{
+    LabelFontSettings s;
+    if (!settings) {
+        return s;
+    }
+    s.fontColor = settings->labelFontColor();
+    s.backgroundColor = QGuiApplication::palette().color(QPalette::Active, QPalette::Base);
+    s.fontFamily = settings->labelFontFamily();
+    s.fontSizeScale = settings->labelFontSizeScale();
+    s.fontWeight = settings->labelFontWeight();
+    s.fontItalic = settings->labelFontItalic();
+    s.fontUnderline = settings->labelFontUnderline();
+    s.fontStrikeout = settings->labelFontStrikeout();
+    return s;
+}
 
 inline void writeFontProperties(QObject* window, const IZoneVisualizationSettings* settings)
 {
@@ -222,6 +257,44 @@ inline QQuickItem* findQmlItemByName(QQuickItem* item, const QString& objectName
     }
 
     return nullptr;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Common window destroy pattern shared across overlay, selector, OSD, shader TUs
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Destroy a managed window: take from windowMap, disconnect physScreen signals,
+/// close, deleteLater, remove from physScreenMap. Safe to call when screenId is
+/// not present in the maps (no-op).
+inline void destroyManagedWindow(QHash<QString, QQuickWindow*>& windowMap, QHash<QString, QScreen*>& physScreenMap,
+                                 const QString& screenId)
+{
+    if (auto* window = windowMap.take(screenId)) {
+        if (auto* physScreen = physScreenMap.value(screenId)) {
+            QObject::disconnect(physScreen, nullptr, window, nullptr);
+        }
+        window->close();
+        window->deleteLater();
+    }
+    physScreenMap.remove(screenId);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Shared color/opacity settings push for snap assist and layout picker
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Write common zone color/opacity appearance settings to a QML window.
+/// Used by snap assist and layout picker to avoid duplicating the 5-7 property writes.
+inline void writeColorSettings(QObject* window, const IZoneVisualizationSettings* settings)
+{
+    if (!window || !settings) {
+        return;
+    }
+    writeQmlProperty(window, QStringLiteral("highlightColor"), settings->highlightColor());
+    writeQmlProperty(window, QStringLiteral("inactiveColor"), settings->inactiveColor());
+    writeQmlProperty(window, QStringLiteral("borderColor"), settings->borderColor());
+    writeQmlProperty(window, QStringLiteral("activeOpacity"), settings->activeOpacity());
+    writeQmlProperty(window, QStringLiteral("inactiveOpacity"), settings->inactiveOpacity());
 }
 
 // patchZonesWithHighlight, parseZonesJson, ensureShaderTimerStarted, getAnchorsForPosition

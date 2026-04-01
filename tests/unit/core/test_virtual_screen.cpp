@@ -440,6 +440,65 @@ private Q_SLOTS:
             QCOMPARE(leftGeom.x(), 0);
         }
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // T2: Cross-validation — daemon vs effect extractPhysicalId
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Validates that the daemon-side VirtualScreenId::extractPhysicalId() and the
+     * KWin effect-side extractPhysicalScreenId() produce identical results for the
+     * same inputs. The effect cannot include daemon headers, so its implementation
+     * is duplicated here. This test proves the CONTRACT between both sides.
+     *
+     * If the effect's implementation changes, this local copy must be updated to
+     * match (see kwin-effect/plasmazoneseffect.h around line 540).
+     */
+    void testExtractPhysicalId_crossValidation()
+    {
+        // Local copy of the effect's extractPhysicalScreenId logic.
+        // Must be kept in sync with PlasmaZonesEffect::extractPhysicalScreenId().
+        auto effectExtractPhysicalScreenId = [](const QString& screenId) -> QString {
+            static const QLatin1String vsSep("/vs:");
+            int pos = screenId.indexOf(vsSep);
+            return (pos > 0) ? screenId.left(pos) : screenId;
+        };
+
+        // Test vectors: {input, expectedPhysicalId}
+        struct TestCase
+        {
+            QString input;
+            QString expected;
+        };
+
+        const QVector<TestCase> cases = {
+            // Simple virtual screen
+            {QStringLiteral("DP-1/vs:0"), QStringLiteral("DP-1")},
+            // Higher virtual index
+            {QStringLiteral("DP-1/vs:2"), QStringLiteral("DP-1")},
+            // Physical ID with colons (EDID-based)
+            {QStringLiteral("DP-1:BenQ:12345/vs:2"), QStringLiteral("DP-1:BenQ:12345")},
+            // Non-virtual (plain connector name)
+            {QStringLiteral("DP-1"), QStringLiteral("DP-1")},
+            // Non-virtual (EDID-based)
+            {QStringLiteral("Dell:U2722D:115107"), QStringLiteral("Dell:U2722D:115107")},
+            // Empty string
+            {QString(), QString()},
+            // Bare separator (malformed — pos == 0, not > 0, returns original)
+            {QStringLiteral("/vs:0"), QStringLiteral("/vs:0")},
+            // Separator with no index
+            {QStringLiteral("DP-1/vs:"), QStringLiteral("DP-1")},
+        };
+
+        for (const auto& tc : cases) {
+            QString daemonResult = VirtualScreenId::extractPhysicalId(tc.input);
+            QString effectResult = effectExtractPhysicalScreenId(tc.input);
+
+            QCOMPARE(daemonResult, tc.expected);
+            QCOMPARE(effectResult, tc.expected);
+            QCOMPARE(daemonResult, effectResult);
+        }
+    }
 };
 
 QTEST_GUILESS_MAIN(TestVirtualScreen)

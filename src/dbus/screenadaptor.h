@@ -7,6 +7,7 @@
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QStringList>
+#include <functional>
 
 class QScreen;
 
@@ -53,6 +54,10 @@ Q_SIGNALS:
 
 private:
     void handleScreenGeometryChanged(QScreen* screen, const QString& physId);
+
+    /// Emit per-virtual-screen or fall back to physical screen ID.
+    /// Returns true if virtual screen IDs were emitted, false if physical.
+    bool emitForEffectiveScreens(const QString& physId, const std::function<void(const QString&)>& emitFn);
 
     QString m_primaryScreenOverride;
 };

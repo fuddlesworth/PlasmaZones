@@ -464,15 +464,7 @@ void OverlayService::destroyOverlayWindow(QScreen* screen)
 
 void OverlayService::destroyOverlayWindow(const QString& screenId)
 {
-    if (auto* window = m_overlayWindows.take(screenId)) {
-        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
-        if (auto* physScreen = m_overlayPhysScreens.value(screenId)) {
-            disconnect(physScreen, nullptr, window, nullptr);
-        }
-        window->close();
-        window->deleteLater();
-    }
-    m_overlayPhysScreens.remove(screenId);
+    destroyManagedWindow(m_overlayWindows, m_overlayPhysScreens, screenId);
     m_overlayGeometries.remove(screenId);
 }
 

@@ -112,12 +112,8 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     writeQmlProperty(m_snapAssistWindow, QStringLiteral("screenHeight"), screenGeom.height());
 
     // Zone appearance defaults (used when zone.useCustomColors is false) - match main overlay
+    writeColorSettings(m_snapAssistWindow, m_settings);
     if (m_settings) {
-        writeQmlProperty(m_snapAssistWindow, QStringLiteral("highlightColor"), m_settings->highlightColor());
-        writeQmlProperty(m_snapAssistWindow, QStringLiteral("inactiveColor"), m_settings->inactiveColor());
-        writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderColor"), m_settings->borderColor());
-        writeQmlProperty(m_snapAssistWindow, QStringLiteral("activeOpacity"), m_settings->activeOpacity());
-        writeQmlProperty(m_snapAssistWindow, QStringLiteral("inactiveOpacity"), m_settings->inactiveOpacity());
         writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderWidth"), m_settings->borderWidth());
         writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderRadius"), m_settings->borderRadius());
     }
@@ -339,6 +335,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
 
     m_layoutPickerScreen = screen;
+    m_layoutPickerScreenId = resolvedId;
 
     // Build layouts list (use virtual-aware screen ID for correct layout resolution)
     QVariantList layoutsList = buildLayoutsList(resolvedId);
@@ -379,13 +376,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     writeQmlProperty(m_layoutPickerWindow, QStringLiteral("locked"), locked);
 
     // Theme colors and zone appearance (consistent with zone selector)
-    if (m_settings) {
-        writeQmlProperty(m_layoutPickerWindow, QStringLiteral("highlightColor"), m_settings->highlightColor());
-        writeQmlProperty(m_layoutPickerWindow, QStringLiteral("inactiveColor"), m_settings->inactiveColor());
-        writeQmlProperty(m_layoutPickerWindow, QStringLiteral("borderColor"), m_settings->borderColor());
-        writeQmlProperty(m_layoutPickerWindow, QStringLiteral("activeOpacity"), m_settings->activeOpacity());
-        writeQmlProperty(m_layoutPickerWindow, QStringLiteral("inactiveOpacity"), m_settings->inactiveOpacity());
-    }
+    writeColorSettings(m_layoutPickerWindow, m_settings);
 
     // Layer shell with keyboard interactivity — position to virtual or physical screen
     if (!configureLayerSurface(m_layoutPickerWindow, screen, LayerSurface::LayerTop,

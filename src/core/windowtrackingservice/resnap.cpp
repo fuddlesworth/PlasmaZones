@@ -255,7 +255,7 @@ WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& scre
             QRect geo = it.value().isEmpty() ? QRect() : resolveZoneGeometry(it.value(), screen);
             qCDebug(lcCore) << "  skipped:" << it.key() << "zones=" << it.value() << "screen=" << screen
                             << "floating=" << floating << "geoValid=" << geo.isValid()
-                            << "screenMatch=" << (screenFilter.isEmpty() || screen == screenFilter);
+                            << "screenMatch=" << (screenFilter.isEmpty() || Utils::screensMatch(screen, screenFilter));
         }
     }
     return result;

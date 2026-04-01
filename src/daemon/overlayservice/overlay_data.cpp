@@ -49,21 +49,11 @@ void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QV
     }
     const bool showNumbers =
         (m_settings ? m_settings->showZoneNumbers() : true) && (!screenLayout || screenLayout->showZoneNumbers());
-    const QColor labelFontColor = m_settings ? m_settings->labelFontColor() : QColor(Qt::white);
-    QColor backgroundColor = Qt::black;
-    if (m_settings) {
-        backgroundColor = QGuiApplication::palette().color(QPalette::Active, QPalette::Base);
-    }
-    const QString fontFamily = m_settings ? m_settings->labelFontFamily() : QString();
-    const qreal fontSizeScale = m_settings ? m_settings->labelFontSizeScale() : 1.0;
-    const int fontWeight = m_settings ? m_settings->labelFontWeight() : QFont::Bold;
-    const bool fontItalic = m_settings ? m_settings->labelFontItalic() : false;
-    const bool fontUnderline = m_settings ? m_settings->labelFontUnderline() : false;
-    const bool fontStrikeout = m_settings ? m_settings->labelFontStrikeout() : false;
+    const LabelFontSettings lfs = extractLabelFontSettings(m_settings);
     const QSize size(qMax(1, static_cast<int>(window->width())), qMax(1, static_cast<int>(window->height())));
-    QImage labelsImage =
-        ZoneLabelTextureBuilder::build(patched, size, labelFontColor, showNumbers, backgroundColor, fontFamily,
-                                       fontSizeScale, fontWeight, fontItalic, fontUnderline, fontStrikeout);
+    QImage labelsImage = ZoneLabelTextureBuilder::build(patched, size, lfs.fontColor, showNumbers, lfs.backgroundColor,
+                                                        lfs.fontFamily, lfs.fontSizeScale, lfs.fontWeight,
+                                                        lfs.fontItalic, lfs.fontUnderline, lfs.fontStrikeout);
     if (labelsImage.isNull()) {
         labelsImage = QImage(1, 1, QImage::Format_ARGB32);
         labelsImage.fill(Qt::transparent);

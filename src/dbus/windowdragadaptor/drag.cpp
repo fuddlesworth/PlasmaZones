@@ -143,11 +143,23 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
     outScreenId = screenId;
     if (isContextDisabled(m_settings, screenId, m_layoutManager->currentVirtualDesktop(),
                           m_layoutManager->currentActivity())) {
+        if (m_overlayShown && m_overlayService) {
+            m_overlayService->hide();
+            m_overlayShown = false;
+            m_overlayScreen = nullptr;
+            m_overlayScreenId.clear();
+        }
         return nullptr;
     }
 
     // Skip overlay and zone detection on autotile-managed screens
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+        if (m_overlayShown && m_overlayService) {
+            m_overlayService->hide();
+            m_overlayShown = false;
+            m_overlayScreen = nullptr;
+            m_overlayScreenId.clear();
+        }
         return nullptr;
     }
 

@@ -59,20 +59,10 @@ QVariantMap parseShaderParamsJson(const QString& json, const char* context)
 QImage buildLabelsImageForPreviewZones(const QVariantList& zones, const QSize& size,
                                        const IZoneVisualizationSettings* settings)
 {
-    const QColor labelFontColor = settings ? settings->labelFontColor() : QColor(Qt::white);
-    QColor backgroundColor = Qt::black;
-    if (settings) {
-        backgroundColor = QGuiApplication::palette().color(QPalette::Active, QPalette::Base);
-    }
-    const QString fontFamily = settings ? settings->labelFontFamily() : QString();
-    const qreal fontSizeScale = settings ? settings->labelFontSizeScale() : 1.0;
-    const int fontWeight = settings ? settings->labelFontWeight() : QFont::Bold;
-    const bool fontItalic = settings ? settings->labelFontItalic() : false;
-    const bool fontUnderline = settings ? settings->labelFontUnderline() : false;
-    const bool fontStrikeout = settings ? settings->labelFontStrikeout() : false;
-    QImage labelsImage =
-        ZoneLabelTextureBuilder::build(zones, size, labelFontColor, true, backgroundColor, fontFamily, fontSizeScale,
-                                       fontWeight, fontItalic, fontUnderline, fontStrikeout);
+    const LabelFontSettings lfs = extractLabelFontSettings(settings);
+    QImage labelsImage = ZoneLabelTextureBuilder::build(zones, size, lfs.fontColor, true, lfs.backgroundColor,
+                                                        lfs.fontFamily, lfs.fontSizeScale, lfs.fontWeight,
+                                                        lfs.fontItalic, lfs.fontUnderline, lfs.fontStrikeout);
     if (labelsImage.isNull()) {
         labelsImage = QImage(1, 1, QImage::Format_ARGB32);
         labelsImage.fill(Qt::transparent);
@@ -272,7 +262,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
 
     QScreen* screen = nullptr;
     if (!screenId.isEmpty()) {
-        screen = Utils::findScreenByIdOrName(screenId);
+        screen = resolveTargetScreen(screenId);
     }
     if (!screen) {
         screen = Utils::findScreenAtPosition(x, y);
