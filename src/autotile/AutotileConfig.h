@@ -42,11 +42,12 @@ struct AlgorithmSettings
             }
             const QVariant& a = it.value();
             const QVariant& b = oit.value();
-            if (a.canConvert<double>() && b.canConvert<double>()
-                && (a.typeId() == QMetaType::Double || a.typeId() == QMetaType::Float || a.typeId() == QMetaType::Int
-                    || a.typeId() == QMetaType::LongLong)
-                && (b.typeId() == QMetaType::Double || b.typeId() == QMetaType::Float || b.typeId() == QMetaType::Int
-                    || b.typeId() == QMetaType::LongLong)) {
+            const auto isNumericType = [](int typeId) {
+                return typeId == QMetaType::Double || typeId == QMetaType::Float || typeId == QMetaType::Int
+                    || typeId == QMetaType::UInt || typeId == QMetaType::LongLong || typeId == QMetaType::ULongLong;
+            };
+            if (a.canConvert<double>() && b.canConvert<double>() && isNumericType(a.typeId())
+                && isNumericType(b.typeId())) {
                 if (!qFuzzyCompare(1.0 + a.toDouble(), 1.0 + b.toDouble())) {
                     return false;
                 }

@@ -61,13 +61,13 @@ struct TilingParams
     QVector<QSize> minSizes = {}; ///< Per-window minimum sizes (may be empty)
 
     // ── Enriched context (v2) ──────────────────────────────────────────
-    QVector<WindowInfo> windowInfos; ///< Per-window metadata (parallel to minSizes)
+    QVector<WindowInfo> windowInfos; ///< Per-window metadata (parallel to window list)
     int focusedIndex = -1; ///< Index of focused window in tiled list (-1 = unknown)
     TilingScreenInfo screenInfo; ///< Physical screen metadata
     QVariantMap customParams; ///< Algorithm-declared custom parameters
 
     /// Create minimal params for preview rendering (no per-window/screen context)
-    static TilingParams forPreview(int count, const QRect& rect, const TilingState* state)
+    static TilingParams forPreview(int count, const QRect& rect, TilingState* state)
     {
         TilingParams p;
         p.windowCount = count;
@@ -343,6 +343,28 @@ public:
      * @param windowIndex Index the window occupied before removal
      */
     virtual void onWindowRemoved(TilingState* state, int windowIndex);
+
+    // ── Custom Parameters (optional, v2) ──────────────────────────────────
+
+    /**
+     * @brief Whether this algorithm declares custom parameters
+     *
+     * Algorithms that support custom parameters (e.g., scripted algorithms
+     * with @param declarations) return true. Used to avoid downcasting.
+     *
+     * @return true if the algorithm has custom parameter definitions (default: false)
+     */
+    virtual bool supportsCustomParams() const noexcept;
+
+    /**
+     * @brief Get custom parameter definitions as a QVariantList for QML
+     *
+     * Each entry is a QVariantMap with keys: name, type, defaultValue,
+     * description, minValue, maxValue, enumOptions (as applicable).
+     *
+     * @return List of param definition maps, or empty if none declared
+     */
+    virtual QVariantList customParamDefList() const;
 
 protected:
     /**

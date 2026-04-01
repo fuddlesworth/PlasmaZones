@@ -99,6 +99,16 @@ void TilingAlgorithm::onWindowRemoved(TilingState* /*state*/, int /*windowIndex*
     // Default no-op. Algorithms with lifecycle hooks override.
 }
 
+bool TilingAlgorithm::supportsCustomParams() const noexcept
+{
+    return false;
+}
+
+QVariantList TilingAlgorithm::customParamDefList() const
+{
+    return {};
+}
+
 QVector<int> TilingAlgorithm::distributeEvenly(int total, int count)
 {
     QVector<int> sizes;

@@ -653,7 +653,8 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
             if (val.typeId() == QMetaType::Bool) {
                 jsCustom.setProperty(it.key(), val.toBool());
             } else if (val.typeId() == QMetaType::Double || val.typeId() == QMetaType::Float
-                       || val.typeId() == QMetaType::Int) {
+                       || val.typeId() == QMetaType::Int || val.typeId() == QMetaType::UInt
+                       || val.typeId() == QMetaType::LongLong || val.typeId() == QMetaType::ULongLong) {
                 jsCustom.setProperty(it.key(), val.toDouble());
             } else {
                 jsCustom.setProperty(it.key(), val.toString());
@@ -976,10 +977,24 @@ void ScriptedAlgorithm::onWindowRemoved(TilingState* state, int windowIndex)
     }
     QJSValue jsState = buildJsState(state);
     // Expose countAfterRemoval so hook authors don't need to subtract 1 from windowCount
-    jsState.setProperty(QStringLiteral("countAfterRemoval"), state->tiledWindowCount() - 1);
+    jsState.setProperty(QStringLiteral("countAfterRemoval"), qMax(0, state->tiledWindowCount() - 1));
     guardedCall([this, &jsState, windowIndex]() {
         return m_jsOnWindowRemoved.call({jsState, QJSValue(windowIndex)});
     });
+}
+
+bool ScriptedAlgorithm::supportsCustomParams() const noexcept
+{
+    return !m_metadata.customParams.isEmpty();
+}
+
+QVariantList ScriptedAlgorithm::customParamDefList() const
+{
+    QVariantList result;
+    for (const auto& def : m_metadata.customParams) {
+        result.append(def.toVariantMap());
+    }
+    return result;
 }
 
 const QVector<ScriptedHelpers::CustomParamDef>& ScriptedAlgorithm::customParamDefs() const

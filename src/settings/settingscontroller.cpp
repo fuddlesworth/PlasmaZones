@@ -1933,8 +1933,7 @@ QVariantList SettingsController::availableAlgorithms() const
 
             // Expose whether this algorithm declares custom parameters.
             // The full definitions are retrieved via customParamsForAlgorithm().
-            auto* scripted = qobject_cast<ScriptedAlgorithm*>(algo);
-            algoMap[QLatin1String("supportsCustomParams")] = (scripted && !scripted->customParamDefs().isEmpty());
+            algoMap[QLatin1String("supportsCustomParams")] = algo->supportsCustomParams();
 
             algorithms.append(algoMap);
         }
@@ -1946,23 +1945,23 @@ QVariantList SettingsController::customParamsForAlgorithm(const QString& algorit
 {
     auto* registry = AlgorithmRegistry::instance();
     TilingAlgorithm* algo = registry->algorithm(algorithmId);
-    if (!algo) {
-        return {};
-    }
-
-    auto* scripted = qobject_cast<ScriptedAlgorithm*>(algo);
-    if (!scripted || scripted->customParamDefs().isEmpty()) {
+    if (!algo || !algo->supportsCustomParams()) {
         return {};
     }
 
     const QVariantMap savedCustom = savedCustomParams(algorithmId);
+    const QVariantList defs = algo->customParamDefList();
 
     QVariantList result;
-    for (const auto& def : scripted->customParamDefs()) {
-        QVariantMap paramMap = def.toVariantMap();
+    for (const auto& defVar : defs) {
+        QVariantMap paramMap = defVar.toMap();
+        const QString name = paramMap.value(QLatin1String("name")).toString();
         // Current value: saved value if exists, else default
-        paramMap[QLatin1String("value")] =
-            savedCustom.contains(def.name) ? savedCustom.value(def.name) : def.defaultValue;
+        if (savedCustom.contains(name)) {
+            paramMap[QLatin1String("value")] = savedCustom.value(name);
+        } else {
+            paramMap[QLatin1String("value")] = paramMap.value(QLatin1String("defaultValue"));
+        }
         result.append(paramMap);
     }
     return result;
@@ -1977,37 +1976,38 @@ void SettingsController::setCustomParam(const QString& algorithmId, const QStrin
     // Validate paramName exists in the algorithm's declared custom params
     auto* registry = AlgorithmRegistry::instance();
     TilingAlgorithm* algo = registry->algorithm(algorithmId);
-    if (!algo) {
+    if (!algo || !algo->supportsCustomParams()) {
         return;
     }
-    auto* scripted = qobject_cast<ScriptedAlgorithm*>(algo);
-    if (!scripted) {
-        return;
-    }
-    const auto& defs = scripted->customParamDefs();
-    auto defIt = std::find_if(defs.cbegin(), defs.cend(), [&paramName](const auto& def) {
-        return def.name == paramName;
+    const QVariantList defs = algo->customParamDefList();
+    auto defIt = std::find_if(defs.cbegin(), defs.cend(), [&paramName](const QVariant& v) {
+        return v.toMap().value(QLatin1String("name")).toString() == paramName;
     });
     if (defIt == defs.cend()) {
         qCWarning(lcCore) << "setCustomParam: unknown param" << paramName << "for algorithm" << algorithmId;
         return;
     }
+    const QVariantMap defMap = defIt->toMap();
+    const QString defType = defMap.value(QLatin1String("type")).toString();
 
     // Coerce value to the declared type so QML callers can't persist wrong types
     QVariant coerced = value;
-    if (defIt->type == QLatin1String("number")) {
+    if (defType == QLatin1String("number")) {
         bool ok = false;
         const qreal num = value.toDouble(&ok);
         if (!ok) {
             qCWarning(lcCore) << "setCustomParam: value" << value << "is not a valid number for" << paramName;
             return;
         }
-        coerced = std::clamp(num, defIt->minValue, defIt->maxValue);
-    } else if (defIt->type == QLatin1String("bool")) {
+        const qreal minVal = defMap.value(QLatin1String("minValue")).toDouble();
+        const qreal maxVal = defMap.value(QLatin1String("maxValue")).toDouble();
+        coerced = std::clamp(num, minVal, maxVal);
+    } else if (defType == QLatin1String("bool")) {
         coerced = value.toBool();
-    } else if (defIt->type == QLatin1String("enum")) {
+    } else if (defType == QLatin1String("enum")) {
         const QString str = value.toString();
-        if (!defIt->enumOptions.contains(str)) {
+        const QStringList options = defMap.value(QLatin1String("enumOptions")).toStringList();
+        if (!options.contains(str)) {
             qCWarning(lcCore) << "setCustomParam: value" << str << "not in enum options for" << paramName;
             return;
         }
@@ -2025,7 +2025,7 @@ void SettingsController::setCustomParam(const QString& algorithmId, const QStrin
         algoEntry[PerAlgoKeys::SplitRatio] = algo->defaultSplitRatio();
     }
     if (!algoEntry.contains(PerAlgoKeys::MasterCount)) {
-        algoEntry[PerAlgoKeys::MasterCount] = 1;
+        algoEntry[PerAlgoKeys::MasterCount] = AutotileDefaults::DefaultMasterCount;
     }
 
     perAlgo[algorithmId] = algoEntry;

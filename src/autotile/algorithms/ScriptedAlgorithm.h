@@ -146,6 +146,10 @@ public:
     bool supportsLifecycleHooks() const noexcept override;
     void onWindowAdded(TilingState* state, int windowIndex) override;
     void onWindowRemoved(TilingState* state, int windowIndex) override;
+
+    // Custom parameters (v2)
+    bool supportsCustomParams() const noexcept override;
+    QVariantList customParamDefList() const override;
     /**
      * @brief Get the custom parameter definitions declared by this script
      */

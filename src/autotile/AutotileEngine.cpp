@@ -1430,6 +1430,9 @@ void AutotileEngine::onWindowRemoved(const QString& windowId)
         const int idx = state->tiledWindows().indexOf(windowId);
         if (idx >= 0) {
             algo->onWindowRemoved(state, idx);
+        } else {
+            qCDebug(lcAutotile) << "onWindowRemoved: window" << windowId
+                                << "not found in tiling state — lifecycle hook skipped";
         }
     }
 
@@ -1670,12 +1673,27 @@ void AutotileEngine::recalculateLayout(const QString& screenId)
         }
     }
 
-    // Resolve custom params for this algorithm from saved settings
+    // Resolve custom params for this algorithm from saved settings.
+    // Filter out stale params that no longer match the algorithm's declarations
+    // (e.g., user edited the JS file and renamed/removed a @param).
     QVariantMap customParams;
     if (m_config) {
         const auto it = m_config->savedAlgorithmSettings.constFind(algoId);
-        if (it != m_config->savedAlgorithmSettings.constEnd()) {
-            customParams = it->customParams;
+        if (it != m_config->savedAlgorithmSettings.constEnd() && !it->customParams.isEmpty()) {
+            if (algo->supportsCustomParams()) {
+                const QVariantList defs = algo->customParamDefList();
+                for (auto pit = it->customParams.constBegin(); pit != it->customParams.constEnd(); ++pit) {
+                    const QString& key = pit.key();
+                    const bool declared = std::any_of(defs.cbegin(), defs.cend(), [&key](const QVariant& d) {
+                        return d.toMap().value(QLatin1String("name")).toString() == key;
+                    });
+                    if (declared) {
+                        customParams[key] = pit.value();
+                    }
+                }
+            } else {
+                customParams = it->customParams;
+            }
         }
     }
 
