@@ -224,25 +224,10 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
         if (layout) {
             if (!m_currentScreenName.isEmpty()) {
                 // Write to the current context (screen, desktop, activity).
-                // Most specific context wins — assignLayout FIRST so the
-                // per-context assignment is stored before setActiveLayout fires
-                // activeLayoutChanged → onLayoutChanged(). That handler calls
-                // resolveLayoutForScreen() which reads per-context assignments —
-                // it must see the new assignment to correctly populate the
-                // resnap buffer.
+                // Only the per-context assignment is stored — the global
+                // activeLayout pointer is NOT updated so that other screens
+                // and contexts keep their existing fallback layout.
                 m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity, layout);
-            }
-            // Update global active layout pointer so overlay/zone detector
-            // queries see the new layout, but suppress activeLayoutChanged
-            // to prevent resnap buffer population and zone recalculation on
-            // ALL screens. The per-screen assignment (assignLayout above)
-            // already fired layoutAssigned which handles per-screen zone
-            // recalculation. Without blocking, setActiveLayout fires
-            // activeLayoutChanged → onLayoutChanged → resnap/recalc on
-            // every screen, not just the target.
-            {
-                const QSignalBlocker blocker(m_layoutManager);
-                m_layoutManager->setActiveLayout(layout);
             }
             setCurrentLayoutId(entry.id);
             qCInfo(lcDaemon) << "Applied unified layout=" << entry.name << "screen=" << m_currentScreenName;
