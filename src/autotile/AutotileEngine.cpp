@@ -38,6 +38,26 @@ namespace {
 // If windows fail to open (e.g., app crash during startup), this prevents
 // m_pendingInitialOrders from leaking state indefinitely.
 constexpr int PendingOrderTimeoutMs = 10000;
+
+/// Build per-window metadata from TilingState for algorithm context
+QVector<WindowInfo> buildWindowInfos(const TilingState* state, int windowCount, int& focusedIndex)
+{
+    QVector<WindowInfo> infos;
+    focusedIndex = -1;
+    const QStringList windows = state->tiledWindows();
+    const QString focusedWin = state->focusedWindow();
+    infos.reserve(windowCount);
+    for (int i = 0; i < windowCount && i < windows.size(); ++i) {
+        WindowInfo info;
+        info.appId = Utils::extractAppId(windows[i]);
+        info.focused = (windows[i] == focusedWin);
+        if (info.focused) {
+            focusedIndex = i;
+        }
+        infos.append(info);
+    }
+    return infos;
+}
 } // namespace
 
 AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
@@ -434,7 +454,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         auto& entry = m_config->savedAlgorithmSettings[m_algorithmId];
         entry.splitRatio = m_config->splitRatio;
         entry.masterCount = m_config->masterCount;
-        // customParams are preserved — only splitRatio/masterCount are engine-managed
+        // customParams are not touched here — only splitRatio/masterCount are engine-managed
     }
 
     // Look up saved settings AFTER the save above — insertion may rehash the
@@ -1633,22 +1653,8 @@ void AutotileEngine::recalculateLayout(const QString& screenId)
     }
 
     // Build per-window metadata for algorithm context
-    QVector<WindowInfo> windowInfos;
     int focusedIndex = -1;
-    {
-        const QStringList windows = state->tiledWindows();
-        const QString focusedWin = state->focusedWindow();
-        windowInfos.reserve(windowCount);
-        for (int i = 0; i < windowCount && i < windows.size(); ++i) {
-            WindowInfo info;
-            info.appId = Utils::extractAppId(windows[i]);
-            info.focused = (windows[i] == focusedWin);
-            if (info.focused) {
-                focusedIndex = i;
-            }
-            windowInfos.append(info);
-        }
-    }
+    QVector<WindowInfo> windowInfos = buildWindowInfos(state, windowCount, focusedIndex);
 
     // Build screen metadata for orientation-aware algorithms
     TilingScreenInfo screenInfo;

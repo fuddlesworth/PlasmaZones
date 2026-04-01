@@ -319,7 +319,7 @@ public:
      * @param state Current tiling state (mutable for tree updates)
      * @param windowIndex Index where the window was inserted
      */
-    virtual void onWindowAdded(TilingState* state, int windowIndex) const;
+    virtual void onWindowAdded(TilingState* state, int windowIndex);
 
     /**
      * @brief Called when a window is removed from the tiling before retile
@@ -334,7 +334,7 @@ public:
      * @param state Current tiling state (window still present, count not yet decremented)
      * @param windowIndex Index the window occupied before removal
      */
-    virtual void onWindowRemoved(TilingState* state, int windowIndex) const;
+    virtual void onWindowRemoved(TilingState* state, int windowIndex);
 
 protected:
     /**

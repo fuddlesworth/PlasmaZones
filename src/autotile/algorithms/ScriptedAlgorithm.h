@@ -144,8 +144,8 @@ public:
 
     // Lifecycle hooks (v2)
     bool supportsLifecycleHooks() const noexcept override;
-    void onWindowAdded(TilingState* state, int windowIndex) const override;
-    void onWindowRemoved(TilingState* state, int windowIndex) const override;
+    void onWindowAdded(TilingState* state, int windowIndex) override;
+    void onWindowRemoved(TilingState* state, int windowIndex) override;
     /**
      * @brief Get the custom parameter definitions declared by this script
      */
@@ -185,8 +185,8 @@ private:
     /// Build a JS state object from TilingState for lifecycle hook calls
     QJSValue buildJsState(const TilingState* state) const;
 
-    /// Build a JS array of {appId, focused} objects and return the focused index
-    QJSValue buildJsWindowArray(const QVector<WindowInfo>& infos, int cap, int& focusedIdx) const;
+    /// Build a JS array of {appId, focused} objects
+    QJSValue buildJsWindowArray(const QVector<WindowInfo>& infos, int cap) const;
 
     /// Arms watchdog, calls fn(), disarms, checks for timeout. Returns error on timeout.
     QJSValue guardedCall(const std::function<QJSValue()>& fn) const;

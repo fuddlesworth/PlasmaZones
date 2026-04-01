@@ -40,6 +40,11 @@ function calculateZones(params) {
         return fillArea(area, count);
     }
 
+    // Without per-window context, clustering is meaningless — fall back to even columns
+    if (!params.windows || params.windows.length === 0) {
+        return fillArea(area, count);
+    }
+
     // Read custom params with defaults
     var focusBoost = 0.2;
     var minClusterRatio = 0.1;
@@ -113,8 +118,12 @@ function calculateZones(params) {
         return fillArea(area, count);
     }
 
-    // Compute cluster primary dimensions with minimum enforcement
-    var minClusterPx = Math.max(PZ_MIN_ZONE_SIZE, Math.floor(availablePrimary * minClusterRatio));
+    // Compute cluster primary dimensions with minimum enforcement.
+    // Cap minClusterPx so that numClusters * minClusterPx <= availablePrimary,
+    // preventing normalization from producing negative sizes.
+    var rawMinPx = Math.max(PZ_MIN_ZONE_SIZE, Math.floor(availablePrimary * minClusterRatio));
+    var minClusterPx = Math.min(rawMinPx, Math.floor(availablePrimary / numClusters));
+    minClusterPx = Math.max(PZ_MIN_ZONE_SIZE, minClusterPx);
     var clusterSizes = [];
     var totalAssigned = 0;
 
@@ -133,7 +142,8 @@ function calculateZones(params) {
             clusterSizes[ci] = Math.max(PZ_MIN_ZONE_SIZE, Math.floor(clusterSizes[ci] * scale));
             totalAssigned += clusterSizes[ci];
         }
-        // Give remainder to the last cluster
+        // Distribute remainder to the last cluster (guaranteed non-negative
+        // because minClusterPx is capped to availablePrimary / numClusters)
         if (totalAssigned < availablePrimary) {
             clusterSizes[numClusters - 1] += availablePrimary - totalAssigned;
         }

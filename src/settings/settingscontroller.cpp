@@ -1948,15 +1948,10 @@ QVariantList SettingsController::availableAlgorithms() const
             algoMap[QLatin1String("zoneNumberDisplay")] = algo->zoneNumberDisplay();
             algoMap[QLatin1String("centerLayout")] = algo->centerLayout();
 
-            // Expose custom parameter definitions for auto-generated UI controls
+            // Expose whether this algorithm declares custom parameters.
+            // The full definitions are retrieved via customParamsForAlgorithm().
             auto* scripted = qobject_cast<ScriptedAlgorithm*>(algo);
-            if (scripted && !scripted->customParamDefs().isEmpty()) {
-                QVariantList paramDefs;
-                for (const auto& def : scripted->customParamDefs()) {
-                    paramDefs.append(customParamDefToMap(def));
-                }
-                algoMap[PerAlgoKeys::CustomParams] = paramDefs;
-            }
+            algoMap[QLatin1String("supportsCustomParams")] = (scripted && !scripted->customParamDefs().isEmpty());
 
             algorithms.append(algoMap);
         }
@@ -2081,7 +2076,19 @@ QVariantList SettingsController::generateAlgorithmPreview(const QString& algorit
     state.setSplitRatio(splitRatio);
 
     const int count = qMax(1, windowCount);
-    QVector<QRect> zones = algo->calculateZones(TilingParams::forPreview(count, previewRect, &state));
+    TilingParams params = TilingParams::forPreview(count, previewRect, &state);
+
+    // Include saved custom params so preview reflects user configuration
+    const QVariantMap perAlgo = m_settings.autotilePerAlgorithmSettings();
+    const QVariant algoEntry = perAlgo.value(algorithmId);
+    if (algoEntry.isValid()) {
+        const QVariant customVar = algoEntry.toMap().value(PerAlgoKeys::CustomParams);
+        if (customVar.isValid()) {
+            params.customParams = customVar.toMap();
+        }
+    }
+
+    QVector<QRect> zones = algo->calculateZones(params);
 
     return AlgorithmRegistry::zonesToRelativeGeometry(zones, previewRect);
 }

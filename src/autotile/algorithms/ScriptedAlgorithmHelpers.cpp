@@ -161,7 +161,7 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
             // bool:   // @param name bool default "description"
             // enum:   // @param name enum "default" ["opt1","opt2"] "description"
             static const QRegularExpression paramNumberRe(QStringLiteral(
-                R"RX(^(\w+)\s+number\s+([+-]?\d+(?:\.\d+)?)\s+([+-]?\d+(?:\.\d+)?)\s+([+-]?\d+(?:\.\d+)?)\s+"([^"]*)")RX"));
+                R"RX(^(\w+)\s+number\s+([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s+([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s+([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s+"([^"]*)")RX"));
             static const QRegularExpression paramBoolRe(
                 QStringLiteral(R"RX(^(\w+)\s+bool\s+(true|false)\s+"([^"]*)")RX"));
             static const QRegularExpression paramEnumRe(
@@ -203,11 +203,13 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
                 if (param.enumOptions.isEmpty()) {
                     qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: @param enum has no valid options for"
                                           << param.name << "in" << filePath;
-                } else if (!param.enumOptions.contains(param.defaultValue.toString())) {
-                    qCWarning(lcAutotile)
-                        << "ScriptedAlgorithm::parseMetadata: @param enum default" << param.defaultValue.toString()
-                        << "not in options list for" << param.name << "in" << filePath;
                 } else {
+                    if (!param.enumOptions.contains(param.defaultValue.toString())) {
+                        qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: @param enum default"
+                                              << param.defaultValue.toString() << "not in options list for"
+                                              << param.name << "in" << filePath << "— falling back to first option";
+                        param.defaultValue = param.enumOptions.first();
+                    }
                     meta.customParams.append(param);
                 }
             } else {

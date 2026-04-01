@@ -89,12 +89,12 @@ bool TilingAlgorithm::supportsLifecycleHooks() const noexcept
     return false;
 }
 
-void TilingAlgorithm::onWindowAdded(TilingState* /*state*/, int /*windowIndex*/) const
+void TilingAlgorithm::onWindowAdded(TilingState* /*state*/, int /*windowIndex*/)
 {
     // Default no-op. Algorithms with lifecycle hooks override.
 }
 
-void TilingAlgorithm::onWindowRemoved(TilingState* /*state*/, int /*windowIndex*/) const
+void TilingAlgorithm::onWindowRemoved(TilingState* /*state*/, int /*windowIndex*/)
 {
     // Default no-op. Algorithms with lifecycle hooks override.
 }

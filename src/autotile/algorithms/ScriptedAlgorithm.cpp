@@ -629,9 +629,8 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
 
     // Per-window metadata: params.windows = [{appId, focused}, ...]
     if (!params.windowInfos.isEmpty()) {
-        int focusedIdx = -1;
         const int winInfoCap = std::min<int>(params.windowInfos.size(), MaxZones);
-        jsParams.setProperty(QStringLiteral("windows"), buildJsWindowArray(params.windowInfos, winInfoCap, focusedIdx));
+        jsParams.setProperty(QStringLiteral("windows"), buildJsWindowArray(params.windowInfos, winInfoCap));
     }
 
     // Focused window index (-1 if unknown)
@@ -914,17 +913,13 @@ bool ScriptedAlgorithm::supportsLifecycleHooks() const noexcept
     return m_hasLifecycleHooks;
 }
 
-QJSValue ScriptedAlgorithm::buildJsWindowArray(const QVector<WindowInfo>& infos, int cap, int& focusedIdx) const
+QJSValue ScriptedAlgorithm::buildJsWindowArray(const QVector<WindowInfo>& infos, int cap) const
 {
     QJSValue jsWindows = m_engine->newArray(static_cast<uint>(cap));
-    focusedIdx = -1;
     for (int i = 0; i < cap; ++i) {
         QJSValue entry = m_engine->newObject();
         entry.setProperty(QStringLiteral("appId"), infos[i].appId);
         entry.setProperty(QStringLiteral("focused"), infos[i].focused);
-        if (infos[i].focused) {
-            focusedIdx = i;
-        }
         jsWindows.setProperty(static_cast<quint32>(i), entry);
     }
     return jsWindows;
@@ -937,27 +932,29 @@ QJSValue ScriptedAlgorithm::buildJsState(const TilingState* state) const
     jsState.setProperty(QStringLiteral("masterCount"), state->masterCount());
     jsState.setProperty(QStringLiteral("splitRatio"), std::clamp(state->splitRatio(), MinSplitRatio, MaxSplitRatio));
 
-    // Build WindowInfo list from TilingState for the shared helper
     const QStringList windows = state->tiledWindows();
     const QString focusedWin = state->focusedWindow();
     const int winCount = windows.size();
     QVector<WindowInfo> infos;
     infos.reserve(winCount);
+    int focusedIdx = -1;
     for (int i = 0; i < winCount; ++i) {
         WindowInfo info;
         info.appId = Utils::extractAppId(windows[i]);
         info.focused = (windows[i] == focusedWin);
+        if (info.focused) {
+            focusedIdx = i;
+        }
         infos.append(info);
     }
 
-    int focusedIdx = -1;
-    jsState.setProperty(QStringLiteral("windows"), buildJsWindowArray(infos, winCount, focusedIdx));
+    jsState.setProperty(QStringLiteral("windows"), buildJsWindowArray(infos, winCount));
     jsState.setProperty(QStringLiteral("focusedIndex"), focusedIdx);
 
     return jsState;
 }
 
-void ScriptedAlgorithm::onWindowAdded(TilingState* state, int windowIndex) const
+void ScriptedAlgorithm::onWindowAdded(TilingState* state, int windowIndex)
 {
     if (!m_jsOnWindowAdded.isCallable() || !state) {
         return;
@@ -968,12 +965,14 @@ void ScriptedAlgorithm::onWindowAdded(TilingState* state, int windowIndex) const
     });
 }
 
-void ScriptedAlgorithm::onWindowRemoved(TilingState* state, int windowIndex) const
+void ScriptedAlgorithm::onWindowRemoved(TilingState* state, int windowIndex)
 {
     if (!m_jsOnWindowRemoved.isCallable() || !state) {
         return;
     }
     QJSValue jsState = buildJsState(state);
+    // Expose countAfterRemoval so hook authors don't need to subtract 1 from windowCount
+    jsState.setProperty(QStringLiteral("countAfterRemoval"), state->tiledWindowCount() - 1);
     guardedCall([this, &jsState, windowIndex]() {
         return m_jsOnWindowRemoved.call({jsState, QJSValue(windowIndex)});
     });
