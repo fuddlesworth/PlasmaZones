@@ -5,6 +5,7 @@
 PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami, C++20, Wayland-only.
 
 ## Behavioral Rules (Always Enforced)
+- NEVER question or doubt what the user says they did (installed, restarted, tested, etc.) — trust them and focus on the code
 - Do what has been asked; nothing more, nothing less
 - NEVER create files unless absolutely necessary; prefer editing existing files
 - NEVER proactively create documentation files (*.md) or README files unless explicitly requested

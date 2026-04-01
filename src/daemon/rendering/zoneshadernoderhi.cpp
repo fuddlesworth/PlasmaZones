@@ -310,6 +310,14 @@ void ZoneShaderNodeRhi::prepare()
         return;
     }
 
+    // Upload textures BEFORE creating pipelines/SRBs. Texture uploads may
+    // destroy and recreate RHI texture objects (audio spectrum resize, user
+    // texture resize, wallpaper resize, sampler recreation), which invalidates
+    // any SRB that references the old texture. By uploading first, all textures
+    // are finalized before SRBs bind them — no stale-pointer risk and no need
+    // for mid-frame SRB recovery hacks.
+    uploadDirtyTextures(rhi, cb);
+
     // Create buffer targets (single or multi) before the image pass SRB so createImageSrb*()
     // can bind iChannel0/1/2/3 and syncUniformsFromData() sees correct sizes for iChannelResolution.
     const bool multiBufferMode = m_bufferPaths.size() > 1;
@@ -350,15 +358,10 @@ void ZoneShaderNodeRhi::prepare()
             ensurePipeline();
         }
     }
-    if (m_shaderReady && (!m_pipeline || !m_srb || (m_bufferFeedback && !m_srbB))) {
-        ensurePipeline();
-    }
 
     if (!ensurePipeline()) {
         return;
     }
-
-    uploadDirtyTextures(rhi, cb);
 
     // ========================================================================
     // Multipass buffer passes recorded in prepare() — safe because prepare()

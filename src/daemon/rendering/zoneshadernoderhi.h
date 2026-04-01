@@ -121,6 +121,7 @@ private:
     void appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
     void appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
     void resetAllSrbs();
+    void resetAllPipelines();
     void bakeBufferShaders();
 
     QQuickItem* m_item = nullptr;

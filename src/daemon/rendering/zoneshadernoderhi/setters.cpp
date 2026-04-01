@@ -267,10 +267,12 @@ void ZoneShaderNodeRhi::setUseDepthBuffer(bool use)
         return;
     }
     m_useDepthBuffer = use;
-    // Force recreation of render targets and pipelines
+    // Depth buffer toggle adds/removes binding 12 — the SRB *layout* changes,
+    // so pipelines (which store the layout from creation) must also be reset.
     m_depthTexture.reset();
     m_depthSampler.reset();
     resetAllSrbs();
+    resetAllPipelines();
     markDirty(QSGNode::DirtyMaterial);
 }
 
@@ -280,17 +282,23 @@ void ZoneShaderNodeRhi::resetAllSrbs()
     m_srbB.reset();
     m_bufferSrb.reset();
     m_bufferSrbB.reset();
-    // Pipelines store the SRB layout from creation. If an SRB is rebuilt with
-    // different bindings (depth buffer toggled, audio texture appeared), the
-    // pipeline becomes layout-incompatible.
-    // Vulkan rejects setShaderResources() when the SRB doesn't match the
-    // pipeline's layout — this manifests as a validation error or driver crash,
-    // particularly on NVIDIA. Reset all pipelines so they're recreated with
-    // the correct SRB layout on the next ensurePipeline() / ensureBufferPipeline().
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        m_multiBufferSrbs[i].reset();
+    }
+}
+
+void ZoneShaderNodeRhi::resetAllPipelines()
+{
+    // Only call when the SRB binding layout changes (binding added/removed),
+    // NOT for simple resource replacement (e.g., audio texture recreated at
+    // the same binding). Pipelines store the SRB layout; replacing a resource
+    // at the same binding is layout-compatible and doesn't need a pipeline reset.
+    // Resetting pipelines unnecessarily causes render stalls because
+    // uploadDirtyTextures() runs after ensurePipeline() in prepare(), and
+    // render() bails when m_pipeline is null.
     m_pipeline.reset();
     m_bufferPipeline.reset();
     for (int i = 0; i < kMaxBufferPasses; ++i) {
-        m_multiBufferSrbs[i].reset();
         m_multiBufferPipelines[i].reset();
     }
 }

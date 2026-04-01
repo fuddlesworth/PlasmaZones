@@ -196,10 +196,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 m_shaderError = QStringLiteral("Failed to resize labels texture");
                 return;
             }
-            m_srb.reset(); // Force SRB recreation with new texture
-            if (!ensurePipeline()) {
-                return;
-            }
+            resetAllSrbs();
         }
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
         if (batch) {
@@ -276,14 +273,9 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             if (!m_audioSpectrumTexture->create()) {
                 return;
             }
-            // ALL SRBs reference the audio texture (image pass, buffer pass, compute).
-            // resetAllSrbs() invalidates every SRB and their pipelines so buffer
-            // passes won't be recorded with a dangling pointer to the destroyed
-            // texture — which would crash the NVIDIA Vulkan driver in endFrame().
+            // Old texture destroyed — all SRBs that reference it are stale.
+            // Pipeline/SRB rebuild happens in prepare() after this function returns.
             resetAllSrbs();
-            if (!ensurePipeline()) {
-                return;
-            }
         }
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
         if (batch && bars > 0) {
@@ -328,9 +320,6 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 continue;
             }
             resetAllSrbs();
-            if (!ensurePipeline()) {
-                return;
-            }
         }
         QRhiResourceUpdateBatch* ubatch = rhi->nextResourceUpdateBatch();
         if (ubatch) {
@@ -357,9 +346,6 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 return;
             }
             resetAllSrbs();
-            if (!ensurePipeline()) {
-                return;
-            }
         }
         QRhiResourceUpdateBatch* ubatch = rhi->nextResourceUpdateBatch();
         if (ubatch) {
