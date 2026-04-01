@@ -1561,6 +1561,10 @@ private:
     void saveAutotilingConfig(QSettingsConfigBackend* backend);
     void saveEditorConfig(QSettingsConfigGroup& editor);
 
+    // Purge stale keys from all groups that save() writes exhaustively.
+    // Called at the start of save() so only currently-valid keys survive.
+    void purgeStaleKeys();
+
     // Config backend — owned (standalone) or non-owned (shared from Daemon)
     std::unique_ptr<QSettingsConfigBackend> m_ownedBackend;
     QSettingsConfigBackend* m_configBackend = nullptr; // always valid after construction

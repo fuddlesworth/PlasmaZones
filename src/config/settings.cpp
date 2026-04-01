@@ -228,8 +228,38 @@ void Settings::load()
 
 // ── save() dispatcher ────────────────────────────────────────────────────────
 
+void Settings::purgeStaleKeys()
+{
+    // Delete all groups that save() writes exhaustively.
+    // After deletion, save() rewrites only currently-valid keys,
+    // so any stale keys from past refactors are culled.
+    const QStringList managedGroups = {
+        ConfigDefaults::generalGroup(),    ConfigDefaults::activationGroup(),
+        ConfigDefaults::displayGroup(),    ConfigDefaults::appearanceGroup(),
+        ConfigDefaults::zonesGroup(),      ConfigDefaults::behaviorGroup(),
+        ConfigDefaults::exclusionsGroup(), ConfigDefaults::zoneSelectorGroup(),
+        ConfigDefaults::shadersGroup(),    ConfigDefaults::globalShortcutsGroup(),
+        ConfigDefaults::autotilingGroup(), ConfigDefaults::autotileShortcutsGroup(),
+        ConfigDefaults::animationsGroup(), ConfigDefaults::editorGroup(),
+    };
+    for (const QString& groupName : managedGroups) {
+        m_configBackend->deleteGroup(groupName);
+    }
+    // Per-screen override groups have dynamic names
+    const QStringList allGroups = m_configBackend->groupList();
+    for (const QString& groupName : allGroups) {
+        if (groupName.startsWith(QLatin1String("ZoneSelector:"))
+            || groupName.startsWith(QLatin1String("AutotileScreen:"))
+            || groupName.startsWith(QLatin1String("SnappingScreen:"))) {
+            m_configBackend->deleteGroup(groupName);
+        }
+    }
+}
+
 void Settings::save()
 {
+    purgeStaleKeys();
+
     {
         auto activation = m_configBackend->group(ConfigDefaults::activationGroup());
         saveActivationConfig(*activation);
