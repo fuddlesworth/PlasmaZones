@@ -42,7 +42,9 @@ Flickable {
                         SettingsSwitch {
                             checked: appSettings.enableBlur
                             accessibleName: i18n("Enable blur behind zones")
-                            onToggled: appSettings.enableBlur = checked
+                            onToggled: function(newValue) {
+                                appSettings.enableBlur = newValue;
+                            }
                         }
 
                     }
@@ -57,7 +59,9 @@ Flickable {
                         SettingsSwitch {
                             checked: appSettings.showZoneNumbers
                             accessibleName: i18n("Show zone numbers")
-                            onToggled: appSettings.showZoneNumbers = checked
+                            onToggled: function(newValue) {
+                                appSettings.showZoneNumbers = newValue;
+                            }
                         }
 
                     }
@@ -72,7 +76,9 @@ Flickable {
                         SettingsSwitch {
                             checked: appSettings.flashZonesOnSwitch
                             accessibleName: i18n("Flash zones on layout switch")
-                            onToggled: appSettings.flashZonesOnSwitch = checked
+                            onToggled: function(newValue) {
+                                appSettings.flashZonesOnSwitch = newValue;
+                            }
                         }
 
                     }
@@ -135,7 +141,9 @@ Flickable {
                             enabled: settingsController.cavaAvailable
                             checked: appSettings.enableAudioVisualizer
                             accessibleName: i18n("Enable CAVA audio spectrum")
-                            onToggled: appSettings.enableAudioVisualizer = checked
+                            onToggled: function(newValue) {
+                                appSettings.enableAudioVisualizer = newValue;
+                            }
                         }
 
                     }

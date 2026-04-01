@@ -39,7 +39,9 @@ Flickable {
 
                         checked: appSettings.autotileUseSystemBorderColors
                         accessibleName: i18n("Use system accent color")
-                        onToggled: appSettings.autotileUseSystemBorderColors = checked
+                        onToggled: function(newValue) {
+                            appSettings.autotileUseSystemBorderColors = newValue;
+                        }
                     }
 
                 }
@@ -106,7 +108,9 @@ Flickable {
 
                         checked: appSettings.autotileHideTitleBars
                         accessibleName: i18n("Hide title bars on tiled windows")
-                        onToggled: appSettings.autotileHideTitleBars = checked
+                        onToggled: function(newValue) {
+                            appSettings.autotileHideTitleBars = newValue;
+                        }
                     }
 
                 }

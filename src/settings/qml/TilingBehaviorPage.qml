@@ -64,7 +64,9 @@ Flickable {
                     SettingsSwitch {
                         checked: appSettings.autotileFocusNewWindows
                         accessibleName: i18n("Focus newly opened windows")
-                        onToggled: appSettings.autotileFocusNewWindows = checked
+                        onToggled: function(newValue) {
+                            appSettings.autotileFocusNewWindows = newValue;
+                        }
                     }
 
                 }
@@ -79,7 +81,9 @@ Flickable {
                     SettingsSwitch {
                         checked: appSettings.autotileFocusFollowsMouse
                         accessibleName: i18n("Focus follows mouse pointer")
-                        onToggled: appSettings.autotileFocusFollowsMouse = checked
+                        onToggled: function(newValue) {
+                            appSettings.autotileFocusFollowsMouse = newValue;
+                        }
                     }
 
                 }
@@ -94,7 +98,9 @@ Flickable {
                     SettingsSwitch {
                         checked: appSettings.autotileRespectMinimumSize
                         accessibleName: i18n("Respect window minimum size")
-                        onToggled: appSettings.autotileRespectMinimumSize = checked
+                        onToggled: function(newValue) {
+                            appSettings.autotileRespectMinimumSize = newValue;
+                        }
                     }
 
                 }

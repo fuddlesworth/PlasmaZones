@@ -39,7 +39,9 @@ Item {
                 SettingsSwitch {
                     checked: osdRoot.appSettings.showOsdOnLayoutSwitch
                     accessibleName: i18n("Show OSD on layout switch")
-                    onToggled: osdRoot.appSettings.showOsdOnLayoutSwitch = checked
+                    onToggled: function(newValue) {
+                        osdRoot.appSettings.showOsdOnLayoutSwitch = newValue;
+                    }
                 }
 
             }
@@ -54,7 +56,9 @@ Item {
                 SettingsSwitch {
                     checked: osdRoot.appSettings.showNavigationOsd
                     accessibleName: i18n("Show keyboard navigation OSD")
-                    onToggled: osdRoot.appSettings.showNavigationOsd = checked
+                    onToggled: function(newValue) {
+                        osdRoot.appSettings.showNavigationOsd = newValue;
+                    }
                 }
 
             }

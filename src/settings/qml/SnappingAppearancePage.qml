@@ -49,7 +49,9 @@ Flickable {
 
                             checked: appSettings.useSystemColors
                             accessibleName: i18n("Use system accent color")
-                            onToggled: appSettings.useSystemColors = checked
+                            onToggled: function(newValue) {
+                                appSettings.useSystemColors = newValue;
+                            }
                         }
 
                     }

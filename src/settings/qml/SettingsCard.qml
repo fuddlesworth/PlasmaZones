@@ -159,7 +159,9 @@ Item {
                         checked: root.toggleChecked
                         accessibleName: root.headerText
                         Layout.rightMargin: Kirigami.Units.smallSpacing
-                        onToggled: root.toggleClicked(checked)
+                        onToggled: function(newValue) {
+                            root.toggleClicked(newValue);
+                        }
                     }
 
                     // Collapse chevron
