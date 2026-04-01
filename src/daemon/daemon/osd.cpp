@@ -148,8 +148,7 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
     showLockedOsd(screenId);
 }
 
-void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName,
-                                       const QString& screenId)
+void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)
 {
     auto* algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
     if (!algo) {
@@ -188,7 +187,8 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             QVariantList zones = AlgorithmRegistry::generatePreviewZones(algo, windowCount > 0 ? windowCount : -1);
             QString layoutId = LayoutId::makeAutotileId(algorithmId);
             m_overlayService->showLayoutOsd(layoutId, displayName, zones, static_cast<int>(LayoutCategory::Autotile),
-                                            false, screenId);
+                                            false, screenId, algo->supportsMasterCount(),
+                                            algo->producesOverlappingZones(), algo->zoneNumberDisplay());
             qCInfo(lcDaemon) << "Preview OSD: algorithm=" << displayName << "screen=" << screenId;
         } else {
             qCWarning(lcDaemon) << "Overlay service not available for preview OSD";
@@ -209,8 +209,7 @@ void Daemon::showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenI
     });
 }
 
-void Daemon::showAlgorithmOsdDeferred(const QString& algorithmId, const QString& algorithmName,
-                                      const QString& screenId)
+void Daemon::showAlgorithmOsdDeferred(const QString& algorithmId, const QString& algorithmName, const QString& screenId)
 {
     QTimer::singleShot(0, this, [this, algorithmId, algorithmName, screenId]() {
         showLayoutOsdForAlgorithm(algorithmId, algorithmName, screenId);

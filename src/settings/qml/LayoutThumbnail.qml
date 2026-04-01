@@ -93,32 +93,9 @@ Rectangle {
         fontWeight: root.fontWeight
         fontItalic: root.fontItalic
         fontUnderline: root.fontUnderline
+        showMasterDot: root.layout && root.layout.isAutotile === true && root.layout.supportsMasterCount === true
+        masterCount: root.layout && root.layout.masterCount !== undefined ? root.layout.masterCount : 1
         fontStrikeout: root.fontStrikeout
-    }
-
-    // Master indicator dots for autotile algorithms that support master count
-    Repeater {
-        model: root.layout && root.layout.isAutotile === true && root.layout.supportsMasterCount === true ? zonePreview.zones : []
-
-        Rectangle {
-            required property var modelData
-            required property int index
-            readonly property real relX: (modelData.relativeGeometry && modelData.relativeGeometry.x) || 0
-            readonly property real relY: (modelData.relativeGeometry && modelData.relativeGeometry.y) || 0
-            readonly property real leftOffset: relX < 0.01 ? zonePreview.edgeGap : zonePreview.zonePadding / 2
-            readonly property real topOffset: relY < 0.01 ? zonePreview.edgeGap : zonePreview.zonePadding / 2
-
-            // Use per-layout masterCount if available, default to 1
-            visible: index < (root.layout && root.layout.masterCount !== undefined ? root.layout.masterCount : 1)
-            Accessible.ignored: true
-            x: zonePreview.x + relX * zonePreview.width + leftOffset + Kirigami.Units.smallSpacing
-            y: zonePreview.y + relY * zonePreview.height + topOffset + Kirigami.Units.smallSpacing
-            width: Kirigami.Units.smallSpacing * 2
-            height: Kirigami.Units.smallSpacing * 2
-            radius: Kirigami.Units.smallSpacing
-            color: Kirigami.Theme.positiveTextColor
-        }
-
     }
 
     // Layout name label

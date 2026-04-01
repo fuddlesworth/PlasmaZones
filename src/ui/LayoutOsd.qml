@@ -27,6 +27,10 @@ Window {
     // Layout category: 0=Manual (matches LayoutCategory in C++)
     property int category: 0
     property bool autoAssign: false
+    // Autotile algorithm metadata
+    property bool showMasterDot: false
+    property bool producesOverlappingZones: false
+    property string zoneNumberDisplay: "all"
     // Screen info for aspect ratio (bounded to prevent layout issues)
     property real screenAspectRatio: 16 / 9
     readonly property real safeAspectRatio: Math.max(0.5, Math.min(4, screenAspectRatio))
@@ -220,6 +224,8 @@ Window {
 
                 // Zone preview using shared component
                 QFZCommon.ZonePreview {
+                    id: zonePreview
+
                     anchors.fill: parent
                     anchors.margins: 4
                     zones: root.zones
@@ -229,6 +235,8 @@ Window {
                     edgeGap: 2
                     minZoneSize: 12
                     showZoneNumbers: true
+                    producesOverlappingZones: root.producesOverlappingZones
+                    zoneNumberDisplay: root.zoneNumberDisplay
                     inactiveOpacity: 0.3
                     activeOpacity: 0.6
                     fontFamily: root.fontFamily
@@ -236,6 +244,7 @@ Window {
                     fontWeight: root.fontWeight
                     fontItalic: root.fontItalic
                     fontUnderline: root.fontUnderline
+                    showMasterDot: root.showMasterDot
                     fontStrikeout: root.fontStrikeout
                     animationDuration: 150
                 }
