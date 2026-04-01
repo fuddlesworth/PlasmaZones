@@ -1170,6 +1170,13 @@ bool PlasmaZonesEffect::isTileableWindow(KWin::EffectWindow* w) const
         || w->isTooltip() || w->isMenu() || w->transientFor()) {
         return false;
     }
+    // Reject keep-above windows — overlay/utility tools (Spectacle, color
+    // pickers, screen rulers, etc.) set keep-above and should not enter the
+    // autotile tree or receive auto-focus. Without this guard, opening
+    // Spectacle while focusNewWindows is enabled disrupts the tiled layout.
+    if (w->keepAbove()) {
+        return false;
+    }
     return true;
 }
 
