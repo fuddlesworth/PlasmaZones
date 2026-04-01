@@ -380,12 +380,12 @@ void ZoneSelectorController::selectLayout(const QString& layoutId)
 bool ZoneSelectorController::isScreenLocked() const
 {
     if (m_layoutManager && m_settings && m_screen) {
-        int desktop = m_layoutManager->currentVirtualDesktop();
-        return m_settings->isContextLocked((QString::number(static_cast<int>(m_layoutManager->modeForScreen(
-                                                m_screenId, desktop, m_layoutManager->currentActivity())))
-                                            + QStringLiteral(":"))
-                                               + m_screenId,
-                                           desktop, m_layoutManager->currentActivity());
+        const int desktop = m_layoutManager->currentVirtualDesktop();
+        const QString activity = m_layoutManager->currentActivity();
+        // Check both modes (0 = manual, 1 = autotile) to match OverlayService behavior.
+        // A lock on either mode should block the zone selector regardless of which mode
+        // is currently active, preventing inconsistency with overlay lock checks.
+        return isAnyModeLocked(m_settings, m_screenId, desktop, activity);
     }
     return false;
 }

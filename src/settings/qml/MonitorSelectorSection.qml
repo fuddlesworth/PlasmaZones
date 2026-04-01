@@ -172,7 +172,7 @@ ColumnLayout {
                     border.width: Math.round(Kirigami.Units.devicePixelRatio)
                     border.color: isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : monitorMouse.activeFocus ? Qt.rgba(Kirigami.Theme.focusColor.r, Kirigami.Theme.focusColor.g, Kirigami.Theme.focusColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
                     Accessible.role: Accessible.RadioButton
-                    Accessible.name: screenName
+                    Accessible.name: monitorLabel.text
                     Accessible.checked: isSelected
 
                     ColumnLayout {
@@ -190,6 +190,8 @@ ColumnLayout {
                         }
 
                         Label {
+                            id: monitorLabel
+
                             text: {
                                 let s = modelData;
                                 let parts = [];

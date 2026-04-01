@@ -39,6 +39,14 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
                 if (!mgr) {
                     return;
                 }
+                // Guard against double emission: if effective screen IDs haven't
+                // changed since last emission, suppress the duplicate signals.
+                QStringList currentEffective = mgr->effectiveScreenIds();
+                if (currentEffective == m_lastEmittedEffectiveIds) {
+                    return;
+                }
+                m_lastEmittedEffectiveIds = currentEffective;
+
                 QStringList vsIds = mgr->virtualScreenIdsFor(physId);
                 if (vsIds.size() > 1 || (!vsIds.isEmpty() && vsIds.first() != physId)) {
                     for (const QString& vsId : vsIds) {

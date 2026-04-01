@@ -28,7 +28,7 @@ Rectangle {
     Accessible.name: i18n("Virtual screen preview")
     color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
     border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
-    border.width: 1
+    border.width: Math.round(Kirigami.Units.devicePixelRatio)
     radius: Kirigami.Units.smallSpacing
 
     // "No subdivisions" label when empty
@@ -50,10 +50,10 @@ Rectangle {
             required property var modelData
             required property int index
 
-            x: modelData.x * previewRoot.width + 1
-            y: modelData.y * previewRoot.height + 1
-            width: modelData.width * previewRoot.width - 2
-            height: modelData.height * previewRoot.height - 2
+            x: modelData.x * previewRoot.width + Math.round(Kirigami.Units.devicePixelRatio)
+            y: modelData.y * previewRoot.height + Math.round(Kirigami.Units.devicePixelRatio)
+            width: modelData.width * previewRoot.width - Math.round(Kirigami.Units.devicePixelRatio) * 2
+            height: modelData.height * previewRoot.height - Math.round(Kirigami.Units.devicePixelRatio) * 2
             color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
             border.color: Kirigami.Theme.highlightColor
             border.width: 2
@@ -113,7 +113,7 @@ Rectangle {
             // Visual divider line
             Rectangle {
                 anchors.centerIn: parent
-                width: dividerDragArea.containsMouse || dividerDragArea.pressed ? 3 : 1
+                width: dividerDragArea.containsMouse || dividerDragArea.pressed ? Math.round(Kirigami.Units.devicePixelRatio * 3) : Math.round(Kirigami.Units.devicePixelRatio)
                 height: parent.height - 4
                 radius: 1
                 color: dividerDragArea.containsMouse || dividerDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
@@ -143,7 +143,7 @@ Rectangle {
                 color: dividerDragArea.containsMouse || dividerDragArea.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
                 border.width: 1
                 border.color: dividerDragArea.containsMouse || dividerDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                visible: previewRoot.height > 40
+                visible: previewRoot.height > Kirigami.Units.gridUnit * 2.5
 
                 // Grip dots
                 Column {
@@ -179,14 +179,14 @@ Rectangle {
                 hoverEnabled: true
                 Accessible.description: i18n("Use numeric controls for keyboard adjustment")
                 onPressed: function(mouse) {
-                    dragStartX = mouse.x + dividerHandle.x;
+                    dragStartX = mapToItem(previewRoot, mouse.x, 0).x;
                     dragStartFraction = dividerHandle.dividerX / previewRoot.width;
                 }
                 onPositionChanged: function(mouse) {
                     if (!pressed)
                         return ;
 
-                    var globalX = mouse.x + dividerHandle.x;
+                    var globalX = mapToItem(previewRoot, mouse.x, 0).x;
                     var deltaFraction = (globalX - dragStartX) / previewRoot.width;
                     var newFraction = dragStartFraction + deltaFraction;
                     previewRoot.dividerMoved(dividerHandle.index, newFraction);

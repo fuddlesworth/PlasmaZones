@@ -295,13 +295,15 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
     for (auto it = m_overlayWindows.constBegin(); it != m_overlayWindows.constEnd(); ++it) {
         if (it.value()) {
             const QRect targetGeom = m_overlayGeometries.value(it.key());
-            QPointF local;
-            if (targetGeom.isValid()) {
-                local = QPointF(cursorX - targetGeom.x(), cursorY - targetGeom.y());
-            } else {
-                const QPoint mapped = it.value()->mapFromGlobal(QPoint(cursorX, cursorY));
-                local = QPointF(mapped.x(), mapped.y());
+            if (!targetGeom.isValid()) {
+                // No overlay geometry recorded for this screen ID yet. Skip rather than
+                // falling back to QWindow::mapFromGlobal(), which is unreliable on Wayland
+                // with LayerShell until after the first frame (geometry not yet applied).
+                qCWarning(lcOverlay) << "updateMousePosition: no overlay geometry for screen" << it.key()
+                                     << "— skipping mouse position update";
+                continue;
             }
+            const QPointF local(cursorX - targetGeom.x(), cursorY - targetGeom.y());
             it.value()->setProperty("mousePosition", local);
         }
     }

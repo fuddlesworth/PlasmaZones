@@ -31,6 +31,14 @@ qint64 edgeDistance(const QRect& rect, const QPoint& point)
     const qint64 dy = qMax(0, qMax(rect.top() - point.y(), point.y() - (rect.y() + rect.height())));
     return dx * dx + dy * dy;
 }
+
+/// Exclusive-right containment check: a point at x+width or y+height
+/// belongs to the next virtual screen, not this one. QRect::contains()
+/// is inclusive-right and would create boundary ambiguity.
+bool containsExclusive(const QRect& r, const QPoint& p)
+{
+    return p.x() >= r.x() && p.x() < r.x() + r.width() && p.y() >= r.y() && p.y() < r.y() + r.height();
+}
 } // anonymous namespace
 
 bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config)
@@ -290,13 +298,6 @@ QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const 
         return {};
     }
 
-    // Use exclusive-right semantics to match edgeDistance(): a point at x+width
-    // or y+height belongs to the next virtual screen, not this one. QRect::contains()
-    // is inclusive-right and would create boundary ambiguity.
-    auto containsExclusive = [](const QRect& r, const QPoint& p) {
-        return p.x() >= r.x() && p.x() < r.x() + r.width() && p.y() >= r.y() && p.y() < r.y() + r.height();
-    };
-
     QRect physGeom = screen->geometry();
     for (const auto& vs : it->screens) {
         QRect absGeom = vs.absoluteGeometry(physGeom);
@@ -322,12 +323,6 @@ QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const 
 
 QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
 {
-    // Use exclusive-right semantics matching virtualScreenAtWithScreen() to avoid
-    // boundary ambiguity (QRect::contains() is inclusive-right).
-    auto containsExclusive = [](const QRect& r, const QPoint& p) {
-        return p.x() >= r.x() && p.x() < r.x() + r.width() && p.y() >= r.y() && p.y() < r.y() + r.height();
-    };
-
     for (auto* screen : m_trackedScreens) {
         if (!containsExclusive(screen->geometry(), globalPos)) {
             continue;

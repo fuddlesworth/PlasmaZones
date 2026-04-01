@@ -60,6 +60,10 @@ private:
     bool emitForEffectiveScreens(const QString& physId, const std::function<void(const QString&)>& emitFn);
 
     QString m_primaryScreenOverride;
+
+    /// Last effective screen ID list emitted by the deferred timer, used to
+    /// suppress duplicate emissions during rapid hot-plug sequences.
+    QStringList m_lastEmittedEffectiveIds;
 };
 
 } // namespace PlasmaZones

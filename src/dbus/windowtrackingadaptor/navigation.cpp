@@ -338,8 +338,20 @@ static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<Zo
             if (mgr) {
                 screenId = mgr->effectiveScreenAt(center);
             }
+            if (screenId.isEmpty() && mgr) {
+                // Fallback: iterate effective screen IDs (includes virtual screens)
+                // to resolve by geometry containment.
+                const auto effectiveIds = mgr->effectiveScreenIds();
+                for (const auto& id : effectiveIds) {
+                    const QRect geom = mgr->screenGeometry(id);
+                    if (geom.isValid() && geom.contains(center)) {
+                        screenId = id;
+                        break;
+                    }
+                }
+            }
             if (screenId.isEmpty()) {
-                // Fallback: no ScreenManager or point not in any effective screen
+                // Last resort: no ScreenManager or point not in any effective screen
                 for (QScreen* screen : QGuiApplication::screens()) {
                     if (screen->geometry().contains(center)) {
                         screenId = Utils::screenIdentifier(screen);

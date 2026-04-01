@@ -230,21 +230,36 @@ QString LayoutManager::assignmentIdForScreen(const QString& screenId, int virtua
 AssignmentEntry LayoutManager::assignmentEntryForScreen(const QString& screenId, int virtualDesktop,
                                                         const QString& activity) const
 {
-    // Same fallback cascade as layoutForScreen()
+    // Same fallback cascade as layoutForScreen() — cascade past "mode-only" entries
+    // (where both snappingLayout and tilingAlgorithm are empty) so that virtual screens
+    // inherit the physical screen's layout/algorithm, consistent with layoutForScreen()
+    // and assignmentIdForScreen() which also cascade past such entries.
+    auto hasContent = [](const AssignmentEntry& entry) -> bool {
+        return !entry.snappingLayout.isEmpty() || !entry.tilingAlgorithm.isEmpty();
+    };
 
     LayoutAssignmentKey exactKey{screenId, virtualDesktop, activity};
     if (m_assignments.contains(exactKey)) {
-        return m_assignments[exactKey];
+        const AssignmentEntry& entry = m_assignments[exactKey];
+        if (hasContent(entry)) {
+            return entry;
+        }
     }
 
     LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
     if (m_assignments.contains(desktopKey)) {
-        return m_assignments[desktopKey];
+        const AssignmentEntry& entry = m_assignments[desktopKey];
+        if (hasContent(entry)) {
+            return entry;
+        }
     }
 
     LayoutAssignmentKey screenKey{screenId, 0, QString()};
     if (m_assignments.contains(screenKey)) {
-        return m_assignments[screenKey];
+        const AssignmentEntry& entry = m_assignments[screenKey];
+        if (hasContent(entry)) {
+            return entry;
+        }
     }
 
     if (Utils::isConnectorName(screenId)) {
