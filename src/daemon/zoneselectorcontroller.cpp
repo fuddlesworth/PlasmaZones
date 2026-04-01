@@ -434,7 +434,7 @@ void ZoneSelectorController::updateProximity()
     // This method provides QML property updates for direct cursor-position use cases.
 
     if (!m_cursorPosition.isNull()) {
-        QScreen* cursorScreen = QGuiApplication::screenAt(m_cursorPosition.toPoint());
+        QScreen* cursorScreen = Utils::findScreenAtPosition(m_cursorPosition.toPoint());
         if (cursorScreen) {
             m_screen = cursorScreen;
             // Resolve to effective (virtual) screen ID at the cursor position

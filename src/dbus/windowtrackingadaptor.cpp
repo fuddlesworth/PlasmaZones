@@ -313,16 +313,27 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
 
     // KWin reports physical screen names in outputChanged. When the stored screen
     // is a virtual screen (e.g. "HDMI-1/vs:0"), comparing against the physical name
-    // ("HDMI-1") via screensMatch returns false → spurious unsnap. Resolve the
-    // physical newScreenId to the correct virtual screen using the zone geometry center.
+    // ("HDMI-1") via screensMatch returns false → spurious unsnap.
+    //
+    // If the stored screen is virtual and its physical parent matches the reported
+    // physical screen, keep the stored virtual screen ID — it's already correct.
+    // Only re-resolve via geometry when the physical screens actually differ,
+    // which avoids the zone-center ambiguity when a zone straddles a VS boundary.
     QString resolvedNewScreen = newScreenId;
     if (!VirtualScreenId::isVirtual(newScreenId) && VirtualScreenId::isVirtual(storedScreen)) {
-        // The new screen ID is physical but stored is virtual — resolve via zone geometry
-        QRect zoneGeo = m_service->zoneGeometry(currentZoneId, storedScreen);
-        if (zoneGeo.isValid()) {
-            QString vsId = Utils::effectiveScreenIdAt(zoneGeo.center());
-            if (!vsId.isEmpty()) {
-                resolvedNewScreen = vsId;
+        QString storedPhysical = VirtualScreenId::extractPhysicalId(storedScreen);
+        if (Utils::screensMatch(storedPhysical, newScreenId)) {
+            // Physical parent matches — the window is still on the same monitor,
+            // so the stored virtual screen ID is still valid.
+            resolvedNewScreen = storedScreen;
+        } else {
+            // Different physical screen — resolve via zone geometry as fallback
+            QRect zoneGeo = m_service->zoneGeometry(currentZoneId, storedScreen);
+            if (zoneGeo.isValid()) {
+                QString vsId = Utils::effectiveScreenIdAt(zoneGeo.center());
+                if (!vsId.isEmpty()) {
+                    resolvedNewScreen = vsId;
+                }
             }
         }
     }

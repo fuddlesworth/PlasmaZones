@@ -85,15 +85,26 @@ Flickable {
             }
         }
         // Second pass: if width/height weren't found (e.g. physicalOnly dedup
-        // deleted them), look for a virtual screen child that still has them
+        // deleted them), reconstruct from virtual screen children.
+        // Children are horizontal sub-regions so summing their widths gives
+        // the physical width; the physical height equals any child's height
+        // (all children span the full vertical extent).
         var prefix = _selectedScreen + "/vs:";
+        var totalW = 0;
+        var maxH = 0;
         for (var j = 0; j < screens.length; j++) {
             var name = screens[j].name || "";
             if (name.indexOf(prefix) === 0 && screens[j].width && screens[j].height) {
-                _screenWidth = screens[j].width;
-                _screenHeight = screens[j].height;
-                return ;
+                totalW += screens[j].width;
+                if (screens[j].height > maxH)
+                    maxH = screens[j].height;
+
             }
+        }
+        if (totalW > 0 && maxH > 0) {
+            _screenWidth = totalW;
+            _screenHeight = maxH;
+            return ;
         }
         _screenWidth = 1920;
         _screenHeight = 1080;
@@ -390,19 +401,27 @@ Flickable {
                     SpinBox {
                         id: splitCountSpinBox
 
-                        from: 2
+                        from: 1
                         to: Math.max(root._maxVirtualScreens, root._pendingScreens.length)
                         // No value: binding — set imperatively to avoid binding breakage
                         editable: true
                         enabled: root._selectedScreen !== ""
-                        Component.onCompleted: value = root._pendingScreens.length > 1 ? root._pendingScreens.length : 2
-                        onValueModified: root._redistributeEqual(value)
+                        Component.onCompleted: value = root._pendingScreens.length > 1 ? root._pendingScreens.length : 1
+                        onValueModified: {
+                            if (value <= 1) {
+                                // Treat 1 as "no split" — clear pending and stage removal
+                                settingsController.stageVirtualScreenRemoval(root._selectedScreen);
+                                root._pendingScreens = [];
+                            } else {
+                                root._redistributeEqual(value);
+                            }
+                        }
                         Accessible.name: i18n("Number of virtual screens")
                     }
 
                     Connections {
                         function onPendingScreensChanged() {
-                            splitCountSpinBox.value = root._pendingScreens.length > 1 ? root._pendingScreens.length : 2;
+                            splitCountSpinBox.value = root._pendingScreens.length > 1 ? root._pendingScreens.length : 1;
                         }
 
                         target: root

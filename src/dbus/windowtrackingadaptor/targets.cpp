@@ -8,8 +8,10 @@
 #include "../../core/layout.h"
 #include "../../core/zone.h"
 #include "../../core/logging.h"
+#include "../../core/screenmanager.h"
 #include "../../core/utils.h"
 #include "../../core/geometryutils.h"
+#include "../../core/virtualscreen.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -84,6 +86,36 @@ static QJsonObject swapResult(bool success, const QString& reason, const QString
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Stored Screen Validation
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Validate a stored screen ID, including virtual screen existence check.
+ *
+ * For virtual screen IDs, verifies both that the backing physical screen
+ * is still connected AND that the virtual screen ID is still in the
+ * effective screen list (guards against stale IDs after config removal).
+ * For physical screen IDs, verifies the screen is connected.
+ *
+ * @return true if the stored screen ID is still valid
+ */
+static bool isStoredScreenValid(const QString& storedScreen)
+{
+    if (storedScreen.isEmpty()) {
+        return false;
+    }
+    if (VirtualScreenId::isVirtual(storedScreen)) {
+        QString physId = VirtualScreenId::extractPhysicalId(storedScreen);
+        if (!Utils::findScreenByIdOrName(physId)) {
+            return false;
+        }
+        auto* mgr = ScreenManager::instance();
+        return mgr && mgr->effectiveScreenIds().contains(storedScreen);
+    }
+    return Utils::findScreenByIdOrName(storedScreen) != nullptr;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Navigation Target Computation
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -124,7 +156,7 @@ QString WindowTrackingAdaptor::getMoveTargetForWindow(const QString& windowId, c
     QString effectiveScreenId = screenId;
     if (!currentZoneId.isEmpty()) {
         QString storedScreen = m_service->screenAssignments().value(windowId);
-        if (!storedScreen.isEmpty() && Utils::findScreenByIdOrName(storedScreen)) {
+        if (isStoredScreenValid(storedScreen)) {
             effectiveScreenId = storedScreen;
         }
     }
@@ -334,7 +366,7 @@ QString WindowTrackingAdaptor::getSwapTargetForWindow(const QString& windowId, c
     QString effectiveScreenId = screenId;
     {
         QString storedScreen = m_service->screenAssignments().value(windowId);
-        if (!storedScreen.isEmpty() && Utils::findScreenByIdOrName(storedScreen)) {
+        if (isStoredScreenValid(storedScreen)) {
             effectiveScreenId = storedScreen;
         }
     }

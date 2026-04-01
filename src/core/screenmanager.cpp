@@ -468,6 +468,7 @@ void ScreenManager::onScreenGeometryChanged(const QRect& geometry)
         } else {
             invalidateVirtualGeometryCache();
         }
+        m_effectiveScreenIdsDirty = true;
 
         // Screen geometry changed - the sensor window will be reconfigured by compositor
         // which will trigger onSensorGeometryChanged automatically

@@ -133,7 +133,7 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
         return false;
     }
 
-    if (m_virtualConfigs.value(physicalScreenId) == config) {
+    if (m_virtualConfigs.value(physicalScreenId).exactEquals(config)) {
         return true;
     }
 
@@ -322,8 +322,14 @@ QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const 
 
 QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
 {
+    // Use exclusive-right semantics matching virtualScreenAtWithScreen() to avoid
+    // boundary ambiguity (QRect::contains() is inclusive-right).
+    auto containsExclusive = [](const QRect& r, const QPoint& p) {
+        return p.x() >= r.x() && p.x() < r.x() + r.width() && p.y() >= r.y() && p.y() < r.y() + r.height();
+    };
+
     for (auto* screen : m_trackedScreens) {
-        if (!screen->geometry().contains(globalPos)) {
+        if (!containsExclusive(screen->geometry(), globalPos)) {
             continue;
         }
 

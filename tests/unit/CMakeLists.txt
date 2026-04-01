@@ -103,6 +103,12 @@ pz_add_test(test_autotile_engine_minsize autotile/test_autotile_engine_minsize.c
 pz_add_test(test_autotile_engine_overflow autotile/test_autotile_engine_overflow.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# autotile/ — Autotile + Virtual Screen Integration Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+pz_add_test(test_autotile_virtual autotile/test_autotile_virtual.cpp)
+target_compile_definitions(test_autotile_virtual PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Autotile Engine Extended Tests (startup, float, algoswitch, overflow)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_autotile_ext_startup_float autotile/test_autotile_ext_startup_float.cpp)
@@ -273,6 +279,7 @@ set(_all_tests
     test_scripted_algorithm test_split_tree test_scripted_algorithm_loader
     test_autotile_engine_core test_autotile_engine_master
     test_autotile_engine_minsize test_autotile_engine_overflow
+    test_autotile_virtual
     test_autotile_ext_startup_float test_autotile_ext_algoswitch
     test_autotile_ext_overflow
     test_tiling_state_windows test_tiling_state_config test_tiling_state_serial

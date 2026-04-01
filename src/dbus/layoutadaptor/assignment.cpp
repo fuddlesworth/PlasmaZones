@@ -78,7 +78,6 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
 
     QString resolvedId = Utils::screenIdForName(screenId);
     m_layoutManager->assignLayoutById(resolvedId, 0, QString(), layoutId);
-    m_layoutManager->saveAssignments();
 
     // Update global active layout when assigning to the primary screen (manual layouts only)
     if (layout) {
@@ -94,7 +93,6 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
 void LayoutAdaptor::clearAssignment(const QString& screenId)
 {
     m_layoutManager->clearAssignment(Utils::screenIdForName(screenId));
-    m_layoutManager->saveAssignments();
 }
 
 void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
@@ -225,7 +223,6 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
 
     QString resolvedId = Utils::screenIdForName(screenId);
     m_layoutManager->assignLayoutById(resolvedId, virtualDesktop, QString(), layoutId);
-    m_layoutManager->saveAssignments();
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "(id:" << resolvedId
                          << ") on desktop" << virtualDesktop;
 
@@ -236,7 +233,6 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
 void LayoutAdaptor::clearAssignmentForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
     m_layoutManager->clearAssignment(Utils::screenIdForName(screenId), virtualDesktop, QString());
-    m_layoutManager->saveAssignments();
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "on desktop" << virtualDesktop;
 }
 
@@ -488,7 +484,6 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
     }
 
     m_layoutManager->assignLayoutById(Utils::screenIdForName(screenId), 0, activityId, layoutId);
-    m_layoutManager->saveAssignments();
 
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "for activity" << activityId;
 
@@ -499,7 +494,6 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
 void LayoutAdaptor::clearAssignmentForScreenActivity(const QString& screenId, const QString& activityId)
 {
     m_layoutManager->clearAssignment(Utils::screenIdForName(screenId), 0, activityId);
-    m_layoutManager->saveAssignments();
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "activity" << activityId;
 }
 
@@ -579,32 +573,18 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
     }
 
     m_layoutManager->assignLayoutById(Utils::screenIdForName(screenId), virtualDesktop, activityId, layoutId);
-    m_layoutManager->saveAssignments();
 
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "desktop" << virtualDesktop
                          << "activity" << activityId;
 
-    bool affectsCurrentDesktop = (virtualDesktop == 0);
-    bool affectsCurrentActivity = activityId.isEmpty();
-
-    if (m_virtualDesktopManager) {
-        affectsCurrentDesktop = affectsCurrentDesktop || (virtualDesktop == m_virtualDesktopManager->currentDesktop());
-    }
-    if (m_activityManager) {
-        affectsCurrentActivity = affectsCurrentActivity || (activityId == m_activityManager->currentActivity());
-    }
-
     // Layout resolution is triggered by LayoutManager::layoutAssigned signal
     // → daemon's syncModeFromAssignments(). No direct updateActiveLayout() needed.
-    Q_UNUSED(affectsCurrentDesktop)
-    Q_UNUSED(affectsCurrentActivity)
 }
 
 void LayoutAdaptor::clearAssignmentForScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                             const QString& activityId)
 {
     m_layoutManager->clearAssignment(Utils::screenIdForName(screenId), virtualDesktop, activityId);
-    m_layoutManager->saveAssignments();
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "desktop" << virtualDesktop << "activity"
                          << activityId;
 }

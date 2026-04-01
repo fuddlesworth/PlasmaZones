@@ -141,7 +141,7 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, const QString& screenId
 
     // Convert to overlay-local coordinates: virtual screens use the overlay rect origin,
     // physical screens use the QScreen origin
-    const bool isVirtual = (overlayGeometry.isValid() && overlayGeometry != physScreen->geometry());
+    const bool isVirtual = VirtualScreenId::isVirtual(screenId);
     QRectF overlayGeom = isVirtual ? GeometryUtils::availableAreaToOverlayCoordinates(geom, overlayGeometry)
                                    : GeometryUtils::availableAreaToOverlayCoordinates(geom, physScreen);
 

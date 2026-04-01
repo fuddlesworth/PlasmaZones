@@ -13,6 +13,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
+#include <QTimer>
 
 namespace PlasmaZones {
 
@@ -30,6 +31,22 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
         });
         if (hadVirtual) {
             Q_EMIT virtualScreensChanged(physId);
+        } else {
+            // ScreenManager may not be fully initialized yet — defer a re-check
+            // so virtual screen signals are emitted once the event loop settles.
+            QTimer::singleShot(0, this, [this, physId]() {
+                auto* mgr = ScreenManager::instance();
+                if (!mgr) {
+                    return;
+                }
+                QStringList vsIds = mgr->virtualScreenIdsFor(physId);
+                if (vsIds.size() > 1 || (!vsIds.isEmpty() && vsIds.first() != physId)) {
+                    for (const QString& vsId : vsIds) {
+                        Q_EMIT screenAdded(vsId);
+                    }
+                    Q_EMIT virtualScreensChanged(physId);
+                }
+            });
         }
 
         // Cache screen ID now — QScreen may be partially destroyed when

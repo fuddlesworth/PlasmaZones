@@ -169,16 +169,32 @@ QString LayoutManager::assignmentIdForScreen(const QString& screenId, int virtua
 {
     // Same fallback cascade as layoutForScreen() but returns the raw assignment string
 
+    // Helper: return activeLayoutId if non-empty, otherwise continue cascading.
+    // When mode=Snapping but snappingLayout is empty (mode-only entry), activeLayoutId()
+    // returns empty. We must cascade past it — consistent with layoutForScreen() which
+    // cascades when resolveEntry returns nullptr for empty snappingLayout.
+    auto cascadeId = [](const AssignmentEntry& entry) -> std::optional<QString> {
+        QString id = entry.activeLayoutId();
+        if (!id.isEmpty()) {
+            return id;
+        }
+        return std::nullopt;
+    };
+
     // Try exact match first
     LayoutAssignmentKey exactKey{screenId, virtualDesktop, activity};
     if (m_assignments.contains(exactKey)) {
-        return m_assignments[exactKey].activeLayoutId();
+        if (auto id = cascadeId(m_assignments[exactKey])) {
+            return *id;
+        }
     }
 
     // Try screen + desktop (any activity)
     LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
     if (m_assignments.contains(desktopKey)) {
-        return m_assignments[desktopKey].activeLayoutId();
+        if (auto id = cascadeId(m_assignments[desktopKey])) {
+            return *id;
+        }
     }
 
     // Try screen only (any desktop, any activity) — the "display default".
@@ -186,7 +202,9 @@ QString LayoutManager::assignmentIdForScreen(const QString& screenId, int virtua
     // explicit assignments, so fresh desktops match the display default.
     LayoutAssignmentKey screenKey{screenId, 0, QString()};
     if (m_assignments.contains(screenKey)) {
-        return m_assignments[screenKey].activeLayoutId();
+        if (auto id = cascadeId(m_assignments[screenKey])) {
+            return *id;
+        }
     }
 
     // Fallback: if screenId looks like a connector name, try resolving to screen ID

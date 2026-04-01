@@ -97,6 +97,10 @@ void LayoutAdaptor::onLayoutAssigned(const QString& screen, int virtualDesktop, 
 
 void LayoutAdaptor::setVirtualDesktopManager(VirtualDesktopManager* vdm)
 {
+    if (m_virtualDesktopManager) {
+        disconnect(m_virtualDesktopManager, nullptr, this, nullptr);
+    }
+
     m_virtualDesktopManager = vdm;
     connectVirtualDesktopSignals();
 }
