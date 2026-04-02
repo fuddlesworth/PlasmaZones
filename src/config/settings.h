@@ -137,6 +137,12 @@ public:
     Q_PROPERTY(bool filterLayoutsByAspectRatio READ filterLayoutsByAspectRatio WRITE setFilterLayoutsByAspectRatio
                    NOTIFY filterLayoutsByAspectRatioChanged)
 
+    // Ordering (manual sort order for cycling / zone selector / overlay)
+    Q_PROPERTY(QStringList snappingLayoutOrder READ snappingLayoutOrder WRITE setSnappingLayoutOrder NOTIFY
+                   snappingLayoutOrderChanged)
+    Q_PROPERTY(QStringList tilingAlgorithmOrder READ tilingAlgorithmOrder WRITE setTilingAlgorithmOrder NOTIFY
+                   tilingAlgorithmOrderChanged)
+
     // Exclusions
     Q_PROPERTY(QStringList excludedApplications READ excludedApplications WRITE setExcludedApplications NOTIFY
                    excludedApplicationsChanged)
@@ -713,6 +719,18 @@ public:
         return m_filterLayoutsByAspectRatio;
     }
     void setFilterLayoutsByAspectRatio(bool filter) override;
+
+    // Ordering
+    QStringList snappingLayoutOrder() const override
+    {
+        return m_snappingLayoutOrder;
+    }
+    void setSnappingLayoutOrder(const QStringList& order) override;
+    QStringList tilingAlgorithmOrder() const override
+    {
+        return m_tilingAlgorithmOrder;
+    }
+    void setTilingAlgorithmOrder(const QStringList& order) override;
 
     QStringList excludedApplications() const override
     {
@@ -1641,6 +1659,10 @@ private:
 
     // Layout filtering
     bool m_filterLayoutsByAspectRatio = ConfigDefaults::filterLayoutsByAspectRatio();
+
+    // Ordering
+    QStringList m_snappingLayoutOrder;
+    QStringList m_tilingAlgorithmOrder;
 
     // Exclusions
     QStringList m_excludedApplications;

@@ -518,7 +518,8 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
     }
     const auto entries = LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, includeManual, includeAutotile,
-        Utils::screenAspectRatio(screenId), m_settings && m_settings->filterLayoutsByAspectRatio());
+        Utils::screenAspectRatio(screenId), m_settings && m_settings->filterLayoutsByAspectRatio(),
+        LayoutUtils::buildCustomOrder(m_settings, includeManual, includeAutotile));
     return LayoutUtils::toVariantList(entries);
 }
 
@@ -540,6 +541,7 @@ void OverlayService::setExcludedScreens(const QSet<QString>& screenIds)
 
 int OverlayService::visibleLayoutCount(const QString& screenId) const
 {
+    // Ordering doesn't affect count — skip custom order for performance
     const auto entries = LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
         m_includeAutotileLayouts, Utils::screenAspectRatio(screenId),

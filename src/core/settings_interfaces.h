@@ -313,6 +313,22 @@ public:
 };
 
 /**
+ * @brief Settings related to manual layout/algorithm ordering
+ *
+ * Used by: Daemon (layout cycling, zone selector, overlay), Settings UI
+ */
+class PLASMAZONES_EXPORT IOrderingSettings
+{
+public:
+    virtual ~IOrderingSettings() = default;
+
+    virtual QStringList snappingLayoutOrder() const = 0;
+    virtual void setSnappingLayoutOrder(const QStringList& order) = 0;
+    virtual QStringList tilingAlgorithmOrder() const = 0;
+    virtual void setTilingAlgorithmOrder(const QStringList& order) = 0;
+};
+
+/**
  * @brief Settings related to default layout selection
  *
  * Used by: Daemon, KCM, Layout Manager

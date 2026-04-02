@@ -48,15 +48,27 @@ QString PzLocalizedContext::i18nc(const QString& context, const QString& text, c
 
 QString PzLocalizedContext::i18np(const QString& singular, const QString& plural, int n) const
 {
-    // Qt numerus: the singular form is the lookup key in .ts files.
-    // translate() with the 4th arg (n) selects the correct numerus form
-    // and auto-replaces %n with the count.
-    Q_UNUSED(plural) // Plural form is embedded in the .ts numerusform entries
-    return QCoreApplication::translate("plasmazones", singular.toUtf8().constData(), nullptr, n);
+    // Qt numerus translation only works with loaded .ts files.
+    // Without them, translate() always returns the singular with %n replaced.
+    // We select the correct English form ourselves, then substitute %n.
+    const QString& form = (n == 1) ? singular : plural;
+    QString result = QCoreApplication::translate("plasmazones", form.toUtf8().constData(), nullptr, n);
+    // translate() replaces %n when numerus arg is provided, but guard against
+    // cases where it doesn't (e.g. if the string was found in a .ts file
+    // without numerusform entries)
+    if (result.contains(QLatin1String("%n"))) {
+        result.replace(QLatin1String("%n"), QString::number(n));
+    }
+    return result;
 }
 
 QString PzLocalizedContext::i18ncp(const QString& context, const QString& singular, const QString& plural, int n) const
 {
-    Q_UNUSED(plural)
-    return QCoreApplication::translate("plasmazones", singular.toUtf8().constData(), context.toUtf8().constData(), n);
+    const QString& form = (n == 1) ? singular : plural;
+    QString result =
+        QCoreApplication::translate("plasmazones", form.toUtf8().constData(), context.toUtf8().constData(), n);
+    if (result.contains(QLatin1String("%n"))) {
+        result.replace(QLatin1String("%n"), QString::number(n));
+    }
+    return result;
 }
