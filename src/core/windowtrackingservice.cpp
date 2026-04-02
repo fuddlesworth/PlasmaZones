@@ -531,21 +531,27 @@ void WindowTrackingService::promoteAppIdLock(const QString& windowId)
     if (appId == windowId) {
         return; // windowId is already an appId, nothing to promote
     }
-    if (!m_pendingAppIdLocks.contains(appId)) {
+    auto it = m_pendingAppIdLocks.find(appId);
+    if (it == m_pendingAppIdLocks.end()) {
         return; // no pending appId lock to promote
     }
-    // Promote: bind the lock to this specific window instance only.
-    // Remove from pending so other instances of the same app are not locked.
-    m_pendingAppIdLocks.remove(appId);
+    // Promote: bind the lock to this specific window instance.
+    // Decrement the count so that additional instances of the same app
+    // can also inherit a lock (one per count).
+    if (it.value() <= 1) {
+        m_pendingAppIdLocks.erase(it);
+    } else {
+        --it.value();
+    }
     m_lockedWindows.insert(windowId);
     scheduleSaveState();
 }
 
 void WindowTrackingService::setWindowLocked(const QString& windowId, bool locked)
 {
+    QString appId = Utils::extractAppId(windowId);
     if (locked) {
         // Remove any pending appId entry (user is explicitly locking this instance)
-        QString appId = Utils::extractAppId(windowId);
         if (appId != windowId) {
             m_pendingAppIdLocks.remove(appId);
         }
@@ -553,7 +559,6 @@ void WindowTrackingService::setWindowLocked(const QString& windowId, bool locked
     } else {
         m_lockedWindows.remove(windowId);
         // Also remove pending appId entry if present
-        QString appId = Utils::extractAppId(windowId);
         if (appId != windowId) {
             m_pendingAppIdLocks.remove(appId);
         }

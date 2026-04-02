@@ -238,22 +238,22 @@ void NavigationController::moveFocusedToPosition(int position)
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
 
     if (windows.isEmpty() || !state) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("snap"), QStringLiteral("no_windows"),
-                                                     QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("move_to_position"),
+                                                     QStringLiteral("no_windows"), QString(), QString(), screenId);
         return;
     }
 
     const QString focused = state->focusedWindow();
     if (focused.isEmpty()) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("snap"), QStringLiteral("no_focus"),
-                                                     QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("move_to_position"),
+                                                     QStringLiteral("no_focus"), QString(), QString(), screenId);
         return;
     }
 
     // Locked windows cannot be moved to a different position
     if (isWindowLocked(focused)) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("snap"), QStringLiteral("window_locked"),
-                                                     QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("move_to_position"),
+                                                     QStringLiteral("window_locked"), QString(), QString(), screenId);
         return;
     }
 
@@ -262,8 +262,8 @@ void NavigationController::moveFocusedToPosition(int position)
 
     // Cannot displace a locked window at the target position
     if (isWindowLocked(windows.at(targetIndex))) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("snap"), QStringLiteral("target_locked"),
-                                                     QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("move_to_position"),
+                                                     QStringLiteral("target_locked"), QString(), QString(), screenId);
         return;
     }
 
@@ -271,11 +271,13 @@ void NavigationController::moveFocusedToPosition(int position)
     m_engine->retileAfterOperation(screenId, moved);
 
     if (moved) {
-        Q_EMIT m_engine->navigationFeedbackRequested(
-            true, QStringLiteral("snap"), QStringLiteral("position_%1").arg(position), QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("move_to_position"),
+                                                     QStringLiteral("position_%1").arg(position), QString(), QString(),
+                                                     screenId);
     } else {
-        Q_EMIT m_engine->navigationFeedbackRequested(
-            false, QStringLiteral("snap"), QStringLiteral("already_at_position"), QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("move_to_position"),
+                                                     QStringLiteral("already_at_position"), QString(), QString(),
+                                                     screenId);
     }
 }
 

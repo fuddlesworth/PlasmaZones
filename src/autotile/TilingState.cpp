@@ -361,7 +361,7 @@ bool TilingState::rotateWindowsExcluding(bool clockwise, const std::function<boo
 
     // Separate into locked (excluded) and unlocked (rotatable) windows,
     // preserving their indices in the tiled list
-    QVector<int> unlockedIndices;
+    QList<int> unlockedIndices;
     QStringList unlockedWindows;
     for (int i = 0; i < tiled.size(); ++i) {
         if (!shouldExclude(tiled[i])) {

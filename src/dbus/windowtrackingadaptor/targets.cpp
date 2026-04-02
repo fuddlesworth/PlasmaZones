@@ -167,14 +167,17 @@ QString WindowTrackingAdaptor::getMoveTargetForWindow(const QString& windowId, c
                                          .toJson(QJsonDocument::Compact));
         }
     } else {
-        targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction);
-        targetZoneId = skipLockedZones(targetZoneId, direction);
+        QString rawAdjacentZone = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction);
+        targetZoneId = skipLockedZones(rawAdjacentZone, direction);
         if (targetZoneId.isEmpty()) {
-            Q_EMIT navigationFeedback(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"), currentZoneId,
-                                      QString(), effectiveScreenId);
-            return QString::fromUtf8(QJsonDocument(moveResult(false, QStringLiteral("no_adjacent_zone"), QString(),
-                                                              QString(), currentZoneId, effectiveScreenId))
-                                         .toJson(QJsonDocument::Compact));
+            // Distinguish "no adjacent zone at all" from "adjacent zones exist but are all locked"
+            QString reason =
+                rawAdjacentZone.isEmpty() ? QStringLiteral("no_adjacent_zone") : QStringLiteral("target_locked");
+            Q_EMIT navigationFeedback(false, QStringLiteral("move"), reason, currentZoneId, QString(),
+                                      effectiveScreenId);
+            return QString::fromUtf8(
+                QJsonDocument(moveResult(false, reason, QString(), QString(), currentZoneId, effectiveScreenId))
+                    .toJson(QJsonDocument::Compact));
         }
     }
 
@@ -377,14 +380,16 @@ QString WindowTrackingAdaptor::getSwapTargetForWindow(const QString& windowId, c
         }
     }
 
-    QString targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction);
-    targetZoneId = skipLockedZones(targetZoneId, direction);
+    QString rawAdjacentZone = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction);
+    QString targetZoneId = skipLockedZones(rawAdjacentZone, direction);
     if (targetZoneId.isEmpty()) {
-        Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("no_adjacent_zone"), currentZoneId,
-                                  QString(), effectiveScreenId);
+        // Distinguish "no adjacent zone at all" from "adjacent zones exist but are all locked"
+        QString reason =
+            rawAdjacentZone.isEmpty() ? QStringLiteral("no_adjacent_zone") : QStringLiteral("target_locked");
+        Q_EMIT navigationFeedback(false, QStringLiteral("swap"), reason, currentZoneId, QString(), effectiveScreenId);
         return QString::fromUtf8(
-            QJsonDocument(swapResult(false, QStringLiteral("no_adjacent_zone"), windowId, 0, 0, 0, 0, QString(),
-                                     QString(), 0, 0, 0, 0, QString(), effectiveScreenId, currentZoneId, QString()))
+            QJsonDocument(swapResult(false, reason, windowId, 0, 0, 0, 0, QString(), QString(), 0, 0, 0, 0, QString(),
+                                     effectiveScreenId, currentZoneId, QString()))
                 .toJson(QJsonDocument::Compact));
     }
 

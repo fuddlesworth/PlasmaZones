@@ -20,6 +20,7 @@ class IZoneDetector;
 class ISettings;
 class VirtualDesktopManager;
 class Layout;
+class WindowTrackingAdaptor;
 class Zone;
 
 /**
@@ -48,6 +49,7 @@ class Zone;
 class PLASMAZONES_EXPORT WindowTrackingService : public QObject
 {
     Q_OBJECT
+    friend class WindowTrackingAdaptor;
 
 public:
     explicit WindowTrackingService(LayoutManager* layoutManager, IZoneDetector* zoneDetector, ISettings* settings,
@@ -332,25 +334,11 @@ public:
     }
 
     /**
-     * @brief Get pending appId-based locks awaiting promotion
+     * @brief Get pending appId-based locks awaiting promotion (appId → count)
      */
-    const QSet<QString>& pendingAppIdLocks() const
+    const QHash<QString, int>& pendingAppIdLocks() const
     {
         return m_pendingAppIdLocks;
-    }
-
-    /**
-     * @brief Set locked windows from session restore (loadState only)
-     *
-     * Entries are stored as appIds (for cross-session persistence). They are placed
-     * into m_pendingAppIdLocks and promoted to m_lockedWindows one-at-a-time as
-     * windows are assigned to zones via promoteAppIdLock().
-     *
-     * @note Must only be called during loadState — not a general-purpose setter.
-     */
-    void setLockedWindows(const QSet<QString>& appIds)
-    {
-        m_pendingAppIdLocks = appIds;
     }
 
     /**
@@ -779,6 +767,20 @@ public:
         m_preFloatScreenAssignments = assignments;
     }
 
+    /**
+     * @brief Restore locked windows from session (loadState only)
+     *
+     * Entries are stored as appId → count for cross-session persistence. They are
+     * placed into m_pendingAppIdLocks and promoted to m_lockedWindows one-at-a-time
+     * as windows are assigned to zones via promoteAppIdLock().
+     *
+     * @note Intended for loadState only — not a general-purpose setter.
+     */
+    void setLockedWindows(const QHash<QString, int>& appIdCounts)
+    {
+        m_pendingAppIdLocks = appIdCounts;
+    }
+
 Q_SIGNALS:
     /**
      * @brief Emitted when a window's zone assignment changes
@@ -878,8 +880,9 @@ private:
 
     // Pending appId-based locks from session restore, awaiting promotion to a specific windowId.
     // Kept separate from m_lockedWindows so that isWindowLocked() doesn't match ALL instances
-    // of the same app — only the first instance to be assigned a zone gets the lock.
-    QSet<QString> m_pendingAppIdLocks;
+    // of the same app. Stored as appId → count so that multiple locked instances of the same
+    // app survive session persistence (each instance decrements the count on zone assignment).
+    QHash<QString, int> m_pendingAppIdLocks;
 
     // Resnap buffer: when layout changes, store (windowId, zonePosition, screenId, vd)
     // for windows that were in the previous layout, so resnapToNewLayout can map them

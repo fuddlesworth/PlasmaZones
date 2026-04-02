@@ -214,21 +214,21 @@ private Q_SLOTS:
 
     void testSetLockedWindows_storesAsPending()
     {
-        QSet<QString> appIds = {QStringLiteral("org.kde.dolphin")};
-        m_service->setLockedWindows(appIds);
+        QHash<QString, int> appIdCounts = {{QStringLiteral("org.kde.dolphin"), 1}};
+        m_service->setLockedWindows(appIdCounts);
 
         // Pending locks should NOT be visible via isWindowLocked
         QVERIFY(!m_service->isWindowLocked(QStringLiteral("org.kde.dolphin")));
         QVERIFY(!m_service->isWindowLocked(QStringLiteral("org.kde.dolphin|a1b2c3d4-1234-5678-9abc-def012345678")));
 
         // But should be in pendingAppIdLocks
-        QCOMPARE(m_service->pendingAppIdLocks(), appIds);
+        QCOMPARE(m_service->pendingAppIdLocks(), appIdCounts);
     }
 
     void testPromoteAppIdLock_promotesToWindowId()
     {
-        QSet<QString> appIds = {QStringLiteral("org.kde.dolphin")};
-        m_service->setLockedWindows(appIds);
+        QHash<QString, int> appIdCounts = {{QStringLiteral("org.kde.dolphin"), 1}};
+        m_service->setLockedWindows(appIdCounts);
 
         QString windowId = QStringLiteral("org.kde.dolphin|a1b2c3d4-1234-5678-9abc-def012345678");
         m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
@@ -239,19 +239,19 @@ private Q_SLOTS:
         QVERIFY(m_service->pendingAppIdLocks().isEmpty());
     }
 
-    void testPromoteAppIdLock_secondInstanceNotLocked()
+    void testPromoteAppIdLock_secondInstanceNotLocked_singleCount()
     {
-        QSet<QString> appIds = {QStringLiteral("org.kde.dolphin")};
-        m_service->setLockedWindows(appIds);
+        QHash<QString, int> appIdCounts = {{QStringLiteral("org.kde.dolphin"), 1}};
+        m_service->setLockedWindows(appIdCounts);
 
         QString firstInstance = QStringLiteral("org.kde.dolphin|a1b2c3d4-0000-0000-0000-000000011111");
         QString secondInstance = QStringLiteral("org.kde.dolphin|a1b2c3d4-0000-0000-0000-000000022222");
 
-        // First instance gets the lock
+        // First instance gets the lock (count=1 consumed)
         m_service->assignWindowToZone(firstInstance, m_zoneIds[0], QStringLiteral("DP-1"), 1);
         QVERIFY(m_service->isWindowLocked(firstInstance));
 
-        // Second instance does NOT get the lock (pending entry consumed)
+        // Second instance does NOT get the lock (count exhausted)
         m_service->assignWindowToZone(secondInstance, m_zoneIds[1], QStringLiteral("DP-1"), 1);
         QVERIFY(!m_service->isWindowLocked(secondInstance));
     }
@@ -272,8 +272,8 @@ private Q_SLOTS:
         QVERIFY(!m_service->isWindowLocked(windowId));
         QVERIFY(!m_service->lockedWindows().contains(windowId));
 
-        // AppId should be in pending for next instance
-        QVERIFY(m_service->pendingAppIdLocks().contains(QStringLiteral("org.kde.dolphin")));
+        // AppId should be in pending for next instance (count = 1)
+        QCOMPARE(m_service->pendingAppIdLocks().value(QStringLiteral("org.kde.dolphin")), 1);
     }
 
     void testWindowClosed_nonLockedWindow_noPendingEntry()
@@ -319,8 +319,8 @@ private Q_SLOTS:
     void testSetWindowLocked_clearsPendingAppId()
     {
         // Simulate session restore with pending appId lock
-        QSet<QString> appIds = {QStringLiteral("org.kde.dolphin")};
-        m_service->setLockedWindows(appIds);
+        QHash<QString, int> appIdCounts = {{QStringLiteral("org.kde.dolphin"), 1}};
+        m_service->setLockedWindows(appIdCounts);
 
         // User explicitly locks — should clear pending entry
         QString windowId = QStringLiteral("org.kde.dolphin|a1b2c3d4-1234-5678-9abc-def012345678");
@@ -332,14 +332,98 @@ private Q_SLOTS:
 
     void testSetWindowLocked_unlockClearsPendingAppId()
     {
-        QSet<QString> appIds = {QStringLiteral("org.kde.dolphin")};
-        m_service->setLockedWindows(appIds);
+        QHash<QString, int> appIdCounts = {{QStringLiteral("org.kde.dolphin"), 1}};
+        m_service->setLockedWindows(appIdCounts);
 
         QString windowId = QStringLiteral("org.kde.dolphin|a1b2c3d4-1234-5678-9abc-def012345678");
         m_service->setWindowLocked(windowId, false);
 
         // Both active and pending should be clear
         QVERIFY(!m_service->isWindowLocked(windowId));
+        QVERIFY(m_service->pendingAppIdLocks().isEmpty());
+    }
+
+    // =====================================================================
+    // P1: Multi-Instance Lock Persistence (BUG-1 fix)
+    // =====================================================================
+
+    void testMultiInstanceLock_countPreservedAcrossClose()
+    {
+        // Lock two instances of the same app, close both → pending count = 2
+        QString inst1 = QStringLiteral("org.kde.dolphin|a1b2c3d4-0000-0000-0000-000000011111");
+        QString inst2 = QStringLiteral("org.kde.dolphin|a1b2c3d4-0000-0000-0000-000000022222");
+
+        m_service->assignWindowToZone(inst1, m_zoneIds[0], QStringLiteral("DP-1"), 1);
+        m_service->assignWindowToZone(inst2, m_zoneIds[1], QStringLiteral("DP-1"), 1);
+        m_service->setWindowLocked(inst1, true);
+        m_service->setWindowLocked(inst2, true);
+
+        m_service->windowClosed(inst1);
+        m_service->windowClosed(inst2);
+
+        // Both should be in pending with total count = 2
+        QCOMPARE(m_service->pendingAppIdLocks().value(QStringLiteral("org.kde.dolphin")), 2);
+    }
+
+    void testMultiInstanceLock_countTwoRestoresBothInstances()
+    {
+        // Restore with count=2 → both instances should get locks
+        QHash<QString, int> appIdCounts = {{QStringLiteral("org.kde.dolphin"), 2}};
+        m_service->setLockedWindows(appIdCounts);
+
+        QString inst1 = QStringLiteral("org.kde.dolphin|a1b2c3d4-0000-0000-0000-000000011111");
+        QString inst2 = QStringLiteral("org.kde.dolphin|a1b2c3d4-0000-0000-0000-000000022222");
+
+        // First instance promotes, decrementing count to 1
+        m_service->assignWindowToZone(inst1, m_zoneIds[0], QStringLiteral("DP-1"), 1);
+        QVERIFY(m_service->isWindowLocked(inst1));
+        QCOMPARE(m_service->pendingAppIdLocks().value(QStringLiteral("org.kde.dolphin")), 1);
+
+        // Second instance promotes, consuming the remaining count
+        m_service->assignWindowToZone(inst2, m_zoneIds[1], QStringLiteral("DP-1"), 1);
+        QVERIFY(m_service->isWindowLocked(inst2));
+        QVERIFY(m_service->pendingAppIdLocks().isEmpty());
+    }
+
+    void testMultiInstanceLock_thirdInstanceNotLockedWithCountTwo()
+    {
+        // Restore with count=2 → third instance should NOT be locked
+        QHash<QString, int> appIdCounts = {{QStringLiteral("org.kde.dolphin"), 2}};
+        m_service->setLockedWindows(appIdCounts);
+
+        QString inst1 = QStringLiteral("org.kde.dolphin|a1b2c3d4-0000-0000-0000-000000011111");
+        QString inst2 = QStringLiteral("org.kde.dolphin|a1b2c3d4-0000-0000-0000-000000022222");
+        QString inst3 = QStringLiteral("org.kde.dolphin|a1b2c3d4-0000-0000-0000-000000033333");
+
+        m_service->assignWindowToZone(inst1, m_zoneIds[0], QStringLiteral("DP-1"), 1);
+        m_service->assignWindowToZone(inst2, m_zoneIds[1], QStringLiteral("DP-1"), 1);
+        m_service->assignWindowToZone(inst3, m_zoneIds[2], QStringLiteral("DP-1"), 1);
+
+        QVERIFY(m_service->isWindowLocked(inst1));
+        QVERIFY(m_service->isWindowLocked(inst2));
+        QVERIFY(!m_service->isWindowLocked(inst3));
+    }
+
+    // =====================================================================
+    // P1: Close → Reopen → Re-lock Round-Trip
+    // =====================================================================
+
+    void testCloseReopenRelockCycle()
+    {
+        // Lock → close → assign new instance → verify re-locked
+        QString windowId = QStringLiteral("org.kde.dolphin|a1b2c3d4-1234-5678-9abc-def012345678");
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
+        m_service->setWindowLocked(windowId, true);
+        QVERIFY(m_service->isWindowLocked(windowId));
+
+        // Close — converts to pending appId
+        m_service->windowClosed(windowId);
+        QVERIFY(!m_service->isWindowLocked(windowId));
+
+        // New instance opens and gets assigned to a zone — should inherit the lock
+        QString newInstance = QStringLiteral("org.kde.dolphin|bbbb0000-0000-0000-0000-000000099999");
+        m_service->assignWindowToZone(newInstance, m_zoneIds[1], QStringLiteral("DP-1"), 1);
+        QVERIFY(m_service->isWindowLocked(newInstance));
         QVERIFY(m_service->pendingAppIdLocks().isEmpty());
     }
 
