@@ -74,6 +74,17 @@ public:
      */
     void syncAlgorithmToSettings(const QString& algoId, qreal splitRatio, int maxWindows, int oldMaxWindows);
 
+    /**
+     * @brief Write shortcut-adjusted ratio/count to Settings with signals blocked
+     *
+     * Called after keyboard-shortcut-driven ratio/count changes to keep Settings
+     * in sync. Signal-blocked to prevent feedback loops via autotileSplitRatioChanged.
+     *
+     * @param splitRatio Current split ratio (after shortcut adjustment)
+     * @param masterCount Current master count (after shortcut adjustment)
+     */
+    void syncShortcutAdjustment(qreal splitRatio, int masterCount);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Session persistence
     // ═══════════════════════════════════════════════════════════════════════════

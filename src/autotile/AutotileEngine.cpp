@@ -1072,6 +1072,21 @@ void AutotileEngine::setGlobalMasterCount(int count)
     m_navigation->setGlobalMasterCount(count);
 }
 
+void AutotileEngine::syncShortcutAdjustmentToSettings()
+{
+    // Update per-algorithm saved settings so algorithm switches preserve the value
+    if (!m_algorithmId.isEmpty()) {
+        auto& entry = m_config->savedAlgorithmSettings[m_algorithmId];
+        entry.splitRatio = m_config->splitRatio;
+        entry.masterCount = m_config->masterCount;
+    }
+
+    // Write to Settings (signal-blocked) so syncFromSettings() won't revert
+    if (m_settingsBridge) {
+        m_settingsBridge->syncShortcutAdjustment(m_config->splitRatio, m_config->masterCount);
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Master count adjustment
 // ═══════════════════════════════════════════════════════════════════════════════
