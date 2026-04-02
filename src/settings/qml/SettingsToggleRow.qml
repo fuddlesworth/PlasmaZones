@@ -34,7 +34,9 @@ RowLayout {
 
     SettingsSwitch {
         checked: root.checked
-        onToggled: root.toggled(!root.checked)
+        onToggled: function(newValue) {
+            root.toggled(newValue);
+        }
         accessibleName: root.text
     }
 

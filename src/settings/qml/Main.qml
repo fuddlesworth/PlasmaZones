@@ -760,11 +760,11 @@ ApplicationWindow {
                                 visible: (navDelegate.name === "snapping" || navDelegate.name === "tiling") && !window.sidebarCompact
                                 checked: navDelegate.name === "snapping" ? appSettings.snappingEnabled : appSettings.autotileEnabled
                                 accessibleName: navDelegate.label
-                                onToggled: {
+                                onToggled: function(newValue) {
                                     if (navDelegate.name === "snapping")
-                                        appSettings.snappingEnabled = !appSettings.snappingEnabled;
+                                        appSettings.snappingEnabled = newValue;
                                     else
-                                        appSettings.autotileEnabled = !appSettings.autotileEnabled;
+                                        appSettings.autotileEnabled = newValue;
                                 }
                             }
 
@@ -858,11 +858,11 @@ ApplicationWindow {
                             Layout.alignment: Qt.AlignVCenter
                             checked: settingsController.daemonRunning
                             accessibleName: i18n("Toggle daemon")
-                            onToggled: {
-                                if (settingsController.daemonRunning)
-                                    settingsController.daemonController.stopDaemon();
-                                else
+                            onToggled: function(newValue) {
+                                if (newValue)
                                     settingsController.daemonController.startDaemon();
+                                else
+                                    settingsController.daemonController.stopDaemon();
                             }
                         }
 

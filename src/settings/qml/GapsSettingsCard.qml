@@ -85,7 +85,9 @@ SettingsCard {
 
                 checked: root.usePerSideOuterGap
                 accessibleName: i18n("Set gaps per side")
-                onToggled: root.usePerSideOuterGapToggled(checked)
+                onToggled: function(newValue) {
+                    root.usePerSideOuterGapToggled(newValue);
+                }
             }
 
         }
@@ -191,7 +193,9 @@ SettingsCard {
             SettingsSwitch {
                 checked: root.smartGapsValue
                 accessibleName: i18n("Smart gaps")
-                onToggled: root.smartGapsToggled(checked)
+                onToggled: function(newValue) {
+                    root.smartGapsToggled(newValue);
+                }
             }
 
         }

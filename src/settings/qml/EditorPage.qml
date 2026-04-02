@@ -160,7 +160,9 @@ Flickable {
                         SettingsSwitch {
                             checked: settingsController.editorGridSnappingEnabled
                             accessibleName: i18n("Enable grid snapping")
-                            onToggled: settingsController.editorGridSnappingEnabled = checked
+                            onToggled: function(newValue) {
+                                settingsController.editorGridSnappingEnabled = newValue;
+                            }
                         }
 
                     }
@@ -175,7 +177,9 @@ Flickable {
                         SettingsSwitch {
                             checked: settingsController.editorEdgeSnappingEnabled
                             accessibleName: i18n("Enable edge snapping")
-                            onToggled: settingsController.editorEdgeSnappingEnabled = checked
+                            onToggled: function(newValue) {
+                                settingsController.editorEdgeSnappingEnabled = newValue;
+                            }
                         }
 
                     }

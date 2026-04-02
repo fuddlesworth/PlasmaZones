@@ -66,7 +66,9 @@ Flickable {
                         SettingsSwitch {
                             checked: appSettings.excludeTransientWindows
                             accessibleName: i18n("Exclude transient windows")
-                            onToggled: appSettings.excludeTransientWindows = checked
+                            onToggled: function(newValue) {
+                                appSettings.excludeTransientWindows = newValue;
+                            }
                         }
 
                     }

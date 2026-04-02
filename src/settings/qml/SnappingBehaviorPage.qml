@@ -47,7 +47,9 @@ Flickable {
 
                             checked: settingsController.alwaysActivateOnDrag
                             accessibleName: i18n("Activate on every window drag")
-                            onToggled: settingsController.alwaysActivateOnDrag = checked
+                            onToggled: function(newValue) {
+                                settingsController.alwaysActivateOnDrag = newValue;
+                            }
                         }
 
                     }
@@ -89,7 +91,9 @@ Flickable {
                         SettingsSwitch {
                             checked: appSettings.toggleActivation
                             accessibleName: i18n("Toggle mode")
-                            onToggled: appSettings.toggleActivation = checked
+                            onToggled: function(newValue) {
+                                appSettings.toggleActivation = newValue;
+                            }
                         }
 
                     }
@@ -195,7 +199,9 @@ Flickable {
 
                             checked: appSettings.snapAssistEnabled
                             accessibleName: i18n("Always show after snapping")
-                            onToggled: appSettings.snapAssistEnabled = checked
+                            onToggled: function(newValue) {
+                                appSettings.snapAssistEnabled = newValue;
+                            }
                         }
 
                     }
@@ -253,7 +259,9 @@ Flickable {
                         SettingsSwitch {
                             checked: appSettings.showZonesOnAllMonitors
                             accessibleName: i18n("Show zones on all monitors")
-                            onToggled: appSettings.showZonesOnAllMonitors = checked
+                            onToggled: function(newValue) {
+                                appSettings.showZonesOnAllMonitors = newValue;
+                            }
                         }
 
                     }
@@ -268,7 +276,9 @@ Flickable {
                         SettingsSwitch {
                             checked: appSettings.filterLayoutsByAspectRatio
                             accessibleName: i18n("Filter layouts by aspect ratio")
-                            onToggled: appSettings.filterLayoutsByAspectRatio = checked
+                            onToggled: function(newValue) {
+                                appSettings.filterLayoutsByAspectRatio = newValue;
+                            }
                         }
 
                     }
@@ -303,7 +313,9 @@ Flickable {
                         SettingsSwitch {
                             checked: appSettings.keepWindowsInZonesOnResolutionChange
                             accessibleName: i18n("Re-snap on resolution change")
-                            onToggled: appSettings.keepWindowsInZonesOnResolutionChange = checked
+                            onToggled: function(newValue) {
+                                appSettings.keepWindowsInZonesOnResolutionChange = newValue;
+                            }
                         }
 
                     }
@@ -318,7 +330,9 @@ Flickable {
                         SettingsSwitch {
                             checked: appSettings.moveNewWindowsToLastZone
                             accessibleName: i18n("Move new windows to last zone")
-                            onToggled: appSettings.moveNewWindowsToLastZone = checked
+                            onToggled: function(newValue) {
+                                appSettings.moveNewWindowsToLastZone = newValue;
+                            }
                         }
 
                     }
@@ -333,7 +347,9 @@ Flickable {
                         SettingsSwitch {
                             checked: appSettings.restoreOriginalSizeOnUnsnap
                             accessibleName: i18n("Restore original size on unsnap")
-                            onToggled: appSettings.restoreOriginalSizeOnUnsnap = checked
+                            onToggled: function(newValue) {
+                                appSettings.restoreOriginalSizeOnUnsnap = newValue;
+                            }
                         }
 
                     }
@@ -348,7 +364,9 @@ Flickable {
                         SettingsSwitch {
                             checked: appSettings.restoreWindowsToZonesOnLogin
                             accessibleName: i18n("Restore zones on login")
-                            onToggled: appSettings.restoreWindowsToZonesOnLogin = checked
+                            onToggled: function(newValue) {
+                                appSettings.restoreWindowsToZonesOnLogin = newValue;
+                            }
                         }
 
                     }

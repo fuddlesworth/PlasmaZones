@@ -151,9 +151,11 @@ Flickable {
 
                             checked: root.snappingSettingValue("UsePerSideOuterGap", appSettings.usePerSideOuterGap)
                             accessibleName: i18n("Set gaps per side")
-                            onToggled: root.writeSnappingSetting("UsePerSideOuterGap", checked, function(v) {
-                                appSettings.usePerSideOuterGap = v;
-                            })
+                            onToggled: function(newValue) {
+                                root.writeSnappingSetting("UsePerSideOuterGap", newValue, function(v) {
+                                    appSettings.usePerSideOuterGap = v;
+                                });
+                            }
                         }
 
                     }

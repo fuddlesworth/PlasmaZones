@@ -11,7 +11,7 @@ Item {
     property bool checked: false
     property string accessibleName: ""
 
-    signal toggled()
+    signal toggled(bool newValue)
 
     implicitWidth: Kirigami.Units.gridUnit * 2
     implicitHeight: Kirigami.Units.gridUnit
@@ -60,10 +60,7 @@ Item {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: {
-            root.checked = !root.checked;
-            root.toggled();
-        }
+        onClicked: root.toggled(!root.checked)
     }
 
 }

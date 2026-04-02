@@ -97,7 +97,9 @@ ColumnLayout {
         SettingsSwitch {
             checked: appSettings.zoneSelectorEnabled
             accessibleName: i18n("Enable zone selector popup")
-            onToggled: appSettings.zoneSelectorEnabled = checked
+            onToggled: function(newValue) {
+                appSettings.zoneSelectorEnabled = newValue;
+            }
         }
 
     }

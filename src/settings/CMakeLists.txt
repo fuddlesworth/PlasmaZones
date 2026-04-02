@@ -136,3 +136,4 @@ target_link_libraries(plasmazones-settings
 )
 
 install(TARGETS plasmazones-settings DESTINATION ${KDE_INSTALL_BINDIR})
+install(FILES org.plasmazones.settings.desktop DESTINATION ${KDE_INSTALL_APPDIR})
