@@ -218,10 +218,17 @@ void NavigationController::moveFocusedToPosition(int position)
 
 void NavigationController::increaseMasterRatio(qreal delta)
 {
-    applyToAllStates([delta](TilingState* state) {
+    qreal resultRatio = m_engine->config()->splitRatio;
+    applyToAllStates([delta, &resultRatio](TilingState* state) {
         // setSplitRatio handles clamping internally
         state->setSplitRatio(state->splitRatio() + delta);
+        resultRatio = state->splitRatio(); // capture clamped result
     });
+
+    // Sync config so propagateGlobalSplitRatio() won't overwrite with stale value
+    m_engine->config()->splitRatio = resultRatio;
+    m_engine->syncShortcutAdjustmentToSettings();
+
     const QString screenId = resolveActiveScreen();
     QString reason = delta >= 0 ? QStringLiteral("increased") : QStringLiteral("decreased");
     Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_ratio"), reason, QString(), QString(),
@@ -257,9 +264,14 @@ void NavigationController::setGlobalMasterCount(int count)
 
 void NavigationController::increaseMasterCount()
 {
-    applyToAllStates([](TilingState* state) {
+    int resultCount = m_engine->config()->masterCount;
+    applyToAllStates([&resultCount](TilingState* state) {
         state->setMasterCount(state->masterCount() + 1);
+        resultCount = state->masterCount();
     });
+    m_engine->config()->masterCount = resultCount;
+    m_engine->syncShortcutAdjustmentToSettings();
+
     const QString screenId = resolveActiveScreen();
     Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_count"), QStringLiteral("increased"),
                                                  QString(), QString(), screenId);
@@ -267,11 +279,16 @@ void NavigationController::increaseMasterCount()
 
 void NavigationController::decreaseMasterCount()
 {
-    applyToAllStates([](TilingState* state) {
+    int resultCount = m_engine->config()->masterCount;
+    applyToAllStates([&resultCount](TilingState* state) {
         if (state->masterCount() > 1) {
             state->setMasterCount(state->masterCount() - 1);
+            resultCount = state->masterCount();
         }
     });
+    m_engine->config()->masterCount = resultCount;
+    m_engine->syncShortcutAdjustmentToSettings();
+
     const QString screenId = resolveActiveScreen();
     Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_count"), QStringLiteral("decreased"),
                                                  QString(), QString(), screenId);

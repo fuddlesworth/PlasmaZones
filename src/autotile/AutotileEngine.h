@@ -873,6 +873,16 @@ private:
     bool warnIfEmptyWindowId(const QString& windowId, const char* operation) const;
 
     /**
+     * @brief Sync shortcut-adjusted ratio/count to config and settings
+     *
+     * Called by NavigationController after increase/decreaseMasterRatio/Count.
+     * Updates per-algorithm saved settings and writes to Settings (signal-blocked)
+     * so that subsequent propagateGlobalSplitRatio() calls and settings syncs
+     * don't overwrite the shortcut-adjusted values.
+     */
+    void syncShortcutAdjustmentToSettings();
+
+    /**
      * @brief Shared toggle-float implementation for toggleFocusedWindowFloat/toggleWindowFloat
      *
      * Toggles the floating state, retiles, and emits windowFloatingChanged.
