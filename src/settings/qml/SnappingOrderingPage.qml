@@ -10,6 +10,10 @@ OrderingPage {
     settingsBridge: SnappingBridge {
     }
 
+    function updateCustomOrderState() {
+        root.hasCustomOrder = settingsController.hasCustomSnappingOrder();
+    }
+
     headerText: i18n("Snapping Layout Priority")
     infoText: i18n("Set the priority order for layouts when cycling with keyboard shortcuts and in the zone selector popup. Drag rows or use the arrow buttons to reorder.")
     emptyText: i18n("No layouts available")
@@ -31,6 +35,7 @@ OrderingPage {
     Connections {
         function onLayoutsChanged() {
             root.rebuildModel();
+            root.updateCustomOrderState();
         }
 
         target: settingsController
@@ -41,7 +46,7 @@ OrderingPage {
             if (!root._rebuilding)
                 root.rebuildModel();
 
-            root.hasCustomOrder = settingsController.hasCustomSnappingOrder();
+            root.updateCustomOrderState();
         }
 
         target: settingsController
