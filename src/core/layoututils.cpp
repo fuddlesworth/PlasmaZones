@@ -276,6 +276,21 @@ static void sortUnifiedEntries(QVector<UnifiedLayoutEntry>& list, const QStringL
     }
 }
 
+QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManual, bool includeAutotile)
+{
+    QStringList order;
+    if (!settings) {
+        return order;
+    }
+    if (includeManual) {
+        order.append(settings->snappingLayoutOrder());
+    }
+    if (includeAutotile) {
+        order.append(settings->tilingAlgorithmOrder());
+    }
+    return order;
+}
+
 QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager, bool includeAutotile,
                                                    const QStringList& customOrder)
 {

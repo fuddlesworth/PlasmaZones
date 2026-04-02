@@ -2959,33 +2959,23 @@ int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
 // Ordering helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QVariantList SettingsController::resolvedSnappingOrder() const
+// Shared helper: apply custom order to a set of items, appending unordered items alphabetically
+static QVariantList applyCustomOrder(const QStringList& customOrder, const QHash<QString, QVariantMap>& itemMap)
 {
-    const QStringList& customOrder = m_settings.snappingLayoutOrder();
     QVariantList result;
-
-    // Build lookup from current layouts
-    QHash<QString, QVariantMap> layoutMap;
-    for (const QVariant& v : m_layouts) {
-        QVariantMap map = v.toMap();
-        QString id = map.value(QStringLiteral("id")).toString();
-        if (!id.isEmpty() && !map.value(QStringLiteral("isAutotile"), false).toBool()) {
-            layoutMap.insert(id, map);
-        }
-    }
+    QSet<QString> added;
 
     // First: items in custom order (skip stale IDs)
-    QSet<QString> added;
     for (const QString& id : customOrder) {
-        if (layoutMap.contains(id)) {
-            result.append(layoutMap.value(id));
+        if (itemMap.contains(id)) {
+            result.append(itemMap.value(id));
             added.insert(id);
         }
     }
 
     // Then: remaining items in default order (name-alphabetical)
     QVector<QPair<QString, QVariantMap>> remaining;
-    for (auto it = layoutMap.cbegin(); it != layoutMap.cend(); ++it) {
+    for (auto it = itemMap.cbegin(); it != itemMap.cend(); ++it) {
         if (!added.contains(it.key())) {
             remaining.append({it.key(), it.value()});
         }
@@ -3003,48 +2993,30 @@ QVariantList SettingsController::resolvedSnappingOrder() const
     return result;
 }
 
+QVariantList SettingsController::resolvedSnappingOrder() const
+{
+    QHash<QString, QVariantMap> layoutMap;
+    for (const QVariant& v : m_layouts) {
+        QVariantMap map = v.toMap();
+        QString id = map.value(QStringLiteral("id")).toString();
+        if (!id.isEmpty() && !map.value(QStringLiteral("isAutotile"), false).toBool()) {
+            layoutMap.insert(id, map);
+        }
+    }
+    return applyCustomOrder(m_settings.snappingLayoutOrder(), layoutMap);
+}
+
 QVariantList SettingsController::resolvedTilingOrder() const
 {
-    const QStringList& customOrder = m_settings.tilingAlgorithmOrder();
-    QVariantList algorithms = availableAlgorithms();
-
-    QVariantList result;
     QHash<QString, QVariantMap> algoMap;
-    for (const QVariant& v : algorithms) {
+    for (const QVariant& v : availableAlgorithms()) {
         QVariantMap map = v.toMap();
         QString id = map.value(QStringLiteral("id")).toString();
         if (!id.isEmpty()) {
             algoMap.insert(id, map);
         }
     }
-
-    // First: items in custom order (skip stale IDs)
-    QSet<QString> added;
-    for (const QString& id : customOrder) {
-        if (algoMap.contains(id)) {
-            result.append(algoMap.value(id));
-            added.insert(id);
-        }
-    }
-
-    // Then: remaining items in default order (name-alphabetical)
-    QVector<QPair<QString, QVariantMap>> remaining;
-    for (auto it = algoMap.cbegin(); it != algoMap.cend(); ++it) {
-        if (!added.contains(it.key())) {
-            remaining.append({it.key(), it.value()});
-        }
-    }
-    std::sort(remaining.begin(), remaining.end(), [](const auto& a, const auto& b) {
-        return a.second.value(QStringLiteral("name"))
-                   .toString()
-                   .compare(b.second.value(QStringLiteral("name")).toString(), Qt::CaseInsensitive)
-            < 0;
-    });
-    for (const auto& pair : remaining) {
-        result.append(pair.second);
-    }
-
-    return result;
+    return applyCustomOrder(m_settings.tilingAlgorithmOrder(), algoMap);
 }
 
 void SettingsController::moveSnappingLayout(int fromIndex, int toIndex)

@@ -755,12 +755,6 @@ void Settings::saveAutotilingConfig(QSettingsConfigBackend* backend)
     }
 
     {
-        auto ordering = backend->group(ConfigDefaults::orderingGroup());
-        ordering->writeString(ConfigDefaults::snappingLayoutOrderKey(), m_snappingLayoutOrder.join(QLatin1Char(',')));
-        ordering->writeString(ConfigDefaults::tilingAlgorithmOrderKey(), m_tilingAlgorithmOrder.join(QLatin1Char(',')));
-    }
-
-    {
         auto animations = backend->group(ConfigDefaults::animationsGroup());
         animations->writeBool(ConfigDefaults::animationsEnabledKey(), m_animationsEnabled);
         animations->writeInt(ConfigDefaults::animationDurationKey(), m_animationDuration);

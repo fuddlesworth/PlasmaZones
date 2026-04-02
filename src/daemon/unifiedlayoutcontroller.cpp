@@ -49,20 +49,11 @@ QVector<UnifiedLayoutEntry> UnifiedLayoutController::layouts() const
     if (!m_cacheValid) {
         // Use filtered overload to respect visibility settings (hiddenFromSelector, allowed lists)
         // and mode-based filtering (manual-only vs autotile-only)
-        // Build custom order from settings: use snapping order for manual layouts,
-        // tiling order for autotile algorithms, combined when both modes are active
-        QStringList customOrder;
-        if (m_settings) {
-            if (m_includeManualLayouts)
-                customOrder.append(m_settings->snappingLayoutOrder());
-            if (m_includeAutotileLayouts)
-                customOrder.append(m_settings->tilingAlgorithmOrder());
-        }
-
         m_cachedLayouts = LayoutUtils::buildUnifiedLayoutList(
             m_layoutManager, m_currentScreenName, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
             m_includeAutotileLayouts, Utils::screenAspectRatio(m_currentScreenName),
-            m_settings && m_settings->filterLayoutsByAspectRatio(), customOrder);
+            m_settings && m_settings->filterLayoutsByAspectRatio(),
+            LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts));
 
         m_cacheValid = true;
     }
