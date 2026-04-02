@@ -313,11 +313,11 @@ ApplicationWindow {
         sidebarTransition.restart();
     }
 
-    // Show a toast notification from any child page
     function showWhatsNew() {
         whatsNewDialog.open();
     }
 
+    // Show a toast notification from any child page
     function showToast(msg) {
         toast.show(msg);
     }

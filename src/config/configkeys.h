@@ -51,7 +51,6 @@ public:
     PZ_CONFIG_GROUP(autotileShortcutsGroup, "AutotileShortcuts")
     PZ_CONFIG_GROUP(animationsGroup, "Animations")
     PZ_CONFIG_GROUP(updatesGroup, "Updates")
-    PZ_CONFIG_GROUP(whatsNewGroup, "WhatsNew")
     PZ_CONFIG_GROUP(editorGroup, "Editor")
     PZ_CONFIG_GROUP(tilingQuickLayoutSlotsGroup, "TilingQuickLayoutSlots")
     PZ_CONFIG_GROUP(orderingGroup, "Ordering")
@@ -301,16 +300,6 @@ public:
     PZ_CONFIG_KEY(editorSnapOverrideModifierKey, "SnapOverrideModifier")
     PZ_CONFIG_KEY(fillOnDropEnabledKey, "FillOnDropEnabled")
     PZ_CONFIG_KEY(fillOnDropModifierKey, "FillOnDropModifier")
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Ordering
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — WhatsNew
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    PZ_CONFIG_KEY(lastSeenWhatsNewVersionKey, "LastSeenVersion")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Ordering
