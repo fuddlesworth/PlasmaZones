@@ -344,6 +344,20 @@ void SettingsBridge::syncAlgorithmToSettings(const QString& algoId, qreal splitR
         AutotileConfig::perAlgoToVariantMap(m_engine->config()->savedAlgorithmSettings));
 }
 
+void SettingsBridge::syncShortcutAdjustment(qreal splitRatio, int masterCount)
+{
+    if (!m_settings) {
+        return;
+    }
+
+    const QSignalBlocker blocker(m_settings);
+    m_settings->setAutotileSplitRatio(splitRatio);
+    m_settings->setAutotileMasterCount(masterCount);
+    // Sync per-algorithm map so saved settings survive save/reload
+    m_settings->setAutotilePerAlgorithmSettings(
+        AutotileConfig::perAlgoToVariantMap(m_engine->config()->savedAlgorithmSettings));
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Session persistence
 // ═══════════════════════════════════════════════════════════════════════════════

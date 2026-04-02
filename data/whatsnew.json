@@ -1,0 +1,799 @@
+{
+    "releases": [
+        {
+            "version": "2.5.3",
+            "date": "2026-04-01",
+            "highlights": [
+                "Fixed autotile split ratio expanding to full width with some apps",
+                "Fixed overlay tools (Spectacle, color pickers) being auto-tiled",
+                "Fixed trigger settings reverting after daemon restart"
+            ]
+        },
+        {
+            "version": "2.5.2",
+            "date": "2026-03-31",
+            "highlights": [
+                "Algorithm previews in zone selector now respect metadata",
+                "Fixed window picker exclusion lists not saving",
+                "Fixed autotile split ratio corruption on state load"
+            ]
+        },
+        {
+            "version": "2.5.1",
+            "date": "2026-03-30",
+            "highlights": [
+                "Separate autotile sticky window handling setting",
+                "Fixed editor shader and undo crashes",
+                "Fixed Arch Linux packaging"
+            ]
+        },
+        {
+            "version": "2.5.0",
+            "date": "2026-03-30",
+            "highlights": [
+                "Scripted tiling algorithms \u2014 all 24 algorithms are now JavaScript with hot-reload",
+                "Multi-compositor support \u2014 works on Hyprland, Sway, Wayfire, niri, COSMIC, and more",
+                "Vulkan rendering backend with automatic OpenGL fallback",
+                "New Layout and Algorithm creation wizards",
+                "Layout filter bar with group-by, sort-by, and search",
+                "Disable PlasmaZones per virtual desktop or activity",
+                "Settings UX overhaul with collapsible cards and consolidated footer",
+                "Single-instance settings app with unsaved changes confirmation"
+            ]
+        },
+        {
+            "version": "2.4.7",
+            "date": "2026-03-27",
+            "highlights": [
+                "Center-distance zone selection for overlapping zones",
+                "Fixed window picker inserting unmatchable values",
+                "Fixed keyboard shortcuts moving excluded windows",
+                "Fixed drag-out unsnap not clearing persisted zone"
+            ]
+        },
+        {
+            "version": "2.4.6",
+            "date": "2026-03-27",
+            "highlights": [
+                "New Plasma Sigil shader with animated energy effects",
+                "Fixed System Settings crash when opening PlasmaZones KCM"
+            ]
+        },
+        {
+            "version": "2.4.5",
+            "date": "2026-03-26",
+            "highlights": [
+                "SVG support for shader textures with configurable resolution",
+                "Fixed exclusions UI not being able to add new entries",
+                "Fixed Neon Phantom shader white-out"
+            ]
+        },
+        {
+            "version": "2.4.3",
+            "date": "2026-03-26",
+            "highlights": [
+                "Fixed identical monitors showing as duplicates in settings",
+                "Fixed App-to-Zone rules not matching some app IDs",
+                "Fixed exclusions ignored by auto-snap and keyboard shortcuts",
+                "New Ember Trace and Neon Phantom shaders"
+            ]
+        },
+        {
+            "version": "2.4.2",
+            "date": "2026-03-25",
+            "highlights": [
+                "Fixed multi-zone span pulling in background zones",
+                "Settings UI now refreshes when daemon starts from toggle"
+            ]
+        },
+        {
+            "version": "2.4.1",
+            "date": "2026-03-25",
+            "highlights": [
+                "ConfigDefaults is now the single source of truth for all settings",
+                "Settings bounds exposed to QML via SettingsController",
+                "Fixed edge threshold resetting to 100px",
+                "Fixed per-screen autotile split ratio using wrong default"
+            ]
+        },
+        {
+            "version": "2.4.0",
+            "date": "2026-03-25",
+            "highlights": [
+                "KZones layout import",
+                "Aspect ratio layouts with auto-detection and filtering",
+                "Portable Wayland build \u2014 runs on non-KDE compositors",
+                "Standalone settings app with sidebar drill-down and search",
+                "New Arch Drift and EndeavourOS Drift branded shaders",
+                "Fixed synchronous D-Bus calls freezing compositor"
+            ]
+        },
+        {
+            "version": "2.3.16",
+            "date": "2026-03-21",
+            "highlights": [
+                "Fixed layout card button flicker on hover",
+                "Improved zone selector edge scrolling speed and trigger zone"
+            ]
+        },
+        {
+            "version": "2.3.15",
+            "date": "2026-03-21",
+            "highlights": [
+                "Fixed shader preview crash on hover",
+                "Fixed CAVA settings not applied dynamically"
+            ]
+        },
+        {
+            "version": "2.3.14",
+            "date": "2026-03-21",
+            "highlights": [
+                "Fixed flickering icons on layout card hover"
+            ]
+        },
+        {
+            "version": "2.3.13",
+            "date": "2026-03-21",
+            "highlights": [
+                "Fixed resnap buffer empty on layout change",
+                "Per-screen mode toggle and layout cycle scoped to target screen",
+                "Unified layout change resnap path"
+            ]
+        },
+        {
+            "version": "2.3.12",
+            "date": "2026-03-21",
+            "highlights": [
+                "Fixed EDID serial mismatch between KWin effect and daemon"
+            ]
+        },
+        {
+            "version": "2.3.11",
+            "date": "2026-03-20",
+            "highlights": [
+                "Fixed Move/Swap hotkeys on dual same-model monitors"
+            ]
+        },
+        {
+            "version": "2.3.10",
+            "date": "2026-03-20",
+            "highlights": [
+                "Fixed Move/Swap hotkeys using wrong screen's layout"
+            ]
+        },
+        {
+            "version": "2.3.9",
+            "date": "2026-03-20",
+            "highlights": [
+                "Fixed modifier key settings zeroed on save"
+            ]
+        },
+        {
+            "version": "2.3.8",
+            "date": "2026-03-19",
+            "highlights": [
+                "Batch settings D-Bus method for applying multiple settings at once",
+                "Per-screen settings D-Bus methods",
+                "Zone previews in autotile dropdowns",
+                "Daemon is now sole config writer \u2014 eliminates race conditions"
+            ]
+        },
+        {
+            "version": "2.3.7",
+            "date": "2026-03-19",
+            "highlights": [
+                "Fixed windows unsnapping when monitor enters standby"
+            ]
+        },
+        {
+            "version": "2.3.6",
+            "date": "2026-03-19",
+            "highlights": [
+                "Fixed navigation shortcuts snapping to wrong screen on multi-monitor"
+            ]
+        },
+        {
+            "version": "2.3.5",
+            "date": "2026-03-19",
+            "highlights": [
+                "Fixed KCM assignment save rewriting modes",
+                "Resnap/retile on KCM assignment changes",
+                "Per-screen resnap buffer for multi-monitor setups"
+            ]
+        },
+        {
+            "version": "2.3.3",
+            "date": "2026-03-17",
+            "highlights": [
+                "Fixed autotile not activating when snapping disabled first"
+            ]
+        },
+        {
+            "version": "2.3.2",
+            "date": "2026-03-17",
+            "highlights": [
+                "Batched D-Bus signals for autotile transitions \u2014 reduces messages from ~45 to 3"
+            ]
+        },
+        {
+            "version": "2.3.1",
+            "date": "2026-03-17",
+            "highlights": [
+                "Fixed window state lost on daemon reload",
+                "Fixed screen not found on Wayland (hex serial mismatch)",
+                "Fixed autotile window order lost on rapid mode toggle"
+            ]
+        },
+        {
+            "version": "2.3.0",
+            "date": "2026-03-17",
+            "highlights": [
+                "Stable EDID-based screen identifiers \u2014 monitors survive replug/reboot",
+                "Per-screen layout filtering in cycle, picker, and zone selector",
+                "Per-screen layout locking with Meta+Ctrl+L shortcut",
+                "Shader parameter locking in editor",
+                "Hot reload for shaders",
+                "Fixed snap assist sending windows to wrong monitor"
+            ]
+        },
+        {
+            "version": "2.2.1",
+            "date": "2026-03-14",
+            "highlights": [
+                "Fixed primary screen detection on Wayland",
+                "Complete German translations"
+            ]
+        },
+        {
+            "version": "2.2.0",
+            "date": "2026-03-14",
+            "highlights": [
+                "Independent border and title bar toggles",
+                "Border corner radius setting",
+                "Right-click context menu for layouts",
+                "Monitor selector for layout editor",
+                "Fixed double toggle-float on multi-monitor setups"
+            ]
+        },
+        {
+            "version": "2.1.0",
+            "date": "2026-03-13",
+            "highlights": [
+                "Per-desktop/activity tiling state isolation",
+                "Assignment storage migrated from JSON to KConfig",
+                "New Fedora, NixOS, openSUSE, and KDE Neon zone shaders",
+                "Fixed editor zones not reaching canvas edges during drag"
+            ]
+        },
+        {
+            "version": "2.0.2",
+            "date": "2026-03-11",
+            "highlights": [
+                "Fixed missing retileAllScreens D-Bus slot",
+                "Fixed negative zone geometries from constraint solver"
+            ]
+        },
+        {
+            "version": "2.0.1",
+            "date": "2026-03-11",
+            "highlights": [
+                "Fixed Arch lib64 file conflict with generic tarball",
+                "Fixed global show-zone-numbers toggle ignored when layout active",
+                "Easing preset dropdown UX improvements"
+            ]
+        },
+        {
+            "version": "2.0.0",
+            "date": "2026-03-10",
+            "highlights": [
+                "Autotiling engine with 10 algorithms (Master+Stack, BSP, Dwindle, Spiral, and more)",
+                "Per-screen algorithm selection with independent settings",
+                "Hide title bars on tiled windows with configurable focus border",
+                "Translate-only slide animations with staggered cascading",
+                "Cubic bezier easing curve editor with live preview",
+                "Dual-view layout picker with Snapping/Tiling modes",
+                "Comprehensive unit tests for all algorithms"
+            ]
+        },
+        {
+            "version": "1.15.15",
+            "date": "2026-03-09",
+            "highlights": [
+                "Fixed shortcuts not working until window is manually snapped"
+            ]
+        },
+        {
+            "version": "1.15.14",
+            "date": "2026-03-09",
+            "highlights": [
+                "Fixed Nix build failure after systemd service template change"
+            ]
+        },
+        {
+            "version": "1.15.13",
+            "date": "2026-03-08",
+            "highlights": [
+                "Fixed login freeze with many shortcuts \u2014 async D-Bus shortcut registration"
+            ]
+        },
+        {
+            "version": "1.15.12",
+            "date": "2026-03-08",
+            "highlights": [
+                "Fixed global shortcuts broken after v1.15.9/v1.15.10"
+            ]
+        },
+        {
+            "version": "1.15.11",
+            "date": "2026-03-08",
+            "highlights": [
+                "Fixed release workflow retry loop"
+            ]
+        },
+        {
+            "version": "1.15.10",
+            "date": "2026-03-08",
+            "highlights": [
+                "Fixed login freeze with async D-Bus shortcut key grabs"
+            ]
+        },
+        {
+            "version": "1.15.9",
+            "date": "2026-03-08",
+            "highlights": [
+                "Fixed login freeze with autostart apps \u2014 deferred shortcut registration",
+                "Systemd service ordering for KGlobalAccel"
+            ]
+        },
+        {
+            "version": "1.15.8",
+            "date": "2026-03-08",
+            "highlights": [
+                "Fixed RPM requiring exact KWin version pin"
+            ]
+        },
+        {
+            "version": "1.15.7",
+            "date": "2026-03-06",
+            "highlights": [
+                "KWin 6.6.2 compatibility rebuild"
+            ]
+        },
+        {
+            "version": "1.15.6",
+            "date": "2026-02-28",
+            "highlights": [
+                "Fixed Debian package build using KDE Neon container"
+            ]
+        },
+        {
+            "version": "1.15.5",
+            "date": "2026-02-27",
+            "highlights": [
+                "Fixed multi-zone snap cascade in tiling layouts"
+            ]
+        },
+        {
+            "version": "1.15.4",
+            "date": "2026-02-26",
+            "highlights": [
+                "Fixed overlapping zone multi-zone cascade",
+                "Edge tolerance now respects settings instead of hardcoded 5px"
+            ]
+        },
+        {
+            "version": "1.15.3",
+            "date": "2026-02-26",
+            "highlights": [
+                "KWin effect plugin version lock for reliable loading"
+            ]
+        },
+        {
+            "version": "1.15.2",
+            "date": "2026-02-22",
+            "highlights": [
+                "Fixed overlapping zone snapping \u2014 smallest zone at cursor now wins"
+            ]
+        },
+        {
+            "version": "1.15.1",
+            "date": "2026-02-22",
+            "highlights": [
+                "Fixed RPM packaging for translation files"
+            ]
+        },
+        {
+            "version": "1.15.0",
+            "date": "2026-02-22",
+            "highlights": [
+                "Mosaic Pulse audio-reactive shader",
+                "User-supplied image textures for shaders (up to 4 images)",
+                "Shared GLSL utilities extracted for all shaders",
+                "Fixed system layout restore after deleting user override"
+            ]
+        },
+        {
+            "version": "1.14.1",
+            "date": "2026-02-21",
+            "highlights": [
+                "Fixed zone persistence on daemon restart"
+            ]
+        },
+        {
+            "version": "1.14.0",
+            "date": "2026-02-21",
+            "highlights": [
+                "Per-side edge gaps (top/bottom/left/right) for independent spacing",
+                "Per-zone fixed pixel geometry for pixel-perfect layouts",
+                "Full screen geometry toggle (ignore panels/taskbars)",
+                "AlwaysActive zone activation mode \u2014 no modifier key needed"
+            ]
+        },
+        {
+            "version": "1.13.0",
+            "date": "2026-02-20",
+            "highlights": [
+                "Layout Picker Overlay \u2014 full-screen interactive layout browser",
+                "Snap Assist after resnap when switching layouts",
+                "Fixed zone activation broken when Zone Selector disabled"
+            ]
+        },
+        {
+            "version": "1.12.2",
+            "date": "2026-02-19",
+            "highlights": [
+                "Fixed audio visualizer CAVA process failing with odd bar counts",
+                "Fixed audio shader data losing native type through QML binding"
+            ]
+        },
+        {
+            "version": "1.12.1",
+            "date": "2026-02-18",
+            "highlights": [
+                "Fixed KCM Editor tab loading failure on NixOS system installs",
+                "Fixed KWin effect metadata warning"
+            ]
+        },
+        {
+            "version": "1.12.0",
+            "date": "2026-02-18",
+            "highlights": [
+                "Reapply window geometries after panel changes",
+                "Fixed zones and windows shifting after editing KDE panel"
+            ]
+        },
+        {
+            "version": "1.11.8",
+            "date": "2026-02-16",
+            "highlights": [
+                "Signal-driven drag detection \u2014 eliminates poll timer entirely"
+            ]
+        },
+        {
+            "version": "1.11.7",
+            "date": "2026-02-16",
+            "highlights": [
+                "Event-driven cursor tracking during drag",
+                "Throttled dragMoved signals to ~30Hz",
+                "Eliminated QDBusInterface for WindowDrag calls"
+            ]
+        },
+        {
+            "version": "1.11.6",
+            "date": "2026-02-16",
+            "highlights": [
+                "Dynamic poll timer \u2014 500ms idle, 32ms only during drag",
+                "Reduced D-Bus traffic during drag from 60Hz to 30Hz"
+            ]
+        },
+        {
+            "version": "1.11.5",
+            "date": "2026-02-16",
+            "highlights": [
+                "Deferred D-Bus calls during drag until trigger detected",
+                "Fixed KCM tab button resizing"
+            ]
+        },
+        {
+            "version": "1.11.4",
+            "date": "2026-02-16",
+            "highlights": [
+                "Fixed layout grid card text alignment"
+            ]
+        },
+        {
+            "version": "1.11.3",
+            "date": "2026-02-16",
+            "highlights": [
+                "Master toggle for zone span",
+                "Master toggle for snap assist",
+                "Fixed Nix flake evaluation error"
+            ]
+        },
+        {
+            "version": "1.11.2",
+            "date": "2026-02-15",
+            "highlights": [
+                "Snap Assist trigger override \u2014 hold modifier to enable per-snap"
+            ]
+        },
+        {
+            "version": "1.11.1",
+            "date": "2026-02-15",
+            "highlights": [
+                "Fixed drag stutter from redundant D-Bus calls (60-144+ calls/sec)",
+                "Fixed login hang from synchronous D-Bus in exclusion settings"
+            ]
+        },
+        {
+            "version": "1.11.0",
+            "date": "2026-02-15",
+            "highlights": [
+                "EDID-based monitor identification \u2014 layouts survive port changes",
+                "Nix flake with NixOS module and Home Manager module",
+                "Fixed NixOS KCM loading failure"
+            ]
+        },
+        {
+            "version": "1.10.6",
+            "date": "2026-02-14",
+            "highlights": [
+                "Toggle activation mode \u2014 single press instead of hold",
+                "Proximity snap always active (no modifier required)"
+            ]
+        },
+        {
+            "version": "1.10.5",
+            "date": "2026-02-13",
+            "highlights": [
+                "Fixed Snap Assist D-Bus calls freezing compositor"
+            ]
+        },
+        {
+            "version": "1.10.4",
+            "date": "2026-02-13",
+            "highlights": [
+                "Fixed session restore placing windows on wrong display",
+                "Escape during drag now dismisses overlay without cancelling drag"
+            ]
+        },
+        {
+            "version": "1.10.3",
+            "date": "2026-02-13",
+            "highlights": [
+                "Fixed CAVA audio visualizer not starting without restart",
+                "Default layout now selected on fresh install"
+            ]
+        },
+        {
+            "version": "1.10.2",
+            "date": "2026-02-13",
+            "highlights": [
+                "CI-generated RPM spec and Debian changelog from CHANGELOG.md"
+            ]
+        },
+        {
+            "version": "1.10.0",
+            "date": "2026-02-13",
+            "highlights": [
+                "Multiple binds per action \u2014 up to 4 independent triggers",
+                "Click-to-edit existing triggers in settings",
+                "AND semantics for combined modifier+button triggers",
+                "Conflict detection for duplicate triggers"
+            ]
+        },
+        {
+            "version": "1.9.5",
+            "date": "2026-02-13",
+            "highlights": [
+                "Zones can overlap autohide/dodge panels",
+                "Fixed compositor freeze from processEvents() during drag",
+                "Fixed snap assist not dismissing properly"
+            ]
+        },
+        {
+            "version": "1.9.3",
+            "date": "2026-02-12",
+            "highlights": [
+                "Fixed proximity snap bypassing overlay activation"
+            ]
+        },
+        {
+            "version": "1.9.2",
+            "date": "2026-02-12",
+            "highlights": [
+                "Proximity snap always-on option",
+                "Escape key cancels overlay during window drag"
+            ]
+        },
+        {
+            "version": "1.9.1",
+            "date": "2026-02-12",
+            "highlights": [
+                "Snap Assist \u2014 Aero Snap style window picker to fill empty zones",
+                "Fixed zone padding and outer gap not persisting in layout settings"
+            ]
+        },
+        {
+            "version": "1.8.4",
+            "date": "2026-02-11",
+            "highlights": [
+                "Shader preset load/save in editor",
+                "Preview shader effects in zone editor",
+                "Restore window size immediately when dragging between zones",
+                "Overlay follows cursor when dragging to another monitor"
+            ]
+        },
+        {
+            "version": "1.8.2",
+            "date": "2026-02-09",
+            "highlights": [
+                "Full zone label font customization (family, size, weight, style)",
+                "Font picker dialog with live preview and search",
+                "New Sonic Ripple audio-reactive shader"
+            ]
+        },
+        {
+            "version": "1.8.1",
+            "date": "2026-02-09",
+            "highlights": [
+                "Paint-to-span zone modifier \u2014 progressively paint across zones while dragging"
+            ]
+        },
+        {
+            "version": "1.8.0",
+            "date": "2026-02-09",
+            "highlights": [
+                "CAVA audio visualization for audio-reactive shaders",
+                "Spectrum Pulse shader with bass glow and spectrum aurora",
+                "Auto-assign windows to first empty zone per layout",
+                "App-to-zone auto-snap rules per layout",
+                "Window picker dialog for exclude lists",
+                "Per-monitor zone selector settings",
+                "Snap-all-windows shortcut (Meta+Ctrl+S)"
+            ]
+        },
+        {
+            "version": "1.7.0",
+            "date": "2026-02-06",
+            "highlights": [
+                "Layout visibility filtering per screen, desktop, and activity",
+                "Layout cycling respects visibility filters",
+                "OSD style defaults to visual preview"
+            ]
+        },
+        {
+            "version": "1.6.2",
+            "date": "2026-02-06",
+            "highlights": [
+                "Fixed editor not moving to selected screen"
+            ]
+        },
+        {
+            "version": "1.6.1",
+            "date": "2026-02-06",
+            "highlights": [
+                "New Liquid Metal shader with mercury-like fluid surface"
+            ]
+        },
+        {
+            "version": "1.6.0",
+            "date": "2026-02-05",
+            "highlights": [
+                "Multi-zone snapping support in window tracking",
+                "Fixed shader parameters accumulating across shader switches"
+            ]
+        },
+        {
+            "version": "1.5.9",
+            "date": "2026-02-05",
+            "highlights": [
+                "Release pipeline generates Debian and RPM notes from CHANGELOG.md"
+            ]
+        },
+        {
+            "version": "1.5.2",
+            "date": "2026-02-05",
+            "highlights": [
+                "Multi-pass shader rendering with up to 4 buffer passes",
+                "Zone labels rendered as shader textures",
+                "Voronoi Stained Glass shader with 3D raymarching",
+                "Mouse button zone activation as alternative to modifier keys",
+                "Zone selector auto-scroll",
+                "Update notification banner with GitHub release checking"
+            ]
+        },
+        {
+            "version": "1.3.4",
+            "date": "2026-02-03",
+            "highlights": [
+                "RHI/Vulkan zone overlay renderer replaces OpenGL path",
+                "#include directive support in shaders"
+            ]
+        },
+        {
+            "version": "1.3.3",
+            "date": "2026-02-03",
+            "highlights": [
+                "Resnap-to-new-layout shortcut",
+                "Shortcut consolidation"
+            ]
+        },
+        {
+            "version": "1.3.2",
+            "date": "2026-02-03",
+            "highlights": [
+                "KWin PlasmaZones effect enabled by default on install"
+            ]
+        },
+        {
+            "version": "1.3.1",
+            "date": "2026-02-02",
+            "highlights": [
+                "Debian releases now include debug symbol packages"
+            ]
+        },
+        {
+            "version": "1.3.0",
+            "date": "2026-02-02",
+            "highlights": [
+                "Fixed build paths for Arch and Debian packaging",
+                "Session restore validates layout matches before restoring"
+            ]
+        },
+        {
+            "version": "1.2.6",
+            "date": "2026-02-02",
+            "highlights": [
+                "Float/unfloat preserves geometry across window close/reopen",
+                "Autotiling settings page in KCM"
+            ]
+        },
+        {
+            "version": "1.2.5",
+            "date": "2026-02-01",
+            "highlights": [
+                "Navigation OSD with multi-monitor support"
+            ]
+        },
+        {
+            "version": "1.2.4",
+            "date": "2026-02-01",
+            "highlights": [
+                "All synchronous D-Bus calls converted to async \u2014 prevents compositor freezes"
+            ]
+        },
+        {
+            "version": "1.2.2",
+            "date": "2026-02-01",
+            "highlights": [
+                "Async D-Bus for floating toggle prevents compositor freeze"
+            ]
+        },
+        {
+            "version": "1.2.1",
+            "date": "2026-02-01",
+            "highlights": [
+                "GitHub Actions CI/CD for Arch, Debian, and Fedora builds",
+                "Floating state persisted across sessions"
+            ]
+        },
+        {
+            "version": "1.2.0",
+            "date": "2026-02-01",
+            "highlights": [
+                "Initial packaged release \u2014 Wayland-only, KDE Plasma 6",
+                "Drag windows to zones with modifier key activation",
+                "Custom zone layouts with visual editor",
+                "Multi-monitor support",
+                "Custom shader overlays for zone visualization",
+                "Snap-to-zone shortcuts (Meta+Ctrl+1-9)",
+                "Swap and rotate windows between zones",
+                "Per-activity layout assignments",
+                "Autotiling with Master-Stack, Columns, and BSP",
+                "German translation",
+                "Systemd user service and D-Bus interface"
+            ]
+        }
+    ]
+}
