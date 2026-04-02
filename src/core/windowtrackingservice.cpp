@@ -97,6 +97,13 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
     m_windowScreenAssignments.remove(windowId);
     m_windowDesktopAssignments.remove(windowId);
 
+    // A locked window that loses its zone assignment (e.g. layout switch with
+    // fewer zones) enters a "locked but unsnapped" state that the user can't
+    // easily resolve.  Unlock it automatically so it doesn't get stuck.
+    if (m_lockedWindows.remove(windowId)) {
+        Q_EMIT windowLockChanged(windowId, false);
+    }
+
     // Clear last-used zone if we're unsnapping from it
     // This preserves last-used zone when unsnapping a different window
     if (!m_lastUsedZoneId.isEmpty() && previousZoneIds.contains(m_lastUsedZoneId)) {

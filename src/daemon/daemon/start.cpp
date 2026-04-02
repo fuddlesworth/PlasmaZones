@@ -516,8 +516,8 @@ void Daemon::handleToggleWindowLock()
         if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
             QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
             QString screenId = screen ? Utils::screenIdentifier(screen) : QString();
-            m_overlayService->showNavigationOsd(false, QStringLiteral("lock"), QStringLiteral("not_snapped"), QString(),
-                                                QString(), screenId);
+            m_overlayService->showNavigationOsd(false, QStringLiteral("window_lock"), QStringLiteral("not_snapped"),
+                                                QString(), QString(), screenId);
         }
         return;
     }
@@ -526,7 +526,8 @@ void Daemon::handleToggleWindowLock()
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
         QString screenId = screen ? Utils::screenIdentifier(screen) : QString();
         QString reason = nowLocked ? QStringLiteral("locked") : QStringLiteral("unlocked");
-        m_overlayService->showNavigationOsd(true, QStringLiteral("lock"), reason, QString(), QString(), screenId);
+        m_overlayService->showNavigationOsd(true, QStringLiteral("window_lock"), reason, QString(), QString(),
+                                            screenId);
     }
     qCInfo(lcDaemon) << "Toggle window lock:" << (nowLocked ? "locked" : "unlocked") << "window=" << windowId;
 }

@@ -20,7 +20,7 @@ Window {
 
     // Navigation feedback data
     property bool success: true
-    property string action: "" // "move", "focus", "push", "restore", "float", "swap", "rotate", "snap", "cycle", "algorithm"
+    property string action: "" // "move", "focus", "push", "restore", "float", "swap", "rotate", "snap", "cycle", "algorithm", "window_lock"
     property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/unfloated)
     // Zone data
     property var zones: []
@@ -62,6 +62,16 @@ Window {
                 return i18n("No windows to focus");
             else if (action === "swap_master")
                 return reason === "already_master" ? i18n("Already in main position") : i18n("Nothing to swap");
+            else if (action === "window_lock")
+                return reason === "not_snapped" ? i18n("Window is not snapped") : i18n("Cannot lock window");
+            else if (reason === "window_locked")
+                return i18n("Window is locked");
+            else if (reason === "target_locked" || reason === "zone_locked" || reason === "master_locked")
+                return i18n("Target is locked");
+            else if (reason === "intermediate_locked")
+                return i18n("Locked window in the way");
+            else if (reason === "all_locked" || reason === "nothing_to_rotate")
+                return i18n("All windows are locked");
             else
                 return i18n("Failed");
         }
@@ -128,11 +138,12 @@ Window {
                 return i18np("Rearranged %n window", "Rearranged %n windows", windowCount);
 
             return i18n("Windows rearranged");
-        } else if (action === "algorithm") {
+        } else if (action === "window_lock")
+            return reason === "locked" ? i18n("Window locked") : i18n("Window unlocked");
+        else if (action === "algorithm")
             return i18n("Autotile: %1", reason || "");
-        } else {
+        else
             return i18n("Action completed");
-        }
     }
 
     // Signals

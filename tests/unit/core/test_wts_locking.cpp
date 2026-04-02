@@ -580,6 +580,42 @@ private Q_SLOTS:
         QVERIFY(m_service->pendingAppIdLocks().isEmpty());
     }
 
+    // =====================================================================
+    // P2: unassignWindow automatically unlocks
+    // =====================================================================
+
+    void testUnassignWindow_unlocksLockedWindow()
+    {
+        // A locked window that loses its zone (e.g. layout switch with fewer
+        // zones) should be automatically unlocked so it doesn't get stuck in
+        // a "locked but unsnapped" state.
+        QString windowId = QStringLiteral("org.kde.dolphin|a1b2c3d4-1234-5678-9abc-def012345678");
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
+        m_service->setWindowLocked(windowId, true);
+        QVERIFY(m_service->isWindowLocked(windowId));
+
+        QSignalSpy spy(m_service, &WindowTrackingService::windowLockChanged);
+
+        m_service->unassignWindow(windowId);
+
+        QVERIFY(!m_service->isWindowLocked(windowId));
+        // Should emit windowLockChanged(windowId, false)
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(0).toString(), windowId);
+        QCOMPARE(spy.at(0).at(1).toBool(), false);
+    }
+
+    void testUnassignWindow_nonLockedWindow_noSignal()
+    {
+        QString windowId = QStringLiteral("org.kde.dolphin|a1b2c3d4-1234-5678-9abc-def012345678");
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
+
+        QSignalSpy spy(m_service, &WindowTrackingService::windowLockChanged);
+        m_service->unassignWindow(windowId);
+
+        QCOMPARE(spy.count(), 0);
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     LayoutManager* m_layoutManager = nullptr;
