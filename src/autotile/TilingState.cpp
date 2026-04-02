@@ -355,6 +355,52 @@ bool TilingState::rotateWindows(bool clockwise)
     return true;
 }
 
+bool TilingState::rotateWindowsExcluding(bool clockwise, const std::function<bool(const QString&)>& shouldExclude)
+{
+    QStringList tiled = tiledWindows();
+
+    // Separate into locked (excluded) and unlocked (rotatable) windows,
+    // preserving their indices in the tiled list
+    QList<int> unlockedIndices;
+    QStringList unlockedWindows;
+    for (int i = 0; i < tiled.size(); ++i) {
+        if (!shouldExclude(tiled[i])) {
+            unlockedIndices.append(i);
+            unlockedWindows.append(tiled[i]);
+        }
+    }
+
+    if (unlockedWindows.size() < 2) {
+        return false;
+    }
+
+    // Rotate only the unlocked windows
+    if (clockwise) {
+        unlockedWindows.prepend(unlockedWindows.takeLast());
+    } else {
+        unlockedWindows.append(unlockedWindows.takeFirst());
+    }
+
+    // Put rotated unlocked windows back at their original indices
+    for (int i = 0; i < unlockedIndices.size(); ++i) {
+        tiled[unlockedIndices[i]] = unlockedWindows[i];
+    }
+
+    // Replace tiled slots in m_windowOrder, preserving floating positions
+    int tiledIndex = 0;
+    for (int i = 0; i < m_windowOrder.size() && tiledIndex < tiled.size(); ++i) {
+        if (!m_floatingWindows.contains(m_windowOrder[i])) {
+            m_windowOrder[i] = tiled[tiledIndex++];
+        }
+    }
+
+    rebuildSplitTree();
+
+    Q_EMIT windowOrderChanged();
+    notifyStateChanged();
+    return true;
+}
+
 // ── Split Ratio ──────────────────────────────────────────────────────────────
 
 qreal TilingState::splitRatio() const

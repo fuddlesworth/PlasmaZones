@@ -9,6 +9,7 @@
 #include "core/logging.h"
 #include "core/screenmanager.h"
 #include "core/utils.h"
+#include "core/windowtrackingservice.h"
 
 #include <QScreen>
 #include <algorithm>
@@ -72,6 +73,32 @@ void NavigationController::swapFocusedWithMaster()
         return;
     }
 
+    // Locked windows cannot be swapped with master
+    if (emitIfLocked(focused, QStringLiteral("swap_master"), screenId)) {
+        return;
+    }
+
+    // Cannot displace a locked master window
+    if (!windows.isEmpty() && isWindowLocked(windows.first())) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("swap_master"),
+                                                     QStringLiteral("master_locked"), QString(), QString(), screenId);
+        return;
+    }
+
+    // Check for locked windows between focused and master — moveToTiledPosition
+    // shifts intermediates, which would displace locked windows.
+    const int focusedIndex = windows.indexOf(focused);
+    if (focusedIndex > 1) {
+        for (int i = 1; i < focusedIndex; ++i) {
+            if (isWindowLocked(windows.at(i))) {
+                Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("swap_master"),
+                                                             QStringLiteral("intermediate_locked"), QString(),
+                                                             QString(), screenId);
+                return;
+            }
+        }
+    }
+
     const bool promoted = state->moveToTiledPosition(focused, 0);
     m_engine->retileAfterOperation(screenId, promoted);
 
@@ -96,8 +123,23 @@ void NavigationController::rotateWindowOrder(bool clockwise)
         return; // Nothing to rotate with 0 or 1 window
     }
 
-    // Rotate the window order
-    bool rotated = state->rotateWindows(clockwise);
+    // Count non-locked windows — need at least 2 unlocked to rotate
+    int unlockedCount = 0;
+    for (const QString& w : windows) {
+        if (!isWindowLocked(w)) {
+            ++unlockedCount;
+        }
+    }
+    if (unlockedCount < 2) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("rotate"), QStringLiteral("all_locked"),
+                                                     QString(), QString(), screenId);
+        return;
+    }
+
+    // Rotate only unlocked windows while locked windows keep their positions
+    bool rotated = state->rotateWindowsExcluding(clockwise, [this](const QString& wId) {
+        return isWindowLocked(wId);
+    });
     m_engine->retileAfterOperation(screenId, rotated);
 
     if (rotated) {
@@ -135,6 +177,11 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
         return;
     }
 
+    // Locked windows cannot be swapped
+    if (emitIfLocked(focused, action, screenId)) {
+        return;
+    }
+
     const int currentIndex = windows.indexOf(focused);
     if (currentIndex < 0) {
         Q_EMIT m_engine->navigationFeedbackRequested(false, action, QStringLiteral("no_focus"), QString(), QString(),
@@ -142,15 +189,30 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
         return;
     }
 
-    int targetIndex = forward ? currentIndex + 1 : currentIndex - 1;
-    // Wrap around
-    if (targetIndex < 0) {
-        targetIndex = windows.size() - 1;
-    } else if (targetIndex >= windows.size()) {
-        targetIndex = 0;
+    // Find the next non-locked target, skipping locked windows.
+    // The loop runs at most count-1 steps (every other window); if all are locked
+    // the post-loop guard catches it.
+    int targetIndex = currentIndex;
+    const int count = windows.size();
+    for (int i = 0; i < count - 1; ++i) {
+        targetIndex = forward ? targetIndex + 1 : targetIndex - 1;
+        if (targetIndex < 0) {
+            targetIndex = count - 1;
+        } else if (targetIndex >= count) {
+            targetIndex = 0;
+        }
+        if (!isWindowLocked(windows.at(targetIndex))) {
+            break;
+        }
     }
 
     const QString targetWindow = windows.at(targetIndex);
+    if (isWindowLocked(targetWindow)) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, action, QStringLiteral("all_locked"), QString(), QString(),
+                                                     screenId);
+        return;
+    }
+
     const bool swapped = state->swapWindowsById(focused, targetWindow);
     m_engine->retileAfterOperation(screenId, swapped);
 
@@ -186,29 +248,60 @@ void NavigationController::moveFocusedToPosition(int position)
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
 
     if (windows.isEmpty() || !state) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("snap"), QStringLiteral("no_windows"),
-                                                     QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("move_to_position"),
+                                                     QStringLiteral("no_windows"), QString(), QString(), screenId);
         return;
     }
 
     const QString focused = state->focusedWindow();
     if (focused.isEmpty()) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("snap"), QStringLiteral("no_focus"),
-                                                     QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("move_to_position"),
+                                                     QStringLiteral("no_focus"), QString(), QString(), screenId);
+        return;
+    }
+
+    // Locked windows cannot be moved to a different position
+    if (emitIfLocked(focused, QStringLiteral("move_to_position"), screenId)) {
         return;
     }
 
     // position is 1-based (from snap-to-zone-N shortcuts), convert to 0-based
     const int targetIndex = qBound(0, position - 1, windows.size() - 1);
+
+    // Cannot displace a locked window at the target position
+    if (isWindowLocked(windows.at(targetIndex))) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("move_to_position"),
+                                                     QStringLiteral("target_locked"), QString(), QString(), screenId);
+        return;
+    }
+
+    // Check for locked windows between current and target — moveToTiledPosition
+    // shifts intermediates, which would displace locked windows.
+    const int currentIndex = windows.indexOf(focused);
+    if (currentIndex >= 0) {
+        const int lo = qMin(currentIndex, targetIndex);
+        const int hi = qMax(currentIndex, targetIndex);
+        for (int i = lo + 1; i < hi; ++i) {
+            if (isWindowLocked(windows.at(i))) {
+                Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("move_to_position"),
+                                                             QStringLiteral("intermediate_locked"), QString(),
+                                                             QString(), screenId);
+                return;
+            }
+        }
+    }
+
     const bool moved = state->moveToTiledPosition(focused, targetIndex);
     m_engine->retileAfterOperation(screenId, moved);
 
     if (moved) {
-        Q_EMIT m_engine->navigationFeedbackRequested(
-            true, QStringLiteral("snap"), QStringLiteral("position_%1").arg(position), QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("move_to_position"),
+                                                     QStringLiteral("position_%1").arg(position), QString(), QString(),
+                                                     screenId);
     } else {
-        Q_EMIT m_engine->navigationFeedbackRequested(
-            false, QStringLiteral("snap"), QStringLiteral("already_at_position"), QString(), QString(), screenId);
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("move_to_position"),
+                                                     QStringLiteral("already_at_position"), QString(), QString(),
+                                                     screenId);
     }
 }
 
@@ -373,6 +466,21 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
 
     outScreenId.clear();
     return {};
+}
+
+bool NavigationController::isWindowLocked(const QString& windowId) const
+{
+    return m_engine->m_windowTracker && m_engine->m_windowTracker->isWindowLocked(windowId);
+}
+
+bool NavigationController::emitIfLocked(const QString& windowId, const QString& action, const QString& screenId)
+{
+    if (!isWindowLocked(windowId)) {
+        return false;
+    }
+    Q_EMIT m_engine->navigationFeedbackRequested(false, action, QStringLiteral("window_locked"), QString(), QString(),
+                                                 screenId);
+    return true;
 }
 
 void NavigationController::applyToAllStates(const std::function<void(TilingState*)>& operation)

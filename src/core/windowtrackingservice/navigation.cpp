@@ -214,6 +214,12 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise, 
         for (const auto& windowEntry : screenIt.value()) {
             const QString& windowId = windowEntry.first;
             const QString& storedZoneId = windowEntry.second;
+
+            // Skip locked windows — they stay in their current zone while
+            // other windows rotate around them.
+            if (isWindowLocked(windowId)) {
+                continue;
+            }
             int zoneIndex = -1;
 
             // Try direct match first

@@ -25,6 +25,12 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
         return;
     }
 
+    // Locked windows cannot be dragged out of their zone
+    if (m_service->isWindowLocked(windowId)) {
+        qCInfo(lcDbusWindow) << "Drag-out unsnap blocked: window is locked:" << windowId;
+        return;
+    }
+
     QString screenId = m_service->screenAssignments().value(windowId, m_lastActiveScreenId);
     qCInfo(lcDbusWindow) << "Drag-out unsnap (no activation trigger) for" << windowId << "screen:" << screenId;
     windowUnsnappedForFloat(windowId);

@@ -301,6 +301,61 @@ public:
     bool isWindowSticky(const QString& windowId) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Window Locking
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Check if a window is locked to its current zone
+     */
+    bool isWindowLocked(const QString& windowId) const;
+
+    /**
+     * @brief Set window lock state
+     * @param windowId Full window ID
+     * @param locked true to lock, false to unlock
+     */
+    void setWindowLocked(const QString& windowId, bool locked);
+
+    /**
+     * @brief Toggle window lock state
+     * @param windowId Full window ID
+     * @return New lock state (true = locked)
+     */
+    bool toggleWindowLock(const QString& windowId);
+
+    /**
+     * @brief Get all locked window IDs
+     */
+    const QSet<QString>& lockedWindows() const
+    {
+        return m_lockedWindows;
+    }
+
+    /**
+     * @brief Get pending appId-based locks awaiting promotion (appId → count)
+     */
+    const QHash<QString, int>& pendingAppIdLocks() const
+    {
+        return m_pendingAppIdLocks;
+    }
+
+    /**
+     * @brief Promote an appId-based lock to a specific window instance
+     *
+     * Called when a window is assigned to a zone. If the appId is in the locked
+     * set (from session restore), replaces it with the full windowId so only
+     * this instance is locked — preventing cross-contamination of multi-instance apps.
+     */
+    void promoteAppIdLock(const QString& windowId);
+
+    /**
+     * @brief Check if a zone contains any locked windows
+     * @param zoneId Zone UUID string
+     * @return true if any window in the zone is locked
+     */
+    bool isZoneLockedByWindow(const QString& zoneId) const;
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Auto-Snap Logic
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -710,6 +765,20 @@ public:
         m_preFloatScreenAssignments = assignments;
     }
 
+    /**
+     * @brief Restore locked windows from session (loadState only)
+     *
+     * Entries are stored as appId → count for cross-session persistence. They are
+     * placed into m_pendingAppIdLocks and promoted to m_lockedWindows one-at-a-time
+     * as windows are assigned to zones via promoteAppIdLock().
+     *
+     * @note Intended for loadState only — not a general-purpose setter.
+     */
+    void setLockedWindows(const QHash<QString, int>& appIdCounts)
+    {
+        m_pendingAppIdLocks = appIdCounts;
+    }
+
 Q_SIGNALS:
     /**
      * @brief Emitted when a window's zone assignment changes
@@ -720,6 +789,11 @@ Q_SIGNALS:
      * @brief Emitted when state needs to be saved
      */
     void stateChanged();
+
+    /**
+     * @brief Emitted when a window's lock state changes
+     */
+    void windowLockChanged(const QString& windowId, bool locked);
 
 private:
     // Minimum visible area for geometry validation
@@ -801,6 +875,23 @@ private:
     // Used by the sibling check in calculateRestoreFromSession to distinguish
     // live siblings (daemon-only restart) from stale config entries (KWin restart).
     QSet<QString> m_effectReportedWindows;
+
+    // Locked windows: windows locked to their current zone (full windowId at runtime).
+    // Locked windows cannot be moved by navigation shortcuts, and other windows skip over them.
+    // Converted from windowId to appId on window close for cross-session persistence.
+    QSet<QString> m_lockedWindows;
+
+    // Pending appId-based locks from session restore, awaiting promotion to a specific windowId.
+    // Kept separate from m_lockedWindows so that isWindowLocked() doesn't match ALL instances
+    // of the same app. Stored as appId → count so that multiple locked instances of the same
+    // app survive session persistence (each instance decrements the count on zone assignment).
+    QHash<QString, int> m_pendingAppIdLocks;
+
+    /**
+     * @brief Decrement (or erase) a pending appId lock count by 1
+     * No-op if the appId has no pending entry.
+     */
+    void decrementPendingCount(const QString& appId);
 
     // Resnap buffer: when layout changes, store (windowId, zonePosition, screenId, vd)
     // for windows that were in the previous layout, so resnapToNewLayout can map them

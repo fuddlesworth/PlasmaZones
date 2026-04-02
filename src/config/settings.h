@@ -382,6 +382,10 @@ public:
     Q_PROPERTY(QString toggleLayoutLockShortcut READ toggleLayoutLockShortcut WRITE setToggleLayoutLockShortcut NOTIFY
                    toggleLayoutLockShortcutChanged)
 
+    // Toggle Window Lock (Meta+Shift+L)
+    Q_PROPERTY(QString toggleWindowLockShortcut READ toggleWindowLockShortcut WRITE setToggleWindowLockShortcut NOTIFY
+                   toggleWindowLockShortcutChanged)
+
 public:
     explicit Settings(QObject* parent = nullptr);
     ~Settings() override = default;
@@ -1406,6 +1410,12 @@ public:
     }
     void setToggleLayoutLockShortcut(const QString& shortcut);
 
+    QString toggleWindowLockShortcut() const
+    {
+        return m_toggleWindowLockShortcut;
+    }
+    void setToggleWindowLockShortcut(const QString& shortcut);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Editor Settings (shared [Editor] group in plasmazonesrc)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1814,6 +1824,9 @@ private:
 
     // Toggle Layout Lock (Meta+Ctrl+L)
     QString m_toggleLayoutLockShortcut = ConfigDefaults::toggleLayoutLockShortcut();
+
+    // Toggle Window Lock (Meta+Shift+L)
+    QString m_toggleWindowLockShortcut = ConfigDefaults::toggleWindowLockShortcut();
 
     // Editor Settings ([Editor] group in plasmazonesrc)
     QString m_editorDuplicateShortcut = ConfigDefaults::editorDuplicateShortcut();

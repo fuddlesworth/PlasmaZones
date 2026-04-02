@@ -467,6 +467,89 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // rotateWindowsExcluding
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testRotateWindowsExcluding_clockwiseSkipsExcluded()
+    {
+        TilingState state(QStringLiteral("test"));
+        state.addWindow(QStringLiteral("A"));
+        state.addWindow(QStringLiteral("B")); // will be excluded (locked)
+        state.addWindow(QStringLiteral("C"));
+        state.addWindow(QStringLiteral("D"));
+
+        auto isLocked = [](const QString& wId) {
+            return wId == QStringLiteral("B");
+        };
+
+        // Tiled: [A, B, C, D], unlocked: [A, C, D]
+        // Clockwise rotate unlocked: [D, A, C] → slots 0,2,3
+        // B stays at index 1
+        QVERIFY(state.rotateWindowsExcluding(true, isLocked));
+        QCOMPARE(state.tiledWindows(),
+                 QStringList({QStringLiteral("D"), QStringLiteral("B"), QStringLiteral("A"), QStringLiteral("C")}));
+    }
+
+    void testRotateWindowsExcluding_counterclockwiseSkipsExcluded()
+    {
+        TilingState state(QStringLiteral("test"));
+        state.addWindow(QStringLiteral("A"));
+        state.addWindow(QStringLiteral("B")); // excluded
+        state.addWindow(QStringLiteral("C"));
+        state.addWindow(QStringLiteral("D"));
+
+        auto isLocked = [](const QString& wId) {
+            return wId == QStringLiteral("B");
+        };
+
+        // Unlocked: [A, C, D] → counter-clockwise: [C, D, A] → slots 0,2,3
+        QVERIFY(state.rotateWindowsExcluding(false, isLocked));
+        QCOMPARE(state.tiledWindows(),
+                 QStringList({QStringLiteral("C"), QStringLiteral("B"), QStringLiteral("D"), QStringLiteral("A")}));
+    }
+
+    void testRotateWindowsExcluding_allExcluded()
+    {
+        TilingState state(QStringLiteral("test"));
+        state.addWindow(QStringLiteral("A"));
+        state.addWindow(QStringLiteral("B"));
+
+        auto allLocked = [](const QString&) {
+            return true;
+        };
+        QVERIFY(!state.rotateWindowsExcluding(true, allLocked));
+    }
+
+    void testRotateWindowsExcluding_oneUnlocked()
+    {
+        TilingState state(QStringLiteral("test"));
+        state.addWindow(QStringLiteral("A")); // locked
+        state.addWindow(QStringLiteral("B")); // unlocked
+
+        auto lockA = [](const QString& wId) {
+            return wId == QStringLiteral("A");
+        };
+        // Only 1 unlocked window — cannot rotate
+        QVERIFY(!state.rotateWindowsExcluding(true, lockA));
+    }
+
+    void testRotateWindowsExcluding_noneExcluded()
+    {
+        TilingState state(QStringLiteral("test"));
+        state.addWindow(QStringLiteral("A"));
+        state.addWindow(QStringLiteral("B"));
+        state.addWindow(QStringLiteral("C"));
+
+        auto noneLocked = [](const QString&) {
+            return false;
+        };
+
+        // Should behave like regular rotateWindows
+        QVERIFY(state.rotateWindowsExcluding(true, noneLocked));
+        QCOMPARE(state.tiledWindows(), QStringList({QStringLiteral("C"), QStringLiteral("A"), QStringLiteral("B")}));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // moveToPosition
     // ═══════════════════════════════════════════════════════════════════════════
 

@@ -1174,6 +1174,10 @@ public:
     {
         return QStringLiteral("Meta+Ctrl+L");
     }
+    static QString toggleWindowLockShortcut()
+    {
+        return QStringLiteral("Meta+Shift+L");
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotile Shortcuts
