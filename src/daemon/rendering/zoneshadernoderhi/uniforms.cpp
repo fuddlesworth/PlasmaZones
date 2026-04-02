@@ -196,7 +196,10 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 m_shaderError = QStringLiteral("Failed to resize labels texture");
                 return;
             }
-            m_srb.reset(); // Force SRB recreation with new texture
+            // Labels texture is bound in ALL SRBs (image, buffer, multi-buffer).
+            // Resetting only m_srb leaves buffer SRBs with a dangling pointer
+            // to the old labels texture — crashes NVIDIA Vulkan in endFrame().
+            resetAllSrbs();
             if (!ensurePipeline()) {
                 return;
             }
