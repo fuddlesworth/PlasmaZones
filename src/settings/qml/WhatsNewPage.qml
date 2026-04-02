@@ -9,9 +9,15 @@ import org.kde.kirigami as Kirigami
 Kirigami.Dialog {
     id: root
 
+    readonly property color subtleBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
+    readonly property color subtleBorder: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+    readonly property int thinBorder: Math.round(Kirigami.Units.devicePixelRatio)
+
     title: i18n("What's New in PlasmaZones %1", Qt.application.version)
     preferredWidth: Kirigami.Units.gridUnit * 28
-    preferredHeight: Kirigami.Units.gridUnit * 26
+    // Use maximumHeight instead of preferredHeight to avoid Kirigami.Dialog
+    // binding loop on "y" (its overlay centering feeds back into itself).
+    maximumHeight: Kirigami.Units.gridUnit * 26
     standardButtons: Dialog.NoButton
     padding: Kirigami.Units.largeSpacing
     onOpened: settingsController.markWhatsNewSeen()
@@ -33,9 +39,9 @@ Kirigami.Dialog {
             width: listView.width
             implicitHeight: cardColumn.implicitHeight
             radius: Kirigami.Units.smallSpacing * 1.5
-            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
-            border.width: Math.round(Kirigami.Units.devicePixelRatio)
-            border.color: cardHover.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+            color: root.subtleBg
+            border.width: root.thinBorder
+            border.color: cardHover.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : root.subtleBorder
 
             HoverHandler {
                 id: cardHover
@@ -51,7 +57,7 @@ Kirigami.Dialog {
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: headerRow.implicitHeight
-                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
+                    color: root.subtleBg
                     radius: releaseCard.radius
 
                     Rectangle {
@@ -92,7 +98,7 @@ Kirigami.Dialog {
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 1
-                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                    color: root.subtleBorder
                 }
 
                 // Highlights
