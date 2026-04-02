@@ -153,6 +153,7 @@ private:
     qint64 m_bufferMtime = 0;
     bool m_bufferShaderReady = false;
     bool m_bufferShaderDirty = true;
+    int m_bufferShaderRetries = 0;
     std::unique_ptr<QRhiTexture> m_bufferTexture;
     std::unique_ptr<QRhiRenderPassDescriptor> m_bufferRenderPassDescriptor;
     std::unique_ptr<QRhiTextureRenderTarget> m_bufferRenderTarget;
@@ -179,6 +180,7 @@ private:
     std::array<qint64, kMaxBufferPasses> m_multiBufferMtimes = {};
     bool m_multiBufferShadersReady = false;
     bool m_multiBufferShaderDirty = true;
+    int m_multiBufferShaderRetries = 0;
     // Dummy 1x1 texture for iChannel0 when multipass is set but buffer not yet created (e.g. zero size)
     std::unique_ptr<QRhiTexture> m_dummyChannelTexture;
     std::unique_ptr<QRhiSampler> m_dummyChannelSampler;

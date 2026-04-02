@@ -109,8 +109,13 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
     // overwrites the depth attachment — only the final buffer pass's depth output survives
     // for the image pass to read at binding 12.
     if (m_useDepthBuffer && multiBufferMode && m_bufferPaths.size() > 1) {
-        qCWarning(lcOverlay) << "Depth buffer with" << m_bufferPaths.size()
-                             << "buffer passes: only the last pass's depth output will be available in the image pass";
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            qCWarning(lcOverlay)
+                << "Depth buffer with" << m_bufferPaths.size()
+                << "buffer passes: only the last pass's depth output will be available in the image pass";
+        }
     }
     auto createTextureAndRT = [rhi, bufferSize, this](std::unique_ptr<QRhiTexture>& tex,
                                                       std::unique_ptr<QRhiTextureRenderTarget>& rt,
@@ -553,20 +558,8 @@ bool ZoneShaderNodeRhi::ensurePipeline()
     };
 
     if (hasMultipass) {
-        if (!m_dummyChannelTexture) {
-            m_dummyChannelTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
-            if (m_dummyChannelTexture->create()) {
-                m_dummyChannelTextureNeedsUpload = true;
-            } else {
-                m_dummyChannelTexture.reset();
-            }
-        }
-        if (!m_dummyChannelSampler && m_dummyChannelTexture) {
-            m_dummyChannelSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
-                                                        QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
-            if (!m_dummyChannelSampler->create()) {
-                m_dummyChannelSampler.reset();
-            }
+        if (!ensureDummyChannelResources(rhi)) {
+            return false;
         }
     }
 

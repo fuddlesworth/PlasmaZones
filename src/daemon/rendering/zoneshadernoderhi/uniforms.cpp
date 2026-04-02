@@ -509,7 +509,12 @@ void ZoneShaderNodeRhi::bakeBufferShaders()
             m_srb.reset();
             m_srbB.reset();
         } else {
-            m_multiBufferShaderDirty = true; // Retry next frame on failure
+            if (++m_multiBufferShaderRetries < 3) {
+                m_multiBufferShaderDirty = true; // Retry next frame
+            } else {
+                qCWarning(lcOverlay)
+                    << "Multi-buffer shader compilation failed after 3 attempts; giving up until shader path changes";
+            }
         }
     }
     if (multipass && !multiBufferMode && m_bufferShaderDirty) {
@@ -539,7 +544,12 @@ void ZoneShaderNodeRhi::bakeBufferShaders()
             } else {
                 qCWarning(lcOverlay) << "Buffer shader: compile failed, path=" << m_bufferPath
                                      << "error=" << fragmentBaker.errorMessage();
-                m_bufferShaderDirty = true; // Retry next frame on failure
+                if (++m_bufferShaderRetries < 3) {
+                    m_bufferShaderDirty = true; // Retry next frame
+                } else {
+                    qCWarning(lcOverlay)
+                        << "Buffer shader compilation failed after 3 attempts; giving up until shader path changes";
+                }
             }
         }
     }

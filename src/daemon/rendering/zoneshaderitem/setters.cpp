@@ -460,11 +460,8 @@ void ZoneShaderItem::setLabelsTexture(const QImage& image)
     QImage newImage = image;
     {
         QMutexLocker lock(&m_labelsTextureMutex);
-        if (m_labelsTexture.size() == newImage.size()) {
-            const int pixels = newImage.width() * newImage.height();
-            if (pixels <= 512 * 512 && m_labelsTexture == newImage) {
-                return;
-            }
+        if (m_labelsTexture.cacheKey() == newImage.cacheKey()) {
+            return;
         }
         m_labelsTexture = std::move(newImage);
     }

@@ -20,7 +20,7 @@ namespace PlasmaZones {
 
 namespace RhiConstants {
 
-static constexpr float QuadVertices[] = {
+inline constexpr float QuadVertices[] = {
     -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
 };
 

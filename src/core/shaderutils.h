@@ -16,8 +16,11 @@ inline QString normalizeWrapMode(const QString& wrap)
 /// Normalize filter mode: "nearest" and "mipmap" are recognized, everything else -> "linear"
 inline QString normalizeFilterMode(const QString& filter)
 {
-    if (filter == QLatin1String("nearest") || filter == QLatin1String("mipmap")) {
-        return filter;
+    if (filter == QLatin1String("nearest")) {
+        return QStringLiteral("nearest");
+    }
+    if (filter == QLatin1String("mipmap")) {
+        return QStringLiteral("mipmap");
     }
     return QStringLiteral("linear");
 }

@@ -316,10 +316,12 @@ void ZoneShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
 
     m_bufferShaderDirty = true;
     m_bufferShaderReady = false;
+    m_bufferShaderRetries = 0;
     m_bufferFragmentShaderSource.clear();
     m_bufferMtime = 0;
     m_multiBufferShadersReady = false;
     m_multiBufferShaderDirty = true;
+    m_multiBufferShaderRetries = 0;
     for (int i = 0; i < kMaxBufferPasses; ++i) {
         m_multiBufferFragmentShaderSources[i].clear();
         m_multiBufferFragmentShaders[i] = QShader();

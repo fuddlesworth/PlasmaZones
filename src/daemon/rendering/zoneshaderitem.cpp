@@ -39,7 +39,11 @@ ZoneShaderItem::~ZoneShaderItem()
     // members are torn down.  The scene graph render thread may still call
     // prepare()/render() on the node between now and the node's eventual
     // deletion; without this, m_item would be a dangling pointer.
-    if (m_renderNode) {
+    //
+    // Guard: if the window (and its scene graph) was already destroyed, the node
+    // has been deleted by the SG and m_renderNode is dangling. QQuickItem::window()
+    // returns nullptr once the window is gone, so use that as our liveness check.
+    if (m_renderNode && window()) {
         m_renderNode->invalidateItem();
     }
 }
@@ -141,18 +145,25 @@ void ZoneShaderItem::updateHoveredHighlightOnly()
                             << "zones=" << m_zones.size() << ") - setZones must be called first";
         return;
     }
+    // Pre-compute highlight flags outside the mutex to avoid blocking the render
+    // thread with QVariant::toMap() conversions.
+    const int count = static_cast<int>(m_zoneData.rects.size());
+    QVector<bool> highlights(count, false);
     int highlightedCount = 0;
+    for (int i = 0; i < count; ++i) {
+        const bool fromZone = (i < m_zones.size())
+            ? m_zones[i].toMap().value(QLatin1String(JsonKeys::IsHighlighted), false).toBool()
+            : false;
+        const bool hovered = (m_hoveredZoneIndex >= 0 && i == m_hoveredZoneIndex);
+        highlights[i] = fromZone || hovered;
+        if (highlights[i]) {
+            ++highlightedCount;
+        }
+    }
     {
         QMutexLocker lock(&m_zoneDataMutex);
-        for (int i = 0; i < m_zoneData.rects.size(); ++i) {
-            const bool fromZone = (i < m_zones.size())
-                ? m_zones[i].toMap().value(QLatin1String(JsonKeys::IsHighlighted), false).toBool()
-                : false;
-            const bool hovered = (m_hoveredZoneIndex >= 0 && i == m_hoveredZoneIndex);
-            m_zoneData.rects[i].highlighted = fromZone || hovered;
-            if (m_zoneData.rects[i].highlighted) {
-                ++highlightedCount;
-            }
+        for (int i = 0; i < count; ++i) {
+            m_zoneData.rects[i].highlighted = highlights[i];
         }
         m_zoneData.highlightedCount = highlightedCount;
         m_zoneData.version = ++m_dataVersion;

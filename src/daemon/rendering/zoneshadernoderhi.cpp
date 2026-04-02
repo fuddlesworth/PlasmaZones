@@ -420,8 +420,10 @@ void ZoneShaderNodeRhi::prepare()
                 // batches may be optimized to no-ops, skipping barrier emission.
                 if (i + 1 < n && m_ubo) {
                     QRhiResourceUpdateBatch* barrier = rhi->nextResourceUpdateBatch();
-                    barrier->updateDynamicBuffer(m_ubo.get(), 0, 4, &m_uniforms);
-                    cb->resourceUpdate(barrier);
+                    if (barrier) {
+                        barrier->updateDynamicBuffer(m_ubo.get(), 0, 4, &m_uniforms);
+                        cb->resourceUpdate(barrier);
+                    }
                 }
             }
         } else {
@@ -457,8 +459,10 @@ void ZoneShaderNodeRhi::prepare()
         // Resource flush after buffer passes (Vulkan barrier hint).
         if (m_ubo) {
             QRhiResourceUpdateBatch* barrier = rhi->nextResourceUpdateBatch();
-            barrier->updateDynamicBuffer(m_ubo.get(), 0, 4, &m_uniforms);
-            cb->resourceUpdate(barrier);
+            if (barrier) {
+                barrier->updateDynamicBuffer(m_ubo.get(), 0, 4, &m_uniforms);
+                cb->resourceUpdate(barrier);
+            }
         }
     }
 }

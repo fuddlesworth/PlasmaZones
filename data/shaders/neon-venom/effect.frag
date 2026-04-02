@@ -370,7 +370,7 @@ void main() {
     // ─── Labels: Venomous Bioluminescent Tubes ─────────────────────
     if (showLabels) {
         vec2 luv = labelsUv(vFragCoord);
-        vec2 px = 1.0 / max(iResolution, vec2(1.0));
+        vec2 texelSize = 1.0 / max(iResolution, vec2(1.0));
         vec4 labels = texture(uZoneLabels, luv);
         float spread = labelSpread * pxScale();
         float t = iTime * customParams[0].y; // veinSpeed
@@ -383,10 +383,10 @@ void main() {
         float haloTight = 0.0, haloWide = 0.0, haloVWide = 0.0;
         float haloR = 0.0, haloG = 0.0, haloB = 0.0;
         // Chromatic offset: green/purple venom split
-        vec2 chromOff = vec2(px.x * 2.5, px.y * 0.5);
+        vec2 chromOff = vec2(texelSize.x * 2.5, texelSize.y * 0.5);
         for (int dy = -2; dy <= 2; dy++) {
             for (int dx = -2; dx <= 2; dx++) {
-                vec2 off = vec2(float(dx), float(dy)) * px;
+                vec2 off = vec2(float(dx), float(dy)) * texelSize;
                 float r2 = float(dx * dx + dy * dy);
                 float wTight = exp(-r2 * 0.5);
                 float wWide = exp(-r2 * 0.2);
@@ -439,7 +439,7 @@ void main() {
             result.rgb += hazeCol * haloEdgeVWide * 0.3 * bioFlicker;
 
             // ── Acid drip: venom bleeding downward from text ─────────
-            float dripSample = texture(uZoneLabels, luv + vec2(0.0, -px.y * spread * 5.0)).a;
+            float dripSample = texture(uZoneLabels, luv + vec2(0.0, -texelSize.y * spread * 5.0)).a;
             float drip = dripSample * (1.0 - labels.a) * 0.4;
             if (drip > 0.01) {
                 float dripNoise = noise2D(vec2(luv.x * 40.0, t * 0.5));
@@ -471,10 +471,10 @@ void main() {
             tubeColor = mix(tubeColor, glowCol * 1.2, veinTex * 0.25);
 
             // Stroke edge rim: bioluminescent tubes glow brightest at edges
-            float aL = texture(uZoneLabels, luv + vec2(-px.x, 0.0)).a;
-            float aR = texture(uZoneLabels, luv + vec2( px.x, 0.0)).a;
-            float aU = texture(uZoneLabels, luv + vec2(0.0, -px.y)).a;
-            float aD = texture(uZoneLabels, luv + vec2(0.0,  px.y)).a;
+            float aL = texture(uZoneLabels, luv + vec2(-texelSize.x, 0.0)).a;
+            float aR = texture(uZoneLabels, luv + vec2( texelSize.x, 0.0)).a;
+            float aU = texture(uZoneLabels, luv + vec2(0.0, -texelSize.y)).a;
+            float aD = texture(uZoneLabels, luv + vec2(0.0,  texelSize.y)).a;
             float rim = clamp((4.0 * labels.a - aL - aR - aU - aD) * 2.5, 0.0, 1.0);
 
             // Combine: venom tube body + bright white-green rim
