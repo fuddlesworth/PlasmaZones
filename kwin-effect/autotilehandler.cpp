@@ -219,16 +219,19 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
     const auto windows = KWin::effects->stackingOrder();
     for (int i = windows.size() - 1; i >= 0; --i) {
         KWin::EffectWindow* w = windows[i];
-        if (!w || !m_effect->isTileableWindow(w) || w->isMinimized() || !w->isOnCurrentDesktop()
-            || !w->isOnCurrentActivity()) {
+        if (!w || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
             continue;
         }
         // Geometry check first (cheap QRectF::contains) before shouldHandleWindow (allocates via windowClass())
         if (!w->frameGeometry().contains(pos)) {
             continue;
         }
-        if (!m_effect->shouldHandleWindow(w)) {
-            continue;
+        // A non-autotile window (excluded app, keep-above overlay, popup, dialog,
+        // Spectacle, etc.) occludes the cursor — don't look through it to focus a
+        // tiled window beneath. This prevents focus-stealing from emoji pickers,
+        // screenshot tools, and other excluded/overlay windows.
+        if (!m_effect->isTileableWindow(w) || !m_effect->shouldHandleWindow(w)) {
+            return;
         }
         const QString windowId = m_effect->getWindowId(w);
         if (windowId == m_lastFocusFollowsMouseWindowId) {
