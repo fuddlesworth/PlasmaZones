@@ -42,6 +42,11 @@ class SettingsController : public QObject
     Q_PROPERTY(QString dismissedUpdateVersion READ dismissedUpdateVersion WRITE setDismissedUpdateVersion NOTIFY
                    dismissedUpdateVersionChanged)
 
+    // What's New
+    Q_PROPERTY(QString lastSeenWhatsNewVersion READ lastSeenWhatsNewVersion NOTIFY lastSeenWhatsNewVersionChanged)
+    Q_PROPERTY(bool hasUnseenWhatsNew READ hasUnseenWhatsNew NOTIFY lastSeenWhatsNewVersionChanged)
+    Q_PROPERTY(QVariantList whatsNewEntries READ whatsNewEntries CONSTANT)
+
     // Layout management
     Q_PROPERTY(QVariantList layouts READ layouts NOTIFY layoutsChanged)
 
@@ -176,6 +181,18 @@ public:
     }
     void setDismissedUpdateVersion(const QString& version);
     Q_INVOKABLE void dismissUpdate();
+
+    // What's New
+    QString lastSeenWhatsNewVersion() const
+    {
+        return m_lastSeenWhatsNewVersion;
+    }
+    bool hasUnseenWhatsNew() const;
+    QVariantList whatsNewEntries() const
+    {
+        return m_whatsNewEntries;
+    }
+    Q_INVOKABLE void markWhatsNewSeen();
 
     // Layout accessors
     QVariantList layouts() const
@@ -642,6 +659,7 @@ Q_SIGNALS:
     void layoutOperationFailed(const QString& reason);
     void screensChanged();
     void dismissedUpdateVersionChanged();
+    void lastSeenWhatsNewVersionChanged();
 
     // Virtual desktop / activity / assignment signals
     void virtualDesktopsChanged();
@@ -717,6 +735,8 @@ private:
     DaemonController m_daemonController;
     UpdateChecker m_updateChecker;
     QString m_dismissedUpdateVersion;
+    QString m_lastSeenWhatsNewVersion;
+    QVariantList m_whatsNewEntries;
     ScreenHelper m_screenHelper;
     QString m_activePage = QStringLiteral("overview");
     bool m_needsSave = false;

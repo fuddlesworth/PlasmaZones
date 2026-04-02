@@ -138,6 +138,39 @@ Flickable {
                         url: "https://github.com/fuddlesworth/PlasmaZones/releases"
                     }
 
+                    Button {
+                        Layout.fillWidth: true
+                        flat: true
+                        horizontalPadding: Kirigami.Units.largeSpacing
+                        Accessible.name: i18n("What's New")
+                        onClicked: window.showWhatsNew()
+
+                        contentItem: RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Kirigami.Icon {
+                                source: "documentinfo"
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            }
+
+                            Label {
+                                text: i18n("What's New")
+                                Layout.fillWidth: true
+                                color: Kirigami.Theme.linkColor
+                            }
+
+                            Kirigami.Icon {
+                                source: "arrow-right"
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                opacity: 0.5
+                            }
+
+                        }
+
+                    }
+
                 }
 
             }

@@ -3,6 +3,7 @@
 
 #include "settingscontroller.h"
 #include "../core/constants.h"
+#include "version.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/virtualscreen.h"
@@ -248,6 +249,28 @@ SettingsController::SettingsController(QObject* parent)
     {
         QSettings appSettings(QStringLiteral("plasmazones"), QStringLiteral("settings-window"));
         m_dismissedUpdateVersion = appSettings.value(QStringLiteral("dismissedUpdateVersion")).toString();
+        m_lastSeenWhatsNewVersion = appSettings.value(QStringLiteral("lastSeenWhatsNewVersion")).toString();
+    }
+
+    // Load What's New entries from embedded resource
+    {
+        QFile whatsNewFile(QStringLiteral(":/whatsnew.json"));
+        if (whatsNewFile.open(QIODevice::ReadOnly)) {
+            const auto doc = QJsonDocument::fromJson(whatsNewFile.readAll());
+            const auto releases = doc.object().value(QLatin1String("releases")).toArray();
+            for (const auto& entry : releases) {
+                const auto obj = entry.toObject();
+                QVariantMap release;
+                release[QStringLiteral("version")] = obj.value(QLatin1String("version")).toString();
+                release[QStringLiteral("date")] = obj.value(QLatin1String("date")).toString();
+                QVariantList highlights;
+                const auto arr = obj.value(QLatin1String("highlights")).toArray();
+                for (const auto& h : arr)
+                    highlights.append(h.toString());
+                release[QStringLiteral("highlights")] = highlights;
+                m_whatsNewEntries.append(release);
+            }
+        }
     }
 
     // Initial loads
@@ -270,6 +293,23 @@ void SettingsController::setDismissedUpdateVersion(const QString& version)
 void SettingsController::dismissUpdate()
 {
     setDismissedUpdateVersion(m_updateChecker.latestVersion());
+}
+
+bool SettingsController::hasUnseenWhatsNew() const
+{
+    if (m_whatsNewEntries.isEmpty())
+        return false;
+    return m_lastSeenWhatsNewVersion != PlasmaZones::VERSION_STRING;
+}
+
+void SettingsController::markWhatsNewSeen()
+{
+    if (m_lastSeenWhatsNewVersion != PlasmaZones::VERSION_STRING) {
+        m_lastSeenWhatsNewVersion = PlasmaZones::VERSION_STRING;
+        QSettings appSettings(QStringLiteral("plasmazones"), QStringLiteral("settings-window"));
+        appSettings.setValue(QStringLiteral("lastSeenWhatsNewVersion"), PlasmaZones::VERSION_STRING);
+        Q_EMIT lastSeenWhatsNewVersionChanged();
+    }
 }
 
 const QHash<QString, QString>& SettingsController::parentPageRedirects()

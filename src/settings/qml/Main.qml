@@ -321,6 +321,10 @@ ApplicationWindow {
     }
 
     // Show a toast notification from any child page
+    function showWhatsNew() {
+        whatsNewDialog.open();
+    }
+
     function showToast(msg) {
         toast.show(msg);
     }
@@ -1061,6 +1065,58 @@ ApplicationWindow {
 
             }
 
+            // ── What's New banner (visible when unseen changes exist) ──
+            Pane {
+                id: whatsNewBanner
+
+                Layout.fillWidth: true
+                visible: settingsController.hasUnseenWhatsNew
+                padding: Kirigami.Units.smallSpacing
+                topPadding: Kirigami.Units.smallSpacing
+                bottomPadding: Kirigami.Units.smallSpacing
+
+                RowLayout {
+                    anchors.fill: parent
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Kirigami.Icon {
+                        source: "documentinfo"
+                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                        color: Kirigami.Theme.linkColor
+                    }
+
+                    Label {
+                        text: i18n("See what's new in PlasmaZones %1", Qt.application.version)
+                        Layout.fillWidth: true
+                        color: Kirigami.Theme.linkColor
+                    }
+
+                    Button {
+                        text: i18n("What's New")
+                        flat: true
+                        icon.name: "go-next"
+                        onClicked: whatsNewDialog.open()
+                    }
+
+                    ToolButton {
+                        icon.name: "dialog-close"
+                        display: ToolButton.IconOnly
+                        onClicked: settingsController.markWhatsNewSeen()
+                        ToolTip.text: i18n("Dismiss")
+                        ToolTip.visible: hovered
+                    }
+
+                }
+
+                background: Rectangle {
+                    color: Qt.rgba(Kirigami.Theme.linkColor.r, Kirigami.Theme.linkColor.g, Kirigami.Theme.linkColor.b, 0.15)
+                    border.width: Math.round(Kirigami.Units.devicePixelRatio)
+                    border.color: Qt.rgba(Kirigami.Theme.linkColor.r, Kirigami.Theme.linkColor.g, Kirigami.Theme.linkColor.b, 0.3)
+                }
+
+            }
+
             // Page content with crossfade transition
             Item {
                 id: pageContainer
@@ -1762,6 +1818,20 @@ ApplicationWindow {
 
         }
 
+    }
+
+    // ── What's New dialog ──────────────────────────────────────────
+    WhatsNewPage {
+        id: whatsNewDialog
+
+        parent: window.Overlay.overlay
+    }
+
+    // Auto-show What's New dialog on first launch after update
+    Timer {
+        interval: 500
+        running: settingsController.hasUnseenWhatsNew
+        onTriggered: whatsNewDialog.open()
     }
 
 }
