@@ -15,7 +15,7 @@ OrderingPage {
     emptyText: i18n("No algorithms available")
     emptyExplanation: i18n("Algorithms are registered by the daemon.")
     resetAccessibleName: i18n("Reset algorithm order to default")
-    hasCustomOrder: settingsController.settings.tilingAlgorithmOrder.length > 0
+    hasCustomOrder: settingsController.hasCustomTilingOrder()
     previewZonesKey: "previewZones"
     zoneCountKey: "defaultMaxWindows"
     hideZeroBadge: true
@@ -40,13 +40,14 @@ OrderingPage {
     }
 
     Connections {
-        function onTilingAlgorithmOrderChanged() {
+        function onStagedTilingOrderChanged() {
             if (!root._rebuilding)
                 root.rebuildModel();
 
+            root.hasCustomOrder = settingsController.hasCustomTilingOrder();
         }
 
-        target: settingsController.settings
+        target: settingsController
     }
 
 }
