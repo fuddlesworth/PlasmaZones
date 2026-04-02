@@ -878,6 +878,19 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /**
+     * @brief Skip adjacent zones that contain locked windows
+     *
+     * Walks the adjacency graph from startZoneId in the given direction,
+     * skipping zones occupied by locked windows. Uses a visited set to
+     * prevent infinite loops on cyclic topologies.
+     *
+     * @param startZoneId Zone to start walking from
+     * @param direction Direction to walk ("left", "right", "up", "down")
+     * @return First unlocked adjacent zone, or empty if all are locked / no more zones
+     */
+    QString skipLockedZones(const QString& startZoneId, const QString& direction);
+
+    /**
      * @brief Validate window ID and log warning if empty
      * @param windowId Window ID to validate
      * @param operation Name of the operation (for logging)

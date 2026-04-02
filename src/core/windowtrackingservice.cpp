@@ -522,15 +522,7 @@ bool WindowTrackingService::isWindowSticky(const QString& windowId) const
 
 bool WindowTrackingService::isWindowLocked(const QString& windowId) const
 {
-    if (m_lockedWindows.contains(windowId)) {
-        return true;
-    }
-    // Fallback: check by appId (for session-restored entries)
-    QString appId = Utils::extractAppId(windowId);
-    if (appId != windowId && m_lockedWindows.contains(appId)) {
-        return true;
-    }
-    return false;
+    return m_lockedWindows.contains(windowId);
 }
 
 void WindowTrackingService::promoteAppIdLock(const QString& windowId)
@@ -539,12 +531,12 @@ void WindowTrackingService::promoteAppIdLock(const QString& windowId)
     if (appId == windowId) {
         return; // windowId is already an appId, nothing to promote
     }
-    if (!m_lockedWindows.contains(appId)) {
-        return; // no appId lock to promote
+    if (!m_pendingAppIdLocks.contains(appId)) {
+        return; // no pending appId lock to promote
     }
     // Promote: bind the lock to this specific window instance only.
-    // Remove the broad appId entry so other instances of the same app are not locked.
-    m_lockedWindows.remove(appId);
+    // Remove from pending so other instances of the same app are not locked.
+    m_pendingAppIdLocks.remove(appId);
     m_lockedWindows.insert(windowId);
     scheduleSaveState();
 }
@@ -552,18 +544,18 @@ void WindowTrackingService::promoteAppIdLock(const QString& windowId)
 void WindowTrackingService::setWindowLocked(const QString& windowId, bool locked)
 {
     if (locked) {
-        // Remove stale appId entry from session restore before inserting full windowId
+        // Remove any pending appId entry (user is explicitly locking this instance)
         QString appId = Utils::extractAppId(windowId);
         if (appId != windowId) {
-            m_lockedWindows.remove(appId);
+            m_pendingAppIdLocks.remove(appId);
         }
         m_lockedWindows.insert(windowId);
     } else {
         m_lockedWindows.remove(windowId);
-        // Also remove appId entry if present (from session restore)
+        // Also remove pending appId entry if present
         QString appId = Utils::extractAppId(windowId);
         if (appId != windowId) {
-            m_lockedWindows.remove(appId);
+            m_pendingAppIdLocks.remove(appId);
         }
     }
     scheduleSaveState();

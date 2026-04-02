@@ -84,6 +84,24 @@ static QJsonObject swapResult(bool success, const QString& reason, const QString
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Locking Helpers
+// ═══════════════════════════════════════════════════════════════════════════
+
+QString WindowTrackingAdaptor::skipLockedZones(const QString& startZoneId, const QString& direction)
+{
+    QString zoneId = startZoneId;
+    QSet<QString> visited;
+    while (!zoneId.isEmpty() && m_service->isZoneLockedByWindow(zoneId)) {
+        if (visited.contains(zoneId)) {
+            return {};
+        }
+        visited.insert(zoneId);
+        zoneId = m_zoneDetectionAdaptor->getAdjacentZone(zoneId, direction);
+    }
+    return zoneId;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Navigation Target Computation
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -150,18 +168,7 @@ QString WindowTrackingAdaptor::getMoveTargetForWindow(const QString& windowId, c
         }
     } else {
         targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction);
-        // Skip over zones containing locked windows (cap iterations to prevent cycles)
-        {
-            QSet<QString> visited;
-            while (!targetZoneId.isEmpty() && m_service->isZoneLockedByWindow(targetZoneId)) {
-                if (visited.contains(targetZoneId)) {
-                    targetZoneId.clear();
-                    break;
-                }
-                visited.insert(targetZoneId);
-                targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(targetZoneId, direction);
-            }
-        }
+        targetZoneId = skipLockedZones(targetZoneId, direction);
         if (targetZoneId.isEmpty()) {
             Q_EMIT navigationFeedback(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"), currentZoneId,
                                       QString(), effectiveScreenId);
@@ -371,18 +378,7 @@ QString WindowTrackingAdaptor::getSwapTargetForWindow(const QString& windowId, c
     }
 
     QString targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction);
-    // Skip over zones containing locked windows (cap iterations to prevent cycles)
-    {
-        QSet<QString> visited;
-        while (!targetZoneId.isEmpty() && m_service->isZoneLockedByWindow(targetZoneId)) {
-            if (visited.contains(targetZoneId)) {
-                targetZoneId.clear();
-                break;
-            }
-            visited.insert(targetZoneId);
-            targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(targetZoneId, direction);
-        }
-    }
+    targetZoneId = skipLockedZones(targetZoneId, direction);
     if (targetZoneId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("no_adjacent_zone"), currentZoneId,
                                   QString(), effectiveScreenId);

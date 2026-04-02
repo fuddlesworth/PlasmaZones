@@ -179,7 +179,9 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
         return;
     }
 
-    // Find the next non-locked target, skipping locked windows
+    // Find the next non-locked target, skipping locked windows.
+    // The loop runs at most count-1 steps (every other window); if all are locked
+    // the post-loop guard catches it.
     int targetIndex = currentIndex;
     const int count = windows.size();
     for (int i = 0; i < count - 1; ++i) {
@@ -191,12 +193,6 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
         }
         if (!isWindowLocked(windows.at(targetIndex))) {
             break;
-        }
-        // If we've looped back to start, all targets are locked
-        if (targetIndex == currentIndex) {
-            Q_EMIT m_engine->navigationFeedbackRequested(false, action, QStringLiteral("all_locked"), QString(),
-                                                         QString(), screenId);
-            return;
         }
     }
 

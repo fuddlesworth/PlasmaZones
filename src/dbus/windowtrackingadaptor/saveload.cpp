@@ -165,10 +165,18 @@ void WindowTrackingAdaptor::saveState()
                           QString::fromUtf8(QJsonDocument(userSnappedArray).toJson(QJsonDocument::Compact)));
 
     // Save locked windows (persisted as appIds for cross-session restore).
-    // Runtime keys may be full window IDs; convert to app IDs.
-    QJsonArray lockedWindowsArray;
+    // Merge active locks (runtime windowIds → appIds) with pending appId locks
+    // (not yet promoted), deduplicating to avoid JSON bloat.
+    QSet<QString> lockedAppIds;
     for (const QString& windowId : m_service->lockedWindows()) {
-        lockedWindowsArray.append(Utils::extractAppId(windowId));
+        lockedAppIds.insert(Utils::extractAppId(windowId));
+    }
+    for (const QString& appId : m_service->pendingAppIdLocks()) {
+        lockedAppIds.insert(appId);
+    }
+    QJsonArray lockedWindowsArray;
+    for (const QString& appId : lockedAppIds) {
+        lockedWindowsArray.append(appId);
     }
     tracking->writeString(QStringLiteral("LockedWindows"),
                           QString::fromUtf8(QJsonDocument(lockedWindowsArray).toJson(QJsonDocument::Compact)));

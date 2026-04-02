@@ -113,10 +113,11 @@ void WindowTrackingService::windowClosed(const QString& windowId)
 
     // Convert lock state from full windowId to appId for cross-session persistence.
     // Unlike floating (which is cleared on close), lock state persists across restarts.
+    // Move back to pending so the next instance of this app inherits the lock.
     if (m_lockedWindows.contains(windowId)) {
         m_lockedWindows.remove(windowId);
         if (!appId.isEmpty()) {
-            m_lockedWindows.insert(appId);
+            m_pendingAppIdLocks.insert(appId);
         }
     }
 

@@ -332,11 +332,25 @@ public:
     }
 
     /**
-     * @brief Set locked windows (loaded from KConfig by adaptor during loadState only)
+     * @brief Get pending appId-based locks awaiting promotion
      */
-    void setLockedWindows(const QSet<QString>& windows)
+    const QSet<QString>& pendingAppIdLocks() const
     {
-        m_lockedWindows = windows;
+        return m_pendingAppIdLocks;
+    }
+
+    /**
+     * @brief Set locked windows from session restore (loadState only)
+     *
+     * Entries are stored as appIds (for cross-session persistence). They are placed
+     * into m_pendingAppIdLocks and promoted to m_lockedWindows one-at-a-time as
+     * windows are assigned to zones via promoteAppIdLock().
+     *
+     * @note Must only be called during loadState — not a general-purpose setter.
+     */
+    void setLockedWindows(const QSet<QString>& appIds)
+    {
+        m_pendingAppIdLocks = appIds;
     }
 
     /**
@@ -857,10 +871,15 @@ private:
     // live siblings (daemon-only restart) from stale config entries (KWin restart).
     QSet<QString> m_effectReportedWindows;
 
-    // Locked windows: windows locked to their current zone (runtime: full windowId, persisted: appId)
+    // Locked windows: windows locked to their current zone (full windowId at runtime).
     // Locked windows cannot be moved by navigation shortcuts, and other windows skip over them.
     // Converted from windowId to appId on window close for cross-session persistence.
     QSet<QString> m_lockedWindows;
+
+    // Pending appId-based locks from session restore, awaiting promotion to a specific windowId.
+    // Kept separate from m_lockedWindows so that isWindowLocked() doesn't match ALL instances
+    // of the same app — only the first instance to be assigned a zone gets the lock.
+    QSet<QString> m_pendingAppIdLocks;
 
     // Resnap buffer: when layout changes, store (windowId, zonePosition, screenId, vd)
     // for windows that were in the previous layout, so resnapToNewLayout can map them
