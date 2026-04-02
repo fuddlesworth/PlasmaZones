@@ -52,7 +52,8 @@ QVector<UnifiedLayoutEntry> UnifiedLayoutController::layouts() const
         m_cachedLayouts = LayoutUtils::buildUnifiedLayoutList(
             m_layoutManager, m_currentScreenName, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
             m_includeAutotileLayouts, Utils::screenAspectRatio(m_currentScreenName),
-            m_settings && m_settings->filterLayoutsByAspectRatio());
+            m_settings && m_settings->filterLayoutsByAspectRatio(),
+            LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts));
 
         m_cacheValid = true;
     }

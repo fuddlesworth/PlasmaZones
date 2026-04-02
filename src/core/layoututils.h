@@ -19,6 +19,7 @@ class AlgorithmRegistry;
 namespace PlasmaZones {
 
 class ILayoutManager;
+class IOrderingSettings;
 class Layout;
 class Zone;
 
@@ -120,7 +121,8 @@ namespace LayoutUtils {
  * @return Vector of unified layout entries
  */
 PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager,
-                                                                      bool includeAutotile = false);
+                                                                      bool includeAutotile = false,
+                                                                      const QStringList& customOrder = {});
 
 /**
  * @brief Build filtered list of layouts visible in the given context
@@ -147,7 +149,22 @@ PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutMan
 PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry>
 buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenId, int virtualDesktop,
                        const QString& activity, bool includeManual = true, bool includeAutotile = true,
-                       qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false);
+                       qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
+                       const QStringList& customOrder = {});
+
+/**
+ * @brief Build a combined custom order list from settings
+ *
+ * Merges snapping layout order and tiling algorithm order based on which
+ * layout types are included. Used by daemon, overlay, zone selector, and D-Bus.
+ *
+ * @param settings Ordering settings interface (can be nullptr)
+ * @param includeManual Include snapping layout order
+ * @param includeAutotile Include tiling algorithm order
+ * @return Combined custom order list (empty if no custom order set)
+ */
+PLASMAZONES_EXPORT QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManual,
+                                                bool includeAutotile);
 
 /**
  * @brief Convert a unified layout entry to QVariantMap for QML

@@ -170,7 +170,8 @@ ColumnLayout {
                     else
                         filtered = Logic.applyTilingFilters(filtered, search, filterBar);
                     let groups = buildGroups(filtered, filterBar.groupByIndex);
-                    Logic.sortItems(groups, filterBar.sortByIndex, filterBar.sortAscending);
+                    let customOrder = root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder();
+                    Logic.sortItems(groups, filterBar.sortByIndex, filterBar.sortAscending, customOrder);
                     model = Logic.finalizeGroups(groups);
                 }
 
@@ -208,7 +209,7 @@ ColumnLayout {
                         return Logic.groupByAspectRatio(filtered);
                     else if (groupIdx === filterBar.groupZoneCount)
                         return Logic.groupByZoneCount(filtered, (count) => {
-                        return i18np("%1 zone", "%1 zones", count);
+                        return i18np("%n zone", "%n zones", count);
                     }, i18n("Unknown"));
                     else if (groupIdx === filterBar.groupAutoManual)
                         return Logic.groupByBoolKey(filtered, (item) => {

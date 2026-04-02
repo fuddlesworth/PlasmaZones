@@ -100,6 +100,10 @@ ApplicationWindow {
             "label": i18n("Assignments"),
             "iconName": "view-list-details"
         }, {
+            "name": "snapping-ordering",
+            "label": i18n("Priority"),
+            "iconName": "view-sort"
+        }, {
             "name": "snapping-shortcuts",
             "label": i18n("Quick Shortcuts"),
             "iconName": "bookmark"
@@ -121,6 +125,10 @@ ApplicationWindow {
             "label": i18n("Assignments"),
             "iconName": "view-list-details"
         }, {
+            "name": "tiling-ordering",
+            "label": i18n("Priority"),
+            "iconName": "view-sort"
+        }, {
             "name": "tiling-shortcuts",
             "label": i18n("Quick Shortcuts"),
             "iconName": "bookmark"
@@ -139,8 +147,10 @@ ApplicationWindow {
         "tiling-algorithm": "TilingAlgorithmPage.qml",
         "snapping-assignments": "SnappingAssignmentsPage.qml",
         "snapping-shortcuts": "SnappingQuickShortcutsPage.qml",
+        "snapping-ordering": "SnappingOrderingPage.qml",
         "tiling-assignments": "TilingAssignmentsPage.qml",
         "tiling-shortcuts": "TilingQuickShortcutsPage.qml",
+        "tiling-ordering": "TilingOrderingPage.qml",
         "apprules": "AssignmentsAppRulesPage.qml",
         "exclusions": "ExclusionsPage.qml",
         "editor": "EditorPage.qml",

@@ -66,8 +66,8 @@ RowLayout {
     // Static ComboBox models (avoids inline array recreation that resets currentIndex)
     readonly property var snappingGroupModel: [i18n("Aspect Ratio"), i18n("Zone Count"), i18n("Auto / Manual"), i18n("Source"), i18n("None")]
     readonly property var tilingGroupModel: [i18n("Capability"), i18n("Source"), i18n("Persistent"), i18n("None")]
-    readonly property var snappingSortModel: [i18n("Name"), i18n("Zone Count")]
-    readonly property var tilingSortModel: [i18n("Name"), i18n("Zone Count")]
+    readonly property var snappingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Custom")]
+    readonly property var tilingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Custom")]
     // Guard to suppress redundant filterSettingsChanged during batch resets
     property bool _resetting: false
     property int _previousViewMode: 0
