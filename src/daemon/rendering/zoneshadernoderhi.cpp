@@ -383,7 +383,7 @@ void ZoneShaderNodeRhi::prepare()
     // runs BEFORE the scene graph opens its render pass. Buffer passes use
     // offscreen FBOs (their own render targets), not the main RT.
     // ========================================================================
-    // m_bufferSrb guard: uploadDirtyTextures() above can call resetAllSrbs() when
+    // m_bufferSrb guard: uploadDirtyTextures() above can call resetAllBindingsAndPipelines() when
     // a texture is resized, which nulls all SRBs. Without this guard,
     // setShaderResources(nullptr) crashes the NVIDIA Vulkan driver.
     const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady && m_bufferPipeline

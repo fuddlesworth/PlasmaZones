@@ -199,7 +199,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             // Labels texture is bound in ALL SRBs (image, buffer, multi-buffer).
             // Resetting only m_srb leaves buffer SRBs with a dangling pointer
             // to the old labels texture — crashes NVIDIA Vulkan in endFrame().
-            resetAllSrbs();
+            resetAllBindingsAndPipelines();
             if (!ensurePipeline()) {
                 return;
             }
@@ -291,7 +291,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             // buffer, multi-buffer). Resetting only image-pass SRBs leaves buffer
             // SRBs with a dangling pointer to the old texture — crashes NVIDIA
             // Vulkan driver when the buffer pass is recorded.
-            resetAllSrbs();
+            resetAllBindingsAndPipelines();
             if (!ensurePipeline()) {
                 return;
             }
@@ -325,7 +325,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             if (!m_userTextureSamplers[i]->create()) {
                 continue;
             }
-            resetAllSrbs();
+            resetAllBindingsAndPipelines();
         }
         if (!m_userTextureDirty[i] || !m_userTextures[i] || !m_userTextureSamplers[i]) {
             continue;
@@ -338,7 +338,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             if (!m_userTextures[i]->create()) {
                 continue;
             }
-            resetAllSrbs();
+            resetAllBindingsAndPipelines();
             if (!ensurePipeline()) {
                 return;
             }
@@ -367,7 +367,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 m_wallpaperTexture.reset(); // Prevent binding a non-created texture
                 return;
             }
-            resetAllSrbs();
+            resetAllBindingsAndPipelines();
             if (!ensurePipeline()) {
                 return;
             }

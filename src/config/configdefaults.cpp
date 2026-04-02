@@ -25,15 +25,10 @@ QString ConfigDefaults::readRenderingBackendFromDisk()
 
     // QSettings::IniFormat maps keys before any [Section] header into the "General"
     // group automatically on all platforms — so a root-level read (no beginGroup)
-    // already resolves "General/RenderingBackend". We also explicitly check the
-    // [General] group as a fallback in case the file uses an explicit section header,
-    // which is a no-op on Linux but guards against platform-specific IniFormat quirks.
-    QString raw = cfg.value(renderingBackendKey()).toString();
-    if (raw.isEmpty()) {
-        cfg.beginGroup(generalGroup());
-        raw = cfg.value(renderingBackendKey(), renderingBackend()).toString();
-        cfg.endGroup();
-    }
+    // already resolves "General/RenderingBackend". The explicit [General] group
+    // fallback was removed: it was dead code because the implicit mapping already
+    // catches both ungrouped and [General]-grouped keys identically.
+    const QString raw = cfg.value(renderingBackendKey(), renderingBackend()).toString();
     return normalizeRenderingBackend(raw);
 }
 

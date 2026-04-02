@@ -109,9 +109,8 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
     // overwrites the depth attachment — only the final buffer pass's depth output survives
     // for the image pass to read at binding 12.
     if (m_useDepthBuffer && multiBufferMode && m_bufferPaths.size() > 1) {
-        static bool warned = false;
-        if (!warned) {
-            warned = true;
+        if (!m_depthMultiBufferWarned) {
+            m_depthMultiBufferWarned = true;
             qCWarning(lcOverlay)
                 << "Depth buffer with" << m_bufferPaths.size()
                 << "buffer passes: only the last pass's depth output will be available in the image pass";

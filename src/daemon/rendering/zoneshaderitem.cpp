@@ -46,6 +46,7 @@ ZoneShaderItem::~ZoneShaderItem()
     if (m_renderNode && window()) {
         m_renderNode->invalidateItem();
     }
+    m_renderNode = nullptr;
 }
 
 // ============================================================================

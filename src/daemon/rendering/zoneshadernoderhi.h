@@ -122,7 +122,7 @@ private:
     void appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
     void appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
     void appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
-    void resetAllSrbs();
+    void resetAllBindingsAndPipelines();
     void bakeBufferShaders();
 
     QQuickItem* m_item = nullptr;
@@ -261,6 +261,7 @@ private:
 
     // Depth buffer (binding 12) — opt-in via metadata "depthBuffer": true
     bool m_useDepthBuffer = false;
+    bool m_depthMultiBufferWarned = false; ///< Per-instance warning: shared depth across multi-buffer passes
     std::unique_ptr<QRhiTexture> m_depthTexture; // R32F, readable at binding 12
     std::unique_ptr<QRhiSampler> m_depthSampler;
 

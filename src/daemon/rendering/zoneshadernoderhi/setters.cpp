@@ -189,7 +189,7 @@ void ZoneShaderNodeRhi::setUserTextureWrap(int slot, const QString& wrap)
     m_userTextureWraps[slot] = use;
     // Force sampler recreation with new wrap mode
     m_userTextureSamplers[slot].reset();
-    resetAllSrbs();
+    resetAllBindingsAndPipelines();
 }
 
 void ZoneShaderNodeRhi::setWallpaperTexture(const QImage& image)
@@ -219,7 +219,7 @@ void ZoneShaderNodeRhi::setUseWallpaper(bool use)
     for (int i = 0; i < kMaxBufferPasses; ++i) {
         m_multiBufferPipelines[i].reset();
     }
-    resetAllSrbs();
+    resetAllBindingsAndPipelines();
 }
 
 void ZoneShaderNodeRhi::appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const
@@ -264,11 +264,11 @@ void ZoneShaderNodeRhi::setUseDepthBuffer(bool use)
     for (int i = 0; i < kMaxBufferPasses; ++i) {
         m_multiBufferPipelines[i].reset();
     }
-    resetAllSrbs();
+    resetAllBindingsAndPipelines();
     markDirty(QSGNode::DirtyMaterial);
 }
 
-void ZoneShaderNodeRhi::resetAllSrbs()
+void ZoneShaderNodeRhi::resetAllBindingsAndPipelines()
 {
     m_srb.reset();
     m_srbB.reset();
@@ -417,7 +417,7 @@ void ZoneShaderNodeRhi::setBufferWrap(const QString& wrap)
         m_bufferWraps[i] = use;
         m_bufferSamplers[i].reset();
     }
-    resetAllSrbs();
+    resetAllBindingsAndPipelines();
 }
 
 void ZoneShaderNodeRhi::setBufferWraps(const QStringList& wraps)
@@ -432,7 +432,7 @@ void ZoneShaderNodeRhi::setBufferWraps(const QStringList& wraps)
         }
     }
     if (changed) {
-        resetAllSrbs();
+        resetAllBindingsAndPipelines();
     }
 }
 
@@ -447,7 +447,7 @@ void ZoneShaderNodeRhi::setBufferFilter(const QString& filter)
         m_bufferFilters[i] = use;
         m_bufferSamplers[i].reset();
     }
-    resetAllSrbs();
+    resetAllBindingsAndPipelines();
 }
 
 void ZoneShaderNodeRhi::setBufferFilters(const QStringList& filters)
@@ -462,7 +462,7 @@ void ZoneShaderNodeRhi::setBufferFilters(const QStringList& filters)
         }
     }
     if (changed) {
-        resetAllSrbs();
+        resetAllBindingsAndPipelines();
     }
 }
 

@@ -6,6 +6,7 @@
 
 #include "../../../core/constants.h"
 #include "../../../core/logging.h"
+#include "../../../core/shaderutils.h"
 
 #include <QFile>
 #include <QMutexLocker>
@@ -209,12 +210,7 @@ void ZoneShaderItem::setBufferWraps(const QStringList& wraps)
 
 void ZoneShaderItem::setBufferFilter(const QString& filter)
 {
-    QString use;
-    if (filter == QLatin1String("nearest") || filter == QLatin1String("mipmap")) {
-        use = filter;
-    } else {
-        use = QStringLiteral("linear");
-    }
+    const QString use = normalizeFilterMode(filter);
     if (m_bufferFilter == use) {
         return;
     }
