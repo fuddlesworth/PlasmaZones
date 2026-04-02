@@ -25,23 +25,15 @@ layout(location = 0) out vec4 fragColor;
 // Noise
 // ═══════════════════════════════════════════════════════════════════════
 
-float noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(
-        mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
-        mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
-        f.y
-    );
-}
-
+// NOTE: fbm(vec2, int) is duplicated in neon-venom/effect.frag. The two shaders
+// use slightly different fbm signatures (neon-venom adds rotAngle), so
+// deduplication into common.glsl needs more thought before attempting.
 float fbm(vec2 p, int octaves) {
     float f = 0.0;
     float amp = 0.5;
     mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
     for (int i = 0; i < octaves; i++) {
-        f += amp * noise(p);
+        f += amp * noise2D(p);
         p = rot * p * 2.0;
         amp *= 0.5;
     }
@@ -84,7 +76,7 @@ float acquisitionRing(vec2 uv, vec2 center, float radius, float width,
     float segActive = smoothstep(activeFrac * TAU + 0.1, activeFrac * TAU, segAngle);
     // Gap pattern — some segments off for mechanical feel
     float gapId = floor(segAngle / tickSpacing);
-    float gapOn = step(0.25, fract(sin(gapId * 127.1 + floor(t * 0.4)) * 43758.5));
+    float gapOn = step(0.25, hash11(gapId * 127.1 + floor(t * 0.4)));
 
     // Traveling energy pulse around the ring circumference
     float pulseAngle = mod(angle - t * 2.0, TAU);
@@ -115,7 +107,7 @@ float dataArc(vec2 uv, vec2 center, float radius, float startAngle,
 
     // Data readout: hash-based brightness variation along the arc
     float dataId = floor(a * 20.0 + t);
-    float dataOn = step(0.3, fract(sin(dataId * 43.7) * 43758.5));
+    float dataOn = step(0.3, hash11(dataId * 43.7));
 
     return arc * arcMask * (0.3 + dataOn * 0.7);
 }
@@ -268,7 +260,7 @@ float ghostData(vec2 uv, float t, float intensity) {
     float burstFade = exp(-fract(t * 0.7) * 3.0);
 
     // Spatial mask: ghosts only appear in certain regions (not everywhere)
-    float spatialMask = step(0.6, noise(uv * 4.0 + burstTime));
+    float spatialMask = step(0.6, noise2D(uv * 4.0 + burstTime));
 
     return ridge * burst * burstFade * spatialMask * intensity;
 }

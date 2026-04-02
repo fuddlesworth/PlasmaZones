@@ -535,6 +535,7 @@ void ZoneShaderNodeRhi::bakeBufferShaders()
                 m_bufferShaderReady = true;
                 m_bufferPipeline.reset();
                 m_bufferSrb.reset();
+                m_bufferSrbB.reset();
             } else {
                 qCWarning(lcOverlay) << "Buffer shader: compile failed, path=" << m_bufferPath
                                      << "error=" << fragmentBaker.errorMessage();

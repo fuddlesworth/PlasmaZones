@@ -6,30 +6,11 @@
 #include "../rendering_macros.h"
 
 #include "../../../core/logging.h"
+#include "../../../core/shaderutils.h"
 
 #include <QFileInfo>
-#include <QLatin1String>
 
 namespace PlasmaZones {
-
-// ============================================================================
-// Normalize helpers for wrap/filter mode strings
-// ============================================================================
-
-// Normalize wrap mode string: only "repeat" is recognized, everything else → "clamp"
-static QString normalizeWrapMode(const QString& wrap)
-{
-    return (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
-}
-
-// Normalize filter mode string: "nearest" and "mipmap" are recognized, everything else → "linear"
-static QString normalizeFilterMode(const QString& filter)
-{
-    if (filter == QLatin1String("nearest") || filter == QLatin1String("mipmap")) {
-        return filter;
-    }
-    return QStringLiteral("linear");
-}
 
 // ============================================================================
 // Zone Data Setters

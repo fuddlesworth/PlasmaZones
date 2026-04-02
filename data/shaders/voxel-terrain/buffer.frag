@@ -316,11 +316,12 @@ void main() {
     HitInfo hit = dda_raycast(ro, rd, camPos, tp);
 
     vec3 col = vec3(0.0);
-    float alpha = 1.0;
+    float alpha;
 
     float volG = min(hit.volGlow, 3.0);
 
     if (hit.hit) {
+        alpha = 1.0;
         vec3 nor = hit.normal;
         vec3 uvw = hit.pos - hit.vos;
 
@@ -447,6 +448,7 @@ void main() {
             }
         }
     } else {
+        alpha = 0.0;  // updated below from volumetric contribution
         // ── Negative space: atmospheric depth ──────────────
 
         // Radial depth gradient — not flat black
@@ -568,6 +570,13 @@ void main() {
     // flat 0.1 cap preserves channel ratios, gamma lifts
     // darks, clamp clips the hot channels to neon.
     col = pow(max(col, vec3(0.0)), vec3(0.45));
+
+    // For miss pixels, derive alpha from the post-gamma luminance so the
+    // image pass can blend with the zone fill color instead of getting an
+    // opaque black background.  Hit pixels keep alpha = 1.0.
+    if (!hit.hit) {
+        alpha = clamp(dot(col, vec3(0.2126, 0.7152, 0.0722)) * 2.5, 0.0, 1.0);
+    }
 
     fragColor = vec4(col, alpha);
 

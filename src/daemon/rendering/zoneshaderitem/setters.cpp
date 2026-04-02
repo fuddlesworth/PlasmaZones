@@ -78,10 +78,6 @@ void ZoneShaderItem::setIMouse(const QPointF& mouse)
 
 void ZoneShaderItem::setZones(const QVariantList& zones)
 {
-    // Note: We intentionally skip deep comparison here for performance reasons.
-    // Zone data changes frequently during animations, and comparing large QVariantLists
-    // on every frame would be more expensive than re-parsing. The parseZoneData()
-    // function handles the actual change detection via m_zoneDataDirty flag.
     if (m_zones == zones) {
         return;
     }

@@ -77,7 +77,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             // 3x3 box blur weighted by circle of confusion
             vec4 blurred = vec4(0.0);
             float total = 0.0;
-            vec2 texelSize = 1.0 / max(iResolution, vec2(1.0));
+            vec2 texelSize = 1.0 / max(iChannelResolution[0], vec2(1.0));
             for (int dy = -1; dy <= 1; dy++) {
                 for (int dx = -1; dx <= 1; dx++) {
                     vec2 offset = vec2(float(dx), float(dy)) * texelSize * coc * 8.0;

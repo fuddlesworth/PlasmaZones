@@ -272,7 +272,7 @@ void OverlayService::createOverlayWindow(QScreen* screen)
                                QStringLiteral("plasmazones-overlay-%1").arg(Utils::screenIdentifier(screen)),
                                LayerSurface::AnchorAll)) {
         qCWarning(lcOverlay) << "Failed to configure layer surface for overlay on" << screen->name();
-        delete window;
+        window->deleteLater();
         return;
     }
 

@@ -343,7 +343,6 @@ install(DIRECTORY data/shaders/
     PATTERN "*.glsl"
     PATTERN "*.vert"
     PATTERN "*.frag"
-    PATTERN "*.comp"
     PATTERN "*.png"
     PATTERN "*.svg"
 )

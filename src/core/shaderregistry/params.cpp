@@ -257,8 +257,9 @@ QImage ShaderRegistry::loadWallpaperImage()
     QString path = s_cachedWallpaperPath;
     if (path.isEmpty() || !QFile::exists(path)) {
         lock.unlock();
-        path = wallpaperPath(); // acquires lock internally
+        wallpaperPath(); // populates s_cachedWallpaperPath (acquires lock internally)
         lock.relock();
+        path = s_cachedWallpaperPath; // re-read after relock — local copy may be stale
     }
     if (path.isEmpty()) {
         return {};

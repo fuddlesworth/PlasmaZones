@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "shaderregistry.h"
+#include "shaderutils.h"
 
 #include <QColor>
 #include <QDesktopServices>
@@ -20,21 +21,6 @@
 #include "logging.h"
 
 namespace PlasmaZones {
-
-// Normalize wrap mode: only "repeat" is recognized, everything else → "clamp"
-static QString normalizeWrap(const QString& wrap)
-{
-    return (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
-}
-
-// Normalize filter mode: "nearest" and "mipmap" recognized, everything else → "linear"
-static QString normalizeFilter(const QString& filter)
-{
-    if (filter == QLatin1String("nearest") || filter == QLatin1String("mipmap")) {
-        return filter;
-    }
-    return QStringLiteral("linear");
-}
 
 // Namespace UUID for generating deterministic shader IDs (UUID v5)
 static const QUuid ShaderNamespaceUuid = QUuid::fromString(QStringLiteral("{a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d}"));
@@ -493,10 +479,7 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
     if (info.bufferShaderPaths.isEmpty()) {
         const QString bufferShaderName =
             root.value(QLatin1String("bufferShader")).toString(QStringLiteral("buffer.frag"));
-        info.bufferShaderPath = dir.filePath(bufferShaderName);
-        info.bufferShaderPaths.append(info.bufferShaderPath);
-    } else {
-        info.bufferShaderPath = info.bufferShaderPaths.constFirst();
+        info.bufferShaderPaths.append(dir.filePath(bufferShaderName));
     }
     if (info.isMultipass) {
         bool allExist = true;
@@ -509,7 +492,6 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
         }
         if (!allExist) {
             info.bufferShaderPaths.clear();
-            info.bufferShaderPath.clear();
         }
     }
     // Desktop wallpaper subscription: shader opts in to receive wallpaper at binding 11
@@ -518,14 +500,14 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
     info.bufferFeedback = root.value(QLatin1String("bufferFeedback")).toBool(false);
     qreal scale = root.value(QLatin1String("bufferScale")).toDouble(1.0);
     info.bufferScale = qBound(0.125, scale, 1.0);
-    info.bufferWrap = normalizeWrap(root.value(QLatin1String("bufferWrap")).toString(QStringLiteral("clamp")));
+    info.bufferWrap = normalizeWrapMode(root.value(QLatin1String("bufferWrap")).toString(QStringLiteral("clamp")));
 
     info.useDepthBuffer = root.value(QLatin1String("depthBuffer")).toBool(false);
 
     const QJsonArray bufferWrapsArray = root.value(QLatin1String("bufferWraps")).toArray();
     if (!bufferWrapsArray.isEmpty()) {
         for (const QJsonValue& v : bufferWrapsArray) {
-            info.bufferWraps.append(normalizeWrap(v.toString()));
+            info.bufferWraps.append(normalizeWrapMode(v.toString()));
         }
         const int needed = info.bufferShaderPaths.size();
         while (info.bufferWraps.size() < needed) {
@@ -537,12 +519,13 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
     }
 
     // Per-channel filter modes: "nearest", "linear", or "mipmap"
-    info.bufferFilter = normalizeFilter(root.value(QLatin1String("bufferFilter")).toString(QStringLiteral("linear")));
+    info.bufferFilter =
+        normalizeFilterMode(root.value(QLatin1String("bufferFilter")).toString(QStringLiteral("linear")));
 
     const QJsonArray bufferFiltersArray = root.value(QLatin1String("bufferFilters")).toArray();
     if (!bufferFiltersArray.isEmpty()) {
         for (const QJsonValue& v : bufferFiltersArray) {
-            info.bufferFilters.append(normalizeFilter(v.toString()));
+            info.bufferFilters.append(normalizeFilterMode(v.toString()));
         }
         const int needed = info.bufferShaderPaths.size();
         while (info.bufferFilters.size() < needed) {

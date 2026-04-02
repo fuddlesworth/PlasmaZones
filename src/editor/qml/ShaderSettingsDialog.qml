@@ -1025,6 +1025,7 @@ Kirigami.Dialog {
 
                             delegate: MenuItem {
                                 text: modelData.name
+                                Accessible.name: modelData.name
                                 onTriggered: {
                                     if (!editorController)
                                         return ;
