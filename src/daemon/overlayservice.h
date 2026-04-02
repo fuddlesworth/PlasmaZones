@@ -146,6 +146,15 @@ public:
      */
     void warmUpLayoutOsd();
 
+    /**
+     * @brief Pre-create Navigation OSD QML windows for all connected screens.
+     *
+     * Same rationale as warmUpLayoutOsd(): avoids ~100-300ms QML compilation
+     * delay on the first keyboard navigation action after daemon start or
+     * after the dismiss timer destroys the previous window.
+     */
+    void warmUpNavigationOsd();
+
     // Navigation OSD (feedback for keyboard navigation)
     void showNavigationOsd(bool success, const QString& action, const QString& reason,
                            const QString& sourceZoneId = QString(), const QString& targetZoneId = QString(),
@@ -256,13 +265,13 @@ private:
     // Track screens with failed window creation to prevent log spam
     QHash<QScreen*, bool> m_navigationOsdCreationFailed;
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
-    QString m_lastNavigationAction;
-    QString m_lastNavigationReason;
+    QString m_lastNavigationActionKey; // "action:reason" composite key
     QElapsedTimer m_lastNavigationTime;
 
     void createZoneSelectorWindow(QScreen* screen);
     void destroyZoneSelectorWindow(QScreen* screen);
     void updateZoneSelectorWindow(QScreen* screen);
+    void showLayoutOsdImpl(Layout* layout, const QString& screenId, bool locked);
     void createLayoutOsdWindow(QScreen* screen);
     void destroyLayoutOsdWindow(QScreen* screen);
     void createNavigationOsdWindow(QScreen* screen);

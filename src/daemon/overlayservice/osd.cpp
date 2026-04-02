@@ -17,19 +17,6 @@ namespace PlasmaZones {
 
 namespace {
 
-// Result of OSD window preparation
-struct OsdWindowSetup
-{
-    QQuickWindow* window = nullptr;
-    QRect screenGeom;
-    qreal aspectRatio = 16.0 / 9.0;
-
-    explicit operator bool() const
-    {
-        return window != nullptr;
-    }
-};
-
 // Center an OSD/layer window on screen using layer surface margins.
 // Precondition: the window must already have a LayerSurface (created before show()).
 // This function retrieves the existing LayerSurface — it does not create one.
@@ -112,30 +99,7 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenId)
         return;
     }
 
-    QQuickWindow* window = nullptr;
-    QRect screenGeom;
-    qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio, screenId)) {
-        return;
-    }
-
-    writeQmlProperty(window, QStringLiteral("locked"), false);
-    writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
-    writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
-    writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
-    writeQmlProperty(window, QStringLiteral("aspectRatioClass"),
-                     ScreenClassification::toString(layout->aspectRatioClass()));
-    writeQmlProperty(window, QStringLiteral("category"), static_cast<int>(LayoutCategory::Manual));
-    writeQmlProperty(window, QStringLiteral("autoAssign"), layout->autoAssign());
-    writeAutotileMetadata(window, false, false);
-    writeQmlProperty(window, QStringLiteral("zones"), LayoutUtils::zonesToVariantList(layout, ZoneField::Full));
-    writeFontProperties(window, m_settings);
-
-    // Size OSD using layout's intended AR for correct preview proportions
-    qreal layoutAR = ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
-    sizeAndCenterOsd(window, screenGeom, layoutAR);
-    QMetaObject::invokeMethod(window, "show");
-    qCInfo(lcOverlay) << "Layout OSD: layout=" << layout->name() << "screen=" << screenId;
+    showLayoutOsdImpl(layout, screenId, false);
 }
 
 void OverlayService::showLockedLayoutOsd(Layout* layout, const QString& screenId)
@@ -144,6 +108,11 @@ void OverlayService::showLockedLayoutOsd(Layout* layout, const QString& screenId
         return;
     }
 
+    showLayoutOsdImpl(layout, screenId, true);
+}
+
+void OverlayService::showLayoutOsdImpl(Layout* layout, const QString& screenId, bool locked)
+{
     QQuickWindow* window = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
@@ -151,7 +120,7 @@ void OverlayService::showLockedLayoutOsd(Layout* layout, const QString& screenId
         return;
     }
 
-    writeQmlProperty(window, QStringLiteral("locked"), true);
+    writeQmlProperty(window, QStringLiteral("locked"), locked);
     writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
     writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
@@ -168,7 +137,7 @@ void OverlayService::showLockedLayoutOsd(Layout* layout, const QString& screenId
     qreal layoutAR = ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
     sizeAndCenterOsd(window, screenGeom, layoutAR);
     QMetaObject::invokeMethod(window, "show");
-    qCInfo(lcOverlay) << "Locked OSD: layout=" << layout->name() << "screen=" << screenId;
+    qCInfo(lcOverlay) << (locked ? "Locked" : "Layout") << "OSD: layout=" << layout->name() << "screen=" << screenId;
 }
 
 void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
@@ -187,6 +156,9 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
         return;
     }
 
+    // Reset locked state — window is reused across show calls, so a prior
+    // showLockedLayoutOsd() would leave the lock overlay stuck on.
+    writeQmlProperty(window, QStringLiteral("locked"), false);
     writeQmlProperty(window, QStringLiteral("layoutId"), id);
     writeQmlProperty(window, QStringLiteral("layoutName"), name);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
@@ -217,10 +189,22 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
 
 void OverlayService::hideLayoutOsd()
 {
-    // Destroy windows instead of hiding. When Vulkan is the scene graph backend,
-    // hide() destroys the VkSwapchainKHR but Qt doesn't reinitialize it on
-    // re-show, causing the window to stop rendering after the first cycle.
-    // prepareLayoutOsdWindow() will recreate via createLayoutOsdWindow().
+    // Destroy only the sending window's screen, not all screens.
+    // showDesktopSwitchOsd() shows layout OSDs on ALL screens simultaneously;
+    // each window has its own 1500ms dismiss timer.  If we destroyed all windows
+    // here, the first screen to dismiss would kill the others mid-animation.
+    // Destroy (not hide) because on Vulkan, hide() destroys the VkSwapchainKHR
+    // but Qt doesn't reinitialize it on re-show.
+    auto* senderWindow = qobject_cast<QQuickWindow*>(sender());
+    if (senderWindow) {
+        for (auto it = m_layoutOsdWindows.constBegin(); it != m_layoutOsdWindows.constEnd(); ++it) {
+            if (it.value() == senderWindow) {
+                destroyLayoutOsdWindow(it.key());
+                return;
+            }
+        }
+    }
+    // Fallback: no sender (direct call) — destroy all
     const QList<QScreen*> screens = m_layoutOsdWindows.keys();
     for (auto* screen : screens) {
         destroyLayoutOsdWindow(screen);
@@ -246,9 +230,23 @@ void OverlayService::warmUpLayoutOsd()
             if (!m_layoutOsdWindows.contains(screen)) {
                 createLayoutOsdWindow(screen);
             }
+            if (!m_navigationOsdWindows.contains(screen)) {
+                createNavigationOsdWindow(screen);
+            }
         });
         m_screenAddedConnected = true;
     }
+}
+
+void OverlayService::warmUpNavigationOsd()
+{
+    const auto screens = QGuiApplication::screens();
+    for (QScreen* screen : screens) {
+        if (!m_navigationOsdWindows.contains(screen)) {
+            createNavigationOsdWindow(screen);
+        }
+    }
+    qCInfo(lcOverlay) << "Pre-warmed Navigation OSD windows for" << screens.size() << "screens";
 }
 
 void OverlayService::createLayoutOsdWindow(QScreen* screen)
@@ -304,14 +302,13 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
 
     // Deduplicate: Skip if same action+reason within 200ms (prevents duplicate from Qt signal + D-Bus signal)
-    QString actionKey = action + QLatin1String(":") + reason;
-    if (actionKey == m_lastNavigationAction + QLatin1String(":") + m_lastNavigationReason
-        && m_lastNavigationTime.isValid() && m_lastNavigationTime.elapsed() < 200) {
+    const QString actionKey = action + QLatin1Char(':') + reason;
+    if (actionKey == m_lastNavigationActionKey && m_lastNavigationTime.isValid()
+        && m_lastNavigationTime.elapsed() < 200) {
         qCDebug(lcOverlay) << "Skipping duplicate navigation OSD:" << action << reason;
         return;
     }
-    m_lastNavigationAction = action;
-    m_lastNavigationReason = reason;
+    m_lastNavigationActionKey = actionKey;
     m_lastNavigationTime.restart();
 
     // Show on the screen where the navigation occurred, fallback to primary
@@ -424,10 +421,18 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
 void OverlayService::hideNavigationOsd()
 {
-    // Destroy windows instead of hiding. When Vulkan is the scene graph backend,
-    // hide() destroys the VkSwapchainKHR but Qt doesn't reinitialize it on
-    // re-show, causing the window to stop rendering after the first cycle.
-    // showNavigationOsd() will recreate via createNavigationOsdWindow().
+    // Per-screen destroy (same rationale as hideLayoutOsd — don't kill other
+    // screens' active OSDs when one screen's dismiss timer fires).
+    auto* senderWindow = qobject_cast<QQuickWindow*>(sender());
+    if (senderWindow) {
+        for (auto it = m_navigationOsdWindows.constBegin(); it != m_navigationOsdWindows.constEnd(); ++it) {
+            if (it.value() == senderWindow) {
+                destroyNavigationOsdWindow(it.key());
+                return;
+            }
+        }
+    }
+    // Fallback: no sender (direct call) — destroy all
     const QList<QScreen*> screens = m_navigationOsdWindows.keys();
     for (auto* screen : screens) {
         destroyNavigationOsdWindow(screen);

@@ -419,6 +419,7 @@ void Daemon::connectLayoutSignals()
     if (m_overlayService) {
         QTimer::singleShot(0, this, [this]() {
             m_overlayService->warmUpLayoutOsd();
+            m_overlayService->warmUpNavigationOsd();
         });
     }
 
