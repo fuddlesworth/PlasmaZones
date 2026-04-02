@@ -170,7 +170,7 @@ ColumnLayout {
                     else
                         filtered = Logic.applyTilingFilters(filtered, search, filterBar);
                     let groups = buildGroups(filtered, filterBar.groupByIndex);
-                    let customOrder = root.viewMode === 0 ? settingsController.settings.snappingLayoutOrder : settingsController.settings.tilingAlgorithmOrder;
+                    let customOrder = root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder();
                     Logic.sortItems(groups, filterBar.sortByIndex, filterBar.sortAscending, customOrder);
                     model = Logic.finalizeGroups(groups);
                 }

@@ -541,13 +541,17 @@ public:
     Q_INVOKABLE void stageAssignmentEntry(const QString& screenName, int virtualDesktop, const QString& activityId,
                                           int mode, const QString& snappingLayoutId, const QString& tilingAlgorithmId);
 
-    // ── Ordering helpers ─────────────────────────────────────────────────────
+    // ── Ordering helpers (staged — flushed to settings on save) ────────────
     Q_INVOKABLE QVariantList resolvedSnappingOrder() const;
     Q_INVOKABLE QVariantList resolvedTilingOrder() const;
     Q_INVOKABLE void moveSnappingLayout(int fromIndex, int toIndex);
     Q_INVOKABLE void moveTilingAlgorithm(int fromIndex, int toIndex);
     Q_INVOKABLE void resetSnappingOrder();
     Q_INVOKABLE void resetTilingOrder();
+    Q_INVOKABLE bool hasCustomSnappingOrder() const;
+    Q_INVOKABLE bool hasCustomTilingOrder() const;
+    Q_INVOKABLE QStringList effectiveSnappingOrder() const;
+    Q_INVOKABLE QStringList effectiveTilingOrder() const;
 
     // ── Algorithm helpers ────────────────────────────────────────────────────
     Q_INVOKABLE QVariantList availableAlgorithms() const;
@@ -650,6 +654,10 @@ Q_SIGNALS:
     void disabledDesktopsChanged();
     void disabledActivitiesChanged();
 
+    // Ordering staged signals
+    void stagedSnappingOrderChanged();
+    void stagedTilingOrderChanged();
+
     // Editor signals
     void editorDuplicateShortcutChanged();
     void editorSplitHorizontalShortcutChanged();
@@ -737,6 +745,10 @@ private:
     QHash<int, QString> m_stagedQuickSlots;
     // Staged tiling quick layout slot changes (flushed on Apply to config)
     QHash<int, QString> m_stagedTilingQuickSlots;
+
+    // Staged ordering changes (flushed to m_settings on save)
+    std::optional<QStringList> m_stagedSnappingOrder;
+    std::optional<QStringList> m_stagedTilingOrder;
 
     static QString assignmentCacheKey(const QString& screen, int desktop, const QString& activity);
     StagedAssignment& stagedEntry(const QString& screen, int desktop, const QString& activity);

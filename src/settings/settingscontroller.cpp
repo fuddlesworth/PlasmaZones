@@ -357,6 +357,8 @@ void SettingsController::load()
     m_stagedAssignments.clear();
     m_stagedQuickSlots.clear();
     m_stagedTilingQuickSlots.clear();
+    m_stagedSnappingOrder.reset();
+    m_stagedTilingOrder.reset();
     m_loading = false;
     setNeedsSave(false);
 }
@@ -364,6 +366,16 @@ void SettingsController::load()
 void SettingsController::save()
 {
     m_saving = true;
+
+    // Flush staged ordering to settings before persisting
+    if (m_stagedSnappingOrder.has_value()) {
+        m_settings.setSnappingLayoutOrder(*m_stagedSnappingOrder);
+        m_stagedSnappingOrder.reset();
+    }
+    if (m_stagedTilingOrder.has_value()) {
+        m_settings.setTilingAlgorithmOrder(*m_stagedTilingOrder);
+        m_stagedTilingOrder.reset();
+    }
 
     // Save main settings (includes editor settings)
     m_settings.save();
@@ -416,6 +428,8 @@ void SettingsController::defaults()
     m_stagedAssignments.clear();
     m_stagedQuickSlots.clear();
     m_stagedTilingQuickSlots.clear();
+    m_stagedSnappingOrder.reset();
+    m_stagedTilingOrder.reset();
 
     // Notify daemon to reload — reset() wrote defaults to disk
     DaemonDBus::notifyReload();
@@ -2993,6 +3007,26 @@ static QVariantList applyCustomOrder(const QStringList& customOrder, const QHash
     return result;
 }
 
+QStringList SettingsController::effectiveSnappingOrder() const
+{
+    return m_stagedSnappingOrder.value_or(m_settings.snappingLayoutOrder());
+}
+
+QStringList SettingsController::effectiveTilingOrder() const
+{
+    return m_stagedTilingOrder.value_or(m_settings.tilingAlgorithmOrder());
+}
+
+bool SettingsController::hasCustomSnappingOrder() const
+{
+    return !effectiveSnappingOrder().isEmpty();
+}
+
+bool SettingsController::hasCustomTilingOrder() const
+{
+    return !effectiveTilingOrder().isEmpty();
+}
+
 QVariantList SettingsController::resolvedSnappingOrder() const
 {
     QHash<QString, QVariantMap> layoutMap;
@@ -3003,7 +3037,7 @@ QVariantList SettingsController::resolvedSnappingOrder() const
             layoutMap.insert(id, map);
         }
     }
-    return applyCustomOrder(m_settings.snappingLayoutOrder(), layoutMap);
+    return applyCustomOrder(effectiveSnappingOrder(), layoutMap);
 }
 
 QVariantList SettingsController::resolvedTilingOrder() const
@@ -3016,7 +3050,7 @@ QVariantList SettingsController::resolvedTilingOrder() const
             algoMap.insert(id, map);
         }
     }
-    return applyCustomOrder(m_settings.tilingAlgorithmOrder(), algoMap);
+    return applyCustomOrder(effectiveTilingOrder(), algoMap);
 }
 
 void SettingsController::moveSnappingLayout(int fromIndex, int toIndex)
@@ -3027,13 +3061,13 @@ void SettingsController::moveSnappingLayout(int fromIndex, int toIndex)
         return;
     }
 
-    // Build the full ID list from the resolved order, then move
     QStringList ids;
     for (const QVariant& v : ordered) {
         ids.append(v.toMap().value(QStringLiteral("id")).toString());
     }
     ids.move(fromIndex, toIndex);
-    m_settings.setSnappingLayoutOrder(ids);
+    m_stagedSnappingOrder = ids;
+    Q_EMIT stagedSnappingOrderChanged();
     setNeedsSave(true);
 }
 
@@ -3050,19 +3084,22 @@ void SettingsController::moveTilingAlgorithm(int fromIndex, int toIndex)
         ids.append(v.toMap().value(QStringLiteral("id")).toString());
     }
     ids.move(fromIndex, toIndex);
-    m_settings.setTilingAlgorithmOrder(ids);
+    m_stagedTilingOrder = ids;
+    Q_EMIT stagedTilingOrderChanged();
     setNeedsSave(true);
 }
 
 void SettingsController::resetSnappingOrder()
 {
-    m_settings.setSnappingLayoutOrder({});
+    m_stagedSnappingOrder = QStringList{};
+    Q_EMIT stagedSnappingOrderChanged();
     setNeedsSave(true);
 }
 
 void SettingsController::resetTilingOrder()
 {
-    m_settings.setTilingAlgorithmOrder({});
+    m_stagedTilingOrder = QStringList{};
+    Q_EMIT stagedTilingOrderChanged();
     setNeedsSave(true);
 }
 

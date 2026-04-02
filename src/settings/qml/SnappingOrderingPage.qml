@@ -15,7 +15,7 @@ OrderingPage {
     emptyText: i18n("No layouts available")
     emptyExplanation: i18n("Create layouts in the Layouts page first.")
     resetAccessibleName: i18n("Reset layout order to default")
-    hasCustomOrder: settingsController.settings.snappingLayoutOrder.length > 0
+    hasCustomOrder: settingsController.hasCustomSnappingOrder()
     previewZonesKey: "zones"
     zoneCountKey: "zoneCount"
     resolveOrder: function() {
@@ -37,13 +37,14 @@ OrderingPage {
     }
 
     Connections {
-        function onSnappingLayoutOrderChanged() {
+        function onStagedSnappingOrderChanged() {
             if (!root._rebuilding)
                 root.rebuildModel();
 
+            root.hasCustomOrder = settingsController.hasCustomSnappingOrder();
         }
 
-        target: settingsController.settings
+        target: settingsController
     }
 
 }
