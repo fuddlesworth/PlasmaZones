@@ -236,6 +236,17 @@ static void appendAutotileEntries(QVector<UnifiedLayoutEntry>& list)
     }
 }
 
+static bool defaultEntryLessThan(const UnifiedLayoutEntry& a, const UnifiedLayoutEntry& b)
+{
+    if (a.recommended != b.recommended) {
+        return a.recommended;
+    }
+    if (a.isAutotile != b.isAutotile) {
+        return !a.isAutotile;
+    }
+    return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
+}
+
 static void sortUnifiedEntries(QVector<UnifiedLayoutEntry>& list, const QStringList& customOrder = {})
 {
     if (!customOrder.isEmpty()) {
@@ -253,26 +264,10 @@ static void sortUnifiedEntries(QVector<UnifiedLayoutEntry>& list, const QStringL
                              if (aIdx != bIdx) {
                                  return aIdx < bIdx;
                              }
-                             // Both unlisted — fall back to default sort
-                             if (a.recommended != b.recommended) {
-                                 return a.recommended;
-                             }
-                             if (a.isAutotile != b.isAutotile) {
-                                 return !a.isAutotile;
-                             }
-                             return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
+                             return defaultEntryLessThan(a, b);
                          });
     } else {
-        // Default sort: recommended before non-recommended, manual before autotile, then alphabetical
-        std::sort(list.begin(), list.end(), [](const UnifiedLayoutEntry& a, const UnifiedLayoutEntry& b) {
-            if (a.recommended != b.recommended) {
-                return a.recommended;
-            }
-            if (a.isAutotile != b.isAutotile) {
-                return !a.isAutotile;
-            }
-            return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
-        });
+        std::sort(list.begin(), list.end(), defaultEntryLessThan);
     }
 }
 

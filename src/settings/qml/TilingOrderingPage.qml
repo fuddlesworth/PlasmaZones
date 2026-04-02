@@ -10,6 +10,10 @@ OrderingPage {
     settingsBridge: TilingBridge {
     }
 
+    function updateCustomOrderState() {
+        root.hasCustomOrder = settingsController.hasCustomTilingOrder();
+    }
+
     headerText: i18n("Tiling Algorithm Priority")
     infoText: i18n("Set the priority order for algorithms when cycling with keyboard shortcuts and in the zone selector popup. Drag rows or use the arrow buttons to reorder.")
     emptyText: i18n("No algorithms available")
@@ -34,6 +38,7 @@ OrderingPage {
     Connections {
         function onAvailableAlgorithmsChanged() {
             root.rebuildModel();
+            root.updateCustomOrderState();
         }
 
         target: settingsController
@@ -44,7 +49,7 @@ OrderingPage {
             if (!root._rebuilding)
                 root.rebuildModel();
 
-            root.hasCustomOrder = settingsController.hasCustomTilingOrder();
+            root.updateCustomOrderState();
         }
 
         target: settingsController

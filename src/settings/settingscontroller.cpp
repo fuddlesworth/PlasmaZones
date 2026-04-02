@@ -359,6 +359,8 @@ void SettingsController::load()
     m_stagedTilingQuickSlots.clear();
     m_stagedSnappingOrder.reset();
     m_stagedTilingOrder.reset();
+    Q_EMIT stagedSnappingOrderChanged();
+    Q_EMIT stagedTilingOrderChanged();
     m_loading = false;
     setNeedsSave(false);
 }
@@ -430,6 +432,8 @@ void SettingsController::defaults()
     m_stagedTilingQuickSlots.clear();
     m_stagedSnappingOrder.reset();
     m_stagedTilingOrder.reset();
+    Q_EMIT stagedSnappingOrderChanged();
+    Q_EMIT stagedTilingOrderChanged();
 
     // Notify daemon to reload — reset() wrote defaults to disk
     DaemonDBus::notifyReload();
@@ -3062,6 +3066,7 @@ void SettingsController::moveSnappingLayout(int fromIndex, int toIndex)
     }
 
     QStringList ids;
+    ids.reserve(ordered.size());
     for (const QVariant& v : ordered) {
         ids.append(v.toMap().value(QStringLiteral("id")).toString());
     }
@@ -3080,6 +3085,7 @@ void SettingsController::moveTilingAlgorithm(int fromIndex, int toIndex)
     }
 
     QStringList ids;
+    ids.reserve(ordered.size());
     for (const QVariant& v : ordered) {
         ids.append(v.toMap().value(QStringLiteral("id")).toString());
     }

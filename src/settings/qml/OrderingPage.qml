@@ -174,7 +174,7 @@ Flickable {
                                         delegateRoot.y = Qt.binding(function() {
                                             return delegateRoot.baseY + delegateRoot.visualOffset;
                                         });
-                                        if (from >= 0 && to >= 0 && from !== to) {
+                                        if (from >= 0 && to >= 0 && from !== to && from < orderModel.count && to < orderModel.count) {
                                             orderModel.move(from, to, 1);
                                             root.moveItem(from, to);
                                         }
