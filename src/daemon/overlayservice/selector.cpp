@@ -74,9 +74,10 @@ void OverlayService::hideZoneSelector()
     // Note: Don't clear selected zone here - we need it for snapping when drag ends
     // The selected zone will be cleared after the snap is processed
 
-    // Destroy windows instead of hiding — on Vulkan, hide() destroys the
-    // VkSwapchainKHR and Qt doesn't reinitialize it on re-show.
-    // showZoneSelector() will create fresh windows via createZoneSelectorWindow().
+    // Destroy windows instead of hiding. When Vulkan is the scene graph backend,
+    // hide() destroys the VkSwapchainKHR but Qt doesn't reinitialize it on
+    // re-show — this affects ALL QQuickWindows, not just those with custom render
+    // nodes. showZoneSelector() will create fresh windows via createZoneSelectorWindow().
     const QList<QScreen*> screens = m_zoneSelectorWindows.keys();
     for (auto* screen : screens) {
         destroyZoneSelectorWindow(screen);

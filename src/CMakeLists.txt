@@ -401,6 +401,7 @@ install(TARGETS plasmazones_rendering
 # Daemon executable
 set(plasmazones_daemon_SRCS
     daemon/main.cpp
+    daemon/vulkan_support.cpp
     daemon/daemon.cpp
     daemon/daemon/start.cpp
     daemon/daemon/signals.cpp
@@ -502,6 +503,7 @@ configure_file(
 
 set(plasmazones_editor_SRCS
     editor/main.cpp
+    daemon/vulkan_support.cpp
     editor/EditorController.cpp
     editor/controller/gaps.cpp
     editor/controller/shader.cpp

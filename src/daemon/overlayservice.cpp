@@ -326,12 +326,15 @@ void OverlayService::updateSettings(ISettings* settings)
             }
         }
     }
-    // Zone selector windows don't use Vulkan rendering (standard QML), so hide() is safe.
-    for (auto* screen : m_zoneSelectorWindows.keys()) {
-        if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                              m_currentActivity)) {
-            if (auto* window = m_zoneSelectorWindows.value(screen)) {
-                window->hide();
+    // Zone selector windows must also be destroyed (not just hidden) when Vulkan is
+    // the scene graph backend — hide() destroys the VkSwapchainKHR and Qt doesn't
+    // reinitialize it on re-show, affecting ALL QQuickWindows.
+    {
+        const QList<QScreen*> selectorScreens = m_zoneSelectorWindows.keys();
+        for (auto* screen : selectorScreens) {
+            if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                                  m_currentActivity)) {
+                destroyZoneSelectorWindow(screen);
             }
         }
     }
@@ -393,15 +396,16 @@ Layout* OverlayService::resolveScreenLayout(QScreen* screen) const
 
 void OverlayService::hideDisabledAndRefresh()
 {
-    // Destroy overlay windows / hide selectors on screens where the current context is disabled.
-    // Overlay windows must be destroyed (not just hidden) because on Vulkan, hide() destroys
-    // the VkSwapchainKHR and Qt doesn't reinitialize it on re-show.
+    // Destroy windows on screens where the current context is disabled.
+    // Must destroy (not just hide) because on Vulkan, hide() destroys the
+    // VkSwapchainKHR and Qt doesn't reinitialize it on re-show.
     if (m_settings) {
-        for (auto* screen : m_zoneSelectorWindows.keys()) {
-            if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                                  m_currentActivity)) {
-                if (auto* window = m_zoneSelectorWindows.value(screen)) {
-                    window->hide();
+        {
+            const QList<QScreen*> selectorScreens = m_zoneSelectorWindows.keys();
+            for (auto* screen : selectorScreens) {
+                if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                                      m_currentActivity)) {
+                    destroyZoneSelectorWindow(screen);
                 }
             }
         }

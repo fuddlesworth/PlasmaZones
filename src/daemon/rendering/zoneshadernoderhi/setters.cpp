@@ -213,13 +213,10 @@ void ZoneShaderNodeRhi::setUseWallpaper(bool use)
     }
     m_useWallpaper = use;
     // Toggling wallpaper adds/removes binding 11 from the SRB layout.
-    // Pipelines bake the layout at creation, so they must be recreated too.
-    m_pipeline.reset();
-    m_bufferPipeline.reset();
-    for (int i = 0; i < kMaxBufferPasses; ++i) {
-        m_multiBufferPipelines[i].reset();
-    }
+    // resetAllBindingsAndPipelines() resets all SRBs AND pipelines so they are
+    // recreated with the new layout.
     resetAllBindingsAndPipelines();
+    markDirty(QSGNode::DirtyMaterial);
 }
 
 void ZoneShaderNodeRhi::appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const
@@ -256,14 +253,11 @@ void ZoneShaderNodeRhi::setUseDepthBuffer(bool use)
     }
     m_useDepthBuffer = use;
     // Toggling depth buffer adds/removes binding 12 from the SRB layout.
-    // Pipelines bake the layout at creation, so they must be recreated too.
+    // Release depth resources so ensureBufferTarget() recreates them with the new config.
     m_depthTexture.reset();
     m_depthSampler.reset();
-    m_pipeline.reset();
-    m_bufferPipeline.reset();
-    for (int i = 0; i < kMaxBufferPasses; ++i) {
-        m_multiBufferPipelines[i].reset();
-    }
+    // resetAllBindingsAndPipelines() resets all SRBs AND pipelines so they are
+    // recreated with the new layout.
     resetAllBindingsAndPipelines();
     markDirty(QSGNode::DirtyMaterial);
 }

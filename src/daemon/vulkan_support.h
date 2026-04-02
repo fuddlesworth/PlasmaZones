@@ -12,11 +12,9 @@
 Q_DECLARE_METATYPE(QVulkanInstance*)
 #endif
 
-#include <QGuiApplication>
-#include <QLibrary>
-#include <QQuickWindow>
-#include <QSGRendererInterface>
 #include <QString>
+
+class QGuiApplication;
 
 namespace PlasmaZones {
 
@@ -36,33 +34,7 @@ inline const QVersionNumber PzVulkanApiVersion = QVersionNumber(1, 1);
  * @param backend  Normalized rendering backend string ("vulkan", "opengl", "auto")
  * @return true if Vulkan was selected and library loaded; false otherwise
  */
-inline bool probeAndSetGraphicsApi(const QString& backend)
-{
-    if (backend == QLatin1String("vulkan")) {
-#if QT_CONFIG(vulkan)
-        QLibrary vulkanLib(QStringLiteral("vulkan"), 1);
-        bool vulkanLibAvailable = vulkanLib.load();
-        if (!vulkanLibAvailable) {
-            vulkanLib.setFileName(QStringLiteral("vulkan"));
-            vulkanLibAvailable = vulkanLib.load();
-        }
-        if (vulkanLibAvailable) {
-            QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
-            return true;
-        }
-        QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-        return false;
-#else
-        QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-        return false;
-#endif
-    }
-    if (backend == QLatin1String("opengl")) {
-        QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-    }
-    // "auto" → let Qt choose (default behavior)
-    return false;
-}
+bool probeAndSetGraphicsApi(const QString& backend);
 
 /**
  * Create and register QVulkanInstance AFTER QGuiApplication construction.
@@ -73,17 +45,7 @@ inline bool probeAndSetGraphicsApi(const QString& backend)
  * @return true if Vulkan instance was created successfully
  */
 #if QT_CONFIG(vulkan)
-inline bool createAndRegisterVulkanInstance(QVulkanInstance& vulkanInstance, QGuiApplication& app)
-{
-    vulkanInstance.setApiVersion(PzVulkanApiVersion);
-    vulkanInstance.setExtensions(vulkanInstance.extensions() << QByteArrayLiteral("VK_EXT_swapchain_colorspace"));
-    if (vulkanInstance.create()) {
-        app.setProperty(PzVulkanInstanceProperty, QVariant::fromValue(&vulkanInstance));
-        return true;
-    }
-    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-    return false;
-}
+bool createAndRegisterVulkanInstance(QVulkanInstance& vulkanInstance, QGuiApplication& app);
 #endif
 
 } // namespace PlasmaZones

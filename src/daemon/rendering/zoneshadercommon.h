@@ -75,7 +75,8 @@ struct alignas(16) ZoneShaderUniforms
     // Audio spectrum (CAVA): number of bars; 0 = disabled. Texture at binding 6.
     int iAudioSpectrumSize;
 
-    // 1 when rhi->isYUpInFramebuffer() (OpenGL): buffer texture sampling needs Y-flip
+    // Vestigial: always 1. Both OpenGL and Vulkan need Y-flip when sampling buffer
+    // textures. Kept in the UBO for layout stability (removing shifts all subsequent offsets).
     int iFlipBufferY;
     int _pad_after_audioSpectrum[2];
 

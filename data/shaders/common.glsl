@@ -30,7 +30,7 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     vec4 zoneParams[64];
     vec2 iChannelResolution[4];
     int iAudioSpectrumSize;  // number of bars; 0 = disabled
-    int iFlipBufferY;        // 1 = OpenGL (buffer textures need Y-flip when sampling)
+    int iFlipBufferY;        // Vestigial: always 1. Both OpenGL and Vulkan need Y-flip. Kept for UBO layout stability.
     vec2 iTextureResolution[4]; // user texture sizes (bindings 7-10); std140 pads each vec2 to 16 bytes
 };
 

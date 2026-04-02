@@ -400,7 +400,7 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
         // Clear shader properties if window is shader type but shaders are now disabled
         writeQmlProperty(window, QStringLiteral("shaderSource"), QUrl());
         writeQmlProperty(window, QStringLiteral("bufferShaderPath"), QString());
-        writeQmlProperty(window, QStringLiteral("bufferShaderPaths"), QVariantList());
+        writeQmlProperty(window, QStringLiteral("bufferShaderPaths"), QVariant::fromValue(QStringList()));
         writeQmlProperty(window, QStringLiteral("bufferFeedback"), false);
         writeQmlProperty(window, QStringLiteral("bufferScale"), 1.0);
         writeQmlProperty(window, QStringLiteral("bufferWrap"), QStringLiteral("clamp"));

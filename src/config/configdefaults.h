@@ -551,10 +551,8 @@ public:
      *
      * QSettings::IniFormat maps ungrouped keys (before any [Section] header) into
      * the "General" group automatically. The settings app writes RenderingBackend
-     * at the root level, so the default read resolves it via General/. We also
-     * explicitly check the [General] group as a fallback for robustness.
-     * This helper provides a single canonical read order used by daemon, editor,
-     * and Settings.
+     * at the root level, so the default read resolves it via General/ implicitly.
+     * This helper provides a single canonical read used by daemon, editor, and Settings.
      *
      * Safe to call before QCoreApplication exists (uses raw QSettings).
      * Returns the normalized backend string ("auto", "vulkan", or "opengl").
