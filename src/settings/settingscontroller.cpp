@@ -3057,42 +3057,39 @@ QVariantList SettingsController::resolvedTilingOrder() const
     return applyCustomOrder(effectiveTilingOrder(), algoMap);
 }
 
-void SettingsController::moveSnappingLayout(int fromIndex, int toIndex)
+// Shared helper: move an item within a resolved order list and stage the result
+static bool moveOrderedItem(const QVariantList& resolved, int fromIndex, int toIndex,
+                            std::optional<QStringList>& staged)
 {
-    QVariantList ordered = resolvedSnappingOrder();
-    if (fromIndex < 0 || fromIndex >= ordered.size() || toIndex < 0 || toIndex >= ordered.size()
+    if (fromIndex < 0 || fromIndex >= resolved.size() || toIndex < 0 || toIndex >= resolved.size()
         || fromIndex == toIndex) {
-        return;
+        return false;
     }
 
     QStringList ids;
-    ids.reserve(ordered.size());
-    for (const QVariant& v : ordered) {
+    ids.reserve(resolved.size());
+    for (const QVariant& v : resolved) {
         ids.append(v.toMap().value(QStringLiteral("id")).toString());
     }
     ids.move(fromIndex, toIndex);
-    m_stagedSnappingOrder = ids;
-    Q_EMIT stagedSnappingOrderChanged();
-    setNeedsSave(true);
+    staged = ids;
+    return true;
+}
+
+void SettingsController::moveSnappingLayout(int fromIndex, int toIndex)
+{
+    if (moveOrderedItem(resolvedSnappingOrder(), fromIndex, toIndex, m_stagedSnappingOrder)) {
+        Q_EMIT stagedSnappingOrderChanged();
+        setNeedsSave(true);
+    }
 }
 
 void SettingsController::moveTilingAlgorithm(int fromIndex, int toIndex)
 {
-    QVariantList ordered = resolvedTilingOrder();
-    if (fromIndex < 0 || fromIndex >= ordered.size() || toIndex < 0 || toIndex >= ordered.size()
-        || fromIndex == toIndex) {
-        return;
+    if (moveOrderedItem(resolvedTilingOrder(), fromIndex, toIndex, m_stagedTilingOrder)) {
+        Q_EMIT stagedTilingOrderChanged();
+        setNeedsSave(true);
     }
-
-    QStringList ids;
-    ids.reserve(ordered.size());
-    for (const QVariant& v : ordered) {
-        ids.append(v.toMap().value(QStringLiteral("id")).toString());
-    }
-    ids.move(fromIndex, toIndex);
-    m_stagedTilingOrder = ids;
-    Q_EMIT stagedTilingOrderChanged();
-    setNeedsSave(true);
 }
 
 void SettingsController::resetSnappingOrder()

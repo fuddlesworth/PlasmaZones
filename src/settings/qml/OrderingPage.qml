@@ -27,6 +27,7 @@ Flickable {
     // Whether to hide the badge when count is 0
     property bool hideZeroBadge: false
     property bool _rebuilding: false
+    property bool _movingLocally: false
 
     function rebuildModel() {
         _rebuilding = true;
@@ -34,6 +35,17 @@ Flickable {
         let items = resolveOrder();
         for (let i = 0; i < items.length; i++) orderModel.append(items[i])
         _rebuilding = false;
+    }
+
+    // Move locally within the QML model and notify the controller without a full rebuild
+    function moveLocal(from, to) {
+        if (from < 0 || from >= orderModel.count || to < 0 || to >= orderModel.count || from === to)
+            return ;
+
+        _movingLocally = true;
+        orderModel.move(from, to, 1);
+        moveItem(from, to);
+        _movingLocally = false;
     }
 
     function commitOrder() {
@@ -174,10 +186,9 @@ Flickable {
                                         delegateRoot.y = Qt.binding(function() {
                                             return delegateRoot.baseY + delegateRoot.visualOffset;
                                         });
-                                        if (from >= 0 && to >= 0 && from !== to && from < orderModel.count && to < orderModel.count) {
-                                            orderModel.move(from, to, 1);
-                                            root.moveItem(from, to);
-                                        }
+                                        if (from >= 0 && to >= 0 && from !== to && from < orderModel.count && to < orderModel.count)
+                                            root.moveLocal(from, to);
+
                                     }
                                     onPositionChanged: {
                                         if (drag.active) {
@@ -313,7 +324,7 @@ Flickable {
                                         icon.height: Kirigami.Units.iconSizes.smallMedium
                                         enabled: delegateRoot.index > 0
                                         opacity: enabled ? 1 : 0.3
-                                        onClicked: root.moveItem(delegateRoot.index, delegateRoot.index - 1)
+                                        onClicked: root.moveLocal(delegateRoot.index, delegateRoot.index - 1)
                                         ToolTip.visible: hovered
                                         ToolTip.text: i18n("Move up")
                                         Accessible.name: i18n("Move %1 up", delegateRoot.model.name)
@@ -335,7 +346,7 @@ Flickable {
                                         icon.height: Kirigami.Units.iconSizes.smallMedium
                                         enabled: delegateRoot.index < orderModel.count - 1
                                         opacity: enabled ? 1 : 0.3
-                                        onClicked: root.moveItem(delegateRoot.index, delegateRoot.index + 1)
+                                        onClicked: root.moveLocal(delegateRoot.index, delegateRoot.index + 1)
                                         ToolTip.visible: hovered
                                         ToolTip.text: i18n("Move down")
                                         Accessible.name: i18n("Move %1 down", delegateRoot.model.name)
