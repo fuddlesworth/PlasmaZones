@@ -231,6 +231,18 @@ public:
      */
     bool rotateWindows(bool clockwise = true);
 
+    /**
+     * @brief Rotate window positions, excluding windows matched by a predicate
+     *
+     * Locked/excluded windows keep their tree positions while unlocked windows
+     * rotate around them.
+     *
+     * @param clockwise Direction of rotation
+     * @param shouldExclude Predicate returning true for windows to exclude
+     * @return true if rotation was performed
+     */
+    bool rotateWindowsExcluding(bool clockwise, const std::function<bool(const QString&)>& shouldExclude);
+
     // ═══════════════════════════════════════════════════════════════════════
     // Split Ratio
     // ═══════════════════════════════════════════════════════════════════════

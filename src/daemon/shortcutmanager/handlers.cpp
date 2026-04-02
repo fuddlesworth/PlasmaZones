@@ -195,6 +195,12 @@ void ShortcutManager::onToggleLayoutLock()
     Q_EMIT toggleLayoutLockRequested();
 }
 
+void ShortcutManager::onToggleWindowLock()
+{
+    qCInfo(lcShortcuts) << "Toggle window lock triggered";
+    Q_EMIT toggleWindowLockRequested();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Update Shortcut Methods
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -319,6 +325,11 @@ void ShortcutManager::updateLayoutPickerShortcut()
 void ShortcutManager::updateToggleLayoutLockShortcut()
 {
     UPDATE_SHORTCUT(m_toggleLayoutLockAction, toggleLayoutLockShortcut);
+}
+
+void ShortcutManager::updateToggleWindowLockShortcut()
+{
+    UPDATE_SHORTCUT(m_toggleWindowLockAction, toggleWindowLockShortcut);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

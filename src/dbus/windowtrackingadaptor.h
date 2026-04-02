@@ -45,6 +45,16 @@ public:
     ~WindowTrackingAdaptor() override = default;
 
     /**
+     * @brief Last active window ID reported by the KWin effect's windowActivated call
+     *
+     * Returns the internal window ID string of the most recently focused window.
+     */
+    QString lastActiveWindowId() const
+    {
+        return m_lastActiveWindowId;
+    }
+
+    /**
      * @brief Last screen reported by the KWin effect's windowActivated call
      *
      * The KWin effect has reliable screen info on both X11 and Wayland.
@@ -866,6 +876,21 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods - Private
     // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Skip adjacent zones that contain locked windows
+     *
+     * Walks the adjacency graph from startZoneId in the given direction,
+     * skipping zones occupied by locked windows. Uses a visited set to
+     * prevent infinite loops on cyclic topologies.
+     *
+     * @param startZoneId Zone to start walking from
+     * @param direction Direction to walk ("left", "right", "up", "down")
+     * @param originZoneId The window's current zone — reject if the walk loops back to it
+     * @return First unlocked adjacent zone, or empty if all are locked / no more zones
+     */
+    QString skipLockedZones(const QString& startZoneId, const QString& direction,
+                            const QString& originZoneId = QString());
 
     /**
      * @brief Validate window ID and log warning if empty

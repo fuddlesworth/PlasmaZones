@@ -800,5 +800,6 @@ SETTINGS_SETTER(const QString&, ResnapToNewLayoutShortcut, m_resnapToNewLayoutSh
 SETTINGS_SETTER(const QString&, SnapAllWindowsShortcut, m_snapAllWindowsShortcut, snapAllWindowsShortcutChanged)
 SETTINGS_SETTER(const QString&, LayoutPickerShortcut, m_layoutPickerShortcut, layoutPickerShortcutChanged)
 SETTINGS_SETTER(const QString&, ToggleLayoutLockShortcut, m_toggleLayoutLockShortcut, toggleLayoutLockShortcutChanged)
+SETTINGS_SETTER(const QString&, ToggleWindowLockShortcut, m_toggleWindowLockShortcut, toggleWindowLockShortcutChanged)
 
 } // namespace PlasmaZones

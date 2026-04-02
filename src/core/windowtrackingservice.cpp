@@ -50,8 +50,8 @@ WindowTrackingService::~WindowTrackingService()
 // Zone Assignment Management
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingService::assignWindowToZone(const QString& windowId, const QString& zoneId,
-                                               const QString& screenId, int virtualDesktop)
+void WindowTrackingService::assignWindowToZone(const QString& windowId, const QString& zoneId, const QString& screenId,
+                                               int virtualDesktop)
 {
     assignWindowToZones(windowId, QStringList{zoneId}, screenId, virtualDesktop);
 }
@@ -76,6 +76,10 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     // when a window closes (in windowClosed()). Storing here causes ALL previously-snapped
     // windows to auto-restore on open, even when they shouldn't.
 
+    // If this window matches an appId-based lock from session restore,
+    // promote it to the specific windowId so only this instance is locked.
+    promoteAppIdLock(windowId);
+
     if (zoneChanged) {
         Q_EMIT windowZoneChanged(windowId, zoneIds.first());
     }
@@ -92,6 +96,13 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
 
     m_windowScreenAssignments.remove(windowId);
     m_windowDesktopAssignments.remove(windowId);
+
+    // A locked window that loses its zone assignment (e.g. layout switch with
+    // fewer zones) enters a "locked but unsnapped" state that the user can't
+    // easily resolve.  Unlock it automatically so it doesn't get stuck.
+    if (m_lockedWindows.remove(windowId)) {
+        Q_EMIT windowLockChanged(windowId, false);
+    }
 
     // Clear last-used zone if we're unsnapping from it
     // This preserves last-used zone when unsnapping a different window
@@ -510,6 +521,91 @@ void WindowTrackingService::setWindowSticky(const QString& windowId, bool sticky
 bool WindowTrackingService::isWindowSticky(const QString& windowId) const
 {
     return m_windowStickyStates.value(windowId, false);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Window Locking
+// ═══════════════════════════════════════════════════════════════════════════════
+
+bool WindowTrackingService::isWindowLocked(const QString& windowId) const
+{
+    return m_lockedWindows.contains(windowId);
+}
+
+void WindowTrackingService::decrementPendingCount(const QString& appId)
+{
+    auto it = m_pendingAppIdLocks.find(appId);
+    if (it == m_pendingAppIdLocks.end()) {
+        return;
+    }
+    if (it.value() <= 1) {
+        m_pendingAppIdLocks.erase(it);
+    } else {
+        --it.value();
+    }
+}
+
+void WindowTrackingService::promoteAppIdLock(const QString& windowId)
+{
+    QString appId = Utils::extractAppId(windowId);
+    if (appId == windowId) {
+        return; // windowId is already an appId, nothing to promote
+    }
+    if (m_lockedWindows.contains(windowId)) {
+        return; // already locked (e.g. zone reassignment) — don't consume a pending count
+    }
+    if (!m_pendingAppIdLocks.contains(appId)) {
+        return; // no pending appId lock to promote
+    }
+    // Promote: bind the lock to this specific window instance.
+    // Decrement the count so that additional instances of the same app
+    // can also inherit a lock (one per count).
+    decrementPendingCount(appId);
+    m_lockedWindows.insert(windowId);
+    Q_EMIT windowLockChanged(windowId, true);
+    scheduleSaveState();
+}
+
+void WindowTrackingService::setWindowLocked(const QString& windowId, bool locked)
+{
+    if (locked == m_lockedWindows.contains(windowId)) {
+        return; // no change
+    }
+    if (locked) {
+        // Decrement (not remove) any pending appId count — other instances may still
+        // need their pending locks. Only decrement by 1 for this specific instance.
+        QString appId = Utils::extractAppId(windowId);
+        if (appId != windowId) {
+            decrementPendingCount(appId);
+        }
+        m_lockedWindows.insert(windowId);
+    } else {
+        m_lockedWindows.remove(windowId);
+        // Don't touch pending counts on unlock — the count was already consumed
+        // when the window was locked (either via promoteAppIdLock or the lock path above).
+        // Decrementing here would double-consume and steal a pending lock from
+        // another instance of the same app.
+    }
+    Q_EMIT windowLockChanged(windowId, locked);
+    scheduleSaveState();
+}
+
+bool WindowTrackingService::toggleWindowLock(const QString& windowId)
+{
+    bool wasLocked = isWindowLocked(windowId);
+    setWindowLocked(windowId, !wasLocked);
+    return !wasLocked;
+}
+
+bool WindowTrackingService::isZoneLockedByWindow(const QString& zoneId) const
+{
+    QStringList windows = windowsInZone(zoneId);
+    for (const QString& windowId : windows) {
+        if (isWindowLocked(windowId)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace PlasmaZones

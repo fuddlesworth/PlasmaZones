@@ -13,6 +13,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include "../../config/configbackend_qsettings.h"
+#include "../../config/configdefaults.h"
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -164,12 +165,30 @@ void WindowTrackingAdaptor::saveState()
     tracking->writeString(QStringLiteral("UserSnappedClasses"),
                           QString::fromUtf8(QJsonDocument(userSnappedArray).toJson(QJsonDocument::Compact)));
 
+    // Save locked windows as appId → count (JSON object) for cross-session restore.
+    // Merge active locks (runtime windowIds → appIds) with pending appId lock counts
+    // (not yet promoted). Using counts preserves multi-instance locks across sessions.
+    QHash<QString, int> lockedAppIdCounts;
+    for (const QString& windowId : m_service->lockedWindows()) {
+        lockedAppIdCounts[Utils::extractAppId(windowId)]++;
+    }
+    for (auto it = m_service->pendingAppIdLocks().cbegin(); it != m_service->pendingAppIdLocks().cend(); ++it) {
+        lockedAppIdCounts[it.key()] += it.value();
+    }
+    QJsonObject lockedWindowsObj;
+    for (auto it = lockedAppIdCounts.cbegin(); it != lockedAppIdCounts.cend(); ++it) {
+        lockedWindowsObj.insert(it.key(), it.value());
+    }
+    tracking->writeString(ConfigDefaults::lockedWindowsKey(),
+                          QString::fromUtf8(QJsonDocument(lockedWindowsObj).toJson(QJsonDocument::Compact)));
+
     tracking.reset(); // release group before sync
     backend->sync();
     qCInfo(lcDbusWindow) << "Saved state:"
                          << "zones=" << fullAssignments.size() << "pending=" << pendingQueuesObj.size()
                          << "preTile=" << m_service->preTileGeometries().size()
-                         << "preFloat=" << preFloatZonesObj.size() << "userSnapped=" << userSnappedArray.size();
+                         << "preFloat=" << preFloatZonesObj.size() << "userSnapped=" << userSnappedArray.size()
+                         << "locked=" << lockedWindowsObj.size();
 }
 
 void WindowTrackingAdaptor::requestReapplyWindowGeometries()
@@ -504,6 +523,23 @@ void WindowTrackingAdaptor::loadState()
         }
     }
     m_service->setUserSnappedClasses(userSnappedClasses);
+
+    // Load locked windows (persisted as appId → count JSON object)
+    QHash<QString, int> lockedCounts;
+    QString lockedJson = readVal(ConfigDefaults::lockedWindowsKey(), QString());
+    if (!lockedJson.isEmpty()) {
+        QJsonDocument doc = QJsonDocument::fromJson(lockedJson.toUtf8());
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            for (auto it = obj.begin(); it != obj.end(); ++it) {
+                int count = it.value().toInt(1);
+                if (count > 0) {
+                    lockedCounts.insert(it.key(), count);
+                }
+            }
+        }
+    }
+    m_service->setLockedWindows(lockedCounts);
 
     // Restore active layout from previous session so that previousLayout() is correct
     // on the next layout switch. Without this, the daemon starts with defaultLayout()

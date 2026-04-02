@@ -168,6 +168,10 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     connect(m_settings, &Settings::toggleLayoutLockShortcutChanged, this,
             &ShortcutManager::updateToggleLayoutLockShortcut);
 
+    // Toggle Window Lock shortcut
+    connect(m_settings, &Settings::toggleWindowLockShortcutChanged, this,
+            &ShortcutManager::updateToggleWindowLockShortcut);
+
     // Autotile shortcut settings connections
     connect(m_settings, &Settings::autotileToggleShortcutChanged, this, &ShortcutManager::updateToggleAutotileShortcut);
     connect(m_settings, &Settings::autotileFocusMasterShortcutChanged, this,
@@ -224,6 +228,7 @@ void ShortcutManager::registerShortcuts()
     setupSnapAllWindowsShortcut();
     setupLayoutPickerShortcut();
     setupToggleLayoutLockShortcut();
+    setupToggleWindowLockShortcut();
     setupAutotileShortcuts();
 
     qCInfo(lcShortcuts) << "Shortcuts registered, flushing backend";
@@ -316,6 +321,9 @@ void ShortcutManager::updateShortcuts()
     // Toggle Layout Lock shortcut
     updateToggleLayoutLockShortcut();
 
+    // Toggle Window Lock shortcut
+    updateToggleWindowLockShortcut();
+
     // Autotile shortcuts
     updateToggleAutotileShortcut();
     updateFocusMasterShortcut();
@@ -389,6 +397,9 @@ void ShortcutManager::unregisterShortcuts()
 
     // Toggle Layout Lock action
     DELETE_SHORTCUT(m_toggleLayoutLockAction);
+
+    // Toggle Window Lock action
+    DELETE_SHORTCUT(m_toggleWindowLockAction);
 
     // Autotile actions
     DELETE_SHORTCUT(m_toggleAutotileAction);
@@ -580,6 +591,14 @@ void ShortcutManager::setupToggleLayoutLockShortcut()
                    &ShortcutManager::onToggleLayoutLock);
 
     qCInfo(lcShortcuts) << "Toggle layout lock shortcut registered:" << m_settings->toggleLayoutLockShortcut();
+}
+
+void ShortcutManager::setupToggleWindowLockShortcut()
+{
+    SETUP_SHORTCUT(m_toggleWindowLockAction, "Toggle Window Lock", "toggle_window_lock", toggleWindowLockShortcut,
+                   &ShortcutManager::onToggleWindowLock);
+
+    qCInfo(lcShortcuts) << "Toggle window lock shortcut registered:" << m_settings->toggleWindowLockShortcut();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

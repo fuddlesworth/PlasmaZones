@@ -192,7 +192,7 @@ private Q_SLOTS:
         // Check feedback
         bool foundSnapFeedback = false;
         for (const auto& args : feedbackSpy) {
-            if (args.at(1).toString() == QStringLiteral("snap")) {
+            if (args.at(1).toString() == QStringLiteral("move_to_position")) {
                 foundSnapFeedback = true;
                 QCOMPARE(args.at(0).toBool(), true); // success
                 break;

@@ -111,6 +111,18 @@ void WindowTrackingService::windowClosed(const QString& windowId)
     m_autoSnappedWindows.remove(windowId);
     m_effectReportedWindows.remove(windowId);
 
+    // Convert lock state from full windowId to appId for cross-session persistence.
+    // Unlike floating (which is cleared on close), lock state persists across restarts.
+    // Only persist if the window was actually snapped to a zone — a locked-but-unsnapped
+    // window (possible via external state manipulation) should not create a phantom
+    // pending lock that would auto-lock the next instance of the same app.
+    if (m_lockedWindows.contains(windowId)) {
+        m_lockedWindows.remove(windowId);
+        if (!appId.isEmpty() && !zoneId.isEmpty()) {
+            m_pendingAppIdLocks[appId]++;
+        }
+    }
+
     scheduleSaveState();
 }
 
