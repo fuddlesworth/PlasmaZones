@@ -57,6 +57,7 @@ qt_add_qml_module(plasmazones-settings
         qml/SnappingBridge.qml
         qml/TilingBridge.qml
         qml/AboutPage.qml
+        qml/WhatsNewPage.qml
         qml/MonitorStatePage.qml
         # Sub-components (copied from KCM)
         qml/MonitorAssignmentsCard.qml
@@ -108,6 +109,14 @@ qt_add_qml_module(plasmazones-settings
         qml/WizardConfigCard.qml
         qml/WizardUtils.js
     NO_PLUGIN
+)
+
+# Embed What's New data
+qt_add_resources(plasmazones-settings "whatsnew_data"
+    PREFIX "/"
+    BASE "${CMAKE_SOURCE_DIR}/data"
+    FILES
+        ${CMAKE_SOURCE_DIR}/data/whatsnew.json
 )
 
 # Embed org.plasmazones.common QML module (ZonePreview, CategoryBadge)
