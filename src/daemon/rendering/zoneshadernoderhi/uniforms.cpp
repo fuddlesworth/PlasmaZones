@@ -222,6 +222,9 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         // texture data is still stored with row 0 at top in GPU memory — the
         // viewport flip means the BOTTOM of the screen is written to the LAST
         // row, so texture UV must be Y-flipped to read the correct screen position.
+        // NOTE: If a future RHI backend (e.g. Metal, Direct3D) does not need this
+        // flip, this must become conditional again (check rhi->isYUpInFramebuffer()
+        // and backend-specific viewport behavior).
         m_uniforms.iFlipBufferY = 1;
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
         if (batch) {
@@ -449,7 +452,6 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_zoneDataDirty = true;
     m_labelsTextureDirty = true;
     m_audioSpectrumDirty = true;
-    m_offscreenPassesDone = false;
     // Next prepare() will re-create all RHI resources and do a full UBO upload
 }
 

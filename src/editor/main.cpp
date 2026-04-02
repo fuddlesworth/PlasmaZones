@@ -49,31 +49,13 @@ int main(int argc, char* argv[])
 
     // Read rendering backend preference and set graphics API BEFORE QGuiApplication.
     // Must match daemon's backend so shader previews render identically.
+    bool useVulkan = false;
 #if QT_CONFIG(vulkan)
     QVulkanInstance vulkanInstance;
 #endif
     {
         const QString backend = PlasmaZones::ConfigDefaults::readRenderingBackendFromDisk();
-
-        if (backend == QLatin1String("vulkan")) {
-#if QT_CONFIG(vulkan)
-            QLibrary vulkanLib(QStringLiteral("vulkan"), 1);
-            bool vulkanLibAvailable = vulkanLib.load();
-            if (!vulkanLibAvailable) {
-                vulkanLib.setFileName(QStringLiteral("vulkan"));
-                vulkanLibAvailable = vulkanLib.load();
-            }
-            if (vulkanLibAvailable) {
-                QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
-            } else {
-                QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-            }
-#else
-            QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-#endif
-        } else if (backend == QLatin1String("opengl")) {
-            QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-        }
+        useVulkan = PlasmaZones::probeAndSetGraphicsApi(backend);
     }
 
     QGuiApplication app(argc, argv);
@@ -82,15 +64,11 @@ int main(int argc, char* argv[])
     // Create and store QVulkanInstance for shader preview windows (same as daemon)
 #if QT_CONFIG(vulkan)
     qRegisterMetaType<QVulkanInstance*>();
-    if (QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan) {
-        vulkanInstance.setApiVersion(PlasmaZones::PzVulkanApiVersion);
-        vulkanInstance.setExtensions(vulkanInstance.extensions() << QByteArrayLiteral("VK_EXT_swapchain_colorspace"));
-        if (vulkanInstance.create()) {
-            app.setProperty(PlasmaZones::PzVulkanInstanceProperty, QVariant::fromValue(&vulkanInstance));
-        } else {
+    if (useVulkan) {
+        if (!PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app)) {
             qCCritical(PlasmaZones::lcEditor)
                 << "Failed to create Vulkan instance — falling back to OpenGL for shader preview.";
-            QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+            useVulkan = false;
         }
     }
 #endif

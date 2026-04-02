@@ -50,6 +50,7 @@ createFullscreenQuadPipeline(QRhi* rhi, QRhiRenderPassDescriptor* rpDesc, const 
         blends.append(depthBlend);
     }
     pipeline->setTargetBlends(blends.begin(), blends.end());
+    pipeline->setFlags(QRhiGraphicsPipeline::UsesScissor);
     if (!pipeline->create()) {
         return nullptr;
     }
@@ -106,8 +107,11 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
     // NOTE: When useDepthBuffer is true, the same m_depthTexture is attached to ALL
     // buffer render targets (single and multi-buffer). In multi-buffer mode, each pass
     // overwrites the depth attachment — only the final buffer pass's depth output survives
-    // for the image pass to read at binding 12. Shader authors must be aware that only the
-    // last buffer pass's depth data is available in the image pass.
+    // for the image pass to read at binding 12.
+    if (m_useDepthBuffer && multiBufferMode && m_bufferPaths.size() > 1) {
+        qCInfo(lcOverlay) << "Depth buffer with" << m_bufferPaths.size()
+                          << "buffer passes: only the last pass's depth output will be available in the image pass";
+    }
     auto createTextureAndRT = [rhi, bufferSize, this](std::unique_ptr<QRhiTexture>& tex,
                                                       std::unique_ptr<QRhiTextureRenderTarget>& rt,
                                                       std::unique_ptr<QRhiRenderPassDescriptor>& rpd) -> bool {
@@ -265,6 +269,32 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
 }
 
 // ============================================================================
+// ensureDummyChannelResources — shared by ensureBufferPipeline (multi/single)
+// ============================================================================
+
+bool ZoneShaderNodeRhi::ensureDummyChannelResources(QRhi* rhi)
+{
+    if (!m_dummyChannelTexture) {
+        m_dummyChannelTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
+        if (m_dummyChannelTexture->create()) {
+            m_dummyChannelTextureNeedsUpload = true;
+        } else {
+            m_dummyChannelTexture.reset();
+            return false;
+        }
+    }
+    if (!m_dummyChannelSampler) {
+        m_dummyChannelSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+                                                    QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+        if (!m_dummyChannelSampler->create()) {
+            m_dummyChannelSampler.reset();
+            return false;
+        }
+    }
+    return true;
+}
+
+// ============================================================================
 // ensureBufferPipeline
 // ============================================================================
 
@@ -279,24 +309,8 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
         if (!rhi || !m_bufferSamplers[0]) {
             return false;
         }
-        // Ensure dummy channel texture/sampler exist before creating SRBs —
-        // every multipass SRB needs all 4 channel bindings for Vulkan.
-        if (!m_dummyChannelTexture) {
-            m_dummyChannelTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
-            if (m_dummyChannelTexture->create()) {
-                m_dummyChannelTextureNeedsUpload = true;
-            } else {
-                m_dummyChannelTexture.reset();
-                return false;
-            }
-        }
-        if (!m_dummyChannelSampler) {
-            m_dummyChannelSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
-                                                        QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
-            if (!m_dummyChannelSampler->create()) {
-                m_dummyChannelSampler.reset();
-                return false;
-            }
+        if (!ensureDummyChannelResources(rhi)) {
+            return false;
         }
         const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
         for (int i = 0; i < n; ++i) {
@@ -371,23 +385,8 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
     if (!rhi) {
         return false;
     }
-    // Ensure dummy channel texture/sampler for single-buffer SRBs (ping-pong).
-    if (!m_dummyChannelTexture) {
-        m_dummyChannelTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
-        if (m_dummyChannelTexture->create()) {
-            m_dummyChannelTextureNeedsUpload = true;
-        } else {
-            m_dummyChannelTexture.reset();
-            return false;
-        }
-    }
-    if (!m_dummyChannelSampler) {
-        m_dummyChannelSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
-                                                    QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
-        if (!m_dummyChannelSampler->create()) {
-            m_dummyChannelSampler.reset();
-            return false;
-        }
+    if (!ensureDummyChannelResources(rhi)) {
+        return false;
     }
     QRhiRenderPassDescriptor* rpDesc = m_bufferRenderPassDescriptor ? m_bufferRenderPassDescriptor.get()
                                                                     : m_bufferRenderTarget->renderPassDescriptor();

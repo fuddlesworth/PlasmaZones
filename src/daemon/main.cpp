@@ -56,38 +56,11 @@ int main(int argc, char* argv[])
 #endif
     {
         const QString backend = PlasmaZones::ConfigDefaults::readRenderingBackendFromDisk();
-
-        if (backend == QLatin1String("vulkan")) {
-#if QT_CONFIG(vulkan)
-            // Pre-check: can we even load the Vulkan library?
-            QLibrary vulkanLib(QStringLiteral("vulkan"), 1);
-            bool vulkanLibAvailable = vulkanLib.load();
-            if (!vulkanLibAvailable) {
-                vulkanLib.setFileName(QStringLiteral("vulkan"));
-                vulkanLibAvailable = vulkanLib.load();
-            }
-
-            if (vulkanLibAvailable) {
-                // Set the graphics API BEFORE QGuiApplication (required by Qt).
-                // The actual QVulkanInstance::create() is deferred to AFTER the
-                // app exists, because Qt 6.11+ accesses the platform integration
-                // inside ensureVulkan(), which is null before QGuiApplication.
-                QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
-                useVulkan = true;
-            } else {
-                qCCritical(PlasmaZones::lcDaemon) << "Vulkan library not found — falling back to OpenGL."
-                                                  << "Install vulkan-icd-loader or equivalent for your distro.";
-                QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-            }
-#else
-            qCWarning(PlasmaZones::lcDaemon)
-                << "Vulkan backend requested but Qt was built without Vulkan support — falling back to OpenGL.";
-            QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-#endif
-        } else if (backend == QLatin1String("opengl")) {
-            QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+        useVulkan = PlasmaZones::probeAndSetGraphicsApi(backend);
+        if (!useVulkan && backend == QLatin1String("vulkan")) {
+            qCCritical(PlasmaZones::lcDaemon) << "Vulkan library not found — falling back to OpenGL."
+                                              << "Install vulkan-icd-loader or equivalent for your distro.";
         }
-        // "auto" → let Qt choose (default behavior)
         qCInfo(PlasmaZones::lcDaemon) << "Rendering backend:" << backend
                                       << (useVulkan                                ? "(Vulkan)"
                                               : backend == QLatin1String("opengl") ? "(OpenGL)"
@@ -101,24 +74,12 @@ int main(int argc, char* argv[])
 #if QT_CONFIG(vulkan)
     qRegisterMetaType<QVulkanInstance*>();
     if (useVulkan) {
-        // Create the Vulkan instance AFTER QGuiApplication — Qt 6.11+ accesses
-        // QGuiApplicationPrivate::platform_integration in ensureVulkan(), which
-        // is null before app construction (SIGSEGV on NVIDIA 595+).
-        vulkanInstance.setApiVersion(PlasmaZones::PzVulkanApiVersion);
-        // Qt's Wayland Vulkan platform integration uses VK_COLOR_SPACE_PASS_THROUGH_EXT
-        // for swapchain creation, which requires VK_EXT_swapchain_colorspace on the
-        // instance. Without it, the NVIDIA validation layer reports an error on every
-        // vkCreateSwapchainKHR call, and after repeated window creation/destruction
-        // cycles (overlay show/hide), the driver starts rejecting swapchain commands.
-        vulkanInstance.setExtensions(vulkanInstance.extensions() << QByteArrayLiteral("VK_EXT_swapchain_colorspace"));
-        if (vulkanInstance.create()) {
-            app.setProperty(PlasmaZones::PzVulkanInstanceProperty, QVariant::fromValue(&vulkanInstance));
+        if (PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app)) {
             qCInfo(PlasmaZones::lcDaemon) << "Vulkan instance created successfully";
         } else {
             qCCritical(PlasmaZones::lcDaemon)
                 << "Failed to create Vulkan instance after app init — falling back to OpenGL."
                 << "Check that Vulkan drivers are installed (vulkan-icd-loader, mesa-vulkan-drivers, etc.)";
-            QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
             useVulkan = false;
         }
     }

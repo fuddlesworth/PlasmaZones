@@ -42,7 +42,12 @@ static void shaderCacheEvictOne()
     s_shaderCache.erase(s_shaderCache.begin());
 }
 
-// NUL delimiter: cannot appear in file paths (Unix/Windows), avoids newline collision in keys
+// NUL delimiter: cannot appear in file paths (Unix/Windows), avoids newline collision in keys.
+// NOTE: This cache is in-memory only (cleared on daemon restart). The key uses top-level
+// file mtimes but does NOT track #include dependencies (e.g. common.glsl). If an included
+// file changes without touching the top-level shader, a stale cached QShader may be returned
+// within the same session. This is acceptable because included file changes require a rebuild
+// which restarts the daemon, but be aware if on-disk caching is ever added.
 static constexpr char kShaderCacheKeyDelim = '\0';
 
 static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, const QString& fragPath, qint64 fragMtime)

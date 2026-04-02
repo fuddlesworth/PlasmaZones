@@ -84,8 +84,9 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 
 // Pseudo-random: 1D in → 1D out (float → float)
 // All arithmetic is unsigned to avoid signed overflow (undefined on SPIR-V).
+// Bias by 0x80000000 to map negative floats to distinct hash values near zero.
 float hash11(float n) {
-    uint h = uint(int(n));
+    uint h = uint(int(n)) + 2147483648u;
     h = h * 747796405u + 2891336453u;
     h = ((h >> 16u) ^ h) * 2654435769u;
     h = ((h >> 16u) ^ h) * 2654435769u;
@@ -94,9 +95,10 @@ float hash11(float n) {
 }
 
 // Pseudo-random: 2D in → 1D out (vec2 → float)
-// Convert float→int→uint to handle negatives, then all ops are unsigned.
+// Bias by 0x80000000 so negative inputs (e.g. centered UV coordinates) don't
+// collide with positive inputs near zero after int→uint truncation.
 float hash21(vec2 p) {
-    uvec2 q = uvec2(ivec2(p));
+    uvec2 q = uvec2(ivec2(p)) + uvec2(2147483648u);
     q = q * uvec2(1597334673u, 3812015801u);
     uint h = (q.x ^ q.y) * 1103515245u + 12345u;
     h = ((h >> 16u) ^ h) * 2654435769u;
@@ -107,7 +109,7 @@ float hash21(vec2 p) {
 // Pseudo-random: 2D in → 2D out (vec2 → vec2, e.g. for particle positions)
 // Must use different expressions for x and y; p.x*p.y == p.y*p.x would yield diagonal-only output
 vec2 hash22(vec2 p) {
-    uvec2 q = uvec2(ivec2(p));
+    uvec2 q = uvec2(ivec2(p)) + uvec2(2147483648u);
     q = q * uvec2(1597334673u, 3812015801u);
     uint h1 = (q.x ^ q.y) * 1103515245u + 12345u;
     uint h2 = (q.x * 2654435769u) ^ (q.y * 2246822519u);

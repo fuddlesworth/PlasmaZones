@@ -23,10 +23,13 @@ QString ConfigDefaults::readRenderingBackendFromDisk()
 {
     QSettings cfg(configFilePath(), QSettings::IniFormat);
 
-    // Try ungrouped root first (settings app writes RenderingBackend before any [Section] header)
+    // QSettings::IniFormat maps keys before any [Section] header into the "General"
+    // group automatically on all platforms — so a root-level read (no beginGroup)
+    // already resolves "General/RenderingBackend". We also explicitly check the
+    // [General] group as a fallback in case the file uses an explicit section header,
+    // which is a no-op on Linux but guards against platform-specific IniFormat quirks.
     QString raw = cfg.value(renderingBackendKey()).toString();
     if (raw.isEmpty()) {
-        // Fallback: check [General] group
         cfg.beginGroup(generalGroup());
         raw = cfg.value(renderingBackendKey(), renderingBackend()).toString();
         cfg.endGroup();
