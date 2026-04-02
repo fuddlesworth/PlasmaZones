@@ -395,9 +395,9 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
         writeQmlProperty(window, QStringLiteral("bufferFeedback"), false);
         writeQmlProperty(window, QStringLiteral("bufferScale"), 1.0);
         writeQmlProperty(window, QStringLiteral("bufferWrap"), QStringLiteral("clamp"));
-        writeQmlProperty(window, QStringLiteral("bufferWraps"), QVariant::fromValue(QStringList()));
+        writeQmlProperty(window, QStringLiteral("bufferWraps"), QStringList());
         writeQmlProperty(window, QStringLiteral("bufferFilter"), QStringLiteral("linear"));
-        writeQmlProperty(window, QStringLiteral("bufferFilters"), QVariant::fromValue(QStringList()));
+        writeQmlProperty(window, QStringLiteral("bufferFilters"), QStringList());
         writeQmlProperty(window, QStringLiteral("useDepthBuffer"), false);
         writeQmlProperty(window, QStringLiteral("shaderParams"), QVariantMap());
     }

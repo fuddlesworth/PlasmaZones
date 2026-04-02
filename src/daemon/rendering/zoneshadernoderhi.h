@@ -121,7 +121,6 @@ private:
     void appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
     void appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
     void resetAllSrbs();
-    void resetAllPipelines();
     void bakeBufferShaders();
 
     QQuickItem* m_item = nullptr;
@@ -198,6 +197,7 @@ private:
     bool m_timeDirty = true;
     bool m_zoneDataDirty = true;
     bool m_didFullUploadOnce = false;
+    bool m_offscreenPassesDone = false; // Set by prepare(), read by render()
 
     ZoneShaderUniforms m_uniforms = {};
     QVector<ZoneData> m_zones;

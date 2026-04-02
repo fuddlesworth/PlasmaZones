@@ -196,7 +196,10 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 m_shaderError = QStringLiteral("Failed to resize labels texture");
                 return;
             }
-            resetAllSrbs();
+            m_srb.reset(); // Force SRB recreation with new texture
+            if (!ensurePipeline()) {
+                return;
+            }
         }
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
         if (batch) {
@@ -273,9 +276,11 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             if (!m_audioSpectrumTexture->create()) {
                 return;
             }
-            // Old texture destroyed — all SRBs that reference it are stale.
-            // Pipeline/SRB rebuild happens in prepare() after this function returns.
-            resetAllSrbs();
+            m_srb.reset();
+            m_srbB.reset();
+            if (!ensurePipeline()) {
+                return;
+            }
         }
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
         if (batch && bars > 0) {
@@ -320,6 +325,9 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 continue;
             }
             resetAllSrbs();
+            if (!ensurePipeline()) {
+                return;
+            }
         }
         QRhiResourceUpdateBatch* ubatch = rhi->nextResourceUpdateBatch();
         if (ubatch) {
@@ -346,6 +354,9 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 return;
             }
             resetAllSrbs();
+            if (!ensurePipeline()) {
+                return;
+            }
         }
         QRhiResourceUpdateBatch* ubatch = rhi->nextResourceUpdateBatch();
         if (ubatch) {
@@ -427,6 +438,7 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_zoneDataDirty = true;
     m_labelsTextureDirty = true;
     m_audioSpectrumDirty = true;
+    m_offscreenPassesDone = false;
     // Next prepare() will re-create all RHI resources and do a full UBO upload
 }
 

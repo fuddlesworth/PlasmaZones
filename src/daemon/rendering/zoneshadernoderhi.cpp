@@ -310,14 +310,6 @@ void ZoneShaderNodeRhi::prepare()
         return;
     }
 
-    // Upload textures BEFORE creating pipelines/SRBs. Texture uploads may
-    // destroy and recreate RHI texture objects (audio spectrum resize, user
-    // texture resize, wallpaper resize, sampler recreation), which invalidates
-    // any SRB that references the old texture. By uploading first, all textures
-    // are finalized before SRBs bind them — no stale-pointer risk and no need
-    // for mid-frame SRB recovery hacks.
-    uploadDirtyTextures(rhi, cb);
-
     // Create buffer targets (single or multi) before the image pass SRB so createImageSrb*()
     // can bind iChannel0/1/2/3 and syncUniformsFromData() sees correct sizes for iChannelResolution.
     const bool multiBufferMode = m_bufferPaths.size() > 1;
@@ -358,10 +350,15 @@ void ZoneShaderNodeRhi::prepare()
             ensurePipeline();
         }
     }
+    if (m_shaderReady && (!m_pipeline || !m_srb || (m_bufferFeedback && !m_srbB))) {
+        ensurePipeline();
+    }
 
     if (!ensurePipeline()) {
         return;
     }
+
+    uploadDirtyTextures(rhi, cb);
 
     // ========================================================================
     // Multipass buffer passes recorded in prepare() — safe because prepare()
@@ -369,12 +366,8 @@ void ZoneShaderNodeRhi::prepare()
     // offscreen FBOs (their own render targets), not the main RT.
     // Compute dispatch stays in render() — see render() comment.
     // ========================================================================
-    // SRB validity is required — if resetAllSrbs() fired earlier in this prepare()
-    // (e.g., from particle texture resize), the buffer SRBs are null. Attempting
-    // setShaderResources(nullptr) crashes on Vulkan. Skip the buffer pass entirely;
-    // the SRBs will be rebuilt on the next frame.
     const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady && m_bufferPipeline
-        && m_bufferSrb && m_bufferRenderTarget && m_bufferTexture;
+        && m_bufferRenderTarget && m_bufferTexture;
     const bool multipassMulti =
         multiBufferMode && m_multiBufferShadersReady && m_multiBufferTextures[0] && m_multiBufferPipelines[0];
     const bool multipassActive = multipassSingle || multipassMulti;
@@ -411,8 +404,6 @@ void ZoneShaderNodeRhi::prepare()
             QRhiTextureRenderTarget* bufferRT = (m_bufferFeedback && writeIndex == 1 && m_bufferRenderTargetB)
                 ? m_bufferRenderTargetB.get()
                 : m_bufferRenderTarget.get();
-            // Guard feedback SRB: if m_srbB is null on odd frames, fall back to m_bufferSrb
-            // (which is guaranteed non-null by the multipassSingle check above).
             QRhiShaderResourceBindings* bufferSrb =
                 (m_bufferFeedback && writeIndex == 1 && m_bufferSrbB) ? m_bufferSrbB.get() : m_bufferSrb.get();
             QRhiTexture* writtenTexture = (m_bufferFeedback && writeIndex == 1 && m_bufferTextureB)
@@ -434,14 +425,9 @@ void ZoneShaderNodeRhi::prepare()
 }
 
 // ============================================================================
-// render() — compute dispatch + image pass draw
+// render() — image pass draw
 // Buffer passes are recorded in prepare() (offscreen FBOs, safe before the
-// scene graph's render pass). Compute dispatch must happen here because
-// beginComputePass() requires no active render pass — we end the scene
-// graph's pass, dispatch compute, then re-begin the pass for the image draw.
-// Overlay windows are destroyed on hide (not just hidden), so the
-// endPass/beginPass on the main RT is safe — each window lives for one
-// show cycle only.
+// scene graph's render pass).
 // ============================================================================
 
 void ZoneShaderNodeRhi::render(const RenderState* state)
@@ -452,6 +438,8 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
         return;
     }
     if (!m_shaderReady || !m_pipeline || !m_srb) {
+        qCDebug(lcOverlay) << "render(): bail — shaderReady:" << m_shaderReady << "pipeline:" << (m_pipeline != nullptr)
+                           << "srb:" << (m_srb != nullptr);
         return;
     }
     QRhiCommandBuffer* cb = commandBuffer();

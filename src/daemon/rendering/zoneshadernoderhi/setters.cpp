@@ -267,12 +267,10 @@ void ZoneShaderNodeRhi::setUseDepthBuffer(bool use)
         return;
     }
     m_useDepthBuffer = use;
-    // Depth buffer toggle adds/removes binding 12 — the SRB *layout* changes,
-    // so pipelines (which store the layout from creation) must also be reset.
+    // Force recreation of render targets and pipelines
     m_depthTexture.reset();
     m_depthSampler.reset();
     resetAllSrbs();
-    resetAllPipelines();
     markDirty(QSGNode::DirtyMaterial);
 }
 
@@ -284,22 +282,6 @@ void ZoneShaderNodeRhi::resetAllSrbs()
     m_bufferSrbB.reset();
     for (int i = 0; i < kMaxBufferPasses; ++i) {
         m_multiBufferSrbs[i].reset();
-    }
-}
-
-void ZoneShaderNodeRhi::resetAllPipelines()
-{
-    // Only call when the SRB binding layout changes (binding added/removed),
-    // NOT for simple resource replacement (e.g., audio texture recreated at
-    // the same binding). Pipelines store the SRB layout; replacing a resource
-    // at the same binding is layout-compatible and doesn't need a pipeline reset.
-    // Resetting pipelines unnecessarily causes render stalls because
-    // uploadDirtyTextures() runs after ensurePipeline() in prepare(), and
-    // render() bails when m_pipeline is null.
-    m_pipeline.reset();
-    m_bufferPipeline.reset();
-    for (int i = 0; i < kMaxBufferPasses; ++i) {
-        m_multiBufferPipelines[i].reset();
     }
 }
 

@@ -222,6 +222,9 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         m_renderNode = rhiNode;
         node = rhiNode;
         qCInfo(PlasmaZones::lcOverlay) << "updatePaintNode: created NEW render node (oldNode was null)";
+    } else {
+        qCDebug(PlasmaZones::lcOverlay) << "updatePaintNode: reusing existing node, shaderReady:"
+                                        << node->isShaderReady();
     }
 
     // Sync shader timing uniforms
@@ -306,6 +309,8 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     // Load when: item's m_shaderDirty, OR node not ready (e.g. after releaseResources)
     const bool wasDirty = m_shaderDirty.exchange(false);
     const bool needLoad = wasDirty || (m_shaderSource.isValid() && !m_shaderSource.isEmpty() && !node->isShaderReady());
+    qCDebug(PlasmaZones::lcOverlay) << "updatePaintNode: needLoad:" << needLoad << "wasDirty:" << wasDirty
+                                    << "shaderReady:" << node->isShaderReady() << "source:" << m_shaderSource;
     if (needLoad) {
         if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
             QString fragPath = m_shaderSource.toLocalFile();

@@ -466,7 +466,7 @@ bool ZoneShaderNodeRhi::ensurePipeline()
         QRhiSampler* dummySam = m_dummyChannelSampler.get();
         for (int i = 0; i < n; ++i) {
             QRhiTexture* tex = m_multiBufferTextures[i] ? m_multiBufferTextures[i].get() : dummyTex;
-            QRhiSampler* sam = (tex == dummyTex || !m_bufferSamplers[i]) ? dummySam : m_bufferSamplers[i].get();
+            QRhiSampler* sam = (tex == dummyTex) ? dummySam : m_bufferSamplers[i].get();
             if (tex && sam) {
                 bindings.append(QRhiShaderResourceBinding::sampledTexture(
                     2 + i, QRhiShaderResourceBinding::FragmentStage, tex, sam));
