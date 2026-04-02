@@ -363,6 +363,24 @@ void Settings::setFilterLayoutsByAspectRatio(bool filter)
     }
 }
 
+void Settings::setSnappingLayoutOrder(const QStringList& order)
+{
+    if (m_snappingLayoutOrder != order) {
+        m_snappingLayoutOrder = order;
+        Q_EMIT snappingLayoutOrderChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setTilingAlgorithmOrder(const QStringList& order)
+{
+    if (m_tilingAlgorithmOrder != order) {
+        m_tilingAlgorithmOrder = order;
+        Q_EMIT tilingAlgorithmOrderChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 SETTINGS_SETTER(const QStringList&, ExcludedApplications, m_excludedApplications, excludedApplicationsChanged)
 
 void Settings::addExcludedApplication(const QString& app)

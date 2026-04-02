@@ -53,6 +53,7 @@ public:
     PZ_CONFIG_GROUP(updatesGroup, "Updates")
     PZ_CONFIG_GROUP(editorGroup, "Editor")
     PZ_CONFIG_GROUP(tilingQuickLayoutSlotsGroup, "TilingQuickLayoutSlots")
+    PZ_CONFIG_GROUP(orderingGroup, "Ordering")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Trigger JSON Field Names
@@ -339,6 +340,13 @@ public:
     PZ_CONFIG_KEY(virtualScreenWidthKey, "width")
     PZ_CONFIG_KEY(virtualScreenHeightKey, "height")
     PZ_CONFIG_KEY(virtualScreenNameKey, "name")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Ordering
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    PZ_CONFIG_KEY(snappingLayoutOrderKey, "SnappingLayoutOrder")
+    PZ_CONFIG_KEY(tilingAlgorithmOrderKey, "TilingAlgorithmOrder")
 
 private:
     // Non-instantiable

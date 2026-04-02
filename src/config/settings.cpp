@@ -202,6 +202,30 @@ void Settings::load()
         loadEditorConfig(*editor);
     }
 
+    // Ordering (small enough to stay inline)
+    {
+        auto ordering = m_configBackend->group(ConfigDefaults::orderingGroup());
+        auto parseOrderList = [](const QString& raw) -> QStringList {
+            if (raw.isEmpty())
+                return {};
+            QStringList result = raw.split(QLatin1Char(','));
+            for (auto& s : result)
+                s = s.trimmed();
+            result.removeAll(QString());
+            return result;
+        };
+        QStringList newSnappingOrder = parseOrderList(ordering->readString(ConfigDefaults::snappingLayoutOrderKey()));
+        if (m_snappingLayoutOrder != newSnappingOrder) {
+            m_snappingLayoutOrder = newSnappingOrder;
+            Q_EMIT snappingLayoutOrderChanged();
+        }
+        QStringList newTilingOrder = parseOrderList(ordering->readString(ConfigDefaults::tilingAlgorithmOrderKey()));
+        if (m_tilingAlgorithmOrder != newTilingOrder) {
+            m_tilingAlgorithmOrder = newTilingOrder;
+            Q_EMIT tilingAlgorithmOrderChanged();
+        }
+    }
+
     if (m_useSystemColors) {
         applySystemColorScheme();
     }
@@ -242,6 +266,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::shadersGroup(),    ConfigDefaults::globalShortcutsGroup(),
         ConfigDefaults::autotilingGroup(), ConfigDefaults::autotileShortcutsGroup(),
         ConfigDefaults::animationsGroup(), ConfigDefaults::editorGroup(),
+        ConfigDefaults::orderingGroup(),
     };
 }
 

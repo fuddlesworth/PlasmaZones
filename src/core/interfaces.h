@@ -37,7 +37,8 @@ class PLASMAZONES_EXPORT ISettings : public QObject,
                                      public IWindowExclusionSettings,
                                      public IZoneSelectorSettings,
                                      public IWindowBehaviorSettings,
-                                     public IDefaultLayoutSettings
+                                     public IDefaultLayoutSettings,
+                                     public IOrderingSettings
 {
     Q_OBJECT
 
@@ -278,6 +279,9 @@ Q_SIGNALS:
     void autotileStickyWindowHandlingChanged();
     void lockedScreensChanged();
     void virtualScreenConfigsChanged();
+    // Ordering
+    void snappingLayoutOrderChanged();
+    void tilingAlgorithmOrderChanged();
     // Animation settings (general)
     void animationsEnabledChanged();
     void animationDurationChanged();

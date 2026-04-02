@@ -236,22 +236,48 @@ static void appendAutotileEntries(QVector<UnifiedLayoutEntry>& list)
     }
 }
 
-static void sortUnifiedEntries(QVector<UnifiedLayoutEntry>& list)
+static void sortUnifiedEntries(QVector<UnifiedLayoutEntry>& list, const QStringList& customOrder = {})
 {
-    // Sort: recommended before non-recommended, manual before autotile, then alphabetical
-    std::sort(list.begin(), list.end(), [](const UnifiedLayoutEntry& a, const UnifiedLayoutEntry& b) {
-        // Recommended layouts come first
-        if (a.recommended != b.recommended) {
-            return a.recommended; // recommended (true) before non-recommended (false)
+    if (!customOrder.isEmpty()) {
+        // Build index map for O(1) lookup
+        QHash<QString, int> orderMap;
+        for (int i = 0; i < customOrder.size(); ++i) {
+            orderMap.insert(customOrder[i], i);
         }
-        if (a.isAutotile != b.isAutotile) {
-            return !a.isAutotile; // manual (false) before autotile (true)
-        }
-        return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
-    });
+
+        // Entries in customOrder come first (in that order), then the rest by default sort
+        std::stable_sort(list.begin(), list.end(),
+                         [&orderMap](const UnifiedLayoutEntry& a, const UnifiedLayoutEntry& b) {
+                             const int aIdx = orderMap.value(a.id, INT_MAX);
+                             const int bIdx = orderMap.value(b.id, INT_MAX);
+                             if (aIdx != bIdx) {
+                                 return aIdx < bIdx;
+                             }
+                             // Both unlisted — fall back to default sort
+                             if (a.recommended != b.recommended) {
+                                 return a.recommended;
+                             }
+                             if (a.isAutotile != b.isAutotile) {
+                                 return !a.isAutotile;
+                             }
+                             return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
+                         });
+    } else {
+        // Default sort: recommended before non-recommended, manual before autotile, then alphabetical
+        std::sort(list.begin(), list.end(), [](const UnifiedLayoutEntry& a, const UnifiedLayoutEntry& b) {
+            if (a.recommended != b.recommended) {
+                return a.recommended;
+            }
+            if (a.isAutotile != b.isAutotile) {
+                return !a.isAutotile;
+            }
+            return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
+        });
+    }
 }
 
-QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager, bool includeAutotile)
+QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager, bool includeAutotile,
+                                                   const QStringList& customOrder)
 {
     QVector<UnifiedLayoutEntry> list;
 
@@ -269,7 +295,7 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
         appendAutotileEntries(list);
     }
 
-    sortUnifiedEntries(list);
+    sortUnifiedEntries(list, customOrder);
 
     return list;
 }
@@ -277,7 +303,7 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
 QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenId,
                                                    int virtualDesktop, const QString& activity, bool includeManual,
                                                    bool includeAutotile, qreal screenAspectRatio,
-                                                   bool filterByAspectRatio)
+                                                   bool filterByAspectRatio, const QStringList& customOrder)
 {
     QVector<UnifiedLayoutEntry> list;
 
@@ -351,7 +377,7 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
         appendAutotileEntries(list);
     }
 
-    sortUnifiedEntries(list);
+    sortUnifiedEntries(list, customOrder);
 
     return list;
 }

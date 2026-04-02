@@ -201,7 +201,12 @@ QStringList LayoutAdaptor::getLayoutList()
 {
     QStringList result;
 
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager, /*includeAutotile=*/true);
+    QStringList customOrder;
+    if (m_settings) {
+        customOrder.append(m_settings->snappingLayoutOrder());
+        customOrder.append(m_settings->tilingAlgorithmOrder());
+    }
+    const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager, /*includeAutotile=*/true, customOrder);
     for (const auto& entry : entries) {
         QJsonObject json = LayoutUtils::toJson(entry);
 

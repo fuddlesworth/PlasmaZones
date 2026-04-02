@@ -171,13 +171,27 @@ function ungrouped(items) {
 
 // ── Sorting ─────────────────────────────────────────────────────────────────
 
-// sortIdx 0 = Name (both modes), 1 = Zone Count (snapping only).
-// Tiling sort model only has Name; loadState() clamps persisted values.
-function sortItems(groups, sortIdx, ascending) {
+// sortIdx 0 = Name (both modes), 1 = Zone Count, 2 = Custom order.
+// Custom order uses the provided customOrder array of IDs.
+function sortItems(groups, sortIdx, ascending, customOrder) {
+    // Build index map for custom order (O(1) lookup)
+    var orderMap = {};
+    if (sortIdx === 2 && customOrder && customOrder.length > 0) {
+        for (var i = 0; i < customOrder.length; i++)
+            orderMap[customOrder[i]] = i;
+    }
+
     for (var key in groups) {
         groups[key].items.sort(function(a, b) {
             var cmp;
-            if (sortIdx === 1) {
+            if (sortIdx === 2 && customOrder && customOrder.length > 0) {
+                var aIdx = (a.id in orderMap) ? orderMap[a.id] : Number.MAX_SAFE_INTEGER;
+                var bIdx = (b.id in orderMap) ? orderMap[b.id] : Number.MAX_SAFE_INTEGER;
+                if (aIdx !== bIdx)
+                    cmp = aIdx - bIdx;
+                else
+                    cmp = (a.name || "").localeCompare(b.name || "");
+            } else if (sortIdx === 1) {
                 cmp = Math.max(0, a.zoneCount || 0) - Math.max(0, b.zoneCount || 0);
                 if (cmp === 0)
                     cmp = (a.name || "").localeCompare(b.name || "");
