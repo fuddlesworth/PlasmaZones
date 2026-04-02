@@ -94,16 +94,10 @@ QVariantList ZoneSelectorController::layouts() const
         screenId = m_screenId;
         aspectRatio = Utils::screenAspectRatio(m_screen);
     }
-    QStringList customOrder;
-    if (m_settings) {
-        if (m_includeManualLayouts)
-            customOrder.append(m_settings->snappingLayoutOrder());
-        if (m_includeAutotileLayouts)
-            customOrder.append(m_settings->tilingAlgorithmOrder());
-    }
     const auto entries = LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
-        m_includeAutotileLayouts, aspectRatio, m_settings && m_settings->filterLayoutsByAspectRatio(), customOrder);
+        m_includeAutotileLayouts, aspectRatio, m_settings && m_settings->filterLayoutsByAspectRatio(),
+        LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts));
     return LayoutUtils::toVariantList(entries);
 }
 

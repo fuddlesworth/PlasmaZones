@@ -48,6 +48,7 @@ qt_add_qml_module(plasmazones-settings
         qml/AssignmentsAppRulesPage.qml
         qml/SnappingAssignmentsPage.qml
         qml/SnappingQuickShortcutsPage.qml
+        qml/OrderingPage.qml
         qml/SnappingOrderingPage.qml
         qml/TilingAssignmentsPage.qml
         qml/TilingQuickShortcutsPage.qml

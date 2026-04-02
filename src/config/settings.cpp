@@ -328,6 +328,11 @@ void Settings::save()
     }
     saveAutotilingConfig(m_configBackend);
     {
+        auto ordering = m_configBackend->group(ConfigDefaults::orderingGroup());
+        ordering->writeString(ConfigDefaults::snappingLayoutOrderKey(), m_snappingLayoutOrder.join(QLatin1Char(',')));
+        ordering->writeString(ConfigDefaults::tilingAlgorithmOrderKey(), m_tilingAlgorithmOrder.join(QLatin1Char(',')));
+    }
+    {
         auto editor = m_configBackend->group(ConfigDefaults::editorGroup());
         saveEditorConfig(*editor);
     }
