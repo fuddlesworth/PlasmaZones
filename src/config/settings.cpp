@@ -212,6 +212,7 @@ void Settings::load()
             for (auto& s : result)
                 s = s.trimmed();
             result.removeAll(QString());
+            result.removeDuplicates();
             return result;
         };
         QStringList newSnappingOrder = parseOrderList(ordering->readString(ConfigDefaults::snappingLayoutOrderKey()));

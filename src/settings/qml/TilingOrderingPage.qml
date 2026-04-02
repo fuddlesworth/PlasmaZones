@@ -46,7 +46,7 @@ OrderingPage {
 
     Connections {
         function onStagedTilingOrderChanged() {
-            if (!root._rebuilding)
+            if (!root._rebuilding && !root._movingLocally)
                 root.rebuildModel();
 
             root.updateCustomOrderState();
