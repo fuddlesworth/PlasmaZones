@@ -508,6 +508,12 @@ void Daemon::connectShortcutSignals()
             }
         }
         if (!service->isWindowSnapped(windowId) && !isTiledInAutotile) {
+            if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+                QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+                QString screenId = screen ? Utils::screenIdentifier(screen) : QString();
+                m_overlayService->showNavigationOsd(false, QStringLiteral("lock"), QStringLiteral("not_snapped"),
+                                                    QString(), QString(), screenId);
+            }
             return;
         }
         bool nowLocked = service->toggleWindowLock(windowId);

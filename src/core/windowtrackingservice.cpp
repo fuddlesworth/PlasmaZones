@@ -76,6 +76,10 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     // when a window closes (in windowClosed()). Storing here causes ALL previously-snapped
     // windows to auto-restore on open, even when they shouldn't.
 
+    // If this window matches an appId-based lock from session restore,
+    // promote it to the specific windowId so only this instance is locked.
+    promoteAppIdLock(windowId);
+
     if (zoneChanged) {
         Q_EMIT windowZoneChanged(windowId, zoneIds.first());
     }
@@ -527,6 +531,22 @@ bool WindowTrackingService::isWindowLocked(const QString& windowId) const
         return true;
     }
     return false;
+}
+
+void WindowTrackingService::promoteAppIdLock(const QString& windowId)
+{
+    QString appId = Utils::extractAppId(windowId);
+    if (appId == windowId) {
+        return; // windowId is already an appId, nothing to promote
+    }
+    if (!m_lockedWindows.contains(appId)) {
+        return; // no appId lock to promote
+    }
+    // Promote: bind the lock to this specific window instance only.
+    // Remove the broad appId entry so other instances of the same app are not locked.
+    m_lockedWindows.remove(appId);
+    m_lockedWindows.insert(windowId);
+    scheduleSaveState();
 }
 
 void WindowTrackingService::setWindowLocked(const QString& windowId, bool locked)

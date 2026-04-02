@@ -265,7 +265,7 @@ void NavigationController::moveFocusedToPosition(int position)
     const int targetIndex = qBound(0, position - 1, windows.size() - 1);
 
     // Cannot displace a locked window at the target position
-    if (targetIndex < windows.size() && isWindowLocked(windows.at(targetIndex))) {
+    if (isWindowLocked(windows.at(targetIndex))) {
         Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("snap"), QStringLiteral("target_locked"),
                                                      QString(), QString(), screenId);
         return;

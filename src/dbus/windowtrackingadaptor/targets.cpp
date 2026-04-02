@@ -150,9 +150,17 @@ QString WindowTrackingAdaptor::getMoveTargetForWindow(const QString& windowId, c
         }
     } else {
         targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction);
-        // Skip over zones containing locked windows
-        while (!targetZoneId.isEmpty() && m_service->isZoneLockedByWindow(targetZoneId)) {
-            targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(targetZoneId, direction);
+        // Skip over zones containing locked windows (cap iterations to prevent cycles)
+        {
+            QSet<QString> visited;
+            while (!targetZoneId.isEmpty() && m_service->isZoneLockedByWindow(targetZoneId)) {
+                if (visited.contains(targetZoneId)) {
+                    targetZoneId.clear();
+                    break;
+                }
+                visited.insert(targetZoneId);
+                targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(targetZoneId, direction);
+            }
         }
         if (targetZoneId.isEmpty()) {
             Q_EMIT navigationFeedback(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"), currentZoneId,
@@ -363,9 +371,17 @@ QString WindowTrackingAdaptor::getSwapTargetForWindow(const QString& windowId, c
     }
 
     QString targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction);
-    // Skip over zones containing locked windows — locked windows can't be displaced
-    while (!targetZoneId.isEmpty() && m_service->isZoneLockedByWindow(targetZoneId)) {
-        targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(targetZoneId, direction);
+    // Skip over zones containing locked windows (cap iterations to prevent cycles)
+    {
+        QSet<QString> visited;
+        while (!targetZoneId.isEmpty() && m_service->isZoneLockedByWindow(targetZoneId)) {
+            if (visited.contains(targetZoneId)) {
+                targetZoneId.clear();
+                break;
+            }
+            visited.insert(targetZoneId);
+            targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(targetZoneId, direction);
+        }
     }
     if (targetZoneId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("no_adjacent_zone"), currentZoneId,

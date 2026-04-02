@@ -332,12 +332,21 @@ public:
     }
 
     /**
-     * @brief Set locked windows (loaded from KConfig by adaptor)
+     * @brief Set locked windows (loaded from KConfig by adaptor during loadState only)
      */
     void setLockedWindows(const QSet<QString>& windows)
     {
         m_lockedWindows = windows;
     }
+
+    /**
+     * @brief Promote an appId-based lock to a specific window instance
+     *
+     * Called when a window is assigned to a zone. If the appId is in the locked
+     * set (from session restore), replaces it with the full windowId so only
+     * this instance is locked — preventing cross-contamination of multi-instance apps.
+     */
+    void promoteAppIdLock(const QString& windowId);
 
     /**
      * @brief Check if a zone contains any locked windows
