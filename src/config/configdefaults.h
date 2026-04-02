@@ -1176,7 +1176,7 @@ public:
     }
     static QString toggleWindowLockShortcut()
     {
-        return QStringLiteral("Meta+Shift+L");
+        return QStringLiteral("Meta+Ctrl+Shift+L");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
