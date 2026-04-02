@@ -53,6 +53,7 @@ public:
     PZ_CONFIG_GROUP(updatesGroup, "Updates")
     PZ_CONFIG_GROUP(editorGroup, "Editor")
     PZ_CONFIG_GROUP(tilingQuickLayoutSlotsGroup, "TilingQuickLayoutSlots")
+    PZ_CONFIG_GROUP(orderingGroup, "Ordering")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Trigger JSON Field Names
@@ -299,6 +300,13 @@ public:
     PZ_CONFIG_KEY(editorSnapOverrideModifierKey, "SnapOverrideModifier")
     PZ_CONFIG_KEY(fillOnDropEnabledKey, "FillOnDropEnabled")
     PZ_CONFIG_KEY(fillOnDropModifierKey, "FillOnDropModifier")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Ordering
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    PZ_CONFIG_KEY(snappingLayoutOrderKey, "SnappingLayoutOrder")
+    PZ_CONFIG_KEY(tilingAlgorithmOrderKey, "TilingAlgorithmOrder")
 
 private:
     // Non-instantiable

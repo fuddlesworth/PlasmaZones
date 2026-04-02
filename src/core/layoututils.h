@@ -120,7 +120,8 @@ namespace LayoutUtils {
  * @return Vector of unified layout entries
  */
 PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager,
-                                                                      bool includeAutotile = false);
+                                                                      bool includeAutotile = false,
+                                                                      const QStringList& customOrder = {});
 
 /**
  * @brief Build filtered list of layouts visible in the given context
@@ -147,7 +148,8 @@ PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutMan
 PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry>
 buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenId, int virtualDesktop,
                        const QString& activity, bool includeManual = true, bool includeAutotile = true,
-                       qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false);
+                       qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
+                       const QStringList& customOrder = {});
 
 /**
  * @brief Convert a unified layout entry to QVariantMap for QML

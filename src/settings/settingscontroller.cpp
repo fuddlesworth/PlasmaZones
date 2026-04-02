@@ -287,6 +287,8 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("tiling-algorithm"),
         QStringLiteral("tiling-assignments"),
         QStringLiteral("tiling-shortcuts"),
+        QStringLiteral("snapping-ordering"),
+        QStringLiteral("tiling-ordering"),
         QStringLiteral("apprules"),
         QStringLiteral("exclusions"),
         QStringLiteral("editor"),
@@ -2951,6 +2953,145 @@ int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
     }
 
     return imported;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Ordering helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantList SettingsController::resolvedSnappingOrder() const
+{
+    const QStringList& customOrder = m_settings.snappingLayoutOrder();
+    QVariantList result;
+
+    // Build lookup from current layouts
+    QHash<QString, QVariantMap> layoutMap;
+    for (const QVariant& v : m_layouts) {
+        QVariantMap map = v.toMap();
+        QString id = map.value(QStringLiteral("id")).toString();
+        if (!id.isEmpty() && !map.value(QStringLiteral("isAutotile"), false).toBool()) {
+            layoutMap.insert(id, map);
+        }
+    }
+
+    // First: items in custom order (skip stale IDs)
+    QSet<QString> added;
+    for (const QString& id : customOrder) {
+        if (layoutMap.contains(id)) {
+            result.append(layoutMap.value(id));
+            added.insert(id);
+        }
+    }
+
+    // Then: remaining items in default order (name-alphabetical)
+    QVector<QPair<QString, QVariantMap>> remaining;
+    for (auto it = layoutMap.cbegin(); it != layoutMap.cend(); ++it) {
+        if (!added.contains(it.key())) {
+            remaining.append({it.key(), it.value()});
+        }
+    }
+    std::sort(remaining.begin(), remaining.end(), [](const auto& a, const auto& b) {
+        return a.second.value(QStringLiteral("name"))
+                   .toString()
+                   .compare(b.second.value(QStringLiteral("name")).toString(), Qt::CaseInsensitive)
+            < 0;
+    });
+    for (const auto& pair : remaining) {
+        result.append(pair.second);
+    }
+
+    return result;
+}
+
+QVariantList SettingsController::resolvedTilingOrder() const
+{
+    const QStringList& customOrder = m_settings.tilingAlgorithmOrder();
+    QVariantList algorithms = availableAlgorithms();
+
+    QVariantList result;
+    QHash<QString, QVariantMap> algoMap;
+    for (const QVariant& v : algorithms) {
+        QVariantMap map = v.toMap();
+        QString id = map.value(QStringLiteral("id")).toString();
+        if (!id.isEmpty()) {
+            algoMap.insert(id, map);
+        }
+    }
+
+    // First: items in custom order (skip stale IDs)
+    QSet<QString> added;
+    for (const QString& id : customOrder) {
+        if (algoMap.contains(id)) {
+            result.append(algoMap.value(id));
+            added.insert(id);
+        }
+    }
+
+    // Then: remaining items in default order (name-alphabetical)
+    QVector<QPair<QString, QVariantMap>> remaining;
+    for (auto it = algoMap.cbegin(); it != algoMap.cend(); ++it) {
+        if (!added.contains(it.key())) {
+            remaining.append({it.key(), it.value()});
+        }
+    }
+    std::sort(remaining.begin(), remaining.end(), [](const auto& a, const auto& b) {
+        return a.second.value(QStringLiteral("name"))
+                   .toString()
+                   .compare(b.second.value(QStringLiteral("name")).toString(), Qt::CaseInsensitive)
+            < 0;
+    });
+    for (const auto& pair : remaining) {
+        result.append(pair.second);
+    }
+
+    return result;
+}
+
+void SettingsController::moveSnappingLayout(int fromIndex, int toIndex)
+{
+    QVariantList ordered = resolvedSnappingOrder();
+    if (fromIndex < 0 || fromIndex >= ordered.size() || toIndex < 0 || toIndex >= ordered.size()
+        || fromIndex == toIndex) {
+        return;
+    }
+
+    // Build the full ID list from the resolved order, then move
+    QStringList ids;
+    for (const QVariant& v : ordered) {
+        ids.append(v.toMap().value(QStringLiteral("id")).toString());
+    }
+    ids.move(fromIndex, toIndex);
+    m_settings.setSnappingLayoutOrder(ids);
+    setNeedsSave(true);
+}
+
+void SettingsController::moveTilingAlgorithm(int fromIndex, int toIndex)
+{
+    QVariantList ordered = resolvedTilingOrder();
+    if (fromIndex < 0 || fromIndex >= ordered.size() || toIndex < 0 || toIndex >= ordered.size()
+        || fromIndex == toIndex) {
+        return;
+    }
+
+    QStringList ids;
+    for (const QVariant& v : ordered) {
+        ids.append(v.toMap().value(QStringLiteral("id")).toString());
+    }
+    ids.move(fromIndex, toIndex);
+    m_settings.setTilingAlgorithmOrder(ids);
+    setNeedsSave(true);
+}
+
+void SettingsController::resetSnappingOrder()
+{
+    m_settings.setSnappingLayoutOrder({});
+    setNeedsSave(true);
+}
+
+void SettingsController::resetTilingOrder()
+{
+    m_settings.setTilingAlgorithmOrder({});
+    setNeedsSave(true);
 }
 
 } // namespace PlasmaZones

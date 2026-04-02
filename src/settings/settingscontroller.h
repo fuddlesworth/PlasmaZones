@@ -541,6 +541,14 @@ public:
     Q_INVOKABLE void stageAssignmentEntry(const QString& screenName, int virtualDesktop, const QString& activityId,
                                           int mode, const QString& snappingLayoutId, const QString& tilingAlgorithmId);
 
+    // ── Ordering helpers ─────────────────────────────────────────────────────
+    Q_INVOKABLE QVariantList resolvedSnappingOrder() const;
+    Q_INVOKABLE QVariantList resolvedTilingOrder() const;
+    Q_INVOKABLE void moveSnappingLayout(int fromIndex, int toIndex);
+    Q_INVOKABLE void moveTilingAlgorithm(int fromIndex, int toIndex);
+    Q_INVOKABLE void resetSnappingOrder();
+    Q_INVOKABLE void resetTilingOrder();
+
     // ── Algorithm helpers ────────────────────────────────────────────────────
     Q_INVOKABLE QVariantList availableAlgorithms() const;
     Q_INVOKABLE QVariantList generateAlgorithmPreview(const QString& algorithmId, int windowCount, double splitRatio,

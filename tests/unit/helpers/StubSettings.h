@@ -559,6 +559,24 @@ public:
     {
     }
 
+    // IOrderingSettings
+    QStringList snappingLayoutOrder() const override
+    {
+        return m_snappingLayoutOrder;
+    }
+    void setSnappingLayoutOrder(const QStringList& order) override
+    {
+        m_snappingLayoutOrder = order;
+    }
+    QStringList tilingAlgorithmOrder() const override
+    {
+        return m_tilingAlgorithmOrder;
+    }
+    void setTilingAlgorithmOrder(const QStringList& order) override
+    {
+        m_tilingAlgorithmOrder = order;
+    }
+
     // Animation settings (ISettings)
     bool animationsEnabled() const override
     {
@@ -718,6 +736,8 @@ public:
 private:
     QString m_defaultLayoutId;
     QString m_renderingBackend = ConfigDefaults::renderingBackend();
+    QStringList m_snappingLayoutOrder;
+    QStringList m_tilingAlgorithmOrder;
 };
 
 } // namespace PlasmaZones

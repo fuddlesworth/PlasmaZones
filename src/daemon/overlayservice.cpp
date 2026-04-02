@@ -510,9 +510,16 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
             }
         }
     }
+    QStringList customOrder;
+    if (m_settings) {
+        if (includeManual)
+            customOrder.append(m_settings->snappingLayoutOrder());
+        if (includeAutotile)
+            customOrder.append(m_settings->tilingAlgorithmOrder());
+    }
     const auto entries = LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, includeManual, includeAutotile,
-        Utils::screenAspectRatio(screenId), m_settings && m_settings->filterLayoutsByAspectRatio());
+        Utils::screenAspectRatio(screenId), m_settings && m_settings->filterLayoutsByAspectRatio(), customOrder);
     return LayoutUtils::toVariantList(entries);
 }
 
@@ -534,10 +541,17 @@ void OverlayService::setExcludedScreens(const QSet<QString>& screenIds)
 
 int OverlayService::visibleLayoutCount(const QString& screenId) const
 {
+    QStringList customOrder;
+    if (m_settings) {
+        if (m_includeManualLayouts)
+            customOrder.append(m_settings->snappingLayoutOrder());
+        if (m_includeAutotileLayouts)
+            customOrder.append(m_settings->tilingAlgorithmOrder());
+    }
     const auto entries = LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
         m_includeAutotileLayouts, Utils::screenAspectRatio(screenId),
-        m_settings && m_settings->filterLayoutsByAspectRatio());
+        m_settings && m_settings->filterLayoutsByAspectRatio(), customOrder);
     return entries.size();
 }
 
