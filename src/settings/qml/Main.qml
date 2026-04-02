@@ -1816,8 +1816,6 @@ ApplicationWindow {
     // ── What's New dialog ──────────────────────────────────────────
     WhatsNewPage {
         id: whatsNewDialog
-
-        parent: window.Overlay.overlay
     }
 
     // Auto-show What's New dialog on first launch after update
