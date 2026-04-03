@@ -57,6 +57,10 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
                     if (m_renderNode) {
                         m_renderNode->releaseResources();
                     }
+                    // Mark shader dirty so updatePaintNode() reloads source on
+                    // the next scene graph sync after re-show. Without this,
+                    // prepare() tries to bake from cleared QShader objects.
+                    m_shaderDirty.store(true);
                 },
                 Qt::DirectConnection);
         }

@@ -447,6 +447,12 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_didFullUploadOnce = false;
     m_shaderReady = false;
     m_shaderDirty = true;
+    m_bufferShaderReady = false;
+    m_bufferShaderDirty = true;
+    m_bufferShaderRetries = 0;
+    m_multiBufferShadersReady = false;
+    m_multiBufferShaderDirty = true;
+    m_multiBufferShaderRetries = 0;
     m_uniformsDirty = true;
     m_timeDirty = true;
     m_zoneDataDirty = true;

@@ -189,10 +189,8 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
 
 void OverlayService::hideLayoutOsd()
 {
-    // Destroy only the sending window's screen, not all screens.
-    // showDesktopSwitchOsd() shows layout OSDs on ALL screens simultaneously;
-    // each window has its own 1500ms dismiss timer. If we destroyed all windows
-    // here, the first screen to dismiss would kill the others mid-animation.
+    // Per-screen destroy: only destroy the sending window's screen so multi-screen
+    // desktop-switch OSDs don't kill each other mid-animation.
     auto* senderWindow = qobject_cast<QQuickWindow*>(sender());
     if (senderWindow) {
         for (auto it = m_layoutOsdWindows.constBegin(); it != m_layoutOsdWindows.constEnd(); ++it) {
