@@ -122,16 +122,7 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
         return QRect();
     }
 
-    // Find zone and its parent layout (search all layouts for per-screen support)
-    Zone* zone = nullptr;
-    Layout* layout = nullptr;
-    for (Layout* l : m_layoutManager->layouts()) {
-        zone = l->zoneById(*uuidOpt);
-        if (zone) {
-            layout = l;
-            break;
-        }
-    }
+    auto [zone, layout] = findZoneInAllLayouts(*uuidOpt);
     if (!zone) {
         return QRect();
     }
@@ -157,16 +148,7 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
             continue;
         }
 
-        // Look up zone in all layouts (same logic as zoneGeometry)
-        Zone* zone = nullptr;
-        Layout* layout = nullptr;
-        for (auto* l : m_layoutManager->layouts()) {
-            zone = l->zoneById(*uuidOpt);
-            if (zone) {
-                layout = l;
-                break;
-            }
-        }
+        auto [zone, layout] = findZoneInAllLayouts(*uuidOpt);
         if (!zone) {
             continue;
         }

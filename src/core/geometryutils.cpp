@@ -516,14 +516,14 @@ QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries)
     QJsonArray array;
     for (const ZoneAssignmentEntry& entry : entries) {
         QJsonObject obj;
-        obj[QLatin1String("windowId")] = entry.windowId;
-        obj[QLatin1String("sourceZoneId")] = entry.sourceZoneId;
-        obj[QLatin1String("targetZoneId")] = entry.targetZoneId;
+        obj[JsonKeys::WindowId] = entry.windowId;
+        obj[JsonKeys::SourceZoneId] = entry.sourceZoneId;
+        obj[JsonKeys::TargetZoneId] = entry.targetZoneId;
         if (!entry.targetZoneIds.isEmpty()) {
             QJsonArray zoneIdsArr;
             for (const QString& zid : entry.targetZoneIds)
                 zoneIdsArr.append(zid);
-            obj[QLatin1String("targetZoneIds")] = zoneIdsArr;
+            obj[JsonKeys::TargetZoneIds] = zoneIdsArr;
         }
         obj[JsonKeys::X] = entry.targetGeometry.x();
         obj[JsonKeys::Y] = entry.targetGeometry.y();

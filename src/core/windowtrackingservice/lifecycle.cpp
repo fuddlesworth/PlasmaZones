@@ -24,6 +24,28 @@ namespace PlasmaZones {
 // Virtual Screen Migration
 // ═══════════════════════════════════════════════════════════════════════════════
 
+QString WindowTrackingService::findNearestVirtualScreen(const QStringList& vsIds, int oldIndex)
+{
+    if (vsIds.isEmpty()) {
+        return {};
+    }
+    int bestIdx = 0;
+    int bestDist = INT_MAX;
+    for (int i = 0; i < vsIds.size(); ++i) {
+        const int idx = VirtualScreenId::extractIndex(vsIds[i]);
+        const int dist = qAbs(idx - oldIndex);
+        if (dist < bestDist) {
+            bestDist = dist;
+            bestIdx = i;
+        }
+    }
+    return vsIds[bestIdx];
+}
+
+// Takes an explicit ScreenManager* parameter rather than using ScreenManager::instance()
+// because this method is called during daemon startup (Daemon::start) before the
+// singleton instance may be fully initialized, and the caller already holds a valid
+// ScreenManager pointer from its own member (m_screenManager.get()).
 void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& physicalScreenId,
                                                               const QStringList& virtualScreenIds, ScreenManager* mgr)
 {
@@ -78,18 +100,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         // instead of the right-half center). Use index-based proximity instead:
         // find the new VS with the nearest index to the old one.
         if (VirtualScreenId::isVirtual(oldScreenId)) {
-            const int oldIndex = VirtualScreenId::extractIndex(oldScreenId);
-            int bestIdx = 0;
-            int bestDist = INT_MAX;
-            for (int i = 0; i < virtualScreenIds.size(); ++i) {
-                const int idx = VirtualScreenId::extractIndex(virtualScreenIds[i]);
-                const int dist = qAbs(idx - oldIndex);
-                if (dist < bestDist) {
-                    bestDist = dist;
-                    bestIdx = i;
-                }
-            }
-            return virtualScreenIds[bestIdx];
+            return findNearestVirtualScreen(virtualScreenIds, VirtualScreenId::extractIndex(oldScreenId));
         }
 
         // Fall back to the physical screen's layout and center-point mapping.
@@ -261,8 +272,22 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
     if (VirtualScreenId::isVirtual(m_lastUsedScreenId)
         && VirtualScreenId::extractPhysicalId(m_lastUsedScreenId) == physicalScreenId) {
         m_lastUsedScreenId = physicalScreenId;
-        // Clear stale zone ID — virtual screen layout zones don't exist in physical screen layout
-        m_lastUsedZoneId.clear();
+        // Only clear the zone ID if it doesn't exist in the physical screen's layout.
+        // If the zone is still valid in the physical layout, preserve it for last-zone-snap.
+        // This mirrors the forward migration logic in migrateScreenAssignmentsToVirtual.
+        bool zoneStillValid = false;
+        if (!m_lastUsedZoneId.isEmpty() && m_layoutManager) {
+            Layout* physLayout2 = m_layoutManager->resolveLayoutForScreen(physicalScreenId);
+            if (physLayout2) {
+                auto uuidOpt = Utils::parseUuid(m_lastUsedZoneId);
+                if (uuidOpt && physLayout2->zoneById(*uuidOpt)) {
+                    zoneStillValid = true;
+                }
+            }
+        }
+        if (!zoneStillValid) {
+            m_lastUsedZoneId.clear();
+        }
     }
 
     // B3: Migrate pre-tile geometry connectorName fields
@@ -299,6 +324,11 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
             m_windowZoneAssignments.remove(wId);
             m_windowScreenAssignments.remove(wId);
             m_preTileGeometries.remove(wId);
+            m_windowDesktopAssignments.remove(wId);
+            m_preFloatZoneAssignments.remove(wId);
+            m_preFloatScreenAssignments.remove(wId);
+            m_floatingWindows.remove(wId);
+            m_autotileFloatedWindows.remove(wId);
         }
     }
 
@@ -838,20 +868,10 @@ QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId)
         // Find the virtual screen with the nearest index to the old one,
         // so windows migrate to the geometrically closest region rather
         // than always landing on the first virtual screen.
-        const int oldIndex = VirtualScreenId::extractIndex(screenId);
-        int bestIdx = 0;
-        int bestDist = INT_MAX;
-        for (int i = 0; i < vsIds.size(); ++i) {
-            const int idx = VirtualScreenId::extractIndex(vsIds[i]);
-            const int dist = qAbs(idx - oldIndex);
-            if (dist < bestDist) {
-                bestDist = dist;
-                bestIdx = i;
-            }
-        }
-        qCInfo(lcCore) << "Virtual screen" << screenId << "no longer exists, falling back to" << vsIds[bestIdx]
+        QString nearest = findNearestVirtualScreen(vsIds, VirtualScreenId::extractIndex(screenId));
+        qCInfo(lcCore) << "Virtual screen" << screenId << "no longer exists, falling back to" << nearest
                        << "on same physical monitor" << physId;
-        return vsIds[bestIdx];
+        return nearest;
     }
 
     qCWarning(lcCore) << "Virtual screen" << screenId << "no longer exists, falling back to physical screen" << physId;
@@ -865,14 +885,19 @@ Zone* WindowTrackingService::findZoneById(const QString& zoneId) const
         return nullptr;
     }
 
+    return findZoneInAllLayouts(*uuidOpt).zone;
+}
+
+WindowTrackingService::ZoneLookupResult WindowTrackingService::findZoneInAllLayouts(const QUuid& zoneUuid) const
+{
     // Search all layouts, not just the active one, to support per-screen layouts
     for (Layout* layout : m_layoutManager->layouts()) {
-        Zone* zone = layout->zoneById(*uuidOpt);
+        Zone* zone = layout->zoneById(zoneUuid);
         if (zone) {
-            return zone;
+            return {zone, layout};
         }
     }
-    return nullptr;
+    return {};
 }
 
 } // namespace PlasmaZones

@@ -13,6 +13,7 @@
 #include <QJsonParseError>
 #include <QDir>
 #include <QFile>
+#include <QLatin1StringView>
 #include <optional>
 
 namespace PlasmaZones {
@@ -172,11 +173,11 @@ inline std::optional<QJsonObject> parseJsonObject(const QString& json)
  * @brief Direction constants for use in comparisons
  */
 namespace Direction {
-inline const QString Left = QStringLiteral("left");
-inline const QString Right = QStringLiteral("right");
-inline const QString Up = QStringLiteral("up");
-inline const QString Down = QStringLiteral("down");
-}
+inline constexpr QLatin1StringView Left{"left"};
+inline constexpr QLatin1StringView Right{"right"};
+inline constexpr QLatin1StringView Up{"up"};
+inline constexpr QLatin1StringView Down{"down"};
+} // namespace Direction
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Window ID Utilities

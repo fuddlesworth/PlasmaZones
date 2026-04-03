@@ -286,6 +286,21 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
             margins.setBottom(vsBottomOff);
         }
 
+        // Guard against unusably narrow/short popup on very small virtual screens.
+        // If the available dimension after margins is below MinUsablePopupSize,
+        // fall back to filling the virtual screen area for that axis.
+        constexpr int MinUsablePopupSize = 200;
+        const int availableWidth = physGeom.width() - margins.left() - margins.right();
+        if (availableWidth < MinUsablePopupSize) {
+            margins.setLeft(vsLeftOff);
+            margins.setRight(vsRightOff);
+        }
+        const int availableHeight = physGeom.height() - margins.top() - margins.bottom();
+        if (availableHeight < MinUsablePopupSize) {
+            margins.setTop(vsTopOff);
+            margins.setBottom(vsBottomOff);
+        }
+
         // Batch anchors + margins into a single propertiesChanged() emission
         // to avoid a one-frame glitch with new anchors but old margins.
         LayerSurface::BatchGuard batch(layerSurface);

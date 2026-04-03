@@ -358,7 +358,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         return;
     }
     // Apply virtual screen positioning (anchors + margins) after configureLayerSurface
-    applyLayerShellScreenPosition(window, physScreen, geometry);
+    updateWindowScreenPosition(window, screenId);
 
     window->setVisible(false);
 
@@ -379,17 +379,13 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
                 if (isVS) {
                     // Virtual screen: recalculate geometry from ScreenManager since
                     // virtual screen proportions are relative to the physical screen.
-                    auto* mgr = ScreenManager::instance();
-                    if (mgr) {
-                        const QRect vsGeom = mgr->screenGeometry(sid);
-                        if (vsGeom.isValid()) {
-                            w->setWidth(vsGeom.width());
-                            w->setHeight(vsGeom.height());
-                            m_overlayGeometries[sid] = vsGeom;
-                            applyLayerShellScreenPosition(w, screenPtr, vsGeom);
-                            updateOverlayWindow(sid, screenPtr);
-                            return;
-                        }
+                    const QRect vsGeom = updateWindowScreenPosition(w, sid);
+                    if (vsGeom.isValid()) {
+                        w->setWidth(vsGeom.width());
+                        w->setHeight(vsGeom.height());
+                        m_overlayGeometries[sid] = vsGeom;
+                        updateOverlayWindow(sid, screenPtr);
+                        return;
                     }
                 } else {
                     // Physical screen: size directly from the new geometry.

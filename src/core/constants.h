@@ -355,6 +355,12 @@ inline constexpr QLatin1String OuterGapRight{"outerGapRight"};
 // Pywal color file keys
 inline constexpr QLatin1String Colors{"colors"};
 
+// Zone assignment serialization keys
+inline constexpr QLatin1String WindowId{"windowId"};
+inline constexpr QLatin1String SourceZoneId{"sourceZoneId"};
+inline constexpr QLatin1String TargetZoneId{"targetZoneId"};
+inline constexpr QLatin1String TargetZoneIds{"targetZoneIds"};
+
 // Virtual screen keys
 inline constexpr QLatin1String IsVirtualScreen{"isVirtualScreen"};
 inline constexpr QLatin1String VirtualDisplayName{"virtualDisplayName"};

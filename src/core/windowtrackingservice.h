@@ -797,6 +797,19 @@ private:
     /// when multiple zones share the same number.
     static void sortZonesByNumber(QVector<Zone*>& zones);
 
+    /// Find the nearest virtual screen by index proximity.
+    /// Used when a stored virtual screen ID no longer exists in the current configuration.
+    static QString findNearestVirtualScreen(const QStringList& vsIds, int oldIndex);
+
+    /// Find a zone by UUID across all loaded layouts.
+    /// Returns the zone and its parent layout, or {nullptr, nullptr} if not found.
+    struct ZoneLookupResult
+    {
+        Zone* zone = nullptr;
+        Layout* layout = nullptr;
+    };
+    ZoneLookupResult findZoneInAllLayouts(const QUuid& zoneUuid) const;
+
     /// Build a map from zone ID (toString) to 1-based position in sorted-by-zoneNumber order.
     static QHash<QString, int> buildZonePositionMap(Layout* layout);
 

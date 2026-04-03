@@ -231,6 +231,20 @@ inline void applyLayerShellScreenPosition(QWindow* window, QScreen* physScreen, 
     }
 }
 
+/// Resolve screen geometry from ScreenManager and apply layer-shell positioning.
+/// Combines resolveScreenGeometry() + resolveTargetScreen() + applyLayerShellScreenPosition()
+/// into a single call.  Returns the resolved geometry (invalid QRect on failure).
+inline QRect updateWindowScreenPosition(QWindow* window, const QString& screenId)
+{
+    const QRect geom = resolveScreenGeometry(screenId);
+    QScreen* physScreen = resolveTargetScreen(screenId);
+    if (!physScreen || !geom.isValid()) {
+        return QRect();
+    }
+    applyLayerShellScreenPosition(window, physScreen, geom);
+    return geom;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Lock-mode check helper shared across overlayservice TUs
 // ═══════════════════════════════════════════════════════════════════════════════

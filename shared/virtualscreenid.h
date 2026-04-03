@@ -41,7 +41,7 @@ inline QString extractPhysicalId(const QString& screenId)
 inline int extractIndex(const QString& screenId)
 {
     int sep = screenId.indexOf(separator());
-    if (sep < 0) {
+    if (sep <= 0) {
         return -1;
     }
     bool ok = false;
@@ -64,6 +64,23 @@ inline QString make(const QString& physicalScreenId, int index)
 inline bool samePhysical(const QString& idA, const QString& idB)
 {
     return extractPhysicalId(idA) == extractPhysicalId(idB);
+}
+
+/// Detect a virtual-screen crossing: the screen IDs differ, but both
+/// belong to the same physical monitor.  Returns false when both IDs
+/// are plain physical IDs (outputChanged handles those) or when they
+/// belong to different physical monitors.
+inline bool isVirtualScreenCrossing(const QString& oldScreenId, const QString& newScreenId)
+{
+    if (oldScreenId.isEmpty() || newScreenId.isEmpty() || oldScreenId == newScreenId) {
+        return false;
+    }
+    // At least one side must be a virtual ID — two plain physical IDs
+    // that differ are a physical monitor change, not a VS crossing.
+    if (!isVirtual(oldScreenId) && !isVirtual(newScreenId)) {
+        return false;
+    }
+    return samePhysical(oldScreenId, newScreenId);
 }
 
 } // namespace VirtualScreenId

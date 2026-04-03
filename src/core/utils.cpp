@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "utils.h"
+#include "logging.h"
 #include "screenmanager.h"
 #include "virtualscreen.h"
 #include <QGuiApplication>
@@ -355,10 +356,9 @@ void warnDuplicateScreenIds()
     }
     for (auto it = idToConnectors.constBegin(); it != idToConnectors.constEnd(); ++it) {
         if (it.value().size() > 1) {
-            qInfo(
-                "PlasmaZones: identical monitors detected for EDID ID \"%s\" (connectors: %s). "
-                "Using connector-disambiguated IDs for independent layout assignments.",
-                qPrintable(it.key()), qPrintable(it.value().join(QStringLiteral(", "))));
+            qCInfo(lcScreen) << "Identical monitors detected for EDID ID" << it.key()
+                             << "(connectors:" << it.value().join(QStringLiteral(", ")) << ")."
+                             << "Using connector-disambiguated IDs for independent layout assignments.";
         }
     }
 }

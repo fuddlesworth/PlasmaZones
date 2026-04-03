@@ -147,7 +147,7 @@ Layout* LayoutManager::layoutForScreen(const QString& screenId, int virtualDeskt
 
     // No assignment: use defaultLayoutId from settings when set, else first layout (by defaultOrder)
     if (m_settings && !m_settings->defaultLayoutId().isEmpty()) {
-        if (Layout* L = layoutById(QUuid(m_settings->defaultLayoutId()))) {
+        if (Layout* L = layoutById(QUuid::fromString(m_settings->defaultLayoutId()))) {
             return L;
         }
     }

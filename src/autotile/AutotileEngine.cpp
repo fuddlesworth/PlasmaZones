@@ -6,6 +6,7 @@
 #include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QPointer>
 #include <QScopeGuard>
 #include <QScreen>
 #include <QTimer>
@@ -105,10 +106,11 @@ void AutotileEngine::connectSignals()
     // Screen geometry changes
     if (m_screenManager) {
         connect(m_screenManager, &ScreenManager::availableGeometryChanged, this, [this](QScreen* screen, const QRect&) {
-            if (!screen) {
+            QPointer<QScreen> guardedScreen = screen;
+            if (!guardedScreen) {
                 return;
             }
-            const QString physId = Utils::screenIdentifier(screen);
+            const QString physId = Utils::screenIdentifier(guardedScreen);
             // When virtual screens are configured, autotile state is keyed by
             // virtual screen IDs — retile each one instead of the physical ID.
             if (m_screenManager->hasVirtualScreens(physId)) {

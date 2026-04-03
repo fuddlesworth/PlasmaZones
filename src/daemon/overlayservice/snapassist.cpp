@@ -126,7 +126,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
         return;
     }
     // Apply virtual screen positioning (anchors + margins) after configureLayerSurface
-    applyLayerShellScreenPosition(m_snapAssistWindow, screen, screenGeom);
+    updateWindowScreenPosition(m_snapAssistWindow, screenId);
 
     assertWindowOnScreen(m_snapAssistWindow, screen, screenGeom);
     // Size only — position is controlled by layer-surface anchors + margins,
@@ -391,7 +391,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         return;
     }
     // Apply virtual screen positioning (anchors + margins) after configureLayerSurface
-    applyLayerShellScreenPosition(m_layoutPickerWindow, screen, screenGeom);
+    updateWindowScreenPosition(m_layoutPickerWindow, resolvedId);
 
     assertWindowOnScreen(m_layoutPickerWindow, screen, screenGeom);
     // Size only — position is controlled by layer-surface anchors + margins,

@@ -151,13 +151,15 @@ void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const
                     QRectF geom =
                         capturedGeom.isValid() ? capturedGeom : (safeWindow ? safeWindow->frameGeometry() : QRectF());
                     if (geom.width() > 0 && geom.height() > 0) {
-                        // Use virtual-screen-aware ID when available.  If VS configs
-                        // haven't loaded yet, pass empty — the daemon will resolve
-                        // the screen from the geometry coordinates when needed.
+                        // Use virtual-screen-aware ID when available.
+                        // getWindowScreenId() falls back to the physical ID when
+                        // virtual screen defs haven't loaded yet, so it is safe
+                        // to call unconditionally.  Using it here ensures the
+                        // stored screen ID always matches the ID used by later
+                        // lookups (which also call getWindowScreenId).
                         QString screenId;
                         if (safeWindow) {
-                            screenId = m_virtualScreensReady ? getWindowScreenId(safeWindow)
-                                                             : outputScreenId(safeWindow->screen());
+                            screenId = getWindowScreenId(safeWindow);
                         }
                         fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
                                               {capturedWindowId, static_cast<int>(geom.x()), static_cast<int>(geom.y()),
@@ -782,24 +784,16 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // (The autotile handler has its own detection in slotWindowFrameGeometryChanged;
         // this covers snapping-mode windows which autotile doesn't track.)
         //
-        // NOTE: VS crossing detection logic is duplicated in autotilehandler/tiling.cpp
-        // (slotWindowFrameGeometryChanged). Changes here must be mirrored there.
+        // VS crossing detection uses VirtualScreenId::isVirtualScreenCrossing()
+        // (shared/virtualscreenid.h) — the same predicate used by autotilehandler/tiling.cpp.
         connect(safeW, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW]() {
             if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty() || !m_virtualScreensReady) {
                 return;
             }
             const QString newScreenId = getWindowScreenId(safeW);
             const QString oldScreenId = m_trackedScreenPerWindow.value(safeW);
-            if (oldScreenId == newScreenId || newScreenId.isEmpty()) {
+            if (!VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {
                 return;
-            }
-            // Only act on virtual screen changes (same physical monitor).
-            // Physical monitor changes are handled by outputChanged above.
-            if (!VirtualScreenId::isVirtual(oldScreenId) && !VirtualScreenId::isVirtual(newScreenId)) {
-                return; // Both physical — outputChanged will handle it
-            }
-            if (!VirtualScreenId::samePhysical(oldScreenId, newScreenId)) {
-                return; // Different physical monitors — outputChanged will handle it
             }
             m_trackedScreenPerWindow[safeW] = newScreenId;
 

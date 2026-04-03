@@ -274,9 +274,9 @@ void Settings::deletePerScreenGroups(QSettingsConfigBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
     for (const QString& groupName : allGroups) {
-        if (groupName.startsWith(QLatin1String("ZoneSelector:"))
-            || groupName.startsWith(QLatin1String("AutotileScreen:"))
-            || groupName.startsWith(QLatin1String("SnappingScreen:"))
+        if (groupName.startsWith(ConfigDefaults::zoneSelectorGroupPrefix())
+            || groupName.startsWith(ConfigDefaults::autotileScreenGroupPrefix())
+            || groupName.startsWith(ConfigDefaults::snappingScreenGroupPrefix())
             || groupName.startsWith(ConfigDefaults::virtualScreenGroupPrefix())) {
             backend->deleteGroup(groupName);
         }

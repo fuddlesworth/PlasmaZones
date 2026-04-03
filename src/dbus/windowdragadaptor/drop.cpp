@@ -84,7 +84,8 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // This is the single point where cross-screen state cleanup happens.
     if (capturedWasSnapped && m_windowTracking && releaseScreen) {
         QString storedScreen = m_windowTracking->service()->screenAssignments().value(windowId);
-        if (!storedScreen.isEmpty() && !Utils::screensMatch(storedScreen, releaseScreenId)) {
+        if (!storedScreen.isEmpty()
+            && (!Utils::screensMatch(storedScreen, releaseScreenId) || storedScreen != releaseScreenId)) {
             m_windowTracking->windowUnsnapped(windowId);
             m_windowTracking->clearPreTileGeometry(windowId);
             qCInfo(lcDbusWindow) << "Cross-screen drag: cleared snap/pre-tile state for" << windowId << "from"

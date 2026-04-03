@@ -27,15 +27,21 @@ namespace PlasmaZones {
 
 // Global cache for available geometry (screen name -> geometry)
 // Updated by sensor windows, read by actualAvailableGeometry()
+// Main-thread-only — no synchronization needed (Qt GUI thread constraint)
 static QHash<QString, QRect> s_availableGeometryCache;
 
 // Global pointer to the active ScreenManager instance (for static method access)
+// Main-thread-only — no synchronization needed (Qt GUI thread constraint)
 static QPointer<ScreenManager> s_instance;
 
 ScreenManager::ScreenManager(QObject* parent)
     : QObject(parent)
 {
     Q_ASSERT_X(!s_instance, "ScreenManager", "Multiple ScreenManager instances created");
+    if (s_instance) {
+        qCWarning(lcScreen) << "ScreenManager: singleton already exists, ignoring duplicate construction";
+        return;
+    }
     s_instance = this;
     m_delayedPanelRequeryTimer.setSingleShot(true);
     connect(&m_delayedPanelRequeryTimer, &QTimer::timeout, this, [this]() {

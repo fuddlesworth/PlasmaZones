@@ -348,6 +348,14 @@ public:
     PZ_CONFIG_KEY(snappingLayoutOrderKey, "SnappingLayoutOrder")
     PZ_CONFIG_KEY(tilingAlgorithmOrderKey, "TilingAlgorithmOrder")
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Per-Screen Config Group Prefixes
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    PZ_CONFIG_GROUP(zoneSelectorGroupPrefix, "ZoneSelector:")
+    PZ_CONFIG_GROUP(autotileScreenGroupPrefix, "AutotileScreen:")
+    PZ_CONFIG_GROUP(snappingScreenGroupPrefix, "SnappingScreen:")
+
 private:
     // Non-instantiable
     ConfigKeys() = delete;

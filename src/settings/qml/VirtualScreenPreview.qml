@@ -20,6 +20,11 @@ Rectangle {
     required property var pendingScreens
     required property int screenWidth
     required property int screenHeight
+    // ── Font sizing ratios for region labels ────────────────────────────
+    // Fraction of region width used to scale the label font (0.125 = 1/8).
+    readonly property real titleFontScaleFraction: 0.125
+    // Fraction of region width used to scale the detail font (0.1 = 1/10).
+    readonly property real detailFontScaleFraction: 0.1
 
     // ── Signals ─────────────────────────────────────────────────────────
     signal dividerMoved(int dividerIndex, real newFraction)
@@ -65,7 +70,7 @@ Rectangle {
                     Layout.alignment: Qt.AlignHCenter
                     text: modelData.displayName || i18n("Screen %1", index + 1)
                     font.weight: Font.DemiBold
-                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.7, Math.min(Kirigami.Theme.defaultFont.pixelSize * 1, regionRect.width / 8))
+                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.7, Math.min(Kirigami.Theme.defaultFont.pixelSize * 1, regionRect.width * previewRoot.titleFontScaleFraction))
                     color: Kirigami.Theme.textColor
                     elide: Text.ElideRight
                     maximumLineCount: 1
@@ -74,7 +79,7 @@ Rectangle {
                 Label {
                     Layout.alignment: Qt.AlignHCenter
                     text: Math.round(modelData.width * previewRoot.screenWidth) + "px \u00b7 " + Math.round(modelData.width * 100) + "%"
-                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.65, Math.min(Kirigami.Theme.defaultFont.pixelSize * 0.85, regionRect.width / 10))
+                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.65, Math.min(Kirigami.Theme.defaultFont.pixelSize * 0.85, regionRect.width * previewRoot.detailFontScaleFraction))
                     color: Kirigami.Theme.disabledTextColor
                 }
 

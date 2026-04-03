@@ -310,15 +310,16 @@ static void normalizeAutotileKeys(QHash<QString, QVariantMap>& settings)
 void Settings::loadPerScreenOverrides(QSettingsConfigBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
-    loadPerScreenGroup(backend, allGroups, QStringLiteral("ZoneSelector:"), kPerScreenKeys, std::size(kPerScreenKeys),
-                       readPerScreenZoneSelectorEntry, validatePerScreenValue, m_perScreenZoneSelectorSettings);
-    loadPerScreenGroup(backend, allGroups, QStringLiteral("AutotileScreen:"), kPerScreenAutotileKeys,
+    loadPerScreenGroup(backend, allGroups, ConfigDefaults::zoneSelectorGroupPrefix(), kPerScreenKeys,
+                       std::size(kPerScreenKeys), readPerScreenZoneSelectorEntry, validatePerScreenValue,
+                       m_perScreenZoneSelectorSettings);
+    loadPerScreenGroup(backend, allGroups, ConfigDefaults::autotileScreenGroupPrefix(), kPerScreenAutotileKeys,
                        std::size(kPerScreenAutotileKeys), readPerScreenAutotileEntry, validatePerScreenAutotileValue,
                        m_perScreenAutotileSettings);
     // Normalize autotile keys from disk format ("AutotileAlgorithm") to short format
     // ("Algorithm") that QML uses for lookup via PerScreenOverrideHelper.settingValue().
     normalizeAutotileKeys(m_perScreenAutotileSettings);
-    loadPerScreenGroup(backend, allGroups, QStringLiteral("SnappingScreen:"), kPerScreenSnappingKeys,
+    loadPerScreenGroup(backend, allGroups, ConfigDefaults::snappingScreenGroupPrefix(), kPerScreenSnappingKeys,
                        std::size(kPerScreenSnappingKeys), readPerScreenSnappingEntry, validatePerScreenSnappingValue,
                        m_perScreenSnappingSettings);
 }
@@ -356,10 +357,11 @@ static QHash<QString, QVariantMap> expandAutotileKeys(const QHash<QString, QVari
 
 void Settings::saveAllPerScreenOverrides(QSettingsConfigBackend* backend)
 {
-    savePerScreenOverrides(backend, QStringLiteral("ZoneSelector:"), m_perScreenZoneSelectorSettings);
+    savePerScreenOverrides(backend, ConfigDefaults::zoneSelectorGroupPrefix(), m_perScreenZoneSelectorSettings);
     // Expand short keys back to disk format before saving
-    savePerScreenOverrides(backend, QStringLiteral("AutotileScreen:"), expandAutotileKeys(m_perScreenAutotileSettings));
-    savePerScreenOverrides(backend, QStringLiteral("SnappingScreen:"), m_perScreenSnappingSettings);
+    savePerScreenOverrides(backend, ConfigDefaults::autotileScreenGroupPrefix(),
+                           expandAutotileKeys(m_perScreenAutotileSettings));
+    savePerScreenOverrides(backend, ConfigDefaults::snappingScreenGroupPrefix(), m_perScreenSnappingSettings);
 }
 
 template<typename T>

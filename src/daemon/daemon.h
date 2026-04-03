@@ -145,6 +145,12 @@ private:
     void handleDecreaseMasterCount();
     void handleRetile();
 
+    /** @brief Check if screen is locked for layout change in its current mode */
+    bool isScreenLockedForLayoutChange(const QString& screenId);
+
+    /** @brief Handle cycle-layout shortcut (previous or next) */
+    void handleCycleLayout(const QString& screenId, bool forward);
+
     // Start-up sub-methods (defined in start.cpp)
     void createDbusAdaptors();
     void connectScreenSignals();

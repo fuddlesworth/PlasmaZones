@@ -18,7 +18,8 @@ Flickable {
     id: root
 
     // ── Internal state ───────────────────────────────────────────────────
-    // UX cap (C++ maximum is ConfigDefaults::maxVirtualScreensPerPhysical() = 10)
+    // UX cap — C++ maximum is ConfigDefaults::maxVirtualScreensPerPhysical() (10).
+    // Capped lower here for usability: more than 5 splits is impractical on most ultrawides.
     readonly property int _maxVirtualScreens: 5
     property string _selectedScreen: ""
     // Array of {x: real, y: real, width: real, height: real, displayName: string} — staged virtual screen definitions

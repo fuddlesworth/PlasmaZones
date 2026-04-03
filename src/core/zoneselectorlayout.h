@@ -11,6 +11,12 @@
 
 namespace PlasmaZones {
 
+/// Fallback screen dimensions when no QScreen is available
+namespace Defaults {
+inline constexpr int FallbackScreenWidth = 1920;
+inline constexpr int FallbackScreenHeight = 1080;
+} // namespace Defaults
+
 /**
  * @brief Computed layout dimensions for the zone selector popup
  *
@@ -149,7 +155,8 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
 /// For virtual screens, use the QRect overload with the virtual screen's geometry instead.
 inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& config, QScreen* screen, int layoutCount)
 {
-    const QRect screenGeom = screen ? screen->geometry() : QRect(0, 0, 1920, 1080);
+    const QRect screenGeom =
+        screen ? screen->geometry() : QRect(0, 0, Defaults::FallbackScreenWidth, Defaults::FallbackScreenHeight);
     return computeZoneSelectorLayout(config, screenGeom, layoutCount);
 }
 
