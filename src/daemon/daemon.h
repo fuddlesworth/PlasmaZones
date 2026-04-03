@@ -5,6 +5,7 @@
 
 #include <QObject>
 #include <QGuiApplication>
+#include <QElapsedTimer>
 #include <QTimer>
 #include <QHash>
 #include <QRect>
@@ -322,6 +323,14 @@ private:
 
     bool m_running = false;
     int m_suppressResnapOsd = 0;
+
+    // Debounce timers for shortcuts that generate expensive work (Vulkan surface
+    // creation, geometry batches, OSD churn) when triggered faster than ~100ms
+    // by keyboard auto-repeat. Checked at the top of each handler.
+    static constexpr int kShortcutDebounceMs = 100;
+    QElapsedTimer m_rotateDebounce;
+    QElapsedTimer m_floatDebounce;
+    QElapsedTimer m_cycleLayoutDebounce;
 
     // Last autotile window order per (screen, desktop, activity), captured when
     // leaving autotile. Used to re-seed the autotile engine with the same order

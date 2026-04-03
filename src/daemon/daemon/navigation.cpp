@@ -41,6 +41,11 @@ IWindowEngine* Daemon::engineForScreen(const QString& screenId) const
 
 void Daemon::handleRotate(bool clockwise)
 {
+    if (m_rotateDebounce.isValid() && m_rotateDebounce.elapsed() < kShortcutDebounceMs) {
+        return;
+    }
+    m_rotateDebounce.restart();
+
     QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
     if (!screen) {
         qCDebug(lcDaemon) << "Rotate shortcut: no screen info";
@@ -57,6 +62,11 @@ void Daemon::handleRotate(bool clockwise)
 
 void Daemon::handleFloat()
 {
+    if (m_floatDebounce.isValid() && m_floatDebounce.elapsed() < kShortcutDebounceMs) {
+        return;
+    }
+    m_floatDebounce.restart();
+
     // Delegate to WTA → effect → unified toggleFloatForWindow.
     // The effect resolves the active KWin window + screen, stores both pre-snap
     // and pre-autotile geometry, then calls toggleFloatForWindow which the daemon

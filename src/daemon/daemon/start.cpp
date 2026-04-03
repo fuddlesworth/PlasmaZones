@@ -321,6 +321,10 @@ void Daemon::connectShortcutSignals()
 
     // Cycle layout shortcuts (Meta+[/])
     connect(m_shortcutManager.get(), &ShortcutManager::previousLayoutRequested, this, [this]() {
+        if (m_cycleLayoutDebounce.isValid() && m_cycleLayoutDebounce.elapsed() < kShortcutDebounceMs) {
+            return;
+        }
+        m_cycleLayoutDebounce.restart();
         if (!m_unifiedLayoutController) {
             return;
         }
@@ -345,6 +349,10 @@ void Daemon::connectShortcutSignals()
         resnapIfManualMode();
     });
     connect(m_shortcutManager.get(), &ShortcutManager::nextLayoutRequested, this, [this]() {
+        if (m_cycleLayoutDebounce.isValid() && m_cycleLayoutDebounce.elapsed() < kShortcutDebounceMs) {
+            return;
+        }
+        m_cycleLayoutDebounce.restart();
         if (!m_unifiedLayoutController) {
             return;
         }
