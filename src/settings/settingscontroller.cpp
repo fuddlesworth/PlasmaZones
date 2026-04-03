@@ -1929,22 +1929,23 @@ bool SettingsController::importAllSettings(const QString& filePath)
         QFile importFile(filePath);
         if (!importFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
             qCWarning(PlasmaZones::lcCore) << "Failed to open import file:" << filePath;
-            return false;
-        }
-        QJsonParseError parseErr;
-        QJsonDocument importDoc = QJsonDocument::fromJson(importFile.readAll(), &parseErr);
-        if (parseErr.error != QJsonParseError::NoError || !importDoc.isObject()) {
-            qCWarning(PlasmaZones::lcCore) << "Invalid JSON in import file:" << filePath << parseErr.errorString();
-            return false;
-        }
-
-        // Valid JSON — copy to config path
-        if (QFile::exists(configPath)) {
-            QFile::remove(configPath);
-        }
-        ok = QFile::copy(filePath, configPath);
-        if (!ok) {
-            qCWarning(PlasmaZones::lcCore) << "Failed to import settings from:" << filePath;
+            ok = false;
+        } else {
+            QJsonParseError parseErr;
+            QJsonDocument importDoc = QJsonDocument::fromJson(importFile.readAll(), &parseErr);
+            if (parseErr.error != QJsonParseError::NoError || !importDoc.isObject()) {
+                qCWarning(PlasmaZones::lcCore) << "Invalid JSON in import file:" << filePath << parseErr.errorString();
+                ok = false;
+            } else {
+                // Valid JSON — copy to config path
+                if (QFile::exists(configPath)) {
+                    QFile::remove(configPath);
+                }
+                ok = QFile::copy(filePath, configPath);
+                if (!ok) {
+                    qCWarning(PlasmaZones::lcCore) << "Failed to import settings from:" << filePath;
+                }
+            }
         }
     }
 

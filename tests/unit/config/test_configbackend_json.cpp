@@ -28,7 +28,7 @@ private Q_SLOTS:
     void testReadWriteString()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("TestGroup"));
             g->writeString(QStringLiteral("Key"), QStringLiteral("Hello"));
@@ -42,7 +42,7 @@ private Q_SLOTS:
     void testReadWriteInt()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("TestGroup"));
             g->writeInt(QStringLiteral("Count"), 42);
@@ -56,7 +56,7 @@ private Q_SLOTS:
     void testReadWriteBool()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("TestGroup"));
             g->writeBool(QStringLiteral("Enabled"), true);
@@ -72,7 +72,7 @@ private Q_SLOTS:
     void testReadWriteDouble()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("TestGroup"));
             g->writeDouble(QStringLiteral("Opacity"), 0.75);
@@ -86,7 +86,7 @@ private Q_SLOTS:
     void testReadWriteColor()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         QColor original(128, 64, 255, 200);
         {
             auto g = backend->group(QStringLiteral("TestGroup"));
@@ -105,7 +105,7 @@ private Q_SLOTS:
     void testReadColorCommaFormat()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         // Manually write comma format (as if hand-edited)
         {
             auto g = backend->group(QStringLiteral("TestGroup"));
@@ -128,7 +128,7 @@ private Q_SLOTS:
     void testReadDefaultsForMissingKeys()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         auto g = backend->group(QStringLiteral("NonExistent"));
         QCOMPARE(g->readString(QStringLiteral("Missing"), QStringLiteral("fallback")), QStringLiteral("fallback"));
         QCOMPARE(g->readInt(QStringLiteral("Missing"), 99), 99);
@@ -143,7 +143,7 @@ private Q_SLOTS:
     void testWriteStringWithJsonArray_storesNative()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         const QString jsonStr = QStringLiteral("[{\"modifier\":2,\"mouseButton\":0}]");
         {
             auto g = backend->group(QStringLiteral("Activation"));
@@ -163,7 +163,7 @@ private Q_SLOTS:
     void testWriteStringWithJsonObject_storesNative()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         const QString jsonStr = QStringLiteral("{\"bsp\":{\"splitRatio\":0.5}}");
         {
             auto g = backend->group(QStringLiteral("Autotiling"));
@@ -185,7 +185,7 @@ private Q_SLOTS:
     void testSyncAndReparse()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("Persist"));
             g->writeString(QStringLiteral("Key"), QStringLiteral("Value"));
@@ -203,7 +203,7 @@ private Q_SLOTS:
     void testSyncCreatesFile()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("Test"));
             g->writeString(QStringLiteral("Key"), QStringLiteral("Value"));
@@ -215,7 +215,7 @@ private Q_SLOTS:
     void testSyncWritesValidJson()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("Test"));
             g->writeInt(QStringLiteral("Number"), 42);
@@ -238,7 +238,7 @@ private Q_SLOTS:
     void testGroupList()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("Alpha"));
             g->writeString(QStringLiteral("K"), QStringLiteral("V"));
@@ -255,7 +255,7 @@ private Q_SLOTS:
     void testDeleteGroup()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("Doomed"));
             g->writeString(QStringLiteral("K"), QStringLiteral("V"));
@@ -268,7 +268,7 @@ private Q_SLOTS:
     void testHasKeyAndDeleteKey()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("G"));
             g->writeString(QStringLiteral("Exists"), QStringLiteral("Yes"));
@@ -289,7 +289,7 @@ private Q_SLOTS:
     void testRootStringReadWrite()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         backend->writeRootString(QStringLiteral("RenderingBackend"), QStringLiteral("vulkan"));
         QCOMPARE(backend->readRootString(QStringLiteral("RenderingBackend")), QStringLiteral("vulkan"));
     }
@@ -297,7 +297,7 @@ private Q_SLOTS:
     void testRemoveRootKey()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         backend->writeRootString(QStringLiteral("Key"), QStringLiteral("Value"));
         backend->removeRootKey(QStringLiteral("Key"));
         QCOMPARE(backend->readRootString(QStringLiteral("Key"), QStringLiteral("gone")), QStringLiteral("gone"));
@@ -310,7 +310,7 @@ private Q_SLOTS:
     void testPerScreenGroupReadWrite()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
             g->writeInt(QStringLiteral("Position"), 3);
@@ -326,7 +326,7 @@ private Q_SLOTS:
     void testPerScreenGroupInGroupList()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("AutotileScreen:HDMI-1"));
             g->writeString(QStringLiteral("Algorithm"), QStringLiteral("bsp"));
@@ -338,7 +338,7 @@ private Q_SLOTS:
     void testDeletePerScreenGroup()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("SnappingScreen:DP-1"));
             g->writeBool(QStringLiteral("Enabled"), true);
@@ -354,7 +354,7 @@ private Q_SLOTS:
     void testReadConfigFromDisk_flatMap()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("Behavior"));
             g->writeString(QStringLiteral("DefaultLayoutId"), QStringLiteral("abc-123"));
@@ -372,7 +372,7 @@ private Q_SLOTS:
     void testReadBoolFromString()
     {
         IsolatedConfigGuard guard;
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("G"));
             g->writeString(QStringLiteral("A"), QStringLiteral("true"));
@@ -402,7 +402,7 @@ private Q_SLOTS:
         f.write(R"({"G":{"zero":0,"one":1,"half":0.5}})");
         f.close();
 
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         auto g = backend->group(QStringLiteral("G"));
         QCOMPARE(g->readBool(QStringLiteral("zero")), false);
         QCOMPARE(g->readBool(QStringLiteral("one")), true);
@@ -427,7 +427,7 @@ private Q_SLOTS:
         f.close();
 
         // Backend should load with empty root (not crash or throw)
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         auto g = backend->group(QStringLiteral("TestGroup"));
         QCOMPARE(g->readString(QStringLiteral("Missing"), QStringLiteral("default")), QStringLiteral("default"));
     }
@@ -445,7 +445,7 @@ private Q_SLOTS:
             f.write(R"({"TestGroup":{"Key":"Value"}})");
         }
 
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("TestGroup"));
             QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("Value"));
@@ -472,23 +472,23 @@ private Q_SLOTS:
 
     void testIsPerScreenPrefix()
     {
-        QVERIFY(JsonConfigBackend::isPerScreenPrefix(QStringLiteral("ZoneSelector:eDP-1")));
-        QVERIFY(JsonConfigBackend::isPerScreenPrefix(QStringLiteral("AutotileScreen:HDMI-1")));
-        QVERIFY(JsonConfigBackend::isPerScreenPrefix(QStringLiteral("SnappingScreen:DP-2")));
+        QVERIFY(PlasmaZones::isPerScreenPrefix(QStringLiteral("ZoneSelector:eDP-1")));
+        QVERIFY(PlasmaZones::isPerScreenPrefix(QStringLiteral("AutotileScreen:HDMI-1")));
+        QVERIFY(PlasmaZones::isPerScreenPrefix(QStringLiteral("SnappingScreen:DP-2")));
         // Assignment groups are NOT per-screen
-        QVERIFY(!JsonConfigBackend::isPerScreenPrefix(QStringLiteral("Assignment:eDP-1:Desktop:1")));
-        QVERIFY(!JsonConfigBackend::isPerScreenPrefix(QStringLiteral("General")));
+        QVERIFY(!PlasmaZones::isPerScreenPrefix(QStringLiteral("Assignment:eDP-1:Desktop:1")));
+        QVERIFY(!PlasmaZones::isPerScreenPrefix(QStringLiteral("General")));
     }
 
     void testPrefixCategoryRoundTrip()
     {
-        QCOMPARE(JsonConfigBackend::prefixToCategory(QStringLiteral("AutotileScreen")), QStringLiteral("Autotile"));
-        QCOMPARE(JsonConfigBackend::prefixToCategory(QStringLiteral("SnappingScreen")), QStringLiteral("Snapping"));
-        QCOMPARE(JsonConfigBackend::prefixToCategory(QStringLiteral("ZoneSelector")), QStringLiteral("ZoneSelector"));
+        QCOMPARE(PlasmaZones::prefixToCategory(QStringLiteral("AutotileScreen")), QStringLiteral("Autotile"));
+        QCOMPARE(PlasmaZones::prefixToCategory(QStringLiteral("SnappingScreen")), QStringLiteral("Snapping"));
+        QCOMPARE(PlasmaZones::prefixToCategory(QStringLiteral("ZoneSelector")), QStringLiteral("ZoneSelector"));
 
-        QCOMPARE(JsonConfigBackend::categoryToPrefix(QStringLiteral("Autotile")), QStringLiteral("AutotileScreen"));
-        QCOMPARE(JsonConfigBackend::categoryToPrefix(QStringLiteral("Snapping")), QStringLiteral("SnappingScreen"));
-        QCOMPARE(JsonConfigBackend::categoryToPrefix(QStringLiteral("ZoneSelector")), QStringLiteral("ZoneSelector"));
+        QCOMPARE(PlasmaZones::categoryToPrefix(QStringLiteral("Autotile")), QStringLiteral("AutotileScreen"));
+        QCOMPARE(PlasmaZones::categoryToPrefix(QStringLiteral("Snapping")), QStringLiteral("SnappingScreen"));
+        QCOMPARE(PlasmaZones::categoryToPrefix(QStringLiteral("ZoneSelector")), QStringLiteral("ZoneSelector"));
     }
 };
 

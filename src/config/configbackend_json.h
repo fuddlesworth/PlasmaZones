@@ -90,29 +90,11 @@ public:
     void removeRootKey(const QString& key) override;
     QStringList groupList() const override;
 
-    /// Create the default config backend for the JSON config file.
-    static std::unique_ptr<JsonConfigBackend> createDefault();
-
     /// Read config file directly from disk as a flat QMap for compatibility
     /// with WindowTrackingAdaptor::loadState(). Flattens nested JSON into
     /// "Group/Key" format matching the QSettings convention.
     /// If @p filePath is empty, reads from the default config path.
     static QMap<QString, QVariant> readConfigFromDisk(const QString& filePath = {});
-
-    // Per-screen group helpers — delegate to free functions in iconfigbackend.h.
-    // Kept for backward compatibility with tests and callers that use the qualified name.
-    static bool isPerScreenPrefix(const QString& groupName)
-    {
-        return PlasmaZones::isPerScreenPrefix(groupName);
-    }
-    static QString prefixToCategory(const QString& prefix)
-    {
-        return PlasmaZones::prefixToCategory(prefix);
-    }
-    static QString categoryToPrefix(const QString& category)
-    {
-        return PlasmaZones::categoryToPrefix(category);
-    }
 
     /// Atomically write a QJsonObject to disk (temp file + rename).
     /// Shared by sync() and ConfigMigration to avoid duplicated write logic.

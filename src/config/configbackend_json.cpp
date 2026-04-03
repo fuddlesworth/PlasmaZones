@@ -41,7 +41,7 @@ JsonConfigGroup::~JsonConfigGroup()
 
 bool JsonConfigGroup::isPerScreenGroup() const
 {
-    return JsonConfigBackend::isPerScreenPrefix(m_groupName);
+    return PlasmaZones::isPerScreenPrefix(m_groupName);
 }
 
 JsonConfigGroup::PerScreenPath JsonConfigGroup::parsePerScreenGroup() const
@@ -58,7 +58,7 @@ JsonConfigGroup::PerScreenPath JsonConfigGroup::parsePerScreenGroup() const
         return path;
     }
     path.screenId = screenId;
-    path.category = JsonConfigBackend::prefixToCategory(prefix);
+    path.category = PlasmaZones::prefixToCategory(prefix);
     return path;
 }
 
@@ -66,6 +66,11 @@ QJsonObject JsonConfigGroup::groupObject() const
 {
     if (isPerScreenGroup()) {
         const auto path = parsePerScreenGroup();
+        if (path.screenId.isEmpty()) {
+            // Malformed per-screen group name (e.g. "ZoneSelector:" with no screen ID).
+            // Return empty object so reads get defaults and writes are no-ops.
+            return {};
+        }
         const QJsonObject perScreen = m_root.value(QLatin1String(PerScreenKey)).toObject();
         const QJsonObject category = perScreen.value(path.category).toObject();
         return category.value(path.screenId).toObject();
@@ -366,7 +371,7 @@ void JsonConfigBackend::sync()
     // distinguish format revisions.  Fresh installs that never went through
     // migration would otherwise lack it.
     if (!m_root.contains(QLatin1String("_version"))) {
-        m_root[QLatin1String("_version")] = 1;
+        m_root[QLatin1String("_version")] = ConfigSchemaVersion;
     }
 
     if (!writeJsonAtomically(m_filePath, m_root)) {
@@ -497,13 +502,6 @@ QStringList JsonConfigBackend::groupList() const
     return groups;
 }
 
-// ── Static factory ──────────────────────────────────────────────────────────
-
-std::unique_ptr<JsonConfigBackend> JsonConfigBackend::createDefault()
-{
-    return std::make_unique<JsonConfigBackend>(ConfigDefaults::configFilePath());
-}
-
 QMap<QString, QVariant> JsonConfigBackend::readConfigFromDisk(const QString& filePath)
 {
     QMap<QString, QVariant> map;
@@ -563,7 +561,7 @@ QMap<QString, QVariant> JsonConfigBackend::readConfigFromDisk(const QString& fil
 
 std::unique_ptr<IConfigBackend> createDefaultConfigBackend()
 {
-    return JsonConfigBackend::createDefault();
+    return std::make_unique<JsonConfigBackend>(ConfigDefaults::configFilePath());
 }
 
 } // namespace PlasmaZones

@@ -92,7 +92,7 @@ bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& js
     QJsonObject root = iniMapToJson(flatMap);
     // Schema version for future migration steps (e.g. v2 might restructure groups).
     // Currently write-only — checked when a future migration needs to distinguish formats.
-    root[QLatin1String("_version")] = 1;
+    root[QLatin1String("_version")] = ConfigSchemaVersion;
 
     return JsonConfigBackend::writeJsonAtomically(jsonPath, root);
 }
@@ -173,7 +173,13 @@ QJsonValue ConfigMigration::convertValue(const QVariant& value)
         return QJsonValue(value.toBool());
     }
 
-    // Try to detect and convert value types
+    // Type detection priority (order matters):
+    //   1. Boolean strings ("true"/"false")
+    //   2. JSON arrays/objects (trigger lists, per-algorithm settings)
+    //   3. Comma-separated integers 0-255 → color hex (r,g,b or r,g,b,a)
+    //   4. Plain integers
+    //   5. Doubles (only if contains '.' to avoid "0" → 0.0)
+    //   6. Fallback: keep as string
 
     // Boolean strings
     if (s.compare(QLatin1String("true"), Qt::CaseInsensitive) == 0) {

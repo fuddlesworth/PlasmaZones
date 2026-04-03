@@ -105,6 +105,11 @@ inline IConfigBackend* resolveBackend(IConfigBackend* shared, std::unique_ptr<IC
 /// JSON key for the per-screen container object.
 inline constexpr char PerScreenKey[] = "PerScreen";
 
+/// Current config schema version.  Written by both sync() (fresh installs)
+/// and migrateIniToJson() (upgrades).  Bump when a future migration step
+/// needs to distinguish format revisions.
+inline constexpr int ConfigSchemaVersion = 1;
+
 namespace detail {
 struct PerScreenMapping
 {

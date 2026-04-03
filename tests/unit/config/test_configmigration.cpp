@@ -94,7 +94,7 @@ private Q_SLOTS:
 
         // Verify content
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
-        QCOMPARE(root.value(QStringLiteral("_version")).toInt(), 1);
+        QCOMPARE(root.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
 
         QJsonObject activation = root.value(QStringLiteral("Activation")).toObject();
         QCOMPARE(activation.value(QStringLiteral("SnappingEnabled")).toBool(), true);
@@ -223,7 +223,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         // groupList should contain the assignment group
         QStringList groups = backend->groupList();
         QVERIFY(groups.contains(QStringLiteral("Assignment:eDP-1:Desktop:1")));
@@ -332,7 +332,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        auto backend = JsonConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("Activation"));
             QCOMPARE(g->readBool(QStringLiteral("SnappingEnabled")), true);

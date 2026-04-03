@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "configdefaults.h"
-#include "iconfigbackend.h"
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
@@ -33,14 +32,22 @@ QString ConfigDefaults::legacyConfigFilePath()
 
 QString ConfigDefaults::readRenderingBackendFromDisk()
 {
-    // Try JSON config first — use the default backend factory to stay decoupled
-    // from the concrete backend type.
+    // Lightweight read — only needs one key, so avoid constructing a full backend
+    // (which parses the entire file and tracks group state).  This runs before
+    // QCoreApplication exists on the daemon startup path.
     const QString jsonPath = configFilePath();
     if (QFile::exists(jsonPath)) {
-        auto backend = createDefaultConfigBackend();
-        auto rendering = backend->group(renderingGroup());
-        if (rendering->hasKey(renderingBackendKey())) {
-            return normalizeRenderingBackend(rendering->readString(renderingBackendKey(), renderingBackend()));
+        QFile f(jsonPath);
+        if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QJsonParseError err;
+            QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+            if (err.error == QJsonParseError::NoError && doc.isObject()) {
+                const QJsonObject rendering = doc.object().value(renderingGroup()).toObject();
+                if (rendering.contains(renderingBackendKey())) {
+                    return normalizeRenderingBackend(
+                        rendering.value(renderingBackendKey()).toString(renderingBackend()));
+                }
+            }
         }
     }
 
