@@ -330,7 +330,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("tiling-shortcuts"),
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
-        QStringLiteral("apprules"),
+        QStringLiteral("snapping-apprules"),
         QStringLiteral("exclusions"),
         QStringLiteral("editor"),
         QStringLiteral("general"),
