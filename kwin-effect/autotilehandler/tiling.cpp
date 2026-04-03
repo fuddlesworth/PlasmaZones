@@ -354,7 +354,8 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // fires. Detect the change here so the autotile engine can transfer the
     // window. Only check windows we're already tracking (m_notifiedWindowScreens)
     // and only when the physical screen has virtual subdivisions.
-    if (m_notifiedWindows.contains(windowId) && !m_effect->m_virtualScreenDefs.isEmpty()) {
+    if (m_notifiedWindows.contains(windowId) && !m_effect->m_virtualScreenDefs.isEmpty()
+        && m_effect->m_virtualScreensReady) {
         // Don't detect VS crossings during an active drag — the drop handler
         // (callDragStopped / autotile drag end) owns state transitions.
         // Detecting mid-drag would transfer the window before the user drops it.
@@ -363,10 +364,14 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
         }
         const QString newScreenId = m_effect->getWindowScreenId(w);
         const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
-        if (!oldScreenId.isEmpty() && oldScreenId != newScreenId) {
-            // Virtual screen changed — delegate to the same handler used by
-            // outputChanged. The re-entrancy guard inside handleWindowOutputChanged
-            // prevents infinite loops from geometry changes caused by tiling.
+        if (!oldScreenId.isEmpty() && oldScreenId != newScreenId
+            && m_effect->samePhysicalScreen(oldScreenId, newScreenId)) {
+            // Virtual screen changed on the same physical monitor — delegate to
+            // the same handler used by outputChanged. Physical monitor changes
+            // are already handled by the outputChanged signal, so we only act
+            // here for actual VS crossings. The re-entrancy guard inside
+            // handleWindowOutputChanged prevents infinite loops from geometry
+            // changes caused by tiling.
             handleWindowOutputChanged(w);
             return;
         }

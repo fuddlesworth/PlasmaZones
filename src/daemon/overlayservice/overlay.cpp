@@ -99,6 +99,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
                                    << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
                 updateOverlayWindow(screenId, physScreen);
                 window->show();
+                window->update();
             }
         }
     } else {

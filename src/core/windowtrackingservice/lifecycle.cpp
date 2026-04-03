@@ -152,6 +152,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             }
         }
         m_lastUsedScreenId = targetVs;
+        anyStateMigrated = true;
         // Only clear the zone ID if it doesn't exist in the target virtual screen's layout.
         // If the zone is still valid in the new layout, preserve it for last-zone-snap.
         bool zoneStillValid = false;
@@ -175,6 +176,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             // Use resolveVirtualScreen if the window has zone info, otherwise default to first
             QStringList zoneIds = m_windowZoneAssignments.value(it.key());
             it->connectorName = resolveVirtualScreen(zoneIds);
+            anyStateMigrated = true;
         }
     }
 
@@ -259,6 +261,8 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         }
         for (const QString& wId : windowsToRemove) {
             m_windowZoneAssignments.remove(wId);
+            m_windowScreenAssignments.remove(wId);
+            m_preTileGeometries.remove(wId);
         }
     }
 

@@ -287,6 +287,7 @@ inline void destroyManagedWindow(QHash<QString, QQuickWindow*>& windowMap, QHash
             QObject::disconnect(physScreen, nullptr, window, nullptr);
         }
         window->close();
+        window->destroy();
         window->deleteLater();
     }
     physScreenMap.remove(screenId);

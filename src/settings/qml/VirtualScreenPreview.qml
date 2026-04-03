@@ -177,6 +177,7 @@ Rectangle {
                 anchors.margins: -4
                 cursorShape: Qt.SplitHCursor
                 hoverEnabled: true
+                Accessible.name: i18n("Virtual screen divider %1", dividerHandle.index + 1)
                 Accessible.description: i18n("Use numeric controls for keyboard adjustment")
                 onPressed: function(mouse) {
                     dragStartX = mapToItem(previewRoot, mouse.x, 0).x;

@@ -429,7 +429,7 @@ inline constexpr QLatin1String ZoneSelectorIdPrefix{"zoneselector-"};
  * sentinel instead of a real zone UUID to signal that the window should be
  * restored to its original (pre-tiling) geometry rather than snapped to a zone.
  */
-inline const QString RestoreSentinel = QStringLiteral("__restore__");
+inline constexpr QLatin1StringView RestoreSentinel("__restore__");
 
 /**
  * @brief D-Bus service constants

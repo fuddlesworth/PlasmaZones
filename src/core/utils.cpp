@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QFile>
 #include <QHash>
+#include <QPointer>
 
 namespace PlasmaZones {
 namespace Utils {
@@ -38,9 +39,9 @@ static QHash<const QScreen*, QString>& screenIdentifierCache()
 }
 
 // Reverse cache: EDID identifier → QScreen* (for findScreenByIdOrName slow path)
-static QHash<QString, QScreen*>& screenByIdCache()
+static QHash<QString, QPointer<QScreen>>& screenByIdCache()
 {
-    static QHash<QString, QScreen*> s_cache;
+    static QHash<QString, QPointer<QScreen>> s_cache;
     return s_cache;
 }
 
@@ -122,7 +123,7 @@ void invalidateEdidCache(const QString& connectorName)
         // Remove the cached identifier for this connector's QScreen
         auto& idCache = screenIdentifierCache();
         for (auto it = idCache.begin(); it != idCache.end(); ++it) {
-            if (it.key()->name() == connectorName) {
+            if (it.key() && it.key()->name() == connectorName) {
                 idCache.erase(it);
                 break;
             }
@@ -130,7 +131,7 @@ void invalidateEdidCache(const QString& connectorName)
         // Remove reverse cache entries pointing to this connector's screen
         auto& byIdCache = screenByIdCache();
         for (auto it = byIdCache.begin(); it != byIdCache.end();) {
-            if (it.value()->name() == connectorName) {
+            if (it.value().isNull() || it.value()->name() == connectorName) {
                 it = byIdCache.erase(it);
             } else {
                 ++it;
@@ -265,12 +266,10 @@ QScreen* findScreenByIdOrName(const QString& identifier)
     auto& cache = screenByIdCache();
     auto cacheIt = cache.constFind(physId);
     if (cacheIt != cache.constEnd()) {
-        // Verify the cached screen is still valid
-        QScreen* cached = cacheIt.value();
-        if (QGuiApplication::screens().contains(cached)) {
+        QScreen* cached = cacheIt.value().data();
+        if (cached && QGuiApplication::screens().contains(cached)) {
             return cached;
         }
-        // Stale entry — remove and fall through to slow path
         cache.remove(physId);
     }
 

@@ -308,6 +308,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                             qCInfo(lcEffect) << "Autotile drag-to-float:" << windowId;
                         }
                     }
+                    m_snapDragStartScreenId.clear();
                     return;
                 }
                 m_dragActivationDetected = false;
@@ -769,7 +770,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // (The autotile handler has its own detection in slotWindowFrameGeometryChanged;
         // this covers snapping-mode windows which autotile doesn't track.)
         connect(safeW, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW]() {
-            if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty()) {
+            if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty() || !m_virtualScreensReady) {
                 return;
             }
             const QString newScreenId = getWindowScreenId(safeW);
@@ -1938,10 +1939,12 @@ QString PlasmaZonesEffect::resolveEffectiveScreenId(const QPoint& pos, const KWi
     }
 
     // Find which virtual screen contains the point.
-    // Edge-consistent rounding in geometry calculation guarantees no gaps
-    // between abutting virtual screens, so QRect::contains is sufficient.
+    // Use exclusive-right/bottom semantics to match the daemon's containment check.
+    // QRect::contains() uses inclusive-right, which causes boundary-pixel mismatches
+    // between effect and daemon for abutting virtual screens.
     for (const auto& vs : *it) {
-        if (vs.geometry.contains(pos)) {
+        const QRect& r = vs.geometry;
+        if (pos.x() >= r.x() && pos.x() < r.x() + r.width() && pos.y() >= r.y() && pos.y() < r.y() + r.height()) {
             return vs.id;
         }
     }
@@ -2968,7 +2971,7 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
                 // or when the previous screen is unknown (first drag on a new window).
                 if (safeWindow && !releaseScreenId.isEmpty() && m_autotileHandler->isAutotileScreen(releaseScreenId)) {
                     const QString oldScreenId = m_dragBypassScreenId;
-                    if (oldScreenId.isEmpty() || samePhysicalScreen(releaseScreenId, oldScreenId)) {
+                    if (!oldScreenId.isEmpty() && samePhysicalScreen(releaseScreenId, oldScreenId)) {
                         m_autotileHandler->notifyWindowAdded(safeWindow);
                     }
                 }

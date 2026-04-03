@@ -117,7 +117,8 @@ public:
      * then Utils::primaryScreen as final fallback.
      *
      * @param screenId Screen identifier (physical or virtual)
-     * @return QScreen pointer, or nullptr if no screen could be resolved
+     * @return QScreen pointer. Falls back to the primary screen if the requested
+     *         screen cannot be resolved; only returns nullptr if no screens exist at all.
      */
     static QScreen* resolvePhysicalScreen(const QString& screenId);
 

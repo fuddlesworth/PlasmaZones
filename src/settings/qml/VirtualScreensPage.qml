@@ -402,7 +402,7 @@ Flickable {
                         id: splitCountSpinBox
 
                         from: 1
-                        to: Math.max(root._maxVirtualScreens, root._pendingScreens.length)
+                        to: root._maxVirtualScreens
                         // No value: binding — set imperatively to avoid binding breakage
                         editable: true
                         enabled: root._selectedScreen !== ""

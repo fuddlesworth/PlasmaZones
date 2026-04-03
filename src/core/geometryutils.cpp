@@ -257,6 +257,15 @@ int getEffectiveZonePadding(Layout* layout, ISettings* settings, const QString& 
         if (it != perScreen.constEnd()) {
             return it->toInt();
         }
+        // Virtual screen fallback: try physical screen ID if virtual lookup missed
+        if (VirtualScreenId::isVirtual(screenId)) {
+            const QString physId = VirtualScreenId::extractPhysicalId(screenId);
+            QVariantMap physPerScreen = settings->getPerScreenSnappingSettings(physId);
+            auto physIt = physPerScreen.constFind(QLatin1String("ZonePadding"));
+            if (physIt != physPerScreen.constEnd()) {
+                return physIt->toInt();
+            }
+        }
     }
     // Check for layout-specific override
     if (layout && layout->hasZonePaddingOverride()) {
@@ -290,6 +299,10 @@ EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QStrin
     // Per-screen snapping override (highest priority)
     if (!screenId.isEmpty() && settings) {
         QVariantMap perScreen = settings->getPerScreenSnappingSettings(screenId);
+        // Virtual screen fallback: if no per-screen settings found, try physical screen ID
+        if (perScreen.isEmpty() && VirtualScreenId::isVirtual(screenId)) {
+            perScreen = settings->getPerScreenSnappingSettings(VirtualScreenId::extractPhysicalId(screenId));
+        }
         if (!perScreen.isEmpty()) {
             auto usePerSideIt = perScreen.constFind(QLatin1String("UsePerSideOuterGap"));
             bool usePerSide = (usePerSideIt != perScreen.constEnd()) ? usePerSideIt->toBool() : false;
