@@ -102,10 +102,12 @@ OverlayService::OverlayService(QObject* parent)
         m_keepAliveWindow->setScreen(screen);
         m_keepAliveWindow->setWidth(1);
         m_keepAliveWindow->setHeight(1);
-        // Configure as background layer — invisible, no input, minimal compositor cost
-        configureLayerSurface(m_keepAliveWindow, screen, LayerSurface::LayerBackground,
-                              LayerSurface::KeyboardInteractivityNone, QStringLiteral("plasmazones-keepalive"),
-                              LayerSurface::AnchorNone, 0);
+        // Configure as background layer — invisible, no input, minimal compositor cost.
+        // Best-effort: if layer-shell is unavailable the window still keeps Qt's
+        // Vulkan globals alive (just renders as a tiny xdg_toplevel).
+        (void)configureLayerSurface(m_keepAliveWindow, screen, LayerSurface::LayerBackground,
+                                    LayerSurface::KeyboardInteractivityNone, QStringLiteral("plasmazones-keepalive"),
+                                    LayerSurface::AnchorNone, 0);
         m_keepAliveWindow->show();
     });
 }
