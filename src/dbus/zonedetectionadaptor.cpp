@@ -8,9 +8,7 @@
 #include "../core/zone.h"
 #include "../core/geometryutils.h"
 #include "../core/logging.h"
-#include "../core/screenmanager.h"
 #include "../core/utils.h"
-#include "../core/virtualscreen.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <limits>
@@ -95,19 +93,11 @@ QString ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& zoneId, co
     }
 
     // Find target screen - use specified screen ID or fall back to primary
-    // Virtual screen IDs (e.g. "Dell:U2722D:115107/vs:0") have no QScreen
-    // object — resolve to the backing physical QScreen instead.
-    QScreen* screen = nullptr;
-    if (VirtualScreenId::isVirtual(screenId)) {
-        auto* mgr = ScreenManager::instance();
-        if (mgr) {
-            screen = mgr->physicalQScreenFor(screenId);
-        }
-    }
-    if (!screen) {
-        screen = screenId.isEmpty()
-            ? DbusHelpers::getPrimaryScreenOrWarn(QStringLiteral("getZoneGeometryForScreen"))
-            : DbusHelpers::getScreenOrWarn(screenId, QStringLiteral("getZoneGeometryForScreen"));
+    QScreen* screen = screenId.isEmpty()
+        ? DbusHelpers::getPrimaryScreenOrWarn(QStringLiteral("getZoneGeometryForScreen"))
+        : DbusHelpers::resolvePhysicalQScreen(screenId);
+    if (!screen && !screenId.isEmpty()) {
+        qCWarning(lcDbus) << "getZoneGeometryForScreen: screen not found:" << screenId;
     }
     if (!screen) {
         return QString();
@@ -384,16 +374,10 @@ QStringList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& screenId)
     }
 
     // Virtual screen IDs have no QScreen object — resolve to backing physical QScreen.
-    QScreen* screen = nullptr;
-    if (VirtualScreenId::isVirtual(screenId)) {
-        auto* mgr = ScreenManager::instance();
-        if (mgr) {
-            screen = mgr->physicalQScreenFor(screenId);
-        }
-    }
-    if (!screen) {
-        screen = screenId.isEmpty() ? DbusHelpers::getPrimaryScreenOrWarn(QStringLiteral("getAllZoneGeometries"))
-                                    : DbusHelpers::getScreenOrWarn(screenId, QStringLiteral("getAllZoneGeometries"));
+    QScreen* screen = screenId.isEmpty() ? DbusHelpers::getPrimaryScreenOrWarn(QStringLiteral("getAllZoneGeometries"))
+                                         : DbusHelpers::resolvePhysicalQScreen(screenId);
+    if (!screen && !screenId.isEmpty()) {
+        qCWarning(lcDbus) << "getAllZoneGeometries: screen not found:" << screenId;
     }
     if (!screen) {
         return result;

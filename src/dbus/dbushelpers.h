@@ -299,6 +299,19 @@ inline bool validateNonEmpty(const QString& value, const QString& paramName, con
  */
 QString resolveScreenId(const QString& screenId);
 
+/**
+ * @brief Resolve a screen ID (physical or virtual) to its backing QScreen*
+ *
+ * Uses ScreenManager::physicalQScreenFor() when available, then falls back to
+ * Utils::findScreenByIdOrName(). Does NOT fall back to primaryScreen — returns
+ * nullptr so the caller can decide the appropriate fallback behavior.
+ *
+ * This replaces the duplicated pattern:
+ *   if (VirtualScreenId::isVirtual(id)) { mgr->physicalQScreenFor(id); }
+ *   if (!screen) { Utils::findScreenByIdOrName(id); }
+ */
+QScreen* resolvePhysicalQScreen(const QString& screenId);
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Screen Geometry Resolution (implemented in dbushelpers.cpp to reduce header weight)
 // ═══════════════════════════════════════════════════════════════════════════════

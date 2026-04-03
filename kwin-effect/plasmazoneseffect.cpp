@@ -320,7 +320,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 if (!cancelled && w && !m_snapDragStartScreenId.isEmpty()) {
                     const QString dropScreenId = getWindowScreenId(w);
                     if (dropScreenId != m_snapDragStartScreenId && !dropScreenId.isEmpty()
-                        && samePhysicalScreen(dropScreenId, m_snapDragStartScreenId)) {
+                        && VirtualScreenId::samePhysical(dropScreenId, m_snapDragStartScreenId)) {
                         qCInfo(lcEffect) << "Snap drag: virtual screen changed" << m_snapDragStartScreenId << "->"
                                          << dropScreenId;
                         fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("windowScreenChanged"),
@@ -780,10 +780,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             }
             // Only act on virtual screen changes (same physical monitor).
             // Physical monitor changes are handled by outputChanged above.
-            if (!isVirtualScreenId(oldScreenId) && !isVirtualScreenId(newScreenId)) {
+            if (!VirtualScreenId::isVirtual(oldScreenId) && !VirtualScreenId::isVirtual(newScreenId)) {
                 return; // Both physical — outputChanged will handle it
             }
-            if (!samePhysicalScreen(oldScreenId, newScreenId)) {
+            if (!VirtualScreenId::samePhysical(oldScreenId, newScreenId)) {
                 return; // Different physical monitors — outputChanged will handle it
             }
             m_trackedScreenPerWindow[safeW] = newScreenId;
@@ -2971,7 +2971,7 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
                 // or when the previous screen is unknown (first drag on a new window).
                 if (safeWindow && !releaseScreenId.isEmpty() && m_autotileHandler->isAutotileScreen(releaseScreenId)) {
                     const QString oldScreenId = m_dragBypassScreenId;
-                    if (!oldScreenId.isEmpty() && samePhysicalScreen(releaseScreenId, oldScreenId)) {
+                    if (!oldScreenId.isEmpty() && VirtualScreenId::samePhysical(releaseScreenId, oldScreenId)) {
                         m_autotileHandler->notifyWindowAdded(safeWindow);
                     }
                 }

@@ -74,6 +74,7 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
 target_include_directories(kwin_effect_plasmazones PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_SOURCE_DIR}  # For shared/ headers (virtualscreenid.h)
 )
 
 # Note: metadata.json is embedded in the plugin binary via Q_PLUGIN_METADATA in

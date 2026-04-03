@@ -49,5 +49,17 @@ QRectF resolveScreenGeometry(Layout* layout, const QString& screenId)
     return {};
 }
 
+QScreen* resolvePhysicalQScreen(const QString& screenId)
+{
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        QScreen* screen = mgr->physicalQScreenFor(screenId);
+        if (screen) {
+            return screen;
+        }
+    }
+    return Utils::findScreenByIdOrName(screenId);
+}
+
 } // namespace DbusHelpers
 } // namespace PlasmaZones

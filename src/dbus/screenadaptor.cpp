@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "screenadaptor.h"
+#include "dbushelpers.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/screenmanager.h"
@@ -151,10 +152,7 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenId)
     // For virtual screens, resolve the backing physical screen for metadata
     // (manufacturer, model, refresh rate) and use ScreenManager for geometry
     auto* mgr = ScreenManager::instance();
-    const QScreen* screen = Utils::findScreenByIdOrName(screenId);
-    if (!screen && mgr) {
-        screen = mgr->physicalQScreenFor(screenId);
-    }
+    const QScreen* screen = DbusHelpers::resolvePhysicalQScreen(screenId);
 
     if (screen) {
         // Use virtual screen geometry if available, otherwise physical

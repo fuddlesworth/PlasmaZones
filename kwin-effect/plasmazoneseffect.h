@@ -21,6 +21,8 @@
 
 #include <functional>
 
+#include "shared/virtualscreenid.h"
+
 namespace KWin {
 class OutlinedBorderItem;
 class SurfaceItem;
@@ -529,34 +531,6 @@ private:
     // Used for deduplication of cursorScreenChanged D-Bus calls when virtual
     // screens subdivide a physical monitor — detects sub-screen crossings.
     QString m_lastEffectiveScreenId;
-
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // Virtual Screen Support — public utilities
-    // ═══════════════════════════════════════════════════════════════════════════════
-public:
-    /// Extract the physical screen ID from a virtual screen ID.
-    /// Returns the original ID if it doesn't contain the "/vs:" separator.
-    /// This duplicates VirtualScreenId::extractPhysicalId from the daemon
-    /// (which the effect cannot include). Keep in sync.
-    static QString extractPhysicalScreenId(const QString& screenId)
-    {
-        static const QLatin1String vsSep("/vs:");
-        int pos = screenId.indexOf(vsSep);
-        return (pos > 0) ? screenId.left(pos) : screenId;
-    }
-
-    /// Check if a screen ID is a virtual screen ID (contains "/vs:").
-    static bool isVirtualScreenId(const QString& screenId)
-    {
-        return screenId.indexOf(QLatin1String("/vs:")) > 0;
-    }
-
-    /// Check if two screen IDs share the same physical screen.
-    /// For virtual screens (containing "/vs:"), strips the suffix before comparing.
-    static bool samePhysicalScreen(const QString& idA, const QString& idB)
-    {
-        return extractPhysicalScreenId(idA) == extractPhysicalScreenId(idB);
-    }
 
 private:
     /**

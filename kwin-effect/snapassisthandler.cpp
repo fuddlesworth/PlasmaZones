@@ -133,7 +133,7 @@ QJsonArray SnapAssistHandler::buildCandidates(const QString& excludeWindowId, co
         // snap a window from the other half of their ultrawide).
         if (!screenId.isEmpty()) {
             QString winScreen = m_effect->getWindowScreenId(w);
-            if (winScreen != screenId && !PlasmaZonesEffect::samePhysicalScreen(screenId, winScreen)) {
+            if (winScreen != screenId && !VirtualScreenId::samePhysical(screenId, winScreen)) {
                 continue;
             }
         }

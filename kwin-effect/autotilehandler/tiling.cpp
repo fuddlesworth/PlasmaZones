@@ -365,7 +365,7 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
         const QString newScreenId = m_effect->getWindowScreenId(w);
         const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
         if (!oldScreenId.isEmpty() && oldScreenId != newScreenId
-            && m_effect->samePhysicalScreen(oldScreenId, newScreenId)) {
+            && VirtualScreenId::samePhysical(oldScreenId, newScreenId)) {
             // Virtual screen changed on the same physical monitor — delegate to
             // the same handler used by outputChanged. Physical monitor changes
             // are already handled by the outputChanged signal, so we only act
