@@ -179,6 +179,14 @@ void Daemon::connectScreenSignals()
             QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
             m_windowTrackingAdaptor->service()->migrateScreenAssignmentsToVirtual(physId, vsIds, m_screenManager.get());
         }
+        // Trigger geometry recalculation and window resnap so snapped windows
+        // reposition to the new virtual screen bounds (e.g. 50/50 → 60/40).
+        // Reuse the same debounced path as physical screen geometry changes.
+        QScreen* physScreen = ScreenManager::resolvePhysicalScreen(physId);
+        if (physScreen) {
+            m_pendingGeometryUpdates[physScreen->name()] = ScreenManager::actualAvailableGeometry(physScreen);
+            m_geometryUpdateTimer.start();
+        }
     });
 
     // Connect screen manager signals

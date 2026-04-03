@@ -147,18 +147,45 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
 
 QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const QString& screenId) const
 {
-    QRect combined;
+    // Unite zone geometries as QRectF first, then round once at the end.
+    // Uniting independently-rounded QRects can produce 1px gaps at fractional
+    // scaling factors (e.g. 1.2x on ultrawides).
+    QRectF combined;
     for (const QString& zoneId : zoneIds) {
-        QRect geo = zoneGeometry(zoneId, screenId);
-        if (geo.isValid()) {
+        auto uuidOpt = Utils::parseUuid(zoneId);
+        if (!uuidOpt) {
+            continue;
+        }
+
+        // Look up zone in all layouts (same logic as zoneGeometry)
+        Zone* zone = nullptr;
+        Layout* layout = nullptr;
+        for (auto* l : m_layoutManager->layouts()) {
+            zone = l->zoneById(*uuidOpt);
+            if (zone) {
+                layout = l;
+                break;
+            }
+        }
+        if (!zone) {
+            continue;
+        }
+
+        QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
+        if (!screen) {
+            continue;
+        }
+
+        QRectF geoF = GeometryUtils::getZoneGeometryForScreenF(zone, screen, screenId, layout, m_settings);
+        if (geoF.isValid()) {
             if (combined.isValid()) {
-                combined = combined.united(geo);
+                combined = combined.united(geoF);
             } else {
-                combined = geo;
+                combined = geoF;
             }
         }
     }
-    return combined;
+    return combined.toAlignedRect();
 }
 
 QVector<ZoneAssignmentEntry> WindowTrackingService::calculateRotation(bool clockwise, const QString& screenFilter) const

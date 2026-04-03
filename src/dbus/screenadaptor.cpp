@@ -48,9 +48,8 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
                 }
                 m_lastEmittedEffectiveIds = currentEffective;
 
-                QStringList vsIds = mgr->virtualScreenIdsFor(physId);
-                if (vsIds.size() > 1 || (!vsIds.isEmpty() && vsIds.first() != physId)) {
-                    for (const QString& vsId : vsIds) {
+                if (mgr->hasVirtualScreens(physId)) {
+                    for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
                         Q_EMIT screenAdded(vsId);
                     }
                     Q_EMIT virtualScreensChanged(physId);
@@ -108,9 +107,8 @@ bool ScreenAdaptor::emitForEffectiveScreens(const QString& physId, const std::fu
 {
     auto* mgr = ScreenManager::instance();
     if (mgr) {
-        QStringList vsIds = mgr->virtualScreenIdsFor(physId);
-        if (vsIds.size() > 1 || (!vsIds.isEmpty() && vsIds.first() != physId)) {
-            for (const QString& vsId : vsIds) {
+        if (mgr->hasVirtualScreens(physId)) {
+            for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
                 emitFn(vsId);
             }
             return true;

@@ -1956,15 +1956,20 @@ QString PlasmaZonesEffect::resolveEffectiveScreenId(const QPoint& pos, const KWi
         // Manhattan distance from point to nearest edge of the rect
         int dx = 0;
         int dy = 0;
+        // Use exclusive-right/bottom (x + width, y + height) to match the
+        // primary containment check above.  QRect::right()/bottom() return
+        // inclusive values (x + width - 1), which would be off by 1px.
+        const int exRight = vs.geometry.x() + vs.geometry.width();
+        const int exBottom = vs.geometry.y() + vs.geometry.height();
         if (pos.x() < vs.geometry.left()) {
             dx = vs.geometry.left() - pos.x();
-        } else if (pos.x() > vs.geometry.right()) {
-            dx = pos.x() - vs.geometry.right();
+        } else if (pos.x() >= exRight) {
+            dx = pos.x() - exRight + 1;
         }
         if (pos.y() < vs.geometry.top()) {
             dy = vs.geometry.top() - pos.y();
-        } else if (pos.y() > vs.geometry.bottom()) {
-            dy = pos.y() - vs.geometry.bottom();
+        } else if (pos.y() >= exBottom) {
+            dy = pos.y() - exBottom + 1;
         }
         int dist = dx + dy;
         if (dist < minDist) {

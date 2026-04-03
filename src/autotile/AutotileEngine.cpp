@@ -111,9 +111,8 @@ void AutotileEngine::connectSignals()
             const QString physId = Utils::screenIdentifier(screen);
             // When virtual screens are configured, autotile state is keyed by
             // virtual screen IDs — retile each one instead of the physical ID.
-            const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
-            if (vsIds.size() > 1 || (vsIds.size() == 1 && VirtualScreenId::isVirtual(vsIds.first()))) {
-                for (const QString& vsId : vsIds) {
+            if (m_screenManager->hasVirtualScreens(physId)) {
+                for (const QString& vsId : m_screenManager->virtualScreenIdsFor(physId)) {
                     onScreenGeometryChanged(vsId);
                 }
             } else {
