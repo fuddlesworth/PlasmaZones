@@ -191,10 +191,8 @@ void OverlayService::hideLayoutOsd()
 {
     // Destroy only the sending window's screen, not all screens.
     // showDesktopSwitchOsd() shows layout OSDs on ALL screens simultaneously;
-    // each window has its own 1500ms dismiss timer.  If we destroyed all windows
+    // each window has its own 1500ms dismiss timer. If we destroyed all windows
     // here, the first screen to dismiss would kill the others mid-animation.
-    // Destroy (not hide) because on Vulkan, hide() destroys the VkSwapchainKHR
-    // but Qt doesn't reinitialize it on re-show.
     auto* senderWindow = qobject_cast<QQuickWindow*>(sender());
     if (senderWindow) {
         for (auto it = m_layoutOsdWindows.constBegin(); it != m_layoutOsdWindows.constEnd(); ++it) {
@@ -421,8 +419,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
 void OverlayService::hideNavigationOsd()
 {
-    // Per-screen destroy (same rationale as hideLayoutOsd — don't kill other
-    // screens' active OSDs when one screen's dismiss timer fires).
+    // Per-screen destroy (same rationale as hideLayoutOsd).
     auto* senderWindow = qobject_cast<QQuickWindow*>(sender());
     if (senderWindow) {
         for (auto it = m_navigationOsdWindows.constBegin(); it != m_navigationOsdWindows.constEnd(); ++it) {

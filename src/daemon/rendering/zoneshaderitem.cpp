@@ -31,6 +31,36 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
 {
     // Enable custom rendering via updatePaintNode
     setFlag(ItemHasContents, true);
+
+    // When the scene graph is invalidated (e.g. window hide on Vulkan destroys
+    // the QRhi and all GPU resources), release the render node's QRhi objects
+    // and reset m_initialized so prepare() reinitializes with the new QRhi on
+    // the next show(). Without this, the node holds dangling pointers to
+    // destroyed QRhi resources, causing stalls or black windows after re-show.
+    //
+    // sceneGraphAboutToStop fires on the render thread BEFORE the scene graph
+    // is torn down, while the node and QRhi are still valid. This is safer than
+    // sceneGraphInvalidated which fires during/after teardown when the node may
+    // already be deleted. Use DirectConnection because this signal is emitted
+    // on the render thread and releaseResources() must run there (QRhi objects
+    // must be destroyed on the thread that owns the QRhi context).
+    connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow* win) {
+        if (m_connectedWindow) {
+            disconnect(m_connectedWindow, &QQuickWindow::sceneGraphAboutToStop, this, nullptr);
+            m_connectedWindow = nullptr;
+        }
+        if (win) {
+            m_connectedWindow = win;
+            connect(
+                win, &QQuickWindow::sceneGraphAboutToStop, this,
+                [this]() {
+                    if (m_renderNode) {
+                        m_renderNode->releaseResources();
+                    }
+                },
+                Qt::DirectConnection);
+        }
+    });
 }
 
 ZoneShaderItem::~ZoneShaderItem()

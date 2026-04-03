@@ -670,6 +670,9 @@ private:
     // Render node tracking for safe teardown (set in updatePaintNode, cleared in destructor)
     ZoneShaderNodeRhi* m_renderNode = nullptr;
 
+    // Track connected window for sceneGraphInvalidated cleanup
+    QQuickWindow* m_connectedWindow = nullptr;
+
     // Dirty flags for render thread synchronization
     std::atomic<bool> m_zoneDataDirty{false};
     std::atomic<bool> m_shaderDirty{false};
