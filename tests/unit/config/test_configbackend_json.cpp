@@ -348,10 +348,10 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // readConfigFromDisk (flat map for WindowTrackingAdaptor)
+    // readJsonConfigFromDisk (flat map for WindowTrackingAdaptor)
     // =========================================================================
 
-    void testReadConfigFromDisk_flatMap()
+    void testReadJsonConfigFromDisk_flatMap()
     {
         IsolatedConfigGuard guard;
         auto backend = PlasmaZones::createDefaultConfigBackend();
@@ -361,7 +361,7 @@ private Q_SLOTS:
         }
         backend->sync();
 
-        auto map = PlasmaZones::readConfigFromDisk();
+        auto map = PlasmaZones::readJsonConfigFromDisk();
         QCOMPARE(map.value(QStringLiteral("Behavior/DefaultLayoutId")).toString(), QStringLiteral("abc-123"));
     }
 

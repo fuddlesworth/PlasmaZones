@@ -516,7 +516,7 @@ QStringList JsonConfigBackend::groupList() const
     return groups;
 }
 
-QMap<QString, QVariant> readConfigFromDisk(const QString& filePath)
+QMap<QString, QVariant> readJsonConfigFromDisk(const QString& filePath)
 {
     QMap<QString, QVariant> map;
 

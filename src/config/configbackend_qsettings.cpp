@@ -125,7 +125,14 @@ QSettingsConfigGroup::QSettingsConfigGroup(QSettings* settings, const QString& g
                "Another ConfigGroup is still active — destroy it before creating a new one");
     m_settings->beginGroup(m_group);
     if (m_backend) {
-        m_backend->m_activeGroupCount.fetch_add(1, std::memory_order_relaxed);
+        const int count = m_backend->m_activeGroupCount;
+        if (count != 0) {
+            qWarning(
+                "QSettingsConfigGroup: creating group '%s' while %d other group(s) still active — "
+                "concurrent writes to the same backend may lose data",
+                qPrintable(groupName), count);
+        }
+        ++m_backend->m_activeGroupCount;
     }
 }
 
@@ -133,7 +140,7 @@ QSettingsConfigGroup::~QSettingsConfigGroup()
 {
     m_settings->endGroup();
     if (m_backend) {
-        m_backend->m_activeGroupCount.fetch_sub(1, std::memory_order_relaxed);
+        --m_backend->m_activeGroupCount;
     }
 }
 
@@ -289,7 +296,7 @@ std::unique_ptr<IConfigGroup> QSettingsConfigBackend::group(const QString& name)
 
 void QSettingsConfigBackend::reparseConfiguration()
 {
-    Q_ASSERT_X(m_activeGroupCount.load(std::memory_order_relaxed) == 0, "QSettingsConfigBackend::reparseConfiguration",
+    Q_ASSERT_X(m_activeGroupCount == 0, "QSettingsConfigBackend::reparseConfiguration",
                "Cannot reparse while QSettingsConfigGroup instances are alive — "
                "they hold a raw QSettings* that would be destroyed");
 

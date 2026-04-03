@@ -13,8 +13,6 @@
 #include <QString>
 #include <QStringList>
 #include <memory>
-#include <atomic>
-
 namespace PlasmaZones {
 
 class QSettingsConfigBackend; // forward declare for group back-pointer
@@ -88,7 +86,7 @@ private:
     friend class QSettingsConfigGroup; // for group-count tracking
     QString m_filePath;
     std::unique_ptr<QSettings> m_settings;
-    std::atomic<int> m_activeGroupCount{0};
+    int m_activeGroupCount = 0;
 };
 
 } // namespace PlasmaZones

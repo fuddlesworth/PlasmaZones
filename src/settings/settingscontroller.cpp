@@ -1956,6 +1956,8 @@ bool SettingsController::importAllSettings(const QString& filePath)
             QFile::rename(backupPath, configPath);
         }
     } else {
+        // Clean up backup on success
+        QFile::remove(backupPath);
         m_settings.load();
         DaemonDBus::notifyReload();
         Q_EMIT needsSaveChanged();

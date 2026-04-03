@@ -195,7 +195,7 @@ void WindowTrackingAdaptor::saveStateOnShutdown()
 void WindowTrackingAdaptor::loadState()
 {
     // Read config as a flat key map for structured parsing below.
-    // readConfigFromDisk() reads the file directly, bypassing QSettings cache.
+    // readJsonConfigFromDisk() reads the file directly, bypassing QSettings cache.
     // QSettingsConfigGroup doesn't expose key enumeration, and the flat map is
     // convenient for this function's parsing pattern.
     //
@@ -204,7 +204,7 @@ void WindowTrackingAdaptor::loadState()
     if (m_configBackend) {
         m_configBackend->sync();
     }
-    const auto configMap = PlasmaZones::readConfigFromDisk();
+    const auto configMap = PlasmaZones::readJsonConfigFromDisk();
     const QString wt = QStringLiteral("WindowTracking");
     auto readVal = [&](const QString& key, const QString& def = QString()) -> QString {
         return configMap.value(wt + QLatin1Char('/') + key, def).toString();

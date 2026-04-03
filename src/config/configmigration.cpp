@@ -104,7 +104,7 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
     const QString renderingGroup = ConfigDefaults::renderingGroup();
     const QString generalGroup = ConfigDefaults::generalGroup();
     const QString renderingKey = ConfigDefaults::renderingBackendKey();
-    const QLatin1String psKey(PerScreenKey);
+    const QLatin1String PerScreenKeyStr(PerScreenKey);
 
     for (auto it = flatMap.constBegin(); it != flatMap.constEnd(); ++it) {
         const QString& flatKey = it.key();
@@ -146,13 +146,13 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
             const QString screenId = groupPart.mid(colonIdx + 1);
             const QString category = prefixToCategory(prefix);
 
-            QJsonObject perScreen = root.value(psKey).toObject();
+            QJsonObject perScreen = root.value(PerScreenKeyStr).toObject();
             QJsonObject cat = perScreen.value(category).toObject();
             QJsonObject screen = cat.value(screenId).toObject();
             screen[keyPart] = convertValue(value);
             cat[screenId] = screen;
             perScreen[category] = cat;
-            root[psKey] = perScreen;
+            root[PerScreenKeyStr] = perScreen;
         } else {
             // Regular group: Group/Key
             QJsonObject groupObj = root.value(groupPart).toObject();
