@@ -53,12 +53,6 @@ ApplicationWindow {
         "hasChildren": true,
         "hasDividerAfter": true
     }, {
-        "name": "apprules",
-        "label": i18n("App Rules"),
-        "iconName": "application-x-executable",
-        "hasChildren": false,
-        "hasDividerAfter": false
-    }, {
         "name": "exclusions",
         "label": i18n("Exclusions"),
         "iconName": "dialog-cancel",
@@ -90,21 +84,27 @@ ApplicationWindow {
             "label": i18n("Appearance"),
             "iconName": "preferences-desktop-color"
         }, {
+            "name": "snapping-effects",
+            "label": i18n("Effects"),
+            "iconName": "preferences-desktop-effects",
+            "hasDividerAfter": true
+        }, {
             "name": "snapping-behavior",
             "label": i18n("Behavior"),
             "iconName": "preferences-system"
         }, {
             "name": "snapping-zoneselector",
             "label": i18n("Zone Selector"),
-            "iconName": "view-choose"
-        }, {
-            "name": "snapping-effects",
-            "label": i18n("Effects"),
-            "iconName": "preferences-desktop-effects"
+            "iconName": "view-choose",
+            "hasDividerAfter": true
         }, {
             "name": "snapping-assignments",
             "label": i18n("Assignments"),
             "iconName": "view-list-details"
+        }, {
+            "name": "snapping-apprules",
+            "label": i18n("App Rules"),
+            "iconName": "application-x-executable"
         }, {
             "name": "snapping-ordering",
             "label": i18n("Priority"),
@@ -117,7 +117,8 @@ ApplicationWindow {
         "tiling": [{
             "name": "tiling-appearance",
             "label": i18n("Appearance"),
-            "iconName": "preferences-desktop-color"
+            "iconName": "preferences-desktop-color",
+            "hasDividerAfter": true
         }, {
             "name": "tiling-behavior",
             "label": i18n("Behavior"),
@@ -125,7 +126,8 @@ ApplicationWindow {
         }, {
             "name": "tiling-algorithm",
             "label": i18n("Algorithms"),
-            "iconName": "view-grid"
+            "iconName": "view-grid",
+            "hasDividerAfter": true
         }, {
             "name": "tiling-assignments",
             "label": i18n("Assignments"),
@@ -153,12 +155,12 @@ ApplicationWindow {
         "tiling-behavior": "TilingBehaviorPage.qml",
         "tiling-algorithm": "TilingAlgorithmPage.qml",
         "snapping-assignments": "SnappingAssignmentsPage.qml",
+        "snapping-apprules": "AssignmentsAppRulesPage.qml",
         "snapping-shortcuts": "SnappingQuickShortcutsPage.qml",
         "snapping-ordering": "SnappingOrderingPage.qml",
         "tiling-assignments": "TilingAssignmentsPage.qml",
         "tiling-shortcuts": "TilingQuickShortcutsPage.qml",
         "tiling-ordering": "TilingOrderingPage.qml",
-        "apprules": "AssignmentsAppRulesPage.qml",
         "exclusions": "ExclusionsPage.qml",
         "editor": "EditorPage.qml",
         "general": "GeneralPage.qml",
@@ -206,6 +208,7 @@ ApplicationWindow {
                     });
                     // Show matching children inline
                     for (let j = 0; j < matchingChildren.length; j++) {
+                        let childDivider = matchingChildren[j].hasDividerAfter || false;
                         sidebarModel.append({
                             "name": matchingChildren[j].name,
                             "label": "  " + matchingChildren[j].label,
@@ -215,6 +218,17 @@ ApplicationWindow {
                             "hasDividerAfter": false,
                             "isDivider": false
                         });
+                        if (childDivider)
+                            sidebarModel.append({
+                            "name": "__divider__",
+                            "label": "",
+                            "iconName": "",
+                            "hasChildren": false,
+                            "isBackButton": false,
+                            "hasDividerAfter": false,
+                            "isDivider": true
+                        });
+
                     }
                     continue;
                 }
@@ -264,6 +278,7 @@ ApplicationWindow {
                 if (searchText && children[i].label.toLowerCase().indexOf(searchText) < 0)
                     continue;
 
+                let childDivider = children[i].hasDividerAfter || false;
                 sidebarModel.append({
                     "name": children[i].name,
                     "label": children[i].label,
@@ -273,6 +288,17 @@ ApplicationWindow {
                     "hasDividerAfter": false,
                     "isDivider": false
                 });
+                if (childDivider)
+                    sidebarModel.append({
+                    "name": "__divider__",
+                    "label": "",
+                    "iconName": "",
+                    "hasChildren": false,
+                    "isBackButton": false,
+                    "hasDividerAfter": false,
+                    "isDivider": true
+                });
+
             }
         }
     }
