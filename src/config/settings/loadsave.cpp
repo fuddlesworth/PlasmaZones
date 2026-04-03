@@ -833,6 +833,12 @@ void Settings::loadVirtualScreenConfigs(QSettingsConfigBackend* backend)
             }
             validScreens.append(vs);
         }
+        // Renumber surviving entries with contiguous indices (0..N-1) so that
+        // save round-trips don't cause ID drift when interior entries were invalid.
+        for (int i = 0; i < validScreens.size(); ++i) {
+            validScreens[i].index = i;
+            validScreens[i].id = VirtualScreenId::make(physId, i);
+        }
         config.screens = validScreens;
 
         // Need at least 2 screens for a meaningful subdivision
@@ -884,8 +890,8 @@ void Settings::loadVirtualScreenConfigs(QSettingsConfigBackend* backend)
             for (const auto& vs : config.screens) {
                 totalArea += vs.region.width() * vs.region.height();
             }
-            if (totalArea < 0.99 || totalArea > 1.01) {
-                qCWarning(lcConfig) << "loadVirtualScreenConfigs: total area" << totalArea << "outside [0.99, 1.01] for"
+            if (totalArea < 0.95 || totalArea > 1.05) {
+                qCWarning(lcConfig) << "loadVirtualScreenConfigs: total area" << totalArea << "outside [0.95, 1.05] for"
                                     << physId << "- skipping config";
                 continue;
             }

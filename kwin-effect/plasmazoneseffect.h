@@ -155,7 +155,8 @@ private:
 
     void callDragStarted(const QString& windowId, const QRectF& geometry);
     void callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons);
-    void callDragStopped(KWin::EffectWindow* window, const QString& windowId);
+    void callDragStopped(KWin::EffectWindow* window, const QString& windowId,
+                         const QString& snapDragStartScreenId = {});
     void callCancelSnap();
     void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr);
     void connectNavigationSignals();

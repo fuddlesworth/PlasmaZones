@@ -7,7 +7,6 @@
 #include "../core/virtualscreen.h"
 #include "../core/geometryutils.h"
 #include "../core/layout.h"
-#include <QCursor>
 #include <QGuiApplication>
 #include <QScreen>
 
@@ -17,14 +16,17 @@ namespace DbusHelpers {
 QString resolveScreenId(const QString& screenId)
 {
     if (screenId.isEmpty()) {
+        // Fall back to the primary screen's effective screen ID.
+        // QCursor::pos() returns stale data for Wayland background daemons,
+        // so we avoid it entirely and use the primary screen instead.
         auto* mgr = ScreenManager::instance();
-        if (mgr) {
-            const QString cursorScreen = mgr->effectiveScreenAt(QCursor::pos());
-            if (!cursorScreen.isEmpty()) {
-                return cursorScreen;
-            }
-        }
         QScreen* primary = QGuiApplication::primaryScreen();
+        if (primary && mgr) {
+            // If the primary screen has virtual subdivisions, returns the first
+            // virtual screen ID. Otherwise returns the physical screen ID.
+            const QStringList ids = mgr->effectiveIdsForPhysical(Utils::screenIdentifier(primary));
+            return ids.isEmpty() ? Utils::screenIdentifier(primary) : ids.first();
+        }
         return primary ? Utils::screenIdentifier(primary) : QString();
     }
     return VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId);

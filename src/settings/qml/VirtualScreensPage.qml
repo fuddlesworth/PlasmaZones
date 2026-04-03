@@ -112,9 +112,11 @@ Flickable {
 
     // Redistribute splits equally for a given count
     function _redistributeEqual(count) {
-        if (count < 1)
-            count = 1;
-
+        if (count <= 1) {
+            settingsController.stageVirtualScreenRemoval(_selectedScreen);
+            _pendingScreens = [];
+            return ;
+        }
         if (count > _maxVirtualScreens)
             count = _maxVirtualScreens;
 
@@ -199,20 +201,25 @@ Flickable {
         return vsIdx >= 0 ? name.substring(0, vsIdx) : name;
     }
 
+    function _autoSelectScreen() {
+        var screens = settingsController.screens;
+        for (var i = 0; i < screens.length; i++) {
+            if (screens[i].isPrimary) {
+                _selectedScreen = _toPhysicalId(screens[i].name || "");
+                return ;
+            }
+        }
+        if (screens.length > 0)
+            _selectedScreen = _toPhysicalId(screens[0].name || "");
+
+    }
+
     contentHeight: content.implicitHeight
     clip: true
     Component.onCompleted: {
-        // Auto-select primary monitor, fallback to first
-        if (!_selectedScreen && settingsController.screens.length > 0) {
-            var screens = settingsController.screens;
-            for (var i = 0; i < screens.length; i++) {
-                if (screens[i].isPrimary) {
-                    _selectedScreen = _toPhysicalId(screens[i].name || "");
-                    return ;
-                }
-            }
-            _selectedScreen = _toPhysicalId(screens[0].name || "");
-        }
+        if (!_selectedScreen && settingsController.screens.length > 0)
+            _autoSelectScreen();
+
     }
     on_SelectedScreenChanged: {
         _updateScreenGeometry();
@@ -223,16 +230,9 @@ Flickable {
         function onScreensChanged() {
             root._updateScreenGeometry();
             root._refreshConfig();
-            if (root._selectedScreen === "" && settingsController.screens.length > 0) {
-                var screens = settingsController.screens;
-                for (var i = 0; i < screens.length; i++) {
-                    if (screens[i].isPrimary) {
-                        root._selectedScreen = root._toPhysicalId(screens[i].name || "");
-                        return ;
-                    }
-                }
-                root._selectedScreen = root._toPhysicalId(screens[0].name || "");
-            }
+            if (root._selectedScreen === "" && settingsController.screens.length > 0)
+                root._autoSelectScreen();
+
         }
 
         target: settingsController

@@ -11,7 +11,6 @@
 #include "../helpers/SettingsDbusQueries.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
-#include "../../core/screenmanager.h"
 #include "../../core/utils.h"
 
 #include "pz_i18n.h"
@@ -391,15 +390,9 @@ void EditorController::setAspectRatioClass(int cls)
 QSize EditorController::targetScreenSize() const
 {
     // Get the target screen size for fixed geometry coordinate conversion.
-    // Prefer ScreenManager geometry which is virtual-screen aware.
+    // Editor runs as a separate process where ScreenManager is unavailable,
+    // so iterate QGuiApplication::screens() directly.
     if (!m_targetScreen.isEmpty()) {
-        auto* mgr = ScreenManager::instance();
-        if (mgr) {
-            QRect vsGeom = mgr->screenGeometry(m_targetScreen);
-            if (vsGeom.isValid()) {
-                return vsGeom.size();
-            }
-        }
         for (QScreen* screen : QGuiApplication::screens()) {
             if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
                 return screen->geometry().size();

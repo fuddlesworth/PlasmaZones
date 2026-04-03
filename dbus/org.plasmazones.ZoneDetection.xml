@@ -72,6 +72,9 @@
             <arg name="direction" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Direction: left, right, up, down."/>
             </arg>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen ID (optional, empty = current screen)."/>
+            </arg>
             <arg name="zoneId" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Adjacent zone UUID, or empty string."/>
             </arg>

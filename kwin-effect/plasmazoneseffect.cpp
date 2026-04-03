@@ -334,6 +334,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                                               {windowId, dropScreenId}, QStringLiteral("snap drag VS crossing"));
                     }
                 }
+                // Capture snap-mode start screen ID BEFORE clearing — callDragStopped's
+                // async callback needs it for cross-VS autotile transfer detection.
+                // m_dragBypassScreenId is only set for autotile-bypass drags, not snap drags,
+                // so without this capture the cross-VS path in callDragStopped is dead code.
+                const QString snapDragStartScreenId = m_snapDragStartScreenId;
                 m_snapDragStartScreenId.clear();
 
                 if (!m_dragStartedSent) {
@@ -359,7 +364,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     // Tell the daemon to cancel rather than snap to the hovered zone.
                     callCancelSnap();
                 } else {
-                    callDragStopped(w, windowId);
+                    callDragStopped(w, windowId, snapDragStartScreenId);
                 }
             });
 
@@ -776,6 +781,9 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // state as the outputChanged handler above.
         // (The autotile handler has its own detection in slotWindowFrameGeometryChanged;
         // this covers snapping-mode windows which autotile doesn't track.)
+        //
+        // NOTE: VS crossing detection logic is duplicated in autotilehandler/tiling.cpp
+        // (slotWindowFrameGeometryChanged). Changes here must be mirrored there.
         connect(safeW, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW]() {
             if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty() || !m_virtualScreensReady) {
                 return;
@@ -2050,6 +2058,17 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 }
 
                 QJsonArray screens = doc.object().value(QLatin1String("screens")).toArray();
+
+                // Look up the physical output geometry ONCE rather than per VS definition (O(N) vs O(N*M))
+                QRect physGeom;
+                const auto outputs = KWin::effects->screens();
+                for (const auto* out : outputs) {
+                    if (self->outputScreenId(out) == physicalScreenId) {
+                        physGeom = out->geometry();
+                        break;
+                    }
+                }
+
                 QVector<EffectVirtualScreenDef> defs;
                 for (const QJsonValue& val : screens) {
                     QJsonObject obj = val.toObject();
@@ -2059,23 +2078,18 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                     def.id = obj.value(QLatin1String("id")).toString();
 
                     // Compute absolute geometry from fractional region within physical screen
-                    const auto outputs = KWin::effects->screens();
-                    for (const auto* out : outputs) {
-                        if (self->outputScreenId(out) == physicalScreenId) {
-                            const QRect physGeom = out->geometry();
-                            qreal rx = region.value(QLatin1String("x")).toDouble();
-                            qreal ry = region.value(QLatin1String("y")).toDouble();
-                            qreal rw = region.value(QLatin1String("width")).toDouble();
-                            qreal rh = region.value(QLatin1String("height")).toDouble();
-                            // Edge-consistent rounding: compute edges then derive width/height
-                            // to avoid 1px gaps between abutting virtual screens
-                            int left = physGeom.x() + qRound(rx * physGeom.width());
-                            int top = physGeom.y() + qRound(ry * physGeom.height());
-                            int right = physGeom.x() + qRound((rx + rw) * physGeom.width());
-                            int bottom = physGeom.y() + qRound((ry + rh) * physGeom.height());
-                            def.geometry = QRect(left, top, right - left, bottom - top);
-                            break;
-                        }
+                    if (physGeom.isValid()) {
+                        qreal rx = region.value(QLatin1String("x")).toDouble();
+                        qreal ry = region.value(QLatin1String("y")).toDouble();
+                        qreal rw = region.value(QLatin1String("width")).toDouble();
+                        qreal rh = region.value(QLatin1String("height")).toDouble();
+                        // Edge-consistent rounding: compute edges then derive width/height
+                        // to avoid 1px gaps between abutting virtual screens
+                        int left = physGeom.x() + qRound(rx * physGeom.width());
+                        int top = physGeom.y() + qRound(ry * physGeom.height());
+                        int right = physGeom.x() + qRound((rx + rw) * physGeom.width());
+                        int bottom = physGeom.y() + qRound((ry + rh) * physGeom.height());
+                        def.geometry = QRect(left, top, right - left, bottom - top);
                     }
 
                     if (def.geometry.isValid() && !def.id.isEmpty()) {
@@ -2131,6 +2145,17 @@ void PlasmaZonesEffect::fetchAllVirtualScreenConfigs()
     }
 
     physIds.removeDuplicates();
+
+    // Prune stale m_virtualScreenDefs entries for physical screens that are no
+    // longer connected. Without this, resolveEffectiveScreenId could match against
+    // geometry from a disconnected monitor.
+    const QSet<QString> currentPhysIds(physIds.begin(), physIds.end());
+    for (auto it = m_virtualScreenDefs.begin(); it != m_virtualScreenDefs.end();) {
+        if (!currentPhysIds.contains(it.key()))
+            it = m_virtualScreenDefs.erase(it);
+        else
+            ++it;
+    }
 
     if (physIds.isEmpty()) {
         // No physical screens to query — gate opens immediately
@@ -2874,7 +2899,8 @@ void PlasmaZonesEffect::callDragMoved(const QString& windowId, const QPointF& cu
     QDBusConnection::sessionBus().asyncCall(msg);
 }
 
-void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QString& windowId)
+void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QString& windowId,
+                                        const QString& snapDragStartScreenId)
 {
     // Cursor position at release (from last poll during drag) - daemon uses this for release screen
     QPointF cursorAtRelease = m_dragTracker->lastCursorPos();
@@ -2898,7 +2924,7 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
     // Create watcher to handle the reply
     QDBusPendingCallWatcher* watcher = new QDBusPendingCallWatcher(pendingCall, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, safeWindow, windowId](QDBusPendingCallWatcher* w) {
+            [this, safeWindow, windowId, snapDragStartScreenId](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
 
                 QDBusPendingReply<int, int, int, int, bool, QString, bool, bool, QString> reply = *w;
@@ -2989,10 +3015,12 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
                 // virtual screen from a different VS on the SAME physical monitor,
                 // add it to autotile. KWin's outputChanged won't fire (same physical
                 // monitor), so the autotile handler doesn't see the transfer.
-                // Only trigger for same-physical-monitor drops (the actual cross-VS case)
-                // or when the previous screen is unknown (first drag on a new window).
+                // Use m_dragBypassScreenId for autotile-bypass drags, or the captured
+                // snapDragStartScreenId for snap-mode drags (m_snapDragStartScreenId
+                // is already cleared by the time this async callback runs).
                 if (safeWindow && !releaseScreenId.isEmpty() && m_autotileHandler->isAutotileScreen(releaseScreenId)) {
-                    const QString oldScreenId = m_dragBypassScreenId;
+                    const QString oldScreenId =
+                        !m_dragBypassScreenId.isEmpty() ? m_dragBypassScreenId : snapDragStartScreenId;
                     if (!oldScreenId.isEmpty() && VirtualScreenId::samePhysical(releaseScreenId, oldScreenId)) {
                         m_autotileHandler->notifyWindowAdded(safeWindow);
                     }

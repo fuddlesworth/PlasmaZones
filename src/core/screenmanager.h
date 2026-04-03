@@ -191,6 +191,27 @@ public:
     QScreen* physicalQScreenFor(const QString& screenId) const;
 
     /**
+     * @brief Get effective screen IDs for a physical screen
+     *
+     * If the physical screen has virtual subdivisions, returns the virtual screen IDs.
+     * Otherwise returns the physical screen ID as a single-element list.
+     *
+     * @param physicalScreenId Physical screen identifier
+     * @return List of effective screen IDs
+     */
+    QStringList effectiveIdsForPhysical(const QString& physicalScreenId) const;
+
+    /**
+     * @brief Get effective screen IDs with fallback to QGuiApplication screens
+     *
+     * Returns effectiveScreenIds() if ScreenManager is available and has screens.
+     * Otherwise falls back to Utils::allScreens() identifiers.
+     *
+     * @return List of effective screen IDs
+     */
+    static QStringList effectiveScreenIdsWithFallback();
+
+    /**
      * @brief Check if a screen ID has virtual subdivisions
      * @param physicalScreenId Physical screen identifier
      * @return true if the screen has been subdivided

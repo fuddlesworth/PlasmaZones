@@ -9,9 +9,6 @@
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
 #include "../core/screenmanager.h"
-#include "../core/utils.h"
-#include <QGuiApplication>
-#include <QScreen>
 
 namespace PlasmaZones {
 
@@ -45,23 +42,11 @@ bool ModeTracker::isAnyScreenAutotile() const
     if (!m_layoutManager) {
         return false;
     }
-    auto* mgr = ScreenManager::instance();
-    const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
-    if (!effectiveIds.isEmpty()) {
-        for (const QString& screenId : effectiveIds) {
-            const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, m_desktop, m_activity);
-            if (LayoutId::isAutotile(assignmentId)) {
-                return true;
-            }
-        }
-    } else {
-        // Fallback: no ScreenManager
-        for (QScreen* screen : Utils::allScreens()) {
-            const QString screenId = Utils::screenIdentifier(screen);
-            const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, m_desktop, m_activity);
-            if (LayoutId::isAutotile(assignmentId)) {
-                return true;
-            }
+    const QStringList effectiveIds = ScreenManager::effectiveScreenIdsWithFallback();
+    for (const QString& screenId : effectiveIds) {
+        const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, m_desktop, m_activity);
+        if (LayoutId::isAutotile(assignmentId)) {
+            return true;
         }
     }
     return false;

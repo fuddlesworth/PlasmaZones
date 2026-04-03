@@ -555,12 +555,9 @@ void Daemon::connectOverlaySignals()
             QString effectiveScreenId = screenId;
             if (effectiveScreenId.isEmpty()) {
                 // Prefer effective screen IDs (virtual-screen-aware) over physical screen
-                auto* mgr = ScreenManager::instance();
-                const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
+                const QStringList effectiveIds = ScreenManager::effectiveScreenIdsWithFallback();
                 if (!effectiveIds.isEmpty()) {
                     effectiveScreenId = effectiveIds.first();
-                } else if (QGuiApplication::primaryScreen()) {
-                    effectiveScreenId = Utils::screenIdentifier(QGuiApplication::primaryScreen());
                 }
             }
             // Snap assist is a manual-mode concept; ignore if this screen uses autotile.

@@ -16,6 +16,7 @@
 #include "../logging.h"
 #include <QScreen>
 #include <QUuid>
+#include <climits>
 
 namespace PlasmaZones {
 
@@ -35,7 +36,10 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
 
     // Helper: determine which virtual screen a zone center falls within.
     // Returns the first virtual screen as default if the zone can't be resolved.
-    auto resolveVirtualScreen = [&](const QStringList& zoneIds) -> QString {
+    // @param oldScreenId  The window's stored screen ID (physical or old virtual).
+    //                     Used to select index-based fallback when re-migrating
+    //                     between virtual screen configurations.
+    auto resolveVirtualScreen = [&](const QStringList& zoneIds, const QString& oldScreenId) -> QString {
         if (zoneIds.isEmpty() || !m_layoutManager) {
             return virtualScreenIds.first();
         }
@@ -67,7 +71,31 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         }
         // Multiple matches (shared layout) or no matches — fall through to center-point
 
-        // Fall back to the physical screen's layout and center-point mapping
+        // When re-migrating from an old virtual screen ID, zone relative coordinates
+        // were defined relative to the old VS bounds, not the full physical screen.
+        // Projecting them against the physical screen geometry gives wrong results
+        // (e.g. a zone at (0,0,1,1) on the right-half VS maps to the physical center
+        // instead of the right-half center). Use index-based proximity instead:
+        // find the new VS with the nearest index to the old one.
+        if (VirtualScreenId::isVirtual(oldScreenId)) {
+            const int oldIndex = VirtualScreenId::extractIndex(oldScreenId);
+            int bestIdx = 0;
+            int bestDist = INT_MAX;
+            for (int i = 0; i < virtualScreenIds.size(); ++i) {
+                const int idx = VirtualScreenId::extractIndex(virtualScreenIds[i]);
+                const int dist = qAbs(idx - oldIndex);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestIdx = i;
+                }
+            }
+            return virtualScreenIds[bestIdx];
+        }
+
+        // Fall back to the physical screen's layout and center-point mapping.
+        // This path is only used when migrating from a physical screen ID
+        // (first-time VS setup), where zone coords are relative to the physical
+        // screen and center-point resolution is correct.
         Layout* layout = m_layoutManager->resolveLayoutForScreen(physicalScreenId);
         if (!layout) {
             return virtualScreenIds.first();
@@ -78,7 +106,6 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             return virtualScreenIds.first();
         }
 
-        // Get physical screen geometry to compute absolute zone position
         QScreen* physScreen = mgr->physicalQScreenFor(physicalScreenId);
         if (!physScreen) {
             return virtualScreenIds.first();
@@ -114,7 +141,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         }
 
         QStringList zoneIds = m_windowZoneAssignments.value(it.key());
-        QString targetVs = resolveVirtualScreen(zoneIds);
+        QString targetVs = resolveVirtualScreen(zoneIds, it.value());
         it.value() = targetVs;
         migrated++;
     }
@@ -127,7 +154,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
 
         // Pre-float entries may have zone info too; try to resolve
         QStringList zoneIds = m_preFloatZoneAssignments.value(it.key());
-        it.value() = resolveVirtualScreen(zoneIds);
+        it.value() = resolveVirtualScreen(zoneIds, it.value());
         anyStateMigrated = true;
     }
 
@@ -137,7 +164,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             if (entry.screenId != physicalScreenId && !entry.screenId.startsWith(prefix)) {
                 continue;
             }
-            entry.screenId = resolveVirtualScreen(entry.zoneIds);
+            entry.screenId = resolveVirtualScreen(entry.zoneIds, entry.screenId);
             anyStateMigrated = true;
         }
     }
@@ -184,7 +211,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         if (it->connectorName == physicalScreenId || it->connectorName.startsWith(prefix)) {
             // Use resolveVirtualScreen if the window has zone info, otherwise default to first
             QStringList zoneIds = m_windowZoneAssignments.value(it.key());
-            it->connectorName = resolveVirtualScreen(zoneIds);
+            it->connectorName = resolveVirtualScreen(zoneIds, it->connectorName);
             anyStateMigrated = true;
         }
     }
@@ -808,9 +835,23 @@ QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId)
     QString physId = VirtualScreenId::extractPhysicalId(screenId);
     const QStringList vsIds = smgr->virtualScreenIdsFor(physId);
     if (!vsIds.isEmpty()) {
-        qCInfo(lcCore) << "Virtual screen" << screenId << "no longer exists, falling back to" << vsIds.first()
+        // Find the virtual screen with the nearest index to the old one,
+        // so windows migrate to the geometrically closest region rather
+        // than always landing on the first virtual screen.
+        const int oldIndex = VirtualScreenId::extractIndex(screenId);
+        int bestIdx = 0;
+        int bestDist = INT_MAX;
+        for (int i = 0; i < vsIds.size(); ++i) {
+            const int idx = VirtualScreenId::extractIndex(vsIds[i]);
+            const int dist = qAbs(idx - oldIndex);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestIdx = i;
+            }
+        }
+        qCInfo(lcCore) << "Virtual screen" << screenId << "no longer exists, falling back to" << vsIds[bestIdx]
                        << "on same physical monitor" << physId;
-        return vsIds.first();
+        return vsIds[bestIdx];
     }
 
     qCWarning(lcCore) << "Virtual screen" << screenId << "no longer exists, falling back to physical screen" << physId;

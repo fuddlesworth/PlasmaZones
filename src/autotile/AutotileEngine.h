@@ -396,6 +396,17 @@ public:
      */
     void setFocusedWindow(const QString& windowId);
 
+    /**
+     * @brief Set the active screen hint for keyboard shortcut handlers.
+     *
+     * Called before parameterless engine methods (focusMaster, increaseMasterCount, etc.)
+     * to ensure the engine operates on the correct virtual screen when no focused window
+     * has been tracked yet on that screen.
+     *
+     * @param screenId Resolved screen ID (virtual or physical)
+     */
+    void setActiveScreenHint(const QString& screenId);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Split ratio adjustment
     // ═══════════════════════════════════════════════════════════════════════════

@@ -362,23 +362,44 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
 
     window->setVisible(false);
 
-    // Connect to physical screen geometry changes (only for physical screens;
-    // virtual screen geometry changes are handled via ScreenManager signals)
+    // Connect to physical screen geometry changes.
+    // For physical screens: update overlay size directly from the new geometry.
+    // For virtual screens: recalculate geometry from ScreenManager since the
+    // virtual screen bounds are derived from the physical screen geometry.
     const bool isVirtualScreen = VirtualScreenId::isVirtual(screenId);
-    if (!isVirtualScreen) {
+    {
         QPointer<QScreen> screenPtr = physScreen;
         const QString sid = screenId; // Capture by value for lambda
-        connect(physScreen, &QScreen::geometryChanged, window, [this, screenPtr, sid](const QRect& newGeom) {
+        const bool isVS = isVirtualScreen;
+        connect(physScreen, &QScreen::geometryChanged, window, [this, screenPtr, sid, isVS](const QRect& newGeom) {
             if (!screenPtr) {
                 return;
             }
             if (auto* w = m_overlayWindows.value(sid)) {
-                // Only set size — position is controlled by layer-surface anchors (AnchorAll),
-                // setX/setY are no-ops on layer surfaces.
-                w->setWidth(newGeom.width());
-                w->setHeight(newGeom.height());
-                m_overlayGeometries[sid] = newGeom;
-                updateOverlayWindow(sid, screenPtr);
+                if (isVS) {
+                    // Virtual screen: recalculate geometry from ScreenManager since
+                    // virtual screen proportions are relative to the physical screen.
+                    auto* mgr = ScreenManager::instance();
+                    if (mgr) {
+                        const QRect vsGeom = mgr->screenGeometry(sid);
+                        if (vsGeom.isValid()) {
+                            w->setWidth(vsGeom.width());
+                            w->setHeight(vsGeom.height());
+                            m_overlayGeometries[sid] = vsGeom;
+                            applyLayerShellScreenPosition(w, screenPtr, vsGeom);
+                            updateOverlayWindow(sid, screenPtr);
+                            return;
+                        }
+                    }
+                } else {
+                    // Physical screen: size directly from the new geometry.
+                    // Position is controlled by layer-surface anchors (AnchorAll),
+                    // setX/setY are no-ops on layer surfaces.
+                    w->setWidth(newGeom.width());
+                    w->setHeight(newGeom.height());
+                    m_overlayGeometries[sid] = newGeom;
+                    updateOverlayWindow(sid, screenPtr);
+                }
             }
         });
     }

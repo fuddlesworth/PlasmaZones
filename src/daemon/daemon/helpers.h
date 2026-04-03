@@ -24,7 +24,8 @@ namespace PlasmaZones {
  * position hint (QCursor::pos() is unreliable on Wayland for background daemons).
  * Falls back to vs:0 (leftmost) if no better hint is available.
  */
-inline QString resolveVirtualScreenId(const QString& physicalId, const WindowTrackingAdaptor* trackingAdaptor)
+inline QString resolveVirtualScreenId(const QString& physicalId, const WindowTrackingAdaptor* trackingAdaptor,
+                                      const QPoint& cursorPos = QPoint())
 {
     auto* mgr = ScreenManager::instance();
     if (!mgr || !mgr->hasVirtualScreens(physicalId)) {
@@ -52,6 +53,15 @@ inline QString resolveVirtualScreenId(const QString& physicalId, const WindowTra
         if (VirtualScreenId::isVirtual(activeScreen)
             && VirtualScreenId::extractPhysicalId(activeScreen) == physicalId) {
             return activeScreen;
+        }
+    }
+
+    // Cursor position hint: when a keyboard shortcut fires with no focused window,
+    // the cursor position (from the effect) can resolve the correct virtual screen.
+    if (!cursorPos.isNull()) {
+        const QString vsAtCursor = mgr->effectiveScreenAt(cursorPos);
+        if (VirtualScreenId::isVirtual(vsAtCursor) && VirtualScreenId::extractPhysicalId(vsAtCursor) == physicalId) {
+            return vsAtCursor;
         }
     }
 

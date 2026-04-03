@@ -812,21 +812,46 @@ QHash<QString, VirtualScreenConfig> Settings::virtualScreenConfigs() const
 
 void Settings::setVirtualScreenConfigs(const QHash<QString, VirtualScreenConfig>& configs)
 {
-    if (m_virtualScreenConfigs != configs) {
-        m_virtualScreenConfigs = configs;
+    // Use exactEquals() for change detection — fuzzy operator== has 1e-3 tolerance
+    // that silently drops tiny geometry adjustments.
+    // Also filter out 1-screen configs: hasSubdivisions() returns false for size==1,
+    // so effectiveScreenIds() would not emit virtual IDs for them, but storing them
+    // causes inconsistency (settings says VS exists, ScreenManager disagrees).
+    QHash<QString, VirtualScreenConfig> filtered;
+    for (auto it = configs.constBegin(); it != configs.constEnd(); ++it) {
+        if (it.value().hasSubdivisions()) {
+            filtered.insert(it.key(), it.value());
+        }
+    }
+
+    // Check exact equality to avoid dropping tiny geometry adjustments
+    if (m_virtualScreenConfigs.size() != filtered.size()) {
+        m_virtualScreenConfigs = filtered;
         Q_EMIT virtualScreenConfigsChanged();
         Q_EMIT settingsChanged();
+        return;
+    }
+    for (auto it = filtered.constBegin(); it != filtered.constEnd(); ++it) {
+        auto existing = m_virtualScreenConfigs.constFind(it.key());
+        if (existing == m_virtualScreenConfigs.constEnd() || !existing.value().exactEquals(it.value())) {
+            m_virtualScreenConfigs = filtered;
+            Q_EMIT virtualScreenConfigsChanged();
+            Q_EMIT settingsChanged();
+            return;
+        }
     }
 }
 
 void Settings::setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config)
 {
-    if (config.screens.isEmpty()) {
+    if (config.screens.isEmpty() || !config.hasSubdivisions()) {
         if (!m_virtualScreenConfigs.contains(physicalScreenId))
             return;
         m_virtualScreenConfigs.remove(physicalScreenId);
     } else {
-        if (m_virtualScreenConfigs.value(physicalScreenId) == config)
+        // Use exactEquals() for change detection — fuzzy operator== has 1e-3 tolerance
+        // that silently drops tiny geometry adjustments.
+        if (m_virtualScreenConfigs.value(physicalScreenId).exactEquals(config))
             return;
         m_virtualScreenConfigs.insert(physicalScreenId, config);
     }

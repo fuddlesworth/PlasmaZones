@@ -238,6 +238,13 @@ inline void applyLayerShellScreenPosition(QWindow* window, QScreen* physScreen, 
 /// Check whether either snapping mode (0 = manual, 1 = autotile) is locked for
 /// the given screen/desktop/activity context. Used by zone selector, layout
 /// picker, and overlay update paths that must respect per-context lock state.
+///
+/// NOTE (behavioral change, PR #247): This intentionally checks BOTH modes
+/// (0 = manual, 1 = autotile) regardless of which mode is currently active.
+/// A lock on either mode blocks the zone selector for consistency with the
+/// OverlayService lock checks. Previously, ZoneSelectorController only
+/// checked the current mode, which caused inconsistencies when the overlay
+/// reported a lock but the selector did not.
 inline bool isAnyModeLocked(ISettings* settings, const QString& screenId, int desktop, const QString& activity)
 {
     if (!settings) {

@@ -1062,6 +1062,13 @@ void AutotileEngine::setFocusedWindow(const QString& windowId)
     onWindowFocused(windowId);
 }
 
+void AutotileEngine::setActiveScreenHint(const QString& screenId)
+{
+    if (!screenId.isEmpty()) {
+        m_activeScreen = screenId;
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Split ratio adjustment
 // ═══════════════════════════════════════════════════════════════════════════════

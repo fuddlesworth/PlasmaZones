@@ -354,6 +354,9 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // fires. Detect the change here so the autotile engine can transfer the
     // window. Only check windows we're already tracking (m_notifiedWindowScreens)
     // and only when the physical screen has virtual subdivisions.
+    //
+    // NOTE: VS crossing detection logic is duplicated in plasmazoneseffect.cpp
+    // (slotWindowAdded frameGeometryChanged handler). Changes here must be mirrored there.
     if (m_notifiedWindows.contains(windowId) && !m_effect->m_virtualScreenDefs.isEmpty()
         && m_effect->m_virtualScreensReady) {
         // Don't detect VS crossings during an active drag — the drop handler

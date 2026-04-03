@@ -207,8 +207,14 @@ QRect ScreenManager::screenGeometry(const QString& screenId) const
         if (cached.isValid()) {
             return cached;
         }
-        qCDebug(lcScreen) << "screenGeometry: virtual screen" << screenId
-                          << "not found in cache, falling back to physical screen";
+        // Virtual screen ID is not in the cache — the VS config was removed or
+        // never existed. Return invalid QRect rather than falling through to
+        // physical screen lookup, which would strip "/vs:N" and return the full
+        // physical geometry. Callers do not expect a virtual screen ID to
+        // silently resolve to a different (larger) geometry.
+        qCWarning(lcScreen) << "screenGeometry: virtual screen" << screenId
+                            << "not found in cache, returning invalid geometry";
+        return QRect();
     }
 
     // Physical screen — try tracked screens first, then fallback
@@ -260,6 +266,30 @@ bool ScreenManager::hasVirtualScreens(const QString& physicalScreenId) const
 {
     auto it = m_virtualConfigs.constFind(physicalScreenId);
     return it != m_virtualConfigs.constEnd() && it->hasSubdivisions();
+}
+
+QStringList ScreenManager::effectiveIdsForPhysical(const QString& physicalScreenId) const
+{
+    if (hasVirtualScreens(physicalScreenId)) {
+        return virtualScreenIdsFor(physicalScreenId);
+    }
+    return {physicalScreenId};
+}
+
+QStringList ScreenManager::effectiveScreenIdsWithFallback()
+{
+    auto* mgr = instance();
+    if (mgr) {
+        QStringList ids = mgr->effectiveScreenIds();
+        if (!ids.isEmpty()) {
+            return ids;
+        }
+    }
+    QStringList result;
+    for (const auto* screen : Utils::allScreens()) {
+        result.append(Utils::screenIdentifier(screen));
+    }
+    return result;
 }
 
 VirtualScreenDef::PhysicalEdges ScreenManager::physicalEdgesFor(const QString& screenId) const

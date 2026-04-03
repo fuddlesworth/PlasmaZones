@@ -38,6 +38,9 @@ int LayoutAdaptor::getCurrentVirtualDesktop()
 }
 
 // Screen Assignments
+// NOTE: Individual assignment methods do not call saveAssignments() directly.
+// LayoutManager auto-persists in assignLayout(), assignLayoutById(),
+// clearAssignment(), setAssignmentEntryDirect(), and the batch setAll*() methods.
 QString LayoutAdaptor::getLayoutForScreen(const QString& screenId)
 {
     int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
@@ -131,17 +134,7 @@ QString LayoutAdaptor::getAllScreenAssignments()
 
     // Use effective screen IDs (includes virtual screens when configured)
     // so the KCM sees one entry per virtual screen, not per physical monitor.
-    auto* mgr = ScreenManager::instance();
-    const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
-
-    QStringList screenIds;
-    if (!effectiveIds.isEmpty()) {
-        screenIds = effectiveIds;
-    } else {
-        for (QScreen* screen : Utils::allScreens()) {
-            screenIds.append(Utils::screenIdentifier(screen));
-        }
-    }
+    const QStringList screenIds = ScreenManager::effectiveScreenIdsWithFallback();
 
     for (const QString& screenId : std::as_const(screenIds)) {
         // Derive connector name for the JSON key (KCM compatibility)
@@ -269,18 +262,7 @@ QString LayoutAdaptor::getScreenStates()
 
     // Use effective screen IDs (includes virtual screens when configured)
     // so the settings app sees one entry per virtual screen, not per physical monitor.
-    auto* mgr = ScreenManager::instance();
-    const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
-
-    // Build list of screen IDs to iterate — fall back to physical screens if no ScreenManager
-    QStringList screenIds;
-    if (!effectiveIds.isEmpty()) {
-        screenIds = effectiveIds;
-    } else {
-        for (QScreen* screen : Utils::allScreens()) {
-            screenIds.append(Utils::screenIdentifier(screen));
-        }
-    }
+    const QStringList screenIds = ScreenManager::effectiveScreenIdsWithFallback();
 
     for (const QString& screenId : std::as_const(screenIds)) {
         const auto entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);
