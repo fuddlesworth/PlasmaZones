@@ -109,7 +109,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     // Match main overlay: full-screen anchors so zone coordinates (overlay-local) line up
     if (!configureLayerSurface(m_snapAssistWindow, screen, LayerSurface::LayerTop,
                                LayerSurface::KeyboardInteractivityExclusive,
-                               QStringLiteral("plasmazones-snap-assist-%1").arg(Utils::screenIdentifier(screen)),
+                               QStringLiteral("plasmazones-snap-assist-%1-%2")
+                                   .arg(Utils::screenIdentifier(screen))
+                                   .arg(++m_scopeGeneration),
                                LayerSurface::AnchorAll)) {
         qCWarning(lcOverlay) << "showSnapAssist: failed to configure layer surface";
         destroySnapAssistWindow();
@@ -359,7 +361,9 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     // Full-screen layer shell with keyboard interactivity
     if (!configureLayerSurface(m_layoutPickerWindow, screen, LayerSurface::LayerTop,
                                LayerSurface::KeyboardInteractivityExclusive,
-                               QStringLiteral("plasmazones-layout-picker-%1").arg(Utils::screenIdentifier(screen)),
+                               QStringLiteral("plasmazones-layout-picker-%1-%2")
+                                   .arg(Utils::screenIdentifier(screen))
+                                   .arg(++m_scopeGeneration),
                                LayerSurface::AnchorAll)) {
         qCWarning(lcOverlay) << "showLayoutPicker: failed to configure layer surface";
         destroyLayoutPickerWindow();

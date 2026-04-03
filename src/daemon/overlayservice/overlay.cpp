@@ -270,9 +270,10 @@ void OverlayService::createOverlayWindow(QScreen* screen)
     }
 
     // Configure layer surface for full-screen overlay
-    if (!configureLayerSurface(window, screen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
-                               QStringLiteral("plasmazones-overlay-%1").arg(Utils::screenIdentifier(screen)),
-                               LayerSurface::AnchorAll)) {
+    if (!configureLayerSurface(
+            window, screen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
+            QStringLiteral("plasmazones-overlay-%1-%2").arg(Utils::screenIdentifier(screen)).arg(++m_scopeGeneration),
+            LayerSurface::AnchorAll)) {
         qCWarning(lcOverlay) << "Failed to configure layer surface for overlay on" << screen->name();
         window->deleteLater();
         return;

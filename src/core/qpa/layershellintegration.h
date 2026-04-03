@@ -70,6 +70,12 @@ public:
     CallbackId addGlobalRemovedCallback(GlobalRemovedCallback cb);
     void removeGlobalRemovedCallback(CallbackId id);
 
+    /// Access the Wayland display for explicit flushing after surface creation.
+    QtWaylandClient::QWaylandDisplay* display() const
+    {
+        return m_display;
+    }
+
 private:
     /// Fallback xdg-shell integration for regular (non-layer-shell) windows.
     /// Loaded lazily on first use via Qt's shell integration factory.

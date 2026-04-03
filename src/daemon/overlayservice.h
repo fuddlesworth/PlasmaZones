@@ -360,6 +360,12 @@ private:
     bool m_zoneDataDirty = true;
     QString m_pendingShaderError;
 
+    // Monotonic counter for unique layer-shell scope strings.
+    // Appended to each configureLayerSurface() scope so KWin sees every
+    // new surface as unique, avoiding configure rate-limiting after rapid
+    // destroy/recreate cycles on Vulkan.
+    int m_scopeGeneration = 0;
+
     // CAVA audio visualization
     std::unique_ptr<CavaService> m_cavaService;
 

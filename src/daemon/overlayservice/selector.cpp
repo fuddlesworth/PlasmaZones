@@ -245,9 +245,10 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
     const auto pos = static_cast<ZoneSelectorPosition>(config.position);
 
     // Configure layer surface for zone selector (LayerTop for pointer input)
-    if (!configureLayerSurface(window, screen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityNone,
-                               QStringLiteral("plasmazones-selector-%1").arg(Utils::screenIdentifier(screen)),
-                               getAnchorsForPosition(pos))) {
+    if (!configureLayerSurface(
+            window, screen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityNone,
+            QStringLiteral("plasmazones-selector-%1-%2").arg(Utils::screenIdentifier(screen)).arg(++m_scopeGeneration),
+            getAnchorsForPosition(pos))) {
         qCWarning(lcOverlay) << "Failed to configure layer surface for zone selector on" << screen->name();
         delete window;
         return;
