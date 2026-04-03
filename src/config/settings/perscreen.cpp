@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../settings.h"
-#include "../configbackend_qsettings.h"
+#include "../iconfigbackend.h"
 #include "../configdefaults.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
@@ -127,7 +127,7 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     return QVariant();
 }
 
-QVariant readPerScreenAutotileEntry(QSettingsConfigGroup& group, const QString& key)
+QVariant readPerScreenAutotileEntry(IConfigGroup& group, const QString& key)
 {
     if (key == QLatin1String("AutotileSplitRatio"))
         return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatio()));
@@ -171,14 +171,14 @@ QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& valu
     return QVariant();
 }
 
-QVariant readPerScreenSnappingEntry(QSettingsConfigGroup& group, const QString& key)
+QVariant readPerScreenSnappingEntry(IConfigGroup& group, const QString& key)
 {
     if (key == QLatin1String("SnapAssistEnabled") || key == QLatin1String("ZoneSelectorEnabled"))
         return QVariant(group.readBool(key, false));
     return QVariant(group.readInt(key, 0));
 }
 
-QVariant readPerScreenZoneSelectorEntry(QSettingsConfigGroup& group, const QString& key)
+QVariant readPerScreenZoneSelectorEntry(IConfigGroup& group, const QString& key)
 {
     namespace K = ZoneSelectorConfigKey;
     if (key == QLatin1String(K::PreviewLockAspect))
@@ -186,8 +186,7 @@ QVariant readPerScreenZoneSelectorEntry(QSettingsConfigGroup& group, const QStri
     return QVariant(group.readInt(key, 0));
 }
 
-void savePerScreenOverrides(QSettingsConfigBackend* backend, const QString& prefix,
-                            const QHash<QString, QVariantMap>& source)
+void savePerScreenOverrides(IConfigBackend* backend, const QString& prefix, const QHash<QString, QVariantMap>& source)
 {
     const QStringList groups = backend->groupList();
     for (const QString& groupName : groups) {
@@ -244,10 +243,10 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
     }
 }
 
-using PerScreenReadFn = QVariant (*)(QSettingsConfigGroup&, const QString&);
+using PerScreenReadFn = QVariant (*)(IConfigGroup&, const QString&);
 using PerScreenValidateFn = QVariant (*)(const QString&, const QVariant&);
 
-void loadPerScreenGroup(QSettingsConfigBackend* backend, const QStringList& allGroups, const QString& prefix,
+void loadPerScreenGroup(IConfigBackend* backend, const QStringList& allGroups, const QString& prefix,
                         const char* const* keys, size_t keyCount, PerScreenReadFn readEntry,
                         PerScreenValidateFn validate, QHash<QString, QVariantMap>& dest)
 {
@@ -307,7 +306,7 @@ static void normalizeAutotileKeys(QHash<QString, QVariantMap>& settings)
     }
 }
 
-void Settings::loadPerScreenOverrides(QSettingsConfigBackend* backend)
+void Settings::loadPerScreenOverrides(IConfigBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
     loadPerScreenGroup(backend, allGroups, ConfigDefaults::zoneSelectorGroupPrefix(), kPerScreenKeys,
@@ -355,7 +354,7 @@ static QHash<QString, QVariantMap> expandAutotileKeys(const QHash<QString, QVari
     return expanded;
 }
 
-void Settings::saveAllPerScreenOverrides(QSettingsConfigBackend* backend)
+void Settings::saveAllPerScreenOverrides(IConfigBackend* backend)
 {
     savePerScreenOverrides(backend, ConfigDefaults::zoneSelectorGroupPrefix(), m_perScreenZoneSelectorSettings);
     // Expand short keys back to disk format before saving

@@ -14,7 +14,7 @@
 #include <QJsonObject>
 #include <QScopedPointer>
 #include <QUuid>
-#include "config/configbackend_qsettings.h"
+#include "config/configbackend_json.h"
 #include <memory>
 #include <vector>
 
@@ -448,7 +448,7 @@ private Q_SLOTS:
 
         // Pre-populate config with an Assignment entry that has autotile but no snappingLayout
         {
-            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             {
                 auto grp = backend->group(QStringLiteral("Assignment:DP-1"));
                 grp->writeInt(QStringLiteral("Mode"), 1); // Autotile
@@ -473,7 +473,7 @@ private Q_SLOTS:
         QCOMPARE(entry.snappingLayout, layoutId); // Filled from ModeTracking
 
         // ModeTracking group should be deleted
-        auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         QVERIFY(!backend->groupList().contains(QStringLiteral("ModeTracking")));
     }
 

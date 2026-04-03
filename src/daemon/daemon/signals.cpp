@@ -598,8 +598,9 @@ void Daemon::connectOverlaySignals()
 
     // Dismiss snap assist when any window zone assignment changes (navigation, snap, unsnap,
     // float toggle, resnap, etc.). Snap assist is only relevant until the user performs another
-    // window operation. The snap assist's own selection path already calls root.close() in QML,
-    // so this is a no-op for that case (isSnapAssistVisible returns false).
+    // window operation. During snap assist continuation, the window stays visible (keyboard
+    // grab released) so this handler fires and destroys it; showContinuationIfNeeded() then
+    // creates a fresh one. For non-continuation selections, this provides the final cleanup.
     connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowZoneChanged, this,
             [this](const QString& /*windowId*/, const QString& /*zoneId*/) {
                 if (m_overlayService->isSnapAssistVisible()) {

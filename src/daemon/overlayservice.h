@@ -208,6 +208,7 @@ private:
 
     void createOverlayWindow(QScreen* screen);
     void destroyOverlayWindow(QScreen* screen);
+    void dismissOverlayWindow(QScreen* screen);
     void updateOverlayWindow(QScreen* screen);
     void recreateOverlayWindowsOnTypeMismatch();
 

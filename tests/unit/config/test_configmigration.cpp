@@ -1,0 +1,352 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include <QTest>
+#include <QDir>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QTextStream>
+
+#include "../../../src/config/configmigration.h"
+#include "../../../src/config/configdefaults.h"
+#include "../../../src/config/configbackend_json.h"
+#include "../helpers/IsolatedConfigGuard.h"
+
+using namespace PlasmaZones;
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
+
+class TestConfigMigration : public QObject
+{
+    Q_OBJECT
+
+private:
+    void writeIniFile(const QString& path, const QString& content)
+    {
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Text));
+        QTextStream out(&f);
+        out << content;
+    }
+
+    QJsonObject readJsonConfig(const QString& path)
+    {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly)) {
+            return {};
+        }
+        return QJsonDocument::fromJson(f.readAll()).object();
+    }
+
+private Q_SLOTS:
+
+    // =========================================================================
+    // No migration needed
+    // =========================================================================
+
+    void testFreshInstall_noFiles()
+    {
+        IsolatedConfigGuard guard;
+        // No old config, no new config
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        // No JSON file created (fresh install gets defaults on first save)
+        QVERIFY(!QFile::exists(ConfigDefaults::configFilePath()));
+    }
+
+    void testJsonAlreadyExists()
+    {
+        IsolatedConfigGuard guard;
+        // Create JSON config
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QFile f(ConfigDefaults::configFilePath());
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("{\"_version\":1}");
+        f.close();
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+    }
+
+    // =========================================================================
+    // Migration
+    // =========================================================================
+
+    void testMigrateBasicSettings()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Activation]\n"
+                                    "SnappingEnabled=true\n"
+                                    "ToggleActivation=false\n"
+                                    "\n"
+                                    "[Display]\n"
+                                    "ShowOnAllMonitors=true\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        // JSON config should exist
+        QVERIFY(QFile::exists(ConfigDefaults::configFilePath()));
+
+        // Old file should be renamed to .bak
+        QVERIFY(!QFile::exists(ConfigDefaults::legacyConfigFilePath()));
+        QVERIFY(QFile::exists(ConfigDefaults::legacyConfigFilePath() + QStringLiteral(".bak")));
+
+        // Verify content
+        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        QCOMPARE(root.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
+
+        QJsonObject activation = root.value(QStringLiteral("Activation")).toObject();
+        QCOMPARE(activation.value(QStringLiteral("SnappingEnabled")).toBool(), true);
+        QCOMPARE(activation.value(QStringLiteral("ToggleActivation")).toBool(), false);
+
+        QJsonObject display = root.value(QStringLiteral("Display")).toObject();
+        QCOMPARE(display.value(QStringLiteral("ShowOnAllMonitors")).toBool(), true);
+    }
+
+    void testMigrateColors()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Appearance]\n"
+                                    "HighlightColor=82,148,226,255\n"
+                                    "BorderColor=255,0,0,128\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        QJsonObject appearance = root.value(QStringLiteral("Appearance")).toObject();
+
+        // Colors should be converted to hex
+        QString highlight = appearance.value(QStringLiteral("HighlightColor")).toString();
+        QVERIFY2(highlight.startsWith(QLatin1Char('#')),
+                 qPrintable(QStringLiteral("Expected hex color, got: ") + highlight));
+
+        // Verify the hex parses back to the original color
+        QColor c(highlight);
+        QCOMPARE(c.red(), 82);
+        QCOMPARE(c.green(), 148);
+        QCOMPARE(c.blue(), 226);
+        QCOMPARE(c.alpha(), 255);
+    }
+
+    void testMigrateJsonTriggers()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Activation]\n"
+                                    "DragActivationTriggers=[{\"modifier\":2,\"mouseButton\":0}]\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        QJsonObject activation = root.value(QStringLiteral("Activation")).toObject();
+
+        // Should be stored as native JSON array, not a string
+        QJsonValue triggers = activation.value(QStringLiteral("DragActivationTriggers"));
+        QVERIFY2(triggers.isArray(), "DragActivationTriggers should be a native JSON array after migration");
+
+        QJsonArray arr = triggers.toArray();
+        QCOMPARE(arr.size(), 1);
+        QCOMPARE(arr[0].toObject().value(QStringLiteral("modifier")).toInt(), 2);
+        QCOMPARE(arr[0].toObject().value(QStringLiteral("mouseButton")).toInt(), 0);
+    }
+
+    void testMigratePerScreenGroups()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[ZoneSelector:eDP-1]\n"
+                                    "Position=3\n"
+                                    "MaxRows=5\n"
+                                    "\n"
+                                    "[AutotileScreen:HDMI-1]\n"
+                                    "Algorithm=bsp\n"
+                                    "\n"
+                                    "[SnappingScreen:DP-2]\n"
+                                    "SnapAssistEnabled=true\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        QJsonObject perScreen = root.value(QStringLiteral("PerScreen")).toObject();
+
+        // ZoneSelector
+        QJsonObject zs = perScreen.value(QStringLiteral("ZoneSelector")).toObject();
+        QJsonObject edp = zs.value(QStringLiteral("eDP-1")).toObject();
+        QCOMPARE(edp.value(QStringLiteral("Position")).toInt(), 3);
+        QCOMPARE(edp.value(QStringLiteral("MaxRows")).toInt(), 5);
+
+        // Autotile
+        QJsonObject at = perScreen.value(QStringLiteral("Autotile")).toObject();
+        QJsonObject hdmi = at.value(QStringLiteral("HDMI-1")).toObject();
+        QCOMPARE(hdmi.value(QStringLiteral("Algorithm")).toString(), QStringLiteral("bsp"));
+
+        // Snapping
+        QJsonObject sn = perScreen.value(QStringLiteral("Snapping")).toObject();
+        QJsonObject dp2 = sn.value(QStringLiteral("DP-2")).toObject();
+        QCOMPARE(dp2.value(QStringLiteral("SnapAssistEnabled")).toBool(), true);
+    }
+
+    void testMigrateAssignmentGroups_notPerScreen()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Assignment:eDP-1:Desktop:1:Activity:abc-123]\n"
+                                    "Mode=0\n"
+                                    "SnappingLayout={uuid-here}\n"
+                                    "TilingAlgorithm=bsp\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+
+        // Assignment groups must NOT end up under PerScreen
+        QVERIFY2(!root.contains(QStringLiteral("PerScreen")), "Assignment groups should not be under PerScreen");
+
+        // They should be a regular top-level group
+        const QString groupName = QStringLiteral("Assignment:eDP-1:Desktop:1:Activity:abc-123");
+        QVERIFY2(root.contains(groupName), "Assignment group should be at root level");
+
+        QJsonObject assignment = root.value(groupName).toObject();
+        QCOMPARE(assignment.value(QStringLiteral("Mode")).toInt(), 0);
+        QCOMPARE(assignment.value(QStringLiteral("TilingAlgorithm")).toString(), QStringLiteral("bsp"));
+    }
+
+    void testMigrateAssignmentGroups_readableByBackend()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Assignment:eDP-1:Desktop:1]\n"
+                                    "Mode=1\n"
+                                    "TilingAlgorithm=dwindle\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        // groupList should contain the assignment group
+        QStringList groups = backend->groupList();
+        QVERIFY(groups.contains(QStringLiteral("Assignment:eDP-1:Desktop:1")));
+
+        // Reading via group() should work
+        auto g = backend->group(QStringLiteral("Assignment:eDP-1:Desktop:1"));
+        QCOMPARE(g->readInt(QStringLiteral("Mode")), 1);
+        QCOMPARE(g->readString(QStringLiteral("TilingAlgorithm")), QStringLiteral("dwindle"));
+    }
+
+    void testMigrateNumericValues()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Zones]\n"
+                                    "Padding=8\n"
+                                    "OuterGap=4\n"
+                                    "\n"
+                                    "[Appearance]\n"
+                                    "ActiveOpacity=0.3\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        QJsonObject zones = root.value(QStringLiteral("Zones")).toObject();
+        QCOMPARE(zones.value(QStringLiteral("Padding")).toInt(), 8);
+        QCOMPARE(zones.value(QStringLiteral("OuterGap")).toInt(), 4);
+
+        QJsonObject appearance = root.value(QStringLiteral("Appearance")).toObject();
+        QCOMPARE(appearance.value(QStringLiteral("ActiveOpacity")).toDouble(), 0.3);
+    }
+
+    void testMigrateRootLevelKeys()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("RenderingBackend=vulkan\n"
+                                    "\n"
+                                    "[Activation]\n"
+                                    "SnappingEnabled=true\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        // RenderingBackend should be under "Rendering" group
+        QJsonObject rendering = root.value(QStringLiteral("Rendering")).toObject();
+        QCOMPARE(rendering.value(QStringLiteral("RenderingBackend")).toString(), QStringLiteral("vulkan"));
+    }
+
+    void testMigrateRenderingBackendFromGeneralGroup()
+    {
+        IsolatedConfigGuard guard;
+        // QSettings maps [General]/RenderingBackend identically to ungrouped
+        // RenderingBackend. Both must end up under the "Rendering" group.
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[General]\n"
+                                    "RenderingBackend=vulkan\n"
+                                    "\n"
+                                    "[Activation]\n"
+                                    "SnappingEnabled=true\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        QJsonObject rendering = root.value(QStringLiteral("Rendering")).toObject();
+        QCOMPARE(rendering.value(QStringLiteral("RenderingBackend")).toString(), QStringLiteral("vulkan"));
+
+        // Must NOT be under General
+        QJsonObject general = root.value(QStringLiteral("General")).toObject();
+        QVERIFY2(!general.contains(QStringLiteral("RenderingBackend")),
+                 "RenderingBackend should not remain under General after migration");
+    }
+
+    // =========================================================================
+    // Idempotency
+    // =========================================================================
+
+    void testMigrationDoesNotRunTwice()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Activation]\n"
+                                    "SnappingEnabled=true\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(QFile::exists(ConfigDefaults::configFilePath()));
+
+        // Second call should be a no-op
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+    }
+
+    // =========================================================================
+    // Round-trip with JsonConfigBackend
+    // =========================================================================
+
+    void testMigratedConfigReadableByBackend()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Activation]\n"
+                                    "SnappingEnabled=true\n"
+                                    "\n"
+                                    "[Appearance]\n"
+                                    "HighlightColor=82,148,226,255\n"
+                                    "ActiveOpacity=0.3\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        {
+            auto g = backend->group(QStringLiteral("Activation"));
+            QCOMPARE(g->readBool(QStringLiteral("SnappingEnabled")), true);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Appearance"));
+            QColor c = g->readColor(QStringLiteral("HighlightColor"));
+            QCOMPARE(c.red(), 82);
+            QCOMPARE(c.green(), 148);
+            QCOMPARE(c.blue(), 226);
+            QCOMPARE(g->readDouble(QStringLiteral("ActiveOpacity")), 0.3);
+        }
+    }
+};
+
+QTEST_MAIN(TestConfigMigration)
+#include "test_configmigration.moc"

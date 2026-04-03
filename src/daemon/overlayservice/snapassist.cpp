@@ -40,18 +40,52 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
         return;
     }
 
+    // Parse JSON early — needed for both stale-request check and QML property push.
+    const QVariantList zonesList = parseZonesJson(emptyZonesJson, "showSnapAssist:");
+    QVariantList candidatesList = parseZonesJson(candidatesJson, "showSnapAssist:");
+
+    // Guard against stale snap assist requests from a previous layout.
+    // The KWin effect computes empty zones asynchronously; by the time the D-Bus
+    // request arrives, the layout may have been switched and the zone IDs are no
+    // longer valid. Verify that at least one requested zone exists in the current
+    // layout for the target screen.
+    Layout* currentLayout = resolveScreenLayout(screenId);
+    if (currentLayout) {
+        bool anyValid = false;
+        for (const QVariant& z : zonesList) {
+            const QString zoneId = z.toMap().value(QLatin1String("zoneId")).toString();
+            if (!zoneId.isEmpty() && currentLayout->zoneById(QUuid::fromString(zoneId))) {
+                anyValid = true;
+                break;
+            }
+        }
+        if (!anyValid) {
+            qCInfo(lcOverlay) << "showSnapAssist: stale request — zone IDs do not match current layout"
+                              << currentLayout->name();
+            Q_EMIT snapAssistDismissed();
+            return;
+        }
+    }
+
     // Use virtual screen geometry when available, otherwise physical
     QRect screenGeom = resolveScreenGeometry(screenId);
     if (!screenGeom.isValid()) {
         screenGeom = screen->geometry();
     }
 
-    // Always destroy and recreate to avoid stale QML state (zone sizes wrong after continuation)
-    destroySnapAssistWindow();
-    createSnapAssistWindow(screen);
-    if (!m_snapAssistWindow) {
-        Q_EMIT snapAssistDismissed();
-        return;
+    // Reuse existing visible window when on the same screen (avoids QML compilation +
+    // Wayland surface create/destroy churn during snap assist continuation).
+    // Recreate when the target screen changes, window was closed, or doesn't exist.
+    // Visibility check avoids re-showing a window whose Vulkan swapchain was torn
+    // down by close() — only reuse windows that are still on-screen.
+    const bool reuseWindow = m_snapAssistWindow && m_snapAssistWindow->isVisible() && m_snapAssistScreenId == screenId;
+    if (!reuseWindow) {
+        destroySnapAssistWindow();
+        createSnapAssistWindow(screen);
+        if (!m_snapAssistWindow) {
+            Q_EMIT snapAssistDismissed();
+            return;
+        }
     }
 
     m_snapAssistScreen = screen;
@@ -62,10 +96,6 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     if (auto* selectorWindow = m_zoneSelectorWindows.value(screenId)) {
         selectorWindow->hide();
     }
-
-    // Parse JSON using shared helper (same format: array of objects)
-    const QVariantList zonesList = parseZonesJson(emptyZonesJson, "showSnapAssist:");
-    QVariantList candidatesList = parseZonesJson(candidatesJson, "showSnapAssist:");
 
     // Start async thumbnail capture via KWin ScreenShot2. Overlay shows icons immediately.
     // Requires KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1 when desktop matching fails (local install).
@@ -116,30 +146,41 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
         writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderRadius"), m_settings->borderRadius());
     }
 
-    // Match main overlay: position to cover virtual or physical screen
-    if (!configureLayerSurface(
-            m_snapAssistWindow, screen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityExclusive,
-            QStringLiteral("plasmazones-snap-assist-%1-%2").arg(screenId).arg(++m_scopeGeneration))) {
-        qCWarning(lcOverlay) << "showSnapAssist: failed to configure layer surface";
-        destroySnapAssistWindow();
-        Q_EMIT snapAssistDismissed();
-        return;
+    // Configure layer surface only on fresh creation (not reuse) — reconfiguring
+    // an already-visible layer surface with a new scope is unnecessary and can
+    // confuse KWin's rate-limiting. Size/screen are already correct for reuse.
+    if (reuseWindow) {
+        // Restore exclusive keyboard grab for Escape handling — it was released
+        // in onSnapAssistWindowSelected() to keep the desktop responsive during
+        // the D-Bus roundtrip.
+        if (auto* ls = LayerSurface::find(m_snapAssistWindow)) {
+            ls->setKeyboardInteractivity(LayerSurface::KeyboardInteractivityExclusive);
+        }
+    } else {
+        if (!configureLayerSurface(
+                m_snapAssistWindow, screen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityExclusive,
+                QStringLiteral("plasmazones-snap-assist-%1-%2").arg(screenId).arg(++m_scopeGeneration))) {
+            qCWarning(lcOverlay) << "showSnapAssist: failed to configure layer surface";
+            destroySnapAssistWindow();
+            Q_EMIT snapAssistDismissed();
+            return;
+        }
+        // Apply virtual screen positioning (anchors + margins) after configureLayerSurface
+        updateWindowScreenPosition(m_snapAssistWindow, screenId);
     }
-    // Apply virtual screen positioning (anchors + margins) after configureLayerSurface
-    updateWindowScreenPosition(m_snapAssistWindow, screenId);
 
-    assertWindowOnScreen(m_snapAssistWindow, screen, screenGeom);
-    // Size only — position is controlled by layer-surface anchors + margins,
-    // setX/setY are no-ops on layer surfaces.
-    m_snapAssistWindow->setWidth(screenGeom.width());
-    m_snapAssistWindow->setHeight(screenGeom.height());
+    if (!reuseWindow) {
+        assertWindowOnScreen(m_snapAssistWindow, screen, screenGeom);
+        m_snapAssistWindow->setWidth(screenGeom.width());
+        m_snapAssistWindow->setHeight(screenGeom.height());
+    }
     m_snapAssistWindow->show();
     // Ensure the window receives keyboard focus for Escape handling on Wayland.
     // KeyboardInteractivityExclusive tells the compositor to send keyboard events,
     // but Qt may not set internal focus without an explicit activation request.
     m_snapAssistWindow->requestActivate();
     qCInfo(lcOverlay) << "showSnapAssist: screen=" << screenId << "zones=" << zonesList.size()
-                      << "candidates=" << candidatesList.size();
+                      << "candidates=" << candidatesList.size() << "reuse=" << reuseWindow;
 
     Q_EMIT snapAssistShown(screenId, emptyZonesJson, candidatesJson);
 }
@@ -248,7 +289,7 @@ void OverlayService::createSnapAssistWindow(QScreen* physScreen)
         m_snapAssistScreenId.clear();
     });
 
-    // Emit snapAssistDismissed when the window is closed by QML (user selection, backdrop click, Escape)
+    // Emit snapAssistDismissed when the window is closed by QML (backdrop click, Escape)
     connect(window, &QWindow::visibleChanged, this, [this](bool visible) {
         if (!visible) {
             Q_EMIT snapAssistDismissed();
@@ -289,6 +330,15 @@ void OverlayService::destroySnapAssistWindow()
 void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId,
                                                 const QString& geometryJson)
 {
+    // Release exclusive keyboard grab immediately so the desktop remains
+    // responsive while the D-Bus roundtrip to KWin processes the snap.
+    // The window stays visible for potential reuse by showSnapAssist() continuation.
+    if (m_snapAssistWindow) {
+        if (auto* ls = LayerSurface::find(m_snapAssistWindow)) {
+            ls->setKeyboardInteractivity(LayerSurface::KeyboardInteractivityNone);
+        }
+    }
+
     // Use the virtual-aware screen ID stored when snap assist was shown
     QString screenId = m_snapAssistScreenId;
     if (screenId.isEmpty() && m_snapAssistScreen) {

@@ -14,10 +14,10 @@ namespace TestHelpers {
 /**
  * @brief RAII guard that isolates both config and data directories for tests.
  *
- * Sets XDG_CONFIG_HOME and XDG_DATA_HOME so that QSettings (via
- * QSettingsConfigBackend::createDefault()) and QStandardPaths::GenericDataLocation
- * resolve inside a temporary directory instead of the real user directories
- * (~/.config, ~/.local/share).
+ * Sets XDG_CONFIG_HOME and XDG_DATA_HOME so that config backends
+ * (createDefaultConfigBackend() / QSettingsConfigBackend::createDefault())
+ * and QStandardPaths::GenericDataLocation resolve inside a temporary directory
+ * instead of the real user directories (~/.config, ~/.local/share).
  *
  * This prevents tests from polluting the user's install with layout files,
  * shader presets, or other data written via QStandardPaths.
@@ -26,7 +26,7 @@ class IsolatedConfigGuard
 {
 public:
     IsolatedConfigGuard()
-        : m_configFileName(QStringLiteral("plasmazonesrc-") + QUuid::createUuid().toString(QUuid::Id128).left(8))
+        : m_configFileName(QStringLiteral("config-") + QUuid::createUuid().toString(QUuid::Id128).left(8))
     {
         QVERIFY2(m_tempDir.isValid(), "Failed to create temporary directory for isolated config");
         m_oldConfigHome = qEnvironmentVariable("XDG_CONFIG_HOME");
@@ -64,7 +64,7 @@ public:
     /**
      * A unique config file name for this guard instance.
      *
-     * Use this instead of the hardcoded "plasmazonesrc" when possible, so each
+     * Use this instead of a hardcoded config file name when possible, so each
      * test gets its own config file within the temporary directory.
      */
     QString configFileName() const

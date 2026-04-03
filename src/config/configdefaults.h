@@ -541,10 +541,14 @@ public:
     // Config Path
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // Returns the absolute path to plasmazonesrc.
+    // Returns the absolute path to config.json.
     // Not cached — QStandardPaths respects $XDG_CONFIG_HOME changes at runtime,
     // which tests rely on via IsolatedConfigGuard.
     PLASMAZONES_EXPORT static QString configFilePath();
+
+    // Returns the absolute path to the legacy plasmazonesrc file (INI format).
+    // Used only by the one-time migration module.
+    PLASMAZONES_EXPORT static QString legacyConfigFilePath();
 
     /**
      * Read the rendering backend from the config file on disk.

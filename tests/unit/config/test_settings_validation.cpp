@@ -21,7 +21,7 @@
 
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
-#include "../../../src/config/configbackend_qsettings.h"
+#include "../../../src/config/configbackend_json.h"
 #include "../../../src/core/constants.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
@@ -47,7 +47,7 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         {
-            auto backend = QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             auto zones = backend->group(QStringLiteral("Zones"));
             zones->writeInt(QStringLiteral("Padding"), 999); // max is 50
             zones.reset();
@@ -71,7 +71,7 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         {
-            auto backend = QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             auto appearance = backend->group(QStringLiteral("Appearance"));
             appearance->writeString(QStringLiteral("HighlightColor"), QStringLiteral("not-a-color"));
             appearance.reset();
@@ -96,7 +96,7 @@ private Q_SLOTS:
 
         // parseTriggerListJson is a static method, test it through config
         {
-            auto backend = QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             auto activation = backend->group(QStringLiteral("Activation"));
             // Write invalid JSON as the trigger list
             activation->writeString(QStringLiteral("DragActivationTriggers"), QStringLiteral("{broken json["));
@@ -133,7 +133,7 @@ private Q_SLOTS:
         QString json = QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
 
         {
-            auto backend = QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             auto activation = backend->group(QStringLiteral("Activation"));
             activation->writeString(QStringLiteral("DragActivationTriggers"), json);
             activation.reset();

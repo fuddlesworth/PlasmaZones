@@ -499,7 +499,7 @@ plasmazones-settings --page tiling-behavior  # opens to tiling behavior page
 
 The app is single-instance — launching it again while running raises the existing window and switches to the requested page.
 
-Settings stored in `~/.config/plasmazonesrc`. Layouts stored as JSON in `~/.local/share/plasmazones/layouts/`.
+Settings stored in `~/.config/plasmazones/config.json`. Layouts stored as JSON in `~/.local/share/plasmazones/layouts/`.
 
 ---
 

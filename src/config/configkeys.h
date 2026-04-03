@@ -38,6 +38,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_GROUP(generalGroup, "General")
+    PZ_CONFIG_GROUP(renderingGroup, "Rendering")
     PZ_CONFIG_GROUP(activationGroup, "Activation")
     PZ_CONFIG_GROUP(displayGroup, "Display")
     PZ_CONFIG_GROUP(appearanceGroup, "Appearance")
@@ -63,7 +64,7 @@ public:
     PZ_CONFIG_KEY(triggerMouseButtonField, "mouseButton")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — General
+    // Config Keys — Rendering
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(renderingBackendKey, "RenderingBackend")

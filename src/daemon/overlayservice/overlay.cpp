@@ -89,6 +89,20 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             }
 
             const QRect geom = mgr->screenGeometry(screenId);
+
+            // Type-mismatch check: non-shader windows survive hide() and may be
+            // stale if shader settings changed while the overlay was hidden.
+            // Destroy and recreate if the window type no longer matches.
+            if (m_overlayWindows.contains(screenId)) {
+                auto* existing = m_overlayWindows.value(screenId);
+                if (existing) {
+                    const bool windowIsShader = existing->property("isShaderOverlay").toBool();
+                    const bool shouldUseShader = useShaderForScreen(physScreen);
+                    if (windowIsShader != shouldUseShader) {
+                        destroyOverlayWindow(screenId);
+                    }
+                }
+            }
             if (!m_overlayWindows.contains(screenId)) {
                 createOverlayWindow(screenId, physScreen, geom);
             }
@@ -117,6 +131,18 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             }
 
             const QString screenId = Utils::screenIdentifier(screen);
+
+            // Type-mismatch check for physical screen fallback path
+            if (m_overlayWindows.contains(screenId)) {
+                auto* existing = m_overlayWindows.value(screenId);
+                if (existing) {
+                    const bool windowIsShader = existing->property("isShaderOverlay").toBool();
+                    const bool shouldUseShader = useShaderForScreen(screen);
+                    if (windowIsShader != shouldUseShader) {
+                        destroyOverlayWindow(screenId);
+                    }
+                }
+            }
             if (!m_overlayWindows.contains(screenId)) {
                 createOverlayWindow(screen);
             }
@@ -128,20 +154,10 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
                                    << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
                 updateOverlayWindow(screen);
                 window->show();
-                // On Vulkan, window->hide() destroys the swapchain and the scene graph
-                // becomes inactive. Property writes (e.g. shaderSource) while hidden queue
-                // update() requests that are lost when the scene graph reinitializes on
-                // show(). Force a content update after show so the scene graph renders.
                 window->update();
             }
         }
     }
-
-    // Type-mismatch recreation is not needed here: hide() destroys all overlay
-    // windows, so initializeOverlay() always creates fresh windows with the
-    // correct type. The old check compared isShaderOverlay against useShaderForScreen()
-    // and recreated on mismatch, but could trigger runaway loops when both evaluations
-    // raced during window setup.
 
     if (anyScreenUsesShader()) {
         updateZonesForAllWindows(); // Push initial zone data
@@ -451,6 +467,25 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
     if (wasVisible && anyScreenUsesShader()) {
         updateZonesForAllWindows();
         startShaderAnimation();
+    }
+}
+
+void OverlayService::dismissOverlayWindow(QScreen* screen)
+{
+    const QString screenId = Utils::screenIdentifier(screen);
+    auto* window = m_overlayWindows.value(screenId);
+    if (!window) {
+        return;
+    }
+    // Shader overlays: must destroy — QSGRenderNode Vulkan pipelines are tied
+    // to the per-window QRhi which gets invalidated when hide() tears down the
+    // wl_surface and show() creates a new one.
+    // Non-shader overlays: hide() is safe — standard QML items recover from
+    // scene graph pause/resume, avoiding Vulkan surface create/destroy churn.
+    if (window->property("isShaderOverlay").toBool()) {
+        destroyOverlayWindow(screenId);
+    } else {
+        window->hide();
     }
 }
 

@@ -4,7 +4,7 @@
 #include "settings.h"
 #include "colorimporter.h"
 #include "configdefaults.h"
-#include "configbackend_qsettings.h"
+#include "iconfigbackend.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
@@ -26,13 +26,13 @@ namespace PlasmaZones {
 
 Settings::Settings(QObject* parent)
     : ISettings(parent)
-    , m_ownedBackend(QSettingsConfigBackend::createDefault())
+    , m_ownedBackend(createDefaultConfigBackend())
     , m_configBackend(m_ownedBackend.get())
 {
     load();
 }
 
-Settings::Settings(QSettingsConfigBackend* backend, QObject* parent)
+Settings::Settings(IConfigBackend* backend, QObject* parent)
     : ISettings(parent)
     , m_configBackend(backend)
 {
@@ -54,7 +54,7 @@ QString Settings::normalizeUuidString(const QString& uuidStr)
     return uuid.toString();
 }
 
-int Settings::readValidatedInt(QSettingsConfigGroup& group, const QString& key, int defaultValue, int min, int max,
+int Settings::readValidatedInt(IConfigGroup& group, const QString& key, int defaultValue, int min, int max,
                                const char* settingName)
 {
     int value = group.readInt(key, defaultValue);
@@ -66,7 +66,7 @@ int Settings::readValidatedInt(QSettingsConfigGroup& group, const QString& key, 
     return value;
 }
 
-QColor Settings::readValidatedColor(QSettingsConfigGroup& group, const QString& key, const QColor& defaultValue,
+QColor Settings::readValidatedColor(IConfigGroup& group, const QString& key, const QColor& defaultValue,
                                     const char* settingName)
 {
     QColor color = group.readColor(key, defaultValue);
@@ -77,7 +77,7 @@ QColor Settings::readValidatedColor(QSettingsConfigGroup& group, const QString& 
     return color;
 }
 
-void Settings::loadIndexedShortcuts(QSettingsConfigGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
+void Settings::loadIndexedShortcuts(IConfigGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
                                     const QString (&defaults)[9])
 {
     for (int i = 0; i < 9; ++i) {
@@ -116,7 +116,7 @@ std::optional<QVariantList> Settings::parseTriggerListJson(const QString& json)
     return result; // May be empty (valid [] means no triggers)
 }
 
-void Settings::saveTriggerList(QSettingsConfigGroup& group, const QString& key, const QVariantList& triggers)
+void Settings::saveTriggerList(IConfigGroup& group, const QString& key, const QVariantList& triggers)
 {
     QJsonArray arr;
     for (const QVariant& t : triggers) {
@@ -167,12 +167,12 @@ void Settings::load()
     loadPerScreenOverrides(m_configBackend);
     loadVirtualScreenConfigs(m_configBackend);
 
-    // Rendering backend — stored at root level (ungrouped, before any [Section]).
-    // Read through the config backend (which just reparsed fresh from disk)
-    // rather than readRenderingBackendFromDisk() which creates a separate
-    // QSettings(IniFormat) instance subject to Qt's global QConfFile cache.
-    m_renderingBackend = ConfigDefaults::normalizeRenderingBackend(
-        m_configBackend->readRootString(ConfigDefaults::renderingBackendKey(), ConfigDefaults::renderingBackend()));
+    // Rendering backend
+    {
+        auto rendering = m_configBackend->group(ConfigDefaults::renderingGroup());
+        m_renderingBackend = ConfigDefaults::normalizeRenderingBackend(
+            rendering->readString(ConfigDefaults::renderingBackendKey(), ConfigDefaults::renderingBackend()));
+    }
 
     // Shaders (small enough to stay inline)
     {
@@ -270,14 +270,11 @@ QStringList Settings::managedGroupNames()
     };
 }
 
-void Settings::deletePerScreenGroups(QSettingsConfigBackend* backend)
+void Settings::deletePerScreenGroups(IConfigBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
     for (const QString& groupName : allGroups) {
-        if (groupName.startsWith(ConfigDefaults::zoneSelectorGroupPrefix())
-            || groupName.startsWith(ConfigDefaults::autotileScreenGroupPrefix())
-            || groupName.startsWith(ConfigDefaults::snappingScreenGroupPrefix())
-            || groupName.startsWith(ConfigDefaults::virtualScreenGroupPrefix())) {
+        if (isPerScreenPrefix(groupName) || groupName.startsWith(ConfigDefaults::virtualScreenGroupPrefix())) {
             backend->deleteGroup(groupName);
         }
     }
@@ -337,8 +334,11 @@ void Settings::save()
         saveEditorConfig(*editor);
     }
 
-    // Rendering backend at root level (ungrouped, before any [Section] header)
-    m_configBackend->writeRootString(ConfigDefaults::renderingBackendKey(), m_renderingBackend);
+    // Rendering backend
+    {
+        auto rendering = m_configBackend->group(ConfigDefaults::renderingGroup());
+        rendering->writeString(ConfigDefaults::renderingBackendKey(), m_renderingBackend);
+    }
 
     // Shader Effects
     {

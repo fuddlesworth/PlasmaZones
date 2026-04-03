@@ -5,6 +5,7 @@
 
 #include <QObject>
 #include <QGuiApplication>
+#include <QElapsedTimer>
 #include <QTimer>
 #include <QHash>
 #include <QRect>
@@ -39,7 +40,7 @@ class UnifiedLayoutController;
 class AutotileAdaptor;
 class AutotileEngine;
 class IWindowEngine;
-class QSettingsConfigBackend;
+class IConfigBackend;
 class ScriptedAlgorithmLoader;
 class SnapAdaptor;
 class SnapEngine;
@@ -288,7 +289,7 @@ private:
      */
     void syncModeFromAssignments();
 
-    std::unique_ptr<QSettingsConfigBackend> m_configBackend;
+    std::unique_ptr<IConfigBackend> m_configBackend;
     std::unique_ptr<LayoutManager> m_layoutManager;
     std::unique_ptr<Settings> m_settings;
     std::unique_ptr<ZoneDetector> m_zoneDetector;
@@ -337,6 +338,14 @@ private:
 
     bool m_running = false;
     int m_suppressResnapOsd = 0;
+
+    // Debounce timers for shortcuts that generate expensive work (Vulkan surface
+    // creation, geometry batches, OSD churn) when triggered faster than ~100ms
+    // by keyboard auto-repeat. Checked at the top of each handler.
+    static constexpr int kShortcutDebounceMs = 100;
+    QElapsedTimer m_rotateDebounce;
+    QElapsedTimer m_floatDebounce;
+    QElapsedTimer m_cycleLayoutDebounce;
 
     // Last autotile window order per (screen, desktop, activity), captured when
     // leaving autotile. Used to re-seed the autotile engine with the same order

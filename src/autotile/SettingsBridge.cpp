@@ -14,7 +14,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalBlocker>
-#include "config/configbackend_qsettings.h"
+#include "config/iconfigbackend.h"
 
 namespace PlasmaZones {
 
@@ -36,7 +36,7 @@ void populatePreviewSavedSettings(AlgorithmRegistry::PreviewParams& params,
 }
 } // anonymous namespace
 
-SettingsBridge::SettingsBridge(AutotileEngine* engine, QSettingsConfigBackend* configBackend)
+SettingsBridge::SettingsBridge(AutotileEngine* engine, IConfigBackend* configBackend)
     : m_engine(engine)
     , m_configBackend(configBackend)
 {
@@ -364,8 +364,8 @@ void SettingsBridge::syncShortcutAdjustment(qreal splitRatio, int masterCount)
 
 void SettingsBridge::saveState()
 {
-    std::unique_ptr<QSettingsConfigBackend> fallback;
-    QSettingsConfigBackend* backend = QSettingsConfigBackend::resolveBackend(m_configBackend, fallback);
+    std::unique_ptr<IConfigBackend> fallback;
+    IConfigBackend* backend = resolveBackend(m_configBackend, fallback);
     auto group = backend->group(QStringLiteral("AutoTileState"));
 
     // Save global state (algorithm only — autotile screens are derived from
@@ -402,8 +402,8 @@ void SettingsBridge::saveState()
 
 void SettingsBridge::loadState()
 {
-    std::unique_ptr<QSettingsConfigBackend> fallback;
-    QSettingsConfigBackend* backend = QSettingsConfigBackend::resolveBackend(m_configBackend, fallback);
+    std::unique_ptr<IConfigBackend> fallback;
+    IConfigBackend* backend = resolveBackend(m_configBackend, fallback);
     auto group = backend->group(QStringLiteral("AutoTileState"));
 
     if (!group->hasKey(QStringLiteral("algorithm")) && !group->hasKey(QStringLiteral("screenStates"))) {

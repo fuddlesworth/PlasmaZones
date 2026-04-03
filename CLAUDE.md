@@ -77,7 +77,7 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 ## Settings
 
 ### Architecture
-- `ISettings` interface → `Settings` class → `IConfigBackend` (pluggable, default: QSettings → `~/.config/plasmazonesrc`)
+- `ISettings` interface → `Settings` class → `IConfigBackend` (pluggable, default: JSON → `~/.config/plasmazones/config.json`)
 - `ConfigDefaults` for all default values; `.kcfg` schema is KCM-only
 - Editor settings: separate, in `EditorController` (separate process)
 

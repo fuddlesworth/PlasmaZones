@@ -231,9 +231,13 @@ void OverlayService::updateShaderUniforms()
         updateZonesForAllWindows();
     }
 
-    // Update ALL shader overlay windows with synchronized time
-    for (auto* window : std::as_const(m_overlayWindows)) {
-        if (window) {
+    // Update visible shader overlay windows with synchronized time.
+    // Skip hidden non-shader windows kept alive across hide/show cycles —
+    // they don't have iTime/iFrame properties and writing to hidden windows
+    // is wasted work (60Hz property writes silently dropped by QML).
+    for (auto it = m_overlayWindows.cbegin(); it != m_overlayWindows.cend(); ++it) {
+        auto* window = it.value();
+        if (window && window->isVisible()) {
             writeQmlProperty(window, QStringLiteral("iTime"), static_cast<qreal>(iTime));
             writeQmlProperty(window, QStringLiteral("iTimeDelta"), static_cast<qreal>(iTimeDelta));
             writeQmlProperty(window, QStringLiteral("iFrame"), frame);

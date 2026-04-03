@@ -47,7 +47,7 @@ public:
         }
     }
 
-    /// Save current state to JSON (simulates plasmazonesrc)
+    /// Save current state to JSON (simulates config.json)
     QString saveStateToJson()
     {
         QJsonObject root;

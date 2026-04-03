@@ -18,6 +18,7 @@
 #include <QSignalSpy>
 
 #include "../../../src/config/configdefaults.h"
+#include "../../../src/config/iconfigbackend.h"
 #include "../../../src/config/settings.h"
 #include "../../../src/core/virtualscreen.h"
 #include "../helpers/IsolatedConfigGuard.h"
@@ -174,7 +175,7 @@ private Q_SLOTS:
 
         // Manually write an invalid config to the backend
         {
-            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             auto group = backend->group(ConfigDefaults::virtualScreenGroupPrefix() + physId);
             group->writeInt(ConfigDefaults::virtualScreenCountKey(), 2);
 
@@ -212,7 +213,7 @@ private Q_SLOTS:
         const QString physId = QStringLiteral("test:negative");
 
         {
-            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             auto group = backend->group(ConfigDefaults::virtualScreenGroupPrefix() + physId);
             group->writeInt(ConfigDefaults::virtualScreenCountKey(), 1);
             group->writeString(QStringLiteral("0/") + ConfigDefaults::virtualScreenNameKey(), QStringLiteral("Bad"));
@@ -239,7 +240,7 @@ private Q_SLOTS:
         const QString physId = QStringLiteral("test:zerocount");
 
         {
-            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             auto group = backend->group(ConfigDefaults::virtualScreenGroupPrefix() + physId);
             group->writeInt(ConfigDefaults::virtualScreenCountKey(), 0);
             group.reset();
@@ -440,7 +441,7 @@ private Q_SLOTS:
 
         // Write a 3-screen config directly to the backend: 2 valid + 1 invalid
         {
-            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             auto group = backend->group(ConfigDefaults::virtualScreenGroupPrefix() + physId);
             group->writeInt(ConfigDefaults::virtualScreenCountKey(), 3);
 
@@ -496,7 +497,7 @@ private Q_SLOTS:
         const QString physId = QStringLiteral("test:max-count");
 
         {
-            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             auto group = backend->group(ConfigDefaults::virtualScreenGroupPrefix() + physId);
             group->writeInt(ConfigDefaults::virtualScreenCountKey(), 11);
 

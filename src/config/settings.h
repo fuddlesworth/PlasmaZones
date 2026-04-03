@@ -7,7 +7,7 @@
 #include "../core/constants.h"
 #include "../core/virtualscreen.h"
 #include "configdefaults.h"
-#include "configbackend_qsettings.h"
+#include "iconfigbackend.h"
 #include <memory>
 #include <optional>
 #include <QFont>
@@ -19,7 +19,7 @@ namespace PlasmaZones {
 /**
  * @brief Global settings for PlasmaZones
  *
- * Implements the ISettings interface with QSettingsConfigBackend persistence.
+ * Implements the ISettings interface with IConfigBackend persistence.
  * Supports ricer-friendly customization with color themes, opacity,
  * and integration with system color schemes.
  *
@@ -37,14 +37,14 @@ public:
     /**
      * @brief Construct with an external (non-owned) config backend
      *
-     * Used by the daemon to share a single QSettingsConfigBackend across
+     * Used by the daemon to share a single IConfigBackend across
      * Settings, LayoutManager, and other components. Eliminates Qt's
      * QConfFile cache conflicts from multiple QSettings instances per file.
      *
      * @param backend Non-owned backend pointer (must outlive this Settings)
      * @param parent Parent QObject
      */
-    Settings(QSettingsConfigBackend* backend, QObject* parent);
+    Settings(IConfigBackend* backend, QObject* parent);
 
     // Activation settings
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
@@ -1414,7 +1414,7 @@ public:
     void setToggleLayoutLockShortcut(const QString& shortcut);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Editor Settings (shared [Editor] group in plasmazonesrc)
+    // Editor Settings (shared [Editor] group in config.json)
     // ═══════════════════════════════════════════════════════════════════════════
 
     QString editorDuplicateShortcut() const
@@ -1511,7 +1511,7 @@ private:
 
     /**
      * @brief Read and validate an integer from config with bounds checking
-     * @param group QSettingsConfigGroup to read from
+     * @param group IConfigGroup to read from
      * @param key Config key name
      * @param defaultValue Default if not found or invalid
      * @param min Minimum valid value
@@ -1519,28 +1519,28 @@ private:
      * @param settingName Human-readable name for warning messages
      * @return Validated integer value
      */
-    int readValidatedInt(QSettingsConfigGroup& group, const QString& key, int defaultValue, int min, int max,
+    int readValidatedInt(IConfigGroup& group, const QString& key, int defaultValue, int min, int max,
                          const char* settingName);
 
     /**
      * @brief Read and validate a color from config
-     * @param group QSettingsConfigGroup to read from
+     * @param group IConfigGroup to read from
      * @param key Config key name
      * @param defaultValue Default if not found or invalid
      * @param settingName Human-readable name for warning messages
      * @return Validated QColor value
      */
-    QColor readValidatedColor(QSettingsConfigGroup& group, const QString& key, const QColor& defaultValue,
+    QColor readValidatedColor(IConfigGroup& group, const QString& key, const QColor& defaultValue,
                               const char* settingName);
 
     /**
      * @brief Load indexed shortcuts (1-9) from config group
-     * @param group QSettingsConfigGroup to read from
+     * @param group IConfigGroup to read from
      * @param keyPattern Pattern with %1 placeholder (e.g., "QuickLayout%1Shortcut")
      * @param shortcuts Array of 9 QString to populate
      * @param defaults Array of 9 default values
      */
-    void loadIndexedShortcuts(QSettingsConfigGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
+    void loadIndexedShortcuts(IConfigGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
                               const QString (&defaults)[9]);
 
     /**
@@ -1552,11 +1552,11 @@ private:
 
     /**
      * @brief Save a trigger list to config as compact JSON
-     * @param group QSettingsConfigGroup to write to
+     * @param group IConfigGroup to write to
      * @param key Config key for the JSON trigger list
      * @param triggers The trigger list to serialize
      */
-    static void saveTriggerList(QSettingsConfigGroup& group, const QString& key, const QVariantList& triggers);
+    static void saveTriggerList(IConfigGroup& group, const QString& key, const QVariantList& triggers);
 
     /** @brief Shared dispatcher for indexed shortcut arrays (quick-layout, snap-to-zone) */
     using ShortcutSignalFn = void (Settings::*)();
@@ -1564,41 +1564,41 @@ private:
                             const ShortcutSignalFn (&signals)[9]);
 
     // ─── load() helpers (decomposed for SRP) ─────────────────────────────
-    void loadActivationConfig(QSettingsConfigGroup& activation);
-    void loadDisplayConfig(QSettingsConfigGroup& display);
-    void loadAppearanceConfig(QSettingsConfigGroup& appearance);
-    void loadZoneGeometryConfig(QSettingsConfigGroup& zones);
-    void loadBehaviorConfig(QSettingsConfigBackend* backend);
-    void loadZoneSelectorConfig(QSettingsConfigGroup& zoneSelector);
-    void loadPerScreenOverrides(QSettingsConfigBackend* backend);
-    void loadShortcutConfig(QSettingsConfigGroup& globalShortcuts);
-    void loadAutotilingConfig(QSettingsConfigBackend* backend);
-    void loadEditorConfig(QSettingsConfigGroup& editor);
-    void loadVirtualScreenConfigs(QSettingsConfigBackend* backend);
+    void loadActivationConfig(IConfigGroup& activation);
+    void loadDisplayConfig(IConfigGroup& display);
+    void loadAppearanceConfig(IConfigGroup& appearance);
+    void loadZoneGeometryConfig(IConfigGroup& zones);
+    void loadBehaviorConfig(IConfigBackend* backend);
+    void loadZoneSelectorConfig(IConfigGroup& zoneSelector);
+    void loadPerScreenOverrides(IConfigBackend* backend);
+    void loadShortcutConfig(IConfigGroup& globalShortcuts);
+    void loadAutotilingConfig(IConfigBackend* backend);
+    void loadEditorConfig(IConfigGroup& editor);
+    void loadVirtualScreenConfigs(IConfigBackend* backend);
 
     // ─── save() helpers (decomposed for SRP) ────────────────────────────
-    void saveActivationConfig(QSettingsConfigGroup& activation);
-    void saveDisplayConfig(QSettingsConfigGroup& display);
-    void saveAppearanceConfig(QSettingsConfigGroup& appearance);
-    void saveZoneGeometryConfig(QSettingsConfigGroup& zones);
-    void saveBehaviorConfig(QSettingsConfigBackend* backend);
-    void saveZoneSelectorConfig(QSettingsConfigGroup& zoneSelector);
-    void saveAllPerScreenOverrides(QSettingsConfigBackend* backend);
-    void saveShortcutConfig(QSettingsConfigGroup& globalShortcuts);
-    void saveAutotilingConfig(QSettingsConfigBackend* backend);
-    void saveEditorConfig(QSettingsConfigGroup& editor);
-    void saveVirtualScreenConfigs(QSettingsConfigBackend* backend);
+    void saveActivationConfig(IConfigGroup& activation);
+    void saveDisplayConfig(IConfigGroup& display);
+    void saveAppearanceConfig(IConfigGroup& appearance);
+    void saveZoneGeometryConfig(IConfigGroup& zones);
+    void saveBehaviorConfig(IConfigBackend* backend);
+    void saveZoneSelectorConfig(IConfigGroup& zoneSelector);
+    void saveAllPerScreenOverrides(IConfigBackend* backend);
+    void saveShortcutConfig(IConfigGroup& globalShortcuts);
+    void saveAutotilingConfig(IConfigBackend* backend);
+    void saveEditorConfig(IConfigGroup& editor);
+    void saveVirtualScreenConfigs(IConfigBackend* backend);
 
     // Groups that save() writes exhaustively (excludes unmanaged groups).
     static QStringList managedGroupNames();
     // Delete all per-screen override groups (ZoneSelector:*, AutotileScreen:*, SnappingScreen:*).
-    static void deletePerScreenGroups(QSettingsConfigBackend* backend);
+    static void deletePerScreenGroups(IConfigBackend* backend);
     // Purge stale keys from all managed groups before save() rewrites them.
     void purgeStaleKeys();
 
     // Config backend — owned (standalone) or non-owned (shared from Daemon)
-    std::unique_ptr<QSettingsConfigBackend> m_ownedBackend;
-    QSettingsConfigBackend* m_configBackend = nullptr; // always valid after construction
+    std::unique_ptr<IConfigBackend> m_ownedBackend;
+    IConfigBackend* m_configBackend = nullptr; // always valid after construction
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Activation
@@ -1828,7 +1828,7 @@ private:
     // Toggle Layout Lock (Meta+Ctrl+L)
     QString m_toggleLayoutLockShortcut = ConfigDefaults::toggleLayoutLockShortcut();
 
-    // Editor Settings ([Editor] group in plasmazonesrc)
+    // Editor Settings ([Editor] group in config.json)
     QString m_editorDuplicateShortcut = ConfigDefaults::editorDuplicateShortcut();
     QString m_editorSplitHorizontalShortcut = ConfigDefaults::editorSplitHorizontalShortcut();
     QString m_editorSplitVerticalShortcut = ConfigDefaults::editorSplitVerticalShortcut();

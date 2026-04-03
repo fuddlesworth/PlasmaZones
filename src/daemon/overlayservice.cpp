@@ -532,8 +532,7 @@ Layout* OverlayService::resolveScreenLayout(const QString& screenId) const
 void OverlayService::hideDisabledAndRefresh()
 {
     // Destroy windows on screens where the current context is disabled.
-    // Must destroy (not just hide) because on Vulkan, hide() destroys the
-    // VkSwapchainKHR and Qt doesn't reinitialize it on re-show.
+    // Destroy (not hide) to free GPU resources for permanently inactive contexts.
     if (m_settings) {
         {
             const QStringList selectorScreenIds = m_zoneSelectorWindows.keys();

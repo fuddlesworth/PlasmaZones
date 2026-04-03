@@ -9,7 +9,9 @@
 #include "../helpers/SettingsDbusQueries.h"
 
 #include "pz_i18n.h"
-#include "../../config/configbackend_qsettings.h"
+#include "../../config/configdefaults.h"
+#include "../../config/configmigration.h"
+#include "../../config/iconfigbackend.h"
 #include <QRegularExpression>
 
 namespace PlasmaZones {
@@ -109,7 +111,11 @@ void EditorController::setDefaultZoneColors(const QString& highlightColor, const
 
 void EditorController::loadEditorSettings()
 {
-    auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+    // Ensure INI→JSON migration has run (the daemon does this too, but the
+    // editor may start before the daemon on first upgrade).
+    PlasmaZones::ConfigMigration::ensureJsonConfig();
+
+    auto backend = PlasmaZones::createDefaultConfigBackend();
 
     // Note: Per-layout zonePadding/outerGap overrides are loaded from the layout JSON
     // in loadLayout(). The global settings are cached here for performance (avoids D-Bus calls).
@@ -119,26 +125,35 @@ void EditorController::loadEditorSettings()
 
     // Load label font settings from global Appearance config (read-only in editor)
     {
-        auto appearanceGroup = backend->group(QStringLiteral("Appearance"));
-        m_labelFontFamily = appearanceGroup->readString(QStringLiteral("LabelFontFamily"));
-        m_labelFontSizeScale =
-            qBound(0.25, appearanceGroup->readDouble(QStringLiteral("LabelFontSizeScale"), 1.0), 3.0);
-        m_labelFontWeight = appearanceGroup->readInt(QStringLiteral("LabelFontWeight"), 700);
-        m_labelFontItalic = appearanceGroup->readBool(QStringLiteral("LabelFontItalic"), false);
-        m_labelFontUnderline = appearanceGroup->readBool(QStringLiteral("LabelFontUnderline"), false);
-        m_labelFontStrikeout = appearanceGroup->readBool(QStringLiteral("LabelFontStrikeout"), false);
+        auto appearanceGroup = backend->group(ConfigDefaults::appearanceGroup());
+        m_labelFontFamily = appearanceGroup->readString(ConfigDefaults::labelFontFamilyKey());
+        m_labelFontSizeScale = qBound(
+            ConfigDefaults::labelFontSizeScaleMin(),
+            appearanceGroup->readDouble(ConfigDefaults::labelFontSizeScaleKey(), ConfigDefaults::labelFontSizeScale()),
+            ConfigDefaults::labelFontSizeScaleMax());
+        m_labelFontWeight =
+            appearanceGroup->readInt(ConfigDefaults::labelFontWeightKey(), ConfigDefaults::labelFontWeight());
+        m_labelFontItalic =
+            appearanceGroup->readBool(ConfigDefaults::labelFontItalicKey(), ConfigDefaults::labelFontItalic());
+        m_labelFontUnderline =
+            appearanceGroup->readBool(ConfigDefaults::labelFontUnderlineKey(), ConfigDefaults::labelFontUnderline());
+        m_labelFontStrikeout =
+            appearanceGroup->readBool(ConfigDefaults::labelFontStrikeoutKey(), ConfigDefaults::labelFontStrikeout());
     }
 
-    auto editorGroup = backend->group(QStringLiteral("Editor"));
+    auto editorGroup = backend->group(ConfigDefaults::editorGroup());
 
     // Load snapping settings (backward compatible with single SnapInterval)
-    bool gridEnabled = editorGroup->readBool(QStringLiteral("GridSnappingEnabled"), true);
-    bool edgeEnabled = editorGroup->readBool(QStringLiteral("EdgeSnappingEnabled"), true);
+    bool gridEnabled = editorGroup->readBool(ConfigDefaults::editorGridSnappingEnabledKey(),
+                                             ConfigDefaults::editorGridSnappingEnabled());
+    bool edgeEnabled = editorGroup->readBool(ConfigDefaults::editorEdgeSnappingEnabledKey(),
+                                             ConfigDefaults::editorEdgeSnappingEnabled());
 
     // Try to load separate X and Y intervals, fall back to single interval for backward compatibility
-    qreal snapIntX = editorGroup->readDouble(QStringLiteral("SnapIntervalX"), -1.0);
-    qreal snapIntY = editorGroup->readDouble(QStringLiteral("SnapIntervalY"), -1.0);
-    qreal snapInt = editorGroup->readDouble(QStringLiteral("SnapInterval"), EditorConstants::DefaultSnapInterval);
+    qreal snapIntX = editorGroup->readDouble(ConfigDefaults::editorSnapIntervalXKey(), -1.0);
+    qreal snapIntY = editorGroup->readDouble(ConfigDefaults::editorSnapIntervalYKey(), -1.0);
+    qreal snapInt =
+        editorGroup->readDouble(ConfigDefaults::editorSnapIntervalKey(), EditorConstants::DefaultSnapInterval);
 
     // If separate intervals not found, use the single interval for both
     if (snapIntX < 0.0)
@@ -153,41 +168,44 @@ void EditorController::loadEditorSettings()
     m_snappingService->setSnapIntervalY(snapIntY);
 
     // Load app-specific keyboard shortcuts with validation
-    loadShortcutSetting(*editorGroup, QStringLiteral("EditorDuplicateShortcut"), QStringLiteral("Ctrl+D"),
-                        m_editorDuplicateShortcut, [this]() {
+    loadShortcutSetting(*editorGroup, ConfigDefaults::editorDuplicateShortcutKey(),
+                        ConfigDefaults::editorDuplicateShortcut(), m_editorDuplicateShortcut, [this]() {
                             Q_EMIT editorDuplicateShortcutChanged();
                         });
 
-    loadShortcutSetting(*editorGroup, QStringLiteral("EditorSplitHorizontalShortcut"), QStringLiteral("Ctrl+Shift+H"),
-                        m_editorSplitHorizontalShortcut, [this]() {
+    loadShortcutSetting(*editorGroup, ConfigDefaults::editorSplitHorizontalShortcutKey(),
+                        ConfigDefaults::editorSplitHorizontalShortcut(), m_editorSplitHorizontalShortcut, [this]() {
                             Q_EMIT editorSplitHorizontalShortcutChanged();
                         });
 
-    loadShortcutSetting(*editorGroup, QStringLiteral("EditorSplitVerticalShortcut"), QStringLiteral("Ctrl+Alt+V"),
-                        m_editorSplitVerticalShortcut, [this]() {
+    loadShortcutSetting(*editorGroup, ConfigDefaults::editorSplitVerticalShortcutKey(),
+                        ConfigDefaults::editorSplitVerticalShortcut(), m_editorSplitVerticalShortcut, [this]() {
                             Q_EMIT editorSplitVerticalShortcutChanged();
                         });
 
-    loadShortcutSetting(*editorGroup, QStringLiteral("EditorFillShortcut"), QStringLiteral("Ctrl+Shift+F"),
+    loadShortcutSetting(*editorGroup, ConfigDefaults::editorFillShortcutKey(), ConfigDefaults::editorFillShortcut(),
                         m_editorFillShortcut, [this]() {
                             Q_EMIT editorFillShortcutChanged();
                         });
 
     // Load snap override modifier
-    int snapOverrideMod = editorGroup->readInt(QStringLiteral("SnapOverrideModifier"), 0x02000000);
+    int snapOverrideMod = editorGroup->readInt(ConfigDefaults::editorSnapOverrideModifierKey(),
+                                               ConfigDefaults::editorSnapOverrideModifier());
     if (m_snapOverrideModifier != snapOverrideMod) {
         m_snapOverrideModifier = snapOverrideMod;
         Q_EMIT snapOverrideModifierChanged();
     }
 
     // Load fill-on-drop settings
-    bool fillOnDropEn = editorGroup->readBool(QStringLiteral("FillOnDropEnabled"), true);
+    bool fillOnDropEn =
+        editorGroup->readBool(ConfigDefaults::fillOnDropEnabledKey(), ConfigDefaults::fillOnDropEnabled());
     if (m_fillOnDropEnabled != fillOnDropEn) {
         m_fillOnDropEnabled = fillOnDropEn;
         Q_EMIT fillOnDropEnabledChanged();
     }
 
-    int fillOnDropMod = editorGroup->readInt(QStringLiteral("FillOnDropModifier"), 0x04000000); // Default: Ctrl
+    int fillOnDropMod =
+        editorGroup->readInt(ConfigDefaults::fillOnDropModifierKey(), ConfigDefaults::fillOnDropModifier());
     if (m_fillOnDropModifier != fillOnDropMod) {
         m_fillOnDropModifier = fillOnDropMod;
         Q_EMIT fillOnDropModifierChanged();
@@ -196,28 +214,34 @@ void EditorController::loadEditorSettings()
 
 void EditorController::saveEditorSettings()
 {
-    auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
-    auto editorGroup = backend->group(QStringLiteral("Editor"));
+    // Creates an ephemeral backend — reads from disk, writes one group, syncs.
+    // If the daemon has unsaved in-memory changes to the same file, QSaveFile's
+    // atomic rename prevents corruption but the daemon's next sync will overwrite
+    // editor changes (and vice versa).  Proper fix requires IPC (D-Bus) for
+    // cross-process settings writes; acceptable for now since the editor only
+    // writes to the Editor group which the daemon doesn't modify at runtime.
+    auto backend = PlasmaZones::createDefaultConfigBackend();
+    auto editorGroup = backend->group(ConfigDefaults::editorGroup());
 
     // Save snapping settings
-    editorGroup->writeBool(QStringLiteral("GridSnappingEnabled"), m_snappingService->gridSnappingEnabled());
-    editorGroup->writeBool(QStringLiteral("EdgeSnappingEnabled"), m_snappingService->edgeSnappingEnabled());
-    editorGroup->writeDouble(QStringLiteral("SnapIntervalX"), m_snappingService->snapIntervalX());
-    editorGroup->writeDouble(QStringLiteral("SnapIntervalY"), m_snappingService->snapIntervalY());
-    editorGroup->writeDouble(QStringLiteral("SnapInterval"), m_snappingService->snapIntervalX()); // Backward compat
+    editorGroup->writeBool(ConfigDefaults::editorGridSnappingEnabledKey(), m_snappingService->gridSnappingEnabled());
+    editorGroup->writeBool(ConfigDefaults::editorEdgeSnappingEnabledKey(), m_snappingService->edgeSnappingEnabled());
+    editorGroup->writeDouble(ConfigDefaults::editorSnapIntervalXKey(), m_snappingService->snapIntervalX());
+    editorGroup->writeDouble(ConfigDefaults::editorSnapIntervalYKey(), m_snappingService->snapIntervalY());
+    editorGroup->writeDouble(ConfigDefaults::editorSnapIntervalKey(), m_snappingService->snapIntervalX());
 
     // Save app-specific keyboard shortcuts
-    editorGroup->writeString(QStringLiteral("EditorDuplicateShortcut"), m_editorDuplicateShortcut);
-    editorGroup->writeString(QStringLiteral("EditorSplitHorizontalShortcut"), m_editorSplitHorizontalShortcut);
-    editorGroup->writeString(QStringLiteral("EditorSplitVerticalShortcut"), m_editorSplitVerticalShortcut);
-    editorGroup->writeString(QStringLiteral("EditorFillShortcut"), m_editorFillShortcut);
+    editorGroup->writeString(ConfigDefaults::editorDuplicateShortcutKey(), m_editorDuplicateShortcut);
+    editorGroup->writeString(ConfigDefaults::editorSplitHorizontalShortcutKey(), m_editorSplitHorizontalShortcut);
+    editorGroup->writeString(ConfigDefaults::editorSplitVerticalShortcutKey(), m_editorSplitVerticalShortcut);
+    editorGroup->writeString(ConfigDefaults::editorFillShortcutKey(), m_editorFillShortcut);
 
     // Save snap override modifier
-    editorGroup->writeInt(QStringLiteral("SnapOverrideModifier"), m_snapOverrideModifier);
+    editorGroup->writeInt(ConfigDefaults::editorSnapOverrideModifierKey(), m_snapOverrideModifier);
 
     // Save fill-on-drop settings
-    editorGroup->writeBool(QStringLiteral("FillOnDropEnabled"), m_fillOnDropEnabled);
-    editorGroup->writeInt(QStringLiteral("FillOnDropModifier"), m_fillOnDropModifier);
+    editorGroup->writeBool(ConfigDefaults::fillOnDropEnabledKey(), m_fillOnDropEnabled);
+    editorGroup->writeInt(ConfigDefaults::fillOnDropModifierKey(), m_fillOnDropModifier);
 
     editorGroup.reset(); // release group before sync
     backend->sync();

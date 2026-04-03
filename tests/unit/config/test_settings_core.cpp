@@ -15,7 +15,7 @@
 
 #include <QTest>
 #include <QSignalSpy>
-#include "config/configbackend_qsettings.h"
+#include "config/configbackend_json.h"
 
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
@@ -46,7 +46,7 @@ private Q_SLOTS:
 
         // Write a value into the Updates group
         {
-            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             auto updates = backend->group(QStringLiteral("Updates"));
             updates->writeString(QStringLiteral("DismissedUpdateVersion"), QStringLiteral("99.0.0"));
             updates.reset();
@@ -58,7 +58,7 @@ private Q_SLOTS:
         settings.reset();
 
         // Verify the Updates group is gone
-        auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         QVERIFY2(!backend->groupList().contains(QStringLiteral("Updates")), "reset() must delete the Updates group");
     }
 
@@ -72,7 +72,7 @@ private Q_SLOTS:
 
         // Write per-screen overrides
         {
-            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             {
                 auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
                 g->writeInt(QStringLiteral("Position"), 3);
@@ -91,7 +91,7 @@ private Q_SLOTS:
         Settings settings;
         settings.reset();
 
-        auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         const QStringList groups = backend->groupList();
         for (const QString& g : groups) {
             QVERIFY2(!g.startsWith(QLatin1String("ZoneSelector:")),
@@ -108,9 +108,9 @@ private Q_SLOTS:
      * This validates the full round-trip for a representative subset of settings
      * across all config groups.
      *
-     * QSettingsConfigBackend::createDefault() reads from
-     * $XDG_CONFIG_HOME/plasmazonesrc. The IsolatedConfigGuard redirects
-     * XDG_CONFIG_HOME to a temp directory, so each test gets a fresh file.
+     * createDefaultConfigBackend() reads from
+     * $XDG_CONFIG_HOME/plasmazones/config.json. The IsolatedConfigGuard
+     * redirects XDG_CONFIG_HOME to a temp directory, so each test gets a fresh file.
      */
     void testSave_load_roundtrip_allGroups()
     {
@@ -141,7 +141,7 @@ private Q_SLOTS:
 
         // Verify the round-trip by reading from a fresh config backend
         // (re-reads from disk after save() flushed).
-        auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
 
         {
             auto zones = backend->group(QStringLiteral("Zones"));
@@ -276,7 +276,7 @@ private Q_SLOTS:
 
         // Write activation config without DragActivationTriggers
         {
-            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             auto activation = backend->group(QStringLiteral("Activation"));
             activation->writeBool(QStringLiteral("SnappingEnabled"), true);
             // Deliberately do NOT write DragActivationTriggers
@@ -303,7 +303,7 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         {
-            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             auto activation = backend->group(QStringLiteral("Activation"));
             activation->writeString(QStringLiteral("DragActivationTriggers"), QStringLiteral("{not valid json!}"));
             activation.reset();
@@ -329,7 +329,7 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         {
-            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             auto activation = backend->group(QStringLiteral("Activation"));
             activation->writeInt(QStringLiteral("ZoneSpanModifier"), 3); // Alt
             // Deliberately do NOT write ZoneSpanTriggers
@@ -359,7 +359,7 @@ private Q_SLOTS:
 
         // Inject stale keys into several groups
         {
-            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             {
                 auto g = backend->group(ConfigDefaults::activationGroup());
                 g->writeString(QStringLiteral("ObsoleteActivationKey"), QStringLiteral("stale"));
@@ -387,7 +387,7 @@ private Q_SLOTS:
         settings.save();
 
         // Re-read the file and verify stale keys are gone
-        auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(ConfigDefaults::activationGroup());
             QVERIFY2(!g->hasKey(QStringLiteral("ObsoleteActivationKey")),
@@ -425,7 +425,7 @@ private Q_SLOTS:
 
         // Inject a per-screen group with a valid key and a stale key
         {
-            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             {
                 auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
                 g->writeInt(ConfigDefaults::zoneSelectorPositionKey(), 2);
@@ -437,7 +437,7 @@ private Q_SLOTS:
         Settings settings;
         settings.save();
 
-        auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
             QVERIFY2(!g->hasKey(QStringLiteral("ObsoletePerScreenKey")),
@@ -455,7 +455,7 @@ private Q_SLOTS:
 
         // Write to unmanaged groups
         {
-            auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+            auto backend = PlasmaZones::createDefaultConfigBackend();
             {
                 auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
                 g->writeString(QStringLiteral("1"), QStringLiteral("some-layout-id"));
@@ -470,7 +470,7 @@ private Q_SLOTS:
         Settings settings;
         settings.save();
 
-        auto backend = PlasmaZones::QSettingsConfigBackend::createDefault();
+        auto backend = PlasmaZones::createDefaultConfigBackend();
         {
             auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
             QCOMPARE(g->readString(QStringLiteral("1")), QStringLiteral("some-layout-id"));

@@ -3,6 +3,7 @@
 
 #include "../core/logging.h"
 #include "../core/translationloader.h"
+#include "../config/configmigration.h"
 #include "settingscontroller.h"
 #include "version.h"
 #include "pz_i18n.h"
@@ -87,6 +88,10 @@ int main(int argc, char* argv[])
             QQuickStyle::setStyle(QStringLiteral("Fusion"));
         }
     }
+
+    // Ensure INI→JSON migration has run (the daemon does this too, but the
+    // settings app may start before the daemon on first upgrade).
+    PlasmaZones::ConfigMigration::ensureJsonConfig();
 
     PlasmaZones::SettingsController controller;
 

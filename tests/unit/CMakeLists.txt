@@ -167,6 +167,14 @@ add_executable(test_configdefaults config/test_configdefaults.cpp)
 target_link_libraries(test_configdefaults PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_configdefaults COMMAND test_configdefaults)
 
+add_executable(test_configbackend_json config/test_configbackend_json.cpp)
+target_link_libraries(test_configbackend_json PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_configbackend_json COMMAND test_configbackend_json)
+
+add_executable(test_configmigration config/test_configmigration.cpp)
+target_link_libraries(test_configmigration PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_configmigration COMMAND test_configmigration)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ — Layout Tests (core, zones)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -288,7 +296,7 @@ set(_all_tests
     test_geometry_utils_serialization test_wts_clearfloat test_wts_virtual_migration test_snap_engine
     test_settings_core test_settings_validation test_settings_perscreen
     test_settings_virtualscreen test_virtualscreen_staged
-    test_configdefaults
+    test_configdefaults test_configbackend_json test_configmigration
     test_layout_core test_layout_zones
     test_layoutmanager_persistence test_layoutmanager_cycling test_layoutmanager_assignment
     test_virtual_screen test_virtual_screen_manager test_snap_assist_virtual

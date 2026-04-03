@@ -129,6 +129,8 @@ if [ "$REMOVE_CONFIG" = true ]; then
     echo "Removing configuration and layouts..."
     rm -rf "$PREFIX/share/plasmazones"
     rm -f "$HOME/.config/plasmazonesrc"
+    rm -f "$HOME/.config/plasmazonesrc.bak"
+    rm -rf "$HOME/.config/plasmazones"
     echo "Configuration removed."
 else
     # Remove manifest and uninstall script but keep user data

@@ -481,6 +481,10 @@ void Daemon::connectShortcutSignals()
 
     // Cycle layout shortcuts (Meta+[/])
     connect(m_shortcutManager.get(), &ShortcutManager::previousLayoutRequested, this, [this]() {
+        if (m_cycleLayoutDebounce.isValid() && m_cycleLayoutDebounce.elapsed() < kShortcutDebounceMs) {
+            return;
+        }
+        m_cycleLayoutDebounce.restart();
         const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
         if (screenId.isEmpty()) {
             qCDebug(lcDaemon) << "PreviousLayout shortcut: no screen info";
@@ -489,6 +493,10 @@ void Daemon::connectShortcutSignals()
         handleCycleLayout(screenId, false);
     });
     connect(m_shortcutManager.get(), &ShortcutManager::nextLayoutRequested, this, [this]() {
+        if (m_cycleLayoutDebounce.isValid() && m_cycleLayoutDebounce.elapsed() < kShortcutDebounceMs) {
+            return;
+        }
+        m_cycleLayoutDebounce.restart();
         const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
         if (screenId.isEmpty()) {
             qCDebug(lcDaemon) << "NextLayout shortcut: no screen info";

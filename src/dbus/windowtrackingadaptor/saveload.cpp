@@ -12,7 +12,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
-#include "../../config/configbackend_qsettings.h"
+#include "../../config/iconfigbackend.h"
 #include "../../config/configkeys.h"
 #include <QTimer>
 
@@ -48,8 +48,8 @@ static QHash<QString, QStringList> parseZoneListMap(const QString& json)
 
 void WindowTrackingAdaptor::saveState()
 {
-    std::unique_ptr<QSettingsConfigBackend> fallback;
-    QSettingsConfigBackend* backend = QSettingsConfigBackend::resolveBackend(m_configBackend, fallback);
+    std::unique_ptr<IConfigBackend> fallback;
+    IConfigBackend* backend = resolveBackend(m_configBackend, fallback);
     auto tracking = backend->group(ConfigKeys::windowTrackingGroup());
 
     // Save active layout ID so we can restore it after daemon restart.
@@ -184,7 +184,7 @@ void WindowTrackingAdaptor::saveStateOnShutdown()
 void WindowTrackingAdaptor::loadState()
 {
     // Read config as a flat key map for structured parsing below.
-    // readConfigFromDisk() reads the file directly, bypassing QSettings cache.
+    // readJsonConfigFromDisk() reads the file directly, bypassing QSettings cache.
     // QSettingsConfigGroup doesn't expose key enumeration, and the flat map is
     // convenient for this function's parsing pattern.
     //
@@ -193,7 +193,7 @@ void WindowTrackingAdaptor::loadState()
     if (m_configBackend) {
         m_configBackend->sync();
     }
-    const auto configMap = PlasmaZones::QSettingsConfigBackend::readConfigFromDisk();
+    const auto configMap = PlasmaZones::readJsonConfigFromDisk();
     const QString wt = ConfigKeys::windowTrackingGroup();
     auto readVal = [&](const QString& key, const QString& def = QString()) -> QString {
         return configMap.value(wt + QLatin1Char('/') + key, def).toString();

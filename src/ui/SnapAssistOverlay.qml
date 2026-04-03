@@ -223,6 +223,11 @@ Window {
                         }
 
                         MouseArea {
+                            // Don't close here — C++ manages the window lifecycle.
+                            // During continuation, showSnapAssist() reuses this window
+                            // with updated data. When all zones are filled, C++ calls
+                            // hideSnapAssist() which destroys the window.
+
                             id: cardMouse
 
                             anchors.fill: parent
@@ -246,7 +251,6 @@ Window {
                                     "height": z.height
                                 }) : "{}";
                                 root.windowSelected(wId, zoneId, geo);
-                                root.close();
                             }
                         }
 

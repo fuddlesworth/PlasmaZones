@@ -15,7 +15,7 @@ namespace PlasmaZones {
 
 // ── load() helpers ───────────────────────────────────────────────────────────
 
-void Settings::loadActivationConfig(QSettingsConfigGroup& activation)
+void Settings::loadActivationConfig(IConfigGroup& activation)
 {
     m_dragActivationTriggers = parseTriggerListJson(activation.readString(ConfigDefaults::dragActivationTriggersKey()))
                                    .value_or(ConfigDefaults::dragActivationTriggers());
@@ -44,7 +44,7 @@ void Settings::loadActivationConfig(QSettingsConfigGroup& activation)
     m_snappingEnabled = activation.readBool(ConfigDefaults::snappingEnabledKey(), ConfigDefaults::snappingEnabled());
 }
 
-void Settings::loadDisplayConfig(QSettingsConfigGroup& display)
+void Settings::loadDisplayConfig(IConfigGroup& display)
 {
     m_showZonesOnAllMonitors =
         display.readBool(ConfigDefaults::showOnAllMonitorsKey(), ConfigDefaults::showOnAllMonitors());
@@ -90,7 +90,7 @@ void Settings::loadDisplayConfig(QSettingsConfigGroup& display)
         ConfigDefaults::overlayDisplayModeMin(), ConfigDefaults::overlayDisplayModeMax(), "overlay display mode"));
 }
 
-void Settings::loadAppearanceConfig(QSettingsConfigGroup& appearance)
+void Settings::loadAppearanceConfig(IConfigGroup& appearance)
 {
     m_useSystemColors = appearance.readBool(ConfigDefaults::useSystemColorsKey(), ConfigDefaults::useSystemColors());
     m_highlightColor = readValidatedColor(appearance, ConfigDefaults::highlightColorKey(),
@@ -141,7 +141,7 @@ void Settings::loadAppearanceConfig(QSettingsConfigGroup& appearance)
         appearance.readBool(ConfigDefaults::labelFontStrikeoutKey(), ConfigDefaults::labelFontStrikeout());
 }
 
-void Settings::loadZoneGeometryConfig(QSettingsConfigGroup& zones)
+void Settings::loadZoneGeometryConfig(IConfigGroup& zones)
 {
     m_zonePadding =
         readValidatedInt(zones, ConfigDefaults::zonePaddingKey(), ConfigDefaults::zonePadding(),
@@ -177,7 +177,7 @@ void Settings::loadZoneGeometryConfig(QSettingsConfigGroup& zones)
                          ConfigDefaults::minimumZoneDisplaySizePxMax(), "minimum zone display size");
 }
 
-void Settings::loadBehaviorConfig(QSettingsConfigBackend* backend)
+void Settings::loadBehaviorConfig(IConfigBackend* backend)
 {
     {
         auto behavior = backend->group(ConfigDefaults::behaviorGroup());
@@ -234,7 +234,7 @@ void Settings::loadBehaviorConfig(QSettingsConfigBackend* backend)
     }
 }
 
-void Settings::loadZoneSelectorConfig(QSettingsConfigGroup& zoneSelector)
+void Settings::loadZoneSelectorConfig(IConfigGroup& zoneSelector)
 {
     m_zoneSelectorEnabled =
         zoneSelector.readBool(ConfigDefaults::zoneSelectorEnabledKey(), ConfigDefaults::zoneSelectorEnabled());
@@ -269,7 +269,7 @@ void Settings::loadZoneSelectorConfig(QSettingsConfigGroup& zoneSelector)
                          ConfigDefaults::maxRowsMin(), ConfigDefaults::maxRowsMax(), "zone selector max rows");
 }
 
-void Settings::loadShortcutConfig(QSettingsConfigGroup& globalShortcuts)
+void Settings::loadShortcutConfig(IConfigGroup& globalShortcuts)
 {
     m_openEditorShortcut =
         globalShortcuts.readString(ConfigDefaults::openEditorShortcutKey(), ConfigDefaults::openEditorShortcut());
@@ -343,7 +343,7 @@ void Settings::loadShortcutConfig(QSettingsConfigGroup& globalShortcuts)
                                                             ConfigDefaults::toggleLayoutLockShortcut());
 }
 
-void Settings::loadAutotilingConfig(QSettingsConfigBackend* backend)
+void Settings::loadAutotilingConfig(IConfigBackend* backend)
 {
     auto autotiling = backend->group(ConfigDefaults::autotilingGroup());
     m_autotileEnabled = autotiling->readBool(ConfigDefaults::autotileEnabledKey(), ConfigDefaults::autotileEnabled());
@@ -510,7 +510,7 @@ void Settings::loadAutotilingConfig(QSettingsConfigBackend* backend)
     }
 }
 
-void Settings::loadEditorConfig(QSettingsConfigGroup& editor)
+void Settings::loadEditorConfig(IConfigGroup& editor)
 {
     m_editorDuplicateShortcut =
         editor.readString(ConfigDefaults::editorDuplicateShortcutKey(), ConfigDefaults::editorDuplicateShortcut());
@@ -556,7 +556,7 @@ void Settings::loadEditorConfig(QSettingsConfigGroup& editor)
 
 // ── save() helpers ───────────────────────────────────────────────────────────
 
-void Settings::saveEditorConfig(QSettingsConfigGroup& editor)
+void Settings::saveEditorConfig(IConfigGroup& editor)
 {
     editor.writeString(ConfigDefaults::editorDuplicateShortcutKey(), m_editorDuplicateShortcut);
     editor.writeString(ConfigDefaults::editorSplitHorizontalShortcutKey(), m_editorSplitHorizontalShortcut);
@@ -571,7 +571,7 @@ void Settings::saveEditorConfig(QSettingsConfigGroup& editor)
     editor.writeInt(ConfigDefaults::fillOnDropModifierKey(), m_fillOnDropModifier);
 }
 
-void Settings::saveActivationConfig(QSettingsConfigGroup& activation)
+void Settings::saveActivationConfig(IConfigGroup& activation)
 {
     saveTriggerList(activation, ConfigDefaults::dragActivationTriggersKey(), m_dragActivationTriggers);
     activation.writeBool(ConfigDefaults::zoneSpanEnabledKey(), m_zoneSpanEnabled);
@@ -581,7 +581,7 @@ void Settings::saveActivationConfig(QSettingsConfigGroup& activation)
     activation.writeBool(ConfigDefaults::snappingEnabledKey(), m_snappingEnabled);
 }
 
-void Settings::saveDisplayConfig(QSettingsConfigGroup& display)
+void Settings::saveDisplayConfig(IConfigGroup& display)
 {
     display.writeBool(ConfigDefaults::showOnAllMonitorsKey(), m_showZonesOnAllMonitors);
     display.writeString(ConfigDefaults::disabledMonitorsKey(), m_disabledMonitors.join(QLatin1Char(',')));
@@ -595,7 +595,7 @@ void Settings::saveDisplayConfig(QSettingsConfigGroup& display)
     display.writeInt(ConfigDefaults::overlayDisplayModeKey(), static_cast<int>(m_overlayDisplayMode));
 }
 
-void Settings::saveAppearanceConfig(QSettingsConfigGroup& appearance)
+void Settings::saveAppearanceConfig(IConfigGroup& appearance)
 {
     appearance.writeBool(ConfigDefaults::useSystemColorsKey(), m_useSystemColors);
     appearance.writeColor(ConfigDefaults::highlightColorKey(), m_highlightColor);
@@ -615,7 +615,7 @@ void Settings::saveAppearanceConfig(QSettingsConfigGroup& appearance)
     appearance.writeBool(ConfigDefaults::labelFontStrikeoutKey(), m_labelFontStrikeout);
 }
 
-void Settings::saveZoneGeometryConfig(QSettingsConfigGroup& zones)
+void Settings::saveZoneGeometryConfig(IConfigGroup& zones)
 {
     zones.writeInt(ConfigDefaults::zonePaddingKey(), m_zonePadding);
     zones.writeInt(ConfigDefaults::outerGapKey(), m_outerGap);
@@ -630,7 +630,7 @@ void Settings::saveZoneGeometryConfig(QSettingsConfigGroup& zones)
     zones.writeInt(ConfigDefaults::minimumZoneDisplaySizePxKey(), m_minimumZoneDisplaySizePx);
 }
 
-void Settings::saveBehaviorConfig(QSettingsConfigBackend* backend)
+void Settings::saveBehaviorConfig(IConfigBackend* backend)
 {
     {
         auto behavior = backend->group(ConfigDefaults::behaviorGroup());
@@ -660,7 +660,7 @@ void Settings::saveBehaviorConfig(QSettingsConfigBackend* backend)
     }
 }
 
-void Settings::saveZoneSelectorConfig(QSettingsConfigGroup& zoneSelector)
+void Settings::saveZoneSelectorConfig(IConfigGroup& zoneSelector)
 {
     zoneSelector.writeBool(ConfigDefaults::zoneSelectorEnabledKey(), m_zoneSelectorEnabled);
     zoneSelector.writeInt(ConfigDefaults::zoneSelectorTriggerDistanceKey(), m_zoneSelectorTriggerDistance);
@@ -674,7 +674,7 @@ void Settings::saveZoneSelectorConfig(QSettingsConfigGroup& zoneSelector)
     zoneSelector.writeInt(ConfigDefaults::zoneSelectorMaxRowsKey(), m_zoneSelectorMaxRows);
 }
 
-void Settings::saveShortcutConfig(QSettingsConfigGroup& globalShortcuts)
+void Settings::saveShortcutConfig(IConfigGroup& globalShortcuts)
 {
     globalShortcuts.writeString(ConfigDefaults::openEditorShortcutKey(), m_openEditorShortcut);
     globalShortcuts.writeString(ConfigDefaults::openSettingsShortcutKey(), m_openSettingsShortcut);
@@ -712,7 +712,7 @@ void Settings::saveShortcutConfig(QSettingsConfigGroup& globalShortcuts)
     globalShortcuts.writeString(ConfigDefaults::toggleLayoutLockShortcutKey(), m_toggleLayoutLockShortcut);
 }
 
-void Settings::saveAutotilingConfig(QSettingsConfigBackend* backend)
+void Settings::saveAutotilingConfig(IConfigBackend* backend)
 {
     {
         auto autotiling = backend->group(ConfigDefaults::autotilingGroup());
@@ -783,7 +783,7 @@ void Settings::saveAutotilingConfig(QSettingsConfigBackend* backend)
 
 // ── Virtual screen config load/save ──────────────────────────────────────────
 
-void Settings::loadVirtualScreenConfigs(QSettingsConfigBackend* backend)
+void Settings::loadVirtualScreenConfigs(IConfigBackend* backend)
 {
     m_virtualScreenConfigs.clear();
     const QStringList allGroups = backend->groupList();
@@ -901,7 +901,7 @@ void Settings::loadVirtualScreenConfigs(QSettingsConfigBackend* backend)
     }
 }
 
-void Settings::saveVirtualScreenConfigs(QSettingsConfigBackend* backend)
+void Settings::saveVirtualScreenConfigs(IConfigBackend* backend)
 {
     // Remove old VirtualScreen: groups that are no longer in the config
     const QStringList allGroups = backend->groupList();
