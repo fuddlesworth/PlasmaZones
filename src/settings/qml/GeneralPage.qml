@@ -113,6 +113,7 @@ Flickable {
                             currentIndex = Math.max(0, settingsController.renderingBackendOptions.indexOf(appSettings.renderingBackend));
                         }
 
+                        enabled: !settingsController.daemonRunning
                         Accessible.name: i18n("Rendering backend")
                         model: settingsController.renderingBackendDisplayNames
                         currentIndex: Math.max(0, settingsController.renderingBackendOptions.indexOf(appSettings.renderingBackend))
@@ -137,8 +138,8 @@ Flickable {
                 Kirigami.InlineMessage {
                     Layout.fillWidth: true
                     type: Kirigami.MessageType.Information
-                    text: i18n("Rendering backend changes take effect after restarting the daemon.")
-                    visible: appSettings.renderingBackend !== settingsController.startupRenderingBackend
+                    text: settingsController.daemonRunning ? i18n("Stop the daemon to change the rendering backend.") : i18n("Rendering backend changes take effect after restarting the daemon.")
+                    visible: settingsController.daemonRunning || appSettings.renderingBackend !== settingsController.startupRenderingBackend
                 }
 
             }

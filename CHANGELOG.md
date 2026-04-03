@@ -7,6 +7,35 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-04-03
+
+### Added
+- **Tumbleweed Drift shader**: openSUSE Tumbleweed branded zone overlay with animated desert landscape, rolling pinwheel logos, dust devils, sand particles, erosion flow lines, and responsive audio reactivity.
+- **Neon Venom and Chrome Protocol shaders**.
+- **Voxel-terrain improvements**: Multipass with depth buffer, highlight visibility, pulse-flow label effects.
+- **Shader engine**: Depth buffer via MRT, per-channel filter/wrapping modes for multipass buffers, shader presets from registry.
+- **Autotile JS API enrichment** ([#274]): Per-window context, custom parameters, and lifecycle hooks for scripted algorithms.
+- **Layout ordering settings** ([#281]): Configure snapping and tiling cycle order in settings.
+- **What's New dialog** ([#282]): Per-release highlights shown on first launch after update.
+- **Settings `.desktop` file** for application launchers.
+
+### Changed
+- **Shared config backend** ([#276]): Single `QSettingsConfigBackend` shared across daemon instead of per-component instances.
+- **Stale config key purging** ([#280]): Settings save removes obsolete keys to prevent config pollution.
+- **ConfigDefaults reference constants** ([#278]): Autotile defaults reference `Defaults::` constants instead of duplicating values.
+
+### Fixed
+- **Shader parameter defaults**: `customParams` initialized to `-1.0` sentinel so fallback checks work on first frame.
+- **DOF focal depth stability**: Multi-sample region averaging prevents jittery depth-of-field.
+- **Vulkan surface lifecycle**: Fixes for surface creation on rapid show/hide, teardown crashes, keep-alive window management, deferred `QVulkanInstance` creation, scissor state, and swapchain colorspace.
+- **Rendering pipeline stability**: RHI resource release on scene stop, multipass crash guards, SRB resets on label texture resize, texture upload ordering.
+- **OSD improvements**: Navigation self-destruct fix, masterCount wiring, autotile metadata in layout OSD, per-screen dismiss.
+- **Focus-follows-mouse**: No longer focuses through excluded or overlay windows.
+- **Autotile shortcut sync**: Master ratio and count changes from shortcuts now persist to config.
+- **Settings stability**: Single-instance enforcement, daemon toggle desync from broken QML bindings, RenderingBackend read from ungrouped config keys.
+- **i18n**: Correct plural form selection in `i18np` without `.ts` files.
+- **Layout picker**: No longer overwrites the global default layout when selecting per-screen.
+
 ## [2.5.3] - 2026-04-01
 
 ### Fixed
@@ -1094,7 +1123,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.3...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.6.0...HEAD
+[2.6.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.3...v2.6.0
 [2.5.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.2...v2.5.3
 [2.5.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.1...v2.5.2
 [2.5.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.0...v2.5.1
@@ -1283,3 +1313,11 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#272]: https://github.com/fuddlesworth/PlasmaZones/discussions/272
 [#273]: https://github.com/fuddlesworth/PlasmaZones/discussions/273
 [#275]: https://github.com/fuddlesworth/PlasmaZones/discussions/275
+[#274]: https://github.com/fuddlesworth/PlasmaZones/pull/274
+[#276]: https://github.com/fuddlesworth/PlasmaZones/pull/276
+[#277]: https://github.com/fuddlesworth/PlasmaZones/pull/277
+[#278]: https://github.com/fuddlesworth/PlasmaZones/pull/278
+[#279]: https://github.com/fuddlesworth/PlasmaZones/pull/279
+[#280]: https://github.com/fuddlesworth/PlasmaZones/pull/280
+[#281]: https://github.com/fuddlesworth/PlasmaZones/pull/281
+[#282]: https://github.com/fuddlesworth/PlasmaZones/pull/282

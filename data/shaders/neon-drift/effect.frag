@@ -40,34 +40,13 @@ const vec3 SUNSET_PURPLE = vec3(0.420, 0.247, 0.627);
 const vec3 SUNSET_WARM   = vec3(0.910, 0.627, 0.753);
 
 
-// ── Noise helpers ───────────────────────────────────────────────
-
-float rand2D(in vec2 p) {
-    return fract(sin(dot(p, vec2(15.285, 97.258))) * 47582.122);
-}
-
-vec2 quintic(vec2 f) {
-    return f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-}
-
-float noise(in vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    float a = rand2D(i);
-    float b = rand2D(i + vec2(1.0, 0.0));
-    float c = rand2D(i + vec2(0.0, 1.0));
-    float d = rand2D(i + vec2(1.0, 1.0));
-    vec2 u = quintic(f);
-    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
-
 float fbm(in vec2 uv, int octaves, float rotAngle) {
     float value = 0.0;
     float amplitude = 0.5;
     float c = cos(rotAngle), s = sin(rotAngle);
     mat2 rot = mat2(c, -s, s, c);
     for (int i = 0; i < octaves && i < 8; i++) {
-        value += amplitude * noise(uv);
+        value += amplitude * noise2D(uv);
         uv = rot * uv * 2.0 + vec2(180.0);
         amplitude *= 0.55;
     }
@@ -126,8 +105,8 @@ vec3 neonTube(float dist, vec3 tubeColor, float intensity) {
 
 float neonFlicker(float time, float seed, float trebleEnv) {
     float base = 0.92 + 0.08 * sin(time * 60.0 + seed * 100.0);
-    float buzz = step(0.97, noise(vec2(time * 30.0, seed * 7.0))) * 0.4;
-    float trebleBuzz = trebleEnv * step(0.9, noise(vec2(time * 50.0, seed * 13.0))) * 0.5;
+    float buzz = step(0.97, noise2D(vec2(time * 30.0, seed * 7.0))) * 0.4;
+    float trebleBuzz = trebleEnv * step(0.9, noise2D(vec2(time * 50.0, seed * 13.0))) * 0.5;
     return clamp(base - buzz - trebleBuzz, 0.4, 1.0);
 }
 
@@ -259,8 +238,8 @@ vec3 electricArc(vec2 p, vec2 from, vec2 to, float time, float strength,
     for (int j = 0; j < 8; j++) {
         float t = float(j) / 7.0;
         vec2 basePos = mix(from, to, t);
-        float jag = noise(vec2(t * 12.0 + seed * 7.0, time * 8.0 + seed)) * 2.0 - 1.0;
-        jag += noise(vec2(t * 25.0 + seed * 13.0, time * 15.0)) * 0.5 - 0.25;
+        float jag = noise2D(vec2(t * 12.0 + seed * 7.0, time * 8.0 + seed)) * 2.0 - 1.0;
+        jag += noise2D(vec2(t * 25.0 + seed * 13.0, time * 15.0)) * 0.5 - 0.25;
         float envelope = t * (1.0 - t) * 4.0;
         vec2 arcPos = basePos + norm * jag * 0.03 * envelope;
         closest = min(closest, length(p - arcPos));
@@ -298,7 +277,7 @@ vec3 plasmaTendrils(vec2 p, float time, float bassEnv, float midsEnv,
         float radialMask = smoothstep(R_CENTRAL, R_CENTRAL + 0.05, r) *
                            smoothstep(R_OUTER_RING + 0.05, R_INNER_RING, r);
 
-        float flow = noise(vec2(r * 8.0 - time * 3.0, float(i) * 5.0));
+        float flow = noise2D(vec2(r * 8.0 - time * 3.0, float(i) * 5.0));
         tendril *= flow * radialMask;
 
         float surge = 1.0 + bassEnv * 2.0;
@@ -367,7 +346,7 @@ vec3 auroraBands(vec2 uv, float time, float bassEnv, float midsEnv,
 
         // Sinusoidal ribbon with noise perturbation
         float ribbon = sin(uv.x * freq * aspect + phase) * amp;
-        ribbon += noise(vec2(uv.x * 3.0 + time * 0.3, fi * 7.0)) * 0.06;
+        ribbon += noise2D(vec2(uv.x * 3.0 + time * 0.3, fi * 7.0)) * 0.06;
         // Bass adds low-freq wave distortion — bands undulate
         ribbon += sin(uv.x * 0.8 * aspect + time * 0.5 + fi * 2.0) * bassEnv * 0.08;
         float dist = abs(uv.y - 0.5 - ribbon);
@@ -427,7 +406,7 @@ vec3 emberParticles(vec2 uv, float time, float trebleEnv, float bassEnv,
 
             // Twinkle/flicker
             float twinkle = 0.4 + 0.6 * sin(h1 * TAU * 5.0 + time * (4.0 + h2 * 3.0));
-            twinkle *= 0.7 + 0.3 * step(0.3, noise(vec2(time * 2.0, h1 * 20.0)));
+            twinkle *= 0.7 + 0.3 * step(0.3, noise2D(vec2(time * 2.0, h1 * 20.0)));
 
             // Color: warm orange to pink, brighter at higher treble
             vec3 emberCol = mix(SUNSET_ORANGE, SUNSET_PINK, h2);
@@ -737,7 +716,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                     vec2 to = vec2(cos(a2), sin(a2)) * R_OUTER_TEETH;
 
                     float arcSeed = float(ai) + float(li) * 8.0;
-                    float arcChance = step(0.6, noise(vec2(arcSeed * 3.0, time * 2.0)));
+                    float arcChance = step(0.6, noise2D(vec2(arcSeed * 3.0, time * 2.0)));
                     float arcStr = bassEnv * logoPulse * arcChance * sparkleStr * 0.4;
 
                     // Arcs tinted with sunset warmth
@@ -755,7 +734,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                     vec2 to = vec2(cos(a2), sin(a2)) * R_OUTER_RING;
 
                     float arcSeed = float(ti) + float(li) * 8.0 + 100.0;
-                    float arcChance = step(0.7, noise(vec2(arcSeed * 3.0, time * 1.5)));
+                    float arcChance = step(0.7, noise2D(vec2(arcSeed * 3.0, time * 1.5)));
                     float arcStr = bassEnv * logoPulse * arcChance * sparkleStr * 0.3;
 
                     gearCol += electricArc(gearP, from, to, time, arcStr,
@@ -772,7 +751,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
             // ── Treble edge discharge sparks ──────────────────────
             if (trebleEnv > 0.01 && gDist > -0.005 && gDist < 0.025) {
-                float sparkN = noise(iGearUV * 35.0 + time * 7.0 + float(li) * 33.0);
+                float sparkN = noise2D(iGearUV * 35.0 + time * 7.0 + float(li) * 33.0);
                 sparkN = smoothstep(0.5, 0.95, sparkN);
                 float edgeMask = smoothstep(0.025, 0.0, abs(gDist));
                 vec3 sparkCol = mix(palGlow, SUNSET_WARM, 0.3);
@@ -782,7 +761,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             // ── Heat shimmer — UV distortion haze near gear ───────
             if (gDist > -0.01 && gDist < 0.08) {
                 float shimmerMask = smoothstep(0.08, 0.0, gDist) * 0.6;
-                float shimmerN = noise(iGearUV * 20.0 + vec2(time * 2.0, time * 1.3));
+                float shimmerN = noise2D(iGearUV * 20.0 + vec2(time * 2.0, time * 1.3));
                 float shimmer = shimmerN * shimmerMask * (1.0 + bassEnv * 0.5);
                 vec3 heatCol = mix(SUNSET_ORANGE, palGlow, 0.5) * shimmer * 0.25;
                 gearCol += heatCol * instIntensity * depthFactor;
@@ -940,7 +919,7 @@ vec4 compositeNeonLabels(vec4 color, vec2 fragCoord,
     float flickerRegion = floor(uv.x * 6.0 + uv.y * 3.0);
     float flickerSeed = hash11(flickerRegion * 13.7);
     float flicker = 0.88 + 0.12 * sin(time * 55.0 + flickerSeed * 100.0);
-    float buzzOff = step(0.96, noise(vec2(time * 25.0, flickerSeed * 7.0))) * 0.5;
+    float buzzOff = step(0.96, noise2D(vec2(time * 25.0, flickerSeed * 7.0))) * 0.5;
     flicker = clamp(flicker - buzzOff, 0.35, 1.0);
 
     // ── Color sweep across text (neon powering on) ──────────────────
@@ -1012,7 +991,7 @@ vec4 compositeNeonLabels(vec4 color, vec2 fragCoord,
         );
 
         // Neon tube flicker noise — breaks up solid fill with bright/dim regions
-        float tubeNoise = noise(fragCoord * 0.1 + time * 2.0);
+        float tubeNoise = noise2D(fragCoord * 0.1 + time * 2.0);
         vec3 tubeCol = mix(tubeColor, vec3(1.0, 1.0, 0.97), tubeNoise * 0.4);
 
         // Stroke edge rim — neon tubes glow brightest at edges

@@ -88,6 +88,12 @@ class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public QQuickItem
     Q_PROPERTY(qreal bufferScale READ bufferScale WRITE setBufferScale NOTIFY bufferScaleChanged FINAL)
     /** Buffer channel wrap: "clamp" or "repeat". */
     Q_PROPERTY(QString bufferWrap READ bufferWrap WRITE setBufferWrap NOTIFY bufferWrapChanged FINAL)
+    /** Per-channel buffer wraps (up to 4). Empty = all use bufferWrap. */
+    Q_PROPERTY(QStringList bufferWraps READ bufferWraps WRITE setBufferWraps NOTIFY bufferWrapsChanged FINAL)
+    /** Buffer channel filter: "nearest", "linear", or "mipmap". */
+    Q_PROPERTY(QString bufferFilter READ bufferFilter WRITE setBufferFilter NOTIFY bufferFilterChanged FINAL)
+    /** Per-channel buffer filters (up to 4). Empty = all use bufferFilter. */
+    Q_PROPERTY(QStringList bufferFilters READ bufferFilters WRITE setBufferFilters NOTIFY bufferFiltersChanged FINAL)
     Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged FINAL)
 
     // Custom parameters (32 floats in 8 vec4s, slots 0-31)
@@ -133,6 +139,9 @@ class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public QQuickItem
         QImage wallpaperTexture READ wallpaperTexture WRITE setWallpaperTexture NOTIFY wallpaperTextureChanged FINAL)
     /** Whether the current shader subscribes to the wallpaper texture. */
     Q_PROPERTY(bool useWallpaper READ useWallpaper WRITE setUseWallpaper NOTIFY useWallpaperChanged FINAL)
+
+    /** Whether the current shader uses a depth buffer (R32F at binding 12). */
+    Q_PROPERTY(bool useDepthBuffer READ useDepthBuffer WRITE setUseDepthBuffer NOTIFY useDepthBufferChanged FINAL)
 
     // Status
     Q_PROPERTY(Status status READ status NOTIFY statusChanged FINAL)
@@ -244,6 +253,24 @@ public:
         return m_bufferWrap;
     }
     void setBufferWrap(const QString& wrap);
+
+    QStringList bufferWraps() const
+    {
+        return m_bufferWraps;
+    }
+    void setBufferWraps(const QStringList& wraps);
+
+    QString bufferFilter() const
+    {
+        return m_bufferFilter;
+    }
+    void setBufferFilter(const QString& filter);
+
+    QStringList bufferFilters() const
+    {
+        return m_bufferFilters;
+    }
+    void setBufferFilters(const QStringList& filters);
 
     QVariantMap shaderParams() const
     {
@@ -415,6 +442,12 @@ public:
     }
     void setUseWallpaper(bool use);
 
+    bool useDepthBuffer() const
+    {
+        return m_useDepthBuffer;
+    }
+    void setUseDepthBuffer(bool use);
+
     // Status getters
     Status status() const
     {
@@ -474,6 +507,9 @@ Q_SIGNALS:
     void bufferFeedbackChanged();
     void bufferScaleChanged();
     void bufferWrapChanged();
+    void bufferWrapsChanged();
+    void bufferFilterChanged();
+    void bufferFiltersChanged();
     void shaderParamsChanged();
     void customParamsChanged(); // Emitted when any customParams1-8 changes
     void customColorsChanged(); // Emitted when any customColor1-16 changes
@@ -481,6 +517,7 @@ Q_SIGNALS:
     void audioSpectrumChanged();
     void wallpaperTextureChanged();
     void useWallpaperChanged();
+    void useDepthBufferChanged();
     void statusChanged();
     void errorLogChanged();
 
@@ -506,6 +543,16 @@ protected:
      * @brief Handle component completion
      */
     void componentComplete() override;
+
+    /**
+     * @brief Handle item state changes (visibility, window attachment)
+     *
+     * On Vulkan, window hide destroys the swapchain and deactivates the scene graph.
+     * When the window is re-shown, pending update() requests from property writes
+     * during the hidden state are lost. Override itemChange to force an update when
+     * the item becomes visible again so updatePaintNode() is called.
+     */
+    void itemChange(ItemChange change, const ItemChangeData& value) override;
 
 private:
     /**
@@ -562,17 +609,21 @@ private:
     bool m_bufferFeedback = false;
     qreal m_bufferScale = 1.0;
     QString m_bufferWrap = QStringLiteral("clamp");
+    QStringList m_bufferWraps;
+    QString m_bufferFilter = QStringLiteral("linear");
+    QStringList m_bufferFilters;
     QVariantMap m_shaderParams;
 
-    // Custom shader parameters
-    QVector4D m_customParams1;
-    QVector4D m_customParams2;
-    QVector4D m_customParams3;
-    QVector4D m_customParams4;
-    QVector4D m_customParams5;
-    QVector4D m_customParams6;
-    QVector4D m_customParams7;
-    QVector4D m_customParams8;
+    // Custom shader parameters — initialized to -1.0 (the "unset" sentinel).
+    // Shaders use `>= 0.0` to distinguish set values from defaults.
+    QVector4D m_customParams1 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    QVector4D m_customParams2 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    QVector4D m_customParams3 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    QVector4D m_customParams4 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    QVector4D m_customParams5 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    QVector4D m_customParams6 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    QVector4D m_customParams7 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    QVector4D m_customParams8 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
     QVector4D m_customColor1 = QVector4D(1.0f, 0.5f, 0.0f, 1.0f); // Default orange highlight
     QVector4D m_customColor2 = QVector4D(0.2f, 0.2f, 0.2f, 0.8f); // Default gray inactive
     QVector4D m_customColor3 = QVector4D(1.0f, 1.0f, 1.0f, 0.0f); // Default white, alpha 0 = not set
@@ -604,6 +655,7 @@ private:
     QImage m_wallpaperTexture;
     mutable QMutex m_wallpaperTextureMutex;
     bool m_useWallpaper = false;
+    bool m_useDepthBuffer = false;
 
     // User texture data (bindings 7-10)
     std::array<QString, 4> m_userTexturePaths;
@@ -618,6 +670,9 @@ private:
 
     // Render node tracking for safe teardown (set in updatePaintNode, cleared in destructor)
     ZoneShaderNodeRhi* m_renderNode = nullptr;
+
+    // Track connected window for sceneGraphInvalidated cleanup
+    QQuickWindow* m_connectedWindow = nullptr;
 
     // Dirty flags for render thread synchronization
     std::atomic<bool> m_zoneDataDirty{false};

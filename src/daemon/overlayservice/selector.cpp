@@ -119,10 +119,13 @@ void OverlayService::hideZoneSelector()
     // Note: Don't clear selected zone here - we need it for snapping when drag ends
     // The selected zone will be cleared after the snap is processed
 
-    for (auto* window : std::as_const(m_zoneSelectorWindows)) {
-        if (window) {
-            window->hide();
-        }
+    // Destroy windows instead of hiding. When Vulkan is the scene graph backend,
+    // hide() destroys the VkSwapchainKHR but Qt doesn't reinitialize it on
+    // re-show — this affects ALL QQuickWindows, not just those with custom render
+    // nodes. showZoneSelector() will create fresh windows via createZoneSelectorWindow().
+    const QStringList screenIds = m_zoneSelectorWindows.keys();
+    for (const QString& screenId : screenIds) {
+        destroyZoneSelectorWindow(screenId);
     }
 
     Q_EMIT zoneSelectorVisibilityChanged(false);
@@ -299,7 +302,8 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
 
     // Configure layer surface for zone selector (LayerTop for pointer input)
     if (!configureLayerSurface(window, physScreen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityNone,
-                               QStringLiteral("plasmazones-selector-%1").arg(screenId), getAnchorsForPosition(pos))) {
+                               QStringLiteral("plasmazones-selector-%1-%2").arg(screenId).arg(++m_scopeGeneration),
+                               getAnchorsForPosition(pos))) {
         qCWarning(lcOverlay) << "Failed to configure layer surface for zone selector on" << screenId;
         window->deleteLater();
         return;

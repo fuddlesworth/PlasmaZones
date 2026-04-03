@@ -109,6 +109,14 @@ LayerShellWindow::LayerShellWindow(LayerShellIntegration* integration, QtWayland
     // Initial commit to get a configure event
     wl_surface_commit(m_wlSurface);
 
+    // Flush immediately so the compositor receives the new surface before the
+    // event loop processes other work. Without this, the commit sits in the
+    // client-side write buffer while QML compilation or scene graph init blocks
+    // the main thread, delaying the configure response.
+    if (integration->display()) {
+        wl_display_flush(integration->display()->wl_display());
+    }
+
     qCDebug(lcLayerShellWindow) << "Created layer surface:" << scope << "layer=" << layer
                                 << "screen=" << (targetScreen ? targetScreen->name() : QStringLiteral("null"));
 }

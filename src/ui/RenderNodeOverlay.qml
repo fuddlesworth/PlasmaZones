@@ -63,6 +63,10 @@ Window {
     // Desktop wallpaper texture (QImage, set from C++ for shaders with "wallpaper": true)
     property var wallpaperTexture: null
     property bool useWallpaper: false
+    property bool useDepthBuffer: false
+    property var bufferWraps: [] // QStringList from C++; var required (qmlformat rejects list<string>)
+    property string bufferFilter: "linear"
+    property var bufferFilters: [] // QStringList from C++; var required (qmlformat rejects list<string>)
     // Appearance properties
     property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
     property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
@@ -149,6 +153,10 @@ Window {
             property var audioSpectrum: root.audioSpectrum
             property var wallpaperTexture: root.wallpaperTexture
             property bool useWallpaper: root.useWallpaper
+            property bool useDepthBuffer: root.useDepthBuffer
+            property var bufferWraps: root.bufferWraps
+            property string bufferFilter: root.bufferFilter
+            property var bufferFilters: root.bufferFilters
         }
 
         ZoneShaderRenderer {

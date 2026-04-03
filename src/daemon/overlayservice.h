@@ -147,6 +147,15 @@ public:
      */
     void warmUpLayoutOsd();
 
+    /**
+     * @brief Pre-create Navigation OSD QML windows for all connected screens.
+     *
+     * Same rationale as warmUpLayoutOsd(): avoids ~100-300ms QML compilation
+     * delay on the first keyboard navigation action after daemon start or
+     * after the dismiss timer destroys the previous window.
+     */
+    void warmUpNavigationOsd();
+
     // Navigation OSD (feedback for keyboard navigation)
     void showNavigationOsd(bool success, const QString& action, const QString& reason,
                            const QString& sourceZoneId = QString(), const QString& targetZoneId = QString(),
@@ -279,17 +288,21 @@ private:
 
     bool m_screenAddedConnected = false; // Guard for screenAdded connection (lambdas can't use UniqueConnection)
 
+    // Persistent 1x1 keep-alive window that prevents Qt from tearing down
+    // global Wayland/Vulkan protocol objects when all other windows are destroyed.
+    QQuickWindow* m_keepAliveWindow = nullptr;
+
     // Track screens with failed window creation to prevent log spam
     QHash<QString, bool> m_navigationOsdCreationFailed;
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
-    QString m_lastNavigationAction;
-    QString m_lastNavigationReason;
+    QString m_lastNavigationActionKey; // "action:reason" composite key
     QString m_lastNavigationScreenId;
     QElapsedTimer m_lastNavigationTime;
 
     void createZoneSelectorWindow(const QString& screenId, QScreen* physScreen, const QRect& geom);
     void destroyZoneSelectorWindow(const QString& screenId);
     void updateZoneSelectorWindow(const QString& screenId);
+    void showLayoutOsdImpl(Layout* layout, const QString& screenId, bool locked);
     void createLayoutOsdWindow(const QString& screenId, QScreen* physScreen);
     void destroyLayoutOsdWindow(const QString& screenId);
     void createNavigationOsdWindow(const QString& screenId, QScreen* physScreen);
@@ -382,6 +395,12 @@ private:
     // Shader state
     bool m_zoneDataDirty = true;
     QString m_pendingShaderError;
+
+    // Monotonic counter for unique layer-shell scope strings.
+    // Appended to each configureLayerSurface() scope so KWin sees every
+    // new surface as unique, avoiding configure rate-limiting after rapid
+    // destroy/recreate cycles on Vulkan.
+    int m_scopeGeneration = 0;
 
     // CAVA audio visualization
     std::unique_ptr<CavaService> m_cavaService;

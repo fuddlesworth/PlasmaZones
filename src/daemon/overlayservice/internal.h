@@ -182,15 +182,16 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
     writeQmlProperty(window, QStringLiteral("shaderSource"), QString());
 
     // Set all auxiliary props BEFORE shaderSource — see shader.cpp comment
-    writeQmlProperty(window, QStringLiteral("bufferShaderPath"), info.bufferShaderPath);
-    QVariantList pathList;
-    for (const QString& p : info.bufferShaderPaths) {
-        pathList.append(p);
-    }
-    writeQmlProperty(window, QStringLiteral("bufferShaderPaths"), pathList);
+    writeQmlProperty(window, QStringLiteral("bufferShaderPath"),
+                     info.bufferShaderPaths.isEmpty() ? QString() : info.bufferShaderPaths.constFirst());
+    writeQmlProperty(window, QStringLiteral("bufferShaderPaths"), QVariant::fromValue(info.bufferShaderPaths));
     writeQmlProperty(window, QStringLiteral("bufferFeedback"), info.bufferFeedback);
     writeQmlProperty(window, QStringLiteral("bufferScale"), info.bufferScale);
     writeQmlProperty(window, QStringLiteral("bufferWrap"), info.bufferWrap);
+    writeQmlProperty(window, QStringLiteral("bufferWraps"), QVariant::fromValue(info.bufferWraps));
+    writeQmlProperty(window, QStringLiteral("bufferFilter"), info.bufferFilter);
+    writeQmlProperty(window, QStringLiteral("bufferFilters"), QVariant::fromValue(info.bufferFilters));
+    writeQmlProperty(window, QStringLiteral("useDepthBuffer"), info.useDepthBuffer);
     writeQmlProperty(window, QStringLiteral("shaderParams"), QVariant::fromValue(params));
     // Desktop wallpaper subscription
     writeQmlProperty(window, QStringLiteral("useWallpaper"), info.useWallpaper);

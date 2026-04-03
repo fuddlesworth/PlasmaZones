@@ -30,7 +30,7 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     vec4 zoneParams[64];
     vec2 iChannelResolution[4];
     int iAudioSpectrumSize;  // number of bars; 0 = disabled
-    int iFlipBufferY;        // 1 = OpenGL (buffer textures need Y-flip when sampling)
+    int iFlipBufferY;        // Vestigial: always 1. Both OpenGL and Vulkan need Y-flip. Kept for UBO layout stability.
     vec2 iTextureResolution[4]; // user texture sizes (bindings 7-10); std140 pads each vec2 to 16 bytes
 };
 
@@ -47,16 +47,17 @@ const float TAU = 6.28318530718;
 float pxScale() { return max(iResolution.y, 1.0) / 1080.0; }
 
 // Compute fragment coordinates from texture coords.
-// OpenGL framebuffers are Y-up, Vulkan framebuffers are Y-down.
-// iFlipBufferY is 1 for OpenGL, 0 for Vulkan — use it to flip only when needed.
+// Y is always flipped: both OpenGL (Y-up FBO) and Vulkan (negative-height viewport)
+// store buffer data requiring a Y-flip when sampling. iFlipBufferY is always 1.
 vec2 fragCoordFromTexCoord(vec2 uv) {
-    float y = (iFlipBufferY != 0) ? (1.0 - uv.y) : uv.y;
-    return vec2(uv.x, y) * iResolution;
+    return vec2(uv.x, 1.0 - uv.y) * iResolution;
 }
 
-// Clamp color and apply qt_Opacity for final output.
+// Clamp color, apply qt_Opacity, and premultiply alpha for final output.
+// Qt Quick and Wayland compositors expect premultiplied alpha (rgb * alpha).
 vec4 clampFragColor(vec4 color) {
-    return vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
+    float a = clamp(color.a, 0.0, 1.0) * qt_Opacity;
+    return vec4(clamp(color.rgb, 0.0, 1.0) * a, a);
 }
 
 // Zone rect helpers: rect.xy/zw are normalized 0-1; multiply by iResolution for pixels.
@@ -74,23 +75,46 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
 }
 
+// Pseudo-random: integer-based hashes that produce identical results on
+// SPIR-V (Vulkan) and GLSL (OpenGL). The sin()-based hashes produce different
+// values on different shader compilers due to transcendental function precision
+// and FMA fusion, causing visible artifacts in multipass/feedback rendering
+// where sub-ULP differences accumulate across passes.
+
 // Pseudo-random: 1D in → 1D out (float → float)
+// All arithmetic is unsigned to avoid signed overflow (undefined on SPIR-V).
+// Bias by 0x80000000 to map negative floats to distinct hash values near zero.
 float hash11(float n) {
-    return fract(sin(n) * 43758.5453123);
+    uint h = uint(int(n)) + 2147483648u;
+    h = h * 747796405u + 2891336453u;
+    h = ((h >> 16u) ^ h) * 2654435769u;
+    h = ((h >> 16u) ^ h) * 2654435769u;
+    h = (h >> 16u) ^ h;
+    return float(h) / 4294967295.0;
 }
 
 // Pseudo-random: 2D in → 1D out (vec2 → float)
+// Bias by 0x80000000 so negative inputs (e.g. centered UV coordinates) don't
+// collide with positive inputs near zero after int→uint truncation.
 float hash21(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    uvec2 q = uvec2(ivec2(p)) + uvec2(2147483648u);
+    q = q * uvec2(1597334673u, 3812015801u);
+    uint h = (q.x ^ q.y) * 1103515245u + 12345u;
+    h = ((h >> 16u) ^ h) * 2654435769u;
+    h = (h >> 16u) ^ h;
+    return float(h) / 4294967295.0;
 }
 
 // Pseudo-random: 2D in → 2D out (vec2 → vec2, e.g. for particle positions)
 // Must use different expressions for x and y; p.x*p.y == p.y*p.x would yield diagonal-only output
 vec2 hash22(vec2 p) {
-    return fract(sin(vec2(
-        dot(p, vec2(127.1, 311.7)),
-        dot(p, vec2(269.5, 183.3))
-    )) * 43758.5453);
+    uvec2 q = uvec2(ivec2(p)) + uvec2(2147483648u);
+    q = q * uvec2(1597334673u, 3812015801u);
+    uint h1 = (q.x ^ q.y) * 1103515245u + 12345u;
+    uint h2 = (q.x * 2654435769u) ^ (q.y * 2246822519u);
+    h1 = ((h1 >> 16u) ^ h1) * 2654435769u;
+    h2 = ((h2 >> 16u) ^ h2) * 2654435769u;
+    return vec2(float(h1 >> 16u), float(h2 >> 16u)) / 65535.0;
 }
 
 // Composite pre-rendered zone labels over the current color (premult alpha over).
@@ -147,7 +171,7 @@ float luminance(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 // 1D value noise with hermite interpolation
 float noise1D(float x) {
     float i = floor(x);
-    float f = fract(x);
+    float f = x - i; // explicit fract: guaranteed consistent with floor()
     f = f * f * (3.0 - 2.0 * f);
     return mix(hash11(i), hash11(i + 1.0), f);
 }
@@ -155,7 +179,7 @@ float noise1D(float x) {
 // 2D value noise with hermite interpolation
 float noise2D(vec2 p) {
     vec2 i = floor(p);
-    vec2 f = fract(p);
+    vec2 f = p - i; // explicit fract: guaranteed consistent with floor()
     f = f * f * (3.0 - 2.0 * f);
     float a = hash21(i);
     float b = hash21(i + vec2(1.0, 0.0));

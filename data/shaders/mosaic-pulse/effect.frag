@@ -38,7 +38,7 @@ layout(location = 0) out vec4 fragColor;
 // ─── Mosaic noise (prefixed to avoid common.glsl collision) ──────
 
 float mosaicHash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    return hash21(p);
 }
 
 float mosaicNoise(vec2 p) {

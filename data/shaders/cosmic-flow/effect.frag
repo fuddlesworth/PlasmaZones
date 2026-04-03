@@ -26,35 +26,6 @@ layout(location = 0) out vec4 fragColor;
 #include <audio.glsl>
 
 
-// ── Noise helpers ───────────────────────────────────────────────
-
-// Pseudo-random 2D hash
-float rand2D(in vec2 p) {
-    return fract(sin(dot(p, vec2(15.285, 97.258))) * 47582.122);
-}
-
-// Quintic interpolation for C2 continuity; eliminates visible cell boundaries
-vec2 quintic(vec2 f) {
-    return f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-}
-
-// Value noise
-float noise(in vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-
-    float a = rand2D(i);
-    float b = rand2D(i + vec2(1.0, 0.0));
-    float c = rand2D(i + vec2(0.0, 1.0));
-    float d = rand2D(i + vec2(1.0, 1.0));
-
-    vec2 u = quintic(f);
-    float lower = mix(a, b, u.x);
-    float upper = mix(c, d, u.x);
-
-    return mix(lower, upper, u.y);
-}
-
 // Fractal Brownian Motion with rotation
 float fbm(in vec2 uv, int octaves, float rotAngle) {
     float value = 0.0;
@@ -65,7 +36,7 @@ float fbm(in vec2 uv, int octaves, float rotAngle) {
     mat2 rot = mat2(c, -s, s, c);
 
     for (int i = 0; i < octaves && i < 8; i++) {
-        value += amplitude * noise(uv);
+        value += amplitude * noise2D(uv);
         uv = rot * uv * 2.0 + vec2(180.0);
         amplitude *= 0.6;
     }
@@ -185,7 +156,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         // ── Secondary detail layer: noise veins ─────────────
         // Thin vein lines at the 0.5 contour of a higher-frequency noise
         // Bass widens the vein detection threshold (physically thicker veins)
-        float veinNoise = noise(centeredUV * 6.0 + time * vSpeed * 0.5);
+        float veinNoise = noise2D(centeredUV * 6.0 + time * vSpeed * 0.5);
         float veinWidth = 0.06 + bassEnv * 0.025;
         float veins = 1.0 - smoothstep(0.0, veinWidth, abs(veinNoise - 0.5));
         // Color veins slightly offset from base palette
@@ -199,7 +170,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
             float starThreshold = mix(0.85, 0.55, smoothstep(0.05, 0.5, treble));
             float starIntensity = smoothstep(starThreshold, starThreshold + 0.1, r);
             // Tiny glow: use high-freq noise to scatter slightly
-            float sparkle = noise(centeredUV * 30.0 + time * 2.0);
+            float sparkle = noise2D(centeredUV * 30.0 + time * 2.0);
             sparkle = smoothstep(0.6, 0.9, sparkle);
             float starBright = starIntensity * sparkle * treble * sparkleStr * audioReact;
             // Stars glow white-hot with a slight palette tint

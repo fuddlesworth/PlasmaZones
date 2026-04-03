@@ -437,8 +437,9 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
     window->setProperty("isShaderOverlay", true);
 
     const QString scopeId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
-    if (!configureLayerSurface(window, screen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
-                               QStringLiteral("plasmazones-shader-preview-%1").arg(scopeId))) {
+    if (!configureLayerSurface(
+            window, screen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
+            QStringLiteral("plasmazones-shader-preview-%1-%2").arg(scopeId).arg(++m_scopeGeneration))) {
         qCWarning(lcOverlay) << "Failed to configure layer surface for shader preview on" << scopeId;
         window->deleteLater();
         return;
@@ -457,6 +458,7 @@ void OverlayService::destroyShaderPreviewWindow()
             disconnect(m_shaderPreviewScreen, nullptr, m_shaderPreviewWindow, nullptr);
         }
         m_shaderPreviewWindow->close();
+        m_shaderPreviewWindow->destroy();
         m_shaderPreviewWindow->deleteLater();
         m_shaderPreviewWindow = nullptr;
     }

@@ -6,9 +6,9 @@
 #include "../rendering_macros.h"
 
 #include "../../../core/logging.h"
+#include "../../../core/shaderutils.h"
 
 #include <QFileInfo>
-#include <QLatin1String>
 
 namespace PlasmaZones {
 
@@ -182,14 +182,14 @@ void ZoneShaderNodeRhi::setUserTextureWrap(int slot, const QString& wrap)
     if (slot < 0 || slot >= kMaxUserTextures) {
         return;
     }
-    const QString use = (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
+    const QString use = normalizeWrapMode(wrap);
     if (m_userTextureWraps[slot] == use) {
         return;
     }
     m_userTextureWraps[slot] = use;
     // Force sampler recreation with new wrap mode
     m_userTextureSamplers[slot].reset();
-    resetAllSrbs();
+    resetAllBindingsAndPipelines();
 }
 
 void ZoneShaderNodeRhi::setWallpaperTexture(const QImage& image)
@@ -212,7 +212,11 @@ void ZoneShaderNodeRhi::setUseWallpaper(bool use)
         return;
     }
     m_useWallpaper = use;
-    resetAllSrbs();
+    // Toggling wallpaper adds/removes binding 11 from the SRB layout.
+    // resetAllBindingsAndPipelines() resets all SRBs AND pipelines so they are
+    // recreated with the new layout.
+    resetAllBindingsAndPipelines();
+    markDirty(QSGNode::DirtyMaterial);
 }
 
 void ZoneShaderNodeRhi::appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const
@@ -234,14 +238,47 @@ void ZoneShaderNodeRhi::appendWallpaperBinding(QVector<QRhiShaderResourceBinding
     }
 }
 
-void ZoneShaderNodeRhi::resetAllSrbs()
+void ZoneShaderNodeRhi::appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings) const
+{
+    if (m_useDepthBuffer && m_depthTexture && m_depthSampler) {
+        bindings.append(QRhiShaderResourceBinding::sampledTexture(12, QRhiShaderResourceBinding::FragmentStage,
+                                                                  m_depthTexture.get(), m_depthSampler.get()));
+    }
+}
+
+void ZoneShaderNodeRhi::setUseDepthBuffer(bool use)
+{
+    if (m_useDepthBuffer == use) {
+        return;
+    }
+    m_useDepthBuffer = use;
+    // Toggling depth buffer adds/removes binding 12 from the SRB layout.
+    // Release depth resources so ensureBufferTarget() recreates them with the new config.
+    m_depthTexture.reset();
+    m_depthSampler.reset();
+    // resetAllBindingsAndPipelines() resets all SRBs AND pipelines so they are
+    // recreated with the new layout.
+    resetAllBindingsAndPipelines();
+    markDirty(QSGNode::DirtyMaterial);
+}
+
+void ZoneShaderNodeRhi::resetAllBindingsAndPipelines()
 {
     m_srb.reset();
     m_srbB.reset();
     m_bufferSrb.reset();
     m_bufferSrbB.reset();
+    // Pipelines bake the SRB layout (descriptor set layout) at creation time.
+    // When a texture binding is added or removed (e.g. labels texture created
+    // late, audio spectrum resized from zero), the rebuilt SRBs have a different
+    // layout than the pipelines expect. Vulkan rejects the mismatch silently,
+    // causing missing/incomplete rendering. Reset all pipelines so they are
+    // recreated with the new SRB layout.
+    m_pipeline.reset();
+    m_bufferPipeline.reset();
     for (int i = 0; i < kMaxBufferPasses; ++i) {
         m_multiBufferSrbs[i].reset();
+        m_multiBufferPipelines[i].reset();
     }
 }
 
@@ -273,10 +310,12 @@ void ZoneShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
 
     m_bufferShaderDirty = true;
     m_bufferShaderReady = false;
+    m_bufferShaderRetries = 0;
     m_bufferFragmentShaderSource.clear();
     m_bufferMtime = 0;
     m_multiBufferShadersReady = false;
     m_multiBufferShaderDirty = true;
+    m_multiBufferShaderRetries = 0;
     for (int i = 0; i < kMaxBufferPasses; ++i) {
         m_multiBufferFragmentShaderSources[i].clear();
         m_multiBufferFragmentShaders[i] = QShader();
@@ -363,18 +402,61 @@ void ZoneShaderNodeRhi::setBufferScale(qreal scale)
 
 void ZoneShaderNodeRhi::setBufferWrap(const QString& wrap)
 {
-    const QString use = (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
-    if (m_bufferWrap == use) {
+    const QString use = normalizeWrapMode(wrap);
+    if (m_bufferWrapDefault == use) {
         return;
     }
-    m_bufferWrap = use;
-    m_bufferSampler.reset();
-    m_bufferSrb.reset();
-    m_bufferSrbB.reset();
-    m_srb.reset();
-    m_srbB.reset();
+    m_bufferWrapDefault = use;
     for (int i = 0; i < kMaxBufferPasses; ++i) {
-        m_multiBufferSrbs[i].reset();
+        m_bufferWraps[i] = use;
+        m_bufferSamplers[i].reset();
+    }
+    resetAllBindingsAndPipelines();
+}
+
+void ZoneShaderNodeRhi::setBufferWraps(const QStringList& wraps)
+{
+    bool changed = false;
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        const QString use = (i < wraps.size()) ? normalizeWrapMode(wraps.at(i)) : m_bufferWrapDefault;
+        if (m_bufferWraps[i] != use) {
+            m_bufferWraps[i] = use;
+            m_bufferSamplers[i].reset();
+            changed = true;
+        }
+    }
+    if (changed) {
+        resetAllBindingsAndPipelines();
+    }
+}
+
+void ZoneShaderNodeRhi::setBufferFilter(const QString& filter)
+{
+    const QString use = normalizeFilterMode(filter);
+    if (m_bufferFilterDefault == use) {
+        return;
+    }
+    m_bufferFilterDefault = use;
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        m_bufferFilters[i] = use;
+        m_bufferSamplers[i].reset();
+    }
+    resetAllBindingsAndPipelines();
+}
+
+void ZoneShaderNodeRhi::setBufferFilters(const QStringList& filters)
+{
+    bool changed = false;
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        const QString use = (i < filters.size()) ? normalizeFilterMode(filters.at(i)) : m_bufferFilterDefault;
+        if (m_bufferFilters[i] != use) {
+            m_bufferFilters[i] = use;
+            m_bufferSamplers[i].reset();
+            changed = true;
+        }
+    }
+    if (changed) {
+        resetAllBindingsAndPipelines();
     }
 }
 

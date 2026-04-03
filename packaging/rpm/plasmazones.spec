@@ -180,6 +180,7 @@ echo ""
 # Desktop files
 %{_datadir}/applications/org.plasmazones.editor.desktop
 %{_datadir}/applications/org.plasmazones.daemon.desktop
+%{_datadir}/applications/org.plasmazones.settings.desktop
 %{_datadir}/applications/kcm_plasmazones_*.desktop
 
 # KGlobalAccel component (display name + icon in Shortcuts KCM)

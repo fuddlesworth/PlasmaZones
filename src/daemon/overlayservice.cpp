@@ -46,6 +46,7 @@ void cleanupWindowMap(QHash<K, QQuickWindow*>& windowMap)
         if (window) {
             QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
             window->close();
+            window->destroy();
             window->deleteLater();
         }
     }
@@ -131,6 +132,36 @@ OverlayService::OverlayService(QObject* parent)
 
     m_cavaService = std::make_unique<CavaService>(this);
     connect(m_cavaService.get(), &CavaService::spectrumUpdated, this, &OverlayService::onAudioSpectrumUpdated);
+
+    // Create a persistent 1x1 keep-alive window to prevent Qt from tearing down
+    // global Wayland/Vulkan protocol objects (zwp_linux_dmabuf_v1, wp_presentation,
+    // etc.) when the last visible QQuickWindow is destroyed. Without this, after
+    // overlay destroy-on-hide, Qt cleans up the Vulkan rendering infrastructure
+    // and no new windows can render buffers.
+    QTimer::singleShot(0, this, [this]() {
+        QScreen* screen = Utils::primaryScreen();
+        if (!screen) {
+            return;
+        }
+        m_keepAliveWindow = new QQuickWindow();
+        QQmlEngine::setObjectOwnership(m_keepAliveWindow, QQmlEngine::CppOwnership);
+#if QT_CONFIG(vulkan)
+        auto* vulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
+        if (vulkanInstance) {
+            m_keepAliveWindow->setVulkanInstance(vulkanInstance);
+        }
+#endif
+        m_keepAliveWindow->setScreen(screen);
+        m_keepAliveWindow->setWidth(1);
+        m_keepAliveWindow->setHeight(1);
+        // Configure as background layer — invisible, no input, minimal compositor cost.
+        // Best-effort: if layer-shell is unavailable the window still keeps Qt's
+        // Vulkan globals alive (just renders as a tiny xdg_toplevel).
+        (void)configureLayerSurface(m_keepAliveWindow, screen, LayerSurface::LayerBackground,
+                                    LayerSurface::KeyboardInteractivityNone, QStringLiteral("plasmazones-keepalive"),
+                                    LayerSurface::AnchorNone, 0);
+        m_keepAliveWindow->show();
+    });
 }
 
 bool OverlayService::isVisible() const
@@ -166,6 +197,14 @@ OverlayService::~OverlayService()
     cleanupWindowMap(m_overlayWindows);
     cleanupWindowMap(m_layoutOsdWindows);
     cleanupWindowMap(m_navigationOsdWindows);
+
+    // Destroy keep-alive window last (after all other windows)
+    if (m_keepAliveWindow) {
+        m_keepAliveWindow->close();
+        m_keepAliveWindow->destroy();
+        delete m_keepAliveWindow;
+        m_keepAliveWindow = nullptr;
+    }
 
     // Process pending deletions before destroying the QML engine.
     // All deleteLater() calls must complete while the engine is still valid.
@@ -351,10 +390,16 @@ void OverlayService::hide()
     // Do NOT invalidate m_shaderTimer - keeps iTime continuous across show/hide
     // so animations feel less predictable and don't restart
 
-    for (auto* window : std::as_const(m_overlayWindows)) {
-        if (window) {
-            window->hide();
-        }
+    // Destroy overlay windows instead of hiding them. On Vulkan with Wayland
+    // layer-shell, window->hide() destroys the wl_surface but the Qt Vulkan
+    // backend doesn't properly reinitialize the VkSwapchainKHR when the window
+    // is re-shown, causing the scene graph render loop to stall. Destroying the
+    // window entirely and creating a fresh one on the next show() avoids this.
+    // initializeOverlay() will call createOverlayWindow() since m_overlayWindows
+    // is now empty.
+    const QStringList screenIds = m_overlayWindows.keys();
+    for (const QString& screenId : screenIds) {
+        destroyOverlayWindow(screenId);
     }
 
     m_pendingShaderError.clear();
@@ -430,21 +475,23 @@ Layout* OverlayService::resolveScreenLayout(const QString& screenId) const
 
 void OverlayService::hideDisabledAndRefresh()
 {
-    // Hide overlay/selector on screens where the current context is disabled
+    // Destroy windows on screens where the current context is disabled.
+    // Must destroy (not just hide) because on Vulkan, hide() destroys the
+    // VkSwapchainKHR and Qt doesn't reinitialize it on re-show.
     if (m_settings) {
-        for (const QString& screenId : m_zoneSelectorWindows.keys()) {
-            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
-                if (auto* window = m_zoneSelectorWindows.value(screenId)) {
-                    window->hide();
+        {
+            const QStringList selectorScreenIds = m_zoneSelectorWindows.keys();
+            for (const QString& screenId : selectorScreenIds) {
+                if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+                    destroyZoneSelectorWindow(screenId);
                 }
             }
         }
         if (m_visible) {
-            for (const QString& screenId : m_overlayWindows.keys()) {
+            const QStringList overlayScreenIds = m_overlayWindows.keys();
+            for (const QString& screenId : overlayScreenIds) {
                 if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
-                    if (auto* window = m_overlayWindows.value(screenId)) {
-                        window->hide();
-                    }
+                    destroyOverlayWindow(screenId);
                 }
             }
         }

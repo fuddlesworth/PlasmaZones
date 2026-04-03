@@ -117,9 +117,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     }
 
     // Match main overlay: position to cover virtual or physical screen
-    if (!configureLayerSurface(m_snapAssistWindow, screen, LayerSurface::LayerTop,
-                               LayerSurface::KeyboardInteractivityExclusive,
-                               QStringLiteral("plasmazones-snap-assist-%1").arg(screenId))) {
+    if (!configureLayerSurface(
+            m_snapAssistWindow, screen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityExclusive,
+            QStringLiteral("plasmazones-snap-assist-%1-%2").arg(screenId).arg(++m_scopeGeneration))) {
         qCWarning(lcOverlay) << "showSnapAssist: failed to configure layer surface";
         destroySnapAssistWindow();
         Q_EMIT snapAssistDismissed();
@@ -278,6 +278,7 @@ void OverlayService::destroySnapAssistWindow()
             disconnect(m_snapAssistScreen, nullptr, m_snapAssistWindow, nullptr);
         }
         m_snapAssistWindow->close();
+        m_snapAssistWindow->destroy();
         m_snapAssistWindow->deleteLater();
         m_snapAssistWindow = nullptr;
     }
@@ -382,9 +383,9 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     writeColorSettings(m_layoutPickerWindow, m_settings);
 
     // Layer shell with keyboard interactivity — position to virtual or physical screen
-    if (!configureLayerSurface(m_layoutPickerWindow, screen, LayerSurface::LayerTop,
-                               LayerSurface::KeyboardInteractivityExclusive,
-                               QStringLiteral("plasmazones-layout-picker-%1").arg(resolvedId))) {
+    if (!configureLayerSurface(
+            m_layoutPickerWindow, screen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityExclusive,
+            QStringLiteral("plasmazones-layout-picker-%1-%2").arg(resolvedId).arg(++m_scopeGeneration))) {
         qCWarning(lcOverlay) << "showLayoutPicker: failed to configure layer surface";
         destroyLayoutPickerWindow();
         return;
@@ -458,6 +459,7 @@ void OverlayService::destroyLayoutPickerWindow()
             disconnect(screen, nullptr, m_layoutPickerWindow, nullptr);
         }
         m_layoutPickerWindow->close();
+        m_layoutPickerWindow->destroy();
         m_layoutPickerWindow->deleteLater();
         m_layoutPickerWindow = nullptr;
     }

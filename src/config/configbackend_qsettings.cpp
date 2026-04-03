@@ -315,6 +315,21 @@ void QSettingsConfigBackend::deleteGroup(const QString& name)
     m_settings->remove(name);
 }
 
+QString QSettingsConfigBackend::readRootString(const QString& key, const QString& defaultValue) const
+{
+    return m_settings->value(key, defaultValue).toString();
+}
+
+void QSettingsConfigBackend::writeRootString(const QString& key, const QString& value)
+{
+    m_settings->setValue(key, value);
+}
+
+void QSettingsConfigBackend::removeRootKey(const QString& key)
+{
+    m_settings->remove(key);
+}
+
 QStringList QSettingsConfigBackend::groupList() const
 {
     return m_settings->childGroups();

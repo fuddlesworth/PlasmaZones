@@ -46,7 +46,17 @@ QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo& info) const
     map[QStringLiteral("bufferFeedback")] = info.bufferFeedback;
     map[QStringLiteral("bufferScale")] = info.bufferScale;
     map[QStringLiteral("bufferWrap")] = info.bufferWrap;
+    if (!info.bufferWraps.isEmpty()) {
+        map[QStringLiteral("bufferWraps")] = QVariant::fromValue(info.bufferWraps);
+    }
+    map[QStringLiteral("bufferFilter")] = info.bufferFilter;
+    if (!info.bufferFilters.isEmpty()) {
+        map[QStringLiteral("bufferFilters")] = QVariant::fromValue(info.bufferFilters);
+    }
+    // Keys match metadata.json names ("wallpaper", "depthBuffer"), not Q_PROPERTY names
+    // ("useWallpaper", "useDepthBuffer"). This map goes to D-Bus/settings UI, not QML.
     map[QStringLiteral("wallpaper")] = info.useWallpaper;
+    map[QStringLiteral("depthBuffer")] = info.useDepthBuffer;
 
     // Parameters list (empty list is OK for D-Bus)
     QVariantList params;
@@ -54,6 +64,16 @@ QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo& info) const
         params.append(parameterInfoToVariantMap(param));
     }
     map[QStringLiteral("parameters")] = params;
+
+    // Presets list
+    QVariantList presetsList;
+    for (auto it = info.presets.constBegin(); it != info.presets.constEnd(); ++it) {
+        QVariantMap presetMap;
+        presetMap[QStringLiteral("name")] = it.key();
+        presetMap[QStringLiteral("params")] = it.value();
+        presetsList.append(presetMap);
+    }
+    map[QStringLiteral("presets")] = presetsList;
 
     return map;
 }
@@ -86,6 +106,41 @@ QVariantMap ShaderRegistry::parameterInfoToVariantMap(const ParameterInfo& param
     }
 
     return map;
+}
+
+QVariantMap ShaderRegistry::presetParams(const QString& shaderId, const QString& presetName) const
+{
+    const ShaderInfo info = shader(shaderId);
+    if (!info.isValid() || !info.presets.contains(presetName)) {
+        return {};
+    }
+    // Validate and fill defaults for any missing parameters
+    return validateAndCoerceParams(shaderId, info.presets.value(presetName));
+}
+
+QStringList ShaderRegistry::shaderPresetNames(const QString& shaderId) const
+{
+    const ShaderInfo info = shader(shaderId);
+    if (!info.isValid()) {
+        return {};
+    }
+    return info.presets.keys();
+}
+
+QVariantList ShaderRegistry::shaderPresetsVariant(const QString& shaderId) const
+{
+    const ShaderInfo info = shader(shaderId);
+    if (!info.isValid()) {
+        return {};
+    }
+    QVariantList result;
+    for (auto it = info.presets.constBegin(); it != info.presets.constEnd(); ++it) {
+        QVariantMap entry;
+        entry[QStringLiteral("name")] = it.key();
+        entry[QStringLiteral("params")] = it.value();
+        result.append(entry);
+    }
+    return result;
 }
 
 bool ShaderRegistry::validateParams(const QString& id, const QVariantMap& params) const
@@ -202,8 +257,9 @@ QImage ShaderRegistry::loadWallpaperImage()
     QString path = s_cachedWallpaperPath;
     if (path.isEmpty() || !QFile::exists(path)) {
         lock.unlock();
-        path = wallpaperPath(); // acquires lock internally
+        wallpaperPath(); // populates s_cachedWallpaperPath (acquires lock internally)
         lock.relock();
+        path = s_cachedWallpaperPath; // re-read after relock — local copy may be stale
     }
     if (path.isEmpty()) {
         return {};

@@ -53,6 +53,10 @@ Item {
         iResolution: root.safeConfig.iResolution || Qt.size(width, height)
         iMouse: root.safeConfig.iMouse || Qt.point(0, 0)
         useWallpaper: root.safeConfig.useWallpaper ?? false
+        useDepthBuffer: root.safeConfig.useDepthBuffer ?? false
+        bufferWraps: root.safeConfig.bufferWraps || []
+        bufferFilter: root.safeConfig.bufferFilter || "linear"
+        bufferFilters: root.safeConfig.bufferFilters || []
         onStatusChanged: {
             if (status === ZoneShaderItem.Error)
                 root.shaderError(errorLog);

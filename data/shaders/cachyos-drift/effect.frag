@@ -31,25 +31,9 @@ layout(location = 0) out vec4 fragColor;
 
 
 // ── Noise helpers ───────────────────────────────────────────────
-
-float rand2D(in vec2 p) {
-    return fract(sin(dot(p, vec2(15.285, 97.258))) * 47582.122);
-}
-
-vec2 quintic(vec2 f) {
-    return f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-}
-
-float noise(in vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    float a = rand2D(i);
-    float b = rand2D(i + vec2(1.0, 0.0));
-    float c = rand2D(i + vec2(0.0, 1.0));
-    float d = rand2D(i + vec2(1.0, 1.0));
-    vec2 u = quintic(f);
-    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
+// Uses common.glsl's integer-based hash21/noise2D for cross-backend
+// consistency (sin()-based hashes produce different values on Vulkan
+// vs OpenGL due to transcendental precision differences).
 
 float fbm(in vec2 uv, int octaves, float rotAngle) {
     float value = 0.0;
@@ -58,7 +42,7 @@ float fbm(in vec2 uv, int octaves, float rotAngle) {
     float s = sin(rotAngle);
     mat2 rot = mat2(c, -s, s, c);
     for (int i = 0; i < octaves && i < 8; i++) {
-        value += amplitude * noise(uv);
+        value += amplitude * noise2D(uv);
         uv = rot * uv * 2.0 + vec2(180.0);
         amplitude *= 0.55;
     }
@@ -261,8 +245,8 @@ LogoHit evalLogoInstance(vec2 logoUV, int idx, float time,
     for (int i = 0; i < 12; i++) {
         float phase = float(i) * 2.39996 + float(idx) * 1.618;
         vec2 wobble = vec2(
-            sin(time * 0.7 + phase) * noise(vec2(float(i) * 7.3 + float(idx) * 100.0, time * 0.3)),
-            cos(time * 0.9 + phase) * noise(vec2(time * 0.3, float(i) * 11.1 + float(idx) * 100.0))
+            sin(time * 0.7 + phase) * noise2D(vec2(float(i) * 7.3 + float(idx) * 100.0, time * 0.3)),
+            cos(time * 0.9 + phase) * noise2D(vec2(time * 0.3, float(i) * 11.1 + float(idx) * 100.0))
         ) * 0.004;
         vec2 vertPos = (i < 11) ? vec2[11](V0,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11)[i] : CIRC_POS_0;
         vec2 scatterDir = normalize(vertPos - LOGO_CENTER + 0.001);
@@ -443,15 +427,15 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
         // Domain warp: bass makes veins slither, mids add slower undulation
         float warpStr = 0.08 + bassEnv * 0.25 + midsEnv * 0.12;
-        float wn1 = noise(veinUV * 1.8 + time * 0.6);
-        float wn2 = noise(veinUV * 1.8 + time * 0.6 + vec2(97.0, 53.0));
+        float wn1 = noise2D(veinUV * 1.8 + time * 0.6);
+        float wn2 = noise2D(veinUV * 1.8 + time * 0.6 + vec2(97.0, 53.0));
         veinUV += (vec2(wn1, wn2) - 0.5) * warpStr;
 
         // Second warp layer driven by treble — fast jittery distortion
         float trebleWarp = trebleEnv * 0.1;
         if (trebleWarp > 0.005) {
-            float tw1 = noise(veinUV * 4.0 + time * 3.0);
-            float tw2 = noise(veinUV * 4.0 + time * 3.0 + vec2(41.0, 73.0));
+            float tw1 = noise2D(veinUV * 4.0 + time * 3.0);
+            float tw2 = noise2D(veinUV * 4.0 + time * 3.0 + vec2(41.0, 73.0));
             veinUV += (vec2(tw1, tw2) - 0.5) * trebleWarp;
         }
 
@@ -577,13 +561,13 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             // ── Energy veins along facet seams ────────────────────
             if (iLogo.dist < 0.0 && iLogo.edgeDist < 0.015) {
                 float crease = smoothstep(0.012, 0.001, iLogo.edgeDist);
-                float edgeFlow = noise(iLogoUV * 30.0 + flowDir * time * 2.0 + float(li) * 50.0);
+                float edgeFlow = noise2D(iLogoUV * 30.0 + flowDir * time * 2.0 + float(li) * 50.0);
                 float flowPulse = smoothstep(0.3, 0.7, edgeFlow);
                 vec3 creaseCol = mix(palGlow, vec3(1.0), 0.3);
                 col += creaseCol * crease * (0.25 + flowPulse * 0.3) * depthFactor;
 
                 if (trebleEnv > 0.01) {
-                    float sparkN = noise(iLogoUV * 50.0 + time * 8.0 + float(li) * 77.0);
+                    float sparkN = noise2D(iLogoUV * 50.0 + time * 8.0 + float(li) * 77.0);
                     float spark = step(0.92, sparkN) * trebleEnv * sparkleStr;
                     col += vec3(1.0) * crease * spark * depthFactor;
                 }
@@ -591,7 +575,7 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
             // ── Treble edge discharge ─────────────────────────────
             if (trebleEnv > 0.01 && iLogo.dist > -0.005 && iLogo.dist < 0.02) {
-                float sparkN = noise(iLogoUV * 35.0 + time * 7.0 + float(li) * 33.0);
+                float sparkN = noise2D(iLogoUV * 35.0 + time * 7.0 + float(li) * 33.0);
                 sparkN = smoothstep(0.5, 0.95, sparkN);
                 float edgeMask = smoothstep(0.02, 0.0, abs(iLogo.dist));
                 col += mix(palGlow, vec3(1.0), 0.5) * sparkN * edgeMask * trebleEnv * sparkleStr * depthFactor;
@@ -799,8 +783,8 @@ vec4 compositeCachyLabels(vec4 color, vec2 fragCoord,
         // Noise at pixel scale — creates irregular angular regions inside text.
         // Each region gets a distinct color from the palette via threshold.
         vec2 nCoord = fragCoord * 0.08 + vec2(iTime * 0.6, iTime * 0.35);
-        float n1 = noise(nCoord);
-        float n2 = noise(nCoord * 1.7 + 50.0);
+        float n1 = noise2D(nCoord);
+        float n2 = noise2D(nCoord * 1.7 + 50.0);
 
         // Quantize noise into 4 distinct bands — hard color boundaries
         float band = floor(n1 * 4.0) / 3.0;  // 0.0, 0.33, 0.67, 1.0

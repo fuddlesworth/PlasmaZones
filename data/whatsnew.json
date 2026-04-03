@@ -1,6 +1,20 @@
 {
     "releases": [
         {
+            "version": "2.6.0",
+            "date": "2026-04-03",
+            "highlights": [
+                "Tumbleweed Drift shader \u2014 openSUSE branded desert overlay with rolling logos and audio-reactive dust effects",
+                "Neon Venom and Chrome Protocol shaders",
+                "Voxel-terrain multipass with depth buffer and improved highlights",
+                "Shader engine \u2014 depth buffer, per-channel filter/wrapping, and shader presets",
+                "Autotile JS API \u2014 per-window context, custom parameters, and lifecycle hooks",
+                "Layout ordering settings for snapping and tiling cycle order",
+                "What's New dialog shown on first launch after update",
+                "Vulkan and rendering pipeline stability fixes"
+            ]
+        },
+        {
             "version": "2.5.3",
             "date": "2026-04-01",
             "highlights": [

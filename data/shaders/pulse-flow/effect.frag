@@ -184,6 +184,107 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     return result;
 }
 
+// ─── Energy Label Composite ─────────────────────────────────────────────────
+// Labels rendered as hot energy traces with flowing pulse halo, chromatic heat
+// shift, bass-reactive brightness, and treble spark discharge along outlines.
+
+float getLabelGlowSpread() { return customParams[3].x >= 0.0 ? customParams[3].x : 3.5; }
+float getLabelBrightness() { return customParams[3].y >= 0.0 ? customParams[3].y : 1.5; }
+float getLabelAudioReact() { return customParams[3].z >= 0.0 ? customParams[3].z : 1.0; }
+float getLabelChromaStr()  { return customParams[3].w >= 0.0 ? customParams[3].w : 1.5; }
+
+vec4 compositePulseLabels(vec4 color, vec2 fragCoord,
+                          vec3 glowCol, vec3 trailCol,
+                          float bass, float mids, float treble, bool hasAudio) {
+    vec2 uv = labelsUv(fragCoord);
+    vec2 texel = 1.0 / max(iResolution, vec2(1.0));
+    vec4 labels = texture(uZoneLabels, uv);
+
+    float labelGlowSpread = getLabelGlowSpread();
+    float labelBrightness = getLabelBrightness();
+    float labelAudioReact = getLabelAudioReact();
+    float labelChromaStr  = getLabelChromaStr();
+
+    // ── Halo: Gaussian blur of label alpha for glow envelope ────────────
+    float halo = 0.0;
+    float spread = labelGlowSpread + (hasAudio ? bass * 2.0 * labelAudioReact : 0.0);
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            float w = exp(-float(dx * dx + dy * dy) * 0.25);
+            halo += texture(uZoneLabels, uv + vec2(float(dx), float(dy)) * texel * spread).a * w;
+        }
+    }
+    halo /= 16.5;
+
+    // ── Halo rendering: energy trail around text ────────────────────────
+    if (halo > 0.003) {
+        float haloEdge = halo * (1.0 - labels.a);
+
+        // Flowing color: pulse between glow and trail along a radial wave
+        float flowPhase = length(uv - 0.5) * 6.0 + iTime * 1.2;
+        vec3 haloCol = mix(trailCol, glowCol, 0.5 + 0.5 * sin(flowPhase));
+
+        // Mids shift the halo palette — warmer at high mids
+        if (hasAudio && mids > 0.04) {
+            float warmth = smoothstep(0.04, 0.4, mids);
+            haloCol = mix(haloCol, glowCol * 1.3, warmth * 0.5);
+        }
+
+        float haloBright = haloEdge * 0.4 * labelBrightness;
+
+        // Bass: halo pulses brighter on beat
+        if (hasAudio) {
+            haloBright *= 1.0 + bass * 1.2 * labelAudioReact;
+        }
+
+        // Treble: spark discharge along halo outline
+        if (hasAudio && treble > 0.05 && labelAudioReact > 0.01) {
+            float sparkAngle = atan(uv.y - 0.5, uv.x - 0.5);
+            float sparkTravel = fract(iTime * 3.0) * TAU;
+            float sparkDist = abs(mod(sparkAngle - sparkTravel + PI, TAU) - PI);
+            float spark = exp(-sparkDist * 5.0) * treble * labelAudioReact;
+            color.rgb += glowCol * haloEdge * spark * labelBrightness;
+        }
+
+        color.rgb += haloCol * haloBright;
+        color.a = max(color.a, haloEdge * 0.5);
+    }
+
+    // ── Core text: hot energy with chromatic heat shift ──────────────────
+    if (labels.a > 0.01) {
+        // Chromatic aberration: offset R and B channels for heat distortion
+        float caStr = (hasAudio ? labelChromaStr + bass * 2.5 * labelAudioReact : labelChromaStr)
+            * texel.x * iResolution.x * 0.003;
+        float caAngle = iTime * 0.9;
+        vec2 caDir = vec2(cos(caAngle), sin(caAngle));
+        float rCh = texture(uZoneLabels, uv + caDir * caStr).a;
+        float bCh = texture(uZoneLabels, uv - caDir * caStr).a;
+
+        // Compose: R from offset, G from center, B from opposite offset
+        vec3 chromaticText = vec3(rCh, labels.a, bCh);
+
+        // Color: blend between glow (hot) and white (overdriven) based on
+        // heat, with trail color tinting the chromatic fringe
+        vec3 core = mix(color.rgb * (1.0 + labelBrightness * 0.5), glowCol, 0.4)
+            + chromaticText * trailCol * 0.3;
+        core += glowCol * labels.a * 0.3 * labelBrightness;
+
+        // Data flicker: irregular brightness variation (not a steady pulse)
+        float flicker = 0.9 + 0.1 * sin(iTime * 19.0) * sin(iTime * 27.0);
+        core *= flicker;
+
+        // Bass: brightness surge
+        if (hasAudio) {
+            core *= 1.0 + bass * 0.6 * labelAudioReact;
+        }
+
+        color.rgb = mix(color.rgb, core, labels.a);
+        color.a = max(color.a, labels.a);
+    }
+
+    return color;
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 void main() {
@@ -213,9 +314,9 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    // Simple label compositing (direct overlay, no blur halo)
     if (customParams[1].w > 0.5) {
-        color = compositeLabelsWithUv(color, fragCoord);
+        color = compositePulseLabels(color, fragCoord, glowCol, trailCol,
+                                     bass, mids, treble, hasAudio);
     }
 
     fragColor = clampFragColor(color);

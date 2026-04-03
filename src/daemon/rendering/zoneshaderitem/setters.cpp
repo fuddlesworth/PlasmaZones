@@ -6,6 +6,7 @@
 
 #include "../../../core/constants.h"
 #include "../../../core/logging.h"
+#include "../../../core/shaderutils.h"
 
 #include <QFile>
 #include <QMutexLocker>
@@ -78,10 +79,6 @@ void ZoneShaderItem::setIMouse(const QPointF& mouse)
 
 void ZoneShaderItem::setZones(const QVariantList& zones)
 {
-    // Note: We intentionally skip deep comparison here for performance reasons.
-    // Zone data changes frequently during animations, and comparing large QVariantLists
-    // on every frame would be more expensive than re-parsing. The parseZoneData()
-    // function handles the actual change detection via m_zoneDataDirty flag.
     if (m_zones == zones) {
         return;
     }
@@ -198,6 +195,37 @@ void ZoneShaderItem::setBufferWrap(const QString& wrap)
     }
     m_bufferWrap = use;
     Q_EMIT bufferWrapChanged();
+    update();
+}
+
+void ZoneShaderItem::setBufferWraps(const QStringList& wraps)
+{
+    if (m_bufferWraps == wraps) {
+        return;
+    }
+    m_bufferWraps = wraps;
+    Q_EMIT bufferWrapsChanged();
+    update();
+}
+
+void ZoneShaderItem::setBufferFilter(const QString& filter)
+{
+    const QString use = normalizeFilterMode(filter);
+    if (m_bufferFilter == use) {
+        return;
+    }
+    m_bufferFilter = use;
+    Q_EMIT bufferFilterChanged();
+    update();
+}
+
+void ZoneShaderItem::setBufferFilters(const QStringList& filters)
+{
+    if (m_bufferFilters == filters) {
+        return;
+    }
+    m_bufferFilters = filters;
+    Q_EMIT bufferFiltersChanged();
     update();
 }
 
@@ -341,7 +369,7 @@ void ZoneShaderItem::setShaderParams(const QVariantMap& params)
         if (needsReload) {
             if (!path.isEmpty() && QFile::exists(path)) {
                 const bool isSvg = path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)
-                                || path.endsWith(QLatin1String(".svgz"), Qt::CaseInsensitive);
+                    || path.endsWith(QLatin1String(".svgz"), Qt::CaseInsensitive);
                 if (isSvg) {
                     QSvgRenderer renderer(path);
                     if (renderer.isValid()) {
@@ -428,11 +456,8 @@ void ZoneShaderItem::setLabelsTexture(const QImage& image)
     QImage newImage = image;
     {
         QMutexLocker lock(&m_labelsTextureMutex);
-        if (m_labelsTexture.size() == newImage.size()) {
-            const int pixels = newImage.width() * newImage.height();
-            if (pixels <= 512 * 512 && m_labelsTexture == newImage) {
-                return;
-            }
+        if (m_labelsTexture.cacheKey() == newImage.cacheKey()) {
+            return;
         }
         m_labelsTexture = std::move(newImage);
     }
@@ -509,6 +534,16 @@ void ZoneShaderItem::setUseWallpaper(bool use)
     }
     m_useWallpaper = use;
     Q_EMIT useWallpaperChanged();
+    update();
+}
+
+void ZoneShaderItem::setUseDepthBuffer(bool use)
+{
+    if (m_useDepthBuffer == use) {
+        return;
+    }
+    m_useDepthBuffer = use;
+    Q_EMIT useDepthBufferChanged();
     update();
 }
 

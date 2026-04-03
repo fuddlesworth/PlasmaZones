@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "shaderregistry.h"
+#include "shaderutils.h"
 
 #include <QColor>
 #include <QDesktopServices>
@@ -478,10 +479,7 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
     if (info.bufferShaderPaths.isEmpty()) {
         const QString bufferShaderName =
             root.value(QLatin1String("bufferShader")).toString(QStringLiteral("buffer.frag"));
-        info.bufferShaderPath = dir.filePath(bufferShaderName);
-        info.bufferShaderPaths.append(info.bufferShaderPath);
-    } else {
-        info.bufferShaderPath = info.bufferShaderPaths.constFirst();
+        info.bufferShaderPaths.append(dir.filePath(bufferShaderName));
     }
     if (info.isMultipass) {
         bool allExist = true;
@@ -494,7 +492,6 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
         }
         if (!allExist) {
             info.bufferShaderPaths.clear();
-            info.bufferShaderPath.clear();
         }
     }
     // Desktop wallpaper subscription: shader opts in to receive wallpaper at binding 11
@@ -503,8 +500,41 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
     info.bufferFeedback = root.value(QLatin1String("bufferFeedback")).toBool(false);
     qreal scale = root.value(QLatin1String("bufferScale")).toDouble(1.0);
     info.bufferScale = qBound(0.125, scale, 1.0);
-    const QString wrap = root.value(QLatin1String("bufferWrap")).toString(QStringLiteral("clamp"));
-    info.bufferWrap = (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
+    info.bufferWrap = normalizeWrapMode(root.value(QLatin1String("bufferWrap")).toString(QStringLiteral("clamp")));
+
+    info.useDepthBuffer = root.value(QLatin1String("depthBuffer")).toBool(false);
+
+    const QJsonArray bufferWrapsArray = root.value(QLatin1String("bufferWraps")).toArray();
+    if (!bufferWrapsArray.isEmpty()) {
+        for (const QJsonValue& v : bufferWrapsArray) {
+            info.bufferWraps.append(normalizeWrapMode(v.toString()));
+        }
+        const int needed = info.bufferShaderPaths.size();
+        while (info.bufferWraps.size() < needed) {
+            info.bufferWraps.append(info.bufferWrap);
+        }
+        while (info.bufferWraps.size() > needed) {
+            info.bufferWraps.removeLast();
+        }
+    }
+
+    // Per-channel filter modes: "nearest", "linear", or "mipmap"
+    info.bufferFilter =
+        normalizeFilterMode(root.value(QLatin1String("bufferFilter")).toString(QStringLiteral("linear")));
+
+    const QJsonArray bufferFiltersArray = root.value(QLatin1String("bufferFilters")).toArray();
+    if (!bufferFiltersArray.isEmpty()) {
+        for (const QJsonValue& v : bufferFiltersArray) {
+            info.bufferFilters.append(normalizeFilterMode(v.toString()));
+        }
+        const int needed = info.bufferShaderPaths.size();
+        while (info.bufferFilters.size() < needed) {
+            info.bufferFilters.append(info.bufferFilter);
+        }
+        while (info.bufferFilters.size() > needed) {
+            info.bufferFilters.removeLast();
+        }
+    }
 
     // Parse parameters
     const QJsonArray paramsArray = root.value(QLatin1String("parameters")).toArray();
@@ -524,6 +554,19 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
 
         if (!param.id.isEmpty()) {
             info.parameters.append(param);
+        }
+    }
+
+    // Parse presets (named parameter configurations)
+    const QJsonObject presetsObj = root.value(QLatin1String("presets")).toObject();
+    for (auto it = presetsObj.begin(); it != presetsObj.end(); ++it) {
+        const QJsonObject values = it.value().toObject();
+        QVariantMap presetValues;
+        for (auto vit = values.begin(); vit != values.end(); ++vit) {
+            presetValues[vit.key()] = vit.value().toVariant();
+        }
+        if (!presetValues.isEmpty()) {
+            info.presets[it.key()] = presetValues;
         }
     }
 

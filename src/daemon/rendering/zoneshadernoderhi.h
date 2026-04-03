@@ -94,6 +94,10 @@ public:
     void setBufferFeedback(bool enable) override;
     void setBufferScale(qreal scale) override;
     void setBufferWrap(const QString& wrap) override;
+    void setBufferWraps(const QStringList& wraps) override;
+    void setBufferFilter(const QString& filter) override;
+    void setBufferFilters(const QStringList& filters) override;
+    void setUseDepthBuffer(bool use) override;
     bool loadVertexShader(const QString& path) override;
     bool loadFragmentShader(const QString& path) override;
     void setVertexShaderSource(const QString& source) override;
@@ -104,15 +108,21 @@ public:
     void invalidateUniforms() override;
 
 private:
+    /** Thread-safe QRhi accessor: returns nullptr when m_item is invalidated or has no window. */
+    QRhi* safeRhi() const;
+
     bool ensurePipeline();
     bool ensureBufferPipeline();
     bool ensureBufferTarget();
+    bool ensureDummyChannelResources(QRhi* rhi);
+    bool ensureBufferSampler(QRhi* rhi, int index);
     void syncUniformsFromData();
     void uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb);
     void releaseRhiResources();
     void appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
     void appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
-    void resetAllSrbs();
+    void appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
+    void resetAllBindingsAndPipelines();
     void bakeBufferShaders();
 
     QQuickItem* m_item = nullptr;
@@ -127,20 +137,27 @@ private:
     QVector<quint32> m_renderPassFormat;
 
     // Multi-pass: buffer pass(es) (optional). Up to 4 paths; when size==1 feedback may use ping-pong.
+    static constexpr int kMaxBufferPasses = 4;
     QString m_bufferPath;
     QStringList m_bufferPaths;
     bool m_bufferFeedback = false;
     qreal m_bufferScale = 1.0;
-    QString m_bufferWrap = QStringLiteral("clamp");
+    std::array<QString, kMaxBufferPasses> m_bufferWraps = {QStringLiteral("clamp"), QStringLiteral("clamp"),
+                                                           QStringLiteral("clamp"), QStringLiteral("clamp")};
+    QString m_bufferWrapDefault = QStringLiteral("clamp");
+    std::array<QString, kMaxBufferPasses> m_bufferFilters = {QStringLiteral("linear"), QStringLiteral("linear"),
+                                                             QStringLiteral("linear"), QStringLiteral("linear")};
+    QString m_bufferFilterDefault = QStringLiteral("linear");
     QString m_bufferFragmentShaderSource;
     QShader m_bufferFragmentShader;
     qint64 m_bufferMtime = 0;
     bool m_bufferShaderReady = false;
     bool m_bufferShaderDirty = true;
+    int m_bufferShaderRetries = 0;
     std::unique_ptr<QRhiTexture> m_bufferTexture;
     std::unique_ptr<QRhiRenderPassDescriptor> m_bufferRenderPassDescriptor;
     std::unique_ptr<QRhiTextureRenderTarget> m_bufferRenderTarget;
-    std::unique_ptr<QRhiSampler> m_bufferSampler;
+    std::array<std::unique_ptr<QRhiSampler>, kMaxBufferPasses> m_bufferSamplers;
     std::unique_ptr<QRhiShaderResourceBindings> m_bufferSrb;
     std::unique_ptr<QRhiGraphicsPipeline> m_bufferPipeline;
     QVector<quint32> m_bufferRenderPassFormat;
@@ -153,7 +170,6 @@ private:
     bool m_bufferFeedbackCleared = false; // one-time clear of both buffers when feedback starts
 
     // Multi-buffer mode (2–4 passes): per-pass resources; only used when m_bufferPaths.size() > 1
-    static constexpr int kMaxBufferPasses = 4;
     std::array<std::unique_ptr<QRhiTexture>, kMaxBufferPasses> m_multiBufferTextures = {};
     std::array<std::unique_ptr<QRhiTextureRenderTarget>, kMaxBufferPasses> m_multiBufferRenderTargets = {};
     std::array<std::unique_ptr<QRhiRenderPassDescriptor>, kMaxBufferPasses> m_multiBufferRenderPassDescriptors = {};
@@ -164,6 +180,7 @@ private:
     std::array<qint64, kMaxBufferPasses> m_multiBufferMtimes = {};
     bool m_multiBufferShadersReady = false;
     bool m_multiBufferShaderDirty = true;
+    int m_multiBufferShaderRetries = 0;
     // Dummy 1x1 texture for iChannel0 when multipass is set but buffer not yet created (e.g. zero size)
     std::unique_ptr<QRhiTexture> m_dummyChannelTexture;
     std::unique_ptr<QRhiSampler> m_dummyChannelSampler;
@@ -241,6 +258,12 @@ private:
     std::array<std::unique_ptr<QRhiSampler>, kMaxUserTextures> m_userTextureSamplers;
     std::array<QString, kMaxUserTextures> m_userTextureWraps;
     std::array<bool, kMaxUserTextures> m_userTextureDirty = {};
+
+    // Depth buffer (binding 12) — opt-in via metadata "depthBuffer": true
+    bool m_useDepthBuffer = false;
+    bool m_depthMultiBufferWarned = false; ///< Per-instance warning: shared depth across multi-buffer passes
+    std::unique_ptr<QRhiTexture> m_depthTexture; // R32F, readable at binding 12
+    std::unique_ptr<QRhiSampler> m_depthSampler;
 
     // Desktop wallpaper texture (binding 11) — opt-in via metadata "wallpaper": true
     bool m_useWallpaper = false;

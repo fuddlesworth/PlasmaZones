@@ -101,6 +101,11 @@ public:
         Q_UNUSED(use)
     }
 
+    /** Enable depth buffer (R32F at binding 12) for MRT depth writing/reading. Default no-op. */
+    virtual void setUseDepthBuffer(bool)
+    {
+    }
+
     /** Multi-pass: optional buffer pass fragment shader path. No-op if backend does not support multipass. */
     virtual void setBufferShaderPath(const QString& path)
     {
@@ -125,6 +130,21 @@ public:
     virtual void setBufferWrap(const QString& wrap)
     {
         Q_UNUSED(wrap)
+    }
+    /** Per-channel buffer wraps (up to 4). Empty = all use setBufferWrap value. Default no-op. */
+    virtual void setBufferWraps(const QStringList& wraps)
+    {
+        Q_UNUSED(wraps)
+    }
+    /** Buffer channel filter: "nearest", "linear", or "mipmap". Default no-op. */
+    virtual void setBufferFilter(const QString& filter)
+    {
+        Q_UNUSED(filter)
+    }
+    /** Per-channel buffer filters (up to 4). Empty = all use setBufferFilter value. Default no-op. */
+    virtual void setBufferFilters(const QStringList& filters)
+    {
+        Q_UNUSED(filters)
     }
 
     // Shader loading (paths; RHI node bakes GLSL 330 at runtime)

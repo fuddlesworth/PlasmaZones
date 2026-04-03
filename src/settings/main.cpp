@@ -90,9 +90,18 @@ int main(int argc, char* argv[])
 
     PlasmaZones::SettingsController controller;
 
-    // Register D-Bus service so future launches can forward to us
+    // Register D-Bus service so future launches can forward to us.
+    // If registration fails, another instance registered between our
+    // activateRunningInstance() check and now — retry forwarding and exit.
     if (!controller.registerDBusService()) {
-        qCWarning(PlasmaZones::lcCore) << "Failed to register D-Bus service; single-instance forwarding disabled";
+        qCWarning(PlasmaZones::lcCore) << "D-Bus service already owned; forwarding to running instance";
+        if (activateRunningInstance(requestedPage)) {
+            return 0;
+        }
+        // D-Bus name is taken but we can't reach the owner — bail out
+        // rather than running a second instance without single-instance support.
+        qCCritical(PlasmaZones::lcCore) << "Cannot register D-Bus service and cannot reach existing instance; exiting";
+        return 1;
     }
 
     QQmlApplicationEngine engine;

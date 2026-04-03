@@ -27,34 +27,13 @@ const vec3 FROST_ICE    = vec3(0.475, 0.745, 0.910);   // #79BEE8
 const vec3 FROST_SILVER = vec3(0.831, 0.937, 1.000);   // #D4EFFF
 
 
-// ── Noise helpers ───────────────────────────────────────────────
-
-float rand2D(in vec2 p) {
-    return fract(sin(dot(p, vec2(15.285, 97.258))) * 47582.122);
-}
-
-vec2 quintic(vec2 f) {
-    return f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-}
-
-float noise(in vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    float a = rand2D(i);
-    float b = rand2D(i + vec2(1.0, 0.0));
-    float c = rand2D(i + vec2(0.0, 1.0));
-    float d = rand2D(i + vec2(1.0, 1.0));
-    vec2 u = quintic(f);
-    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
-
 float fbm(in vec2 uv, int octaves, float rotAngle) {
     float value = 0.0;
     float amplitude = 0.5;
     float c = cos(rotAngle), s = sin(rotAngle);
     mat2 rot = mat2(c, -s, s, c);
     for (int i = 0; i < octaves && i < 8; i++) {
-        value += amplitude * noise(uv);
+        value += amplitude * noise2D(uv);
         uv = rot * uv * 2.0 + vec2(180.0);
         amplitude *= 0.55;
     }
@@ -82,8 +61,8 @@ float sdSegment(vec2 p, vec2 a, vec2 b) {
 
 float neonFlicker(float time, float seed, float trebleEnv) {
     float base = 0.92 + 0.08 * sin(time * 60.0 + seed * 100.0);
-    float buzz = step(0.97, noise(vec2(time * 30.0, seed * 7.0))) * 0.4;
-    float trebleBuzz = trebleEnv * step(0.9, noise(vec2(time * 50.0, seed * 13.0))) * 0.5;
+    float buzz = step(0.97, noise2D(vec2(time * 30.0, seed * 7.0))) * 0.4;
+    float trebleBuzz = trebleEnv * step(0.9, noise2D(vec2(time * 50.0, seed * 13.0))) * 0.5;
     return clamp(base - buzz - trebleBuzz, 0.4, 1.0);
 }
 
@@ -279,7 +258,7 @@ vec3 dataStreams(vec2 uv, float time, float aspect, float bassEnv, float midsEnv
         float speed = 0.3 + fi * 0.08;
         float phase = fi * 2.1;
         float path = yBase + sin(uv.x * freq * aspect + time * speed + phase) * 0.06
-                   + noise(vec2(uv.x * 2.0 + time * 0.2, fi * 7.0)) * 0.03;
+                   + noise2D(vec2(uv.x * 2.0 + time * 0.2, fi * 7.0)) * 0.03;
         float width = 0.008 + bassEnv * 0.004;
         float dist = abs(uv.y - path);
         float core = smoothstep(width, width * 0.1, dist);
@@ -682,7 +661,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
                 float sss = interiorDepth * 0.6 + 0.4;
 
                 // Crystalline grain texture (high-freq noise on rotated coords)
-                float grain = noise(rotP * 50.0 + time * 0.3) * 0.08;
+                float grain = noise2D(rotP * 50.0 + time * 0.3) * 0.08;
 
                 // Fresnel rim glow at edges
                 float rim = pow(1.0 - interiorDepth, 2.0) * 0.5;
@@ -722,7 +701,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
             // ── Treble sparkle near logo surface ────────────────
             if (trebleEnv > 0.01 && abs(fDist) < 0.03) {
-                float sparkN = noise(iLogoUV * 40.0 + time * 6.0 + float(li) * 29.0);
+                float sparkN = noise2D(iLogoUV * 40.0 + time * 6.0 + float(li) * 29.0);
                 sparkN = smoothstep(0.55, 0.95, sparkN);
                 float edgeMask = smoothstep(0.03, 0.0, abs(fDist));
                 logoCol += palGlow * sparkN * edgeMask * trebleEnv * sparkleStr * 0.3 * depthFactor;

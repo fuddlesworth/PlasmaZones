@@ -7,11 +7,14 @@
 #include "../core/qpa/layershellpluginloader.h"
 #include "../core/layersurface.h"
 #include "../core/translationloader.h"
+#include "../config/configdefaults.h"
 #include "version.h"
 #include "../daemon/rendering/zoneshaderitem.h"
+#include "../daemon/vulkan_support.h"
 
 #include <QFile>
 #include <QGuiApplication>
+#include <QLibrary>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QCommandLineParser>
@@ -44,8 +47,31 @@ int main(int argc, char* argv[])
     // Register our layer-shell QPA plugin before QGuiApplication
     PlasmaZones::registerLayerShellPlugin();
 
+    // Read rendering backend preference and set graphics API BEFORE QGuiApplication.
+    // Must match daemon's backend so shader previews render identically.
+    bool useVulkan = false;
+#if QT_CONFIG(vulkan)
+    QVulkanInstance vulkanInstance;
+#endif
+    {
+        const QString backend = PlasmaZones::ConfigDefaults::readRenderingBackendFromDisk();
+        useVulkan = PlasmaZones::probeAndSetGraphicsApi(backend);
+    }
+
     QGuiApplication app(argc, argv);
     PlasmaZones::loadTranslations(&app);
+
+    // Create and store QVulkanInstance for shader preview windows (same as daemon)
+#if QT_CONFIG(vulkan)
+    qRegisterMetaType<QVulkanInstance*>();
+    if (useVulkan) {
+        if (!PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app)) {
+            qCCritical(PlasmaZones::lcEditor)
+                << "Failed to create Vulkan instance — falling back to OpenGL for shader preview.";
+            useVulkan = false;
+        }
+    }
+#endif
 
     // Register metatype for QVariant storage (LayerSurface stores itself
     // as a QWindow dynamic property via QVariant::fromValue).

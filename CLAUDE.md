@@ -5,6 +5,7 @@
 PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami, C++20, Wayland-only.
 
 ## Behavioral Rules (Always Enforced)
+- NEVER question or doubt what the user says they did (installed, restarted, tested, etc.) — trust them and focus on the code
 - Do what has been asked; nothing more, nothing less
 - NEVER create files unless absolutely necessary; prefer editing existing files
 - NEVER proactively create documentation files (*.md) or README files unless explicitly requested
@@ -43,7 +44,7 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - Parent-based ownership for QObjects; `std::unique_ptr`/`QPointer` otherwise; never manual delete
 - Forward declare in headers; group includes: own header → project → KDE → Qt
 - `PLASMAZONES_EXPORT` on public API classes
-- Keep files under 500 lines
+- Keep files under 800 lines
 - Input validation at system boundaries
 
 ### Qt6 String Literals (CRITICAL)
@@ -277,7 +278,7 @@ npx @claude-flow/cli@latest doctor --fix
 ## Key Pitfalls
 - Never copy QObjects — Never hardcode colors/spacing — Never use indices for zones
 - Never emit without checking value changed — Never use raw string literals with Qt6
-- Keep files under 500 lines — Keep QML for UI, C++ for logic
+- Keep files under 800 lines — Keep QML for UI, C++ for logic
 
 ## Support
 - Documentation: https://github.com/ruvnet/claude-flow

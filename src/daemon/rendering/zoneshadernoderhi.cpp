@@ -43,7 +43,12 @@ static void shaderCacheEvictOne()
     s_shaderCache.erase(s_shaderCache.begin());
 }
 
-// NUL delimiter: cannot appear in file paths (Unix/Windows), avoids newline collision in keys
+// NUL delimiter: cannot appear in file paths (Unix/Windows), avoids newline collision in keys.
+// NOTE: This cache is in-memory only (cleared on daemon restart). The key uses top-level
+// file mtimes but does NOT track #include dependencies (e.g. common.glsl). If an included
+// file changes without touching the top-level shader, a stale cached QShader may be returned
+// within the same session. This is acceptable because included file changes require a rebuild
+// which restarts the daemon, but be aware if on-disk caching is ever added.
 static constexpr char kShaderCacheKeyDelim = '\0';
 
 static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, const QString& fragPath, qint64 fragMtime)
@@ -63,10 +68,9 @@ static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, cons
 const QList<QShaderBaker::GeneratedShader>& detail::bakeTargets()
 {
     static const QList<QShaderBaker::GeneratedShader> targets = {
-        // SPIR-V 1.3 for Vulkan 1.1. QShaderVersion uses the same major*100 + minor*10
-        // encoding as GLSL versions, so SPIR-V 1.3 is represented as 130 (not 13).
-        // Vulkan 1.1 guarantees SPIR-V 1.3 support per the Vulkan spec appendix.
-        {QShader::SpirvShader, QShaderVersion(130)},
+        // SPIR-V 1.0: Qt's Vulkan QRhi backend looks up QShaderKey(SpirvShader, QShaderVersion(100)).
+        // Using version 100 (SPIR-V 1.0) ensures the baked shader is found at pipeline creation.
+        {QShader::SpirvShader, QShaderVersion(100)},
         {QShader::GlslShader, QShaderVersion(330)},
         {QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs)},
         {QShader::GlslShader, QShaderVersion(310, QShaderVersion::GlslEs)},
@@ -137,6 +141,12 @@ void detail::clearBakeCache()
     cache.entries.clear();
 }
 
+QRhi* ZoneShaderNodeRhi::safeRhi() const
+{
+    return (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window()) ? m_item->window()->rhi()
+                                                                                       : nullptr;
+}
+
 ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
     : m_item(item)
 {
@@ -145,8 +155,13 @@ ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
     QMatrix4x4 identity;
     std::memcpy(m_uniforms.qt_Matrix, identity.constData(), 16 * sizeof(float));
     m_uniforms.qt_Opacity = 1.0f;
-    m_customParams1 = QVector4D(0.5f, 2.0f, 0.0f, 0.0f);
-    m_customParams2 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f);
+    // Initialize all customParams to -1.0 (the "unset" sentinel).
+    // Shaders use `>= 0.0` checks to distinguish set values from defaults.
+    // Without this, unset params read as 0.0 and bypass the default fallback.
+    m_customParams1 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    m_customParams2 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    m_customParams3 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    m_customParams4 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
 
     // 1×1 transparent fallback for when labels are disabled
     m_transparentFallbackImage = QImage(1, 1, QImage::Format_RGBA8888);
@@ -189,23 +204,30 @@ QRectF ZoneShaderNodeRhi::rect() const
 void ZoneShaderNodeRhi::prepare()
 {
     if (!m_itemValid.load(std::memory_order_acquire) || !m_item || !m_item->window()) {
+        qCDebug(lcOverlay) << "prepare(): bail — itemValid:" << m_itemValid.load() << "item:" << (m_item != nullptr)
+                           << "window:" << (m_item && m_item->window());
         return;
     }
     QRhi* rhi = m_item->window()->rhi();
     if (!rhi) {
+        qCDebug(lcOverlay) << "prepare(): bail — rhi is null";
         return;
     }
     QRhiCommandBuffer* cb = commandBuffer();
     QRhiRenderTarget* rt = renderTarget();
     if (!cb || !rt) {
+        qCDebug(lcOverlay) << "prepare(): bail — cb:" << (cb != nullptr) << "rt:" << (rt != nullptr);
         return;
     }
 
     if (!m_initialized) {
         m_initialized = true;
-        qCInfo(lcOverlay) << "ZoneShaderNodeRhi initializing — RHI backend:" << rhi->backendName()
+        qCInfo(lcOverlay) << "ZoneShaderNodeRhi INIT — backend:" << rhi->backendName()
                           << "driver:" << rhi->driverInfo().deviceName
-                          << "Y-up framebuffer:" << rhi->isYUpInFramebuffer();
+                          << "Y-up framebuffer:" << rhi->isYUpInFramebuffer() << "RT pixelSize:" << rt->pixelSize()
+                          << "item size:" << m_item->width() << "x" << m_item->height()
+                          << "DPR:" << (m_item->window() ? m_item->window()->devicePixelRatio() : -1)
+                          << "iResolution:" << m_width << "x" << m_height;
         // Create VBO (fullscreen quad)
         m_vbo.reset(
             rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(RhiConstants::QuadVertices)));
@@ -334,6 +356,17 @@ void ZoneShaderNodeRhi::prepare()
         return;
     }
 
+    // Upload textures FIRST — before any SRB or pipeline creation.
+    // Texture uploads may destroy and recreate QRhiTexture objects (audio
+    // spectrum resize, user texture resize, wallpaper resize), which invalidates
+    // any SRB that references the old texture. If we created SRBs first and then
+    // uploaded textures, the buffer passes recorded later in this function would
+    // use SRBs with dangling pointers to destroyed textures — crashing the NVIDIA
+    // Vulkan driver in endFrame() when the GPU processes the command buffer.
+    // The internal ensurePipeline() calls inside uploadDirtyTextures() rebuild
+    // SRBs immediately after each texture change so rendering recovers same-frame.
+    uploadDirtyTextures(rhi, cb);
+
     // Create buffer targets (single or multi) before the image pass SRB so createImageSrb*()
     // can bind iChannel0/1/2/3 and syncUniformsFromData() sees correct sizes for iChannelResolution.
     const bool multiBufferMode = m_bufferPaths.size() > 1;
@@ -342,28 +375,8 @@ void ZoneShaderNodeRhi::prepare()
         return;
     }
 
-    if (!ensurePipeline()) {
-        return;
-    }
-
-    uploadDirtyTextures(rhi, cb);
-}
-
-// ============================================================================
-// render() — multi-pass + image pass draw commands
-// ============================================================================
-
-void ZoneShaderNodeRhi::render(const RenderState* state)
-{
-    Q_UNUSED(state)
-    if (!m_itemValid.load(std::memory_order_acquire)) {
-        return;
-    }
-    const bool multiBufferMode = m_bufferPaths.size() > 1;
-    const bool bufferReady = multiBufferMode ? m_multiBufferShadersReady : m_bufferShaderReady;
-    // Multi-buffer: create buffer targets and pipelines before the image pass SRB, so
-    // createImageSrbMulti() can bind iChannel0/1/2. If we called ensurePipeline() first,
-    // the image SRB would be created with no channel textures bound -> effect samples black.
+    // Late pipeline recovery: retry buffer target/pipeline creation that may have
+    // failed on a prior frame (e.g., render pass descriptor not yet available).
     if (!m_bufferPath.isEmpty() && bufferReady) {
         if (!multiBufferMode && m_bufferRenderTarget && !m_bufferRenderPassDescriptor
             && !m_bufferRenderTarget->renderPassDescriptor()) {
@@ -388,39 +401,36 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
             m_bufferTextureB.reset();
             m_srbB.reset();
         }
-        ensureBufferTarget();
-        ensureBufferPipeline();
+        if (!ensureBufferTarget() || !ensureBufferPipeline()) {
+            return;
+        }
         if (!m_srb || (!multiBufferMode && m_bufferFeedback && !m_srbB)) {
             ensurePipeline();
         }
     }
-    // Image pass pipeline/SRB (after buffer setup so multi-buffer has textures to bind)
     if (m_shaderReady && (!m_pipeline || !m_srb || (m_bufferFeedback && !m_srbB))) {
         ensurePipeline();
     }
-    if (!m_shaderReady || !m_pipeline || !m_srb) {
-        return;
-    }
-    QRhiCommandBuffer* cb = commandBuffer();
-    QRhiRenderTarget* rt = renderTarget();
-    if (!cb || !rt) {
+
+    if (!ensurePipeline()) {
         return;
     }
 
+    // ========================================================================
+    // Multipass buffer passes recorded in prepare() — safe because prepare()
+    // runs BEFORE the scene graph opens its render pass. Buffer passes use
+    // offscreen FBOs (their own render targets), not the main RT.
+    // ========================================================================
+    // m_bufferSrb guard: uploadDirtyTextures() above can call resetAllBindingsAndPipelines() when
+    // a texture is resized, which nulls all SRBs. Without this guard,
+    // setShaderResources(nullptr) crashes the NVIDIA Vulkan driver.
     const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady && m_bufferPipeline
-        && m_bufferRenderTarget && m_bufferTexture;
+        && m_bufferSrb && m_bufferRenderTarget && m_bufferTexture;
     const bool multipassMulti =
         multiBufferMode && m_multiBufferShadersReady && m_multiBufferTextures[0] && m_multiBufferPipelines[0];
     const bool multipassActive = multipassSingle || multipassMulti;
 
     if (multipassActive) {
-        // The scene graph's batch renderer keeps its render pass active when calling
-        // render() on nodes with the NoExternalRendering flag. We must end that pass
-        // before beginning our own passes on buffer FBOs. After buffer passes complete,
-        // we re-begin a pass on rt for the image pass; the scene graph will endPass()
-        // after render() returns, balancing our beginPass(rt).
-        cb->endPass();
-
         const QColor clearColor(0, 0, 0, 0);
         if (multiBufferMode) {
             const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
@@ -432,12 +442,27 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
                 QSize ps = m_multiBufferTextures[i]->pixelSize();
                 cb->beginPass(m_multiBufferRenderTargets[i].get(), clearColor, {1.0f, 0});
                 cb->setViewport(QRhiViewport(0, 0, ps.width(), ps.height()));
+                cb->setScissor(QRhiScissor(0, 0, ps.width(), ps.height()));
                 cb->setGraphicsPipeline(m_multiBufferPipelines[i].get());
                 cb->setShaderResources(m_multiBufferSrbs[i].get());
                 QRhiCommandBuffer::VertexInput vbufBinding(m_vbo.get(), 0);
                 cb->setVertexInput(0, 1, &vbufBinding);
                 cb->draw(4);
                 cb->endPass();
+
+                // Force a real resource update between buffer passes so the
+                // Vulkan backend flushes image layout transitions. Pass N+1
+                // samples pass N's output texture via its SRB. A redundant
+                // 4-byte UBO write ensures the batch is non-empty and actually
+                // processed by Qt RHI's deferred command recording — empty
+                // batches may be optimized to no-ops, skipping barrier emission.
+                if (i + 1 < n && m_ubo) {
+                    QRhiResourceUpdateBatch* barrier = rhi->nextResourceUpdateBatch();
+                    if (barrier) {
+                        barrier->updateDynamicBuffer(m_ubo.get(), 0, 4, &m_uniforms);
+                        cb->resourceUpdate(barrier);
+                    }
+                }
             }
         } else {
             if (m_bufferFeedback && !m_bufferFeedbackCleared && m_bufferRenderTarget && m_bufferRenderTargetB) {
@@ -459,6 +484,8 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
             cb->beginPass(bufferRT, clearColor, {1.0f, 0});
             cb->setViewport(
                 QRhiViewport(0, 0, writtenTexture->pixelSize().width(), writtenTexture->pixelSize().height()));
+            cb->setScissor(
+                QRhiScissor(0, 0, writtenTexture->pixelSize().width(), writtenTexture->pixelSize().height()));
             cb->setGraphicsPipeline(m_bufferPipeline.get());
             cb->setShaderResources(bufferSrb);
             QRhiCommandBuffer::VertexInput vbufBinding(m_vbo.get(), 0);
@@ -466,12 +493,40 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
             cb->draw(4);
             cb->endPass();
         }
-        // Must begin our own pass: multi-pass shaders read from buffer textures while
-        // writing to rt. Drawing inline in the scene graph's pass causes Vulkan error
-        // "Texture used with different accesses within the same pass". beginPass(rt)
-        // starts a new pass with correct barriers.
-        const QColor mainClear(0, 0, 0, 0);
-        cb->beginPass(rt, mainClear, {1.0f, 0});
+
+        // Resource flush after buffer passes (Vulkan barrier hint).
+        if (m_ubo) {
+            QRhiResourceUpdateBatch* barrier = rhi->nextResourceUpdateBatch();
+            if (barrier) {
+                barrier->updateDynamicBuffer(m_ubo.get(), 0, 4, &m_uniforms);
+                cb->resourceUpdate(barrier);
+            }
+        }
+    }
+}
+
+// ============================================================================
+// render() — image pass draw
+// Buffer passes are recorded in prepare() (offscreen FBOs, safe before the
+// scene graph's render pass).
+// ============================================================================
+
+void ZoneShaderNodeRhi::render(const RenderState* state)
+{
+    Q_UNUSED(state)
+    if (!m_itemValid.load(std::memory_order_acquire)) {
+        qCDebug(lcOverlay) << "render(): bail — item invalid";
+        return;
+    }
+    if (!m_shaderReady || !m_pipeline || !m_srb) {
+        qCDebug(lcOverlay) << "render(): bail — shaderReady:" << m_shaderReady << "pipeline:" << (m_pipeline != nullptr)
+                           << "srb:" << (m_srb != nullptr);
+        return;
+    }
+    QRhiCommandBuffer* cb = commandBuffer();
+    QRhiRenderTarget* rt = renderTarget();
+    if (!cb || !rt) {
+        return;
     }
 
     // Use item's rect in render target (device pixels) so we render only within the item,
@@ -504,7 +559,12 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
         vpH = qBound(1, itemPxH, outputSize.height() - vpY);
     }
     cb->setViewport(QRhiViewport(vpX, vpY, vpW, vpH));
+    cb->setScissor(QRhiScissor(vpX, vpY, vpW, vpH));
     cb->setGraphicsPipeline(m_pipeline.get());
+
+    const bool multiBufferMode = m_bufferPaths.size() > 1;
+    const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady && m_bufferPipeline
+        && m_bufferRenderTarget && m_bufferTexture;
     const int imageWriteIndex = multipassSingle && m_bufferFeedback ? (m_frame % 2) : 0;
     QRhiShaderResourceBindings* imageSrb =
         (multipassSingle && m_bufferFeedback && imageWriteIndex == 1 && m_srbB) ? m_srbB.get() : m_srb.get();
@@ -516,6 +576,7 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
 
 void ZoneShaderNodeRhi::releaseResources()
 {
+    qCInfo(lcOverlay) << "ZoneShaderNodeRhi::releaseResources() called — releasing all RHI resources";
     releaseRhiResources();
 }
 

@@ -434,6 +434,9 @@ void SettingsController::save()
         m_stagedTilingOrder.reset();
     }
 
+    // Save main settings (includes editor settings)
+    m_settings.save();
+
     // Flush staged tiling quick layout slots to config BEFORE save
     // so the daemon sees them when it reparses
     if (!m_stagedTilingQuickSlots.isEmpty()) {

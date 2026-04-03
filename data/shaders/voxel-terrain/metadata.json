@@ -7,6 +7,9 @@
     "version": "1.0",
     "fragmentShader": "effect.frag",
     "vertexShader": "zone.vert",
+    "multipass": true,
+    "depthBuffer": true,
+    "bufferShader": "buffer.frag",
     "parameters": [
         {"id": "reactivity", "name": "Audio Reactivity", "group": "Audio", "type": "float", "slot": 0, "default": 1.5, "min": 0.5, "max": 3.0},
         {"id": "terrainScale", "name": "Terrain Scale", "group": "Geometry", "type": "float", "slot": 1, "default": 0.1, "min": 0.04, "max": 0.25},
@@ -24,6 +27,7 @@
         {"id": "accentColor", "name": "Accent / Glow Color", "group": "Colors", "type": "color", "slot": 1, "default": "#00d4ff"},
         {"id": "bassColor", "name": "Bass Color", "group": "Colors", "type": "color", "slot": 2, "default": "#e600aa"},
         {"id": "gridColor", "name": "Grid/Wire Color", "group": "Colors", "type": "color", "slot": 3, "default": "#99b3e6"},
-        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 12, "default": true}
+        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 12, "default": true},
+        {"id": "dofStrength", "name": "Depth of Field", "group": "Appearance", "type": "float", "slot": 13, "default": 0.5, "min": 0.0, "max": 2.0}
     ]
 }

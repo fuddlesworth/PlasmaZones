@@ -51,14 +51,15 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     // Store the effective screen ID for cross-virtual-screen detection in showAtPosition()
     m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
 
-    // When single-monitor mode, hide overlay on screens we're switching away from (#136)
+    // When single-monitor mode, destroy overlay on screens we're switching away from (#136).
+    // Must destroy (not just hide) because on Vulkan, window->hide() destroys the
+    // VkSwapchainKHR but Qt doesn't properly reinitialize it on re-show. Destroying
+    // the window ensures a fresh window is created via createOverlayWindow() below.
     if (!showOnAllMonitors) {
-        for (const QString& screenId : m_overlayWindows.keys()) {
-            bool isCursorScreen = (screenId == cursorEffectiveId);
-            if (!isCursorScreen) {
-                if (auto* window = m_overlayWindows.value(screenId)) {
-                    window->hide();
-                }
+        const QStringList screenIds = m_overlayWindows.keys();
+        for (const QString& screenId : screenIds) {
+            if (screenId != cursorEffectiveId) {
+                destroyOverlayWindow(screenId);
             }
         }
     }
@@ -126,54 +127,20 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
                                    << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
                 updateOverlayWindow(screen);
                 window->show();
+                // On Vulkan, window->hide() destroys the swapchain and the scene graph
+                // becomes inactive. Property writes (e.g. shaderSource) while hidden queue
+                // update() requests that are lost when the scene graph reinitializes on
+                // show(). Force a content update after show so the scene graph renders.
+                window->update();
             }
         }
     }
 
-    // Check if we need to recreate windows - this handles the case where windows
-    // were created before shaders were ready (e.g., at startup after reboot)
-    // Check per-screen: each monitor's layout may differ in shader usage
-    QStringList screensToRecreate;
-
-    for (const QString& screenId : m_overlayWindows.keys()) {
-        auto* window = m_overlayWindows.value(screenId);
-        if (!window) {
-            continue;
-        }
-
-        // Use isShaderOverlay property set at creation time (more reliable than shaderSource
-        // which can be set on non-shader windows by updateOverlayWindow())
-        const bool windowIsShader = window->property("isShaderOverlay").toBool();
-        const bool shouldUseShader = useShaderForScreen(screenId);
-        if (windowIsShader != shouldUseShader) {
-            screensToRecreate.append(screenId);
-            qCDebug(lcOverlay) << "Overlay window type mismatch detected for screen" << screenId
-                               << "(window is shader:" << windowIsShader << "should be:" << shouldUseShader << ")";
-        }
-    }
-
-    // Recreate only the windows with type mismatch
-    if (!screensToRecreate.isEmpty()) {
-        for (const QString& screenId : screensToRecreate) {
-            destroyOverlayWindow(screenId);
-        }
-        for (const QString& screenId : screensToRecreate) {
-            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
-                continue;
-            }
-            QScreen* physScreen = mgr ? mgr->physicalQScreenFor(screenId) : resolveTargetScreen(screenId);
-            if (!physScreen) {
-                continue;
-            }
-            const QRect geom = resolveScreenGeometry(screenId);
-            createOverlayWindow(screenId, physScreen, geom);
-            updateOverlayWindow(screenId, physScreen);
-            if (auto* window = m_overlayWindows.value(screenId)) {
-                assertWindowOnScreen(window, physScreen, geom);
-                window->show();
-            }
-        }
-    }
+    // Type-mismatch recreation is not needed here: hide() destroys all overlay
+    // windows, so initializeOverlay() always creates fresh windows with the
+    // correct type. The old check compared isShaderOverlay against useShaderForScreen()
+    // and recreated on mismatch, but could trigger runaway loops when both evaluations
+    // raced during window setup.
 
     if (anyScreenUsesShader()) {
         updateZonesForAllWindows(); // Push initial zone data
@@ -384,7 +351,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     // to the virtual screen geometry. Anchors are NOT set to all-edges for virtual
     // screens since the window doesn't cover the full physical screen.
     if (!configureLayerSurface(window, physScreen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
-                               QStringLiteral("plasmazones-overlay-%1").arg(screenId))) {
+                               QStringLiteral("plasmazones-overlay-%1-%2").arg(screenId).arg(++m_scopeGeneration))) {
         qCWarning(lcOverlay) << "Failed to configure layer surface for overlay on" << screenId;
         window->deleteLater();
         return;
@@ -526,10 +493,14 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
         // Clear shader properties if window is shader type but shaders are now disabled
         writeQmlProperty(window, QStringLiteral("shaderSource"), QUrl());
         writeQmlProperty(window, QStringLiteral("bufferShaderPath"), QString());
-        writeQmlProperty(window, QStringLiteral("bufferShaderPaths"), QVariantList());
+        writeQmlProperty(window, QStringLiteral("bufferShaderPaths"), QVariant::fromValue(QStringList()));
         writeQmlProperty(window, QStringLiteral("bufferFeedback"), false);
         writeQmlProperty(window, QStringLiteral("bufferScale"), 1.0);
         writeQmlProperty(window, QStringLiteral("bufferWrap"), QStringLiteral("clamp"));
+        writeQmlProperty(window, QStringLiteral("bufferWraps"), QStringList());
+        writeQmlProperty(window, QStringLiteral("bufferFilter"), QStringLiteral("linear"));
+        writeQmlProperty(window, QStringLiteral("bufferFilters"), QStringList());
+        writeQmlProperty(window, QStringLiteral("useDepthBuffer"), false);
         writeQmlProperty(window, QStringLiteral("shaderParams"), QVariantMap());
     }
 

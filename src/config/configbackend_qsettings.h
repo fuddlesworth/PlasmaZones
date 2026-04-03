@@ -79,6 +79,11 @@ public:
     /// Delete an entire group and its keys.
     void deleteGroup(const QString& name);
 
+    /// Read/write ungrouped (root-level) keys — outside any [Section] header.
+    QString readRootString(const QString& key, const QString& defaultValue = {}) const;
+    void writeRootString(const QString& key, const QString& value);
+    void removeRootKey(const QString& key);
+
     /// List all top-level group names.
     QStringList groupList() const;
 

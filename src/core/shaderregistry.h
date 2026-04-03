@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QHash>
 #include <QImage>
+#include <QMap>
 #include <QString>
 #include <QUrl>
 #include <QVariant>
@@ -63,11 +64,12 @@ public:
         QUrl shaderUrl; ///< file:// URL to fragment shader (.glsl)
         QString sourcePath; ///< Path to fragment shader source
         QString vertexShaderPath; ///< Path to vertex shader
-        QString bufferShaderPath; ///< Path to first buffer pass shader (backward compat)
         QStringList bufferShaderPaths; ///< Up to 4 buffer pass fragment shaders (A→B→C→D order)
         QString previewPath; ///< Absolute path to preview.png
         QString category; ///< Hierarchical category path (e.g. "Organic", "Audio Visualizer")
         QList<ParameterInfo> parameters;
+
+        QMap<QString, QVariantMap> presets; ///< Named parameter presets (key=name, value=param ID→value, sorted)
 
         bool isUserShader = false; ///< True for ~/.local/share shaders
         bool isMultipass = false; ///< True if multipass and bufferShader are set
@@ -75,6 +77,10 @@ public:
         bool bufferFeedback = false; ///< True to enable ping-pong (buffer pass samples its own previous frame)
         qreal bufferScale = 1.0; ///< Buffer resolution scale (e.g. 0.5 = half size); clamped 0.125–1.0
         QString bufferWrap = QStringLiteral("clamp"); ///< "clamp" or "repeat" for iChannel0 sampler
+        QStringList bufferWraps; ///< Per-channel wrap modes (up to 4); empty = all use bufferWrap
+        QString bufferFilter = QStringLiteral("linear"); ///< "nearest", "linear", or "mipmap"
+        QStringList bufferFilters; ///< Per-channel filter modes (up to 4); empty = all use bufferFilter
+        bool useDepthBuffer = false; ///< True if shader writes to a depth (R32F) attachment at location 1
 
         bool isValid() const
         {
@@ -145,6 +151,25 @@ public:
      * Open user shader directory in file manager
      */
     Q_INVOKABLE void openUserShaderDirectory() const;
+
+    /**
+     * Get named preset parameter values for a shader
+     * @param shaderId Shader UUID
+     * @param presetName Name of the preset
+     * @return Parameter values (keyed by param ID), validated and filled with defaults
+     */
+    Q_INVOKABLE QVariantMap presetParams(const QString& shaderId, const QString& presetName) const;
+
+    /**
+     * Get list of preset names for a shader
+     */
+    Q_INVOKABLE QStringList shaderPresetNames(const QString& shaderId) const;
+
+    /**
+     * Get all presets for a shader as QVariantList for D-Bus/QML
+     * Each entry: {name: "Blue", params: {speed: 0.2, ...}}
+     */
+    Q_INVOKABLE QVariantList shaderPresetsVariant(const QString& shaderId) const;
 
     /**
      * Validate shader parameters against schema
