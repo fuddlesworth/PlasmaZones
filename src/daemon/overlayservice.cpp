@@ -80,6 +80,34 @@ OverlayService::OverlayService(QObject* parent)
 
     m_cavaService = std::make_unique<CavaService>(this);
     connect(m_cavaService.get(), &CavaService::spectrumUpdated, this, &OverlayService::onAudioSpectrumUpdated);
+
+    // Create a persistent 1x1 keep-alive window to prevent Qt from tearing down
+    // global Wayland/Vulkan protocol objects (zwp_linux_dmabuf_v1, wp_presentation,
+    // etc.) when the last visible QQuickWindow is destroyed. Without this, after
+    // overlay destroy-on-hide, Qt cleans up the Vulkan rendering infrastructure
+    // and no new windows can render buffers.
+    QTimer::singleShot(0, this, [this]() {
+        QScreen* screen = Utils::primaryScreen();
+        if (!screen) {
+            return;
+        }
+        m_keepAliveWindow = new QQuickWindow();
+        QQmlEngine::setObjectOwnership(m_keepAliveWindow, QQmlEngine::CppOwnership);
+#if QT_CONFIG(vulkan)
+        auto* vulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
+        if (vulkanInstance) {
+            m_keepAliveWindow->setVulkanInstance(vulkanInstance);
+        }
+#endif
+        m_keepAliveWindow->setScreen(screen);
+        m_keepAliveWindow->setWidth(1);
+        m_keepAliveWindow->setHeight(1);
+        // Configure as background layer — invisible, no input, minimal compositor cost
+        configureLayerSurface(m_keepAliveWindow, screen, LayerSurface::LayerBackground,
+                              LayerSurface::KeyboardInteractivityNone, QStringLiteral("plasmazones-keepalive"),
+                              LayerSurface::AnchorNone, 0);
+        m_keepAliveWindow->show();
+    });
 }
 
 bool OverlayService::isVisible() const
@@ -115,6 +143,14 @@ OverlayService::~OverlayService()
     cleanupWindowMap(m_overlayWindows);
     cleanupWindowMap(m_layoutOsdWindows);
     cleanupWindowMap(m_navigationOsdWindows);
+
+    // Destroy keep-alive window last (after all other windows)
+    if (m_keepAliveWindow) {
+        m_keepAliveWindow->close();
+        m_keepAliveWindow->destroy();
+        delete m_keepAliveWindow;
+        m_keepAliveWindow = nullptr;
+    }
 
     // Process pending deletions before destroying the QML engine.
     // All deleteLater() calls must complete while the engine is still valid.

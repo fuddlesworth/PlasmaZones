@@ -262,6 +262,10 @@ private:
 
     bool m_screenAddedConnected = false; // Guard for screenAdded connection (lambdas can't use UniqueConnection)
 
+    // Persistent 1x1 keep-alive window that prevents Qt from tearing down
+    // global Wayland/Vulkan protocol objects when all other windows are destroyed.
+    QQuickWindow* m_keepAliveWindow = nullptr;
+
     // Track screens with failed window creation to prevent log spam
     QHash<QScreen*, bool> m_navigationOsdCreationFailed;
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
