@@ -88,8 +88,15 @@ WindowDragAdaptor::ScreenResolution WindowDragAdaptor::resolveScreenAt(const QPo
     if (!result.qscreen) {
         result.qscreen = screenAtPoint(qRound(globalPos.x()), qRound(globalPos.y()));
         if (result.qscreen) {
-            result.screenId = Utils::screenIdentifier(result.qscreen);
-            result.physicalId = result.screenId;
+            result.physicalId = Utils::screenIdentifier(result.qscreen);
+            // Try virtual screen resolution before falling back to physical ID
+            auto* mgr = ScreenManager::instance();
+            if (mgr && mgr->hasVirtualScreens(result.physicalId)) {
+                QString vsId = mgr->effectiveScreenAt(QPoint(qRound(globalPos.x()), qRound(globalPos.y())));
+                result.screenId = vsId.isEmpty() ? result.physicalId : vsId;
+            } else {
+                result.screenId = result.physicalId;
+            }
         }
     }
     return result;

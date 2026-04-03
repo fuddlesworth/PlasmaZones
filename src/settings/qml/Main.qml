@@ -818,6 +818,8 @@ ApplicationWindow {
                         spacing: Kirigami.Units.smallSpacing
 
                         Rectangle {
+                            id: daemonDot
+
                             width: Kirigami.Units.smallSpacing * 1.5
                             height: Kirigami.Units.smallSpacing * 1.5
                             radius: width / 2
@@ -828,7 +830,7 @@ ApplicationWindow {
                             SequentialAnimation {
                                 id: daemonPulse
 
-                                property Item target: parent
+                                property Item target: daemonDot
 
                                 loops: settingsController.daemonRunning ? Animation.Infinite : 0
                                 running: settingsController.daemonRunning

@@ -151,7 +151,14 @@ void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const
                     QRectF geom =
                         capturedGeom.isValid() ? capturedGeom : (safeWindow ? safeWindow->frameGeometry() : QRectF());
                     if (geom.width() > 0 && geom.height() > 0) {
-                        QString screenId = safeWindow ? getWindowScreenId(safeWindow) : QString();
+                        // Use virtual-screen-aware ID when available.  If VS configs
+                        // haven't loaded yet, pass empty — the daemon will resolve
+                        // the screen from the geometry coordinates when needed.
+                        QString screenId;
+                        if (safeWindow) {
+                            screenId = m_virtualScreensReady ? getWindowScreenId(safeWindow)
+                                                             : outputScreenId(safeWindow->screen());
+                        }
                         fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
                                               {capturedWindowId, static_cast<int>(geom.x()), static_cast<int>(geom.y()),
                                                static_cast<int>(geom.width()), static_cast<int>(geom.height()),
@@ -1012,8 +1019,18 @@ void PlasmaZonesEffect::slotDaemonReady()
         }
     }
 
-    // Re-push cursor screen (resolve connector name to EDID-based screen ID)
-    if (!m_lastCursorOutput.isEmpty()) {
+    // Re-push cursor screen — use the cached effective screen ID (which includes
+    // virtual screen IDs like "A/vs:0") so the daemon's shortcut handler resolves
+    // to the correct virtual screen, not the physical monitor.
+    // m_lastEffectiveScreenId was set during the last processCursorPosition() call
+    // via resolveEffectiveScreenId(), so it already has the correct virtual ID.
+    if (!m_lastEffectiveScreenId.isEmpty()) {
+        fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("cursorScreenChanged"),
+                              {m_lastEffectiveScreenId}, QStringLiteral("cursorScreenChanged"));
+        qCDebug(lcEffect) << "Re-sent cursor screen:" << m_lastEffectiveScreenId;
+    } else if (!m_lastCursorOutput.isEmpty()) {
+        // Fallback: no effective ID cached yet (cursor hasn't moved since startup).
+        // Resolve physical ID from connector name.
         QString cursorScreenId;
         for (const auto* output : KWin::effects->screens()) {
             if (output->name() == m_lastCursorOutput) {
@@ -1022,11 +1039,11 @@ void PlasmaZonesEffect::slotDaemonReady()
             }
         }
         if (cursorScreenId.isEmpty()) {
-            cursorScreenId = m_lastCursorOutput; // fallback
+            cursorScreenId = m_lastCursorOutput;
         }
         fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("cursorScreenChanged"), {cursorScreenId},
                               QStringLiteral("cursorScreenChanged"));
-        qCDebug(lcEffect) << "Re-sent cursor screen:" << cursorScreenId;
+        qCDebug(lcEffect) << "Re-sent cursor screen (physical fallback):" << cursorScreenId;
     }
 
     // Re-notify active window (gives daemon lastActiveScreenName).

@@ -68,6 +68,14 @@ public:
     }
 
     /**
+     * @brief Get the last activated window's ID
+     */
+    QString lastActiveWindowId() const
+    {
+        return m_lastActiveWindowId;
+    }
+
+    /**
      * @brief Set ZoneDetectionAdaptor for daemon-driven navigation (getAdjacentZone, getFirstZoneInDirection)
      * @param adaptor ZoneDetectionAdaptor instance (must outlive this adaptor)
      */

@@ -24,11 +24,9 @@ Rectangle {
     // ── Signals ─────────────────────────────────────────────────────────
     signal dividerMoved(int dividerIndex, real newFraction)
 
-    Accessible.role: Accessible.Graphic
-    Accessible.name: i18n("Virtual screen preview")
     color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
     border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
-    border.width: Math.round(Kirigami.Units.devicePixelRatio)
+    border.width: 1
     radius: Kirigami.Units.smallSpacing
 
     // "No subdivisions" label when empty
@@ -45,20 +43,17 @@ Rectangle {
         model: previewRoot.pendingScreens
 
         Rectangle {
-            id: regionRect
-
             required property var modelData
             required property int index
 
-            x: modelData.x * previewRoot.width + Math.round(Kirigami.Units.devicePixelRatio)
-            y: modelData.y * previewRoot.height + Math.round(Kirigami.Units.devicePixelRatio)
-            width: modelData.width * previewRoot.width - Math.round(Kirigami.Units.devicePixelRatio) * 2
-            height: modelData.height * previewRoot.height - Math.round(Kirigami.Units.devicePixelRatio) * 2
+            x: modelData.x * previewRoot.width + 1
+            y: modelData.y * previewRoot.height + 1
+            width: modelData.width * previewRoot.width - 2
+            height: modelData.height * previewRoot.height - 2
             color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
             border.color: Kirigami.Theme.highlightColor
             border.width: 2
             radius: Kirigami.Units.smallSpacing / 2
-            Accessible.name: i18n("Virtual screen region %1", modelData.displayName || (index + 1))
 
             ColumnLayout {
                 anchors.centerIn: parent
@@ -68,7 +63,7 @@ Rectangle {
                     Layout.alignment: Qt.AlignHCenter
                     text: modelData.displayName || i18n("Screen %1", index + 1)
                     font.weight: Font.DemiBold
-                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.7, Math.min(Kirigami.Theme.defaultFont.pixelSize * 1, regionRect.width / 8))
+                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.7, Math.min(Kirigami.Theme.defaultFont.pixelSize * 1, parent.parent.width / 8))
                     color: Kirigami.Theme.textColor
                     elide: Text.ElideRight
                     maximumLineCount: 1
@@ -77,7 +72,7 @@ Rectangle {
                 Label {
                     Layout.alignment: Qt.AlignHCenter
                     text: Math.round(modelData.width * previewRoot.screenWidth) + "px \u00b7 " + Math.round(modelData.width * 100) + "%"
-                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.65, Math.min(Kirigami.Theme.defaultFont.pixelSize * 0.85, regionRect.width / 10))
+                    font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.65, Math.min(Kirigami.Theme.defaultFont.pixelSize * 0.85, parent.parent.width / 10))
                     color: Kirigami.Theme.disabledTextColor
                 }
 
@@ -101,11 +96,10 @@ Rectangle {
 
                 return 0;
             }
-            readonly property int handleHalfWidth: Math.round(Kirigami.Units.smallSpacing * 1.5)
 
-            x: dividerX - handleHalfWidth
+            x: dividerX - 3
             y: 0
-            width: handleHalfWidth * 2 + 1
+            width: 7
             height: previewRoot.height
             Accessible.name: i18n("Virtual screen divider %1", index + 1)
             Accessible.role: Accessible.Separator
@@ -113,7 +107,7 @@ Rectangle {
             // Visual divider line
             Rectangle {
                 anchors.centerIn: parent
-                width: dividerDragArea.containsMouse || dividerDragArea.pressed ? Math.round(Kirigami.Units.devicePixelRatio * 3) : Math.round(Kirigami.Units.devicePixelRatio)
+                width: dividerDragArea.containsMouse || dividerDragArea.pressed ? 3 : 1
                 height: parent.height - 4
                 radius: 1
                 color: dividerDragArea.containsMouse || dividerDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
@@ -143,7 +137,7 @@ Rectangle {
                 color: dividerDragArea.containsMouse || dividerDragArea.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
                 border.width: 1
                 border.color: dividerDragArea.containsMouse || dividerDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                visible: previewRoot.height > Kirigami.Units.gridUnit * 2.5
+                visible: previewRoot.height > 40
 
                 // Grip dots
                 Column {
@@ -177,17 +171,15 @@ Rectangle {
                 anchors.margins: -4
                 cursorShape: Qt.SplitHCursor
                 hoverEnabled: true
-                Accessible.name: i18n("Virtual screen divider %1", dividerHandle.index + 1)
-                Accessible.description: i18n("Use numeric controls for keyboard adjustment")
                 onPressed: function(mouse) {
-                    dragStartX = mapToItem(previewRoot, mouse.x, 0).x;
+                    dragStartX = mouse.x + dividerHandle.x;
                     dragStartFraction = dividerHandle.dividerX / previewRoot.width;
                 }
                 onPositionChanged: function(mouse) {
                     if (!pressed)
                         return ;
 
-                    var globalX = mapToItem(previewRoot, mouse.x, 0).x;
+                    var globalX = mouse.x + dividerHandle.x;
                     var deltaFraction = (globalX - dragStartX) / previewRoot.width;
                     var newFraction = dragStartFraction + deltaFraction;
                     previewRoot.dividerMoved(dividerHandle.index, newFraction);

@@ -104,6 +104,15 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             continue;
         }
 
+        // If the window already has a valid virtual screen ID that matches the
+        // current config, skip migration — the saved assignment is correct.
+        // Re-migrating would recompute the zone center against the physical screen
+        // geometry, which gives wrong results because zone relative coords were
+        // defined relative to the virtual screen, not the physical screen.
+        if (VirtualScreenId::isVirtual(it.value()) && virtualScreenIds.contains(it.value())) {
+            continue;
+        }
+
         QStringList zoneIds = m_windowZoneAssignments.value(it.key());
         QString targetVs = resolveVirtualScreen(zoneIds);
         it.value() = targetVs;

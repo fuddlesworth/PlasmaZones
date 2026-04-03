@@ -390,8 +390,34 @@ void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
     if (screenId.isEmpty()) {
         return;
     }
-    m_lastCursorScreenId = screenId;
-    qCDebug(lcDbusWindow) << "Cursor screen changed to" << screenId;
+
+    // The KWin effect may send a physical screen ID when virtual screen configs
+    // haven't loaded yet.  Resolve to the correct virtual screen using the
+    // focused window's daemon-tracked screen assignment as the best hint.
+    QString resolvedId = screenId;
+    if (!VirtualScreenId::isVirtual(screenId)) {
+        auto* mgr = ScreenManager::instance();
+        if (mgr && mgr->hasVirtualScreens(screenId)) {
+            // Use focused window's tracked screen as hint
+            if (m_service && !m_lastActiveWindowId.isEmpty()) {
+                const QString trackedScreen = m_service->screenAssignments().value(m_lastActiveWindowId);
+                if (VirtualScreenId::isVirtual(trackedScreen)
+                    && VirtualScreenId::extractPhysicalId(trackedScreen) == screenId) {
+                    resolvedId = trackedScreen;
+                }
+            }
+            // If no window hint, fall back to first virtual screen
+            if (!VirtualScreenId::isVirtual(resolvedId)) {
+                QStringList vsIds = mgr->virtualScreenIdsFor(screenId);
+                if (!vsIds.isEmpty()) {
+                    resolvedId = vsIds.first();
+                }
+            }
+        }
+    }
+
+    m_lastCursorScreenId = resolvedId;
+    qCDebug(lcDbusWindow) << "Cursor screen changed to" << resolvedId;
 }
 
 void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QString& screenId)
@@ -405,8 +431,18 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
 
     // Track the active window's screen as fallback for shortcut screen detection.
     // The primary source is now cursorScreenChanged (from KWin effect's mouseChanged).
+    // Prefer the daemon-tracked screen assignment (set at snap time) over what the
+    // effect reports, since the effect may send a physical ID before VS configs load.
     if (!screenId.isEmpty()) {
-        m_lastActiveScreenId = screenId;
+        QString resolvedScreen = screenId;
+        if (!VirtualScreenId::isVirtual(screenId) && m_service) {
+            const QString trackedScreen = m_service->screenAssignments().value(windowId);
+            if (VirtualScreenId::isVirtual(trackedScreen)
+                && VirtualScreenId::extractPhysicalId(trackedScreen) == VirtualScreenId::extractPhysicalId(screenId)) {
+                resolvedScreen = trackedScreen;
+            }
+        }
+        m_lastActiveScreenId = resolvedScreen;
     }
 
     qCDebug(lcDbusWindow) << "Window activated:" << windowId << "on screen" << screenId;

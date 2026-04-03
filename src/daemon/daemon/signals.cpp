@@ -190,10 +190,13 @@ void Daemon::initializeAutotile()
             // Resolve focused screen
             const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
             if (screenId.isEmpty()) {
+                qCWarning(lcDaemon) << "Mode toggle: empty screenId from resolveShortcutScreenId";
                 return;
             }
             int desktop = currentDesktop();
             QString activity = currentActivity();
+            qCInfo(lcDaemon) << "Mode toggle: screenId=" << screenId << "desktop=" << desktop
+                             << "activity=" << activity;
 
             // Set context so ModeTracker reads from the correct per-desktop entry
             if (m_modeTracker) {
@@ -213,6 +216,7 @@ void Daemon::initializeAutotile()
 
             bool applied = false;
             const bool wasAutotile = LayoutId::isAutotile(currentAssignment);
+            qCInfo(lcDaemon) << "Mode toggle: currentAssignment=" << currentAssignment << "wasAutotile=" << wasAutotile;
 
             // Capture autotile window order BEFORE layout switch destroys TilingState.
             // Merge (not replace) into m_lastAutotileOrders so other desktops' saved

@@ -348,6 +348,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("editor"),
         QStringLiteral("general"),
         QStringLiteral("about"),
+        QStringLiteral("virtualscreens"),
     };
     return pages;
 }

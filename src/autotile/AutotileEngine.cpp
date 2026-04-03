@@ -335,9 +335,24 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // on another desktop, e.g., panel added/removed). The effect-side borderless
         // re-application handles the visual state; the retile ensures positions match
         // the current screen geometry.
-        if (!m_pendingInitialOrders.contains(screenId)) {
-            scheduleRetileForScreen(screenId);
+        if (m_pendingInitialOrders.contains(screenId)) {
+            // Pending initial order exists — the windows are already known (seeded
+            // from zone-ordered window list during mode toggle). Consume the order
+            // now and insert windows into the TilingState so the retile has something
+            // to work with.  Previously we skipped the retile here expecting the
+            // KWin effect to re-send windowOpened D-Bus calls, but during a per-screen
+            // mode toggle the windows are already open — they never arrive via D-Bus.
+            const QStringList order = m_pendingInitialOrders.take(screenId);
+            TilingState* ts = stateForScreen(screenId);
+            if (ts) {
+                for (const QString& windowId : order) {
+                    if (!ts->containsWindow(windowId)) {
+                        ts->addWindow(windowId);
+                    }
+                }
+            }
         }
+        scheduleRetileForScreen(screenId);
     }
 
     // Only prune states for the CURRENT desktop/activity. States belonging to

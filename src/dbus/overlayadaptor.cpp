@@ -8,7 +8,12 @@
 #include "../core/zone.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
+#include "../core/screenmanager.h"
 #include "../core/utils.h"
+#include "../core/virtualscreen.h"
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -151,11 +156,36 @@ bool OverlayAdaptor::showSnapAssist(const QString& screenId, const QString& empt
         || candidatesJson == QLatin1String("[]")) {
         return false;
     }
+    // When the effect sends a physical screen ID for a subdivided monitor,
+    // resolve to the correct virtual screen so snap assist appears on the
+    // right side.  Use the first empty zone's center to determine which
+    // virtual screen to target.
+    QString resolvedScreen = screenId;
+    if (!VirtualScreenId::isVirtual(screenId)) {
+        auto* mgr = ScreenManager::instance();
+        if (mgr && mgr->hasVirtualScreens(screenId)) {
+            // Parse first zone geometry from emptyZonesJson to get a position hint
+            QJsonDocument doc = QJsonDocument::fromJson(emptyZonesJson.toUtf8());
+            if (doc.isArray() && !doc.array().isEmpty()) {
+                QJsonObject firstZone = doc.array().first().toObject();
+                int zx = firstZone.value(QLatin1String("x")).toInt();
+                int zy = firstZone.value(QLatin1String("y")).toInt();
+                int zw = firstZone.value(QLatin1String("width")).toInt();
+                int zh = firstZone.value(QLatin1String("height")).toInt();
+                QPoint center(zx + zw / 2, zy + zh / 2);
+                QString vsId = mgr->effectiveScreenAt(center);
+                if (!vsId.isEmpty()) {
+                    resolvedScreen = vsId;
+                }
+            }
+        }
+    }
+
     // Defer actual work so we return immediately — the KWin effect blocks on this D-Bus
     // call; returning quickly prevents compositor freeze during overlay creation.
     // Note: Return value means "request accepted for deferred processing", not "overlay shown".
-    QTimer::singleShot(0, m_overlayService, [this, screenId, emptyZonesJson, candidatesJson]() {
-        m_overlayService->showSnapAssist(screenId, emptyZonesJson, candidatesJson);
+    QTimer::singleShot(0, m_overlayService, [this, resolvedScreen, emptyZonesJson, candidatesJson]() {
+        m_overlayService->showSnapAssist(resolvedScreen, emptyZonesJson, candidatesJson);
     });
     return true;
 }

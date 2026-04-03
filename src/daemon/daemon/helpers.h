@@ -10,16 +10,64 @@
 #include <QScreen>
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include "../../core/screenmanager.h"
 #include "../../dbus/windowtrackingadaptor.h"
 
 namespace PlasmaZones {
 
 /**
+ * @brief Resolve a physical screen ID to a virtual screen ID if subdivisions exist.
+ *
+ * When the KWin effect sends a physical screen ID (e.g., during daemon reconnect
+ * before virtual screen configs are loaded), the daemon must resolve it to the
+ * correct virtual screen.  Uses the focused window's geometry center as the
+ * position hint (QCursor::pos() is unreliable on Wayland for background daemons).
+ * Falls back to vs:0 (leftmost) if no better hint is available.
+ */
+inline QString resolveVirtualScreenId(const QString& physicalId, const WindowTrackingAdaptor* trackingAdaptor)
+{
+    auto* mgr = ScreenManager::instance();
+    if (!mgr || !mgr->hasVirtualScreens(physicalId)) {
+        return physicalId;
+    }
+
+    // Best source: the focused window's daemon-tracked screen assignment.
+    // When a window is snapped to a zone, windowSnapped() stores the virtual
+    // screen ID in m_windowScreenAssignments.  This is authoritative — it was
+    // set at snap time by the daemon itself, not by the effect.
+    if (trackingAdaptor && trackingAdaptor->service()) {
+        const QString activeWindowId = trackingAdaptor->lastActiveWindowId();
+        if (!activeWindowId.isEmpty()) {
+            const QString trackedScreen = trackingAdaptor->service()->screenAssignments().value(activeWindowId);
+            if (VirtualScreenId::isVirtual(trackedScreen)
+                && VirtualScreenId::extractPhysicalId(trackedScreen) == physicalId) {
+                return trackedScreen;
+            }
+        }
+    }
+
+    // Fallback: effect-reported active screen (may be virtual if effect has VS configs)
+    if (trackingAdaptor) {
+        const QString activeScreen = trackingAdaptor->lastActiveScreenName();
+        if (VirtualScreenId::isVirtual(activeScreen)
+            && VirtualScreenId::extractPhysicalId(activeScreen) == physicalId) {
+            return activeScreen;
+        }
+    }
+
+    // Last resort: first virtual screen (vs:0)
+    QStringList vsIds = mgr->virtualScreenIdsFor(physicalId);
+    if (!vsIds.isEmpty()) {
+        return vsIds.first();
+    }
+    return physicalId;
+}
+
+/**
  * @brief Resolve the screen ID for a keyboard shortcut action (virtual-screen-aware).
  *
  * Returns the virtual screen ID (e.g., "Dell:U2722D:115107/vs:0") if the cursor
- * is on a subdivided screen, otherwise the physical screen ID.  Returns the raw
- * string from the KWin effect, preserving virtual screen IDs.
+ * is on a subdivided screen, otherwise the physical screen ID.
  */
 inline QString resolveShortcutScreenId(const WindowTrackingAdaptor* trackingAdaptor)
 {
@@ -31,7 +79,12 @@ inline QString resolveShortcutScreenId(const WindowTrackingAdaptor* trackingAdap
     // Primary: cursor screen (may be virtual ID from effect)
     const QString cursorScreen = trackingAdaptor->lastCursorScreenName();
     if (!cursorScreen.isEmpty()) {
-        return cursorScreen; // Return as-is — preserves virtual screen ID
+        // If the effect sent a physical ID but the screen has virtual subdivisions,
+        // resolve to the correct virtual screen.
+        if (!VirtualScreenId::isVirtual(cursorScreen)) {
+            return resolveVirtualScreenId(cursorScreen, trackingAdaptor);
+        }
+        return cursorScreen;
     }
 
     // Fallback: focused window's screen (also may be virtual)
