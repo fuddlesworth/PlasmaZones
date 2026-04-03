@@ -15,6 +15,21 @@ namespace PlasmaZones {
 
 namespace {
 const QLatin1String PerScreenKeyStr(PerScreenKey);
+
+/// Convert a QJsonValue to a QVariant suitable for flat-map consumption.
+/// Arrays and objects are serialized to compact JSON strings so that
+/// callers using QVariant::toString() get the expected JSON text.
+/// Mirrors the logic in JsonConfigGroup::readString().
+QVariant jsonValueToFlatVariant(const QJsonValue& val)
+{
+    if (val.isArray()) {
+        return QString::fromUtf8(QJsonDocument(val.toArray()).toJson(QJsonDocument::Compact));
+    }
+    if (val.isObject()) {
+        return QString::fromUtf8(QJsonDocument(val.toObject()).toJson(QJsonDocument::Compact));
+    }
+    return val.toVariant();
+}
 } // anonymous namespace
 
 // ── JsonConfigGroup ─────────────────────────────────────────────────────────
@@ -549,7 +564,7 @@ QMap<QString, QVariant> readJsonConfigFromDisk(const QString& filePath)
                         const QJsonObject screenObj = sIt.value().toObject();
                         const QString groupKey = prefix + QLatin1Char(':') + sIt.key();
                         for (auto kIt = screenObj.constBegin(); kIt != screenObj.constEnd(); ++kIt) {
-                            map.insert(groupKey + QLatin1Char('/') + kIt.key(), kIt.value().toVariant());
+                            map.insert(groupKey + QLatin1Char('/') + kIt.key(), jsonValueToFlatVariant(kIt.value()));
                         }
                     }
                 }
@@ -557,12 +572,12 @@ QMap<QString, QVariant> readJsonConfigFromDisk(const QString& filePath)
                 // Regular group: Group/Key
                 const QJsonObject groupObj = it.value().toObject();
                 for (auto kIt = groupObj.constBegin(); kIt != groupObj.constEnd(); ++kIt) {
-                    map.insert(it.key() + QLatin1Char('/') + kIt.key(), kIt.value().toVariant());
+                    map.insert(it.key() + QLatin1Char('/') + kIt.key(), jsonValueToFlatVariant(kIt.value()));
                 }
             }
         } else {
             // Root-level non-object key
-            map.insert(it.key(), it.value().toVariant());
+            map.insert(it.key(), jsonValueToFlatVariant(it.value()));
         }
     }
 
