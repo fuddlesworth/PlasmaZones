@@ -56,6 +56,8 @@ bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& js
     }
 
     QJsonObject root = iniMapToJson(flatMap);
+    // Schema version for future migration steps (e.g. v2 might restructure groups).
+    // Currently write-only — checked when a future migration needs to distinguish formats.
     root[QStringLiteral("_version")] = 1;
 
     // Ensure parent directory exists
@@ -110,6 +112,16 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
 
         const QString groupPart = flatKey.left(slashIdx);
         const QString keyPart = flatKey.mid(slashIdx + 1);
+
+        // QSettings maps ungrouped keys AND [General]-grouped keys identically,
+        // so RenderingBackend may appear as either a root key (handled above) or
+        // as "General/RenderingBackend". Route it to the Rendering group either way.
+        if (groupPart == QLatin1String("General") && keyPart == QLatin1String("RenderingBackend")) {
+            QJsonObject rendering = root.value(QStringLiteral("Rendering")).toObject();
+            rendering[keyPart] = convertValue(value);
+            root[QStringLiteral("Rendering")] = rendering;
+            continue;
+        }
 
         // Check for known per-screen group patterns: ZoneSelector:*, AutotileScreen:*, SnappingScreen:*
         // Other colon-containing groups (e.g., Assignment:ScreenId:Desktop:1) are regular groups.

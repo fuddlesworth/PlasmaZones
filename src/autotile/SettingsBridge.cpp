@@ -14,7 +14,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalBlocker>
-#include "config/iconfigbackend.h"
 #include "config/configbackend_json.h"
 
 namespace PlasmaZones {

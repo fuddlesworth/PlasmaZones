@@ -76,14 +76,12 @@ public:
     void removeRootKey(const QString& key) override;
     QStringList groupList() const override;
 
-    /// Create the default config backend for the standard plasmazonesrc file.
+    /// Create a backend for the legacy plasmazonesrc file.
+    /// Used only by migration and tests — runtime code uses JsonConfigBackend.
     static std::unique_ptr<QSettingsConfigBackend> createDefault();
 
-    /// Read config file directly from disk, bypassing Qt's QConfFile cache.
-    /// Returns a QSettings::SettingsMap (QMap<QString, QVariant>) with all keys.
-    static QMap<QString, QVariant> readConfigFromDisk();
-
-    /// Read config from a specific file path.
+    /// Read an INI config from a specific file path, bypassing Qt's QConfFile cache.
+    /// Returns a flat QMap<QString, QVariant> with "Group/Key" keys.
     static QMap<QString, QVariant> readConfigFromDisk(const QString& filePath);
 
 private:

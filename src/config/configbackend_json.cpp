@@ -216,8 +216,9 @@ void JsonConfigGroup::writeString(const QString& key, const QString& value)
     QJsonObject obj = groupObject();
     // Detect JSON arrays/objects and store as native JSON rather than escaped strings.
     // This keeps trigger lists, per-algorithm settings, etc. as clean JSON in the file.
-    // Safe because all known string config values are either plain text or intentional JSON;
-    // strings like "[Main Monitor]" fail JSON parsing and fall through to plain storage.
+    // Caveat: a plain string that happens to be valid JSON (e.g. '["x"]') will be stored
+    // as a native array. All current config values are either plain text or intentional
+    // JSON, so this is safe. Strings like "[Main Monitor]" fail parsing and stay as-is.
     if (!value.isEmpty() && (value.front() == QLatin1Char('[') || value.front() == QLatin1Char('{'))) {
         QJsonParseError err;
         QJsonDocument doc = QJsonDocument::fromJson(value.toUtf8(), &err);
@@ -371,6 +372,7 @@ void JsonConfigBackend::deleteGroup(const QString& name)
 {
     if (isPerScreenPrefix(name)) {
         const int colonIdx = name.indexOf(QLatin1Char(':'));
+        Q_ASSERT(colonIdx >= 0); // guaranteed by isPerScreenPrefix
         const QString prefix = name.left(colonIdx);
         const QString screenId = name.mid(colonIdx + 1);
         const QString category = prefixToCategory(prefix);
@@ -531,6 +533,9 @@ static constexpr PerScreenMapping kPerScreenMappings[] = {
 
 bool JsonConfigBackend::isPerScreenPrefix(const QString& groupName)
 {
+    if (groupName.isEmpty()) {
+        return false;
+    }
     for (const auto& m : kPerScreenMappings) {
         const QLatin1String prefixColon(m.prefix);
         if (groupName.startsWith(prefixColon) && groupName.size() > static_cast<int>(qstrlen(m.prefix))

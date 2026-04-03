@@ -167,7 +167,8 @@ int main(int argc, char* argv[])
     signal(SIGTERM, signalHandler);
     signal(SIGHUP, signalHandler);
 
-    // Migrate INI config to JSON if needed (one-time on upgrade)
+    // Migrate INI config to JSON if needed (one-time on upgrade).
+    // Safe from races: D-Bus registerService() above guarantees only one daemon runs.
     PlasmaZones::ConfigMigration::ensureJsonConfig();
 
     // Create and start daemon

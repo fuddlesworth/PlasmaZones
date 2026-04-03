@@ -273,6 +273,30 @@ private Q_SLOTS:
         QCOMPARE(rendering.value(QStringLiteral("RenderingBackend")).toString(), QStringLiteral("vulkan"));
     }
 
+    void testMigrateRenderingBackendFromGeneralGroup()
+    {
+        IsolatedConfigGuard guard;
+        // QSettings maps [General]/RenderingBackend identically to ungrouped
+        // RenderingBackend. Both must end up under the "Rendering" group.
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[General]\n"
+                                    "RenderingBackend=vulkan\n"
+                                    "\n"
+                                    "[Activation]\n"
+                                    "SnappingEnabled=true\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        QJsonObject rendering = root.value(QStringLiteral("Rendering")).toObject();
+        QCOMPARE(rendering.value(QStringLiteral("RenderingBackend")).toString(), QStringLiteral("vulkan"));
+
+        // Must NOT be under General
+        QJsonObject general = root.value(QStringLiteral("General")).toObject();
+        QVERIFY2(!general.contains(QStringLiteral("RenderingBackend")),
+                 "RenderingBackend should not remain under General after migration");
+    }
+
     // =========================================================================
     // Idempotency
     // =========================================================================

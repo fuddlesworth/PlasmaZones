@@ -339,12 +339,7 @@ QStringList QSettingsConfigBackend::groupList() const
 
 std::unique_ptr<QSettingsConfigBackend> QSettingsConfigBackend::createDefault()
 {
-    return std::make_unique<QSettingsConfigBackend>(ConfigDefaults::configFilePath());
-}
-
-QMap<QString, QVariant> QSettingsConfigBackend::readConfigFromDisk()
-{
-    return readConfigFromDisk(ConfigDefaults::configFilePath());
+    return std::make_unique<QSettingsConfigBackend>(ConfigDefaults::legacyConfigFilePath());
 }
 
 QMap<QString, QVariant> QSettingsConfigBackend::readConfigFromDisk(const QString& filePath)

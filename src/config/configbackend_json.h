@@ -113,7 +113,7 @@ public:
     static QString categoryToPrefix(const QString& category);
 
     /// JSON key for the per-screen container object.
-    static constexpr const char* PerScreenKey = "PerScreen";
+    static constexpr char PerScreenKey[] = "PerScreen";
 
 private:
     friend class JsonConfigGroup; // for group-count tracking and dirty flag
@@ -124,6 +124,8 @@ private:
     QString m_filePath;
     QJsonObject m_root;
     bool m_dirty = false;
+    // std::atomic despite single-threaded use: prevents UB if a group outlives
+    // a backend move/copy (deleted, but guards against future refactoring).
     std::atomic<int> m_activeGroupCount{0};
 };
 
