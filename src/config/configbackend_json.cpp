@@ -222,9 +222,11 @@ void JsonConfigGroup::writeString(const QString& key, const QString& value)
     QJsonObject obj = groupObject();
     // Detect JSON arrays/objects and store as native JSON rather than escaped strings.
     // This keeps trigger lists, per-algorithm settings, etc. as clean JSON in the file.
-    // Caveat: a plain string that happens to be valid JSON (e.g. '["x"]') will be stored
-    // as a native array. All current config values are either plain text or intentional
-    // JSON, so this is safe. Strings like "[Main Monitor]" fail parsing and stay as-is.
+    // Known limitation: a plain string that happens to be valid JSON (e.g. '["x"]')
+    // will be stored as a native array, not a string.  All current config values are
+    // either plain text or intentional JSON, so this is safe.  If a future setting
+    // needs to store arbitrary user strings that could look like JSON, add a writeRawString()
+    // method that bypasses this heuristic.  "[Main Monitor]" fails parsing and stays as-is.
     if (!value.isEmpty() && (value.front() == QLatin1Char('[') || value.front() == QLatin1Char('{'))) {
         QJsonParseError err;
         QJsonDocument doc = QJsonDocument::fromJson(value.toUtf8(), &err);

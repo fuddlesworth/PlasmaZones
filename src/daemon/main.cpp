@@ -168,7 +168,9 @@ int main(int argc, char* argv[])
     signal(SIGHUP, signalHandler);
 
     // Migrate INI config to JSON if needed (one-time on upgrade).
-    // Safe from races: D-Bus registerService() above guarantees only one daemon runs.
+    // The editor and settings app also call ensureJsonConfig() in case they start
+    // before the daemon.  Concurrent calls are safe: both produce identical JSON
+    // from the same INI, and QSaveFile's atomic rename prevents partial writes.
     PlasmaZones::ConfigMigration::ensureJsonConfig();
 
     // Create and start daemon

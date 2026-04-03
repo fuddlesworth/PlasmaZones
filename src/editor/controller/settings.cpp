@@ -9,7 +9,7 @@
 #include "../helpers/SettingsDbusQueries.h"
 
 #include "pz_i18n.h"
-#include "../../config/configbackend_json.h"
+#include "../../config/iconfigbackend.h"
 #include "../../config/configmigration.h"
 #include <QRegularExpression>
 
@@ -114,7 +114,7 @@ void EditorController::loadEditorSettings()
     // editor may start before the daemon on first upgrade).
     PlasmaZones::ConfigMigration::ensureJsonConfig();
 
-    auto backend = PlasmaZones::JsonConfigBackend::createDefault();
+    auto backend = PlasmaZones::createDefaultConfigBackend();
 
     // Note: Per-layout zonePadding/outerGap overrides are loaded from the layout JSON
     // in loadLayout(). The global settings are cached here for performance (avoids D-Bus calls).
@@ -201,7 +201,7 @@ void EditorController::loadEditorSettings()
 
 void EditorController::saveEditorSettings()
 {
-    auto backend = PlasmaZones::JsonConfigBackend::createDefault();
+    auto backend = PlasmaZones::createDefaultConfigBackend();
     auto editorGroup = backend->group(QStringLiteral("Editor"));
 
     // Save snapping settings

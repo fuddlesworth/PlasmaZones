@@ -4,7 +4,7 @@
 #include "settings.h"
 #include "colorimporter.h"
 #include "configdefaults.h"
-#include "configbackend_json.h"
+#include "iconfigbackend.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
@@ -26,7 +26,7 @@ namespace PlasmaZones {
 
 Settings::Settings(QObject* parent)
     : ISettings(parent)
-    , m_ownedBackend(JsonConfigBackend::createDefault())
+    , m_ownedBackend(createDefaultConfigBackend())
     , m_configBackend(m_ownedBackend.get())
 {
     load();

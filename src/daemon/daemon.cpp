@@ -29,7 +29,7 @@
 #include "../core/shaderregistry.h"
 #include "../config/settings.h"
 #include "../config/configmigration.h"
-#include "../config/configbackend_json.h"
+#include "../config/iconfigbackend.h"
 #include "../dbus/layoutadaptor.h"
 #include "../dbus/settingsadaptor.h"
 #include "../dbus/shaderadaptor.h"
@@ -59,7 +59,7 @@ Daemon::Daemon(QObject* parent)
     : QObject(parent)
     // Don't pass 'this' as parent for unique_ptr-managed objects.
     // unique_ptr owns lifetime; a Qt parent would double-free.
-    , m_configBackend(JsonConfigBackend::createDefault())
+    , m_configBackend(createDefaultConfigBackend())
     , m_layoutManager(std::make_unique<LayoutManager>(m_configBackend.get(), nullptr))
     , m_settings(std::make_unique<Settings>(m_configBackend.get(), nullptr))
     , m_zoneDetector(std::make_unique<ZoneDetector>(m_settings.get(), nullptr))

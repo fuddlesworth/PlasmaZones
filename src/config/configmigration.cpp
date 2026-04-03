@@ -9,6 +9,7 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QLatin1String>
 
 namespace PlasmaZones {
 
@@ -25,8 +26,8 @@ bool ConfigMigration::ensureJsonConfig()
             if (!data.trimmed().isEmpty()) {
                 QJsonParseError err;
                 QJsonDocument doc = QJsonDocument::fromJson(data, &err);
-                if (err.error == QJsonParseError::NoError && !doc.object().isEmpty()) {
-                    return true; // Already migrated or fresh JSON config
+                if (err.error == QJsonParseError::NoError && doc.isObject()) {
+                    return true; // Already migrated or fresh JSON config (including empty {})
                 }
             }
         }
@@ -87,7 +88,7 @@ bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& js
     QJsonObject root = iniMapToJson(flatMap);
     // Schema version for future migration steps (e.g. v2 might restructure groups).
     // Currently write-only — checked when a future migration needs to distinguish formats.
-    root[QStringLiteral("_version")] = 1;
+    root[QLatin1String("_version")] = 1;
 
     return JsonConfigBackend::writeJsonAtomically(jsonPath, root);
 }
@@ -104,13 +105,13 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
         if (slashIdx < 0) {
             // Root-level INI key (ungrouped). Route RenderingBackend to its own group.
             if (flatKey == QLatin1String("RenderingBackend")) {
-                QJsonObject rendering = root.value(QStringLiteral("Rendering")).toObject();
+                QJsonObject rendering = root.value(QLatin1String("Rendering")).toObject();
                 rendering[flatKey] = convertValue(value);
-                root[QStringLiteral("Rendering")] = rendering;
+                root[QLatin1String("Rendering")] = rendering;
             } else {
-                QJsonObject general = root.value(QStringLiteral("General")).toObject();
+                QJsonObject general = root.value(QLatin1String("General")).toObject();
                 general[flatKey] = convertValue(value);
-                root[QStringLiteral("General")] = general;
+                root[QLatin1String("General")] = general;
             }
             continue;
         }
@@ -122,9 +123,9 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
         // so RenderingBackend may appear as either a root key (handled above) or
         // as "General/RenderingBackend". Route it to the Rendering group either way.
         if (groupPart == QLatin1String("General") && keyPart == QLatin1String("RenderingBackend")) {
-            QJsonObject rendering = root.value(QStringLiteral("Rendering")).toObject();
+            QJsonObject rendering = root.value(QLatin1String("Rendering")).toObject();
             rendering[keyPart] = convertValue(value);
-            root[QStringLiteral("Rendering")] = rendering;
+            root[QLatin1String("Rendering")] = rendering;
             continue;
         }
 

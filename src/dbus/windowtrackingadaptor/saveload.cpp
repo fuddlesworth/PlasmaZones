@@ -13,7 +13,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include "../../config/iconfigbackend.h"
-#include "../../config/configbackend_json.h"
+#include "../../config/configbackend_json.h" // for readConfigFromDisk() static helper
 #include <QTimer>
 
 namespace PlasmaZones {
