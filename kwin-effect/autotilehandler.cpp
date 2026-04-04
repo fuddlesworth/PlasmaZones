@@ -206,6 +206,17 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
         if (!m_effect->isTileableWindow(w) || !m_effect->shouldHandleWindow(w)) {
             return;
         }
+        // Also block focus for windows below the minimum size threshold.
+        // These are normal windows (pass isTileableWindow) but too small
+        // for autotile — e.g., emoji picker, small utilities. Without this,
+        // hovering over them triggers auto-focus even though they're not tiled.
+        {
+            const QRectF frame = w->frameGeometry();
+            if ((m_effect->m_cachedMinWindowWidth > 0 && frame.width() < m_effect->m_cachedMinWindowWidth)
+                || (m_effect->m_cachedMinWindowHeight > 0 && frame.height() < m_effect->m_cachedMinWindowHeight)) {
+                return;
+            }
+        }
         const QString windowId = m_effect->getWindowId(w);
         if (windowId == m_lastFocusFollowsMouseWindowId) {
             return; // Already focused — no-op
