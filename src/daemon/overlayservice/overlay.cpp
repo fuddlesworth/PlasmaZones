@@ -97,7 +97,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
                 auto* existing = m_overlayWindows.value(screenId);
                 if (existing) {
                     const bool windowIsShader = existing->property("isShaderOverlay").toBool();
-                    const bool shouldUseShader = useShaderForScreen(physScreen);
+                    const bool shouldUseShader = useShaderForScreen(screenId);
                     if (windowIsShader != shouldUseShader) {
                         destroyOverlayWindow(screenId);
                     }

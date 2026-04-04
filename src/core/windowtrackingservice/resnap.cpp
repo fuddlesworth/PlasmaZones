@@ -465,7 +465,8 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateSnapAllWindows(cons
     QVector<Zone*> zones = layout->zones();
     sortZonesByNumber(zones);
 
-    QSet<QUuid> occupiedZoneIds = buildOccupiedZoneSet(screenId);
+    int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    QSet<QUuid> occupiedZoneIds = buildOccupiedZoneSet(screenId, desktopFilter);
 
     // Resolve physical screen for zone geometry calculation
     QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);

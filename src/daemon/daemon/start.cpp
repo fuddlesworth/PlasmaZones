@@ -588,8 +588,7 @@ void Daemon::connectShortcutSignals()
         int desktop = currentDesktop();
         QString activity = currentActivity();
         int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, desktop, activity));
-        QString prefix = QString::number(mode) + QStringLiteral(":");
-        QString key = prefix + screenId;
+        QString key = QString::number(mode) + QStringLiteral(":") + screenId;
         // Lock at screen-level (desktop=0, activity="") so it applies to all desktops/activities
         // and matches the KCM's screen-level lock button
         bool wasLocked = m_settings->isScreenLocked(key);

@@ -108,10 +108,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         if (screen && m_settings && m_layoutManager) {
             int curDesktop = m_layoutManager->currentVirtualDesktop();
             QString curActivity = m_layoutManager->currentActivity();
-            QString prefix = QString::number(static_cast<int>(
-                                 m_layoutManager->modeForScreen(selectorScreenId, curDesktop, curActivity)))
-                + QStringLiteral(":");
-            selectorScreenLocked = m_settings->isContextLocked(prefix + selectorScreenId, curDesktop, curActivity);
+            int curMode = static_cast<int>(m_layoutManager->modeForScreen(selectorScreenId, curDesktop, curActivity));
+            selectorScreenLocked = m_settings->isContextLocked(
+                QString::number(curMode) + QStringLiteral(":") + selectorScreenId, curDesktop, curActivity);
         }
         if (screen && !selectorScreenLocked
             && !isContextDisabled(m_settings, selectorScreenId, curDesktopDrop, curActivityDrop)) {
@@ -165,12 +164,12 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                         // Check lock before applying layout change from drag-drop
                         int layoutChangeDesktop = m_layoutManager->currentVirtualDesktop();
                         QString layoutChangeActivity = m_layoutManager->currentActivity();
-                        QString layoutChangePrefix = QString::number(static_cast<int>(m_layoutManager->modeForScreen(
-                                                         selectorScreenId, layoutChangeDesktop, layoutChangeActivity)))
-                            + QStringLiteral(":");
+                        int lcMode = static_cast<int>(m_layoutManager->modeForScreen(
+                            selectorScreenId, layoutChangeDesktop, layoutChangeActivity));
                         bool screenLocked = m_settings
-                            && m_settings->isContextLocked(layoutChangePrefix + selectorScreenId, layoutChangeDesktop,
-                                                           layoutChangeActivity);
+                            && m_settings->isContextLocked(QString::number(lcMode) + QStringLiteral(":")
+                                                               + selectorScreenId,
+                                                           layoutChangeDesktop, layoutChangeActivity);
                         Layout* currentLayout = m_layoutManager->resolveLayoutForScreen(selectorScreenId);
                         if (currentLayout != selectedLayout && !screenLocked) {
                             // Hide overlay/selector BEFORE the layout change so signal

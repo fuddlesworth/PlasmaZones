@@ -266,7 +266,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::shadersGroup(),    ConfigDefaults::globalShortcutsGroup(),
         ConfigDefaults::autotilingGroup(), ConfigDefaults::autotileShortcutsGroup(),
         ConfigDefaults::animationsGroup(), ConfigDefaults::editorGroup(),
-        ConfigDefaults::orderingGroup(),
+        ConfigDefaults::orderingGroup(),   ConfigDefaults::renderingGroup(),
     };
 }
 

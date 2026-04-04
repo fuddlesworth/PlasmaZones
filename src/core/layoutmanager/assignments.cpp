@@ -11,8 +11,74 @@
 #include "../virtualscreen.h"
 #include <QFile>
 #include <QJsonDocument>
+#include <optional>
 
 namespace PlasmaZones {
+
+namespace {
+
+// Walk the assignment cascade for a screen/desktop/activity context.
+// Visitor: (const AssignmentEntry&) -> std::optional<T>
+// Returns the first non-nullopt result from the visitor, or std::nullopt if
+// no entry satisfied the visitor at any cascade level.
+//
+// Cascade order:
+//   1. Exact match (screenId, virtualDesktop, activity)
+//   2. Screen + desktop, any activity
+//   3. Screen only (desktop=0, activity="") — the "display default"
+//   4. Connector name fallback (recursive)
+//   5. Virtual screen fallback — inherit from physical screen ID (recursive)
+template<typename Visitor>
+auto walkCascade(const QHash<LayoutAssignmentKey, AssignmentEntry>& assignments, const QString& screenId,
+                 int virtualDesktop, const QString& activity, Visitor&& visitor)
+    -> decltype(visitor(std::declval<const AssignmentEntry&>()))
+{
+    using Result = decltype(visitor(std::declval<const AssignmentEntry&>()));
+
+    // 1. Exact match
+    LayoutAssignmentKey exactKey{screenId, virtualDesktop, activity};
+    if (auto it = assignments.constFind(exactKey); it != assignments.constEnd()) {
+        if (auto r = visitor(it.value()))
+            return r;
+    }
+
+    // 2. Screen + desktop (any activity)
+    LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
+    if (auto it = assignments.constFind(desktopKey); it != assignments.constEnd()) {
+        if (auto r = visitor(it.value()))
+            return r;
+    }
+
+    // 3. Screen only (any desktop, any activity) — the "display default"
+    LayoutAssignmentKey screenKey{screenId, 0, QString()};
+    if (auto it = assignments.constFind(screenKey); it != assignments.constEnd()) {
+        if (auto r = visitor(it.value()))
+            return r;
+    }
+
+    // 4. Connector name fallback: if screenId looks like a connector name (no colons),
+    // try resolving to a screen ID and looking up again.
+    if (Utils::isConnectorName(screenId)) {
+        QString resolved = Utils::screenIdForName(screenId);
+        if (resolved != screenId) {
+            return walkCascade(assignments, resolved, virtualDesktop, activity, std::forward<Visitor>(visitor));
+        }
+    }
+
+    // 5. Virtual screen fallback: try physical screen ID if this is a virtual screen.
+    // This lets virtual screens inherit the physical screen's assignment when no
+    // per-virtual-screen assignment exists.
+    if (VirtualScreenId::isVirtual(screenId)) {
+        const QString physId = VirtualScreenId::extractPhysicalId(screenId);
+        auto result = walkCascade(assignments, physId, virtualDesktop, activity, std::forward<Visitor>(visitor));
+        if (result)
+            return result;
+    }
+
+    return Result{};
+}
+
+} // anonymous namespace
 
 void LayoutManager::assignLayout(const QString& screenId, int virtualDesktop, const QString& activity, Layout* layout)
 {
@@ -82,68 +148,23 @@ void LayoutManager::setAssignmentEntryDirect(const QString& screenId, int virtua
     saveAssignments();
 }
 
-// NOTE: layoutForScreen, assignmentIdForScreen, and assignmentEntryForScreen
-// share the same fallback cascade (exact -> desktop -> screen -> connector -> virtual -> default).
-// Changes to the cascade order must be replicated across all three methods.
+// layoutForScreen, assignmentIdForScreen, and assignmentEntryForScreen share the
+// same fallback cascade, implemented once in walkCascade() above. Each method
+// supplies a visitor that decides whether to accept or cascade past each entry.
 
 Layout* LayoutManager::layoutForScreen(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
-    // Helper: resolve stored assignment to Layout* (returns nullptr for autotile mode)
-    auto resolveEntry = [this](const AssignmentEntry& entry) -> Layout* {
-        if (entry.mode == AssignmentEntry::Autotile)
-            return nullptr;
-        if (entry.snappingLayout.isEmpty())
-            return nullptr;
-        return layoutById(QUuid::fromString(entry.snappingLayout));
-    };
-
-    // Try exact match first — continue cascading if resolveEntry returns nullptr
-    // (mode-only entries have empty snapping, so resolveEntry returns nullptr;
-    // the mode is preserved but the layout cascades to the parent scope)
-    LayoutAssignmentKey exactKey{screenId, virtualDesktop, activity};
-    if (m_assignments.contains(exactKey)) {
-        Layout* layout = resolveEntry(m_assignments[exactKey]);
-        if (layout)
-            return layout;
-    }
-
-    // Try screen + desktop (any activity)
-    LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
-    if (m_assignments.contains(desktopKey)) {
-        Layout* layout = resolveEntry(m_assignments[desktopKey]);
-        if (layout)
-            return layout;
-    }
-
-    // Try screen only (any desktop, any activity) — the "display default"
-    LayoutAssignmentKey screenKey{screenId, 0, QString()};
-    if (m_assignments.contains(screenKey)) {
-        Layout* layout = resolveEntry(m_assignments[screenKey]);
-        if (layout)
-            return layout;
-    }
-
-    // Fallback: if screenId looks like a connector name (no colons), try resolving
-    // to a screen ID and looking up again. This handles callers that haven't been
-    // migrated to pass screen IDs yet.
-    if (Utils::isConnectorName(screenId)) {
-        QString resolved = Utils::screenIdForName(screenId);
-        if (resolved != screenId) {
-            return layoutForScreen(resolved, virtualDesktop, activity);
-        }
-    }
-
-    // Virtual screen fallback: try physical screen ID if this is a virtual screen.
-    // This lets virtual screens inherit the physical screen's assignment when no
-    // per-virtual-screen assignment exists. The physical ID does not contain "/vs:"
-    // so the recursive call will not re-enter this branch.
-    if (VirtualScreenId::isVirtual(screenId)) {
-        const QString physId = VirtualScreenId::extractPhysicalId(screenId);
-        Layout* physLayout = layoutForScreen(physId, virtualDesktop, activity);
-        if (physLayout) {
-            return physLayout;
-        }
-    }
+    auto result = walkCascade(m_assignments, screenId, virtualDesktop, activity,
+                              [this](const AssignmentEntry& entry) -> std::optional<Layout*> {
+                                  if (entry.mode == AssignmentEntry::Autotile)
+                                      return std::nullopt;
+                                  if (entry.snappingLayout.isEmpty())
+                                      return std::nullopt;
+                                  Layout* layout = layoutById(QUuid::fromString(entry.snappingLayout));
+                                  return layout ? std::optional<Layout*>(layout) : std::nullopt;
+                              });
+    if (result)
+        return *result;
 
     // No assignment: use defaultLayoutId from settings when set, else first layout (by defaultOrder)
     if (m_settings && !m_settings->defaultLayoutId().isEmpty()) {
@@ -167,115 +188,24 @@ bool LayoutManager::hasExplicitAssignment(const QString& screenId, int virtualDe
 
 QString LayoutManager::assignmentIdForScreen(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
-    // Same fallback cascade as layoutForScreen() but returns the raw assignment string
-
-    // Helper: return activeLayoutId if non-empty, otherwise continue cascading.
-    // When mode=Snapping but snappingLayout is empty (mode-only entry), activeLayoutId()
-    // returns empty. We must cascade past it — consistent with layoutForScreen() which
-    // cascades when resolveEntry returns nullptr for empty snappingLayout.
-    auto cascadeId = [](const AssignmentEntry& entry) -> std::optional<QString> {
-        QString id = entry.activeLayoutId();
-        if (!id.isEmpty()) {
-            return id;
-        }
-        return std::nullopt;
-    };
-
-    // Try exact match first
-    LayoutAssignmentKey exactKey{screenId, virtualDesktop, activity};
-    if (m_assignments.contains(exactKey)) {
-        if (auto id = cascadeId(m_assignments[exactKey])) {
-            return *id;
-        }
-    }
-
-    // Try screen + desktop (any activity)
-    LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
-    if (m_assignments.contains(desktopKey)) {
-        if (auto id = cascadeId(m_assignments[desktopKey])) {
-            return *id;
-        }
-    }
-
-    // Try screen only (any desktop, any activity) — the "display default".
-    // Both manual and autotile base entries inherit to desktops without
-    // explicit assignments, so fresh desktops match the display default.
-    LayoutAssignmentKey screenKey{screenId, 0, QString()};
-    if (m_assignments.contains(screenKey)) {
-        if (auto id = cascadeId(m_assignments[screenKey])) {
-            return *id;
-        }
-    }
-
-    // Fallback: if screenId looks like a connector name, try resolving to screen ID
-    if (Utils::isConnectorName(screenId)) {
-        QString resolved = Utils::screenIdForName(screenId);
-        if (resolved != screenId) {
-            return assignmentIdForScreen(resolved, virtualDesktop, activity);
-        }
-    }
-
-    // Virtual screen fallback: inherit from physical screen
-    if (VirtualScreenId::isVirtual(screenId)) {
-        const QString physId = VirtualScreenId::extractPhysicalId(screenId);
-        QString physResult = assignmentIdForScreen(physId, virtualDesktop, activity);
-        if (!physResult.isEmpty()) {
-            return physResult;
-        }
-    }
-
-    return QString();
+    auto result = walkCascade(m_assignments, screenId, virtualDesktop, activity,
+                              [](const AssignmentEntry& entry) -> std::optional<QString> {
+                                  QString id = entry.activeLayoutId();
+                                  return id.isEmpty() ? std::nullopt : std::optional<QString>(id);
+                              });
+    return result.value_or(QString());
 }
 
 AssignmentEntry LayoutManager::assignmentEntryForScreen(const QString& screenId, int virtualDesktop,
                                                         const QString& activity) const
 {
-    // Same fallback cascade as layoutForScreen() — cascade past "mode-only" entries
-    // (where both snappingLayout and tilingAlgorithm are empty) so that virtual screens
-    // inherit the physical screen's layout/algorithm, consistent with layoutForScreen()
-    // and assignmentIdForScreen() which also cascade past such entries.
-    auto hasContent = [](const AssignmentEntry& entry) -> bool {
-        return !entry.snappingLayout.isEmpty() || !entry.tilingAlgorithm.isEmpty();
-    };
-
-    LayoutAssignmentKey exactKey{screenId, virtualDesktop, activity};
-    if (m_assignments.contains(exactKey)) {
-        const AssignmentEntry& entry = m_assignments[exactKey];
-        if (hasContent(entry)) {
-            return entry;
-        }
-    }
-
-    LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
-    if (m_assignments.contains(desktopKey)) {
-        const AssignmentEntry& entry = m_assignments[desktopKey];
-        if (hasContent(entry)) {
-            return entry;
-        }
-    }
-
-    LayoutAssignmentKey screenKey{screenId, 0, QString()};
-    if (m_assignments.contains(screenKey)) {
-        const AssignmentEntry& entry = m_assignments[screenKey];
-        if (hasContent(entry)) {
-            return entry;
-        }
-    }
-
-    if (Utils::isConnectorName(screenId)) {
-        QString resolved = Utils::screenIdForName(screenId);
-        if (resolved != screenId) {
-            return assignmentEntryForScreen(resolved, virtualDesktop, activity);
-        }
-    }
-
-    // Virtual screen fallback: inherit from physical screen
-    if (VirtualScreenId::isVirtual(screenId)) {
-        const QString physId = VirtualScreenId::extractPhysicalId(screenId);
-        return assignmentEntryForScreen(physId, virtualDesktop, activity);
-    }
-
-    return AssignmentEntry{};
+    auto result = walkCascade(m_assignments, screenId, virtualDesktop, activity,
+                              [](const AssignmentEntry& entry) -> std::optional<AssignmentEntry> {
+                                  if (entry.snappingLayout.isEmpty() && entry.tilingAlgorithm.isEmpty())
+                                      return std::nullopt;
+                                  return entry;
+                              });
+    return result.value_or(AssignmentEntry{});
 }
 
 AssignmentEntry::Mode LayoutManager::modeForScreen(const QString& screenId, int virtualDesktop,

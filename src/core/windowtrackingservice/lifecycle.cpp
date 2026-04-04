@@ -53,8 +53,15 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         return;
     }
 
-    // Clear resnap buffer — stale physical screen IDs would cause mismatches
-    m_resnapBuffer.clear();
+    // Only clear resnap entries for this physical screen — preserve entries for
+    // other screens so concurrent layout + VS config changes don't lose resnap data.
+    m_resnapBuffer.erase(std::remove_if(m_resnapBuffer.begin(), m_resnapBuffer.end(),
+                                        [&](const ResnapEntry& e) {
+                                            return e.screenId == physicalScreenId
+                                                || e.screenId.startsWith(physicalScreenId
+                                                                         + VirtualScreenId::separator());
+                                        }),
+                         m_resnapBuffer.end());
 
     // Helper: determine which virtual screen a zone center falls within.
     // Returns the first virtual screen as default if the zone can't be resolved.
@@ -239,10 +246,15 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
 
 void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& physicalScreenId)
 {
-    // Clear resnap buffer — stale virtual screen IDs would cause mismatches
-    m_resnapBuffer.clear();
-
+    // Only clear resnap entries for this physical screen — preserve entries for
+    // other screens so concurrent layout + VS config changes don't lose resnap data.
     const QString prefix = physicalScreenId + VirtualScreenId::separator();
+    m_resnapBuffer.erase(std::remove_if(m_resnapBuffer.begin(), m_resnapBuffer.end(),
+                                        [&](const ResnapEntry& e) {
+                                            return e.screenId == physicalScreenId || e.screenId.startsWith(prefix);
+                                        }),
+                         m_resnapBuffer.end());
+
     int migrated = 0;
     bool anyStateMigrated = false;
 
@@ -304,11 +316,19 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
     // Validate zone assignments against the physical screen's layout.
     // Virtual screen layouts may have zones that don't exist in the physical
     // screen's layout, so remove any assignments referencing invalid zone IDs.
+    // Floating windows are preserved — their float state should survive VS removal
+    // even if their zone assignments are invalid in the physical layout.
     Layout* physLayout = m_layoutManager ? m_layoutManager->resolveLayoutForScreen(physicalScreenId) : nullptr;
     if (physLayout) {
         QStringList windowsToRemove;
         for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
             if (m_windowScreenAssignments.value(it.key()) != physicalScreenId) {
+                continue;
+            }
+            // Preserve floating windows — clearing float state here would make
+            // previously floating windows eligible for auto-snap again, which is
+            // a user-visible behavior change.
+            if (isWindowFloating(it.key())) {
                 continue;
             }
             bool allValid = true;
@@ -330,8 +350,6 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
             m_windowDesktopAssignments.remove(wId);
             m_preFloatZoneAssignments.remove(wId);
             m_preFloatScreenAssignments.remove(wId);
-            m_floatingWindows.remove(wId);
-            m_autotileFloatedWindows.remove(wId);
         }
     }
 

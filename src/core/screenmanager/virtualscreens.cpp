@@ -43,6 +43,11 @@ bool containsExclusive(const QRect& r, const QPoint& p)
 
 bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config)
 {
+    if (physicalScreenId.isEmpty()) {
+        qCWarning(lcScreen) << "setVirtualScreenConfig: empty physicalScreenId";
+        return false;
+    }
+
     if (config.isEmpty()) {
         if (!m_virtualConfigs.contains(physicalScreenId)) {
             return true;
@@ -141,7 +146,7 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
         return false;
     }
 
-    if (m_virtualConfigs.value(physicalScreenId).exactEquals(config)) {
+    if (m_virtualConfigs.value(physicalScreenId) == config) {
         return true;
     }
 
@@ -270,10 +275,7 @@ bool ScreenManager::hasVirtualScreens(const QString& physicalScreenId) const
 
 QStringList ScreenManager::effectiveIdsForPhysical(const QString& physicalScreenId) const
 {
-    if (hasVirtualScreens(physicalScreenId)) {
-        return virtualScreenIdsFor(physicalScreenId);
-    }
-    return {physicalScreenId};
+    return virtualScreenIdsFor(physicalScreenId);
 }
 
 QStringList ScreenManager::effectiveScreenIdsWithFallback()

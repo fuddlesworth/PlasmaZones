@@ -812,9 +812,7 @@ QHash<QString, VirtualScreenConfig> Settings::virtualScreenConfigs() const
 
 void Settings::setVirtualScreenConfigs(const QHash<QString, VirtualScreenConfig>& configs)
 {
-    // Use exactEquals() for change detection — fuzzy operator== has 1e-3 tolerance
-    // that silently drops tiny geometry adjustments.
-    // Also filter out 1-screen configs: hasSubdivisions() returns false for size==1,
+    // Filter out 1-screen configs: hasSubdivisions() returns false for size==1,
     // so effectiveScreenIds() would not emit virtual IDs for them, but storing them
     // causes inconsistency (settings says VS exists, ScreenManager disagrees).
     QHash<QString, VirtualScreenConfig> filtered;
@@ -833,7 +831,7 @@ void Settings::setVirtualScreenConfigs(const QHash<QString, VirtualScreenConfig>
     }
     for (auto it = filtered.constBegin(); it != filtered.constEnd(); ++it) {
         auto existing = m_virtualScreenConfigs.constFind(it.key());
-        if (existing == m_virtualScreenConfigs.constEnd() || !existing.value().exactEquals(it.value())) {
+        if (existing == m_virtualScreenConfigs.constEnd() || !(existing.value() == it.value())) {
             m_virtualScreenConfigs = filtered;
             Q_EMIT virtualScreenConfigsChanged();
             Q_EMIT settingsChanged();
@@ -849,9 +847,7 @@ void Settings::setVirtualScreenConfig(const QString& physicalScreenId, const Vir
             return;
         m_virtualScreenConfigs.remove(physicalScreenId);
     } else {
-        // Use exactEquals() for change detection — fuzzy operator== has 1e-3 tolerance
-        // that silently drops tiny geometry adjustments.
-        if (m_virtualScreenConfigs.value(physicalScreenId).exactEquals(config))
+        if (m_virtualScreenConfigs.value(physicalScreenId) == config)
             return;
         m_virtualScreenConfigs.insert(physicalScreenId, config);
     }

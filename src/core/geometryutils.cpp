@@ -292,7 +292,7 @@ QRect snapToRect(const QRectF& rf)
     const int top = qRound(rf.y());
     const int right = qRound(rf.x() + rf.width());
     const int bottom = qRound(rf.y() + rf.height());
-    return QRect(left, top, std::max(0, right - left), std::max(0, bottom - top));
+    return QRect(left, top, qMax(0, right - left), qMax(0, bottom - top));
 }
 
 EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QString& screenId)

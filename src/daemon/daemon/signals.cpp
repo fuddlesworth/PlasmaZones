@@ -560,9 +560,19 @@ void Daemon::connectOverlaySignals()
                     effectiveScreenId = effectiveIds.first();
                 }
             }
-            // Snap assist is a manual-mode concept; ignore if this screen uses autotile.
+            // Snap assist is a manual-mode concept; ignore if the TARGET screen uses autotile.
             if (m_autotileEngine && m_autotileEngine->isAutotileScreen(effectiveScreenId)) {
                 return;
+            }
+            // If the window is being pulled from a sibling virtual screen that uses
+            // autotile, notify the engine so it removes the window from the source
+            // screen's tiling tree and retiles the remaining windows.
+            if (m_autotileEngine && m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+                const QString sourceScreen = m_windowTrackingAdaptor->service()->screenAssignments().value(windowId);
+                if (!sourceScreen.isEmpty() && sourceScreen != effectiveScreenId
+                    && m_autotileEngine->isAutotileScreen(sourceScreen)) {
+                    m_autotileEngine->windowClosed(windowId);
+                }
             }
             if (!effectiveScreenId.isEmpty() && m_windowTrackingAdaptor) {
                 QString authGeometry = m_windowTrackingAdaptor->getZoneGeometryForScreen(zoneId, effectiveScreenId);

@@ -37,7 +37,13 @@ QList<ScreenInfo> fetchScreens()
             info.name = screenName;
             // Compare physical parent for virtual screens (primary is always a physical ID)
             QString physName = VirtualScreenId::extractPhysicalId(screenName);
-            info.isPrimary = (physName == primaryScreenName);
+            // For virtual screens, only the first child (vs:0) is considered primary
+            // to avoid showing multiple "Primary" badges in the monitor selector.
+            if (VirtualScreenId::isVirtual(screenName)) {
+                info.isPrimary = (physName == primaryScreenName && VirtualScreenId::extractIndex(screenName) == 0);
+            } else {
+                info.isPrimary = (physName == primaryScreenName);
+            }
 
             QDBusMessage infoReply =
                 DaemonDBus::callDaemon(QString(DBus::Interface::Screen), QStringLiteral("getScreenInfo"), {screenName});

@@ -154,9 +154,14 @@ OverlayService::OverlayService(QObject* parent)
                 }
             }
 
-            // Recreate zone selectors for the new virtual screen configuration
+            // Recreate zone selectors for the new virtual screen configuration.
+            // Defer to the next event loop pass to allow LayoutManager to process
+            // assignment migrations for the new virtual screen IDs first, ensuring
+            // the zone selector shows the correct layout list.
             if (hadZoneSelector) {
-                showZoneSelector();
+                QTimer::singleShot(0, this, [this]() {
+                    showZoneSelector();
+                });
             }
         });
     }

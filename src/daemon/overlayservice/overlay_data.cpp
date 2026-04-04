@@ -79,8 +79,6 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
                              << "has virtual screens configured — caller should use QString overload."
                              << "Screen center disambiguation is unreliable; returning zones for"
                              << "physical screen ID as fallback.";
-        Q_ASSERT_X(false, "buildZonesList(QScreen*)",
-                   "Called with QScreen* when virtual screens are active — use QString overload");
     }
 
     const QPoint screenCenter = screen->geometry().center();
@@ -128,8 +126,6 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
     if (mgr && mgr->hasVirtualScreens(physId)) {
         qCWarning(lcOverlay) << "zoneToVariantMap(Zone*, QScreen*, Layout*): physical screen" << physId
                              << "has virtual screens configured — caller should use QString overload.";
-        Q_ASSERT_X(false, "zoneToVariantMap(QScreen*)",
-                   "Called with QScreen* when virtual screens are active — use QString overload");
     }
 
     const QPoint screenCenter = screen->geometry().center();

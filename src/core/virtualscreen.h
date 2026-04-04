@@ -59,12 +59,6 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
             && region == other.region && index == other.index;
     }
 
-    /// Alias for operator== — callers that previously used exactEquals() continue to work.
-    bool exactEquals(const VirtualScreenDef& other) const
-    {
-        return *this == other;
-    }
-
     /// Check if the definition is valid: non-empty id, non-empty physicalScreenId,
     /// non-negative origin, non-zero size, region within [0,1] bounds.
     /// Uses Tolerance to handle float serialization precision loss.
@@ -129,12 +123,6 @@ struct PLASMAZONES_EXPORT VirtualScreenConfig
     bool operator!=(const VirtualScreenConfig& other) const
     {
         return !(*this == other);
-    }
-
-    /// Alias for operator== — callers that previously used exactEquals() continue to work.
-    bool exactEquals(const VirtualScreenConfig& other) const
-    {
-        return *this == other;
     }
 };
 

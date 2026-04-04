@@ -50,58 +50,8 @@ void OverlayService::setSettings(ISettings* settings)
                     &OverlayService::recreateOverlayWindowsOnTypeMismatch);
 
             connect(m_settings, &ISettings::enableShaderEffectsChanged, this, [this]() {
-                // When shader effects setting changes, recreate overlay windows if visible
-                // to switch between shader and non-shader overlay types
                 if (m_visible) {
-                    // Check if we were using shaders before the setting changed
-                    // (shader timer running indicates we were using shader overlay)
-                    const bool wasUsingShader = m_shaderUpdateTimer && m_shaderUpdateTimer->isActive();
-                    const bool shouldUseShader = anyScreenUsesShader();
-
-                    // Only recreate if the overlay type actually needs to change
-                    if (wasUsingShader != shouldUseShader) {
-                        qCInfo(lcOverlay) << "Shader effects setting changed, recreating overlay windows"
-                                          << "- was=" << wasUsingShader << "now=" << shouldUseShader;
-
-                        // Stop shader animation if it was running
-                        if (wasUsingShader) {
-                            stopShaderAnimation();
-                        }
-
-                        // Store current visibility state
-                        const bool wasVisible = m_visible;
-
-                        // Recreate all overlay windows (each gets correct type per-screen)
-                        const auto screenIds = m_overlayWindows.keys();
-                        // Snapshot phys screens before destroying
-                        QHash<QString, QScreen*> savedPhysScreens = m_overlayPhysScreens;
-                        QHash<QString, QRect> savedGeometries = m_overlayGeometries;
-                        for (const QString& screenId : screenIds) {
-                            destroyOverlayWindow(screenId);
-                        }
-
-                        // Recreate windows with correct type per-screen
-                        for (const QString& screenId : screenIds) {
-                            if (!isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
-                                QScreen* physScreen = savedPhysScreens.value(screenId);
-                                if (!physScreen) {
-                                    continue;
-                                }
-                                const QRect geom = savedGeometries.value(screenId, physScreen->geometry());
-                                createOverlayWindow(screenId, physScreen, geom);
-                                updateOverlayWindow(screenId, physScreen);
-                                if (wasVisible && m_overlayWindows.value(screenId)) {
-                                    m_overlayWindows.value(screenId)->show();
-                                }
-                            }
-                        }
-
-                        // Start shader animation if any screen needs it
-                        if (shouldUseShader && wasVisible) {
-                            updateZonesForAllWindows(); // Push initial zone data
-                            startShaderAnimation();
-                        }
-                    }
+                    recreateOverlayWindowsOnTypeMismatch();
                 }
             });
 

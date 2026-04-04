@@ -57,6 +57,8 @@ Rectangle {
             y: modelData.y * previewRoot.height + 1
             width: modelData.width * previewRoot.width - 2
             height: modelData.height * previewRoot.height - 2
+            Accessible.name: modelData.displayName || i18n("Screen %1", index + 1)
+            Accessible.role: Accessible.Pane
             color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
             border.color: Kirigami.Theme.highlightColor
             border.width: 2
@@ -121,7 +123,7 @@ Rectangle {
 
                 Behavior on width {
                     NumberAnimation {
-                        duration: 100
+                        duration: Kirigami.Units.shortDuration
                     }
 
                 }
@@ -144,7 +146,7 @@ Rectangle {
                 color: dividerDragArea.containsMouse || dividerDragArea.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
                 border.width: 1
                 border.color: dividerDragArea.containsMouse || dividerDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                visible: previewRoot.height > 40
+                visible: previewRoot.height > Math.round(Kirigami.Units.gridUnit * 2.5)
 
                 // Grip dots
                 Column {
