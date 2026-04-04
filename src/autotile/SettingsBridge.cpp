@@ -47,6 +47,18 @@ SettingsBridge::SettingsBridge(AutotileEngine* engine, IConfigBackend* configBac
     QObject::connect(&m_settingsRetileTimer, &QTimer::timeout, m_engine, [this]() {
         processSettingsRetile();
     });
+
+    // Debounced save for shortcut adjustments (ratio/count changes via keyboard).
+    // syncShortcutAdjustment uses QSignalBlocker to prevent feedback loops, which
+    // also suppresses the normal settingsChanged → save path. This timer ensures
+    // the adjusted values are persisted to disk after rapid key presses settle.
+    m_shortcutSaveTimer.setSingleShot(true);
+    m_shortcutSaveTimer.setInterval(500); // 500ms debounce — user may hold key
+    QObject::connect(&m_shortcutSaveTimer, &QTimer::timeout, m_engine, [this]() {
+        if (m_settings) {
+            m_settings->save();
+        }
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -342,6 +354,10 @@ void SettingsBridge::syncAlgorithmToSettings(const QString& algoId, qreal splitR
     // Sync per-algorithm map so saved settings survive save/reload
     m_settings->setAutotilePerAlgorithmSettings(
         AutotileConfig::perAlgoToVariantMap(m_engine->config()->savedAlgorithmSettings));
+
+    // Schedule debounced save — same issue as syncShortcutAdjustment:
+    // QSignalBlocker suppresses the normal settingsChanged → save path.
+    m_shortcutSaveTimer.start();
 }
 
 void SettingsBridge::syncShortcutAdjustment(qreal splitRatio, int masterCount)
@@ -356,6 +372,11 @@ void SettingsBridge::syncShortcutAdjustment(qreal splitRatio, int masterCount)
     // Sync per-algorithm map so saved settings survive save/reload
     m_settings->setAutotilePerAlgorithmSettings(
         AutotileConfig::perAlgoToVariantMap(m_engine->config()->savedAlgorithmSettings));
+
+    // Schedule debounced save — signals are blocked so the normal
+    // settingsChanged → save path is suppressed. Without this, shortcut-
+    // adjusted values only persist on clean daemon shutdown.
+    m_shortcutSaveTimer.start();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

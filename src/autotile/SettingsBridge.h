@@ -119,6 +119,7 @@ private:
     IConfigBackend* m_configBackend = nullptr; // non-owned, from daemon
     QPointer<Settings> m_settings;
     QTimer m_settingsRetileTimer;
+    QTimer m_shortcutSaveTimer; // debounced save after shortcut adjustments
     bool m_pendingSettingsRetile = false;
 };
 

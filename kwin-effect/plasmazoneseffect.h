@@ -176,8 +176,7 @@ private:
      * @param args       Method arguments
      * @return QDBusPendingCall for attaching a watcher
      */
-    QDBusPendingCall asyncMethodCall(const QString& interface, const QString& method,
-                                     const QVariantList& args = {});
+    QDBusPendingCall asyncMethodCall(const QString& interface, const QString& method, const QVariantList& args = {});
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
@@ -307,7 +306,6 @@ public Q_SLOTS:
     // These methods are used by NavigationHandler, WindowAnimator, and DragTracker
     // ═══════════════════════════════════════════════════════════════════════════════
 public:
-
     // Animation sequence mode: 0=all at once, 1=one by one in zone order (for batch snaps)
     int cachedAnimationSequenceMode() const
     {
@@ -480,6 +478,13 @@ private:
     bool m_dragStartedSent = false;
     QString m_pendingDragWindowId;
     QRectF m_pendingDragGeometry;
+
+    // Windows floated by drag on autotile screens. The daemon emits
+    // applyGeometryRequested to restore pre-autotile geometry on float,
+    // but drag-to-float should keep the window where the user dropped it.
+    // Entries are consumed (removed) when slotApplyGeometryRequested skips
+    // the geometry restore for a drag-floated window.
+    QSet<QString> m_dragFloatedWindowIds;
 
     // Autotile: true when the current drag was started on an autotile screen
 
