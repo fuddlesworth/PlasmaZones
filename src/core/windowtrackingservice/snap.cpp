@@ -319,6 +319,10 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
         return SnapResult::noSnap();
     }
     QString zoneId = zoneIds.first(); // Primary zone for validation
+    // Use stored screen from the pending restore entry, falling back to the caller's
+    // screenId. If both are empty, resolveEffectiveScreenId returns it unchanged and
+    // downstream resolveZoneGeometry falls back to the primary screen via
+    // ScreenManager::resolvePhysicalScreen.
     QString savedScreen = entry.screenId.isEmpty() ? screenId : entry.screenId;
 
     // E7: Validate virtual screen still exists — configuration may have changed since save.

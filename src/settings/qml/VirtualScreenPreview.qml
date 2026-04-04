@@ -104,7 +104,7 @@ Rectangle {
                 return 0;
             }
 
-            width: Math.max(Kirigami.Units.smallSpacing, 7)
+            width: Kirigami.Units.smallSpacing * 2
             x: dividerX - Math.round(width / 2)
             y: 0
             height: previewRoot.height

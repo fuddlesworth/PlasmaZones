@@ -372,10 +372,12 @@ void ZoneSelectorController::selectLayout(const QString& layoutId)
     // layout pipeline (per-screen assignments, mode tracking, resnap).
     // Do NOT call m_layoutManager->setActiveLayout() here — it bypasses that
     // pipeline and leaves per-screen state, mode tracking, and resnap out of sync.
+#ifdef QT_DEBUG
     if (!QObject::receivers(SIGNAL(layoutSelected(QString)))) {
         qCWarning(lcOverlay) << "selectLayout(): no receivers connected to layoutSelected signal"
                              << "— layout" << layoutId << "will not be applied";
     }
+#endif
 }
 
 bool ZoneSelectorController::isScreenLocked() const

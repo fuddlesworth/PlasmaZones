@@ -23,7 +23,8 @@ ColumnLayout {
     property bool physicalOnly: false // When true, filter out virtual screens (e.g., for virtual screen config page)
     readonly property bool isPerScreen: selectedScreenName !== ""
     // Filtered screen list: when physicalOnly, deduplicate to physical screens only
-    // (virtual screens like "id/vs:0" are collapsed to their physical parent "id")
+    // (virtual screens like "id/vs:0" are collapsed to their physical parent "id").
+    // Uses imperative JS because QML declarative bindings can't express set-deduplication.
     readonly property var _filteredScreens: {
         var all = appSettings.screens;
         if (!physicalOnly)

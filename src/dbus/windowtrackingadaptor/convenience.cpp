@@ -96,6 +96,7 @@ QString WindowTrackingAdaptor::getWindowState(const QString& windowId)
     QJsonObject result;
 
     if (windowId.isEmpty()) {
+        qCWarning(lcDbusWindow) << "getWindowState: empty window ID";
         return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
     }
 

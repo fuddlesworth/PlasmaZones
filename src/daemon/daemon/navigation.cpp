@@ -139,7 +139,9 @@ void Daemon::handleRestore()
         m_autotileEngine->toggleFocusedWindowFloat();
         return;
     }
-    m_windowTrackingAdaptor->restoreWindowSize();
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->restoreWindowSize();
+    }
 }
 
 void Daemon::handleSwap(NavigationDirection direction)

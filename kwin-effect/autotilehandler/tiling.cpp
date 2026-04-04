@@ -356,10 +356,11 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // and only when the physical screen has virtual subdivisions.
     if (m_notifiedWindows.contains(windowId) && !m_effect->m_virtualScreenDefs.isEmpty()
         && m_effect->m_virtualScreensReady) {
-        // Don't detect VS crossings during an active drag — the drop handler
+        // Don't detect VS crossings for the dragged window — the drop handler
         // (callDragStopped / autotile drag end) owns state transitions.
         // Detecting mid-drag would transfer the window before the user drops it.
-        if (m_effect->m_dragTracker->isDragging()) {
+        // Other windows (e.g., a terminal reflowing) should still get VS crossing checks.
+        if (m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId()) {
             return;
         }
         const QString newScreenId = m_effect->getWindowScreenId(w);

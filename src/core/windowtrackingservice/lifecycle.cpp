@@ -147,6 +147,9 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         // Re-migrating would recompute the zone center against the physical screen
         // geometry, which gives wrong results because zone relative coords were
         // defined relative to the virtual screen, not the physical screen.
+        // Note: zone assignments are NOT validated here because per-VS layouts may
+        // share zone UUIDs. Stale zone assignments are cleaned up by onLayoutChanged()
+        // when the layout is applied to the virtual screen.
         if (VirtualScreenId::isVirtual(it.value()) && virtualScreenIds.contains(it.value())) {
             continue;
         }

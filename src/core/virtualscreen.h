@@ -51,34 +51,26 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
         return QRect(left, top, w, h);
     }
 
-    /// WARNING: operator== uses fuzzy floating-point comparison for the region
-    /// field, so VirtualScreenDef must NOT be used as a QHash/QSet key.
-    /// Two defs that compare equal may have different hash values.
-    /// For change detection (skip-if-unchanged guards), use exactEquals() instead.
+    /// Exact (bitwise) equality — transitive and safe for QHash/QSet.
+    /// Use this for change detection (skip-if-unchanged guards).
     bool operator==(const VirtualScreenDef& other) const
-    {
-        auto fuzzyEqual = [](qreal a, qreal b) {
-            return qAbs(a - b) < Tolerance;
-        };
-        auto fuzzyRectEqual = [&fuzzyEqual](const QRectF& a, const QRectF& b) {
-            return fuzzyEqual(a.x(), b.x()) && fuzzyEqual(a.y(), b.y()) && fuzzyEqual(a.width(), b.width())
-                && fuzzyEqual(a.height(), b.height());
-        };
-        return id == other.id && physicalScreenId == other.physicalScreenId && displayName == other.displayName
-            && fuzzyRectEqual(region, other.region) && index == other.index;
-    }
-
-    /// Exact (bitwise) equality — transitive, suitable for change detection.
-    /// Use this instead of operator== when guarding against redundant updates.
-    bool exactEquals(const VirtualScreenDef& other) const
     {
         return id == other.id && physicalScreenId == other.physicalScreenId && displayName == other.displayName
             && region == other.region && index == other.index;
     }
 
+    /// Alias for operator== — callers that previously used exactEquals() continue to work.
+    bool exactEquals(const VirtualScreenDef& other) const
+    {
+        return *this == other;
+    }
+
     /// Check if the definition is valid: non-empty id, non-empty physicalScreenId,
     /// non-negative origin, non-zero size, region within [0,1] bounds.
     /// Uses Tolerance to handle float serialization precision loss.
+    /// Note: slightly negative coordinates (within -Tolerance) are accepted and
+    /// clamped to zero by absoluteGeometry(). Always use absoluteGeometry() to
+    /// obtain pixel coordinates rather than consuming region directly.
     bool isValid() const
     {
         return VirtualScreenId::isVirtual(id) && !physicalScreenId.isEmpty() && index >= 0 && region.x() >= -Tolerance
@@ -139,19 +131,10 @@ struct PLASMAZONES_EXPORT VirtualScreenConfig
         return !(*this == other);
     }
 
-    /// Exact (bitwise) equality — transitive, suitable for change detection.
-    /// Use this instead of operator== when guarding against redundant updates.
+    /// Alias for operator== — callers that previously used exactEquals() continue to work.
     bool exactEquals(const VirtualScreenConfig& other) const
     {
-        if (physicalScreenId != other.physicalScreenId || screens.size() != other.screens.size()) {
-            return false;
-        }
-        for (int i = 0; i < screens.size(); ++i) {
-            if (!screens[i].exactEquals(other.screens[i])) {
-                return false;
-            }
-        }
-        return true;
+        return *this == other;
     }
 };
 

@@ -40,7 +40,7 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateResnapFromPreviousL
             ZoneAssignmentEntry restoreEntry;
             restoreEntry.windowId = entry->windowId;
             restoreEntry.sourceZoneId = QString();
-            restoreEntry.targetZoneId = QStringLiteral("__restore__");
+            restoreEntry.targetZoneId = QString(RestoreSentinel);
             restoreEntry.targetGeometry = *preTile;
             result.append(restoreEntry);
         } else {

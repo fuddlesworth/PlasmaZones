@@ -30,6 +30,10 @@ enum class ZoneGeometryMode {
  * structural constants for built-in layouts.
  */
 namespace Defaults {
+// Fallback screen dimensions when no QScreen is available
+inline constexpr int FallbackScreenWidth = 1920;
+inline constexpr int FallbackScreenHeight = 1080;
+
 // Alpha values for semi-transparent colors
 constexpr int HighlightAlpha = 128;
 constexpr int InactiveAlpha = 64;

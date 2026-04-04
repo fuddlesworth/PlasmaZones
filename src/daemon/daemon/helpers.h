@@ -123,6 +123,7 @@ inline QString navigationDirectionToString(NavigationDirection direction)
     case NavigationDirection::Down:
         return QStringLiteral("down");
     }
+    Q_UNREACHABLE();
     return QString();
 }
 

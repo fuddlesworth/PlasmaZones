@@ -2063,6 +2063,12 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                     }
                 }
 
+                if (!physGeom.isValid()) {
+                    qCWarning(lcEffect) << "Physical output" << physicalScreenId
+                                        << "not found (hot-unplug?) — skipping VS config update;"
+                                        << "will re-fetch on reconnect";
+                }
+
                 QVector<EffectVirtualScreenDef> defs;
                 for (const QJsonValue& val : screens) {
                     QJsonObject obj = val.toObject();

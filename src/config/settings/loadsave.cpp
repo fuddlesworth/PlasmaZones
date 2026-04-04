@@ -886,12 +886,13 @@ void Settings::loadVirtualScreenConfigs(IConfigBackend* backend)
 
         // Validate total area coverage is approximately 1.0
         {
+            constexpr qreal AreaCoverageTolerance = 0.05;
             qreal totalArea = 0.0;
             for (const auto& vs : config.screens) {
                 totalArea += vs.region.width() * vs.region.height();
             }
-            if (totalArea < 0.95 || totalArea > 1.05) {
-                qCWarning(lcConfig) << "loadVirtualScreenConfigs: total area" << totalArea << "outside [0.95, 1.05] for"
+            if (totalArea < 1.0 - AreaCoverageTolerance || totalArea > 1.0 + AreaCoverageTolerance) {
+                qCWarning(lcConfig) << "loadVirtualScreenConfigs: total area" << totalArea << "outside tolerance for"
                                     << physId << "- skipping config";
                 continue;
             }

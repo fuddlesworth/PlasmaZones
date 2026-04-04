@@ -30,7 +30,7 @@ static QJsonObject moveResult(bool success, const QString& reason, const QString
     obj[QLatin1String("zoneId")] = zoneId;
     obj[QLatin1String("geometryJson")] = geometryJson;
     obj[QLatin1String("sourceZoneId")] = sourceZoneId;
-    obj[QLatin1String("screenName")] = screenId;
+    obj[QLatin1String("screenId")] = screenId;
     return obj;
 }
 
@@ -43,7 +43,7 @@ static QJsonObject focusResult(bool success, const QString& reason, const QStrin
     obj[QLatin1String("windowIdToActivate")] = windowIdToActivate;
     obj[QLatin1String("sourceZoneId")] = sourceZoneId;
     obj[QLatin1String("targetZoneId")] = targetZoneId;
-    obj[QLatin1String("screenName")] = screenId;
+    obj[QLatin1String("screenId")] = screenId;
     return obj;
 }
 
@@ -55,7 +55,7 @@ static QJsonObject cycleResult(bool success, const QString& reason, const QStrin
     obj[QLatin1String("reason")] = reason;
     obj[QLatin1String("windowIdToActivate")] = windowIdToActivate;
     obj[QLatin1String("zoneId")] = zoneId;
-    obj[QLatin1String("screenName")] = screenId;
+    obj[QLatin1String("screenId")] = screenId;
     return obj;
 }
 
@@ -79,7 +79,7 @@ static QJsonObject swapResult(bool success, const QString& reason, const QString
     obj[QLatin1String("w2")] = w2;
     obj[QLatin1String("h2")] = h2;
     obj[QLatin1String("zoneId2")] = zoneId2;
-    obj[QLatin1String("screenName")] = screenId;
+    obj[QLatin1String("screenId")] = screenId;
     obj[QLatin1String("sourceZoneId")] = sourceZoneId;
     obj[QLatin1String("targetZoneId")] = targetZoneId;
     return obj;

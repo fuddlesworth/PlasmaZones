@@ -500,6 +500,7 @@ private:
     // Cached daemon D-Bus service registration state.
     // Updated via QDBusServiceWatcher signals (registration/unregistration) to avoid
     // synchronous isServiceRegistered() calls that block the compositor thread.
+    // --- Daemon readiness / virtual screen fetch gate state ---
     bool m_daemonServiceRegistered = false;
     bool m_daemonReadyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
     bool m_virtualScreensReady = false; ///< set after all fetchVirtualScreenConfig replies arrive

@@ -98,7 +98,7 @@ void WindowTrackingAdaptor::moveWindowToAdjacentZone(const QString& direction)
     QString zoneId = obj.value(QLatin1String("zoneId")).toString();
     QString geometryJson = obj.value(QLatin1String("geometryJson")).toString();
     QString sourceZoneId = obj.value(QLatin1String("sourceZoneId")).toString();
-    QString effectiveScreen = obj.value(QLatin1String("screenName")).toString();
+    QString effectiveScreen = obj.value(QLatin1String("screenId")).toString();
 
     // Handle snap bookkeeping internally (pre-snap geometry is stored by the
     // effect in slotApplyGeometryRequested via ensurePreSnapGeometryStored)
@@ -244,7 +244,7 @@ void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
     int y1 = obj.value(QLatin1String("y1")).toInt();
     int w1 = obj.value(QLatin1String("w1")).toInt();
     int h1 = obj.value(QLatin1String("h1")).toInt();
-    QString effectiveScreen = obj.value(QLatin1String("screenName")).toString();
+    QString effectiveScreen = obj.value(QLatin1String("screenId")).toString();
 
     // Move window 1 to target zone
     windowSnapped(windowId1, zoneId1, effectiveScreen);

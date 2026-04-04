@@ -564,13 +564,15 @@ void Daemon::connectOverlaySignals()
             if (m_autotileEngine && m_autotileEngine->isAutotileScreen(effectiveScreenId)) {
                 return;
             }
-            if (!effectiveScreenId.isEmpty()) {
+            if (!effectiveScreenId.isEmpty() && m_windowTrackingAdaptor) {
                 QString authGeometry = m_windowTrackingAdaptor->getZoneGeometryForScreen(zoneId, effectiveScreenId);
                 if (!authGeometry.isEmpty()) {
                     geometryToUse = authGeometry;
                 }
             }
-            m_windowTrackingAdaptor->requestMoveSpecificWindowToZone(windowId, zoneId, geometryToUse);
+            if (m_windowTrackingAdaptor) {
+                m_windowTrackingAdaptor->requestMoveSpecificWindowToZone(windowId, zoneId, geometryToUse);
+            }
         });
 
     // Connect navigation feedback signal to show OSD (manual mode: from WindowTrackingAdaptor via KWin effect)

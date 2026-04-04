@@ -64,32 +64,30 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
             handleScreenGeometryChanged(screen, cachedId);
         });
 
-        // Cache the effective screen IDs at connection time. When screenRemoved fires,
-        // ScreenManager may have already cleaned up virtual screen data for this physical
-        // screen, so querying it at removal time is unreliable. Using the cached IDs
-        // ensures the correct removal signals are emitted.
-        QStringList cachedEffectiveIds;
+        // Cache effective screen IDs in a member map so they can be updated when
+        // virtualScreensChanged fires. When screenRemoved fires, ScreenManager may
+        // have already cleaned up virtual screen data, so we rely on cached IDs.
         auto* mgrForCache = ScreenManager::instance();
         if (mgrForCache && mgrForCache->hasVirtualScreens(physId)) {
-            cachedEffectiveIds = mgrForCache->virtualScreenIdsFor(physId);
+            m_cachedEffectiveIdsPerScreen[physId] = mgrForCache->virtualScreenIdsFor(physId);
         }
 
         // Use screen as the context object so the connection is automatically
         // destroyed when Qt deletes the QScreen on removal. This prevents dead
         // lambda accumulation on repeated dock/undock cycles.
-        connect(qGuiApp, &QGuiApplication::screenRemoved, screen,
-                [this, screen, cachedId, cachedEffectiveIds](QScreen* removedScreen) {
-                    if (removedScreen != screen) {
-                        return;
-                    }
-                    if (!cachedEffectiveIds.isEmpty()) {
-                        for (const QString& id : cachedEffectiveIds) {
-                            Q_EMIT screenRemoved(id);
-                        }
-                    } else {
-                        Q_EMIT screenRemoved(cachedId);
-                    }
-                });
+        connect(qGuiApp, &QGuiApplication::screenRemoved, screen, [this, screen, cachedId](QScreen* removedScreen) {
+            if (removedScreen != screen) {
+                return;
+            }
+            const QStringList effectiveIds = m_cachedEffectiveIdsPerScreen.take(cachedId);
+            if (!effectiveIds.isEmpty()) {
+                for (const QString& id : effectiveIds) {
+                    Q_EMIT screenRemoved(id);
+                }
+            } else {
+                Q_EMIT screenRemoved(cachedId);
+            }
+        });
     });
 
     // Connect existing screens
@@ -100,26 +98,38 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
             handleScreenGeometryChanged(screen, cachedId);
         });
 
-        // Cache effective screen IDs at connection time (same rationale as screenAdded above).
-        QStringList cachedEffectiveIds;
+        // Cache effective screen IDs in member map (same rationale as screenAdded above).
         auto* mgrForExisting = ScreenManager::instance();
         if (mgrForExisting && mgrForExisting->hasVirtualScreens(cachedId)) {
-            cachedEffectiveIds = mgrForExisting->virtualScreenIdsFor(cachedId);
+            m_cachedEffectiveIdsPerScreen[cachedId] = mgrForExisting->virtualScreenIdsFor(cachedId);
         }
 
-        connect(qGuiApp, &QGuiApplication::screenRemoved, screen,
-                [this, screen, cachedId, cachedEffectiveIds](QScreen* removedScreen) {
-                    if (removedScreen != screen) {
-                        return;
-                    }
-                    if (!cachedEffectiveIds.isEmpty()) {
-                        for (const QString& id : cachedEffectiveIds) {
-                            Q_EMIT screenRemoved(id);
-                        }
-                    } else {
-                        Q_EMIT screenRemoved(cachedId);
-                    }
-                });
+        connect(qGuiApp, &QGuiApplication::screenRemoved, screen, [this, screen, cachedId](QScreen* removedScreen) {
+            if (removedScreen != screen) {
+                return;
+            }
+            const QStringList effectiveIds = m_cachedEffectiveIdsPerScreen.take(cachedId);
+            if (!effectiveIds.isEmpty()) {
+                for (const QString& id : effectiveIds) {
+                    Q_EMIT screenRemoved(id);
+                }
+            } else {
+                Q_EMIT screenRemoved(cachedId);
+            }
+        });
+    }
+
+    // Update cached effective IDs when virtual screen config changes,
+    // so screenRemoved signals emit the current IDs, not stale ones.
+    if (auto* mgr = ScreenManager::instance()) {
+        connect(mgr, &ScreenManager::virtualScreensChanged, this, [this](const QString& physId) {
+            auto* m = ScreenManager::instance();
+            if (m && m->hasVirtualScreens(physId)) {
+                m_cachedEffectiveIdsPerScreen[physId] = m->virtualScreenIdsFor(physId);
+            } else {
+                m_cachedEffectiveIdsPerScreen.remove(physId);
+            }
+        });
     }
 }
 

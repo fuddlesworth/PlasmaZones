@@ -64,6 +64,10 @@ private:
     /// Last effective screen ID list emitted by the deferred timer, used to
     /// suppress duplicate emissions during rapid hot-plug sequences.
     QStringList m_lastEmittedEffectiveIds;
+
+    /// Per-physical-screen cached effective IDs for screenRemoved emission.
+    /// Updated when virtualScreensChanged fires so removal signals stay current.
+    QHash<QString, QStringList> m_cachedEffectiveIdsPerScreen;
 };
 
 } // namespace PlasmaZones

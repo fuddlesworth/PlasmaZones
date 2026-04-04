@@ -401,7 +401,7 @@ private:
     // Appended to each configureLayerSurface() scope so KWin sees every
     // new surface as unique, avoiding configure rate-limiting after rapid
     // destroy/recreate cycles on Vulkan.
-    int m_scopeGeneration = 0;
+    uint64_t m_scopeGeneration = 0;
 
     // CAVA audio visualization
     std::unique_ptr<CavaService> m_cavaService;

@@ -124,7 +124,7 @@ QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, 
     result[QLatin1String("y")] = unfloat.geometry.y();
     result[QLatin1String("width")] = unfloat.geometry.width();
     result[QLatin1String("height")] = unfloat.geometry.height();
-    result[QLatin1String("screenName")] = unfloat.screenId;
+    result[QLatin1String("screenId")] = unfloat.screenId;
 
     qCDebug(lcDbusWindow) << "calculateUnfloatRestore for" << windowId << "-> zones:" << unfloat.zoneIds
                           << "geo:" << unfloat.geometry;

@@ -53,6 +53,36 @@ void cleanupWindowMap(QHash<K, QQuickWindow*>& windowMap)
     windowMap.clear();
 }
 
+// Clean up windows in a QHash map whose keys start with a given prefix
+void cleanupWindowMap(QHash<QString, QQuickWindow*>& windowMap, const QString& prefix)
+{
+    for (auto it = windowMap.begin(); it != windowMap.end();) {
+        if (it.key().startsWith(prefix)) {
+            if (it.value()) {
+                QQmlEngine::setObjectOwnership(it.value(), QQmlEngine::CppOwnership);
+                it.value()->close();
+                it.value()->destroy();
+                it.value()->deleteLater();
+            }
+            it = windowMap.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+// Erase entries by key prefix from any QHash<QString, V>
+template<typename V>
+void eraseByPrefix(QHash<QString, V>& map, const QString& prefix)
+{
+    for (auto it = map.begin(); it != map.end();) {
+        if (it.key().startsWith(prefix))
+            it = map.erase(it);
+        else
+            ++it;
+    }
+}
+
 } // namespace
 
 OverlayService::OverlayService(QObject* parent)
@@ -77,62 +107,17 @@ OverlayService::OverlayService(QObject* parent)
             // Destroy old overlays for this physical screen, recreate with new config
             QScreen* physScreen = Utils::findScreenByIdOrName(physicalScreenId);
             if (!physScreen) {
-                // Physical screen removed -- clean up stale virtual screen entries
+                // Physical screen removed -- destroy windows and clean up stale virtual screen entries
                 const QString prefix = physicalScreenId + VirtualScreenId::separator();
-                for (auto it = m_overlayWindows.begin(); it != m_overlayWindows.end();) {
-                    if (it.key().startsWith(prefix))
-                        it = m_overlayWindows.erase(it);
-                    else
-                        ++it;
-                }
-                for (auto it = m_overlayPhysScreens.begin(); it != m_overlayPhysScreens.end();) {
-                    if (it.key().startsWith(prefix))
-                        it = m_overlayPhysScreens.erase(it);
-                    else
-                        ++it;
-                }
-                for (auto it = m_overlayGeometries.begin(); it != m_overlayGeometries.end();) {
-                    if (it.key().startsWith(prefix))
-                        it = m_overlayGeometries.erase(it);
-                    else
-                        ++it;
-                }
-                for (auto it = m_zoneSelectorWindows.begin(); it != m_zoneSelectorWindows.end();) {
-                    if (it.key().startsWith(prefix))
-                        it = m_zoneSelectorWindows.erase(it);
-                    else
-                        ++it;
-                }
-                for (auto it = m_zoneSelectorPhysScreens.begin(); it != m_zoneSelectorPhysScreens.end();) {
-                    if (it.key().startsWith(prefix))
-                        it = m_zoneSelectorPhysScreens.erase(it);
-                    else
-                        ++it;
-                }
-                for (auto it = m_layoutOsdWindows.begin(); it != m_layoutOsdWindows.end();) {
-                    if (it.key().startsWith(prefix))
-                        it = m_layoutOsdWindows.erase(it);
-                    else
-                        ++it;
-                }
-                for (auto it = m_layoutOsdPhysScreens.begin(); it != m_layoutOsdPhysScreens.end();) {
-                    if (it.key().startsWith(prefix))
-                        it = m_layoutOsdPhysScreens.erase(it);
-                    else
-                        ++it;
-                }
-                for (auto it = m_navigationOsdWindows.begin(); it != m_navigationOsdWindows.end();) {
-                    if (it.key().startsWith(prefix))
-                        it = m_navigationOsdWindows.erase(it);
-                    else
-                        ++it;
-                }
-                for (auto it = m_navigationOsdPhysScreens.begin(); it != m_navigationOsdPhysScreens.end();) {
-                    if (it.key().startsWith(prefix))
-                        it = m_navigationOsdPhysScreens.erase(it);
-                    else
-                        ++it;
-                }
+                cleanupWindowMap(m_overlayWindows, prefix);
+                eraseByPrefix(m_overlayPhysScreens, prefix);
+                eraseByPrefix(m_overlayGeometries, prefix);
+                cleanupWindowMap(m_zoneSelectorWindows, prefix);
+                eraseByPrefix(m_zoneSelectorPhysScreens, prefix);
+                cleanupWindowMap(m_layoutOsdWindows, prefix);
+                eraseByPrefix(m_layoutOsdPhysScreens, prefix);
+                cleanupWindowMap(m_navigationOsdWindows, prefix);
+                eraseByPrefix(m_navigationOsdPhysScreens, prefix);
                 return;
             }
 

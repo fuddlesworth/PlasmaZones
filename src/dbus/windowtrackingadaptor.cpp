@@ -276,6 +276,9 @@ void WindowTrackingAdaptor::windowsSnappedBatch(const QString& batchJson)
     for (const QJsonValue& val : entries) {
         QJsonObject obj = val.toObject();
         QString windowId = obj.value(QLatin1String("windowId")).toString();
+        // isRestore == true means the window should be unsnapped (its zone no longer
+        // exists in the new layout), NOT restored to a zone. The name is misleading
+        // but preserved for wire compatibility.
         bool isRestore = obj.value(QLatin1String("isRestore")).toBool(false);
 
         if (windowId.isEmpty()) {
@@ -560,6 +563,7 @@ QJsonObject WindowTrackingAdaptor::buildStateObject(const QString& windowId, con
     obj[QLatin1String("zoneIds")] = zoneIds;
     obj[QLatin1String("screenId")] = screenId;
     obj[QLatin1String("isFloating")] = isFloating;
+    obj[QLatin1String("isSticky")] = m_service ? m_service->isWindowSticky(windowId) : false;
     obj[QLatin1String("changeType")] = changeType;
     return obj;
 }
