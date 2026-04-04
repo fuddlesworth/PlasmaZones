@@ -264,6 +264,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     if (!cancelled) {
                         // Use screen captured at drag start — the window may have moved
                         // to a different screen during the drag.
+                        // Mark as drag-floated so slotApplyGeometryRequested skips the
+                        // daemon's pre-autotile geometry restore — the window should stay
+                        // where the user dropped it, not snap back to its original position.
+                        m_dragFloatedWindowIds.insert(windowId);
                         fireAndForgetDBusCall(
                             DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
                             {windowId, m_dragBypassScreenId, true}, QStringLiteral("setWindowFloatingForScreen"));
@@ -569,6 +573,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
 
     // Clean up snap-mode minimize tracking
     m_minimizeFloatedWindows.remove(closedWindowId);
+    m_dragFloatedWindowIds.remove(closedWindowId);
 
     // Notify autotile handler for cleanup (tracking sets + autotile D-Bus)
     m_autotileHandler->onWindowClosed(closedWindowId, closedScreenId);
@@ -1899,6 +1904,13 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, cons
     if (w->isMinimized() && zoneId.isEmpty()) {
         qCDebug(lcEffect) << "slotApplyGeometryRequested: skipping float-restore geometry on minimized window:"
                           << windowId;
+        return;
+    }
+    // Skip float-restore geometry for drag-to-float: when the user drags a window
+    // off the autotile layout, the daemon restores pre-autotile geometry. But the
+    // user expects the window to stay where they dropped it, not snap back.
+    if (m_dragFloatedWindowIds.remove(windowId) && zoneId.isEmpty()) {
+        qCInfo(lcEffect) << "slotApplyGeometryRequested: skipping float-restore for drag-floated window:" << windowId;
         return;
     }
     qCInfo(lcEffect) << "slotApplyGeometryRequested:" << windowId << "geo:" << geometry << "zoneId:" << zoneId
