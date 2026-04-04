@@ -118,9 +118,14 @@ Window {
         } else if (action === "swap_master") {
             return i18n("Swapped with main window");
         } else if (action === "master_ratio") {
-            return reason === "increased" ? i18n("Main area enlarged") : i18n("Main area reduced");
+            // reason format: "increased:65" or "decreased:60"
+            let parts = reason.split(":");
+            let pct = parts.length >= 2 ? parts[1] : "";
+            return pct ? i18n("Master ratio → %1%", pct) : i18n("Master ratio changed");
         } else if (action === "master_count") {
-            return reason === "increased" ? i18n("Main window count increased") : i18n("Main window count decreased");
+            let parts = reason.split(":");
+            let count = parts.length >= 2 ? parts[1] : "";
+            return count ? i18n("Master count → %1", count) : i18n("Master count changed");
         } else if (action === "retile") {
             return i18n("Layout refreshed");
         } else if (action === "resnap") {
