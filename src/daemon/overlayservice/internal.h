@@ -255,12 +255,7 @@ inline QRect updateWindowScreenPosition(QWindow* window, const QString& screenId
 ///
 /// NOTE (behavioral change, PR #247): This intentionally checks BOTH modes
 /// (0 = manual, 1 = autotile) regardless of which mode is currently active.
-/// Build the context lock key for a given mode and screen.
-/// Format: "mode:screenId" (e.g. "0:Dell:U2722D:115107/vs:0").
-inline QString contextLockKey(int mode, const QString& screenId)
-{
-    return QString::number(mode) + QStringLiteral(":") + screenId;
-}
+// contextLockKey is defined in Utils:: (src/core/utils.h)
 
 /// A lock on either mode blocks the zone selector for consistency with the
 /// OverlayService lock checks. Previously, ZoneSelectorController only
@@ -271,8 +266,8 @@ inline bool isAnyModeLocked(ISettings* settings, const QString& screenId, int de
     if (!settings) {
         return false;
     }
-    return settings->isContextLocked(contextLockKey(0, screenId), desktop, activity)
-        || settings->isContextLocked(contextLockKey(1, screenId), desktop, activity);
+    return settings->isContextLocked(Utils::contextLockKey(0, screenId), desktop, activity)
+        || settings->isContextLocked(Utils::contextLockKey(1, screenId), desktop, activity);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

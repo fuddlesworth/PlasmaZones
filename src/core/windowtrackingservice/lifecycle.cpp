@@ -21,6 +21,36 @@
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Zone–Layout Validation Helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Returns true if ANY of the given zone IDs exists in the layout.
+static bool anyZoneExistsInLayout(const QStringList& zoneIds, Layout* layout)
+{
+    if (!layout)
+        return false;
+    for (const QString& zid : zoneIds) {
+        auto uuid = Utils::parseUuid(zid);
+        if (uuid && layout->zoneById(*uuid))
+            return true;
+    }
+    return false;
+}
+
+/// Returns true if ALL of the given zone IDs exist in the layout.
+static bool allZonesExistInLayout(const QStringList& zoneIds, Layout* layout)
+{
+    if (!layout)
+        return false;
+    for (const QString& zid : zoneIds) {
+        auto uuid = Utils::parseUuid(zid);
+        if (!uuid || !layout->zoneById(*uuid))
+            return false;
+    }
+    return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Virtual Screen Migration
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -331,15 +361,7 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
             if (isWindowFloating(it.key())) {
                 continue;
             }
-            bool allValid = true;
-            for (const QString& zoneId : it.value()) {
-                auto uuid = Utils::parseUuid(zoneId);
-                if (!uuid || !physLayout->zoneById(*uuid)) {
-                    allValid = false;
-                    break;
-                }
-            }
-            if (!allValid) {
+            if (!allZonesExistInLayout(it.value(), physLayout)) {
                 windowsToRemove.append(it.key());
             }
         }
@@ -496,7 +518,7 @@ void WindowTrackingService::onLayoutChanged()
         QVector<ResnapEntry> newBuffer;
 
         QHash<QString, int> globalZoneIdToPosition = buildZonePositionMap(prevLayout);
-        int globalPrevZoneCount = prevLayout ? prevLayout->zones().size() : 0;
+        int globalPrevZoneCount = prevLayout->zones().size();
 
         // Cache per-screen position maps for screens with per-screen layouts
         // Key: layout pointer (avoids rebuilding for screens sharing the same layout)
@@ -633,21 +655,24 @@ void WindowTrackingService::onLayoutChanged()
                 }
             }
         } else {
-            // Same layout (startup): capture assignments that belong to the current layout.
-            // This lets resnap re-apply zone geometries for restored/pending windows.
-            // 1. Live assignments in current layout
+            // Same layout (startup): capture assignments that belong to their screen's
+            // effective layout. This lets resnap re-apply zone geometries for both
+            // global and per-screen layout windows.
+            // 1. Live assignments — check each window against its own screen's layout
             for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
-                if (!anyZoneInActiveLayout(it.value())) {
+                const QString windowScreen = m_windowScreenAssignments.value(it.key());
+                Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(windowScreen);
+                if (!anyZoneExistsInLayout(it.value(), effectiveLayout)) {
                     continue;
                 }
-                addToBuffer(it.key(), it.value(), m_windowScreenAssignments.value(it.key()),
-                            m_windowDesktopAssignments.value(it.key(), 0));
+                addToBuffer(it.key(), it.value(), windowScreen, m_windowDesktopAssignments.value(it.key(), 0));
             }
 
-            // 2. Pending assignments for current layout
+            // 2. Pending assignments — check against each entry's screen's layout
             for (auto it = m_pendingRestoreQueues.constBegin(); it != m_pendingRestoreQueues.constEnd(); ++it) {
                 for (const PendingRestore& entry : it.value()) {
-                    if (!anyZoneInActiveLayout(entry.zoneIds)) {
+                    Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(entry.screenId);
+                    if (!anyZoneExistsInLayout(entry.zoneIds, effectiveLayout)) {
                         continue;
                     }
                     if (!entry.layoutId.isEmpty()) {
@@ -715,23 +740,10 @@ void WindowTrackingService::onLayoutChanged()
             toRemove.append(it.key());
             continue;
         }
-        // Check if ANY assigned zone exists in the effective layout (not just
-        // the primary). Multi-zone windows are kept as long as at least one
-        // zone is valid — matches calculateResnapFromCurrentAssignments which
-        // handles multi-zone via multiZoneGeometry.
-        bool zoneFound = false;
-        for (Zone* z : effectiveLayout->zones()) {
-            const QString zid = z->id().toString();
-            for (const QString& assignedZone : zoneIdList) {
-                if (zid == assignedZone) {
-                    zoneFound = true;
-                    break;
-                }
-            }
-            if (zoneFound)
-                break;
-        }
-        if (!zoneFound) {
+        // Multi-zone windows are kept as long as at least one zone is valid —
+        // matches calculateResnapFromCurrentAssignments which handles multi-zone
+        // via multiZoneGeometry.
+        if (!anyZoneExistsInLayout(zoneIdList, effectiveLayout)) {
             toRemove.append(it.key());
         }
     }
@@ -822,6 +834,9 @@ QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
 
         if (nearestGeo.isValid()) {
             QRect adjusted = geometry;
+            // Clamp to screen bounds. Prioritize top-left origin so oversized
+            // windows keep their top-left corner visible rather than being
+            // pushed past the origin by the right/bottom clamp.
             if (adjusted.right() > nearestGeo.right()) {
                 adjusted.moveRight(nearestGeo.right());
             }
@@ -847,7 +862,9 @@ QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
     QRect screenGeo = nearest->geometry();
     QRect adjusted = geometry;
 
-    // Clamp to screen bounds while preserving size where possible
+    // Clamp to screen bounds. Prioritize top-left origin so oversized
+    // windows keep their top-left corner visible rather than being
+    // pushed past the origin by the right/bottom clamp.
     if (adjusted.right() > screenGeo.right()) {
         adjusted.moveRight(screenGeo.right());
     }

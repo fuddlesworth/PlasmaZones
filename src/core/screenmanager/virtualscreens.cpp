@@ -273,6 +273,10 @@ bool ScreenManager::hasVirtualScreens(const QString& physicalScreenId) const
     return it != m_virtualConfigs.constEnd() && it->hasSubdivisions();
 }
 
+/// Convenience alias for virtualScreenIdsFor().
+/// Both exist because effectiveIdsForPhysical reads more naturally at call
+/// sites that treat virtual and physical screens interchangeably, while
+/// virtualScreenIdsFor is clearer in virtual-screen-specific code paths.
 QStringList ScreenManager::effectiveIdsForPhysical(const QString& physicalScreenId) const
 {
     return virtualScreenIdsFor(physicalScreenId);

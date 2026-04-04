@@ -3,6 +3,7 @@
 
 #include "screenadaptor.h"
 #include "dbushelpers.h"
+#include "../config/configdefaults.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/screenmanager.h"
@@ -370,6 +371,13 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
     // Basic sanity: must have at least 2 screens (full validation in ScreenManager)
     if (config.screens.size() < 2) {
         qCWarning(lcDbus) << "setVirtualScreenConfig: need at least 2 screens for subdivision";
+        return;
+    }
+
+    // Enforce upper bound from ConfigDefaults
+    if (config.screens.size() > ConfigDefaults::maxVirtualScreensPerPhysical()) {
+        qCWarning(lcDbus) << "setVirtualScreenConfig: too many virtual screens" << config.screens.size() << "(max"
+                          << ConfigDefaults::maxVirtualScreensPerPhysical() << ")";
         return;
     }
 

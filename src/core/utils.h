@@ -348,5 +348,12 @@ PLASMAZONES_EXPORT bool screensMatch(const QString& a, const QString& b);
  */
 PLASMAZONES_EXPORT void warnDuplicateScreenIds();
 
+/// Build the context lock key for a given mode and screen.
+/// Format: "mode:screenId" (e.g. "0:Dell:U2722D:115107/vs:0").
+inline QString contextLockKey(int mode, const QString& screenId)
+{
+    return QString::number(mode) + QStringLiteral(":") + screenId;
+}
+
 } // namespace Utils
 } // namespace PlasmaZones

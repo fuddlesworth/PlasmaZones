@@ -78,15 +78,18 @@ constexpr const char* kPerScreenKeys[] = {
     ZoneSelectorConfigKey::TriggerDistance,
 };
 
-// NOTE: These per-screen override key strings intentionally differ from ConfigKeys accessors
-// (e.g. "AutotileAlgorithm" vs ConfigKeys::defaultAutotileAlgorithmKey() = "DefaultAutotileAlgorithm").
-// Adding 20+ new ConfigKeys accessors for per-screen-specific keys is too invasive; tracked as DRY-7.
+// Per-screen override key strings — defined in PerScreenAutotileKey (settings_interfaces.h).
 constexpr const char* kPerScreenAutotileKeys[] = {
-    "AutotileAlgorithm",     "AutotileSplitRatio",         "AutotileMasterCount",       "AutotileInnerGap",
-    "AutotileOuterGap",      "AutotileUsePerSideOuterGap", "AutotileOuterGapTop",       "AutotileOuterGapBottom",
-    "AutotileOuterGapLeft",  "AutotileOuterGapRight",      "AutotileFocusNewWindows",   "AutotileSmartGaps",
-    "AutotileMaxWindows",    "AutotileInsertPosition",     "AutotileFocusFollowsMouse", "AutotileRespectMinimumSize",
-    "AutotileHideTitleBars", "AnimationsEnabled",          "AnimationDuration",         "AnimationEasingCurve",
+    PerScreenAutotileKey::Algorithm,         PerScreenAutotileKey::SplitRatio,
+    PerScreenAutotileKey::MasterCount,       PerScreenAutotileKey::InnerGap,
+    PerScreenAutotileKey::OuterGap,          PerScreenAutotileKey::UsePerSideOuterGap,
+    PerScreenAutotileKey::OuterGapTop,       PerScreenAutotileKey::OuterGapBottom,
+    PerScreenAutotileKey::OuterGapLeft,      PerScreenAutotileKey::OuterGapRight,
+    PerScreenAutotileKey::FocusNewWindows,   PerScreenAutotileKey::SmartGaps,
+    PerScreenAutotileKey::MaxWindows,        PerScreenAutotileKey::InsertPosition,
+    PerScreenAutotileKey::FocusFollowsMouse, PerScreenAutotileKey::RespectMinimumSize,
+    PerScreenAutotileKey::HideTitleBars,     PerScreenAutotileKey::AnimationsEnabled,
+    PerScreenAutotileKey::AnimationDuration, PerScreenAutotileKey::AnimationEasingCurve,
 };
 
 QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& value)
@@ -141,11 +144,13 @@ QVariant readPerScreenAutotileEntry(IConfigGroup& group, const QString& key)
     return QVariant(group.readInt(key, 0));
 }
 
-// NOTE: Per-screen snapping override keys — same DRY-7 convention note as kPerScreenAutotileKeys above.
+// Per-screen snapping override keys — defined in PerScreenSnappingKey (settings_interfaces.h).
 constexpr const char* kPerScreenSnappingKeys[] = {
-    "SnapAssistEnabled",    "ZoneSelectorEnabled",      "ZoneSelectorTriggerDistance",
-    "ZoneSelectorPosition", "ZoneSelectorLayoutMode",   "ZoneSelectorSizeMode",
-    "ZoneSelectorMaxRows",  "ZoneSelectorPreviewWidth", "ZoneSelectorPreviewHeight",
+    PerScreenSnappingKey::SnapAssistEnabled,           PerScreenSnappingKey::ZoneSelectorEnabled,
+    PerScreenSnappingKey::ZoneSelectorTriggerDistance, PerScreenSnappingKey::ZoneSelectorPosition,
+    PerScreenSnappingKey::ZoneSelectorLayoutMode,      PerScreenSnappingKey::ZoneSelectorSizeMode,
+    PerScreenSnappingKey::ZoneSelectorMaxRows,         PerScreenSnappingKey::ZoneSelectorPreviewWidth,
+    PerScreenSnappingKey::ZoneSelectorPreviewHeight,
 };
 
 QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& value)

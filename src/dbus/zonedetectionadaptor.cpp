@@ -110,8 +110,7 @@ QString ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& zoneId, co
     QString resolvedScreenId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
     QRect snapped = GeometryUtils::getZoneGeometryForScreen(zone, screen, resolvedScreenId, zoneLayout, m_settings);
 
-    // Return as "x,y,width,height"
-    return QStringLiteral("%1,%2,%3,%4").arg(snapped.x()).arg(snapped.y()).arg(snapped.width()).arg(snapped.height());
+    return GeometryUtils::rectToJson(snapped);
 }
 
 QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenId)

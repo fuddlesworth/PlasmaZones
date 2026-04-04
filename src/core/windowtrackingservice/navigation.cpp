@@ -142,6 +142,10 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
     // Uniting independently-rounded QRects can produce 1px gaps at fractional
     // scaling factors (e.g. 1.2x on ultrawides).
     QRectF combined;
+    QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
+    if (!screen) {
+        return combined.toAlignedRect();
+    }
     for (const QString& zoneId : zoneIds) {
         auto uuidOpt = Utils::parseUuid(zoneId);
         if (!uuidOpt) {
@@ -150,11 +154,6 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
 
         auto [zone, layout] = findZoneInAllLayouts(*uuidOpt);
         if (!zone) {
-            continue;
-        }
-
-        QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
-        if (!screen) {
             continue;
         }
 

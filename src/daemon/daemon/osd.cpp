@@ -385,19 +385,15 @@ bool Daemon::isCurrentContextLocked(const QString& screenId) const
     // Check both snapping and tiling locks (mode-agnostic check)
     if (!m_settings)
         return false;
-    auto lockKey = [&](int mode) {
-        return QString::number(mode) + QStringLiteral(":") + screenId;
-    };
-    return m_settings->isContextLocked(lockKey(0), currentDesktop(), currentActivity())
-        || m_settings->isContextLocked(lockKey(1), currentDesktop(), currentActivity());
+    return m_settings->isContextLocked(Utils::contextLockKey(0, screenId), currentDesktop(), currentActivity())
+        || m_settings->isContextLocked(Utils::contextLockKey(1, screenId), currentDesktop(), currentActivity());
 }
 
 bool Daemon::isCurrentContextLockedForMode(const QString& screenId, int mode) const
 {
     if (!m_settings)
         return false;
-    return m_settings->isContextLocked(QString::number(mode) + QStringLiteral(":") + screenId, currentDesktop(),
-                                       currentActivity());
+    return m_settings->isContextLocked(Utils::contextLockKey(mode, screenId), currentDesktop(), currentActivity());
 }
 
 } // namespace PlasmaZones

@@ -52,6 +52,50 @@ inline constexpr const char GridColumns[] = "GridColumns";
 inline constexpr const char TriggerDistance[] = "TriggerDistance";
 } // namespace ZoneSelectorConfigKey
 
+/**
+ * Per-screen autotile override key constants.
+ * These intentionally differ from the global ConfigKeys accessors (e.g.
+ * "AutotileAlgorithm" here vs ConfigKeys::defaultAutotileAlgorithmKey() =
+ * "DefaultAutotileAlgorithm") because per-screen overrides replace the default.
+ */
+namespace PerScreenAutotileKey {
+inline constexpr const char Algorithm[] = "AutotileAlgorithm";
+inline constexpr const char SplitRatio[] = "AutotileSplitRatio";
+inline constexpr const char MasterCount[] = "AutotileMasterCount";
+inline constexpr const char InnerGap[] = "AutotileInnerGap";
+inline constexpr const char OuterGap[] = "AutotileOuterGap";
+inline constexpr const char UsePerSideOuterGap[] = "AutotileUsePerSideOuterGap";
+inline constexpr const char OuterGapTop[] = "AutotileOuterGapTop";
+inline constexpr const char OuterGapBottom[] = "AutotileOuterGapBottom";
+inline constexpr const char OuterGapLeft[] = "AutotileOuterGapLeft";
+inline constexpr const char OuterGapRight[] = "AutotileOuterGapRight";
+inline constexpr const char FocusNewWindows[] = "AutotileFocusNewWindows";
+inline constexpr const char SmartGaps[] = "AutotileSmartGaps";
+inline constexpr const char MaxWindows[] = "AutotileMaxWindows";
+inline constexpr const char InsertPosition[] = "AutotileInsertPosition";
+inline constexpr const char FocusFollowsMouse[] = "AutotileFocusFollowsMouse";
+inline constexpr const char RespectMinimumSize[] = "AutotileRespectMinimumSize";
+inline constexpr const char HideTitleBars[] = "AutotileHideTitleBars";
+inline constexpr const char AnimationsEnabled[] = "AnimationsEnabled";
+inline constexpr const char AnimationDuration[] = "AnimationDuration";
+inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
+} // namespace PerScreenAutotileKey
+
+/**
+ * Per-screen snapping override key constants.
+ */
+namespace PerScreenSnappingKey {
+inline constexpr const char SnapAssistEnabled[] = "SnapAssistEnabled";
+inline constexpr const char ZoneSelectorEnabled[] = "ZoneSelectorEnabled";
+inline constexpr const char ZoneSelectorTriggerDistance[] = "ZoneSelectorTriggerDistance";
+inline constexpr const char ZoneSelectorPosition[] = "ZoneSelectorPosition";
+inline constexpr const char ZoneSelectorLayoutMode[] = "ZoneSelectorLayoutMode";
+inline constexpr const char ZoneSelectorSizeMode[] = "ZoneSelectorSizeMode";
+inline constexpr const char ZoneSelectorMaxRows[] = "ZoneSelectorMaxRows";
+inline constexpr const char ZoneSelectorPreviewWidth[] = "ZoneSelectorPreviewWidth";
+inline constexpr const char ZoneSelectorPreviewHeight[] = "ZoneSelectorPreviewHeight";
+} // namespace PerScreenSnappingKey
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings Interfaces
 // ═══════════════════════════════════════════════════════════════════════════════

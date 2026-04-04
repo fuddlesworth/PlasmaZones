@@ -18,6 +18,18 @@
 
 namespace PlasmaZones {
 
+/// Get per-screen snapping settings with virtual screen fallback.
+/// Tries the exact screenId first; if empty and the screenId is a virtual
+/// screen, falls back to the physical parent's overrides.
+static QVariantMap getPerScreenSnappingWithFallback(ISettings* settings, const QString& screenId)
+{
+    QVariantMap result = settings->getPerScreenSnappingSettings(screenId);
+    if (result.isEmpty() && VirtualScreenId::isVirtual(screenId)) {
+        result = settings->getPerScreenSnappingSettings(VirtualScreenId::extractPhysicalId(screenId));
+    }
+    return result;
+}
+
 namespace GeometryUtils {
 
 namespace {
@@ -251,21 +263,12 @@ QRect getZoneGeometryForScreen(Zone* zone, QScreen* screen, const QString& scree
 
 int getEffectiveZonePadding(Layout* layout, ISettings* settings, const QString& screenId)
 {
-    // Per-screen snapping override (highest priority)
+    // Per-screen snapping override (highest priority), with virtual screen fallback
     if (!screenId.isEmpty() && settings) {
-        QVariantMap perScreen = settings->getPerScreenSnappingSettings(screenId);
+        QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
         auto it = perScreen.constFind(QLatin1String("ZonePadding"));
         if (it != perScreen.constEnd()) {
             return it->toInt();
-        }
-        // Virtual screen fallback: try physical screen ID if virtual lookup missed
-        if (VirtualScreenId::isVirtual(screenId)) {
-            const QString physId = VirtualScreenId::extractPhysicalId(screenId);
-            QVariantMap physPerScreen = settings->getPerScreenSnappingSettings(physId);
-            auto physIt = physPerScreen.constFind(QLatin1String("ZonePadding"));
-            if (physIt != physPerScreen.constEnd()) {
-                return physIt->toInt();
-            }
         }
     }
     // Check for layout-specific override
@@ -297,13 +300,9 @@ QRect snapToRect(const QRectF& rf)
 
 EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QString& screenId)
 {
-    // Per-screen snapping override (highest priority)
+    // Per-screen snapping override (highest priority), with virtual screen fallback
     if (!screenId.isEmpty() && settings) {
-        QVariantMap perScreen = settings->getPerScreenSnappingSettings(screenId);
-        // Virtual screen fallback: if no per-screen settings found, try physical screen ID
-        if (perScreen.isEmpty() && VirtualScreenId::isVirtual(screenId)) {
-            perScreen = settings->getPerScreenSnappingSettings(VirtualScreenId::extractPhysicalId(screenId));
-        }
+        QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
         if (!perScreen.isEmpty()) {
             auto usePerSideIt = perScreen.constFind(QLatin1String("UsePerSideOuterGap"));
             bool usePerSide = (usePerSideIt != perScreen.constEnd()) ? usePerSideIt->toBool() : false;
