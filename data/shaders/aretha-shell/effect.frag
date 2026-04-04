@@ -674,18 +674,30 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         result.a = max(result.a, border * borderColor.a);
     }
 
-    // Outer glow (both states, vitality-modulated)
+    return result;
+}
+
+// Outer glow only — rendered in a separate pass so glow alpha from one zone
+// doesn't darken an adjacent zone's fill during blendOver compositing.
+vec4 arethaZoneGlow(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted) {
+    float vitality = zoneVitality(isHighlighted);
+    float borderRadius = max(params.x, 4.0);
+
+    vec2 rectPos  = zoneRectPos(rect);
+    vec2 rectSize = zoneRectSize(rect);
+    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 p        = fragCoord - center;
+    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+
     float glowExtent = vitalityScale(10.0, 28.0, vitality);
     if (d > 0.0 && d < glowExtent) {
         float glowSize = vitalityScale(4.0, 8.0, vitality);
         float glowStr = vitalityScale(0.12, 0.4, vitality);
         float glow = expGlow(d, glowSize, glowStr);
         vec3 glowColor = vitalityDesaturate(getArethaCyan(), vitality);
-        result.rgb += glowColor * glow;
-        result.a = max(result.a, glow * vitalityScale(0.25, 0.6, vitality));
+        return vec4(glowColor * glow, glow * vitalityScale(0.25, 0.6, vitality));
     }
-
-    return result;
+    return vec4(0.0);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -777,6 +789,10 @@ void main() {
     float treble  = getTrebleSoft();
     float overall = getOverallSoft();
 
+    // Pass 1: Zone fills + borders (no outer glow).
+    // Glows are separated so their alpha doesn't darken adjacent zone fills
+    // during blendOver compositing (the division by outA reduces fill brightness
+    // wherever a prior zone's glow alpha has accumulated).
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
@@ -786,6 +802,19 @@ void main() {
             zoneBorderColors[i], zoneParams[i], isHighlighted,
             bass, mids, treble, overall, hasAudio);
         color = blendOver(color, zoneColor);
+    }
+
+    // Pass 2: Outer glows (additive, after all fills are composited).
+    for (int i = 0; i < zoneCount && i < 64; i++) {
+        vec4 rect = zoneRects[i];
+        if (rect.z <= 0.0 || rect.w <= 0.0) continue;
+
+        bool isHighlighted = zoneParams[i].z > 0.5;
+        vec4 glow = arethaZoneGlow(fragCoord, rect, zoneParams[i], isHighlighted);
+        if (glow.a > 0.0) {
+            color.rgb += glow.rgb;
+            color.a = max(color.a, glow.a);
+        }
     }
 
     if (customParams[6].z > 0.5)
