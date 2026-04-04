@@ -1909,7 +1909,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, cons
     // Skip float-restore geometry for drag-to-float: when the user drags a window
     // off the autotile layout, the daemon restores pre-autotile geometry. But the
     // user expects the window to stay where they dropped it, not snap back.
-    if (m_dragFloatedWindowIds.remove(windowId) && zoneId.isEmpty()) {
+    if (zoneId.isEmpty() && m_dragFloatedWindowIds.remove(windowId)) {
         qCInfo(lcEffect) << "slotApplyGeometryRequested: skipping float-restore for drag-floated window:" << windowId;
         return;
     }

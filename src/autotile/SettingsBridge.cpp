@@ -354,6 +354,10 @@ void SettingsBridge::syncAlgorithmToSettings(const QString& algoId, qreal splitR
     // Sync per-algorithm map so saved settings survive save/reload
     m_settings->setAutotilePerAlgorithmSettings(
         AutotileConfig::perAlgoToVariantMap(m_engine->config()->savedAlgorithmSettings));
+
+    // Schedule debounced save — same issue as syncShortcutAdjustment:
+    // QSignalBlocker suppresses the normal settingsChanged → save path.
+    m_shortcutSaveTimer.start();
 }
 
 void SettingsBridge::syncShortcutAdjustment(qreal splitRatio, int masterCount)
