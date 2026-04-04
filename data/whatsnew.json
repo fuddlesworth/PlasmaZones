@@ -1,15 +1,32 @@
 {
     "releases": [
         {
+            "version": "2.7.0",
+            "date": "2026-04-04",
+            "highlights": [
+                "Config migrated from INI to JSON format with automatic migration on first launch",
+                "Dragging a window off autotile now keeps it where you dropped it",
+                "Master ratio and count shortcuts show actual values in the OSD",
+                "Shortcut-adjusted ratio and count now persist across reboots",
+                "Small utility windows like the emoji picker no longer enter the autotile tree",
+                "Focus-follows-mouse no longer steals focus through under-size windows",
+                "Tumbleweed Drift shader gains sand streams, stronger audio reactivity, and faster animation",
+                "Snap assist, overlay, and shortcut stability improvements"
+            ]
+        },
+        {
             "version": "2.6.0",
             "date": "2026-04-03",
             "highlights": [
-                "Tumbleweed Drift shader \u2014 openSUSE branded desert overlay with rolling logos and audio-reactive dust effects",
+                "Tumbleweed Drift shader with openSUSE desert landscape and audio-reactive dust effects",
                 "Neon Venom and Chrome Protocol shaders",
-                "Voxel-terrain multipass with depth buffer and improved highlights",
-                "Shader engine \u2014 depth buffer, per-channel filter/wrapping, and shader presets",
-                "Autotile JS API \u2014 per-window context, custom parameters, and lifecycle hooks",
-                "Layout ordering settings for snapping and tiling cycle order",
+                "Voxel terrain now uses depth buffer and multipass rendering",
+                "Shader engine gains depth buffer support, per-channel filter/wrapping, and presets",
+                "Autotile JS API adds per-window context, custom parameters, and lifecycle hooks",
+                "Layout ordering settings for snapping and tiling cycle",
+                "Focus-follows-mouse no longer steals focus through excluded or overlay windows",
+                "Shortcut-adjusted master ratio and count now save to disk",
+                "Layout picker no longer overwrites the global default when selecting per-screen",
                 "What's New dialog shown on first launch after update",
                 "Vulkan and rendering pipeline stability fixes"
             ]
@@ -19,7 +36,7 @@
             "date": "2026-04-01",
             "highlights": [
                 "Fixed autotile split ratio expanding to full width with some apps",
-                "Fixed overlay tools (Spectacle, color pickers) being auto-tiled",
+                "Overlay tools like Spectacle and color pickers are no longer auto-tiled",
                 "Fixed trigger settings reverting after daemon restart"
             ]
         },
@@ -45,13 +62,15 @@
             "version": "2.5.0",
             "date": "2026-03-30",
             "highlights": [
-                "Scripted tiling algorithms \u2014 all 24 algorithms are now JavaScript with hot-reload",
-                "Multi-compositor support \u2014 works on Hyprland, Sway, Wayfire, niri, COSMIC, and more",
+                "All 24 tiling algorithms are now JavaScript with hot-reload and custom user scripts",
+                "Dwindle (Memory) algorithm with persistent split positions across window close/reopen",
+                "Works on Hyprland, Sway, Wayfire, niri, COSMIC, and other Wayland compositors",
                 "Vulkan rendering backend with automatic OpenGL fallback",
                 "New Layout and Algorithm creation wizards",
                 "Layout filter bar with group-by, sort-by, and search",
                 "Disable PlasmaZones per virtual desktop or activity",
-                "Settings UX overhaul with collapsible cards and consolidated footer",
+                "Per-algorithm settings storage for split ratio and master count",
+                "Settings redesign with collapsible cards and consolidated footer",
                 "Single-instance settings app with unsaved changes confirmation"
             ]
         },
@@ -116,8 +135,8 @@
             "highlights": [
                 "KZones layout import",
                 "Aspect ratio layouts with auto-detection and filtering",
-                "Portable Wayland build \u2014 runs on non-KDE compositors",
-                "Standalone settings app with sidebar drill-down and search",
+                "Portable Wayland build for non-KDE compositors",
+                "Standalone settings app with sidebar navigation, search, and shortcuts overlay",
                 "New Arch Drift and EndeavourOS Drift branded shaders",
                 "Fixed synchronous D-Bus calls freezing compositor"
             ]
@@ -189,7 +208,7 @@
                 "Batch settings D-Bus method for applying multiple settings at once",
                 "Per-screen settings D-Bus methods",
                 "Zone previews in autotile dropdowns",
-                "Daemon is now sole config writer \u2014 eliminates race conditions"
+                "Daemon is now the sole config writer, eliminating race conditions"
             ]
         },
         {
@@ -226,7 +245,7 @@
             "version": "2.3.2",
             "date": "2026-03-17",
             "highlights": [
-                "Batched D-Bus signals for autotile transitions \u2014 reduces messages from ~45 to 3"
+                "Batched D-Bus signals for autotile transitions, reducing messages from ~45 to 3"
             ]
         },
         {
@@ -234,7 +253,7 @@
             "date": "2026-03-17",
             "highlights": [
                 "Fixed window state lost on daemon reload",
-                "Fixed screen not found on Wayland (hex serial mismatch)",
+                "Fixed screen not found on Wayland due to hex serial mismatch",
                 "Fixed autotile window order lost on rapid mode toggle"
             ]
         },
@@ -242,7 +261,7 @@
             "version": "2.3.0",
             "date": "2026-03-17",
             "highlights": [
-                "Stable EDID-based screen identifiers \u2014 monitors survive replug/reboot",
+                "Stable EDID-based screen identifiers that survive replug and reboot",
                 "Per-screen layout filtering in cycle, picker, and zone selector",
                 "Per-screen layout locking with Meta+Ctrl+L shortcut",
                 "Shader parameter locking in editor",
@@ -300,7 +319,7 @@
             "version": "2.0.0",
             "date": "2026-03-10",
             "highlights": [
-                "Autotiling engine with 10 algorithms (Master+Stack, BSP, Dwindle, Spiral, and more)",
+                "Autotiling engine with 10 algorithms including Master+Stack, BSP, Dwindle, and Spiral",
                 "Per-screen algorithm selection with independent settings",
                 "Hide title bars on tiled windows with configurable focus border",
                 "Translate-only slide animations with staggered cascading",
@@ -327,7 +346,7 @@
             "version": "1.15.13",
             "date": "2026-03-08",
             "highlights": [
-                "Fixed login freeze with many shortcuts \u2014 async D-Bus shortcut registration"
+                "Fixed login freeze with many shortcuts via async D-Bus registration"
             ]
         },
         {
@@ -355,7 +374,7 @@
             "version": "1.15.9",
             "date": "2026-03-08",
             "highlights": [
-                "Fixed login freeze with autostart apps \u2014 deferred shortcut registration",
+                "Fixed login freeze with autostart apps via deferred shortcut registration",
                 "Systemd service ordering for KGlobalAccel"
             ]
         },
@@ -406,7 +425,7 @@
             "version": "1.15.2",
             "date": "2026-02-22",
             "highlights": [
-                "Fixed overlapping zone snapping \u2014 smallest zone at cursor now wins"
+                "Fixed overlapping zone snapping so the smallest zone at cursor wins"
             ]
         },
         {
@@ -421,7 +440,7 @@
             "date": "2026-02-22",
             "highlights": [
                 "Mosaic Pulse audio-reactive shader",
-                "User-supplied image textures for shaders (up to 4 images)",
+                "User-supplied image textures for shaders, up to 4 images",
                 "Shared GLSL utilities extracted for all shaders",
                 "Fixed system layout restore after deleting user override"
             ]
@@ -437,17 +456,17 @@
             "version": "1.14.0",
             "date": "2026-02-21",
             "highlights": [
-                "Per-side edge gaps (top/bottom/left/right) for independent spacing",
+                "Per-side edge gaps for independent top/bottom/left/right spacing",
                 "Per-zone fixed pixel geometry for pixel-perfect layouts",
-                "Full screen geometry toggle (ignore panels/taskbars)",
-                "AlwaysActive zone activation mode \u2014 no modifier key needed"
+                "Full screen geometry toggle to ignore panels and taskbars",
+                "AlwaysActive zone activation mode with no modifier key needed"
             ]
         },
         {
             "version": "1.13.0",
             "date": "2026-02-20",
             "highlights": [
-                "Layout Picker Overlay \u2014 full-screen interactive layout browser",
+                "Layout Picker Overlay for full-screen interactive layout browsing",
                 "Snap Assist after resnap when switching layouts",
                 "Fixed zone activation broken when Zone Selector disabled"
             ]
@@ -480,7 +499,7 @@
             "version": "1.11.8",
             "date": "2026-02-16",
             "highlights": [
-                "Signal-driven drag detection \u2014 eliminates poll timer entirely"
+                "Signal-driven drag detection replaces poll timer entirely"
             ]
         },
         {
@@ -488,7 +507,7 @@
             "date": "2026-02-16",
             "highlights": [
                 "Event-driven cursor tracking during drag",
-                "Throttled dragMoved signals to ~30Hz",
+                "Throttled drag signals to ~30Hz",
                 "Eliminated QDBusInterface for WindowDrag calls"
             ]
         },
@@ -496,7 +515,7 @@
             "version": "1.11.6",
             "date": "2026-02-16",
             "highlights": [
-                "Dynamic poll timer \u2014 500ms idle, 32ms only during drag",
+                "Dynamic poll timer: 500ms idle, 32ms during drag",
                 "Reduced D-Bus traffic during drag from 60Hz to 30Hz"
             ]
         },
@@ -528,14 +547,14 @@
             "version": "1.11.2",
             "date": "2026-02-15",
             "highlights": [
-                "Snap Assist trigger override \u2014 hold modifier to enable per-snap"
+                "Snap Assist trigger override: hold modifier to enable per-snap"
             ]
         },
         {
             "version": "1.11.1",
             "date": "2026-02-15",
             "highlights": [
-                "Fixed drag stutter from redundant D-Bus calls (60-144+ calls/sec)",
+                "Fixed drag stutter from redundant D-Bus calls at 60-144+ calls/sec",
                 "Fixed login hang from synchronous D-Bus in exclusion settings"
             ]
         },
@@ -543,7 +562,7 @@
             "version": "1.11.0",
             "date": "2026-02-15",
             "highlights": [
-                "EDID-based monitor identification \u2014 layouts survive port changes",
+                "EDID-based monitor identification so layouts survive port changes",
                 "Nix flake with NixOS module and Home Manager module",
                 "Fixed NixOS KCM loading failure"
             ]
@@ -552,8 +571,8 @@
             "version": "1.10.6",
             "date": "2026-02-14",
             "highlights": [
-                "Toggle activation mode \u2014 single press instead of hold",
-                "Proximity snap always active (no modifier required)"
+                "Toggle activation mode: single press instead of hold",
+                "Proximity snap always active without modifier"
             ]
         },
         {
@@ -590,7 +609,7 @@
             "version": "1.10.0",
             "date": "2026-02-13",
             "highlights": [
-                "Multiple binds per action \u2014 up to 4 independent triggers",
+                "Multiple binds per action, up to 4 independent triggers",
                 "Click-to-edit existing triggers in settings",
                 "AND semantics for combined modifier+button triggers",
                 "Conflict detection for duplicate triggers"
@@ -624,7 +643,7 @@
             "version": "1.9.1",
             "date": "2026-02-12",
             "highlights": [
-                "Snap Assist \u2014 Aero Snap style window picker to fill empty zones",
+                "Snap Assist: Aero Snap style window picker to fill empty zones",
                 "Fixed zone padding and outer gap not persisting in layout settings"
             ]
         },
@@ -642,7 +661,7 @@
             "version": "1.8.2",
             "date": "2026-02-09",
             "highlights": [
-                "Full zone label font customization (family, size, weight, style)",
+                "Full zone label font customization with family, size, weight, and style",
                 "Font picker dialog with live preview and search",
                 "New Sonic Ripple audio-reactive shader"
             ]
@@ -651,7 +670,7 @@
             "version": "1.8.1",
             "date": "2026-02-09",
             "highlights": [
-                "Paint-to-span zone modifier \u2014 progressively paint across zones while dragging"
+                "Paint-to-span zone modifier: progressively paint across zones while dragging"
             ]
         },
         {
@@ -774,7 +793,7 @@
             "version": "1.2.4",
             "date": "2026-02-01",
             "highlights": [
-                "All synchronous D-Bus calls converted to async \u2014 prevents compositor freezes"
+                "All synchronous D-Bus calls converted to async to prevent compositor freezes"
             ]
         },
         {
@@ -796,7 +815,7 @@
             "version": "1.2.0",
             "date": "2026-02-01",
             "highlights": [
-                "Initial packaged release \u2014 Wayland-only, KDE Plasma 6",
+                "Initial packaged release for Wayland-only KDE Plasma 6",
                 "Drag windows to zones with modifier key activation",
                 "Custom zone layouts with visual editor",
                 "Multi-monitor support",

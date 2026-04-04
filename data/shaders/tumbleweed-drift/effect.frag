@@ -134,21 +134,62 @@ float sandParticles(vec2 uv, float t, float bassEnv, float trebleEnv, vec2 flowD
 
     float acc = 0.0;
     for (int pi = 0; pi < 3; pi++) {
-        float pScale = 8.0 + float(pi) * 4.0;
-        float pSpd = 0.08 + float(pi) * 0.04;
+        float pScale = 6.0 + float(pi) * 3.0;
+        float pSpd = 0.2 + float(pi) * 0.1 + bassEnv * 0.3;
         vec2 pUV = uv * pScale + flowDir * t * pSpd;
         vec2 pCell = floor(pUV);
         vec2 pFract = fract(pUV);
         vec2 pOffset = hash22(pCell) * 0.6 + 0.2;
         float pDist = length(pFract - pOffset);
-        float pRadius = 0.07 - float(pi) * 0.015;
-        float particle = smoothstep(pRadius, pRadius * 0.2, pDist);
-        float twinkle = 0.5 + 0.5 * sin(hash21(pCell) * TAU + t * 1.2);
-        twinkle *= 1.0 + trebleEnv * 1.0;
+        float pRadius = 0.10 - float(pi) * 0.02;
+        float particle = smoothstep(pRadius, pRadius * 0.15, pDist);
+        float twinkle = 0.5 + 0.5 * sin(hash21(pCell) * TAU + t * 2.5);
+        twinkle *= 1.0 + trebleEnv * 2.0;
         acc += particle * twinkle;
     }
 
-    return acc * strength * 0.15;
+    return acc * strength * 0.3;
+}
+
+// ─── Wind-blown sand streams (signature horizontal flow) ─────────
+
+float sandStreams(vec2 uv, float t, float bassEnv, float midsEnv, float trebleEnv, vec2 flowDir) {
+    float acc = 0.0;
+    float flowSpd = 0.6 + bassEnv * 0.8;
+
+    // Project UV along and across the wind direction so streams
+    // follow pWindDirection() instead of always flowing horizontally.
+    vec2 flowNorm = normalize(flowDir);
+    vec2 flowPerp = vec2(-flowNorm.y, flowNorm.x);
+    float alongFlow = dot(uv, flowNorm);
+    float acrossFlow = dot(uv, flowPerp);
+
+    for (int si = 0; si < 5; si++) {
+        float fi = float(si);
+        float yBase = hash21(vec2(fi * 7.13, 3.91));
+        float yPos = yBase + sin(t * (0.08 + fi * 0.03) + fi * 2.5) * 0.12;
+        float yDist = abs(acrossFlow - yPos);
+
+        // Stream width varies with bass
+        float width = 0.015 + 0.01 * sin(t * 0.2 + fi) + bassEnv * 0.012;
+        float stream = smoothstep(width, width * 0.1, yDist);
+
+        // Internal noise makes it look like blowing sand, not a solid line
+        float nx = alongFlow * (12.0 + fi * 3.0) - t * flowSpd * (1.0 + fi * 0.3);
+        float sandNoise = noise2D(vec2(nx, acrossFlow * 20.0 + fi * 50.0));
+        sandNoise = smoothstep(0.3, 0.7, sandNoise);
+
+        // Density varies along length (gusts)
+        float gust = sin(alongFlow * 4.0 - t * flowSpd * 0.5 + fi * 1.7) * 0.5 + 0.5;
+        gust *= gust;
+
+        // Treble adds bright sand grain glints inside the stream
+        float glint = trebleEnv * smoothstep(0.7, 0.95, noise2D(vec2(nx * 2.0, t * 3.0 + fi * 11.0)));
+
+        acc += stream * sandNoise * gust * (0.6 + glint * 1.5);
+    }
+
+    return acc * (0.15 + midsEnv * 0.1);
 }
 
 // ─── Dust devil vortices ───────────────────────────────────────────
@@ -159,17 +200,17 @@ float dustDevil(vec2 uv, vec2 center, float radius, float t,
     float r = length(delta);
     float a = atan(delta.y, delta.x);
 
-    float rotSpeed = 1.5;
-    float spiral = sin(a * 3.0 - r * 15.0 / radius + t * rotSpeed) * 0.5 + 0.5;
-    float falloff = smoothstep(radius, radius * 0.1, r);
+    float rotSpeed = 3.5 + bassEnv * 2.0;
+    float spiral = sin(a * 4.0 - r * 18.0 / radius + t * rotSpeed) * 0.5 + 0.5;
+    float falloff = smoothstep(radius, radius * 0.05, r);
 
-    // Angular noise for organic shape
-    float angNoise = noise2D(vec2(a * 2.0, t * 0.2)) * 0.3;
-    angNoise += noise2D(vec2(a * 5.0, t * 0.4 + r * 8.0)) * 0.15;
+    // Angular noise for organic shape — mids thicken the spiral arms
+    float angNoise = noise2D(vec2(a * 2.0, t * 0.5)) * (0.35 + midsEnv * 0.2);
+    angNoise += noise2D(vec2(a * 6.0, t * 0.8 + r * 10.0)) * 0.2;
     spiral = clamp(spiral + angNoise, 0.0, 1.0);
 
-    // Audio modulates brightness, not speed
-    float intensity = 0.3 + bassEnv * 0.5 + trebleEnv * 0.25;
+    // Bass drives intensity, mids warm the core, treble adds sparkle
+    float intensity = 0.4 + bassEnv * 1.2 + midsEnv * 0.4 + trebleEnv * 0.5;
     return falloff * spiral * intensity;
 }
 
@@ -180,13 +221,13 @@ float dustDevils(vec2 uv, float t, float bassEnv, float midsEnv, float trebleEnv
     float acc = 0.0;
     for (int i = 0; i < 3; i++) {
         float fi = float(i);
-        float phase = fi * 2.094 + t * 0.1;
-        vec2 center = vec2(0.3 + 0.35 * sin(phase * 0.7 + fi),
-                           0.3 + 0.25 * cos(phase * 0.9 + fi * 1.5));
-        float radius = 0.08 + 0.04 * sin(t * 0.3 + fi * 3.0) + bassEnv * 0.03;
+        float phase = fi * 2.094 + t * 0.35;
+        vec2 center = vec2(0.25 + 0.4 * sin(phase * 0.7 + fi),
+                           0.25 + 0.35 * cos(phase * 0.9 + fi * 1.5));
+        float radius = 0.14 + 0.06 * sin(t * 0.5 + fi * 3.0) + bassEnv * 0.08;
 
-        float life = sin(t * 0.15 + fi * 2.0) * 0.5 + 0.5;
-        life = smoothstep(0.2, 0.6, life);
+        float life = sin(t * 0.4 + fi * 2.0) * 0.5 + 0.5;
+        life = smoothstep(0.15, 0.5, life);
 
         acc += dustDevil(uv, center, radius, t, bassEnv, midsEnv, trebleEnv) * life;
     }
@@ -210,16 +251,16 @@ float erosionLines(vec2 uv, float t, float bassEnv) {
     float amp = 0.5;
     float freq = 1.0;
     for (int i = 0; i < 4; i++) {
-        vec2 offset = vec2(t * fs * freq * 0.5, 0.0);
+        vec2 offset = vec2(t * fs * freq * 0.5 + bassEnv * 0.3, 0.0);
         val += amp * noise2D(q * freq + offset);
         freq *= 2.1;
         amp *= 0.45;
     }
 
     float lines = abs(sin(val * 12.0 + uv.x * 20.0));
-    lines = smoothstep(0.92, 1.0, lines);
+    lines = smoothstep(0.90, 1.0, lines);
 
-    return lines * str * 0.5;
+    return lines * str * (0.5 + bassEnv * 0.3);
 }
 
 // ─── Tumbleweed logo SDF ───────────────────────────────────────────
@@ -475,20 +516,18 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
         vec2 uv = (fragCoord - rectPos) / max(rectSize, vec2(1.0));
 
         // ── Desert landscape background ─────────────────────────
-        // The horizon gradient is the primary identity — warm sand below,
-        // teal-dark sky above.  FBM adds living texture on top, not the other way.
         float flowSpeed = pFlowSpeed();
         float speed = pSpeed();
 
-        // Horizon gradient — the soul of the desert
-        // Slow color drift gives the sky a living, breathing feel
-        float horizonDrift = sin(time * 0.06) * 0.08;
-        float horizonWave = sin(uv.x * 3.0 + time * 0.1) * 0.02;
+        // Horizon gradient with bass-reactive distortion
+        float horizonDrift = sin(time * 0.15) * 0.1 + bassEnv * 0.06;
+        float horizonWave = sin(uv.x * 3.0 + time * 0.25) * 0.03
+                          + sin(uv.x * 7.0 + time * 0.4) * 0.01 * (1.0 + bassEnv * 2.0);
         vec3 horizonSand = palSecondary * 0.9 + palAccent * 0.1;
         vec3 horizonMid  = palAccent * (0.25 + horizonDrift) + palPrimary * 0.55
                          + palSecondary * (0.2 - horizonDrift);
         vec3 horizonSky  = mix(palPrimary, palAccent * 0.3 + palPrimary * 0.7,
-                               sin(time * 0.04 + uv.x * 2.0) * 0.12 + 0.12);
+                               sin(time * 0.1 + uv.x * 2.0) * 0.15 + 0.15);
         float yShift = uv.y + horizonWave;
         vec3 col = mix(horizonSand, horizonMid, smoothstep(0.0, 0.45, yShift));
         col = mix(col, horizonSky, smoothstep(0.35, 1.0, yShift));
@@ -502,45 +541,59 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
         float q = fbm(duneUV + duneFlow, 4, 0.6);
         float r = fbm(duneUV + q * 1.2 + duneFlow * 0.7, 4, 0.6);
 
-        // Warm sand texture — stays in the warm palette range
-        float duneT = r * contrast + time * 0.015;
+        // Warm sand texture
+        float duneT = r * contrast + time * 0.04;
         vec3 duneColor = tumbleweedPalette(duneT, palSecondary, horizonMid, palAccent);
-        // Blend FBM as texture — strong at bottom (sand), fading gently at top (sky)
-        float duneMix = 0.35 * smoothstep(1.2, 0.05, uv.y);
+        float duneMix = 0.4 * smoothstep(1.2, 0.05, uv.y);
         col = mix(col, duneColor * brightness, duneMix);
 
-        // Mids shift warmth — visible hue drift
-        col = mix(col, palSecondary * brightness, midsEnv * 0.15);
+        // Mids shift warmth
+        col = mix(col, palSecondary * brightness, midsEnv * 0.3);
 
-        // Wind field distortion
+        // Wind field distortion (stronger with bass)
         vec2 wind = windField(uv, time);
-        float windIntensity = length(wind) * (1.0 + bassEnv * 0.5);
-        col += palAccent * windIntensity * 0.12;
+        float windIntensity = length(wind) * (1.0 + bassEnv * 1.5);
+        col += palAccent * windIntensity * 0.2;
 
         // Sand particles (3-layer parallax)
         float particles = sandParticles(uv, time, bassEnv, trebleEnv, flowDir);
         col += mix(palSecondary, vec3(1.0), 0.5) * particles;
 
+        // Wind-blown sand streams (signature horizontal flow)
+        float streams = sandStreams(uv, time, bassEnv, midsEnv, trebleEnv, flowDir);
+        col += mix(palSecondary, vec3(1.0, 0.95, 0.85), 0.4) * streams;
+
         // Dust devils
         float devils = dustDevils(uv, time, bassEnv, midsEnv, trebleEnv);
-        col += palSecondary * devils * 0.3 + palAccent * devils * 0.1;
+        col += palSecondary * devils * 0.5 + palAccent * devils * 0.2;
 
         // Erosion flow lines
         float erosion = erosionLines(uv, time, bassEnv);
         col += palSecondary * erosion * 0.6;
 
-        // Scanning sandstorm band — slow vertical drift
-        float scanPos = fract(time * 0.035);
+        // Dust storm wave (wide, prominent, bass-reactive)
+        float scanPos = fract(time * 0.07);
         float bandDist = abs(uv.y - scanPos);
-        float bandAlpha = 0.12 + bassEnv * 0.15;
-        float band = smoothstep(0.08, 0.0, bandDist) * bandAlpha;
-        col += palSecondary * band;
+        float bandWidth = 0.12 + bassEnv * 0.08;
+        float bandAlpha = 0.25 + bassEnv * 0.35;
+        float band = smoothstep(bandWidth, 0.0, bandDist) * bandAlpha;
+        // Sand density spikes inside the storm band
+        float stormNoise = noise2D(vec2(uv.x * 15.0 - time * 1.2, uv.y * 8.0)) * 0.5 + 0.5;
+        band *= 0.6 + stormNoise * 0.4;
+        col += mix(palSecondary, palAccent * 0.5, 0.3) * band;
 
         // Heat shimmer — mirage wobble near ground
-        float shimmerWave = sin(uv.x * 25.0 + time * 0.6) * sin(uv.x * 11.0 - time * 0.35);
+        float shimmerWave = sin(uv.x * 25.0 + time * 1.2) * sin(uv.x * 11.0 - time * 0.7);
         float shimmerMask = smoothstep(0.3, 0.0, uv.y);
-        float shimmer = shimmerWave * shimmerMask * 0.04 * (1.0 + bassEnv * 0.4);
+        float shimmer = shimmerWave * shimmerMask * 0.06 * (1.0 + bassEnv * 1.0);
         col += palSecondary * abs(shimmer);
+
+        // Treble sparkle field — sand grains catching light across entire surface
+        if (trebleEnv > 0.03) {
+            float sparkN = noise2D(uv * 30.0 + time * 2.0);
+            sparkN = smoothstep(0.65, 0.92, sparkN);
+            col += vec3(1.0, 0.95, 0.85) * sparkN * trebleEnv * 0.8;
+        }
 
         // ── Multi-instance logo rendering ─────────────────────────
         for (int li = 0; li < logoCount && li < 8; li++) {
@@ -562,22 +615,23 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
             if (logoD > 0.1) continue;
 
             // ── Light casting (warm glow in sand haze) ──────────
-            float lightCast = exp(-max(logoD, 0.0) * 15.0) * 0.25;
-            vec3 logoLight = tumbleweedPalette(time * 0.08 + iLogoUV.y + float(li) * 0.3,
+            float lightCast = exp(-max(logoD, 0.0) * 12.0) * 0.35;
+            vec3 logoLight = tumbleweedPalette(time * 0.15 + iLogoUV.y + float(li) * 0.3,
                                                 palGlow, palAccent, palSecondary);
-            col += logoLight * lightCast * instIntensity * (1.0 + bassEnv * 0.2) * depthFactor;
+            col += logoLight * lightCast * instIntensity * (1.0 + bassEnv * 0.8) * depthFactor;
 
-            // ── Bass shockwave ring ─────────────────────────────
-            float iShockPhase = fract(time * 0.3 + float(li) * 0.137);
+            // ── Bass shockwave ring (prominent, expanding) ──────
+            float iShockPhase = fract(time * 0.5 + float(li) * 0.137);
             float iShockStr = bassEnv * (1.0 - iShockPhase) * logoPulse;
             if (iShockStr > 0.01) {
                 float iLogoDist = length(iLogoUV - TW_LOGO_CENTER);
-                float iShockRadius = iShockPhase * 0.5;
+                float iShockRadius = iShockPhase * 0.6;
                 float shockDist = abs(iLogoDist - iShockRadius);
-                float shockMask = smoothstep(0.06, 0.0, shockDist) * iShockStr;
-                vec3 shockCol = tumbleweedPalette(iShockRadius * 3.0 + time * 0.2 + float(li),
+                float shockWidth = 0.04 + bassEnv * 0.03;
+                float shockMask = smoothstep(shockWidth, 0.0, shockDist) * iShockStr;
+                vec3 shockCol = tumbleweedPalette(iShockRadius * 3.0 + time * 0.3 + float(li),
                                                    palGlow, palAccent, palSecondary);
-                col += shockCol * shockMask * 0.35 * depthFactor;
+                col += shockCol * shockMask * 0.8 * depthFactor;
             }
 
             // ── Logo fill ───────────────────────────────────────
@@ -594,16 +648,16 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
                     fillCol *= brightness * 1.6;
 
                     // Bass pumps brighter
-                    fillCol *= 1.0 + bassEnv * logoPulse * 0.5;
+                    fillCol *= 1.0 + bassEnv * logoPulse * 1.2;
 
-                    // Mids warm the interior slightly
-                    fillCol = mix(fillCol, palSecondary * brightness * 1.5, midsEnv * 0.1);
+                    // Mids shift warmth visibly
+                    fillCol = mix(fillCol, palSecondary * brightness * 1.5, midsEnv * 0.25);
 
-                    // Treble flicker — gentle, not frantic
-                    if (trebleEnv > 0.15) {
-                        float flickerN = noise2D(iLogoUV * 15.0 + time * 3.0);
-                        if (flickerN > 0.75) {
-                            fillCol = mix(fillCol, palGlow * brightness * 2.0, trebleEnv * 0.3);
+                    // Treble flicker
+                    if (trebleEnv > 0.08) {
+                        float flickerN = noise2D(iLogoUV * 15.0 + time * 4.0);
+                        if (flickerN > 0.6) {
+                            fillCol = mix(fillCol, palGlow * brightness * 2.5, trebleEnv * 0.6);
                         }
                     }
 
@@ -616,15 +670,15 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
                 }
 
                 // ── Multi-layer glow ────────────────────────────
-                float glow1 = exp(-max(logoD, 0.0) * 80.0) * 0.5;
-                float glow2 = exp(-max(logoD, 0.0) * 25.0) * 0.25;
-                float glow3 = exp(-max(logoD, 0.0) * 8.0) * 0.12;
-                vec3 edgeCol = tumbleweedPalette(time * 0.12 + iLogoUV.y + float(li) * 0.2,
+                float glow1 = exp(-max(logoD, 0.0) * 60.0) * 0.6;
+                float glow2 = exp(-max(logoD, 0.0) * 20.0) * 0.35;
+                float glow3 = exp(-max(logoD, 0.0) * 6.0) * 0.18;
+                vec3 edgeCol = tumbleweedPalette(time * 0.2 + iLogoUV.y + float(li) * 0.2,
                                                   palGlow, palAccent, palSecondary);
-                float flare = 1.0 + bassEnv * 0.25;
-                col += edgeCol * glow1 * flare * pParticleStrength() * 2.0 * depthFactor;
-                col += palAccent * glow2 * flare * 0.5 * depthFactor;
-                col += palGlow * glow3 * 0.4 * depthFactor;
+                float flare = 1.0 + bassEnv * 0.8;
+                col += edgeCol * glow1 * flare * pParticleStrength() * 2.5 * depthFactor;
+                col += palAccent * glow2 * flare * 0.7 * depthFactor;
+                col += palGlow * glow3 * 0.5 * depthFactor;
             }
 
             // ── Treble edge sparks — windblown sand glints ───────
@@ -697,7 +751,7 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
 
         if (isHighlighted) {
             float bBreathe = 0.85 + 0.15 * sin(time * 2.5);
-            float borderBass = hasAudio ? 1.0 + bassEnv * 0.3 : 1.0;
+            float borderBass = hasAudio ? 1.0 + bassEnv * 0.8 : 1.0;
             borderCol *= bBreathe * borderBass;
         } else {
             float lum = luminance(borderCol);
@@ -711,8 +765,8 @@ vec4 renderTumbleweedZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
 
     // ── Outer glow with angular noise ──────────────────────────────
 
-    float bassGlowPush = hasAudio ? bassEnv * 2.0 : idlePulse * 5.0;
-    float glowRadius = mix(10.0, 18.0, vitality) + bassGlowPush;
+    float bassGlowPush = hasAudio ? bassEnv * 5.0 : idlePulse * 5.0;
+    float glowRadius = mix(10.0, 22.0, vitality) + bassGlowPush;
     if (d > 0.0 && d < glowRadius && pBorderGlow() > 0.01) {
         float glow = expGlow(d, 7.0, pBorderGlow());
         float angle = atan(p.y, p.x);

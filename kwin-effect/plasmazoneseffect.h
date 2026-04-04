@@ -445,6 +445,12 @@ private:
     QStringList m_excludedApplications;
     QStringList m_excludedWindowClasses;
 
+    // Minimum window size for autotile eligibility. Windows smaller than this
+    // are rejected by isEligibleForAutotileNotify() to prevent small utility
+    // windows (emoji picker, color picker, etc.) from entering the tiling tree.
+    int m_cachedMinWindowWidth = 0;
+    int m_cachedMinWindowHeight = 0;
+
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end
     // handler uses the same decision, preventing a race where m_autotileScreens
@@ -483,6 +489,13 @@ private:
     QString m_pendingDragWindowId;
     QRectF m_pendingDragGeometry;
     QString m_snapDragStartScreenId; // Virtual screen at snap-mode drag start (for VS crossing on drop)
+
+    // Windows floated by drag on autotile screens. The daemon emits
+    // applyGeometryRequested to restore pre-autotile geometry on float,
+    // but drag-to-float should keep the window where the user dropped it.
+    // Entries are consumed (removed) when slotApplyGeometryRequested skips
+    // the geometry restore for a drag-floated window.
+    QSet<QString> m_dragFloatedWindowIds;
 
     // Autotile: true when the current drag was started on an autotile screen
 

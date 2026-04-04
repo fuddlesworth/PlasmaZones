@@ -7,6 +7,27 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-04-04
+
+### Added
+- **JSON config backend** ([#286]): Config migrated from INI (`~/.config/plasmazonesrc`) to JSON (`~/.config/plasmazones/config.json`). Existing INI configs are migrated automatically on first launch. The JSON backend supports nested groups, proper array/object serialization, and atomic writes.
+- **Master ratio/count OSD values** ([#289]): Shortcut adjustments now show the actual value in the navigation OSD: "Master ratio → 65%" and "Master count → 2".
+- **Tumbleweed Drift shader improvements**: New wind-blown sand streams, stronger audio reactivity across all bands, faster animation speeds, larger dust devils, and full-surface treble sparkle. Sand streams follow the configured wind direction.
+
+### Changed
+- **Settings navigation**: App Rules moved under Snapping section. Child navigation pages have dividers for visual grouping.
+
+### Fixed
+- **Drag-to-float keeps drop position** ([#289]): Dragging a window off the autotile layout no longer snaps it back to its pre-autotile position. The daemon's geometry restore is skipped for drag-initiated floats.
+- **Shortcut ratio/count persistence** ([#289]): Master ratio and count changes via keyboard shortcuts were only in memory due to QSignalBlocker suppressing the save path. Added debounced save so values survive reboots.
+- **Algorithm switch persistence** ([#289]): Algorithm changes via settings also use QSignalBlocker and had the same missing-save issue. Now triggers the same debounced save.
+- **Minimum window size for autotile** ([#290]): The user-configured minimum window width/height was never checked in the autotile path. Small utility windows like the Plasma emoji picker entered the tiling tree, causing rapid float/unfloat cycles that broke the master ratio. Now enforced in the KWin effect before windows reach the daemon.
+- **Focus-follows-mouse through small windows** ([#290]): Windows below the minimum size threshold no longer steal focus on hover. They block focus-through like excluded apps and popups.
+- **Shortcut debouncing** ([#288]): Rotate, float toggle, and layout cycle shortcuts are now debounced to prevent rapid-fire D-Bus calls from key repeat.
+- **Overlay Vulkan surface churn**: Non-shader overlays are hidden instead of destroyed and recreated, reducing Vulkan surface create/destroy cycles.
+- **Snap assist window pooling**: Snap assist reuses its window instead of creating a new one each time, and rejects stale layout requests.
+- **JSON config serialization**: Arrays and objects in the config file are properly serialized through the flat map representation.
+
 ## [2.6.0] - 2026-04-03
 
 ### Added
@@ -1123,8 +1144,13 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.6.0...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.7.0...HEAD
+[2.7.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.3...v2.6.0
+[#286]: https://github.com/fuddlesworth/PlasmaZones/pull/286
+[#288]: https://github.com/fuddlesworth/PlasmaZones/pull/288
+[#289]: https://github.com/fuddlesworth/PlasmaZones/pull/289
+[#290]: https://github.com/fuddlesworth/PlasmaZones/pull/290
 [2.5.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.2...v2.5.3
 [2.5.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.1...v2.5.2
 [2.5.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.0...v2.5.1

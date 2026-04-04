@@ -230,7 +230,10 @@ void NavigationController::increaseMasterRatio(qreal delta)
     m_engine->syncShortcutAdjustmentToSettings();
 
     const QString screenId = resolveActiveScreen();
-    QString reason = delta >= 0 ? QStringLiteral("increased") : QStringLiteral("decreased");
+    // Encode direction and percentage in reason (e.g., "increased:65") — same
+    // pattern as rotate ("clockwise:N"). QML parses the suffix for display.
+    int pct = qRound(resultRatio * 100.0);
+    QString reason = (delta >= 0 ? QStringLiteral("increased:") : QStringLiteral("decreased:")) + QString::number(pct);
     Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_ratio"), reason, QString(), QString(),
                                                  screenId);
 }
@@ -273,8 +276,9 @@ void NavigationController::increaseMasterCount()
     m_engine->syncShortcutAdjustmentToSettings();
 
     const QString screenId = resolveActiveScreen();
-    Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_count"), QStringLiteral("increased"),
-                                                 QString(), QString(), screenId);
+    QString reason = QStringLiteral("increased:") + QString::number(resultCount);
+    Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_count"), reason, QString(), QString(),
+                                                 screenId);
 }
 
 void NavigationController::decreaseMasterCount()
@@ -290,8 +294,9 @@ void NavigationController::decreaseMasterCount()
     m_engine->syncShortcutAdjustmentToSettings();
 
     const QString screenId = resolveActiveScreen();
-    Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_count"), QStringLiteral("decreased"),
-                                                 QString(), QString(), screenId);
+    QString reason = QStringLiteral("decreased:") + QString::number(resultCount);
+    Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_count"), reason, QString(), QString(),
+                                                 screenId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
