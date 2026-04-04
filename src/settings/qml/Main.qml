@@ -837,6 +837,8 @@ ApplicationWindow {
                         spacing: Kirigami.Units.smallSpacing
 
                         Rectangle {
+                            id: daemonDot
+
                             width: Kirigami.Units.smallSpacing * 1.5
                             height: Kirigami.Units.smallSpacing * 1.5
                             radius: width / 2
@@ -847,18 +849,16 @@ ApplicationWindow {
                             SequentialAnimation {
                                 id: daemonPulse
 
-                                property Item target: parent
-
                                 loops: settingsController.daemonRunning ? Animation.Infinite : 0
                                 running: settingsController.daemonRunning
                                 onRunningChanged: {
                                     if (!running)
-                                        target.opacity = 1;
+                                        daemonDot.opacity = 1;
 
                                 }
 
                                 NumberAnimation {
-                                    target: daemonPulse.target
+                                    target: daemonDot
                                     property: "opacity"
                                     from: 1
                                     to: 0.4
@@ -867,7 +867,7 @@ ApplicationWindow {
                                 }
 
                                 NumberAnimation {
-                                    target: daemonPulse.target
+                                    target: daemonDot
                                     property: "opacity"
                                     from: 0.4
                                     to: 1

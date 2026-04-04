@@ -18,9 +18,6 @@ Flickable {
 
     contentHeight: content.implicitHeight
     clip: true
-    Component.onCompleted: {
-        easingPreview.curve = appSettings.animationEasingCurve;
-    }
 
     ColumnLayout {
         id: content
