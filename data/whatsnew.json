@@ -1,6 +1,20 @@
 {
     "releases": [
         {
+            "version": "2.7.0",
+            "date": "2026-04-04",
+            "highlights": [
+                "Config migrated from INI to JSON format with automatic migration on first launch",
+                "Dragging a window off autotile now keeps it where you dropped it",
+                "Master ratio and count shortcuts show actual values in the OSD",
+                "Shortcut-adjusted ratio and count now persist across reboots",
+                "Small utility windows like the emoji picker no longer enter the autotile tree",
+                "Focus-follows-mouse no longer steals focus through under-size windows",
+                "Tumbleweed Drift shader gains sand streams, stronger audio reactivity, and faster animation",
+                "Snap assist, overlay, and shortcut stability improvements"
+            ]
+        },
+        {
             "version": "2.6.0",
             "date": "2026-04-03",
             "highlights": [
