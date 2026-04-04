@@ -1281,6 +1281,12 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("excludedWindowClasses"), [this](const QVariant& v) {
         m_excludedWindowClasses = v.toStringList();
     });
+    loadSettingAsync(QStringLiteral("minimumWindowWidth"), [this](const QVariant& v) {
+        m_cachedMinWindowWidth = v.toInt();
+    });
+    loadSettingAsync(QStringLiteral("minimumWindowHeight"), [this](const QVariant& v) {
+        m_cachedMinWindowHeight = v.toInt();
+    });
     loadSettingAsync(QStringLiteral("snapAssistEnabled"), [this](const QVariant& v) {
         m_snapAssistHandler->setEnabled(v.toBool());
     });

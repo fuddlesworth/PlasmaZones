@@ -707,6 +707,14 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
     if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
         return false;
     }
+    // Reject windows smaller than the user-configured minimum size.
+    // Prevents small utility windows (emoji picker, color picker, etc.)
+    // from entering the tiling tree and disrupting the layout.
+    const QRectF frame = w->frameGeometry();
+    if ((m_effect->m_cachedMinWindowWidth > 0 && frame.width() < m_effect->m_cachedMinWindowWidth)
+        || (m_effect->m_cachedMinWindowHeight > 0 && frame.height() < m_effect->m_cachedMinWindowHeight)) {
+        return false;
+    }
     return true;
 }
 

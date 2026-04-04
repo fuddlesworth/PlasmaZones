@@ -441,6 +441,12 @@ private:
     QStringList m_excludedApplications;
     QStringList m_excludedWindowClasses;
 
+    // Minimum window size for autotile eligibility. Windows smaller than this
+    // are rejected by isEligibleForAutotileNotify() to prevent small utility
+    // windows (emoji picker, color picker, etc.) from entering the tiling tree.
+    int m_cachedMinWindowWidth = 0;
+    int m_cachedMinWindowHeight = 0;
+
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end
     // handler uses the same decision, preventing a race where m_autotileScreens
