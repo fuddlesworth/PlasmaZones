@@ -1336,6 +1336,7 @@ Kirigami.Dialog {
 
                     anchors.fill: parent
                     active: root.previewShaderConfig !== null
+                    visible: item === null || item.status !== ZoneShaderItem.Error
 
                     sourceComponent: ZoneShaderItem {
                         // Render to a private layer FBO so multipass shaders' beginPass(rt)
@@ -1387,6 +1388,31 @@ Kirigami.Dialog {
                     property: "wallpaperTexture"
                     value: previewBackground.cfg.wallpaperTexture
                     when: shaderPreviewLoader.item !== null && previewBackground.cfg.wallpaperTexture !== undefined && previewBackground.cfg.wallpaperTexture !== null
+                }
+
+                // Shader error box — mirrors RenderNodeOverlay.qml error display
+                Rectangle {
+                    visible: shaderPreviewLoader.item !== null && shaderPreviewLoader.item.status === ZoneShaderItem.Error
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width * 0.8, 400)
+                    height: previewErrorText.implicitHeight + Kirigami.Units.gridUnit * 2
+                    color: Kirigami.Theme.backgroundColor
+                    opacity: 0.95
+                    radius: Kirigami.Units.smallSpacing
+                    border.color: Kirigami.Theme.negativeTextColor
+                    border.width: 1
+
+                    Text {
+                        id: previewErrorText
+
+                        Accessible.name: i18n("Shader error details")
+                        anchors.centerIn: parent
+                        text: (shaderPreviewLoader.item && shaderPreviewLoader.item.errorLog) || i18n("Shader error")
+                        color: Kirigami.Theme.textColor
+                        wrapMode: Text.WordWrap
+                        width: parent.width - Kirigami.Units.gridUnit * 2
+                    }
+
                 }
 
                 // Fallback message when no shader is rendering
