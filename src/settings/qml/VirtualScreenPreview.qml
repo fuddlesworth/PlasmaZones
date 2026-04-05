@@ -53,10 +53,10 @@ Rectangle {
             required property var modelData
             required property int index
 
-            x: modelData.x * previewRoot.width + previewRoot.border.width
-            y: modelData.y * previewRoot.height + previewRoot.border.width
-            width: modelData.width * previewRoot.width - (previewRoot.border.width * 2)
-            height: modelData.height * previewRoot.height - (previewRoot.border.width * 2)
+            x: modelData.x * previewRoot.width
+            y: modelData.y * previewRoot.height
+            width: modelData.width * previewRoot.width
+            height: modelData.height * previewRoot.height
             Accessible.name: modelData.displayName || i18n("Screen %1", index + 1)
             Accessible.role: Accessible.Pane
             color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
@@ -130,7 +130,7 @@ Rectangle {
 
                 Behavior on color {
                     ColorAnimation {
-                        duration: 100
+                        duration: Kirigami.Units.shortDuration
                     }
 
                 }

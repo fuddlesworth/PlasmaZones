@@ -489,12 +489,6 @@ void WindowTrackingService::onLayoutChanged()
         return;
     }
 
-    // Collect valid zone IDs from new active layout (for quick checks)
-    QSet<QString> activeLayoutZoneIds;
-    for (Zone* zone : newLayout->zones()) {
-        activeLayoutZoneIds.insert(zone->id().toString());
-    }
-
     // Before removing stale assignments, capture (window, zonePosition) for resnap-to-new-layout.
     // When user presses the shortcut, we map zone N -> zone N (with cycling when layout has fewer zones).
     // Include BOTH m_windowZoneAssignments (tracked) AND m_pendingRestoreQueues (session-restored
@@ -601,36 +595,25 @@ void WindowTrackingService::onLayoutChanged()
 
         const QUuid prevLayoutId = prevLayout->id();
 
-        // Helper to check if ANY of a window's zones exist in the active layout.
-        // Multi-zone windows are kept as long as at least one zone is valid.
-        auto anyZoneInActiveLayout = [&](const QStringList& zoneIdList) {
-            for (const QString& zid : zoneIdList) {
-                if (activeLayoutZoneIds.contains(zid))
-                    return true;
+        // Resolve the effective new layout for a given screen. Per-screen
+        // assignments take precedence; windows with no screen (or screens
+        // without an explicit assignment) fall back to the active layout.
+        auto resolveNewLayoutForScreen = [&](const QString& screenId) -> Layout* {
+            if (!screenId.isEmpty()) {
+                Layout* perScreen = m_layoutManager->resolveLayoutForScreen(screenId);
+                if (perScreen)
+                    return perScreen;
             }
-            return false;
-        };
-
-        // Helper: is a window on a screen that uses the global active layout?
-        // Windows on screens with per-screen assignments that differ from the
-        // new active layout are unaffected by this layout change.
-        auto isAffectedByGlobalChange = [&](const QString& windowScreen) -> bool {
-            if (windowScreen.isEmpty())
-                return true;
-            Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(windowScreen);
-            return !effectiveLayout || effectiveLayout == newLayout;
+            return newLayout;
         };
 
         if (layoutSwitched) {
             // User switched layouts: capture assignments to zones from the OLD layout (not in new)
             // 1. Live assignments (windows we've tracked via windowSnapped)
             for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
-                // Skip windows on screens with per-screen layouts unaffected by this change
                 QString windowScreen = m_windowScreenAssignments.value(it.key());
-                if (!isAffectedByGlobalChange(windowScreen)) {
-                    continue;
-                }
-                if (anyZoneInActiveLayout(it.value())) {
+                Layout* effectiveLayout = resolveNewLayoutForScreen(windowScreen);
+                if (anyZoneExistsInLayout(it.value(), effectiveLayout)) {
                     continue;
                 }
                 addToBuffer(it.key(), it.value(), windowScreen, m_windowDesktopAssignments.value(it.key(), 0));
@@ -639,10 +622,8 @@ void WindowTrackingService::onLayoutChanged()
             // 2. Pending assignments (session-restored windows)
             for (auto it = m_pendingRestoreQueues.constBegin(); it != m_pendingRestoreQueues.constEnd(); ++it) {
                 for (const PendingRestore& entry : it.value()) {
-                    if (!isAffectedByGlobalChange(entry.screenId)) {
-                        continue;
-                    }
-                    if (anyZoneInActiveLayout(entry.zoneIds)) {
+                    Layout* effectiveLayout = resolveNewLayoutForScreen(entry.screenId);
+                    if (anyZoneExistsInLayout(entry.zoneIds, effectiveLayout)) {
                         continue;
                     }
                     if (!entry.layoutId.isEmpty()) {

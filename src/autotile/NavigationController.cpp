@@ -218,20 +218,18 @@ void NavigationController::moveFocusedToPosition(int position)
 
 void NavigationController::increaseMasterRatio(qreal delta)
 {
-    qreal resultRatio = m_engine->config()->splitRatio;
-    applyToAllStates([delta, &resultRatio](TilingState* state) {
-        // setSplitRatio handles clamping internally
+    applyToAllStates([delta](TilingState* state) {
         state->setSplitRatio(state->splitRatio() + delta);
-        resultRatio = state->splitRatio(); // capture clamped result
     });
 
-    // Sync config so propagateGlobalSplitRatio() won't overwrite with stale value
+    const QString screenId = resolveActiveScreen();
+    const TilingStateKey currentKey{screenId, m_engine->m_currentDesktop, m_engine->m_currentActivity};
+    TilingState* currentState = m_engine->m_screenStates.value(currentKey);
+    qreal resultRatio = currentState ? currentState->splitRatio() : m_engine->config()->splitRatio;
+
     m_engine->config()->splitRatio = resultRatio;
     m_engine->syncShortcutAdjustmentToSettings();
 
-    const QString screenId = resolveActiveScreen();
-    // Encode direction and percentage in reason (e.g., "increased:65") — same
-    // pattern as rotate ("clockwise:N"). QML parses the suffix for display.
     int pct = qRound(resultRatio * 100.0);
     QString reason = (delta >= 0 ? QStringLiteral("increased:") : QStringLiteral("decreased:")) + QString::number(pct);
     Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_ratio"), reason, QString(), QString(),
@@ -267,15 +265,17 @@ void NavigationController::setGlobalMasterCount(int count)
 
 void NavigationController::increaseMasterCount()
 {
-    int resultCount = m_engine->config()->masterCount;
-    applyToAllStates([&resultCount](TilingState* state) {
+    applyToAllStates([](TilingState* state) {
         state->setMasterCount(state->masterCount() + 1);
-        resultCount = state->masterCount();
     });
+
+    const QString screenId = resolveActiveScreen();
+    const TilingStateKey currentKey{screenId, m_engine->m_currentDesktop, m_engine->m_currentActivity};
+    TilingState* currentState = m_engine->m_screenStates.value(currentKey);
+    int resultCount = currentState ? currentState->masterCount() : m_engine->config()->masterCount;
     m_engine->config()->masterCount = resultCount;
     m_engine->syncShortcutAdjustmentToSettings();
 
-    const QString screenId = resolveActiveScreen();
     QString reason = QStringLiteral("increased:") + QString::number(resultCount);
     Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_count"), reason, QString(), QString(),
                                                  screenId);
@@ -283,17 +283,19 @@ void NavigationController::increaseMasterCount()
 
 void NavigationController::decreaseMasterCount()
 {
-    int resultCount = m_engine->config()->masterCount;
-    applyToAllStates([&resultCount](TilingState* state) {
+    applyToAllStates([](TilingState* state) {
         if (state->masterCount() > 1) {
             state->setMasterCount(state->masterCount() - 1);
-            resultCount = state->masterCount();
         }
     });
+
+    const QString screenId = resolveActiveScreen();
+    const TilingStateKey currentKey{screenId, m_engine->m_currentDesktop, m_engine->m_currentActivity};
+    TilingState* currentState = m_engine->m_screenStates.value(currentKey);
+    int resultCount = currentState ? currentState->masterCount() : m_engine->config()->masterCount;
     m_engine->config()->masterCount = resultCount;
     m_engine->syncShortcutAdjustmentToSettings();
 
-    const QString screenId = resolveActiveScreen();
     QString reason = QStringLiteral("decreased:") + QString::number(resultCount);
     Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_count"), reason, QString(), QString(),
                                                  screenId);

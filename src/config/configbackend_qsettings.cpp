@@ -201,10 +201,21 @@ QColor QSettingsConfigGroup::readColor(const QString& key, const QColor& default
     // KConfig comma format: "r,g,b" or "r,g,b,a"
     QStringList parts = str.split(QLatin1Char(','));
     if (parts.size() >= 3) {
-        int r = parts[0].trimmed().toInt();
-        int g = parts[1].trimmed().toInt();
-        int b = parts[2].trimmed().toInt();
-        int a = (parts.size() >= 4) ? parts[3].trimmed().toInt() : 255;
+        bool okR = false, okG = false, okB = false;
+        int r = qBound(0, parts[0].trimmed().toInt(&okR), 255);
+        int g = qBound(0, parts[1].trimmed().toInt(&okG), 255);
+        int b = qBound(0, parts[2].trimmed().toInt(&okB), 255);
+        if (!okR || !okG || !okB) {
+            return defaultValue;
+        }
+        int a = 255;
+        if (parts.size() >= 4) {
+            bool okA = false;
+            a = qBound(0, parts[3].trimmed().toInt(&okA), 255);
+            if (!okA) {
+                a = 255;
+            }
+        }
         return QColor(r, g, b, a);
     }
     return defaultValue;

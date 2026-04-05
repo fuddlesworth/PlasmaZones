@@ -80,8 +80,6 @@ public Q_SLOTS:
      * @param y Window Y position
      * @param width Window width
      * @param height Window height
-     * @param appName Application name (for exclusion filtering)
-     * @param windowClass Window class (for exclusion filtering)
      * @param mouseButtons Qt::MouseButtons flags for the button(s) that started the drag (for activation-by-mouse)
      * @note Parameters are double because KWin QML DBusCall sends JS numbers as D-Bus doubles
      */

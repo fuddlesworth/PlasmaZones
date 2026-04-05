@@ -32,6 +32,10 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
             Q_EMIT screenAdded(id);
         });
         if (hadVirtual) {
+            auto* mgr2 = ScreenManager::instance();
+            if (mgr2) {
+                m_lastEmittedEffectiveIds = mgr2->effectiveScreenIds();
+            }
             Q_EMIT virtualScreensChanged(physId);
         } else {
             // ScreenManager may not be fully initialized yet — defer a re-check

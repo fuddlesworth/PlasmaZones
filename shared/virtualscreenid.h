@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <QLatin1StringView>
+#include <QLatin1String>
 #include <QString>
 
 namespace PlasmaZones {
@@ -16,9 +16,9 @@ namespace PlasmaZones {
 namespace VirtualScreenId {
 
 /// Separator between physical screen ID and virtual index
-inline QLatin1StringView separator()
+inline QLatin1String separator()
 {
-    return QLatin1StringView("/vs:");
+    return QLatin1String("/vs:");
 }
 
 /// Check if a screen ID is a virtual screen ID (contains "/vs:")

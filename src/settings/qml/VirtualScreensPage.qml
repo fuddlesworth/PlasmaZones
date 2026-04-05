@@ -56,7 +56,7 @@ Flickable {
         var screens = [];
         var xPos = 0;
         for (var i = 0; i < ratios.length; i++) {
-            var w = ratios[i] / 100;
+            var w = (i === ratios.length - 1) ? (1 - xPos) : (ratios[i] / 100);
             screens.push({
                 "x": xPos,
                 "y": 0,

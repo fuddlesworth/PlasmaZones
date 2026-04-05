@@ -2196,10 +2196,6 @@ void PlasmaZonesEffect::onVirtualScreensChanged(const QString& physicalScreenId)
     qCInfo(lcEffect) << "Virtual screens changed for" << physicalScreenId;
     m_screenIdCache.clear();
     m_lastEffectiveScreenId.clear();
-    // Ensure VS ready gate stays open for signal-driven updates. The fetch
-    // uses generation=0 so it won't participate in the startup countdown,
-    // but a racing fetchAllVirtualScreenConfigs may have set ready to false.
-    m_virtualScreensReady = true;
     fetchVirtualScreenConfig(physicalScreenId); // generation=0, won't participate in startup gate
 }
 

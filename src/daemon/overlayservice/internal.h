@@ -179,7 +179,7 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
     // with the new (incompatible) config. Without this, switching from a multipass
     // shader tears down buffer FBOs while the old shader still references them,
     // which can crash NVIDIA's EGL driver in beginFrame().
-    writeQmlProperty(window, QStringLiteral("shaderSource"), QString());
+    writeQmlProperty(window, QStringLiteral("shaderSource"), QUrl());
 
     // Set all auxiliary props BEFORE shaderSource — see shader.cpp comment
     writeQmlProperty(window, QStringLiteral("bufferShaderPath"),

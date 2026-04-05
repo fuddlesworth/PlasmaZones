@@ -148,26 +148,9 @@ AutotileConfig AutotileConfig::fromJson(const QJsonObject& json)
         config.masterCount = json[MasterCount].toInt(config.masterCount);
         config.masterCount = std::clamp(config.masterCount, MinMasterCount, MaxMasterCount);
     }
-    // Try new camelCase key first, fall back to legacy PascalCase for backwards compat
-    const QLatin1String legacyPerAlgoKey("PerAlgorithmSettings");
-    const bool hasNewKey = json.contains(PerAlgorithmSettings);
-    const bool hasLegacyKey = !hasNewKey && json.contains(legacyPerAlgoKey);
-    if (hasNewKey || hasLegacyKey) {
-        const QLatin1String& activeKey = hasNewKey ? PerAlgorithmSettings : legacyPerAlgoKey;
-        const QJsonObject perAlgo = json[activeKey].toObject();
+    if (json.contains(PerAlgorithmSettings)) {
+        const QJsonObject perAlgo = json[PerAlgorithmSettings].toObject();
         config.savedAlgorithmSettings = perAlgoFromVariantMap(perAlgo.toVariantMap());
-    } else {
-        // Backwards compat: migrate centered-master fields
-        if (json.contains(CenteredMasterSplitRatio) || json.contains(CenteredMasterMasterCount)) {
-            qreal cmRatio = json[CenteredMasterSplitRatio].toDouble(0.5);
-            int cmCount = json[CenteredMasterMasterCount].toInt(1);
-            cmRatio = std::clamp(cmRatio, MinSplitRatio, MaxSplitRatio);
-            cmCount = std::clamp(cmCount, MinMasterCount, MaxMasterCount);
-            AlgorithmSettings cmSettings;
-            cmSettings.splitRatio = cmRatio;
-            cmSettings.masterCount = cmCount;
-            config.savedAlgorithmSettings[QLatin1String("centered-master")] = cmSettings;
-        }
     }
     if (json.contains(InnerGap)) {
         config.innerGap = json[InnerGap].toInt(config.innerGap);

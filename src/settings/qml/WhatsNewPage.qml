@@ -138,7 +138,7 @@ Kirigami.Dialog {
 
             Behavior on border.color {
                 ColorAnimation {
-                    duration: 200
+                    duration: Kirigami.Units.shortDuration
                     easing.type: Easing.OutCubic
                 }
 
@@ -149,7 +149,7 @@ Kirigami.Dialog {
 
                 Behavior on y {
                     NumberAnimation {
-                        duration: 200
+                        duration: Kirigami.Units.shortDuration
                         easing.type: Easing.OutCubic
                     }
 

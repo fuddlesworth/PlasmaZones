@@ -162,6 +162,10 @@ ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
     m_customParams2 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
     m_customParams3 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
     m_customParams4 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    m_customParams5 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    m_customParams6 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    m_customParams7 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    m_customParams8 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
 
     // 1×1 transparent fallback for when labels are disabled
     m_transparentFallbackImage = QImage(1, 1, QImage::Format_RGBA8888);

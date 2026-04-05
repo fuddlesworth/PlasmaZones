@@ -784,17 +784,8 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStrin
 
 void AutotileEngine::clearSavedFloatingForWindows(const QStringList& windowIds)
 {
-    for (auto it = m_savedFloatingWindows.begin(); it != m_savedFloatingWindows.end();) {
-        for (const QString& id : windowIds) {
-            if (it.value().remove(id)) {
-                qCDebug(lcAutotile) << "Cleared stale saved-floating state for zone-snapped window" << id;
-            }
-        }
-        if (it.value().isEmpty()) {
-            it = m_savedFloatingWindows.erase(it);
-        } else {
-            ++it;
-        }
+    for (const QString& id : windowIds) {
+        removeSavedFloatingEntry(id);
     }
 }
 
@@ -810,9 +801,21 @@ void AutotileEngine::clearAllSavedFloating()
     }
 }
 
+void AutotileEngine::removeSavedFloatingEntry(const QString& windowId)
+{
+    for (auto it = m_savedFloatingWindows.begin(); it != m_savedFloatingWindows.end();) {
+        it.value().remove(windowId);
+        if (it.value().isEmpty()) {
+            it = m_savedFloatingWindows.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 QStringList AutotileEngine::tiledWindowOrder(const QString& screenId) const
 {
-    const TilingStateKey key{screenId, m_currentDesktop, m_currentActivity};
+    const TilingStateKey key = currentKeyForScreen(screenId);
     TilingState* state = m_screenStates.value(key);
     if (!state) {
         return {};

@@ -786,6 +786,7 @@ private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
     void removeWindow(const QString& windowId);
+    void removeSavedFloatingEntry(const QString& windowId);
     bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
     void recalculateLayout(const QString& screenId);
     void applyTiling(const QString& screenId);

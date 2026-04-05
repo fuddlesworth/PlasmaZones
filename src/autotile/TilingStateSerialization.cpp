@@ -91,16 +91,7 @@ TilingState* TilingState::fromJson(const QJsonObject& json, QObject* parent)
     // Algorithms clamp operationally when they calculate zones.
     state->m_masterCount = clampMasterCount(json[MasterCount].toInt(ConfigDefaults::autotileMasterCount()));
 
-    // Split ratio with clamping and sanity check for obviously corrupted values
-    // (e.g., values near 1.0 that indicate state corruption rather than user intent).
-    // Only apply the reset to values WITHIN the valid range but suspiciously close to max,
-    // not to completely out-of-range values (those get clamped normally per the test).
     qreal loadedRatio = json[SplitRatio].toDouble(ConfigDefaults::autotileSplitRatio());
-    const bool withinRange = (loadedRatio >= MinSplitRatio && loadedRatio <= MaxSplitRatio);
-    if (withinRange && loadedRatio > MaxSplitRatio - 0.05) {
-        qCDebug(lcAutotile) << "SplitRatio suspiciously high, resetting to default:" << loadedRatio;
-        loadedRatio = ConfigDefaults::autotileSplitRatio();
-    }
     state->m_splitRatio = clampSplitRatio(loadedRatio);
 
     if (json.contains(AutotileJsonKeys::SplitTreeKey)) {

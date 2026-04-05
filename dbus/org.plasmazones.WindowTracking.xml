@@ -184,12 +184,6 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Floating window IDs."/>
             </arg>
         </method>
-        <method name="notifyDragOutUnsnap">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify that a snapped window was dragged without activation trigger. If tracked as snapped, handles unsnap: saves zone for restore, marks floating, clears zone assignment."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
-            </arg>
-        </method>
         <method name="windowUnsnappedForFloat">
             <annotation name="org.gtk.GDBus.DocString" value="Unsnap for float toggle; saves zone for later restore."/>
             <arg name="windowId" type="s" direction="in">

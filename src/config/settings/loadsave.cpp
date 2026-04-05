@@ -512,6 +512,18 @@ void Settings::loadAutotilingConfig(IConfigBackend* backend)
 
 void Settings::loadEditorConfig(IConfigGroup& editor)
 {
+    const auto oldDupShortcut = m_editorDuplicateShortcut;
+    const auto oldSplitH = m_editorSplitHorizontalShortcut;
+    const auto oldSplitV = m_editorSplitVerticalShortcut;
+    const auto oldFill = m_editorFillShortcut;
+    const bool oldGridSnap = m_editorGridSnappingEnabled;
+    const bool oldEdgeSnap = m_editorEdgeSnappingEnabled;
+    const double oldSnapX = m_editorSnapIntervalX;
+    const double oldSnapY = m_editorSnapIntervalY;
+    const int oldSnapMod = m_editorSnapOverrideModifier;
+    const bool oldFillOnDrop = m_fillOnDropEnabled;
+    const int oldFillOnDropMod = m_fillOnDropModifier;
+
     m_editorDuplicateShortcut =
         editor.readString(ConfigDefaults::editorDuplicateShortcutKey(), ConfigDefaults::editorDuplicateShortcut());
     m_editorSplitHorizontalShortcut = editor.readString(ConfigDefaults::editorSplitHorizontalShortcutKey(),
@@ -541,17 +553,28 @@ void Settings::loadEditorConfig(IConfigGroup& editor)
     m_fillOnDropModifier =
         editor.readInt(ConfigDefaults::fillOnDropModifierKey(), ConfigDefaults::fillOnDropModifier());
 
-    Q_EMIT editorDuplicateShortcutChanged();
-    Q_EMIT editorSplitHorizontalShortcutChanged();
-    Q_EMIT editorSplitVerticalShortcutChanged();
-    Q_EMIT editorFillShortcutChanged();
-    Q_EMIT editorGridSnappingEnabledChanged();
-    Q_EMIT editorEdgeSnappingEnabledChanged();
-    Q_EMIT editorSnapIntervalXChanged();
-    Q_EMIT editorSnapIntervalYChanged();
-    Q_EMIT editorSnapOverrideModifierChanged();
-    Q_EMIT fillOnDropEnabledChanged();
-    Q_EMIT fillOnDropModifierChanged();
+    if (m_editorDuplicateShortcut != oldDupShortcut)
+        Q_EMIT editorDuplicateShortcutChanged();
+    if (m_editorSplitHorizontalShortcut != oldSplitH)
+        Q_EMIT editorSplitHorizontalShortcutChanged();
+    if (m_editorSplitVerticalShortcut != oldSplitV)
+        Q_EMIT editorSplitVerticalShortcutChanged();
+    if (m_editorFillShortcut != oldFill)
+        Q_EMIT editorFillShortcutChanged();
+    if (m_editorGridSnappingEnabled != oldGridSnap)
+        Q_EMIT editorGridSnappingEnabledChanged();
+    if (m_editorEdgeSnappingEnabled != oldEdgeSnap)
+        Q_EMIT editorEdgeSnappingEnabledChanged();
+    if (m_editorSnapIntervalX != oldSnapX)
+        Q_EMIT editorSnapIntervalXChanged();
+    if (m_editorSnapIntervalY != oldSnapY)
+        Q_EMIT editorSnapIntervalYChanged();
+    if (m_editorSnapOverrideModifier != oldSnapMod)
+        Q_EMIT editorSnapOverrideModifierChanged();
+    if (m_fillOnDropEnabled != oldFillOnDrop)
+        Q_EMIT fillOnDropEnabledChanged();
+    if (m_fillOnDropModifier != oldFillOnDropMod)
+        Q_EMIT fillOnDropModifierChanged();
 }
 
 // ── save() helpers ───────────────────────────────────────────────────────────

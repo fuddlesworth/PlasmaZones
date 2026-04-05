@@ -142,14 +142,14 @@ ColumnLayout {
 
                 Behavior on color {
                     ColorAnimation {
-                        duration: 150
+                        duration: Kirigami.Units.shortDuration
                     }
 
                 }
 
                 Behavior on border.color {
                     ColorAnimation {
-                        duration: 150
+                        duration: Kirigami.Units.shortDuration
                     }
 
                 }
@@ -258,14 +258,14 @@ ColumnLayout {
 
                     Behavior on color {
                         ColorAnimation {
-                            duration: 150
+                            duration: Kirigami.Units.shortDuration
                         }
 
                     }
 
                     Behavior on border.color {
                         ColorAnimation {
-                            duration: 150
+                            duration: Kirigami.Units.shortDuration
                         }
 
                     }

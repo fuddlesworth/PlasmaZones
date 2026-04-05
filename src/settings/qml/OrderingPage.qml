@@ -221,7 +221,7 @@ Flickable {
 
                                         Behavior on opacity {
                                             NumberAnimation {
-                                                duration: 200
+                                                duration: Kirigami.Units.shortDuration
                                                 easing.type: Easing.OutCubic
                                             }
 
@@ -258,7 +258,7 @@ Flickable {
 
                                         Behavior on border.color {
                                             ColorAnimation {
-                                                duration: 200
+                                                duration: Kirigami.Units.shortDuration
                                                 easing.type: Easing.OutCubic
                                             }
 
@@ -266,7 +266,7 @@ Flickable {
 
                                         Behavior on border.width {
                                             NumberAnimation {
-                                                duration: 150
+                                                duration: Kirigami.Units.shortDuration
                                                 easing.type: Easing.OutCubic
                                             }
 
@@ -331,7 +331,7 @@ Flickable {
 
                                         Behavior on opacity {
                                             NumberAnimation {
-                                                duration: 200
+                                                duration: Kirigami.Units.shortDuration
                                                 easing.type: Easing.OutCubic
                                             }
 
@@ -353,7 +353,7 @@ Flickable {
 
                                         Behavior on opacity {
                                             NumberAnimation {
-                                                duration: 200
+                                                duration: Kirigami.Units.shortDuration
                                                 easing.type: Easing.OutCubic
                                             }
 
@@ -365,7 +365,7 @@ Flickable {
 
                                 Behavior on color {
                                     ColorAnimation {
-                                        duration: 200
+                                        duration: Kirigami.Units.shortDuration
                                         easing.type: Easing.OutCubic
                                     }
 
@@ -373,7 +373,7 @@ Flickable {
 
                                 Behavior on border.width {
                                     NumberAnimation {
-                                        duration: 150
+                                        duration: Kirigami.Units.shortDuration
                                         easing.type: Easing.OutCubic
                                     }
 
@@ -385,7 +385,7 @@ Flickable {
 
                                     Behavior on y {
                                         NumberAnimation {
-                                            duration: 200
+                                            duration: Kirigami.Units.shortDuration
                                             easing.type: Easing.OutCubic
                                         }
 
@@ -395,7 +395,7 @@ Flickable {
 
                                 Behavior on scale {
                                     NumberAnimation {
-                                        duration: 200
+                                        duration: Kirigami.Units.shortDuration
                                         easing.type: Easing.OutCubic
                                     }
 
@@ -407,7 +407,7 @@ Flickable {
                                 enabled: !dragArea.drag.active
 
                                 NumberAnimation {
-                                    duration: 300
+                                    duration: Kirigami.Units.longDuration
                                     easing.type: Easing.OutCubic
                                 }
 
