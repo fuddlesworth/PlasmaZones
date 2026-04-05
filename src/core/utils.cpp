@@ -253,8 +253,7 @@ QScreen* findScreenByIdOrName(const QString& identifier)
     // Virtual screen IDs (e.g. "LG:Model:Serial/vs:0") resolve to their
     // backing physical QScreen* — strip the "/vs:N" suffix and look up
     // the physical parent.
-    const QString physId =
-        VirtualScreenId::isVirtual(identifier) ? VirtualScreenId::extractPhysicalId(identifier) : identifier;
+    const QString physId = VirtualScreenId::extractPhysicalId(identifier);
 
     // Fast path: try connector name match first
     for (QScreen* screen : QGuiApplication::screens()) {

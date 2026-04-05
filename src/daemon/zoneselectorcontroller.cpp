@@ -440,8 +440,13 @@ void ZoneSelectorController::updateProximity()
         QScreen* cursorScreen = Utils::findScreenAtPosition(m_cursorPosition.toPoint());
         if (cursorScreen) {
             m_screen = cursorScreen;
-            // Resolve to effective (virtual) screen ID at the cursor position
-            m_screenId = Utils::effectiveScreenIdAt(m_cursorPosition.toPoint(), cursorScreen);
+            // Resolve to effective (virtual) screen ID at the cursor position.
+            // Only update screen ID if it actually changed (different screen),
+            // preserving any explicit setScreenId() call within the same screen.
+            const QString resolved = Utils::effectiveScreenIdAt(m_cursorPosition.toPoint(), cursorScreen);
+            if (resolved != m_screenId) {
+                m_screenId = resolved;
+            }
         }
     }
 

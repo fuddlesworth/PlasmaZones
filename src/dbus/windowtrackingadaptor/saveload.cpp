@@ -4,6 +4,7 @@
 #include "../windowtrackingadaptor.h"
 #include "internal.h"
 #include "../../core/interfaces.h"
+#include "../../core/virtualscreen.h"
 #include "../../core/layoutmanager.h"
 #include "../../core/layout.h"
 #include "../../core/logging.h"
@@ -65,7 +66,9 @@ void WindowTrackingAdaptor::saveState()
         QJsonObject entry;
         entry[QLatin1String("windowId")] = it.key();
         entry[QLatin1String("zoneIds")] = toJsonArray(it.value());
-        entry[QLatin1String("screen")] = Utils::screenIdForName(m_service->screenAssignments().value(it.key()));
+        const QString assignedScreen = m_service->screenAssignments().value(it.key());
+        entry[QLatin1String("screen")] =
+            VirtualScreenId::isVirtual(assignedScreen) ? assignedScreen : Utils::screenIdForName(assignedScreen);
         entry[QLatin1String("desktop")] = m_service->desktopAssignments().value(it.key(), 0);
         fullAssignments.append(entry);
     }
@@ -82,7 +85,9 @@ void WindowTrackingAdaptor::saveState()
             QJsonObject entryObj;
             entryObj[QLatin1String("zoneIds")] = toJsonArray(entry.zoneIds);
             if (!entry.screenId.isEmpty()) {
-                entryObj[QLatin1String("screen")] = Utils::screenIdForName(entry.screenId);
+                entryObj[QLatin1String("screen")] = VirtualScreenId::isVirtual(entry.screenId)
+                    ? entry.screenId
+                    : Utils::screenIdForName(entry.screenId);
             }
             if (entry.virtualDesktop > 0) {
                 entryObj[QLatin1String("desktop")] = entry.virtualDesktop;
@@ -140,7 +145,8 @@ void WindowTrackingAdaptor::saveState()
     for (auto it = m_service->preFloatScreenAssignments().constBegin();
          it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
         QString key = Utils::extractAppId(it.key());
-        preFloatScreensObj[key] = Utils::screenIdForName(it.value());
+        preFloatScreensObj[key] =
+            VirtualScreenId::isVirtual(it.value()) ? it.value() : Utils::screenIdForName(it.value());
     }
     tracking->writeString(ConfigKeys::preFloatScreenAssignmentsKey(),
                           QString::fromUtf8(QJsonDocument(preFloatScreensObj).toJson(QJsonDocument::Compact)));
@@ -458,10 +464,13 @@ void WindowTrackingAdaptor::loadState()
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
                 if (it.value().isString()) {
                     QString storedScreen = it.value().toString();
-                    if (!Utils::isConnectorName(storedScreen)) {
-                        QString connectorName = Utils::screenNameForId(storedScreen);
-                        if (!connectorName.isEmpty()) {
-                            storedScreen = connectorName;
+                    // Virtual screen IDs are stored as-is — no connector/ID translation
+                    if (!VirtualScreenId::isVirtual(storedScreen)) {
+                        if (!Utils::isConnectorName(storedScreen)) {
+                            QString connectorName = Utils::screenNameForId(storedScreen);
+                            if (!connectorName.isEmpty()) {
+                                storedScreen = connectorName;
+                            }
                         }
                     }
                     preFloatScreens[it.key()] = storedScreen;

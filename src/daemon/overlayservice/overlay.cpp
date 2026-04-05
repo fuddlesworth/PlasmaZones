@@ -472,20 +472,31 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
 
 void OverlayService::dismissOverlayWindow(QScreen* screen)
 {
-    const QString screenId = Utils::screenIdentifier(screen);
-    auto* window = m_overlayWindows.value(screenId);
-    if (!window) {
-        return;
+    const QString physId = Utils::screenIdentifier(screen);
+
+    // Collect matching overlay keys — may be virtual screen IDs for this physical screen
+    QStringList matchingKeys;
+    for (auto it = m_overlayWindows.constBegin(); it != m_overlayWindows.constEnd(); ++it) {
+        if (VirtualScreenId::extractPhysicalId(it.key()) == physId) {
+            matchingKeys.append(it.key());
+        }
     }
-    // Shader overlays: must destroy — QSGRenderNode Vulkan pipelines are tied
-    // to the per-window QRhi which gets invalidated when hide() tears down the
-    // wl_surface and show() creates a new one.
-    // Non-shader overlays: hide() is safe — standard QML items recover from
-    // scene graph pause/resume, avoiding Vulkan surface create/destroy churn.
-    if (window->property("isShaderOverlay").toBool()) {
-        destroyOverlayWindow(screenId);
-    } else {
-        window->hide();
+
+    for (const QString& screenId : matchingKeys) {
+        auto* window = m_overlayWindows.value(screenId);
+        if (!window) {
+            continue;
+        }
+        // Shader overlays: must destroy — QSGRenderNode Vulkan pipelines are tied
+        // to the per-window QRhi which gets invalidated when hide() tears down the
+        // wl_surface and show() creates a new one.
+        // Non-shader overlays: hide() is safe — standard QML items recover from
+        // scene graph pause/resume, avoiding Vulkan surface create/destroy churn.
+        if (window->property("isShaderOverlay").toBool()) {
+            destroyOverlayWindow(screenId);
+        } else {
+            window->hide();
+        }
     }
 }
 

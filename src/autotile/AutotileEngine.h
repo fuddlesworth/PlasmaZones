@@ -793,6 +793,11 @@ private:
     QString screenForWindow(const QString& windowId) const;
     QRect screenGeometry(const QString& screenId) const;
 
+    /// Check if a screen ID refers to a known (connected) screen.
+    /// Virtual screen IDs are validated via ScreenManager geometry;
+    /// physical IDs via QScreen lookup.
+    bool isKnownScreen(const QString& screenId) const;
+
     /**
      * @brief Construct a TilingStateKey for the current desktop/activity
      *

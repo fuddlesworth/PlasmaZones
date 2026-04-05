@@ -122,10 +122,43 @@ void AutotileEngine::connectSignals()
             }
         });
 
-        // Virtual screen reconfiguration — retile all affected virtual screens
+        // Virtual screen reconfiguration — retile new virtual screens and
+        // clean up orphaned TilingState entries for virtual screens that no longer exist.
         connect(m_screenManager, &ScreenManager::virtualScreensChanged, this, [this](const QString& physicalScreenId) {
-            const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
-            for (const QString& vsId : vsIds) {
+            const QStringList newVsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
+            const QSet<QString> newVsSet(newVsIds.begin(), newVsIds.end());
+
+            // Find and release orphaned virtual screen states for this physical screen
+            QStringList releasedWindows;
+            QMutableHashIterator<TilingStateKey, TilingState*> it(m_screenStates);
+            while (it.hasNext()) {
+                it.next();
+                const QString& sid = it.key().screenId;
+                if (!VirtualScreenId::isVirtual(sid)) {
+                    continue;
+                }
+                if (VirtualScreenId::extractPhysicalId(sid) != physicalScreenId) {
+                    continue;
+                }
+                if (newVsSet.contains(sid)) {
+                    continue;
+                }
+                // This virtual screen no longer exists — release its windows
+                releasedWindows.append(it.value()->tiledWindows());
+                releasedWindows.append(it.value()->floatingWindows());
+                m_pendingInitialOrders.remove(sid);
+                it.value()->deleteLater();
+                it.remove();
+            }
+            for (const QString& windowId : std::as_const(releasedWindows)) {
+                m_windowToStateKey.remove(windowId);
+            }
+            if (!releasedWindows.isEmpty()) {
+                Q_EMIT windowsReleasedFromTiling(releasedWindows);
+            }
+
+            // Retile the new virtual screens
+            for (const QString& vsId : newVsIds) {
                 onScreenGeometryChanged(vsId);
             }
         });
@@ -586,19 +619,9 @@ TilingState* AutotileEngine::stateForScreen(const QString& screenId)
 
     // Reject unknown screens to prevent unbounded state creation from bogus
     // D-Bus callers. Session bus only (same user), but still good hygiene.
-    // Virtual screen IDs (e.g. "Dell:U2722D:115107/vs:0") have no QScreen
-    // object — validate them via ScreenManager geometry instead.
-    if (m_screenManager) {
-        bool found = false;
-        if (VirtualScreenId::isVirtual(screenId)) {
-            found = m_screenManager->screenGeometry(screenId).isValid();
-        } else {
-            found = Utils::findScreenByIdOrName(screenId) != nullptr;
-        }
-        if (!found) {
-            qCWarning(lcAutotile) << "AutotileEngine::stateForScreen: unknown screen" << screenId;
-            return nullptr;
-        }
+    if (!isKnownScreen(screenId)) {
+        qCWarning(lcAutotile) << "AutotileEngine::stateForScreen: unknown screen" << screenId;
+        return nullptr;
     }
 
     // Create new state for this screen+desktop+activity with parent ownership
@@ -624,18 +647,9 @@ TilingState* AutotileEngine::stateForKey(const TilingStateKey& key)
     }
 
     // Reject unknown screens (same validation as stateForScreen)
-    // Virtual screen IDs have no QScreen — validate via ScreenManager geometry.
-    if (m_screenManager) {
-        bool found = false;
-        if (VirtualScreenId::isVirtual(key.screenId)) {
-            found = m_screenManager->screenGeometry(key.screenId).isValid();
-        } else {
-            found = Utils::findScreenByIdOrName(key.screenId) != nullptr;
-        }
-        if (!found) {
-            qCWarning(lcAutotile) << "AutotileEngine::stateForKey: unknown screen" << key.screenId;
-            return nullptr;
-        }
+    if (!isKnownScreen(key.screenId)) {
+        qCWarning(lcAutotile) << "AutotileEngine::stateForKey: unknown screen" << key.screenId;
+        return nullptr;
     }
 
     auto* state = new TilingState(key.screenId, this);
@@ -1744,6 +1758,14 @@ void AutotileEngine::recalculateLayout(const QString& screenId)
             const QRect geom = qscreen->geometry();
             screenInfo.portrait = geom.height() > geom.width();
             screenInfo.aspectRatio = Utils::screenAspectRatio(qscreen);
+        } else if (m_screenManager) {
+            // Virtual screen IDs have no QScreen — use ScreenManager geometry
+            const QRect geom = m_screenManager->screenGeometry(screenId);
+            if (geom.isValid()) {
+                screenInfo.portrait = geom.height() > geom.width();
+                screenInfo.aspectRatio =
+                    (geom.width() > 0 && geom.height() > 0) ? static_cast<double>(geom.width()) / geom.height() : 0.0;
+            }
         }
     }
 
@@ -1957,7 +1979,11 @@ QString AutotileEngine::screenForWindow(const QString& windowId) const
     if (m_screenManager && m_screenManager->primaryScreen()) {
         qCWarning(lcAutotile) << "screenForWindow: window" << windowId
                               << "not in m_windowToStateKey, falling back to primary screen";
-        return Utils::screenIdentifier(m_screenManager->primaryScreen());
+        // If the primary monitor is subdivided into virtual screens, return
+        // the first virtual screen ID instead of the physical ID.
+        const QString physId = Utils::screenIdentifier(m_screenManager->primaryScreen());
+        const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
+        return vsIds.isEmpty() ? physId : vsIds.first();
     }
 
     qCWarning(lcAutotile) << "screenForWindow: no screen found for window" << windowId;
@@ -1982,6 +2008,18 @@ QRect AutotileEngine::screenGeometry(const QString& screenId) const
     }
 
     return ScreenManager::actualAvailableGeometry(screen);
+}
+
+bool AutotileEngine::isKnownScreen(const QString& screenId) const
+{
+    if (!m_screenManager) {
+        // Without ScreenManager, skip validation (test environments)
+        return true;
+    }
+    if (VirtualScreenId::isVirtual(screenId)) {
+        return m_screenManager->screenGeometry(screenId).isValid();
+    }
+    return Utils::findScreenByIdOrName(screenId) != nullptr;
 }
 
 void AutotileEngine::resetMaxWindowsForAlgorithmSwitch(TilingAlgorithm* oldAlgo, TilingAlgorithm* newAlgo)

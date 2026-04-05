@@ -53,15 +53,15 @@ Rectangle {
             required property var modelData
             required property int index
 
-            x: modelData.x * previewRoot.width + 1
-            y: modelData.y * previewRoot.height + 1
-            width: modelData.width * previewRoot.width - 2
-            height: modelData.height * previewRoot.height - 2
+            x: modelData.x * previewRoot.width + previewRoot.border.width
+            y: modelData.y * previewRoot.height + previewRoot.border.width
+            width: modelData.width * previewRoot.width - (previewRoot.border.width * 2)
+            height: modelData.height * previewRoot.height - (previewRoot.border.width * 2)
             Accessible.name: modelData.displayName || i18n("Screen %1", index + 1)
             Accessible.role: Accessible.Pane
             color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
             border.color: Kirigami.Theme.highlightColor
-            border.width: 2
+            border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio * 2))
             radius: Kirigami.Units.smallSpacing / 2
 
             ColumnLayout {

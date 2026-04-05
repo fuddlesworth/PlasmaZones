@@ -436,8 +436,8 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     // The primary source is now cursorScreenChanged (from KWin effect's mouseChanged).
     // Prefer the daemon-tracked screen assignment (set at snap time) over what the
     // effect reports, since the effect may send a physical ID before VS configs load.
+    QString resolvedScreen = screenId;
     if (!screenId.isEmpty()) {
-        QString resolvedScreen = screenId;
         if (!VirtualScreenId::isVirtual(screenId) && m_service) {
             const QString trackedScreen = m_service->screenAssignments().value(windowId);
             if (VirtualScreenId::isVirtual(trackedScreen)
@@ -457,7 +457,7 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
         && !m_service->isAutoSnapped(windowId)) {
         QString windowClass = Utils::extractWindowClass(windowId);
         int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-        m_service->updateLastUsedZone(zoneId, screenId, windowClass, currentDesktop);
+        m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktop);
     }
 }
 

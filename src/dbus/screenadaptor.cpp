@@ -235,14 +235,30 @@ QString ScreenAdaptor::getPrimaryScreen()
     // Prefer KWin-sourced override (from Workspace::outputOrder) over Qt's
     // QGuiApplication::primaryScreen(), which may diverge from KDE Display
     // Settings on some Wayland configurations.
+    QString physId;
     if (!m_primaryScreenOverride.isEmpty()) {
         QScreen* overrideScreen = Utils::findScreenByName(m_primaryScreenOverride);
         if (overrideScreen) {
-            return Utils::screenIdentifier(overrideScreen);
+            physId = Utils::screenIdentifier(overrideScreen);
         }
     }
-    auto* primary = Utils::primaryScreen();
-    return primary ? Utils::screenIdentifier(primary) : QString();
+    if (physId.isEmpty()) {
+        auto* primary = Utils::primaryScreen();
+        if (!primary) {
+            return QString();
+        }
+        physId = Utils::screenIdentifier(primary);
+    }
+    // If the primary monitor is subdivided into virtual screens, return the
+    // first effective (virtual) screen ID so callers can use it for layout lookups.
+    auto* mgr = ScreenManager::instance();
+    if (mgr && mgr->hasVirtualScreens(physId)) {
+        const QStringList vsIds = mgr->virtualScreenIdsFor(physId);
+        if (!vsIds.isEmpty()) {
+            return vsIds.first();
+        }
+    }
+    return physId;
 }
 
 void ScreenAdaptor::setPrimaryScreenFromKWin(const QString& connectorName)

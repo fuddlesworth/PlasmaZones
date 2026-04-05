@@ -465,6 +465,8 @@ void OverlayService::hideNavigationOsd()
     if (senderWindow) {
         for (auto it = m_navigationOsdWindows.constBegin(); it != m_navigationOsdWindows.constEnd(); ++it) {
             if (it.value() == senderWindow) {
+                m_lastNavigationActionKey.clear();
+                m_lastNavigationScreenId.clear();
                 destroyNavigationOsdWindow(it.key());
                 return;
             }

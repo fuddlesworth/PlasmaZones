@@ -262,7 +262,7 @@ QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
 
 QScreen* ScreenManager::physicalQScreenFor(const QString& screenId) const
 {
-    QString physId = VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId;
+    QString physId = VirtualScreenId::extractPhysicalId(screenId);
 
     return Utils::findScreenByIdOrName(physId);
 }
@@ -360,7 +360,9 @@ QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const 
 QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
 {
     for (auto* screen : m_trackedScreens) {
-        if (!containsExclusive(screen->geometry(), globalPos)) {
+        // Use inclusive containment for physical screens (matches Qt's QRect semantics).
+        // Virtual screen sub-containment uses containsExclusive to avoid boundary ambiguity.
+        if (!screen->geometry().contains(globalPos)) {
             continue;
         }
 

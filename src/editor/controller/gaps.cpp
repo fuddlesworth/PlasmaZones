@@ -12,6 +12,7 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include "shared/virtualscreenid.h"
 
 #include "pz_i18n.h"
 #include <QGuiApplication>
@@ -393,8 +394,13 @@ QSize EditorController::targetScreenSize() const
     // Editor runs as a separate process where ScreenManager is unavailable,
     // so iterate QGuiApplication::screens() directly.
     if (!m_targetScreen.isEmpty()) {
+        // For virtual screen IDs, resolve to the physical QScreen.
+        // The editor covers the full physical monitor; virtual screen geometry
+        // is proportional, so the physical geometry is the correct reference.
+        const QString physId = VirtualScreenId::extractPhysicalId(m_targetScreen);
         for (QScreen* screen : QGuiApplication::screens()) {
-            if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
+            if (Utils::screenIdentifier(screen) == physId || screen->name() == physId
+                || Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
                 return screen->geometry().size();
             }
         }
