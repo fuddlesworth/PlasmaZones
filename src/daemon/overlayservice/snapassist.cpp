@@ -8,6 +8,7 @@
 #include "../../core/layoututils.h"
 #include "../../core/utils.h"
 #include "../../core/screenmanager.h"
+#include "../../core/virtualscreen.h"
 #include "../windowthumbnailservice.h"
 #include <QQuickWindow>
 #include <QScreen>
@@ -91,10 +92,21 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     m_snapAssistScreen = screen;
     m_snapAssistScreenId = screenId;
 
-    // Hide the zone selector for this specific virtual screen to avoid overlap.
-    // Only hide the selector keyed by screenId, not all selectors on the physical monitor.
-    if (auto* selectorWindow = m_zoneSelectorWindows.value(screenId)) {
-        selectorWindow->hide();
+    // Hide zone selectors for ALL virtual screens on the same physical monitor,
+    // since the snap assist window covers the entire physical screen area.
+    const QString physId =
+        VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId;
+    auto* mgr = ScreenManager::instance();
+    if (mgr && mgr->hasVirtualScreens(physId)) {
+        for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
+            if (auto* selectorWindow = m_screenStates.value(vsId).zoneSelectorWindow) {
+                selectorWindow->hide();
+            }
+        }
+    } else {
+        if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
+            selectorWindow->hide();
+        }
     }
 
     // Start async thumbnail capture via KWin ScreenShot2. Overlay shows icons immediately.
@@ -249,10 +261,22 @@ void OverlayService::hideSnapAssist()
     if (wasVisible) {
         Q_EMIT snapAssistDismissed();
     }
-    // Re-show the zone selector that was hidden when snap assist was shown (line 62-64)
+    // Re-show zone selectors for ALL virtual screens on the same physical monitor
+    // (symmetric with the hide in showSnapAssist).
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
-        if (auto* selectorWindow = m_zoneSelectorWindows.value(screenId)) {
-            selectorWindow->show();
+        const QString physId =
+            VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId;
+        auto* mgr = ScreenManager::instance();
+        if (mgr && mgr->hasVirtualScreens(physId)) {
+            for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
+                if (auto* selectorWindow = m_screenStates.value(vsId).zoneSelectorWindow) {
+                    selectorWindow->show();
+                }
+            }
+        } else {
+            if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
+                selectorWindow->show();
+            }
         }
     }
 }
@@ -377,7 +401,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
     // Hide the zone selector for this specific virtual screen to avoid overlap.
     // Only hide the selector keyed by resolvedId, not all selectors on the physical monitor.
-    if (auto* selectorWindow = m_zoneSelectorWindows.value(resolvedId)) {
+    if (auto* selectorWindow = m_screenStates.value(resolvedId).zoneSelectorWindow) {
         selectorWindow->hide();
     }
 
@@ -461,7 +485,7 @@ void OverlayService::hideLayoutPicker()
     destroyLayoutPickerWindow();
     // Re-show the zone selector that was hidden when layout picker was shown (line 322-324)
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
-        if (auto* selectorWindow = m_zoneSelectorWindows.value(screenId)) {
+        if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
             selectorWindow->show();
         }
     }

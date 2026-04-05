@@ -64,7 +64,7 @@ void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QV
 QVariantList OverlayService::buildZonesList(QScreen* screen) const
 {
     // WARNING: One physical QScreen can back multiple virtual screens.
-    // This overload picks the FIRST matching virtual screen ID from m_overlayPhysScreens,
+    // This overload picks the FIRST matching virtual screen ID from m_screenStates,
     // which is non-deterministic for QHash iteration. It should only be called in
     // single-overlay-per-physical-screen contexts (no virtual screens configured).
     // Callers with virtual screen context should use buildZonesList(screenId, physScreen) directly.
@@ -101,7 +101,9 @@ QVariantList OverlayService::buildZonesList(const QString& screenId, QScreen* ph
         return zonesList;
     }
 
-    const QRect overlayGeom = m_overlayGeometries.value(screenId, physScreen->geometry());
+    const QRect overlayGeom = (m_screenStates.contains(screenId) && m_screenStates[screenId].overlayGeometry.isValid()
+                                   ? m_screenStates[screenId].overlayGeometry
+                                   : physScreen->geometry());
     qCDebug(lcOverlay) << "buildZonesList: screenId=" << screenId << "overlayGeom=" << overlayGeom
                        << "layout=" << screenLayout->name() << "zones=" << screenLayout->zones().size();
 
@@ -129,7 +131,9 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
 
     const QPoint screenCenter = screen->geometry().center();
     QString screenId = Utils::effectiveScreenIdAt(screenCenter, screen);
-    QRect overlayGeom = m_overlayGeometries.value(screenId, screen->geometry());
+    QRect overlayGeom = (m_screenStates.contains(screenId) && m_screenStates[screenId].overlayGeometry.isValid()
+                             ? m_screenStates[screenId].overlayGeometry
+                             : screen->geometry());
     return zoneToVariantMap(zone, screenId, screen, overlayGeom, layout);
 }
 
@@ -248,15 +252,15 @@ void OverlayService::updateZonesForAllWindows()
 {
     m_zoneDataDirty = false;
 
-    for (auto it = m_overlayWindows.begin(); it != m_overlayWindows.end(); ++it) {
+    for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
         const QString& screenId = it.key();
-        QQuickWindow* window = it.value();
+        QQuickWindow* window = it.value().overlayWindow;
 
         if (!window) {
             continue;
         }
 
-        QScreen* physScreen = m_overlayPhysScreens.value(screenId);
+        QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;
         QVariantList zones = buildZonesList(screenId, physScreen);
         QVariantList patched = patchZonesWithHighlight(zones, window);
 
@@ -278,7 +282,8 @@ void OverlayService::updateZonesForAllWindows()
     }
 
     ++m_zoneDataVersion;
-    for (auto* w : std::as_const(m_overlayWindows)) {
+    for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+        auto* w = it_.value().overlayWindow;
         if (w) {
             writeQmlProperty(w, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
         }

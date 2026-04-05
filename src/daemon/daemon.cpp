@@ -451,7 +451,7 @@ void Daemon::stop()
 
     // Stop pending timers to prevent callbacks during shutdown
     m_geometryUpdateTimer.stop();
-    m_pendingGeometryUpdates.clear();
+    m_geometryUpdatePending = false;
 
     // Disconnect scripted algorithm loader to prevent file watcher events during teardown
     if (m_scriptedAlgorithmLoader) {

@@ -417,15 +417,6 @@ QStringList ScreenAdaptor::getPhysicalScreens()
     return result;
 }
 
-QStringList ScreenAdaptor::getEffectiveScreens()
-{
-    auto* mgr = ScreenManager::instance();
-    if (!mgr) {
-        return {};
-    }
-    return mgr->effectiveScreenIds();
-}
-
 QString ScreenAdaptor::getEffectiveScreenAt(int x, int y)
 {
     auto* mgr = ScreenManager::instance();

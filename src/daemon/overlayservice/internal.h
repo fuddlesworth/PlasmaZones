@@ -296,25 +296,11 @@ inline QQuickItem* findQmlItemByName(QQuickItem* item, const QString& objectName
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Common window destroy pattern shared across overlay, selector, OSD, shader TUs
+// Window destroy helpers (per-screen state struct fields)
 // ═══════════════════════════════════════════════════════════════════════════════
-
-/// Destroy a managed window: take from windowMap, disconnect physScreen signals,
-/// close, deleteLater, remove from physScreenMap. Safe to call when screenId is
-/// not present in the maps (no-op).
-inline void destroyManagedWindow(QHash<QString, QQuickWindow*>& windowMap, QHash<QString, QScreen*>& physScreenMap,
-                                 const QString& screenId)
-{
-    if (auto* window = windowMap.take(screenId)) {
-        if (auto* physScreen = physScreenMap.value(screenId)) {
-            QObject::disconnect(physScreen, nullptr, window, nullptr);
-        }
-        window->close();
-        window->destroy();
-        window->deleteLater();
-    }
-    physScreenMap.remove(screenId);
-}
+// Individual destroy functions are implemented inline in each TU
+// (destroyOverlayWindow, destroyZoneSelectorWindow, etc.) operating on
+// m_screenStates[screenId] fields directly.
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shared color/opacity settings push for snap assist and layout picker

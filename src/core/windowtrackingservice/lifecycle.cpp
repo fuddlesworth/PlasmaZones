@@ -88,8 +88,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     m_resnapBuffer.erase(std::remove_if(m_resnapBuffer.begin(), m_resnapBuffer.end(),
                                         [&](const ResnapEntry& e) {
                                             return e.screenId == physicalScreenId
-                                                || e.screenId.startsWith(physicalScreenId
-                                                                         + VirtualScreenId::separator());
+                                                || e.screenId.startsWith(physicalScreenId + VirtualScreenId::Separator);
                                         }),
                          m_resnapBuffer.end());
 
@@ -173,7 +172,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     bool anyStateMigrated = false;
     // Match both the physical screen ID and any existing virtual screen IDs on it,
     // so re-configuration (VS config changed) re-migrates windows from old virtual IDs to new ones.
-    const QString prefix = physicalScreenId + VirtualScreenId::separator();
+    const QString prefix = physicalScreenId + VirtualScreenId::Separator;
     for (auto it = m_windowScreenAssignments.begin(); it != m_windowScreenAssignments.end(); ++it) {
         if (it.value() != physicalScreenId && !it.value().startsWith(prefix)) {
             continue;
@@ -278,7 +277,7 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
 {
     // Only clear resnap entries for this physical screen — preserve entries for
     // other screens so concurrent layout + VS config changes don't lose resnap data.
-    const QString prefix = physicalScreenId + VirtualScreenId::separator();
+    const QString prefix = physicalScreenId + VirtualScreenId::Separator;
     m_resnapBuffer.erase(std::remove_if(m_resnapBuffer.begin(), m_resnapBuffer.end(),
                                         [&](const ResnapEntry& e) {
                                             return e.screenId == physicalScreenId || e.screenId.startsWith(prefix);

@@ -108,7 +108,7 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     if (k == QLatin1String("InnerGap"))
         return QVariant(
             qBound(ConfigDefaults::autotileInnerGapMin(), value.toInt(), ConfigDefaults::autotileInnerGapMax()));
-    if (k == QLatin1String("OuterGap") || k.startsWith(QLatin1String("OuterGap")))
+    if (k.startsWith(QLatin1String("OuterGap")))
         return QVariant(
             qBound(ConfigDefaults::autotileOuterGapMin(), value.toInt(), ConfigDefaults::autotileOuterGapMax()));
     if (k == QLatin1String("MaxWindows"))

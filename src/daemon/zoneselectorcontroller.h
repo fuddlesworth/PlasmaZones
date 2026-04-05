@@ -233,6 +233,7 @@ private:
 
     // Cursor tracking
     QPointF m_cursorPosition;
+    bool m_hasCursorPosition = false; // True after first updateCursorPosition() call
     qreal m_cursorProximity = 1.0; // 0.0 = at edge, 1.0 = far away
 
     // Configuration (in pixels)

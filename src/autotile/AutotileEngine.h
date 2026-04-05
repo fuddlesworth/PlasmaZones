@@ -119,6 +119,15 @@ public:
     }
 
     /**
+     * @brief Get the last-focused screen (updated by onWindowFocused)
+     * @return Screen ID of the most recently focused screen, or empty string
+     */
+    QString activeScreen() const
+    {
+        return m_activeScreen;
+    }
+
+    /**
      * @brief Set which screens use autotile (derived from layout assignments)
      *
      * Computes added/removed screens, retiles newly-added ones, and emits

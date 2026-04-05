@@ -288,14 +288,12 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
         // autotile activates on a screen with already-snapped windows. The effect-
         // local cache (screenGeometries) already guards against redundant stores
         // within an autotile session; overwrite=false prevents cross-mode clobbering.
-        // Re-resolve screen ID (EDID-based) for daemon tracking D-Bus calls;
-        // the screenId parameter may already be correct from callers that use
-        // getWindowScreenId(), but re-resolve to be safe.
-        QString resolvedScreenId = m_effect->getWindowScreenId(m_effect->findWindowById(windowId));
+        // screenId is already an effective (possibly virtual) screen ID resolved
+        // by the caller via getWindowScreenId() — no need to re-resolve.
         m_effect->fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
                                         {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()),
-                                         static_cast<int>(frame.width()), static_cast<int>(frame.height()),
-                                         resolvedScreenId.isEmpty() ? screenId : resolvedScreenId, false},
+                                         static_cast<int>(frame.width()), static_cast<int>(frame.height()), screenId,
+                                         false},
                                         QStringLiteral("storePreTileGeometry"));
     }
     return true;

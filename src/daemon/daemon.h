@@ -8,7 +8,6 @@
 #include <QElapsedTimer>
 #include <QTimer>
 #include <QHash>
-#include <QRect>
 #include <QSet>
 #include <QThreadPool>
 #include <memory>
@@ -371,7 +370,7 @@ private:
 
     // Geometry update debouncing to prevent cascade of redundant recalculations
     QTimer m_geometryUpdateTimer;
-    QHash<QString, QRect> m_pendingGeometryUpdates;
+    bool m_geometryUpdatePending = false;
     void processPendingGeometryUpdates();
 
     // After geometry updates settle, request KWin effect to re-apply window positions (panel editor fix)

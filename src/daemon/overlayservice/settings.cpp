@@ -37,7 +37,7 @@ void OverlayService::setSettings(ISettings* settings)
         // Connect to new settings signals
         if (m_settings) {
             auto refreshZoneSelectors = [this]() {
-                for (const QString& sid : m_zoneSelectorWindows.keys()) {
+                for (const QString& sid : m_screenStates.keys()) {
                     updateZoneSelectorWindow(sid);
                 }
             };
@@ -70,7 +70,8 @@ void OverlayService::setSettings(ISettings* settings)
                     }
                     qCInfo(lcOverlay) << "Shader files changed on disk, triggering hot-reload";
                     detail::clearBakeCache();
-                    for (auto* window : std::as_const(m_overlayWindows)) {
+                    for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+                        auto* window = it_.value().overlayWindow;
                         if (window && window->property("isShaderOverlay").toBool()) {
                             QMetaObject::invokeMethod(window, "loadShader");
                         }
@@ -121,13 +122,13 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
 void OverlayService::refreshVisibleWindows()
 {
     if (m_zoneSelectorVisible) {
-        for (const QString& sid : m_zoneSelectorWindows.keys()) {
+        for (const QString& sid : m_screenStates.keys()) {
             updateZoneSelectorWindow(sid);
         }
     }
     if (m_visible) {
-        for (const QString& screenId : m_overlayWindows.keys()) {
-            QScreen* physScreen = m_overlayPhysScreens.value(screenId);
+        for (const QString& screenId : m_screenStates.keys()) {
+            QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;
             if (physScreen) {
                 updateOverlayWindow(screenId, physScreen);
             }
@@ -149,7 +150,8 @@ void OverlayService::syncCavaState()
     } else {
         if (m_cavaService->isRunning()) {
             m_cavaService->stop();
-            for (auto* window : std::as_const(m_overlayWindows)) {
+            for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+                auto* window = it_.value().overlayWindow;
                 if (window) {
                     writeQmlProperty(window, QStringLiteral("audioSpectrum"), QVariantList());
                 }

@@ -460,6 +460,11 @@ void ScreenManager::onScreenRemoved(QScreen* screen)
     // The daemon also does this, but ScreenManager should be self-contained.
     Utils::invalidateEdidCache(screen->name());
 
+    // EDID invalidation may change screenIdentifier() results for subsequently
+    // connected monitors on the same connector, so mark effective IDs dirty again
+    // (the assignment above covers the current removal; this covers the EDID side-effect).
+    m_effectiveScreenIdsDirty = true;
+
     Q_EMIT screenRemoved(screen);
 }
 

@@ -117,7 +117,7 @@ bool OverlayService::anyScreenUsesShader() const
     if (m_settings && !m_settings->enableShaderEffects()) {
         return false;
     }
-    for (const QString& screenId : m_overlayWindows.keys()) {
+    for (const QString& screenId : m_screenStates.keys()) {
         if (useShaderForScreen(screenId)) {
             return true;
         }
@@ -184,7 +184,8 @@ void OverlayService::stopShaderAnimation()
 {
     // Don't stop CAVA here — it stays warm for instant audio data on next show().
     // Just clear the spectrum from overlay windows so they don't render stale data.
-    for (auto* window : std::as_const(m_overlayWindows)) {
+    for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+        auto* window = it_.value().overlayWindow;
         if (window) {
             writeQmlProperty(window, QStringLiteral("audioSpectrum"), QVariantList());
         }
@@ -203,8 +204,8 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
     // Pass QVector<float> wrapped in QVariant to avoid per-element QVariant boxing.
     // ZoneShaderItem::setAudioSpectrum() detects and unwraps QVector<float> directly.
     const QVariant wrapped = QVariant::fromValue(spectrum);
-    for (auto it = m_overlayWindows.cbegin(); it != m_overlayWindows.cend(); ++it) {
-        auto* window = it.value();
+    for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
+        auto* window = it.value().overlayWindow;
         if (window && useShaderForScreen(it.key())) {
             writeQmlProperty(window, QStringLiteral("audioSpectrum"), wrapped);
         }
@@ -249,8 +250,8 @@ void OverlayService::updateShaderUniforms()
     // Skip hidden non-shader windows kept alive across hide/show cycles —
     // they don't have iTime/iFrame properties and writing to hidden windows
     // is wasted work (60Hz property writes silently dropped by QML).
-    for (auto it = m_overlayWindows.cbegin(); it != m_overlayWindows.cend(); ++it) {
-        auto* window = it.value();
+    for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
+        auto* window = it.value().overlayWindow;
         if (window && window->isVisible()) {
             writeQmlProperty(window, QStringLiteral("iTime"), static_cast<qreal>(iTime));
             writeQmlProperty(window, QStringLiteral("iTimeDelta"), static_cast<qreal>(iTimeDelta));

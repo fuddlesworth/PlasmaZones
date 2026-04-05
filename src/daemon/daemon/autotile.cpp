@@ -407,7 +407,7 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
 
 void Daemon::processPendingGeometryUpdates()
 {
-    if (m_pendingGeometryUpdates.isEmpty()) {
+    if (!m_geometryUpdatePending) {
         return;
     }
 
@@ -432,7 +432,7 @@ void Daemon::processPendingGeometryUpdates()
     const QVector<Layout*> allLayouts = m_layoutManager->layouts();
     for (auto* layout : allLayouts) {
         if (!processedLayouts.contains(layout->id())) {
-            const QScreen* primaryScreen = QGuiApplication::primaryScreen();
+            const QScreen* primaryScreen = Utils::primaryScreen();
             if (primaryScreen) {
                 layout->recalculateZoneGeometries(
                     GeometryUtils::effectiveScreenGeometry(layout, Utils::screenIdentifier(primaryScreen)));
@@ -440,7 +440,7 @@ void Daemon::processPendingGeometryUpdates()
         }
     }
 
-    m_pendingGeometryUpdates.clear();
+    m_geometryUpdatePending = false;
 
     // Single overlay update after all geometry recalculations
     m_overlayService->updateGeometries();

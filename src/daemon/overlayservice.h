@@ -45,6 +45,23 @@ class OverlayService : public IOverlayService
     Q_PROPERTY(bool zoneSelectorVisible READ isZoneSelectorVisible NOTIFY zoneSelectorVisibilityChanged)
 
 public:
+    /**
+     * @brief Per-screen overlay state, grouping window pointers, physical screen
+     * references, and geometry that were previously stored in parallel QHash maps.
+     */
+    struct PerScreenOverlayState
+    {
+        QQuickWindow* overlayWindow = nullptr;
+        QScreen* overlayPhysScreen = nullptr;
+        QRect overlayGeometry;
+        QQuickWindow* zoneSelectorWindow = nullptr;
+        QScreen* zoneSelectorPhysScreen = nullptr;
+        QQuickWindow* layoutOsdWindow = nullptr;
+        QScreen* layoutOsdPhysScreen = nullptr;
+        QQuickWindow* navigationOsdWindow = nullptr;
+        QScreen* navigationOsdPhysScreen = nullptr;
+    };
+
     explicit OverlayService(QObject* parent = nullptr);
     ~OverlayService() override;
 
@@ -241,11 +258,7 @@ private:
     Layout* resolveScreenLayout(const QString& screenId) const;
 
     std::unique_ptr<QQmlEngine> m_engine;
-    QHash<QString, QQuickWindow*> m_overlayWindows; // Keyed by screen ID (physical or virtual)
-    QHash<QString, QScreen*> m_overlayPhysScreens; // screenId -> backing QScreen* (for layer-shell)
-    QHash<QString, QRect> m_overlayGeometries; // screenId -> overlay geometry (virtual or physical)
-    QHash<QString, QQuickWindow*> m_zoneSelectorWindows; // Keyed by screen ID (physical or virtual)
-    QHash<QString, QScreen*> m_zoneSelectorPhysScreens; // screenId -> backing QScreen*
+    QHash<QString, PerScreenOverlayState> m_screenStates;
     QPointer<Layout> m_layout;
     QPointer<ISettings> m_settings;
     ILayoutManager* m_layoutManager = nullptr;
@@ -253,6 +266,8 @@ private:
     QString m_currentActivity; // Current KDE activity (empty = all activities)
     bool m_visible = false;
     bool m_zoneSelectorVisible = false;
+    bool m_zoneSelectorRecreationPending =
+        false; // Guard against re-entrant showZoneSelector during deferred recreation
     QString m_currentOverlayScreenId; // Effective screen ID overlay is shown on (single-monitor mode, for #136)
 
     // Zone selector selection tracking
@@ -260,13 +275,7 @@ private:
     int m_selectedZoneIndex = -1;
     QRectF m_selectedZoneRelGeo;
 
-    // Layout OSD windows (keyed by screen ID -- physical or virtual)
-    QHash<QString, QQuickWindow*> m_layoutOsdWindows;
-    QHash<QString, QScreen*> m_layoutOsdPhysScreens;
-
-    // Navigation OSD windows (keyed by screen ID -- physical or virtual)
-    QHash<QString, QQuickWindow*> m_navigationOsdWindows;
-    QHash<QString, QScreen*> m_navigationOsdPhysScreens;
+    // Layout OSD and Navigation OSD windows are stored in m_screenStates
 
     // Shader preview overlay (editor dialog)
     QQuickWindow* m_shaderPreviewWindow = nullptr;

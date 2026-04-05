@@ -249,7 +249,7 @@ QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
         if (!result.isValid() || result.width() < MinUsableScreenDimension
             || result.height() < MinUsableScreenDimension) {
             qCWarning(lcScreen) << "screenAvailableGeometry: panel leaves insufficient space in virtual screen"
-                                << screenId << "- using full virtual geometry";
+                                << screenId << "- intersection:" << result << "- using full virtual geometry";
             return vsGeom;
         }
         return result;
@@ -388,7 +388,7 @@ void ScreenManager::invalidateVirtualGeometryCache(const QString& physicalScreen
     }
 
     // Remove all cached entries belonging to this physical screen
-    const QString prefix = physicalScreenId + VirtualScreenId::separator();
+    const QString prefix = physicalScreenId + VirtualScreenId::Separator;
     auto it = m_virtualGeometryCache.begin();
     while (it != m_virtualGeometryCache.end()) {
         if (it.key().startsWith(prefix)) {
@@ -409,6 +409,19 @@ void ScreenManager::rebuildVirtualGeometryCache(const QString& physicalScreenId)
     QScreen* screen = Utils::findScreenByIdOrName(physicalScreenId);
     if (!screen) {
         return;
+    }
+
+    // Clear stale entries for this physical screen before inserting new ones.
+    // Without this, renamed or removed virtual screen defs would leave ghost
+    // entries in the cache after a config change.
+    const QString prefix = physicalScreenId + VirtualScreenId::Separator;
+    auto cacheIt = m_virtualGeometryCache.begin();
+    while (cacheIt != m_virtualGeometryCache.end()) {
+        if (cacheIt.key().startsWith(prefix)) {
+            cacheIt = m_virtualGeometryCache.erase(cacheIt);
+        } else {
+            ++cacheIt;
+        }
     }
 
     QRect physGeom = screen->geometry();

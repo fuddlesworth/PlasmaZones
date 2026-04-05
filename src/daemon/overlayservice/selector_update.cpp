@@ -124,12 +124,12 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         return;
     }
 
-    auto* window = m_zoneSelectorWindows.value(screenId);
+    auto* window = m_screenStates.value(screenId).zoneSelectorWindow;
     if (!window) {
         return;
     }
 
-    QScreen* screen = m_zoneSelectorPhysScreens.value(screenId);
+    QScreen* screen = m_screenStates.value(screenId).zoneSelectorPhysScreen;
     if (!screen) {
         return;
     }
@@ -150,6 +150,8 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         writeQmlProperty(window, QStringLiteral("highlightColor"), m_settings->highlightColor());
         writeQmlProperty(window, QStringLiteral("inactiveColor"), m_settings->inactiveColor());
         writeQmlProperty(window, QStringLiteral("borderColor"), m_settings->borderColor());
+        writeQmlProperty(window, QStringLiteral("activeOpacity"), m_settings->activeOpacity());
+        writeQmlProperty(window, QStringLiteral("inactiveOpacity"), m_settings->inactiveOpacity());
         // Zone appearance settings for scaled preview (global)
         writeQmlProperty(window, QStringLiteral("zonePadding"), m_settings->zonePadding());
         writeQmlProperty(window, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());

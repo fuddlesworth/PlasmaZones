@@ -837,12 +837,13 @@ void Settings::loadVirtualScreenConfigs(IConfigBackend* backend)
             vs.physicalScreenId = physId;
             vs.index = i;
             vs.id = VirtualScreenId::make(physId, i);
-            vs.displayName =
-                group->readString(p + ConfigDefaults::virtualScreenNameKey(), QStringLiteral("Screen %1").arg(i + 1));
-            qreal x = group->readDouble(p + ConfigDefaults::virtualScreenXKey(), 0.0);
-            qreal y = group->readDouble(p + ConfigDefaults::virtualScreenYKey(), 0.0);
-            qreal w = group->readDouble(p + ConfigDefaults::virtualScreenWidthKey(), 1.0);
-            qreal h = group->readDouble(p + ConfigDefaults::virtualScreenHeightKey(), 1.0);
+            vs.displayName = group->readString(p + ConfigDefaults::virtualScreenNameKey(),
+                                               ConfigDefaults::defaultVirtualScreenName(i));
+            const QRectF defaultRegion = ConfigDefaults::defaultVirtualScreenRegion();
+            qreal x = group->readDouble(p + ConfigDefaults::virtualScreenXKey(), defaultRegion.x());
+            qreal y = group->readDouble(p + ConfigDefaults::virtualScreenYKey(), defaultRegion.y());
+            qreal w = group->readDouble(p + ConfigDefaults::virtualScreenWidthKey(), defaultRegion.width());
+            qreal h = group->readDouble(p + ConfigDefaults::virtualScreenHeightKey(), defaultRegion.height());
             vs.region = QRectF(x, y, w, h);
             config.screens.append(vs);
         }
@@ -864,8 +865,8 @@ void Settings::loadVirtualScreenConfigs(IConfigBackend* backend)
         }
         config.screens = validScreens;
 
-        // Need at least 2 screens for a meaningful subdivision
-        if (config.screens.size() < 2)
+        // Need at least minVirtualScreensPerPhysical() screens for a meaningful subdivision
+        if (config.screens.size() < ConfigDefaults::minVirtualScreensPerPhysical())
             continue;
 
         // Validate unique indices
@@ -909,12 +910,12 @@ void Settings::loadVirtualScreenConfigs(IConfigBackend* backend)
 
         // Validate total area coverage is approximately 1.0
         {
-            constexpr qreal AreaCoverageTolerance = 0.05;
             qreal totalArea = 0.0;
             for (const auto& vs : config.screens) {
                 totalArea += vs.region.width() * vs.region.height();
             }
-            if (totalArea < 1.0 - AreaCoverageTolerance || totalArea > 1.0 + AreaCoverageTolerance) {
+            constexpr qreal tol = ConfigDefaults::areaCoverageTolerance();
+            if (totalArea < 1.0 - tol || totalArea > 1.0 + tol) {
                 qCWarning(lcConfig) << "loadVirtualScreenConfigs: total area" << totalArea << "outside tolerance for"
                                     << physId << "- skipping config";
                 continue;

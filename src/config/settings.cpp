@@ -500,8 +500,10 @@ QString Settings::loadColorsFromFile(const QString& filePath)
     setInactiveColor(result.inactiveColor);
     setBorderColor(result.borderColor);
     setLabelFontColor(result.labelFontColor);
-    m_useSystemColors = false;
-    Q_EMIT useSystemColorsChanged();
+    if (m_useSystemColors != false) {
+        m_useSystemColors = false;
+        Q_EMIT useSystemColorsChanged();
+    }
     return QString(); // Success - no error
 }
 
@@ -513,22 +515,30 @@ void Settings::applySystemColorScheme()
 
     QColor highlight = pal.color(QPalette::Active, QPalette::Highlight);
     highlight.setAlpha(Defaults::HighlightAlpha);
-    m_highlightColor = highlight;
+    if (m_highlightColor != highlight) {
+        m_highlightColor = highlight;
+        Q_EMIT highlightColorChanged();
+    }
 
     QColor inactive = pal.color(QPalette::Active, QPalette::Text);
     inactive.setAlpha(Defaults::InactiveAlpha);
-    m_inactiveColor = inactive;
+    if (m_inactiveColor != inactive) {
+        m_inactiveColor = inactive;
+        Q_EMIT inactiveColorChanged();
+    }
 
     QColor border = pal.color(QPalette::Active, QPalette::Text);
     border.setAlpha(Defaults::BorderAlpha);
-    m_borderColor = border;
+    if (m_borderColor != border) {
+        m_borderColor = border;
+        Q_EMIT borderColorChanged();
+    }
 
-    m_labelFontColor = pal.color(QPalette::Active, QPalette::Text);
-
-    Q_EMIT highlightColorChanged();
-    Q_EMIT inactiveColorChanged();
-    Q_EMIT borderColorChanged();
-    Q_EMIT labelFontColorChanged();
+    QColor labelFont = pal.color(QPalette::Active, QPalette::Text);
+    if (m_labelFontColor != labelFont) {
+        m_labelFontColor = labelFont;
+        Q_EMIT labelFontColorChanged();
+    }
 }
 
 void Settings::applyAutotileBorderSystemColor()

@@ -115,15 +115,7 @@ struct PLASMAZONES_EXPORT VirtualScreenConfig
         return screens.isEmpty();
     }
 
-    bool operator==(const VirtualScreenConfig& other) const
-    {
-        return physicalScreenId == other.physicalScreenId && screens == other.screens;
-    }
-
-    bool operator!=(const VirtualScreenConfig& other) const
-    {
-        return !(*this == other);
-    }
+    bool operator==(const VirtualScreenConfig&) const = default;
 };
 
 } // namespace PlasmaZones

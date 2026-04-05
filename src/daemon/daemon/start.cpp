@@ -184,7 +184,7 @@ void Daemon::connectScreenSignals()
         // Reuse the same debounced path as physical screen geometry changes.
         QScreen* physScreen = ScreenManager::resolvePhysicalScreen(physId);
         if (physScreen) {
-            m_pendingGeometryUpdates[physScreen->name()] = ScreenManager::actualAvailableGeometry(physScreen);
+            m_geometryUpdatePending = true;
             m_geometryUpdateTimer.start();
         }
     });
@@ -239,7 +239,7 @@ void Daemon::connectScreenSignals()
                 Q_UNUSED(geometry)
                 // Queue geometry update with debouncing to avoid cascade
                 QRect availableGeom = ScreenManager::actualAvailableGeometry(screen);
-                m_pendingGeometryUpdates[screen->name()] = availableGeom;
+                m_geometryUpdatePending = true;
                 m_geometryUpdateTimer.start();
             });
 
@@ -250,7 +250,7 @@ void Daemon::connectScreenSignals()
             [this](QScreen* screen, const QRect& availableGeometry) {
                 // Queue geometry update with debouncing
                 // Multiple rapid changes will be coalesced into a single update
-                m_pendingGeometryUpdates[screen->name()] = availableGeometry;
+                m_geometryUpdatePending = true;
                 m_geometryUpdateTimer.start();
             });
 

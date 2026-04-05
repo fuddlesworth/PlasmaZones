@@ -49,8 +49,13 @@ void Daemon::initializeAutotile()
                 && m_settings->showOsdOnLayoutSwitch() && m_overlayService) {
                 auto* algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
                 QString displayName = algo ? algo->name() : algorithmId;
-                QString screenId =
-                    m_unifiedLayoutController ? m_unifiedLayoutController->currentScreenName() : QString();
+                QString screenId;
+                if (m_autotileEngine) {
+                    screenId = m_autotileEngine->activeScreen();
+                }
+                if (screenId.isEmpty() && m_unifiedLayoutController) {
+                    screenId = m_unifiedLayoutController->currentScreenName();
+                }
                 if (screenId.isEmpty() && m_windowTrackingAdaptor) {
                     screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
                 }

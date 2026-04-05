@@ -351,10 +351,20 @@ static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<Zo
                 }
             }
             if (screenId.isEmpty()) {
-                // Last resort: no ScreenManager or point not in any effective screen
+                // Last resort: no ScreenManager or point not in any effective screen.
+                // If the physical screen has virtual screens, resolve to the correct one.
                 for (QScreen* screen : QGuiApplication::screens()) {
                     if (screen->geometry().contains(center)) {
-                        screenId = Utils::screenIdentifier(screen);
+                        QString physId = Utils::screenIdentifier(screen);
+                        // Check if this physical screen has virtual screens
+                        if (mgr) {
+                            QString vsId = mgr->effectiveScreenAt(center);
+                            if (!vsId.isEmpty()) {
+                                screenId = vsId;
+                                break;
+                            }
+                        }
+                        screenId = physId;
                         break;
                     }
                 }
@@ -389,7 +399,7 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise, const QString&
 
     if (entries.isEmpty()) {
         // Emit feedback for empty rotation (mirrors SnapEngine::rotateWindows logic)
-        auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdForName(screenId));
+        auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
         if (!layout) {
             Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_active_layout"), QString(),
                                       QString(), screenId);

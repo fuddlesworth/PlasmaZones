@@ -43,7 +43,6 @@ public Q_SLOTS:
     QString getVirtualScreenConfig(const QString& physicalScreenId);
     void setVirtualScreenConfig(const QString& physicalScreenId, const QString& configJson);
     QStringList getPhysicalScreens();
-    QStringList getEffectiveScreens();
     QString getEffectiveScreenAt(int x, int y);
 
 Q_SIGNALS:

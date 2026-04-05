@@ -52,8 +52,8 @@ Q_LOGGING_CATEGORY(lcEffect, "plasmazones.effect", QtInfoMsg)
 
 namespace {
 // Duplicated from daemon's configkeys.h — effect cannot include daemon headers
-constexpr QLatin1StringView TriggerModifierField("modifier");
-constexpr QLatin1StringView TriggerMouseButtonField("mouseButton");
+constexpr QLatin1String TriggerModifierField("modifier");
+constexpr QLatin1String TriggerMouseButtonField("mouseButton");
 } // namespace
 
 // NavigateDirectivePrefix moved to navigationhandler.cpp to avoid redefinition
@@ -945,13 +945,14 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     // (or virtual screen), not on every pixel move. This gives the daemon accurate
     // cursor-based screen info on Wayland where QCursor::pos() is unreliable for
     // background processes.
-    auto* output = KWin::effects->screenAt(pos.toPoint());
+    const QPoint roundedPos(qRound(pos.x()), qRound(pos.y()));
+    auto* output = KWin::effects->screenAt(roundedPos);
     QString connectorName;
     QString effectiveScreenId;
     if (output) {
         connectorName = output->name();
         // Resolve to virtual screen ID if subdivisions exist
-        effectiveScreenId = resolveEffectiveScreenId(pos.toPoint(), output);
+        effectiveScreenId = resolveEffectiveScreenId(roundedPos, output);
         if (effectiveScreenId != m_lastEffectiveScreenId) {
             m_lastEffectiveScreenId = effectiveScreenId;
             m_lastCursorOutput = connectorName;
@@ -1951,7 +1952,8 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
     if (!w) {
         return QString();
     }
-    return resolveEffectiveScreenId(w->frameGeometry().center().toPoint(), w->screen());
+    const QPointF c = w->frameGeometry().center();
+    return resolveEffectiveScreenId(QPoint(qRound(c.x()), qRound(c.y())), w->screen());
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2127,7 +2129,8 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                         continue;
                     }
                     {
-                        const QPoint center = window->frameGeometry().center().toPoint();
+                        const QPointF cf = window->frameGeometry().center();
+                        const QPoint center(qRound(cf.x()), qRound(cf.y()));
                         const QString newScreenId = self->resolveEffectiveScreenId(center, window->screen());
                         if (!newScreenId.isEmpty()) {
                             it.value() = newScreenId;

@@ -299,6 +299,7 @@ void ZoneSelectorController::updateCursorPosition(const QPointF& globalPos)
     }
 
     m_cursorPosition = globalPos;
+    m_hasCursorPosition = true;
     Q_EMIT cursorPositionChanged(globalPos);
 
     if (m_isDragging) {
@@ -436,7 +437,7 @@ void ZoneSelectorController::updateProximity()
     // WindowDragAdaptor::isNearTriggerEdge(), which uses per-screen resolved config.
     // This method provides QML property updates for direct cursor-position use cases.
 
-    if (!m_cursorPosition.isNull()) {
+    if (m_hasCursorPosition) {
         QScreen* cursorScreen = Utils::findScreenAtPosition(m_cursorPosition.toPoint());
         if (cursorScreen) {
             m_screen = cursorScreen;

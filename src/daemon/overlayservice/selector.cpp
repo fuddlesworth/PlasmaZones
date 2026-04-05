@@ -34,6 +34,13 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         return;
     }
 
+    // A deferred recreation is pending (virtualScreensChanged handler).
+    // Skip this call to avoid racing with the deferred timer, which will
+    // call showZoneSelector() once layout migrations have settled.
+    if (m_zoneSelectorRecreationPending) {
+        return;
+    }
+
     m_zoneSelectorVisible = true;
 
     // Resolve target screen from screenId (supports virtual screen IDs)
@@ -64,10 +71,10 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
                 continue;
             }
             const QRect geom = mgr->screenGeometry(screenId);
-            if (!m_zoneSelectorWindows.contains(screenId)) {
+            if (!(m_screenStates.contains(screenId) && m_screenStates[screenId].zoneSelectorWindow)) {
                 createZoneSelectorWindow(screenId, physScreen, geom.isValid() ? geom : physScreen->geometry());
             }
-            if (auto* window = m_zoneSelectorWindows.value(screenId)) {
+            if (auto* window = m_screenStates.value(screenId).zoneSelectorWindow) {
                 assertWindowOnScreen(window, physScreen, geom.isValid() ? geom : physScreen->geometry());
                 updateZoneSelectorWindow(screenId);
                 window->show();
@@ -89,13 +96,13 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             if (m_excludedScreens.contains(screenId)) {
                 continue;
             }
-            if (!m_zoneSelectorWindows.contains(screenId)) {
+            if (!(m_screenStates.contains(screenId) && m_screenStates[screenId].zoneSelectorWindow)) {
                 auto* smgr = ScreenManager::instance();
                 QRect geom = (smgr && smgr->screenGeometry(screenId).isValid()) ? smgr->screenGeometry(screenId)
                                                                                 : screen->geometry();
                 createZoneSelectorWindow(screenId, screen, geom);
             }
-            if (auto* window = m_zoneSelectorWindows.value(screenId)) {
+            if (auto* window = m_screenStates.value(screenId).zoneSelectorWindow) {
                 assertWindowOnScreen(window, screen);
                 updateZoneSelectorWindow(screenId);
                 window->show();
@@ -123,7 +130,7 @@ void OverlayService::hideZoneSelector()
     // hide() destroys the VkSwapchainKHR but Qt doesn't reinitialize it on
     // re-show — this affects ALL QQuickWindows, not just those with custom render
     // nodes. showZoneSelector() will create fresh windows via createZoneSelectorWindow().
-    const QStringList screenIds = m_zoneSelectorWindows.keys();
+    const QStringList screenIds = m_screenStates.keys();
     for (const QString& screenId : screenIds) {
         destroyZoneSelectorWindow(screenId);
     }
@@ -150,14 +157,14 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
     auto* mgr = ScreenManager::instance();
     // Clear selection highlight on all OTHER zone selector windows when cursor moves
     // to a different virtual screen, preventing stale highlights from previous screen.
-    for (auto it = m_zoneSelectorWindows.begin(); it != m_zoneSelectorWindows.end(); ++it) {
-        if (it.key() != cursorScreenId && it.value()) {
-            writeQmlProperty(it.value(), QStringLiteral("selectedLayoutId"), QString());
-            writeQmlProperty(it.value(), QStringLiteral("selectedZoneIndex"), -1);
+    for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
+        if (it.key() != cursorScreenId && it.value().zoneSelectorWindow) {
+            writeQmlProperty(it.value().zoneSelectorWindow, QStringLiteral("selectedLayoutId"), QString());
+            writeQmlProperty(it.value().zoneSelectorWindow, QStringLiteral("selectedZoneIndex"), -1);
         }
     }
 
-    if (auto* window = m_zoneSelectorWindows.value(cursorScreenId)) {
+    if (auto* window = m_screenStates.value(cursorScreenId).zoneSelectorWindow) {
         // Convert global cursor position to window-local coordinates.
         // On Wayland with LayerShell, mapFromGlobal may return wrong coordinates
         // before the first frame (geometry not yet applied). Fall back to
@@ -293,7 +300,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
 
 void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* physScreen, const QRect& geom)
 {
-    if (m_zoneSelectorWindows.contains(screenId)) {
+    if ((m_screenStates.contains(screenId) && m_screenStates[screenId].zoneSelectorWindow)) {
         return;
     }
 
@@ -363,13 +370,25 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
         qCWarning(lcOverlay) << "Failed to connect zoneSelected signal for screen" << screenId
                              << "- zone selector layout switching will not work";
     }
-    m_zoneSelectorWindows.insert(screenId, window);
-    m_zoneSelectorPhysScreens.insert(screenId, physScreen);
+    m_screenStates[screenId].zoneSelectorWindow = window;
+    m_screenStates[screenId].zoneSelectorPhysScreen = physScreen;
 }
 
 void OverlayService::destroyZoneSelectorWindow(const QString& screenId)
 {
-    destroyManagedWindow(m_zoneSelectorWindows, m_zoneSelectorPhysScreens, screenId);
+    auto it = m_screenStates.find(screenId);
+    if (it != m_screenStates.end()) {
+        if (auto* window = it->zoneSelectorWindow) {
+            if (it->zoneSelectorPhysScreen) {
+                QObject::disconnect(it->zoneSelectorPhysScreen, nullptr, window, nullptr);
+            }
+            window->close();
+            window->destroy();
+            window->deleteLater();
+            it->zoneSelectorWindow = nullptr;
+        }
+        it->zoneSelectorPhysScreen = nullptr;
+    }
 }
 
 bool OverlayService::hasSelectedZone() const
@@ -461,8 +480,8 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
     QString screenId;
     auto* senderWindow = qobject_cast<QQuickWindow*>(sender());
     if (senderWindow) {
-        for (auto it = m_zoneSelectorWindows.constBegin(); it != m_zoneSelectorWindows.constEnd(); ++it) {
-            if (it.value() == senderWindow) {
+        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+            if (it.value().zoneSelectorWindow == senderWindow) {
                 screenId = it.key();
                 break;
             }
@@ -488,7 +507,8 @@ void OverlayService::scrollZoneSelector(int angleDeltaY)
     if (!m_zoneSelectorVisible) {
         return;
     }
-    for (auto* window : std::as_const(m_zoneSelectorWindows)) {
+    for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+        auto* window = it_.value().zoneSelectorWindow;
         if (window) {
             QMetaObject::invokeMethod(window, "applyScrollDelta", Q_ARG(QVariant, angleDeltaY));
         }

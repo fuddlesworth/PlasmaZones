@@ -68,8 +68,8 @@
             <arg name="height" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Preview height in pixels."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen name (empty = screen containing x,y)."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen ID (empty = screen containing x,y)."/>
             </arg>
             <arg name="shaderId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Shader UUID."/>
@@ -109,8 +109,8 @@
         <!-- Snap Assist: show window picker to fill empty zones after snapping -->
         <method name="showSnapAssist">
             <annotation name="org.gtk.GDBus.DocString" value="Show Snap Assist overlay with candidate windows. Called by KWin effect after dragStopped when snapAssistRequested is true."/>
-            <arg name="screenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen where the snap occurred (e.g. DP-1)."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen ID where the snap occurred."/>
             </arg>
             <arg name="emptyZonesJson" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON array of {zoneId, x, y, width, height} for empty zones."/>
@@ -155,8 +155,8 @@
         </signal>
         <signal name="snapAssistShown">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when Snap Assist overlay is shown. KWin script subscribes to create thumbnails via WindowThumbnail and call setSnapAssistThumbnail."/>
-            <arg name="screenName" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen where snap occurred (e.g. DP-1)."/>
+            <arg name="screenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen ID where snap occurred."/>
             </arg>
             <arg name="emptyZonesJson" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON array of empty zones."/>

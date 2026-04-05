@@ -16,15 +16,18 @@ namespace PlasmaZones {
 namespace VirtualScreenId {
 
 /// Separator between physical screen ID and virtual index
+inline constexpr QLatin1String Separator{"/vs:"};
+
+/// @deprecated Use VirtualScreenId::Separator instead.
 inline QLatin1String separator()
 {
-    return QLatin1String("/vs:");
+    return Separator;
 }
 
 /// Check if a screen ID is a virtual screen ID (contains "/vs:")
 inline bool isVirtual(const QString& screenId)
 {
-    int pos = screenId.indexOf(separator());
+    int pos = screenId.indexOf(Separator);
     return pos > 0; // Must have non-empty physical ID before separator
 }
 
@@ -32,7 +35,7 @@ inline bool isVirtual(const QString& screenId)
 /// Returns the original ID if not a virtual screen ID
 inline QString extractPhysicalId(const QString& screenId)
 {
-    int sep = screenId.indexOf(separator());
+    int sep = screenId.indexOf(Separator);
     return (sep > 0) ? screenId.left(sep) : screenId;
 }
 
@@ -40,12 +43,12 @@ inline QString extractPhysicalId(const QString& screenId)
 /// Returns -1 if not a virtual screen ID
 inline int extractIndex(const QString& screenId)
 {
-    int sep = screenId.indexOf(separator());
+    int sep = screenId.indexOf(Separator);
     if (sep <= 0) {
         return -1;
     }
     bool ok = false;
-    int index = screenId.mid(sep + separator().size()).toInt(&ok);
+    int index = screenId.mid(sep + Separator.size()).toInt(&ok);
     return (ok && index >= 0) ? index : -1;
 }
 
@@ -56,7 +59,7 @@ inline QString make(const QString& physicalScreenId, int index)
     if (physicalScreenId.isEmpty() || index < 0) {
         return {};
     }
-    return physicalScreenId + separator() + QString::number(index);
+    return physicalScreenId + Separator + QString::number(index);
 }
 
 /// Check if two screen IDs share the same physical screen.
