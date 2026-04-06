@@ -75,6 +75,10 @@ public:
     PZ_CONFIG_GROUP(tilingAppearanceBordersGroup, "Tiling.Appearance.Borders")
     PZ_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
 
+    // Parent groups (for purge enumeration — covers all sub-groups)
+    PZ_CONFIG_GROUP(shortcutsGroup, "Shortcuts")
+    PZ_CONFIG_GROUP(editorGroup, "Editor")
+
     // Editor sub-groups
     PZ_CONFIG_GROUP(editorShortcutsGroup, "Editor.Shortcuts")
     PZ_CONFIG_GROUP(editorSnappingGroup, "Editor.Snapping")

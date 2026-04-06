@@ -265,9 +265,9 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::performanceGroup(), // "Performance"
         ConfigDefaults::renderingGroup(), // "Rendering"
         ConfigDefaults::shadersGroup(), // "Shaders"
-        QStringLiteral("Shortcuts"), // covers Shortcuts.Global + Shortcuts.Tiling
+        ConfigDefaults::shortcutsGroup(), // "Shortcuts" — covers Shortcuts.Global + Shortcuts.Tiling
         ConfigDefaults::animationsGroup(), // "Animations"
-        QStringLiteral("Editor"), // covers Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
+        ConfigDefaults::editorGroup(), // "Editor" — covers Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
         ConfigDefaults::orderingGroup(), // "Ordering"
     };
 }

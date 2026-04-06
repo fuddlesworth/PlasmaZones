@@ -38,6 +38,8 @@ void ConfigMigration::runMigrationChainInMemory(QJsonObject& root)
             qInfo("ConfigMigration: running schema migration v%d → v%d", step.fromVersion, step.fromVersion + 1);
             step.migrate(root);
             version = root.value(QLatin1String("_version")).toInt();
+            Q_ASSERT_X(version == step.fromVersion + 1, "runMigrationChainInMemory",
+                       "migration step did not bump _version correctly");
         }
     }
 }
