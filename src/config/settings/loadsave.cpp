@@ -364,6 +364,11 @@ void Settings::loadAutotilingConfig(IConfigBackend* backend)
     }
     m_autotileSplitRatio = splitRatio;
 
+    qreal splitRatioStep =
+        autotiling->readDouble(ConfigDefaults::autotileSplitRatioStepKey(), ConfigDefaults::autotileSplitRatioStep());
+    m_autotileSplitRatioStep = qBound(ConfigDefaults::autotileSplitRatioStepMin(), splitRatioStep,
+                                      ConfigDefaults::autotileSplitRatioStepMax());
+
     int masterCount =
         autotiling->readInt(ConfigDefaults::autotileMasterCountKey(), ConfigDefaults::autotileMasterCount());
     if (masterCount < ConfigDefaults::autotileMasterCountMin()
@@ -719,6 +724,7 @@ void Settings::saveAutotilingConfig(IConfigBackend* backend)
         autotiling->writeBool(ConfigDefaults::autotileEnabledKey(), m_autotileEnabled);
         autotiling->writeString(ConfigDefaults::defaultAutotileAlgorithmKey(), m_defaultAutotileAlgorithm);
         autotiling->writeDouble(ConfigDefaults::autotileSplitRatioKey(), m_autotileSplitRatio);
+        autotiling->writeDouble(ConfigDefaults::autotileSplitRatioStepKey(), m_autotileSplitRatioStep);
         autotiling->writeInt(ConfigDefaults::autotileMasterCountKey(), m_autotileMasterCount);
         // Save per-algorithm settings map (reuse shared serialization helpers)
         if (!m_autotilePerAlgorithmSettings.isEmpty()) {

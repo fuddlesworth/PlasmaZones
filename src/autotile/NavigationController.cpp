@@ -218,20 +218,35 @@ void NavigationController::moveFocusedToPosition(int position)
 
 void NavigationController::increaseMasterRatio(qreal delta)
 {
-    qreal resultRatio = m_engine->config()->splitRatio;
-    applyToAllStates([delta, &resultRatio](TilingState* state) {
-        // setSplitRatio handles clamping internally
-        state->setSplitRatio(state->splitRatio() + delta);
-        resultRatio = state->splitRatio(); // capture clamped result
-    });
-
-    // Sync config so propagateGlobalSplitRatio() won't overwrite with stale value
-    m_engine->config()->splitRatio = resultRatio;
-    m_engine->syncShortcutAdjustmentToSettings();
-
     const QString screenId = resolveActiveScreen();
-    // Encode direction and percentage in reason (e.g., "increased:65") — same
-    // pattern as rotate ("clockwise:N"). QML parses the suffix for display.
+    if (screenId.isEmpty()) {
+        return;
+    }
+
+    // Find the state for the focused screen only
+    const auto key = m_engine->currentKeyForScreen(screenId);
+    auto sit = m_engine->m_screenStates.find(key);
+    if (sit == m_engine->m_screenStates.end() || !sit.value()) {
+        return;
+    }
+
+    TilingState* state = sit.value();
+    state->setSplitRatio(state->splitRatio() + delta);
+    const qreal resultRatio = state->splitRatio();
+
+    // Update global config so new screens inherit the adjusted ratio.
+    // Only update if the focused screen doesn't have a per-screen SplitRatio override
+    // (per-screen overrides are independent of the global config).
+    if (!m_engine->hasPerScreenOverride(screenId, QLatin1String("SplitRatio"))) {
+        m_engine->config()->splitRatio = resultRatio;
+        m_engine->syncShortcutAdjustmentToSettings();
+    }
+
+    if (m_engine->isEnabled()) {
+        m_engine->retileAfterOperation(screenId, true);
+    }
+
+    // OSD feedback
     int pct = qRound(resultRatio * 100.0);
     QString reason = (delta >= 0 ? QStringLiteral("increased:") : QStringLiteral("decreased:")) + QString::number(pct);
     Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_ratio"), reason, QString(), QString(),
@@ -267,15 +282,30 @@ void NavigationController::setGlobalMasterCount(int count)
 
 void NavigationController::increaseMasterCount()
 {
-    int resultCount = m_engine->config()->masterCount;
-    applyToAllStates([&resultCount](TilingState* state) {
-        state->setMasterCount(state->masterCount() + 1);
-        resultCount = state->masterCount();
-    });
-    m_engine->config()->masterCount = resultCount;
-    m_engine->syncShortcutAdjustmentToSettings();
-
     const QString screenId = resolveActiveScreen();
+    if (screenId.isEmpty()) {
+        return;
+    }
+
+    const auto key = m_engine->currentKeyForScreen(screenId);
+    auto sit = m_engine->m_screenStates.find(key);
+    if (sit == m_engine->m_screenStates.end() || !sit.value()) {
+        return;
+    }
+
+    TilingState* state = sit.value();
+    state->setMasterCount(state->masterCount() + 1);
+    const int resultCount = state->masterCount();
+
+    if (!m_engine->hasPerScreenOverride(screenId, QLatin1String("MasterCount"))) {
+        m_engine->config()->masterCount = resultCount;
+        m_engine->syncShortcutAdjustmentToSettings();
+    }
+
+    if (m_engine->isEnabled()) {
+        m_engine->retileAfterOperation(screenId, true);
+    }
+
     QString reason = QStringLiteral("increased:") + QString::number(resultCount);
     Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_count"), reason, QString(), QString(),
                                                  screenId);
@@ -283,17 +313,34 @@ void NavigationController::increaseMasterCount()
 
 void NavigationController::decreaseMasterCount()
 {
-    int resultCount = m_engine->config()->masterCount;
-    applyToAllStates([&resultCount](TilingState* state) {
-        if (state->masterCount() > 1) {
-            state->setMasterCount(state->masterCount() - 1);
-            resultCount = state->masterCount();
-        }
-    });
-    m_engine->config()->masterCount = resultCount;
-    m_engine->syncShortcutAdjustmentToSettings();
-
     const QString screenId = resolveActiveScreen();
+    if (screenId.isEmpty()) {
+        return;
+    }
+
+    const auto key = m_engine->currentKeyForScreen(screenId);
+    auto sit = m_engine->m_screenStates.find(key);
+    if (sit == m_engine->m_screenStates.end() || !sit.value()) {
+        return;
+    }
+
+    TilingState* state = sit.value();
+    if (state->masterCount() <= 1) {
+        return;
+    }
+
+    state->setMasterCount(state->masterCount() - 1);
+    const int resultCount = state->masterCount();
+
+    if (!m_engine->hasPerScreenOverride(screenId, QLatin1String("MasterCount"))) {
+        m_engine->config()->masterCount = resultCount;
+        m_engine->syncShortcutAdjustmentToSettings();
+    }
+
+    if (m_engine->isEnabled()) {
+        m_engine->retileAfterOperation(screenId, true);
+    }
+
     QString reason = QStringLiteral("decreased:") + QString::number(resultCount);
     Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_count"), reason, QString(), QString(),
                                                  screenId);

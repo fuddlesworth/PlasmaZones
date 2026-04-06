@@ -226,6 +226,14 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
     return m_engine->config()->maxWindows;
 }
 
+qreal PerScreenConfigResolver::effectiveSplitRatioStep(const QString& screenId) const
+{
+    if (auto v = perScreenOverride(screenId, QStringLiteral("SplitRatioStep")))
+        return qBound(ConfigDefaults::autotileSplitRatioStepMin(), v->toDouble(),
+                      ConfigDefaults::autotileSplitRatioStepMax());
+    return m_engine->config()->splitRatioStep;
+}
+
 QString PerScreenConfigResolver::effectiveAlgorithmId(const QString& screenId) const
 {
     if (auto v = perScreenOverride(screenId, QLatin1String("Algorithm")))

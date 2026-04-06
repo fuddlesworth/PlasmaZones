@@ -84,6 +84,7 @@ public:
     bool effectiveSmartGaps(const QString& screenId) const;
     bool effectiveRespectMinimumSize(const QString& screenId) const;
     int effectiveMaxWindows(const QString& screenId) const;
+    qreal effectiveSplitRatioStep(const QString& screenId) const;
     QString effectiveAlgorithmId(const QString& screenId) const;
     TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
 

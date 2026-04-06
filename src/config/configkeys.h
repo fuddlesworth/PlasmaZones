@@ -236,6 +236,7 @@ public:
     PZ_CONFIG_KEY(autotileEnabledKey, "AutotileEnabled")
     PZ_CONFIG_KEY(defaultAutotileAlgorithmKey, "DefaultAutotileAlgorithm")
     PZ_CONFIG_KEY(autotileSplitRatioKey, "AutotileSplitRatio")
+    PZ_CONFIG_KEY(autotileSplitRatioStepKey, "AutotileSplitRatioStep")
     PZ_CONFIG_KEY(autotileMasterCountKey, "AutotileMasterCount")
     PZ_CONFIG_KEY(autotilePerAlgorithmSettingsKey, "AutotilePerAlgorithmSettings")
     PZ_CONFIG_KEY(autotileInnerGapKey, "AutotileInnerGap")

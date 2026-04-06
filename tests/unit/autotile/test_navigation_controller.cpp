@@ -205,11 +205,12 @@ private Q_SLOTS:
     // Master ratio propagation
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testNavigation_increaseMasterRatio_propagatesToAllStates()
+    void testNavigation_increaseMasterRatio_updatesFocusedScreenOnly()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
         const QString screen1 = QStringLiteral("eDP-1");
         const QString screen2 = QStringLiteral("HDMI-1");
+        engine.setAutotileScreens({screen1, screen2});
 
         TilingState* state1 = engine.stateForScreen(screen1);
         TilingState* state2 = engine.stateForScreen(screen2);
@@ -224,8 +225,9 @@ private Q_SLOTS:
 
         engine.increaseMasterRatio(0.1);
 
+        // Only the focused screen (eDP-1) should change
         QVERIFY(qFuzzyCompare(state1->splitRatio(), 0.6));
-        QVERIFY(qFuzzyCompare(state2->splitRatio(), 0.6));
+        QVERIFY(qFuzzyCompare(state2->splitRatio(), 0.5));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

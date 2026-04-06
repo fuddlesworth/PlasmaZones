@@ -96,7 +96,10 @@ void SettingsBridge::syncFromSettings(Settings* settings)
         }                                                                                                              \
     } while (0)
 
-    SYNC_FIELD(masterCount, autotileMasterCount);
+    // masterCount: skip overwrite when shortcut adjustment is pending (same rationale as splitRatio)
+    if (!m_shortcutSaveTimer.isActive()) {
+        SYNC_FIELD(masterCount, autotileMasterCount);
+    }
     SYNC_FIELD(innerGap, autotileInnerGap);
     SYNC_FIELD(outerGap, autotileOuterGap);
     SYNC_FIELD(usePerSideOuterGap, autotileUsePerSideOuterGap);
@@ -109,11 +112,21 @@ void SettingsBridge::syncFromSettings(Settings* settings)
     SYNC_FIELD(focusFollowsMouse, autotileFocusFollowsMouse);
     SYNC_FIELD(respectMinimumSize, autotileRespectMinimumSize);
     SYNC_FIELD(maxWindows, autotileMaxWindows);
-    // splitRatio: qreal needs fuzzy comparison to avoid spurious change detection
-    {
+    // splitRatio: skip overwrite when a shortcut-adjusted value is pending save.
+    // During the debounce window, the runtime ratio is authoritative — Settings
+    // may hold a stale value that hasn't been persisted to disk yet.
+    if (!m_shortcutSaveTimer.isActive()) {
         const qreal newRatio = settings->autotileSplitRatio();
         if (!qFuzzyCompare(1.0 + cfg->splitRatio, 1.0 + newRatio)) {
             cfg->splitRatio = newRatio;
+            configChanged = true;
+        }
+    }
+    // splitRatioStep: sync from settings
+    {
+        const qreal newStep = settings->autotileSplitRatioStep();
+        if (!qFuzzyCompare(1.0 + cfg->splitRatioStep, 1.0 + newStep)) {
+            cfg->splitRatioStep = newStep;
             configChanged = true;
         }
     }
@@ -259,6 +272,12 @@ void SettingsBridge::connectToSettings(Settings* settings)
         m_engine->config()->splitRatio = m_settings->autotileSplitRatio();
         m_engine->propagateGlobalSplitRatio();
         scheduleSettingsRetile();
+    });
+
+    QObject::connect(settings, &Settings::autotileSplitRatioStepChanged, m_engine, [this]() {
+        if (!m_settings)
+            return;
+        m_engine->config()->splitRatioStep = m_settings->autotileSplitRatioStep();
     });
 
     QObject::connect(settings, &Settings::autotileMasterCountChanged, m_engine, [this]() {

@@ -183,6 +183,8 @@ public:
                    defaultAutotileAlgorithmChanged)
     Q_PROPERTY(
         qreal autotileSplitRatio READ autotileSplitRatio WRITE setAutotileSplitRatio NOTIFY autotileSplitRatioChanged)
+    Q_PROPERTY(qreal autotileSplitRatioStep READ autotileSplitRatioStep WRITE setAutotileSplitRatioStep NOTIFY
+                   autotileSplitRatioStepChanged)
     Q_PROPERTY(
         int autotileMasterCount READ autotileMasterCount WRITE setAutotileMasterCount NOTIFY autotileMasterCountChanged)
     Q_PROPERTY(QVariantMap autotilePerAlgorithmSettings READ autotilePerAlgorithmSettings WRITE
@@ -877,6 +879,12 @@ public:
         return m_autotileSplitRatio;
     }
     void setAutotileSplitRatio(qreal ratio);
+
+    qreal autotileSplitRatioStep() const
+    {
+        return m_autotileSplitRatioStep;
+    }
+    void setAutotileSplitRatioStep(qreal step);
 
     int autotileMasterCount() const
     {
@@ -1696,6 +1704,7 @@ private:
     bool m_autotileEnabled = ConfigDefaults::autotileEnabled();
     QString m_defaultAutotileAlgorithm = ConfigDefaults::defaultAutotileAlgorithm();
     qreal m_autotileSplitRatio = ConfigDefaults::autotileSplitRatio();
+    qreal m_autotileSplitRatioStep = ConfigDefaults::autotileSplitRatioStep();
     int m_autotileMasterCount = ConfigDefaults::autotileMasterCount();
     QVariantMap m_autotilePerAlgorithmSettings;
     int m_autotileInnerGap = ConfigDefaults::autotileInnerGap();

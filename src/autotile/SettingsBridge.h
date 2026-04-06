@@ -111,6 +111,17 @@ public:
         return m_settings;
     }
 
+    /**
+     * @brief Whether a shortcut-adjusted ratio/count save is pending
+     *
+     * Used by syncFromSettings() to skip overwriting runtime-adjusted values
+     * with stale Settings values during the debounce window.
+     */
+    bool isShortcutAdjustmentPending() const
+    {
+        return m_shortcutSaveTimer.isActive();
+    }
+
 private:
     void scheduleSettingsRetile();
     void processSettingsRetile();
