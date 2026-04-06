@@ -405,7 +405,11 @@ public:
     PZ_CONFIG_KEY(dismissedVersionKey, "DismissedVersion")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Legacy v1 key accessors — used ONLY by migration code
+    // Legacy v1 key accessors — used ONLY by migration code.
+    // Some names are identical to their v2 counterparts (marked "= v2") because
+    // the group name didn't change — only the keys inside were restructured.
+    // They exist as separate accessors so migration code reads unambiguously as
+    // "reading from v1 source" vs "writing to v2 destination".
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_GROUP(v1ActivationGroup, "Activation")
@@ -413,16 +417,16 @@ public:
     PZ_CONFIG_GROUP(v1AppearanceGroup, "Appearance")
     PZ_CONFIG_GROUP(v1ZonesGroup, "Zones")
     PZ_CONFIG_GROUP(v1BehaviorGroup, "Behavior")
-    PZ_CONFIG_GROUP(v1ExclusionsGroup, "Exclusions")
+    PZ_CONFIG_GROUP(v1ExclusionsGroup, "Exclusions") // = v2 exclusionsGroup
     PZ_CONFIG_GROUP(v1ZoneSelectorGroup, "ZoneSelector")
     PZ_CONFIG_GROUP(v1AutotilingGroup, "Autotiling")
     PZ_CONFIG_GROUP(v1AutotileShortcutsGroup, "AutotileShortcuts")
-    PZ_CONFIG_GROUP(v1AnimationsGroup, "Animations")
+    PZ_CONFIG_GROUP(v1AnimationsGroup, "Animations") // = v2 animationsGroup
     PZ_CONFIG_GROUP(v1GlobalShortcutsGroup, "GlobalShortcuts")
-    PZ_CONFIG_GROUP(v1EditorGroup, "Editor")
-    PZ_CONFIG_GROUP(v1OrderingGroup, "Ordering")
-    PZ_CONFIG_GROUP(v1RenderingGroup, "Rendering")
-    PZ_CONFIG_GROUP(v1ShadersGroup, "Shaders")
+    PZ_CONFIG_GROUP(v1EditorGroup, "Editor") // = v2 editorGroup
+    PZ_CONFIG_GROUP(v1OrderingGroup, "Ordering") // = v2 orderingGroup
+    PZ_CONFIG_GROUP(v1RenderingGroup, "Rendering") // = v2 renderingGroup
+    PZ_CONFIG_GROUP(v1ShadersGroup, "Shaders") // = v2 shadersGroup
 
 private:
     // Non-instantiable

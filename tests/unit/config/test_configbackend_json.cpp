@@ -490,6 +490,98 @@ private Q_SLOTS:
         QCOMPARE(PlasmaZones::categoryToPrefix(QStringLiteral("Snapping")), QStringLiteral("SnappingScreen"));
         QCOMPARE(PlasmaZones::categoryToPrefix(QStringLiteral("ZoneSelector")), QStringLiteral("ZoneSelector"));
     }
+
+    // =========================================================================
+    // Dot-path group operations
+    // =========================================================================
+
+    void testDotPathDeleteGroup_prunesEmptyParents()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Write a value into a deeply nested dot-path group
+        {
+            auto g = backend->group(QStringLiteral("A.B.C"));
+            g->writeString(QStringLiteral("Key"), QStringLiteral("Value"));
+        }
+        backend->sync();
+
+        // Verify it was written
+        {
+            auto g = backend->group(QStringLiteral("A.B.C"));
+            QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("Value"));
+        }
+
+        // Delete the leaf group
+        backend->deleteGroup(QStringLiteral("A.B.C"));
+        backend->sync();
+
+        // The leaf group should be gone
+        QVERIFY(!backend->groupList().contains(QStringLiteral("A.B.C")));
+
+        // Empty parents should be pruned — "A.B" and "A" should also be gone
+        QVERIFY(!backend->groupList().contains(QStringLiteral("A.B")));
+        QVERIFY(!backend->groupList().contains(QStringLiteral("A")));
+    }
+
+    void testDotPathDeleteGroup_preservesSiblings()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Write values into sibling dot-path groups
+        {
+            auto g = backend->group(QStringLiteral("Parent.Child1"));
+            g->writeString(QStringLiteral("Key1"), QStringLiteral("V1"));
+        }
+        {
+            auto g = backend->group(QStringLiteral("Parent.Child2"));
+            g->writeString(QStringLiteral("Key2"), QStringLiteral("V2"));
+        }
+        backend->sync();
+
+        // Delete one child
+        backend->deleteGroup(QStringLiteral("Parent.Child1"));
+
+        // Sibling should survive
+        {
+            auto g = backend->group(QStringLiteral("Parent.Child2"));
+            QCOMPARE(g->readString(QStringLiteral("Key2")), QStringLiteral("V2"));
+        }
+        // Parent should survive (not empty — still has Child2)
+        QVERIFY(backend->groupList().contains(QStringLiteral("Parent")));
+        QVERIFY(backend->groupList().contains(QStringLiteral("Parent.Child2")));
+    }
+
+    void testGroupList_returnsNestedDotPaths()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Write into nested groups
+        {
+            auto g = backend->group(QStringLiteral("Snapping"));
+            g->writeBool(QStringLiteral("Enabled"), true);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Snapping.Behavior.ZoneSpan"));
+            g->writeBool(QStringLiteral("Enabled"), true);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Snapping.Gaps"));
+            g->writeInt(QStringLiteral("Inner"), 8);
+        }
+        backend->sync();
+
+        const QStringList groups = backend->groupList();
+
+        // Should contain the intermediate and leaf groups
+        QVERIFY(groups.contains(QStringLiteral("Snapping")));
+        QVERIFY(groups.contains(QStringLiteral("Snapping.Behavior")));
+        QVERIFY(groups.contains(QStringLiteral("Snapping.Behavior.ZoneSpan")));
+        QVERIFY(groups.contains(QStringLiteral("Snapping.Gaps")));
+    }
 };
 
 QTEST_MAIN(TestJsonConfigBackend)
