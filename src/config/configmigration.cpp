@@ -38,8 +38,11 @@ void ConfigMigration::runMigrationChainInMemory(QJsonObject& root)
             qInfo("ConfigMigration: running schema migration v%d → v%d", step.fromVersion, step.fromVersion + 1);
             step.migrate(root);
             version = root.value(QLatin1String("_version")).toInt();
-            Q_ASSERT_X(version == step.fromVersion + 1, "runMigrationChainInMemory",
-                       "migration step did not bump _version correctly");
+            if (version != step.fromVersion + 1) {
+                qCritical("ConfigMigration: migration step v%d did not bump _version correctly (got %d)",
+                          step.fromVersion, version);
+                break;
+            }
         }
     }
 }
@@ -681,7 +684,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         root[QLatin1String("Ordering")] = v1Ordering;
 
     // ── Bump version ────────────────────────────────────────────────────────
-    root[QLatin1String("_version")] = ConfigSchemaVersion;
+    root[QLatin1String("_version")] = 2;
 }
 
 } // namespace PlasmaZones

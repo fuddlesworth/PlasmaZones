@@ -283,11 +283,11 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
 
-        // Write activation config without DragActivationTriggers
+        // Write v2 snapping behavior config without DragActivationTriggers
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto activation = backend->group(QStringLiteral("Activation"));
-            activation->writeBool(QStringLiteral("SnappingEnabled"), true);
+            auto activation = backend->group(ConfigDefaults::snappingBehaviorGroup());
+            activation->writeBool(ConfigDefaults::enabledKey(), true);
             // Deliberately do NOT write DragActivationTriggers
             activation.reset();
             backend->sync();

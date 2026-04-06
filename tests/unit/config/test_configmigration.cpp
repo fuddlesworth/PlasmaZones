@@ -342,6 +342,129 @@ private Q_SLOTS:
     // Round-trip with JsonConfigBackend
     // =========================================================================
 
+    // =========================================================================
+    // v1 JSON migration (not from INI)
+    // =========================================================================
+
+    void testV1JsonMigration_withActualData()
+    {
+        IsolatedConfigGuard guard;
+        // Create a v1 JSON config with actual data (not just _version:1)
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        QJsonObject activation;
+        activation[QStringLiteral("SnappingEnabled")] = true;
+        activation[QStringLiteral("ToggleActivation")] = false;
+        root[QStringLiteral("Activation")] = activation;
+
+        QJsonObject display;
+        display[QStringLiteral("ShowOnAllMonitors")] = true;
+        root[QStringLiteral("Display")] = display;
+
+        QJsonObject editor;
+        editor[QStringLiteral("EditorDuplicateShortcut")] = QStringLiteral("Ctrl+D");
+        editor[QStringLiteral("GridSnappingEnabled")] = true;
+        editor[QStringLiteral("FillOnDropEnabled")] = false;
+        root[QStringLiteral("Editor")] = editor;
+
+        // Write the v1 JSON to disk
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        // Run migration
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        // Verify v2 structure
+        QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
+        QCOMPARE(migrated.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
+
+        // Activation → Snapping.Behavior + Snapping (Enabled)
+        QJsonObject snapping = migrated.value(QStringLiteral("Snapping")).toObject();
+        QCOMPARE(snapping.value(QStringLiteral("Enabled")).toBool(), true);
+        QJsonObject behavior = snapping.value(QStringLiteral("Behavior")).toObject();
+        QCOMPARE(behavior.value(QStringLiteral("ToggleActivation")).toBool(), false);
+
+        // Display → Snapping.Behavior.Display
+        QJsonObject behaviorDisplay = behavior.value(QStringLiteral("Display")).toObject();
+        QCOMPARE(behaviorDisplay.value(QStringLiteral("ShowOnAllMonitors")).toBool(), true);
+
+        // Editor → Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
+        QJsonObject editorMigrated = migrated.value(QStringLiteral("Editor")).toObject();
+        QJsonObject editorShortcuts = editorMigrated.value(QStringLiteral("Shortcuts")).toObject();
+        QCOMPARE(editorShortcuts.value(QStringLiteral("Duplicate")).toString(), QStringLiteral("Ctrl+D"));
+        QJsonObject editorSnapping = editorMigrated.value(QStringLiteral("Snapping")).toObject();
+        QCOMPARE(editorSnapping.value(QStringLiteral("GridEnabled")).toBool(), true);
+        QJsonObject editorFillOnDrop = editorMigrated.value(QStringLiteral("FillOnDrop")).toObject();
+        QCOMPARE(editorFillOnDrop.value(QStringLiteral("Enabled")).toBool(), false);
+
+        // v1 groups should be removed
+        QVERIFY(!migrated.contains(QStringLiteral("Activation")));
+        QVERIFY(!migrated.contains(QStringLiteral("Display")));
+    }
+
+    void testDoubleMigration_idempotent()
+    {
+        IsolatedConfigGuard guard;
+        // Create v1 JSON, migrate once, migrate again — should be unchanged
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+        QJsonObject activation;
+        activation[QStringLiteral("SnappingEnabled")] = true;
+        root[QStringLiteral("Activation")] = activation;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        // First migration
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QJsonObject afterFirst = readJsonConfig(ConfigDefaults::configFilePath());
+
+        // Second migration — should be a no-op
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QJsonObject afterSecond = readJsonConfig(ConfigDefaults::configFilePath());
+
+        QCOMPARE(afterFirst, afterSecond);
+    }
+
+    void testMigrateShortcuts_v1ToV2()
+    {
+        IsolatedConfigGuard guard;
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        QJsonObject globalShortcuts;
+        globalShortcuts[QStringLiteral("OpenEditorShortcut")] = QStringLiteral("Meta+E");
+        globalShortcuts[QStringLiteral("NextLayoutShortcut")] = QStringLiteral("Meta+N");
+        root[QStringLiteral("GlobalShortcuts")] = globalShortcuts;
+
+        QJsonObject autotileShortcuts;
+        autotileShortcuts[QStringLiteral("ToggleShortcut")] = QStringLiteral("Meta+T");
+        root[QStringLiteral("AutotileShortcuts")] = autotileShortcuts;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
+        QJsonObject shortcuts = migrated.value(QStringLiteral("Shortcuts")).toObject();
+        QJsonObject global = shortcuts.value(QStringLiteral("Global")).toObject();
+        QCOMPARE(global.value(QStringLiteral("OpenEditor")).toString(), QStringLiteral("Meta+E"));
+        QCOMPARE(global.value(QStringLiteral("NextLayout")).toString(), QStringLiteral("Meta+N"));
+
+        QJsonObject tiling = shortcuts.value(QStringLiteral("Tiling")).toObject();
+        QCOMPARE(tiling.value(QStringLiteral("Toggle")).toString(), QStringLiteral("Meta+T"));
+
+        // v1 groups should be removed
+        QVERIFY(!migrated.contains(QStringLiteral("GlobalShortcuts")));
+        QVERIFY(!migrated.contains(QStringLiteral("AutotileShortcuts")));
+    }
+
+    // =========================================================================
+    // Round-trip with JsonConfigBackend
+    // =========================================================================
+
     void testMigratedConfigReadableByBackend()
     {
         IsolatedConfigGuard guard;

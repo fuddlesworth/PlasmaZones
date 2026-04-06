@@ -147,14 +147,10 @@ void EditorController::loadEditorSettings()
         bool edgeEnabled =
             editorSnapping->readBool(ConfigDefaults::edgeEnabledKey(), ConfigDefaults::editorEdgeSnappingEnabled());
 
-        qreal snapIntX = editorSnapping->readDouble(ConfigDefaults::intervalXKey(), -1.0);
-        qreal snapIntY = editorSnapping->readDouble(ConfigDefaults::intervalYKey(), -1.0);
-        qreal snapInt = editorSnapping->readDouble(ConfigDefaults::intervalKey(), EditorConstants::DefaultSnapInterval);
-
-        if (snapIntX < 0.0)
-            snapIntX = snapInt;
-        if (snapIntY < 0.0)
-            snapIntY = snapInt;
+        qreal snapIntX =
+            editorSnapping->readDouble(ConfigDefaults::intervalXKey(), EditorConstants::DefaultSnapInterval);
+        qreal snapIntY =
+            editorSnapping->readDouble(ConfigDefaults::intervalYKey(), EditorConstants::DefaultSnapInterval);
 
         m_snappingService->setGridSnappingEnabled(gridEnabled);
         m_snappingService->setEdgeSnappingEnabled(edgeEnabled);
@@ -227,7 +223,6 @@ void EditorController::saveEditorSettings()
         editorSnapping->writeBool(ConfigDefaults::edgeEnabledKey(), m_snappingService->edgeSnappingEnabled());
         editorSnapping->writeDouble(ConfigDefaults::intervalXKey(), m_snappingService->snapIntervalX());
         editorSnapping->writeDouble(ConfigDefaults::intervalYKey(), m_snappingService->snapIntervalY());
-        editorSnapping->writeDouble(ConfigDefaults::intervalKey(), m_snappingService->snapIntervalX());
         editorSnapping->writeInt(ConfigDefaults::overrideModifierKey(), m_snapOverrideModifier);
     }
 

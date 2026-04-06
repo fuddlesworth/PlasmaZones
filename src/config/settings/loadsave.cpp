@@ -588,15 +588,10 @@ void Settings::loadEditorConfig(IConfigBackend* backend)
         m_editorEdgeSnappingEnabled =
             snapping->readBool(ConfigDefaults::edgeEnabledKey(), ConfigDefaults::editorEdgeSnappingEnabled());
 
-        double intervalX = snapping->readDouble(ConfigDefaults::intervalXKey(), -1.0);
-        if (intervalX < 0.0)
-            intervalX = snapping->readDouble(ConfigDefaults::intervalKey(), ConfigDefaults::editorSnapInterval());
-        m_editorSnapIntervalX = intervalX;
-
-        double intervalY = snapping->readDouble(ConfigDefaults::intervalYKey(), -1.0);
-        if (intervalY < 0.0)
-            intervalY = snapping->readDouble(ConfigDefaults::intervalKey(), ConfigDefaults::editorSnapInterval());
-        m_editorSnapIntervalY = intervalY;
+        m_editorSnapIntervalX =
+            snapping->readDouble(ConfigDefaults::intervalXKey(), ConfigDefaults::editorSnapInterval());
+        m_editorSnapIntervalY =
+            snapping->readDouble(ConfigDefaults::intervalYKey(), ConfigDefaults::editorSnapInterval());
 
         m_editorSnapOverrideModifier =
             snapping->readInt(ConfigDefaults::overrideModifierKey(), ConfigDefaults::editorSnapOverrideModifier());

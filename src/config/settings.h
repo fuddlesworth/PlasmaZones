@@ -1632,7 +1632,7 @@ private:
     bool m_enableBlur = ConfigDefaults::enableBlur();
     QString m_labelFontFamily;
     qreal m_labelFontSizeScale = ConfigDefaults::labelFontSizeScale();
-    int m_labelFontWeight = QFont::Bold;
+    int m_labelFontWeight = ConfigDefaults::labelFontWeight();
     bool m_labelFontItalic = ConfigDefaults::labelFontItalic();
     bool m_labelFontUnderline = ConfigDefaults::labelFontUnderline();
     bool m_labelFontStrikeout = ConfigDefaults::labelFontStrikeout();
@@ -1734,8 +1734,8 @@ private:
     bool m_autotileShowBorder = ConfigDefaults::autotileShowBorder();
     int m_autotileBorderWidth = ConfigDefaults::autotileBorderWidth();
     int m_autotileBorderRadius = ConfigDefaults::autotileBorderRadius();
-    QColor m_autotileBorderColor = QColor(0, 120, 212, 128); // #800078D4 — same as highlightColor
-    QColor m_autotileInactiveBorderColor = QColor(128, 128, 128, 64); // #40808080 — same as inactiveColor
+    QColor m_autotileBorderColor = ConfigDefaults::autotileBorderColor();
+    QColor m_autotileInactiveBorderColor = ConfigDefaults::autotileInactiveBorderColor();
     bool m_autotileUseSystemBorderColors = ConfigDefaults::autotileUseSystemBorderColors();
     StickyWindowHandling m_autotileStickyWindowHandling = StickyWindowHandling::TreatAsNormal;
     QStringList m_lockedScreens;
@@ -1833,9 +1833,9 @@ private:
     bool m_editorEdgeSnappingEnabled = ConfigDefaults::editorEdgeSnappingEnabled();
     qreal m_editorSnapIntervalX = ConfigDefaults::editorSnapInterval();
     qreal m_editorSnapIntervalY = ConfigDefaults::editorSnapInterval();
-    int m_editorSnapOverrideModifier = static_cast<int>(Qt::ShiftModifier);
+    int m_editorSnapOverrideModifier = ConfigDefaults::editorSnapOverrideModifier();
     bool m_fillOnDropEnabled = ConfigDefaults::fillOnDropEnabled();
-    int m_fillOnDropModifier = static_cast<int>(Qt::ControlModifier);
+    int m_fillOnDropModifier = ConfigDefaults::fillOnDropModifier();
 };
 
 } // namespace PlasmaZones

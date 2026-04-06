@@ -39,6 +39,9 @@ public:
     // Config Group Names — v2 dot-path hierarchy
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Schema version key (stored at JSON root)
+    PZ_CONFIG_KEY(versionKey, "_version")
+
     // Top-level groups
     PZ_CONFIG_GROUP(generalGroup, "General")
     PZ_CONFIG_GROUP(snappingGroup, "Snapping")
@@ -54,6 +57,7 @@ public:
     PZ_CONFIG_GROUP(updatesGroup, "Updates")
 
     // Snapping sub-groups
+    PZ_CONFIG_GROUP(snappingAppearanceGroup, "Snapping.Appearance")
     PZ_CONFIG_GROUP(snappingBehaviorGroup, "Snapping.Behavior")
     PZ_CONFIG_GROUP(snappingBehaviorZoneSpanGroup, "Snapping.Behavior.ZoneSpan")
     PZ_CONFIG_GROUP(snappingBehaviorSnapAssistGroup, "Snapping.Behavior.SnapAssist")
@@ -68,6 +72,7 @@ public:
     PZ_CONFIG_GROUP(snappingGapsGroup, "Snapping.Gaps")
 
     // Tiling sub-groups
+    PZ_CONFIG_GROUP(tilingAppearanceGroup, "Tiling.Appearance")
     PZ_CONFIG_GROUP(tilingAlgorithmGroup, "Tiling.Algorithm")
     PZ_CONFIG_GROUP(tilingBehaviorGroup, "Tiling.Behavior")
     PZ_CONFIG_GROUP(tilingAppearanceColorsGroup, "Tiling.Appearance.Colors")
@@ -312,12 +317,12 @@ public:
     PZ_CONFIG_KEY(previousLayoutKey, "PreviousLayout")
     PZ_CONFIG_KEY(nextLayoutKey, "NextLayout")
 
-    // Parameterized — cannot use the macro
+    // Parameterized — uses the pattern accessor to avoid duplication
+    PZ_CONFIG_KEY(quickLayoutKeyPattern, "QuickLayout%1")
     static QString quickLayoutKey(int n)
     {
-        return QStringLiteral("QuickLayout%1").arg(n);
+        return quickLayoutKeyPattern().arg(n);
     }
-    PZ_CONFIG_KEY(quickLayoutKeyPattern, "QuickLayout%1")
 
     PZ_CONFIG_KEY(moveWindowLeftKey, "MoveWindowLeft")
     PZ_CONFIG_KEY(moveWindowRightKey, "MoveWindowRight")
@@ -335,12 +340,12 @@ public:
     PZ_CONFIG_KEY(swapWindowUpKey, "SwapWindowUp")
     PZ_CONFIG_KEY(swapWindowDownKey, "SwapWindowDown")
 
-    // Parameterized — cannot use the macro
+    // Parameterized — uses the pattern accessor to avoid duplication
+    PZ_CONFIG_KEY(snapToZoneKeyPattern, "SnapToZone%1")
     static QString snapToZoneKey(int n)
     {
-        return QStringLiteral("SnapToZone%1").arg(n);
+        return snapToZoneKeyPattern().arg(n);
     }
-    PZ_CONFIG_KEY(snapToZoneKeyPattern, "SnapToZone%1")
 
     PZ_CONFIG_KEY(rotateWindowsClockwiseKey, "RotateWindowsClockwise")
     PZ_CONFIG_KEY(rotateWindowsCounterclockwiseKey, "RotateWindowsCounterclockwise")

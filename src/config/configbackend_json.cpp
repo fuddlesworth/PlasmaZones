@@ -20,11 +20,20 @@ const QLatin1String PerScreenKeyStr(PerScreenKey);
 /// Maximum nesting depth for recursive JSON traversal (prevents stack overflow from malicious configs).
 constexpr int MaxDotPathDepth = 8;
 
-/// Split a dot-path group name into segments with an assertion guard.
+/// Split a dot-path group name into segments with depth enforcement.
+/// Returns empty list if the group name resolves to no segments (release-safe).
 QStringList splitDotPath(const QString& groupName, const char* caller)
 {
-    const QStringList segments = groupName.split(QLatin1Char('.'), Qt::SkipEmptyParts);
-    Q_ASSERT_X(!segments.isEmpty(), caller, "Dot-path group name resolved to no segments");
+    QStringList segments = groupName.split(QLatin1Char('.'), Qt::SkipEmptyParts);
+    if (segments.isEmpty()) {
+        qWarning("splitDotPath (%s): group name '%s' resolved to no segments", caller, qPrintable(groupName));
+        return segments;
+    }
+    if (segments.size() > MaxDotPathDepth) {
+        qWarning("splitDotPath (%s): group '%s' exceeds MaxDotPathDepth (%d segments, max %d) — truncating", caller,
+                 qPrintable(groupName), segments.size(), MaxDotPathDepth);
+        segments = segments.mid(0, MaxDotPathDepth);
+    }
     return segments;
 }
 
@@ -122,7 +131,11 @@ QJsonObject JsonConfigGroup::groupObject() const
     }
     // Dot-path navigation: "Snapping.Behavior.ZoneSpan" → root["Snapping"]["Behavior"]["ZoneSpan"]
     if (m_groupName.contains(QLatin1Char('.'))) {
-        const auto chain = buildDotPathChain(m_root, splitDotPath(m_groupName, "JsonConfigGroup::groupObject"));
+        const QStringList segments = splitDotPath(m_groupName, "JsonConfigGroup::groupObject");
+        if (segments.isEmpty()) {
+            return {};
+        }
+        const auto chain = buildDotPathChain(m_root, segments);
         return chain.last();
     }
     return m_root.value(m_groupName).toObject();
@@ -147,6 +160,10 @@ void JsonConfigGroup::setGroupObject(const QJsonObject& obj)
         // Dot-path write: rebuild the nested chain from root.
         // e.g. "Snapping.Behavior.ZoneSpan" → root["Snapping"]["Behavior"]["ZoneSpan"] = obj
         const QStringList segments = splitDotPath(m_groupName, "JsonConfigGroup::setGroupObject");
+        if (segments.isEmpty()) {
+            m_backend->markDirty();
+            return;
+        }
         const auto chain = buildDotPathChain(m_root, segments);
 
         // Set the leaf, then write back up the chain
@@ -177,6 +194,13 @@ QString JsonConfigGroup::readString(const QString& key, const QString& defaultVa
     }
     if (val.isObject()) {
         return QString::fromUtf8(QJsonDocument(val.toObject()).toJson(QJsonDocument::Compact));
+    }
+    // Handle non-string types (e.g. hand-edited config with "Enabled": true)
+    if (val.isBool()) {
+        return val.toBool() ? QStringLiteral("true") : QStringLiteral("false");
+    }
+    if (val.isDouble()) {
+        return QString::number(val.toDouble());
     }
     return val.toString(defaultValue);
 }
@@ -442,8 +466,8 @@ void JsonConfigBackend::sync()
     // Ensure _version is always present so future migration steps can
     // distinguish format revisions.  Fresh installs that never went through
     // migration would otherwise lack it.
-    if (!m_root.contains(QLatin1String("_version"))) {
-        m_root[QLatin1String("_version")] = ConfigSchemaVersion;
+    if (!m_root.contains(ConfigDefaults::versionKey())) {
+        m_root[ConfigDefaults::versionKey()] = ConfigSchemaVersion;
     }
 
     if (!writeJsonAtomically(m_filePath, m_root)) {
@@ -513,6 +537,9 @@ void JsonConfigBackend::deleteGroup(const QString& name)
         // e.g. "Snapping.Behavior.ZoneSpan" removes ZoneSpan from Behavior,
         // then removes Behavior if empty, then Snapping if empty.
         const QStringList segments = splitDotPath(name, "JsonConfigBackend::deleteGroup");
+        if (segments.isEmpty()) {
+            return;
+        }
         const auto chain = buildDotPathChain(m_root, segments);
 
         // For path "A.B.C", chain=[root["A"], A["B"], B["C"]].
@@ -598,7 +625,7 @@ QStringList JsonConfigBackend::groupList() const
             return;
         }
         for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-            if (it.key() == PerScreenKeyStr || it.key() == QLatin1String("_version")) {
+            if (it.key() == PerScreenKeyStr || it.key() == ConfigDefaults::versionKey()) {
                 continue;
             }
             if (it.value().isObject()) {
@@ -642,7 +669,7 @@ QMap<QString, QVariant> readJsonConfigFromDisk(const QString& filePath)
 
     // Flatten nested JSON into "Group/Key" format
     for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
-        if (it.key() == QLatin1String("_version")) {
+        if (it.key() == ConfigDefaults::versionKey()) {
             continue;
         }
         if (it.value().isObject()) {

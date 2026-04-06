@@ -582,6 +582,109 @@ private Q_SLOTS:
         QVERIFY(groups.contains(QStringLiteral("Snapping.Behavior.ZoneSpan")));
         QVERIFY(groups.contains(QStringLiteral("Snapping.Gaps")));
     }
+
+    // =========================================================================
+    // Dot-path depth limit
+    // =========================================================================
+
+    void testDotPathDepthLimit_withinLimit()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // 8 segments is at the limit — should work fine
+        const QString deepGroup = QStringLiteral("A.B.C.D.E.F.G.H");
+        {
+            auto g = backend->group(deepGroup);
+            g->writeString(QStringLiteral("Key"), QStringLiteral("value"));
+        }
+        {
+            auto g = backend->group(deepGroup);
+            QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("value"));
+        }
+    }
+
+    void testDotPathDepthLimit_exceedsLimit_truncates()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // 10 segments exceeds MaxDotPathDepth=8 — should be truncated to 8
+        const QString tooDeep = QStringLiteral("A.B.C.D.E.F.G.H.I.J");
+        {
+            auto g = backend->group(tooDeep);
+            g->writeString(QStringLiteral("Key"), QStringLiteral("value"));
+        }
+        // The write should have been truncated to depth 8 (A.B.C.D.E.F.G.H)
+        // Reading the truncated path should find the value
+        {
+            auto g = backend->group(QStringLiteral("A.B.C.D.E.F.G.H"));
+            QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("value"));
+        }
+    }
+
+    // =========================================================================
+    // Dot-path sync + reparse round-trip
+    // =========================================================================
+
+    void testDotPathSyncReparse_roundTrip()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Write to a dot-path group
+        {
+            auto g = backend->group(QStringLiteral("Snapping.Behavior.ZoneSpan"));
+            g->writeBool(QStringLiteral("Enabled"), true);
+            g->writeString(QStringLiteral("Triggers"), QStringLiteral("[{\"modifier\":1,\"mouseButton\":0}]"));
+        }
+        backend->sync();
+
+        // Reparse from disk
+        backend->reparseConfiguration();
+
+        // Verify values survived the round-trip
+        {
+            auto g = backend->group(QStringLiteral("Snapping.Behavior.ZoneSpan"));
+            QCOMPARE(g->readBool(QStringLiteral("Enabled"), false), true);
+            QVERIFY(g->readString(QStringLiteral("Triggers")).contains(QStringLiteral("modifier")));
+        }
+    }
+
+    // =========================================================================
+    // readString handles non-string JSON types
+    // =========================================================================
+
+    void testReadString_boolValue_convertsToString()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            g->writeBool(QStringLiteral("Flag"), true);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            // readString on a bool should return "true", not the default
+            QCOMPARE(g->readString(QStringLiteral("Flag"), QStringLiteral("fallback")), QStringLiteral("true"));
+        }
+    }
+
+    void testReadString_numberValue_convertsToString()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            g->writeInt(QStringLiteral("Count"), 42);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            QCOMPARE(g->readString(QStringLiteral("Count"), QStringLiteral("fallback")), QStringLiteral("42"));
+        }
+    }
 };
 
 QTEST_MAIN(TestJsonConfigBackend)
