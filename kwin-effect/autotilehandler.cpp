@@ -21,6 +21,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QTimer>
 #include <QtMath>
 
 namespace PlasmaZones {
@@ -766,6 +767,49 @@ void AutotileHandler::applyFloatCleanup(const QString& windowId)
     }
     m_effect->removeWindowBorder(windowId);
     unmaximizeMonocleWindow(windowId);
+}
+
+void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, const QString& screenId)
+{
+    // Restore border and clear tiling state synchronously — don't wait for
+    // the daemon's async windowFloatingChanged signal, which may never arrive
+    // (e.g., cross-screen drag where onWindowClosed removes daemon tracking
+    // before setWindowFloatingForScreen processes).
+    applyFloatCleanup(windowId);
+
+    // Restore pre-autotile SIZE (not position — window stays where dropped).
+    // Defer to next event loop tick so KWin has finished the interactive move
+    // and the window's frame geometry reflects the actual drop position.
+    if (w) {
+        auto screenIt = m_preAutotileGeometries.constFind(screenId);
+        if (screenIt != m_preAutotileGeometries.constEnd()) {
+            const QString geoKey = findSavedGeometryKey(screenIt.value(), windowId);
+            if (!geoKey.isEmpty()) {
+                const QRectF savedGeo = screenIt.value().value(geoKey);
+                if (savedGeo.isValid()) {
+                    QPointer<KWin::EffectWindow> wp = w;
+                    const int savedW = qRound(savedGeo.width());
+                    const int savedH = qRound(savedGeo.height());
+                    // Capture m_effect by value (raw pointer, owned by the timer's
+                    // context object) instead of `this` — avoids implicit coupling
+                    // to AutotileHandler's lifetime via the parent ownership chain.
+                    PlasmaZonesEffect* effect = m_effect;
+                    QTimer::singleShot(0, effect, [effect, wp, windowId, savedW, savedH]() {
+                        if (!wp || wp->isDeleted()) {
+                            return;
+                        }
+                        QRectF currentFrame = wp->frameGeometry();
+                        QRect sizeRestored(qRound(currentFrame.x()), qRound(currentFrame.y()), savedW, savedH);
+                        effect->applySnapGeometry(wp, sizeRestored);
+                        qCInfo(lcEffect) << "Drag-to-float: restored pre-autotile size for" << windowId << savedW << "x"
+                                         << savedH;
+                    });
+                }
+            }
+        }
+    }
+
+    m_effect->updateAllBorders();
 }
 
 void AutotileHandler::onDaemonReady()

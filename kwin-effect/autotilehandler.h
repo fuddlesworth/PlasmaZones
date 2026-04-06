@@ -61,6 +61,19 @@ public:
 
     void onWindowClosed(const QString& windowId, const QString& screenId);
     void onDaemonReady();
+
+    /**
+     * @brief Handle autotile drag-to-float: restore border and pre-autotile size
+     *
+     * Called synchronously at drag-stop time. Restores the KWin border (title bar),
+     * clears tiling state, and defers a size-only restore to the next event loop
+     * tick (after KWin finishes the interactive move).
+     *
+     * @param w The window being floated (may be null for cross-screen drops)
+     * @param windowId Stable window identifier
+     * @param screenId Screen the window was tiled on (pre-drag screen)
+     */
+    void handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, const QString& screenId);
     void savePreAutotileForDesktopMove(const QString& windowId, const QString& screenId);
     void handleWindowOutputChanged(KWin::EffectWindow* w);
 

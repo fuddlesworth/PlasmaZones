@@ -299,21 +299,29 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                             // Transfer: remove from old virtual screen, add to new one.
                             // handleWindowOutputChanged won't fire (same physical monitor),
                             // so manually perform the close/open cycle.
+                            // Restore border and pre-autotile size BEFORE onWindowClosed
+                            // clears the tiling/borderless tracking state.
+                            if (!dropIsAutotile) {
+                                m_autotileHandler->handleDragToFloat(w, windowId, m_dragBypassScreenId);
+                            }
+
                             m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
                             if (w && dropIsAutotile) {
                                 m_autotileHandler->notifyWindowAdded(w);
-                            } else {
-                                // Dropped on a non-autotile screen — float it.
-                                // Mark as drag-floated so slotApplyGeometryRequested skips the
-                                // daemon's pre-autotile geometry restore.
-                                m_dragFloatedWindowIds.insert(windowId);
-                                fireAndForgetDBusCall(DBus::Interface::WindowTracking,
-                                                      QStringLiteral("setWindowFloatingForScreen"),
-                                                      {windowId, m_dragBypassScreenId, true},
-                                                      QStringLiteral("setWindowFloatingForScreen"));
                             }
+                            // Non-autotile drop: handleDragToFloat already restored
+                            // border and size locally. onWindowClosed sent D-Bus
+                            // windowClosed which removes daemon tracking — a subsequent
+                            // setWindowFloatingForScreen would be a no-op (window not
+                            // found in autotile engine). Don't insert into
+                            // m_dragFloatedWindowIds either: the stale entry would
+                            // incorrectly skip geometry restore if the window is later
+                            // re-snapped on the drop screen and then float-toggled.
                         } else {
                             // Same virtual screen — normal drag-to-float behavior.
+                            // Restore border and pre-autotile size synchronously (don't
+                            // wait for the daemon's async windowFloatingChanged signal).
+                            m_autotileHandler->handleDragToFloat(w, windowId, m_dragBypassScreenId);
                             // Mark as drag-floated so slotApplyGeometryRequested skips the
                             // daemon's pre-autotile geometry restore — the window should stay
                             // where the user dropped it, not snap back to its original position.

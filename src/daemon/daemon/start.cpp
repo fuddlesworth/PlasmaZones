@@ -234,25 +234,18 @@ void Daemon::connectScreenSignals()
         }
     });
 
-    connect(m_screenManager.get(), &ScreenManager::screenGeometryChanged, this,
-            [this](QScreen* screen, const QRect& geometry) {
-                Q_UNUSED(geometry)
-                // Queue geometry update with debouncing to avoid cascade
-                QRect availableGeom = ScreenManager::actualAvailableGeometry(screen);
-                m_geometryUpdatePending = true;
-                m_geometryUpdateTimer.start();
-            });
+    connect(m_screenManager.get(), &ScreenManager::screenGeometryChanged, this, [this] {
+        m_geometryUpdatePending = true;
+        m_geometryUpdateTimer.start();
+    });
 
     // Connect to available geometry changes (panels added/removed/resized)
     // This is reactive - the sensor windows automatically track panel changes
     // Uses debouncing to coalesce rapid changes into a single update
-    connect(m_screenManager.get(), &ScreenManager::availableGeometryChanged, this,
-            [this](QScreen* screen, const QRect& availableGeometry) {
-                // Queue geometry update with debouncing
-                // Multiple rapid changes will be coalesced into a single update
-                m_geometryUpdatePending = true;
-                m_geometryUpdateTimer.start();
-            });
+    connect(m_screenManager.get(), &ScreenManager::availableGeometryChanged, this, [this] {
+        m_geometryUpdatePending = true;
+        m_geometryUpdateTimer.start();
+    });
 
     // Don't pre-create overlay windows at startup. On Wayland with the layer-shell
     // QPA plugin this can cause visibility issues. Create on-demand in show() instead,
