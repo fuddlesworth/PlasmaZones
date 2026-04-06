@@ -55,6 +55,7 @@ public:
     PZ_CONFIG_GROUP(editorGroup, "Editor")
     PZ_CONFIG_GROUP(tilingQuickLayoutSlotsGroup, "TilingQuickLayoutSlots")
     PZ_CONFIG_GROUP(orderingGroup, "Ordering")
+    PZ_CONFIG_GROUP(autoTileStateGroup, "AutoTileState")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Trigger JSON Field Names

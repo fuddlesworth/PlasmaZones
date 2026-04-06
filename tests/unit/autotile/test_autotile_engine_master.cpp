@@ -109,20 +109,26 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
         const QString screen1 = QStringLiteral("Screen1");
-        engine.setAutotileScreens({screen1});
+        const QString screen2 = QStringLiteral("Screen2");
+        engine.setAutotileScreens({screen1, screen2});
 
         engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
         engine.windowOpened(QStringLiteral("win2"), screen1, 0, 0);
         engine.windowOpened(QStringLiteral("win3"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win4"), screen2, 0, 0);
+        engine.windowOpened(QStringLiteral("win5"), screen2, 0, 0);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screen1);
-        const int initial = state->masterCount();
+        TilingState* state1 = engine.stateForScreen(screen1);
+        TilingState* state2 = engine.stateForScreen(screen2);
+        const int initial1 = state1->masterCount();
+        const int initial2 = state2->masterCount();
 
         engine.windowFocused(QStringLiteral("win1"), screen1);
         engine.increaseMasterCount();
 
-        QCOMPARE(state->masterCount(), initial + 1);
+        QCOMPARE(state1->masterCount(), initial1 + 1);
+        QCOMPARE(state2->masterCount(), initial2);
     }
 
     void testDecreaseMasterCount_updatesFocusedScreenOnly()
@@ -130,19 +136,25 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
         const QString screen1 = QStringLiteral("Screen1");
-        engine.setAutotileScreens({screen1});
+        const QString screen2 = QStringLiteral("Screen2");
+        engine.setAutotileScreens({screen1, screen2});
 
         engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
         engine.windowOpened(QStringLiteral("win2"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win3"), screen2, 0, 0);
+        engine.windowOpened(QStringLiteral("win4"), screen2, 0, 0);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screen1);
-        state->setMasterCount(2);
+        TilingState* state1 = engine.stateForScreen(screen1);
+        TilingState* state2 = engine.stateForScreen(screen2);
+        state1->setMasterCount(2);
+        state2->setMasterCount(2);
 
         engine.windowFocused(QStringLiteral("win1"), screen1);
         engine.decreaseMasterCount();
 
-        QCOMPARE(state->masterCount(), 1);
+        QCOMPARE(state1->masterCount(), 1);
+        QCOMPARE(state2->masterCount(), 2);
     }
 
     void testDecreaseMasterCount_doesNotGoBelowOne()

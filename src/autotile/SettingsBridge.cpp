@@ -14,6 +14,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalBlocker>
+#include "config/configdefaults.h"
 #include "config/iconfigbackend.h"
 
 namespace PlasmaZones {
@@ -406,7 +407,7 @@ void SettingsBridge::saveState()
 {
     std::unique_ptr<IConfigBackend> fallback;
     IConfigBackend* backend = resolveBackend(m_configBackend, fallback);
-    auto group = backend->group(QStringLiteral("AutoTileState"));
+    auto group = backend->group(ConfigDefaults::autoTileStateGroup());
 
     // Save global state (algorithm only — autotile screens are derived from
     // layout assignments at startup by updateAutotileScreens(), not persisted
@@ -444,7 +445,7 @@ void SettingsBridge::loadState()
 {
     std::unique_ptr<IConfigBackend> fallback;
     IConfigBackend* backend = resolveBackend(m_configBackend, fallback);
-    auto group = backend->group(QStringLiteral("AutoTileState"));
+    auto group = backend->group(ConfigDefaults::autoTileStateGroup());
 
     if (!group->hasKey(QStringLiteral("algorithm")) && !group->hasKey(QStringLiteral("screenStates"))) {
         qCDebug(lcAutotile) << "No saved autotile state found";

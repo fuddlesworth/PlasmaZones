@@ -228,7 +228,7 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
 
 qreal PerScreenConfigResolver::effectiveSplitRatioStep(const QString& screenId) const
 {
-    if (auto v = perScreenOverride(screenId, QStringLiteral("SplitRatioStep")))
+    if (auto v = perScreenOverride(screenId, QLatin1String("SplitRatioStep")))
         return qBound(ConfigDefaults::autotileSplitRatioStepMin(), v->toDouble(),
                       ConfigDefaults::autotileSplitRatioStepMax());
     return m_engine->config()->splitRatioStep;

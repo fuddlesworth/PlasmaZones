@@ -75,6 +75,14 @@ private:
     QString resolveActiveScreen() const;
 
     /**
+     * @brief Resolve the TilingState for the currently focused screen
+     *
+     * Returns nullptr if no active screen or no state exists for it.
+     * Sets outScreenId to the resolved screen identifier.
+     */
+    TilingState* resolveActiveState(QString& outScreenId) const;
+
+    /**
      * @brief Helper to emit focus request for a window at calculated index
      */
     void emitFocusRequestAtIndex(int indexOffset, bool useFirst = false);
