@@ -1070,12 +1070,12 @@ void AutotileEngine::syncShortcutAdjustmentToSettings()
 
 void AutotileEngine::increaseMasterCount()
 {
-    m_navigation->increaseMasterCount();
+    m_navigation->adjustMasterCount(1);
 }
 
 void AutotileEngine::decreaseMasterCount()
 {
-    m_navigation->decreaseMasterCount();
+    m_navigation->adjustMasterCount(-1);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

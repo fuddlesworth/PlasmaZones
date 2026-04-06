@@ -232,9 +232,9 @@ void Daemon::handleIncreaseMasterRatio()
 {
     if (!m_autotileEngine || !m_autotileEngine->isEnabled())
         return;
-    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-    QString screenId = screen ? Utils::screenIdentifier(screen) : QString();
-    qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
+    const QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+    const QString screenId = screen ? Utils::screenIdentifier(screen) : QString();
+    const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->increaseMasterRatio(step);
 }
 
@@ -242,9 +242,9 @@ void Daemon::handleDecreaseMasterRatio()
 {
     if (!m_autotileEngine || !m_autotileEngine->isEnabled())
         return;
-    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-    QString screenId = screen ? Utils::screenIdentifier(screen) : QString();
-    qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
+    const QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+    const QString screenId = screen ? Utils::screenIdentifier(screen) : QString();
+    const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->decreaseMasterRatio(step);
 }
 HANDLE_AUTOTILE_ONLY(IncreaseMasterCount, increaseMasterCount())

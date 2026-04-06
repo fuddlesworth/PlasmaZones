@@ -62,8 +62,7 @@ public:
     // Master count adjustment
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void increaseMasterCount();
-    void decreaseMasterCount();
+    void adjustMasterCount(int delta);
 
 private:
     /**

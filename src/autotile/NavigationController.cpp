@@ -281,7 +281,7 @@ void NavigationController::setGlobalMasterCount(int count)
 // Master count adjustment
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void NavigationController::increaseMasterCount()
+void NavigationController::adjustMasterCount(int delta)
 {
     QString screenId;
     TilingState* state = resolveActiveState(screenId);
@@ -292,41 +292,7 @@ void NavigationController::increaseMasterCount()
     }
 
     const int oldCount = state->masterCount();
-    state->setMasterCount(oldCount + 1);
-    const int resultCount = state->masterCount(); // clamped
-    const bool changed = resultCount != oldCount;
-
-    if (changed) {
-        if (m_engine->hasPerScreenOverride(screenId, PerScreenKeys::MasterCount)) {
-            m_engine->updatePerScreenOverride(screenId, PerScreenKeys::MasterCount, resultCount);
-        } else {
-            m_engine->config()->masterCount = resultCount;
-            m_engine->syncShortcutAdjustmentToSettings();
-        }
-
-        if (m_engine->isEnabled()) {
-            m_engine->retileAfterOperation(screenId, true);
-        }
-    }
-
-    // Always show OSD with the clamped value — even at max bounds
-    QString reason = QStringLiteral("increased:") + QString::number(resultCount);
-    Q_EMIT m_engine->navigationFeedbackRequested(changed, QStringLiteral("master_count"), reason, QString(), QString(),
-                                                 screenId);
-}
-
-void NavigationController::decreaseMasterCount()
-{
-    QString screenId;
-    TilingState* state = resolveActiveState(screenId);
-    if (!state) {
-        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("master_count"), QStringLiteral("no_focus"),
-                                                     QString(), QString(), QString());
-        return;
-    }
-
-    const int oldCount = state->masterCount();
-    state->setMasterCount(oldCount - 1); // setMasterCount clamps to MinMasterCount
+    state->setMasterCount(oldCount + delta); // setMasterCount clamps internally
     const int resultCount = state->masterCount();
     const bool changed = resultCount != oldCount;
 
@@ -343,8 +309,9 @@ void NavigationController::decreaseMasterCount()
         }
     }
 
-    // Always show OSD — even at minimum, so the user sees the clamped value
-    QString reason = QStringLiteral("decreased:") + QString::number(resultCount);
+    // Always show OSD with the clamped value — even at bounds
+    QString reason =
+        (delta > 0 ? QStringLiteral("increased:") : QStringLiteral("decreased:")) + QString::number(resultCount);
     Q_EMIT m_engine->navigationFeedbackRequested(changed, QStringLiteral("master_count"), reason, QString(), QString(),
                                                  screenId);
 }

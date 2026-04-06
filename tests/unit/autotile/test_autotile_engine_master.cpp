@@ -211,6 +211,37 @@ private Q_SLOTS:
         QVERIFY(qFuzzyCompare(updatedOverrides.value(QStringLiteral("SplitRatio")).toDouble(), 0.6));
     }
 
+    void testDecreaseMasterRatio_withPerScreenOverride_updatesOverrideNotGlobal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        const QString screen1 = QStringLiteral("Screen1");
+        engine.setAutotileScreens({screen1});
+
+        engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+
+        // Apply a per-screen SplitRatio override
+        QVariantMap overrides;
+        overrides[QStringLiteral("SplitRatio")] = 0.5;
+        engine.applyPerScreenConfig(screen1, overrides);
+
+        TilingState* state = engine.stateForScreen(screen1);
+        state->setSplitRatio(0.5);
+        const qreal globalBefore = engine.config()->splitRatio;
+
+        engine.windowFocused(QStringLiteral("win1"), screen1);
+        engine.decreaseMasterRatio(0.1);
+
+        // The per-screen state should be updated
+        QVERIFY(qFuzzyCompare(state->splitRatio(), 0.4));
+        // The global config should NOT be updated
+        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, globalBefore));
+        // The stored per-screen override should reflect the new value
+        QVariantMap updatedOverrides = engine.perScreenOverrides(screen1);
+        QVERIFY(qFuzzyCompare(updatedOverrides.value(QStringLiteral("SplitRatio")).toDouble(), 0.4));
+    }
+
     void testIncreaseMasterCount_withPerScreenOverride_updatesOverrideNotGlobal()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);

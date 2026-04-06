@@ -124,11 +124,11 @@ void SettingsBridge::syncFromSettings(Settings* settings)
         }
     }
     // splitRatioStep: not shortcut-adjustable, so no debounce guard needed.
+    // Step size doesn't affect layout, so don't set configChanged (avoids unnecessary retile).
     {
         const qreal newStep = settings->autotileSplitRatioStep();
         if (!qFuzzyCompare(1.0 + cfg->splitRatioStep, 1.0 + newStep)) {
             cfg->splitRatioStep = newStep;
-            configChanged = true;
         }
     }
     // Sync per-algorithm settings map from Settings
