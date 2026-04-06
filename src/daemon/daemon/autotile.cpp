@@ -19,6 +19,7 @@
 #include "../../autotile/AutotileConfig.h"
 #include "../../autotile/AlgorithmRegistry.h"
 #include "../../autotile/TilingAlgorithm.h"
+#include "../../core/constants.h"
 #include <QScreen>
 
 namespace PlasmaZones {
@@ -93,7 +94,7 @@ void Daemon::updateAutotileScreens()
                 // dynamically derives the correct MaxWindows at retile time even
                 // without a per-screen override. The override here is an optimization.
                 const QString globalAlgo = m_autotileEngine->algorithm();
-                if (screenAlgo != globalAlgo && !overrides.contains(QLatin1String("MaxWindows"))) {
+                if (screenAlgo != globalAlgo && !overrides.contains(PerScreenKeys::MaxWindows)) {
                     auto* screenAlgoPtr = AlgorithmRegistry::instance()->algorithm(screenAlgo);
                     auto* globalAlgoPtr = AlgorithmRegistry::instance()->algorithm(globalAlgo);
                     if (screenAlgoPtr) {

@@ -14,6 +14,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalBlocker>
+#include "config/configdefaults.h"
 #include "config/iconfigbackend.h"
 
 namespace PlasmaZones {
@@ -96,7 +97,10 @@ void SettingsBridge::syncFromSettings(Settings* settings)
         }                                                                                                              \
     } while (0)
 
-    SYNC_FIELD(masterCount, autotileMasterCount);
+    // masterCount: skip overwrite when shortcut adjustment is pending (same rationale as splitRatio)
+    if (!m_shortcutSaveTimer.isActive()) {
+        SYNC_FIELD(masterCount, autotileMasterCount);
+    }
     SYNC_FIELD(innerGap, autotileInnerGap);
     SYNC_FIELD(outerGap, autotileOuterGap);
     SYNC_FIELD(usePerSideOuterGap, autotileUsePerSideOuterGap);
@@ -109,12 +113,22 @@ void SettingsBridge::syncFromSettings(Settings* settings)
     SYNC_FIELD(focusFollowsMouse, autotileFocusFollowsMouse);
     SYNC_FIELD(respectMinimumSize, autotileRespectMinimumSize);
     SYNC_FIELD(maxWindows, autotileMaxWindows);
-    // splitRatio: qreal needs fuzzy comparison to avoid spurious change detection
-    {
+    // splitRatio: skip overwrite when a shortcut-adjusted value is pending save.
+    // During the debounce window, the runtime ratio is authoritative — Settings
+    // may hold a stale value that hasn't been persisted to disk yet.
+    if (!m_shortcutSaveTimer.isActive()) {
         const qreal newRatio = settings->autotileSplitRatio();
         if (!qFuzzyCompare(1.0 + cfg->splitRatio, 1.0 + newRatio)) {
             cfg->splitRatio = newRatio;
             configChanged = true;
+        }
+    }
+    // splitRatioStep: not shortcut-adjustable, so no debounce guard needed.
+    // Step size doesn't affect layout, so don't set configChanged (avoids unnecessary retile).
+    {
+        const qreal newStep = settings->autotileSplitRatioStep();
+        if (!qFuzzyCompare(1.0 + cfg->splitRatioStep, 1.0 + newStep)) {
+            cfg->splitRatioStep = newStep;
         }
     }
     // Sync per-algorithm settings map from Settings
@@ -261,6 +275,12 @@ void SettingsBridge::connectToSettings(Settings* settings)
         scheduleSettingsRetile();
     });
 
+    QObject::connect(settings, &Settings::autotileSplitRatioStepChanged, m_engine, [this]() {
+        if (!m_settings)
+            return;
+        m_engine->config()->splitRatioStep = m_settings->autotileSplitRatioStep();
+    });
+
     QObject::connect(settings, &Settings::autotileMasterCountChanged, m_engine, [this]() {
         if (!m_settings)
             return;
@@ -387,7 +407,7 @@ void SettingsBridge::saveState()
 {
     std::unique_ptr<IConfigBackend> fallback;
     IConfigBackend* backend = resolveBackend(m_configBackend, fallback);
-    auto group = backend->group(QStringLiteral("AutoTileState"));
+    auto group = backend->group(ConfigDefaults::autoTileStateGroup());
 
     // Save global state (algorithm only — autotile screens are derived from
     // layout assignments at startup by updateAutotileScreens(), not persisted
@@ -425,7 +445,7 @@ void SettingsBridge::loadState()
 {
     std::unique_ptr<IConfigBackend> fallback;
     IConfigBackend* backend = resolveBackend(m_configBackend, fallback);
-    auto group = backend->group(QStringLiteral("AutoTileState"));
+    auto group = backend->group(ConfigDefaults::autoTileStateGroup());
 
     if (!group->hasKey(QStringLiteral("algorithm")) && !group->hasKey(QStringLiteral("screenStates"))) {
         qCDebug(lcAutotile) << "No saved autotile state found";

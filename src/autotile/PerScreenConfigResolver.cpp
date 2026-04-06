@@ -113,6 +113,18 @@ bool PerScreenConfigResolver::hasPerScreenOverride(const QString& screenId, cons
     return it != m_perScreenOverrides.constEnd() && it->contains(key);
 }
 
+void PerScreenConfigResolver::updatePerScreenOverride(const QString& screenId, const QString& key,
+                                                      const QVariant& value)
+{
+    auto it = m_perScreenOverrides.find(screenId);
+    if (it == m_perScreenOverrides.end()) {
+        qCWarning(lcAutotile) << "updatePerScreenOverride: no override map for screen" << screenId
+                              << "- cannot update key" << key;
+        return;
+    }
+    (*it)[key] = value;
+}
+
 void PerScreenConfigResolver::removeOverridesForScreen(const QString& screenId)
 {
     m_perScreenOverrides.remove(screenId);
@@ -197,7 +209,7 @@ bool PerScreenConfigResolver::effectiveRespectMinimumSize(const QString& screenI
 int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
 {
     // 1. Explicit per-screen MaxWindows override — highest priority
-    if (auto v = perScreenOverride(screenId, QLatin1String("MaxWindows")))
+    if (auto v = perScreenOverride(screenId, PerScreenKeys::MaxWindows))
         return qBound(AutotileDefaults::MinMaxWindows, v->toInt(), AutotileDefaults::MaxMaxWindows);
 
     // 2. When the per-screen algorithm differs from the global algorithm,
@@ -226,9 +238,17 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
     return m_engine->config()->maxWindows;
 }
 
+qreal PerScreenConfigResolver::effectiveSplitRatioStep(const QString& screenId) const
+{
+    if (auto v = perScreenOverride(screenId, PerScreenKeys::SplitRatioStep))
+        return qBound(ConfigDefaults::autotileSplitRatioStepMin(), v->toDouble(),
+                      ConfigDefaults::autotileSplitRatioStepMax());
+    return m_engine->config()->splitRatioStep;
+}
+
 QString PerScreenConfigResolver::effectiveAlgorithmId(const QString& screenId) const
 {
-    if (auto v = perScreenOverride(screenId, QLatin1String("Algorithm")))
+    if (auto v = perScreenOverride(screenId, PerScreenKeys::Algorithm))
         return v->toString();
     return m_engine->m_algorithmId;
 }

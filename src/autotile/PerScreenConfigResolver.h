@@ -70,6 +70,15 @@ public:
     bool hasPerScreenOverride(const QString& screenId, const QString& key) const;
 
     /**
+     * @brief Update a single per-screen override value in-place
+     *
+     * Used by shortcut handlers to persist runtime-adjusted values (e.g. split
+     * ratio, master count) back into the stored override map so they survive
+     * settings reloads and applyPerScreenConfig round-trips.
+     */
+    void updatePerScreenOverride(const QString& screenId, const QString& key, const QVariant& value);
+
+    /**
      * @brief Remove all overrides for a screen (used during screen removal)
      */
     void removeOverridesForScreen(const QString& screenId);
@@ -84,6 +93,7 @@ public:
     bool effectiveSmartGaps(const QString& screenId) const;
     bool effectiveRespectMinimumSize(const QString& screenId) const;
     int effectiveMaxWindows(const QString& screenId) const;
+    qreal effectiveSplitRatioStep(const QString& screenId) const;
     QString effectiveAlgorithmId(const QString& screenId) const;
     TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
 

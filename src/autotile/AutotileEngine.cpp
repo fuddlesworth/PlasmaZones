@@ -791,6 +791,11 @@ bool AutotileEngine::hasPerScreenOverride(const QString& screenId, const QString
     return m_configResolver->hasPerScreenOverride(screenId, key);
 }
 
+void AutotileEngine::updatePerScreenOverride(const QString& screenId, const QString& key, const QVariant& value)
+{
+    m_configResolver->updatePerScreenOverride(screenId, key, value);
+}
+
 int AutotileEngine::effectiveInnerGap(const QString& screenId) const
 {
     return m_configResolver->effectiveInnerGap(screenId);
@@ -819,6 +824,11 @@ bool AutotileEngine::effectiveRespectMinimumSize(const QString& screenId) const
 int AutotileEngine::effectiveMaxWindows(const QString& screenId) const
 {
     return m_configResolver->effectiveMaxWindows(screenId);
+}
+
+qreal AutotileEngine::effectiveSplitRatioStep(const QString& screenId) const
+{
+    return m_configResolver->effectiveSplitRatioStep(screenId);
 }
 
 QString AutotileEngine::effectiveAlgorithmId(const QString& screenId) const
@@ -1060,12 +1070,12 @@ void AutotileEngine::syncShortcutAdjustmentToSettings()
 
 void AutotileEngine::increaseMasterCount()
 {
-    m_navigation->increaseMasterCount();
+    m_navigation->adjustMasterCount(1);
 }
 
 void AutotileEngine::decreaseMasterCount()
 {
-    m_navigation->decreaseMasterCount();
+    m_navigation->adjustMasterCount(-1);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1939,7 +1949,7 @@ void AutotileEngine::propagateGlobalSplitRatio()
         if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
             continue;
         }
-        if (it.value() && !hasPerScreenOverride(it.key().screenId, QLatin1String("SplitRatio"))) {
+        if (it.value() && !hasPerScreenOverride(it.key().screenId, PerScreenKeys::SplitRatio)) {
             it.value()->setSplitRatio(m_config->splitRatio);
         }
     }
@@ -1953,7 +1963,7 @@ void AutotileEngine::propagateGlobalMasterCount()
         if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
             continue;
         }
-        if (it.value() && !hasPerScreenOverride(it.key().screenId, QLatin1String("MasterCount"))) {
+        if (it.value() && !hasPerScreenOverride(it.key().screenId, PerScreenKeys::MasterCount)) {
             it.value()->setMasterCount(m_config->masterCount);
         }
     }
