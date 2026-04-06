@@ -892,10 +892,7 @@ ApplicationWindow {
                             checked: settingsController.daemonRunning
                             accessibleName: i18n("Toggle daemon")
                             onToggled: function(newValue) {
-                                if (newValue)
-                                    settingsController.daemonController.startDaemon();
-                                else
-                                    settingsController.daemonController.stopDaemon();
+                                settingsController.daemonController.setEnabled(newValue);
                             }
                         }
 

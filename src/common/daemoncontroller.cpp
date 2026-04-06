@@ -79,22 +79,21 @@ bool DaemonController::isEnabled() const
 
 void DaemonController::setEnabled(bool enabled)
 {
-    if (m_enabled == enabled) {
-        return;
-    }
-    m_enabled = enabled;
-
-    // Update systemd service enabled state
+    // Always perform start/stop — the toggle tracks running state which
+    // can diverge from the systemd enabled state (e.g. manually started
+    // while the service is disabled).
     setAutostart(enabled);
 
-    // Start or stop daemon immediately
     if (enabled) {
         startDaemon();
     } else {
         stopDaemon();
     }
 
-    Q_EMIT enabledChanged();
+    if (m_enabled != enabled) {
+        m_enabled = enabled;
+        Q_EMIT enabledChanged();
+    }
 }
 
 void DaemonController::checkStatus()
