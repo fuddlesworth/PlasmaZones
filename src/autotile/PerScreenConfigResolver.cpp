@@ -113,6 +113,16 @@ bool PerScreenConfigResolver::hasPerScreenOverride(const QString& screenId, cons
     return it != m_perScreenOverrides.constEnd() && it->contains(key);
 }
 
+void PerScreenConfigResolver::updatePerScreenOverride(const QString& screenId, const QString& key,
+                                                      const QVariant& value)
+{
+    auto it = m_perScreenOverrides.find(screenId);
+    if (it == m_perScreenOverrides.end()) {
+        return;
+    }
+    (*it)[key] = value;
+}
+
 void PerScreenConfigResolver::removeOverridesForScreen(const QString& screenId)
 {
     m_perScreenOverrides.remove(screenId);

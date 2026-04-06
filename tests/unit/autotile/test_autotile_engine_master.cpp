@@ -177,6 +177,71 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // Per-screen override interaction tests
+    // =========================================================================
+
+    void testIncreaseMasterRatio_withPerScreenOverride_updatesOverrideNotGlobal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        const QString screen1 = QStringLiteral("Screen1");
+        engine.setAutotileScreens({screen1});
+
+        engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+
+        // Apply a per-screen SplitRatio override
+        QVariantMap overrides;
+        overrides[QStringLiteral("SplitRatio")] = 0.5;
+        engine.applyPerScreenConfig(screen1, overrides);
+
+        TilingState* state = engine.stateForScreen(screen1);
+        state->setSplitRatio(0.5);
+        const qreal globalBefore = engine.config()->splitRatio;
+
+        engine.windowFocused(QStringLiteral("win1"), screen1);
+        engine.increaseMasterRatio(0.1);
+
+        // The per-screen state should be updated
+        QVERIFY(qFuzzyCompare(state->splitRatio(), 0.6));
+        // The global config should NOT be updated
+        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, globalBefore));
+        // The stored per-screen override should reflect the new value
+        QVariantMap updatedOverrides = engine.perScreenOverrides(screen1);
+        QVERIFY(qFuzzyCompare(updatedOverrides.value(QStringLiteral("SplitRatio")).toDouble(), 0.6));
+    }
+
+    void testIncreaseMasterCount_withPerScreenOverride_updatesOverrideNotGlobal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        const QString screen1 = QStringLiteral("Screen1");
+        engine.setAutotileScreens({screen1});
+
+        engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win2"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win3"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+
+        QVariantMap overrides;
+        overrides[QStringLiteral("MasterCount")] = 1;
+        engine.applyPerScreenConfig(screen1, overrides);
+
+        const int globalBefore = engine.config()->masterCount;
+
+        engine.windowFocused(QStringLiteral("win1"), screen1);
+        engine.increaseMasterCount();
+
+        TilingState* state = engine.stateForScreen(screen1);
+        QCOMPARE(state->masterCount(), 2);
+        // Global config unchanged
+        QCOMPARE(engine.config()->masterCount, globalBefore);
+        // Stored override updated
+        QVariantMap updatedOverrides = engine.perScreenOverrides(screen1);
+        QCOMPARE(updatedOverrides.value(QStringLiteral("MasterCount")).toInt(), 2);
+    }
+
+    // =========================================================================
     // Monocle maximize tests
     // =========================================================================
 

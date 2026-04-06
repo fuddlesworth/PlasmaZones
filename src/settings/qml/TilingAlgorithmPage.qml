@@ -321,6 +321,7 @@ Flickable {
                         from: settingsController.autotileMaxWindowsMin
                         to: 12
                         stepSize: 1
+                        value: root.settingValue("MaxWindows", appSettings.autotileMaxWindows)
                         formatValue: function(v) {
                             return Math.round(v).toString();
                         }
@@ -329,14 +330,6 @@ Flickable {
                                 appSettings.autotileMaxWindows = v;
                             });
                         }
-                    }
-
-                    Binding {
-                        target: previewWindowSlider.slider
-                        property: "value"
-                        value: root.settingValue("MaxWindows", appSettings.autotileMaxWindows)
-                        when: !previewWindowSlider.slider.pressed
-                        restoreMode: Binding.RestoreNone
                     }
 
                 }
@@ -358,6 +351,7 @@ Flickable {
                         from: settingsController.autotileSplitRatioMin
                         to: 0.9
                         stepSize: 0.05
+                        value: root.settingValue("SplitRatio", appSettings.autotileSplitRatio)
                         formatValue: function(v) {
                             return Math.round(v * 100) + "%";
                         }
@@ -366,14 +360,6 @@ Flickable {
                                 appSettings.autotileSplitRatio = v;
                             });
                         }
-                    }
-
-                    Binding {
-                        target: splitRatioSlider.slider
-                        property: "value"
-                        value: root.settingValue("SplitRatio", appSettings.autotileSplitRatio)
-                        when: !splitRatioSlider.slider.pressed
-                        restoreMode: Binding.RestoreNone
                     }
 
                 }
@@ -390,6 +376,7 @@ Flickable {
                         from: settingsController.autotileSplitRatioStepMin
                         to: settingsController.autotileSplitRatioStepMax
                         stepSize: 0.01
+                        value: root.settingValue("SplitRatioStep", appSettings.autotileSplitRatioStep)
                         formatValue: function(v) {
                             return Math.round(v * 100) + "%";
                         }
@@ -398,14 +385,6 @@ Flickable {
                                 appSettings.autotileSplitRatioStep = v;
                             });
                         }
-                    }
-
-                    Binding {
-                        target: splitRatioStepSlider.slider
-                        property: "value"
-                        value: root.settingValue("SplitRatioStep", appSettings.autotileSplitRatioStep)
-                        when: !splitRatioStepSlider.slider.pressed
-                        restoreMode: Binding.RestoreNone
                     }
 
                 }
@@ -426,6 +405,7 @@ Flickable {
                         from: settingsController.autotileMasterCountMin
                         to: 5
                         stepSize: 1
+                        value: root.settingValue("MasterCount", appSettings.autotileMasterCount)
                         formatValue: function(v) {
                             return Math.round(v).toString();
                         }
@@ -434,14 +414,6 @@ Flickable {
                                 appSettings.autotileMasterCount = v;
                             });
                         }
-                    }
-
-                    Binding {
-                        target: masterCountSlider.slider
-                        property: "value"
-                        value: root.settingValue("MasterCount", appSettings.autotileMasterCount)
-                        when: !masterCountSlider.slider.pressed
-                        restoreMode: Binding.RestoreNone
                     }
 
                 }

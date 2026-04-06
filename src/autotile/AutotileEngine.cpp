@@ -791,6 +791,11 @@ bool AutotileEngine::hasPerScreenOverride(const QString& screenId, const QString
     return m_configResolver->hasPerScreenOverride(screenId, key);
 }
 
+void AutotileEngine::updatePerScreenOverride(const QString& screenId, const QString& key, const QVariant& value)
+{
+    m_configResolver->updatePerScreenOverride(screenId, key, value);
+}
+
 int AutotileEngine::effectiveInnerGap(const QString& screenId) const
 {
     return m_configResolver->effectiveInnerGap(screenId);

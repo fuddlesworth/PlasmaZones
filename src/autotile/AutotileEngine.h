@@ -286,6 +286,7 @@ public:
     void clearPerScreenConfig(const QString& screenId);
     QVariantMap perScreenOverrides(const QString& screenId) const;
     bool hasPerScreenOverride(const QString& screenId, const QString& key) const;
+    void updatePerScreenOverride(const QString& screenId, const QString& key, const QVariant& value);
 
     // Effective per-screen values — forwarded to PerScreenConfigResolver
     int effectiveInnerGap(const QString& screenId) const;

@@ -230,9 +230,12 @@ void NavigationController::increaseMasterRatio(qreal delta)
     const bool changed = !qFuzzyCompare(1.0 + resultRatio, 1.0 + oldRatio);
 
     if (changed) {
-        // Update global config so new screens inherit the adjusted ratio.
-        // Skip if the focused screen has a per-screen SplitRatio override.
-        if (!m_engine->hasPerScreenOverride(screenId, QLatin1String("SplitRatio"))) {
+        if (m_engine->hasPerScreenOverride(screenId, QLatin1String("SplitRatio"))) {
+            // Update the per-screen override so the value persists across
+            // settings reloads (applyPerScreenConfig uses the stored override).
+            m_engine->updatePerScreenOverride(screenId, QLatin1String("SplitRatio"), resultRatio);
+        } else {
+            // Update global config so new screens inherit the adjusted ratio.
             m_engine->config()->splitRatio = resultRatio;
             m_engine->syncShortcutAdjustmentToSettings();
         }
@@ -290,7 +293,9 @@ void NavigationController::increaseMasterCount()
     const bool changed = resultCount != oldCount;
 
     if (changed) {
-        if (!m_engine->hasPerScreenOverride(screenId, QLatin1String("MasterCount"))) {
+        if (m_engine->hasPerScreenOverride(screenId, QLatin1String("MasterCount"))) {
+            m_engine->updatePerScreenOverride(screenId, QLatin1String("MasterCount"), resultCount);
+        } else {
             m_engine->config()->masterCount = resultCount;
             m_engine->syncShortcutAdjustmentToSettings();
         }
@@ -320,7 +325,9 @@ void NavigationController::decreaseMasterCount()
     const bool changed = resultCount != oldCount;
 
     if (changed) {
-        if (!m_engine->hasPerScreenOverride(screenId, QLatin1String("MasterCount"))) {
+        if (m_engine->hasPerScreenOverride(screenId, QLatin1String("MasterCount"))) {
+            m_engine->updatePerScreenOverride(screenId, QLatin1String("MasterCount"), resultCount);
+        } else {
             m_engine->config()->masterCount = resultCount;
             m_engine->syncShortcutAdjustmentToSettings();
         }
