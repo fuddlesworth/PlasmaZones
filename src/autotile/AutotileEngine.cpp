@@ -1949,7 +1949,7 @@ void AutotileEngine::propagateGlobalSplitRatio()
         if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
             continue;
         }
-        if (it.value() && !hasPerScreenOverride(it.key().screenId, QLatin1String("SplitRatio"))) {
+        if (it.value() && !hasPerScreenOverride(it.key().screenId, PerScreenKeys::SplitRatio)) {
             it.value()->setSplitRatio(m_config->splitRatio);
         }
     }
@@ -1963,7 +1963,7 @@ void AutotileEngine::propagateGlobalMasterCount()
         if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
             continue;
         }
-        if (it.value() && !hasPerScreenOverride(it.key().screenId, QLatin1String("MasterCount"))) {
+        if (it.value() && !hasPerScreenOverride(it.key().screenId, PerScreenKeys::MasterCount)) {
             it.value()->setMasterCount(m_config->masterCount);
         }
     }

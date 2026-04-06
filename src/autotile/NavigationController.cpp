@@ -221,6 +221,8 @@ void NavigationController::increaseMasterRatio(qreal delta)
     QString screenId;
     TilingState* state = resolveActiveState(screenId);
     if (!state) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("master_ratio"), QStringLiteral("no_focus"),
+                                                     QString(), QString(), QString());
         return;
     }
 
@@ -230,10 +232,10 @@ void NavigationController::increaseMasterRatio(qreal delta)
     const bool changed = !qFuzzyCompare(1.0 + resultRatio, 1.0 + oldRatio);
 
     if (changed) {
-        if (m_engine->hasPerScreenOverride(screenId, QLatin1String("SplitRatio"))) {
+        if (m_engine->hasPerScreenOverride(screenId, PerScreenKeys::SplitRatio)) {
             // Update the per-screen override so the value persists across
             // settings reloads (applyPerScreenConfig uses the stored override).
-            m_engine->updatePerScreenOverride(screenId, QLatin1String("SplitRatio"), resultRatio);
+            m_engine->updatePerScreenOverride(screenId, PerScreenKeys::SplitRatio, resultRatio);
         } else {
             // Update global config so new screens inherit the adjusted ratio.
             m_engine->config()->splitRatio = resultRatio;
@@ -284,6 +286,8 @@ void NavigationController::increaseMasterCount()
     QString screenId;
     TilingState* state = resolveActiveState(screenId);
     if (!state) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("master_count"), QStringLiteral("no_focus"),
+                                                     QString(), QString(), QString());
         return;
     }
 
@@ -293,8 +297,8 @@ void NavigationController::increaseMasterCount()
     const bool changed = resultCount != oldCount;
 
     if (changed) {
-        if (m_engine->hasPerScreenOverride(screenId, QLatin1String("MasterCount"))) {
-            m_engine->updatePerScreenOverride(screenId, QLatin1String("MasterCount"), resultCount);
+        if (m_engine->hasPerScreenOverride(screenId, PerScreenKeys::MasterCount)) {
+            m_engine->updatePerScreenOverride(screenId, PerScreenKeys::MasterCount, resultCount);
         } else {
             m_engine->config()->masterCount = resultCount;
             m_engine->syncShortcutAdjustmentToSettings();
@@ -316,6 +320,8 @@ void NavigationController::decreaseMasterCount()
     QString screenId;
     TilingState* state = resolveActiveState(screenId);
     if (!state) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("master_count"), QStringLiteral("no_focus"),
+                                                     QString(), QString(), QString());
         return;
     }
 
@@ -325,8 +331,8 @@ void NavigationController::decreaseMasterCount()
     const bool changed = resultCount != oldCount;
 
     if (changed) {
-        if (m_engine->hasPerScreenOverride(screenId, QLatin1String("MasterCount"))) {
-            m_engine->updatePerScreenOverride(screenId, QLatin1String("MasterCount"), resultCount);
+        if (m_engine->hasPerScreenOverride(screenId, PerScreenKeys::MasterCount)) {
+            m_engine->updatePerScreenOverride(screenId, PerScreenKeys::MasterCount, resultCount);
         } else {
             m_engine->config()->masterCount = resultCount;
             m_engine->syncShortcutAdjustmentToSettings();
