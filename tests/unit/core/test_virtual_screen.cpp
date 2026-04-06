@@ -479,6 +479,113 @@ private Q_SLOTS:
         }
     }
 
+    // --- VirtualScreenDef::physicalEdges ---
+
+    void testPhysicalEdges_leftEdgeAtOrigin()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.0, 0.0, 0.5, 1.0);
+        auto edges = def.physicalEdges();
+        QVERIFY(edges.left);
+        QVERIFY(edges.top);
+        QVERIFY(!edges.right);
+        QVERIFY(edges.bottom);
+    }
+
+    void testPhysicalEdges_rightEdgeAtOne()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.5, 0.0, 0.5, 1.0);
+        auto edges = def.physicalEdges();
+        QVERIFY(!edges.left);
+        QVERIFY(edges.top);
+        QVERIFY(edges.right);
+        QVERIFY(edges.bottom);
+    }
+
+    void testPhysicalEdges_topEdgeAtOrigin()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.0, 0.0, 1.0, 0.5);
+        auto edges = def.physicalEdges();
+        QVERIFY(edges.left);
+        QVERIFY(edges.top);
+        QVERIFY(edges.right);
+        QVERIFY(!edges.bottom);
+    }
+
+    void testPhysicalEdges_bottomEdgeAtOne()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.0, 0.5, 1.0, 0.5);
+        auto edges = def.physicalEdges();
+        QVERIFY(edges.left);
+        QVERIFY(!edges.top);
+        QVERIFY(edges.right);
+        QVERIFY(edges.bottom);
+    }
+
+    void testPhysicalEdges_interiorRegion_allFalse()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.3, 0.3, 0.4, 0.4);
+        auto edges = def.physicalEdges();
+        QVERIFY(!edges.left);
+        QVERIFY(!edges.top);
+        QVERIFY(!edges.right);
+        QVERIFY(!edges.bottom);
+    }
+
+    void testPhysicalEdges_withinTolerance_stillTrue()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.0005, 0.0005, 0.999, 0.999);
+        auto edges = def.physicalEdges();
+        QVERIFY(edges.left);
+        QVERIFY(edges.top);
+        QVERIFY(edges.right);
+        QVERIFY(edges.bottom);
+    }
+
+    void testPhysicalEdges_fullScreen_allTrue()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.0, 0.0, 1.0, 1.0);
+        auto edges = def.physicalEdges();
+        QVERIFY(edges.left);
+        QVERIFY(edges.top);
+        QVERIFY(edges.right);
+        QVERIFY(edges.bottom);
+    }
+
+    // --- VirtualScreenId edge cases: negative, double-nested, multi-digit ---
+
+    void testMake_negativeIndex_returnsEmpty()
+    {
+        QVERIFY(VirtualScreenId::make(QStringLiteral("physId"), -1).isEmpty());
+    }
+
+    void testMake_doubleNestedVirtualId()
+    {
+        // Calling make() with an already-virtual ID produces a double-suffixed ID.
+        // extractPhysicalId uses indexOf (first match), so it returns the true physical ID.
+        // extractIndex fails because "0/vs:1" is not a valid integer.
+        QString result = VirtualScreenId::make(QStringLiteral("physId/vs:0"), 1);
+        QCOMPARE(result, QStringLiteral("physId/vs:0/vs:1"));
+        QCOMPARE(VirtualScreenId::extractPhysicalId(result), QStringLiteral("physId"));
+        QCOMPARE(VirtualScreenId::extractIndex(result), -1);
+    }
+
+    void testExtractIndex_multiDigit()
+    {
+        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("physId/vs:10")), 10);
+    }
+
+    void testExtractIndex_largeIndex()
+    {
+        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("physId/vs:999")), 999);
+    }
+
     // --- Cross-validation: daemon vs effect extractPhysicalId ---
     // Validates daemon VirtualScreenId::extractPhysicalId() matches effect-side logic.
     // If the effect's implementation changes, the local copy below must be updated.

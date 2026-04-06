@@ -307,6 +307,35 @@ private Q_SLOTS:
     }
 
     // =====================================================================
+    // Multi-zone assignment across virtual screens
+    // =====================================================================
+
+    void testMultiZoneAssignment_acrossVirtualScreens()
+    {
+        QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
+        QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
+        QString windowId = QStringLiteral("konsole|multi-vs");
+
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
+        QCOMPARE(m_service->screenAssignments().value(windowId), vs0);
+
+        // Reassign to a different zone on a different virtual screen
+        m_service->assignWindowToZone(windowId, m_zoneIds[1], vs1, 1);
+        QCOMPARE(m_service->screenAssignments().value(windowId), vs1);
+
+        // buildOccupiedZoneSet for vs1 should show zone 1 occupied
+        QSet<QUuid> occupiedVs1 = m_service->buildOccupiedZoneSet(vs1);
+        QUuid zone1Uuid = m_testLayout->zones().at(1)->id();
+        QVERIFY(occupiedVs1.contains(zone1Uuid));
+
+        // buildOccupiedZoneSet for vs0 should NOT show zone 0 occupied
+        // (window was reassigned away from vs0)
+        QSet<QUuid> occupiedVs0 = m_service->buildOccupiedZoneSet(vs0);
+        QUuid zone0Uuid = m_testLayout->zones().at(0)->id();
+        QVERIFY(!occupiedVs0.contains(zone0Uuid));
+    }
+
+    // =====================================================================
     // pruneStaleAssignments
     // =====================================================================
 

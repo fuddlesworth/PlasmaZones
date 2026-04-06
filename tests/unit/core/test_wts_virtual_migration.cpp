@@ -86,6 +86,12 @@ private Q_SLOTS:
     // geometry lookups. With nullptr mgr it early-returns (guard clause).
     // We test that behavior explicitly, and also test the reverse direction
     // (migrateFromVirtual) which does NOT need a ScreenManager.
+    //
+    // NOTE: The forward migration happy path (physical → virtual with
+    // geometry-based routing via ScreenManager) is not tested here because
+    // ScreenManager requires a running QGuiApplication with real QScreen
+    // objects. This path is covered by manual integration testing per the
+    // PR test plan.
     // =====================================================================
 
     void testMigrateToVirtual_requiresScreenManager()
