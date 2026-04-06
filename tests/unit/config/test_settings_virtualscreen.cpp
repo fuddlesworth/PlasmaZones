@@ -27,32 +27,12 @@
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using PlasmaZones::TestHelpers::makeDef;
+using PlasmaZones::TestHelpers::makeSplitConfig;
+using PlasmaZones::TestHelpers::makeThreeWayConfig;
 
 class TestSettingsVirtualScreen : public QObject
 {
     Q_OBJECT
-
-private:
-    /// Helper: create a two-screen 50/50 split config
-    static VirtualScreenConfig makeTwoScreenConfig(const QString& physId)
-    {
-        VirtualScreenConfig config;
-        config.physicalScreenId = physId;
-        config.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0, 0, 0.5, 1)));
-        config.screens.append(makeDef(physId, 1, QStringLiteral("Right"), QRectF(0.5, 0, 0.5, 1)));
-        return config;
-    }
-
-    /// Helper: create a three-screen 33/33/34 split config
-    static VirtualScreenConfig makeThreeScreenConfig(const QString& physId)
-    {
-        VirtualScreenConfig config;
-        config.physicalScreenId = physId;
-        config.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0, 0, 0.333, 1)));
-        config.screens.append(makeDef(physId, 1, QStringLiteral("Center"), QRectF(0.333, 0, 0.334, 1)));
-        config.screens.append(makeDef(physId, 2, QStringLiteral("Right"), QRectF(0.667, 0, 0.333, 1)));
-        return config;
-    }
 
 private Q_SLOTS:
 
@@ -73,7 +53,7 @@ private Q_SLOTS:
         // Save
         {
             Settings settings;
-            settings.setVirtualScreenConfig(physId, makeTwoScreenConfig(physId));
+            settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
             settings.save();
         }
 
@@ -123,7 +103,7 @@ private Q_SLOTS:
 
         {
             Settings settings;
-            settings.setVirtualScreenConfig(physId, makeThreeScreenConfig(physId));
+            settings.setVirtualScreenConfig(physId, makeThreeWayConfig(physId));
             settings.save();
         }
 
@@ -269,7 +249,7 @@ private Q_SLOTS:
         // First, save a valid config
         {
             Settings settings;
-            settings.setVirtualScreenConfig(physId, makeTwoScreenConfig(physId));
+            settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
             settings.save();
         }
 
@@ -314,8 +294,8 @@ private Q_SLOTS:
 
         {
             Settings settings;
-            settings.setVirtualScreenConfig(physId1, makeTwoScreenConfig(physId1));
-            settings.setVirtualScreenConfig(physId2, makeThreeScreenConfig(physId2));
+            settings.setVirtualScreenConfig(physId1, makeSplitConfig(physId1));
+            settings.setVirtualScreenConfig(physId2, makeThreeWayConfig(physId2));
             settings.save();
         }
 
@@ -348,7 +328,7 @@ private Q_SLOTS:
         QVERIFY(spy.isValid());
 
         const QString physId = QStringLiteral("test:signal");
-        settings.setVirtualScreenConfig(physId, makeTwoScreenConfig(physId));
+        settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
         QVERIFY2(spy.count() >= 1, "setVirtualScreenConfig must emit virtualScreenConfigsChanged");
     }
@@ -365,8 +345,8 @@ private Q_SLOTS:
         const QString physId2 = QStringLiteral("screen:two");
 
         Settings settings;
-        settings.setVirtualScreenConfig(physId1, makeTwoScreenConfig(physId1));
-        settings.setVirtualScreenConfig(physId2, makeThreeScreenConfig(physId2));
+        settings.setVirtualScreenConfig(physId1, makeSplitConfig(physId1));
+        settings.setVirtualScreenConfig(physId2, makeThreeWayConfig(physId2));
 
         QHash<QString, VirtualScreenConfig> all = settings.virtualScreenConfigs();
         QCOMPARE(all.size(), 2);
@@ -388,12 +368,12 @@ private Q_SLOTS:
         const QString physId2 = QStringLiteral("screen:two");
 
         Settings settings;
-        settings.setVirtualScreenConfig(physId1, makeTwoScreenConfig(physId1));
-        settings.setVirtualScreenConfig(physId2, makeThreeScreenConfig(physId2));
+        settings.setVirtualScreenConfig(physId1, makeSplitConfig(physId1));
+        settings.setVirtualScreenConfig(physId2, makeThreeWayConfig(physId2));
 
         // Replace with a single config
         QHash<QString, VirtualScreenConfig> newConfigs;
-        newConfigs.insert(physId1, makeThreeScreenConfig(physId1));
+        newConfigs.insert(physId1, makeThreeWayConfig(physId1));
 
         settings.setVirtualScreenConfigs(newConfigs);
 
@@ -415,7 +395,7 @@ private Q_SLOTS:
         const QString physId = QStringLiteral("test:reset");
 
         Settings settings;
-        settings.setVirtualScreenConfig(physId, makeTwoScreenConfig(physId));
+        settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
         settings.save();
 
         settings.reset();

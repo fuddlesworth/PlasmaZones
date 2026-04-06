@@ -3144,7 +3144,7 @@ QVariantList SettingsController::getVirtualScreenConfig(const QString& physicalS
         QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         if (doc.isObject()) {
             QJsonObject root = doc.object();
-            QJsonArray screensArr = root.value(QStringLiteral("screens")).toArray();
+            QJsonArray screensArr = root.value(QLatin1String("screens")).toArray();
             QVariantList result;
             for (const auto& entry : screensArr) {
                 QJsonObject screenObj = entry.toObject();
@@ -3172,6 +3172,11 @@ void SettingsController::applyVirtualScreenConfig(const QString& physicalScreenI
     QJsonArray screensArr;
     for (int i = 0; i < screens.size(); ++i) {
         VirtualScreenDef def = variantMapToVirtualScreenDef(screens[i].toMap(), physicalScreenId, i);
+        if (!def.isValid()) {
+            qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << physicalScreenId << "index" << i
+                                << "region:" << def.region;
+            continue;
+        }
         QJsonObject screenObj;
         screenObj[QLatin1String("index")] = def.index;
         screenObj[QLatin1String("displayName")] = def.displayName;

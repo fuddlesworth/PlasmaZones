@@ -391,38 +391,40 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     // For virtual screens: recalculate geometry from ScreenManager since the
     // virtual screen bounds are derived from the physical screen geometry.
     const bool isVirtualScreen = VirtualScreenId::isVirtual(screenId);
+    QMetaObject::Connection geomConn;
     {
         QPointer<QScreen> screenPtr = physScreen;
         const QString sid = screenId; // Capture by value for lambda
         const bool isVS = isVirtualScreen;
-        connect(physScreen, &QScreen::geometryChanged, this, [this, screenPtr, sid, isVS](const QRect& newGeom) {
-            if (!screenPtr) {
-                return;
-            }
-            auto& st = m_screenStates[sid];
-            if (auto* w = st.overlayWindow) {
-                if (isVS) {
-                    // Virtual screen: recalculate geometry from ScreenManager since
-                    // virtual screen proportions are relative to the physical screen.
-                    const QRect vsGeom = updateWindowScreenPosition(w, sid);
-                    if (vsGeom.isValid()) {
-                        w->setWidth(vsGeom.width());
-                        w->setHeight(vsGeom.height());
-                        st.overlayGeometry = vsGeom;
-                        updateOverlayWindow(sid, screenPtr);
-                        return;
-                    }
-                } else {
-                    // Physical screen: size directly from the new geometry.
-                    // Position is controlled by layer-surface anchors (AnchorAll),
-                    // setX/setY are no-ops on layer surfaces.
-                    w->setWidth(newGeom.width());
-                    w->setHeight(newGeom.height());
-                    st.overlayGeometry = newGeom;
-                    updateOverlayWindow(sid, screenPtr);
+        geomConn =
+            connect(physScreen, &QScreen::geometryChanged, this, [this, screenPtr, sid, isVS](const QRect& newGeom) {
+                if (!screenPtr) {
+                    return;
                 }
-            }
-        });
+                auto& st = m_screenStates[sid];
+                if (auto* w = st.overlayWindow) {
+                    if (isVS) {
+                        // Virtual screen: recalculate geometry from ScreenManager since
+                        // virtual screen proportions are relative to the physical screen.
+                        const QRect vsGeom = updateWindowScreenPosition(w, sid);
+                        if (vsGeom.isValid()) {
+                            w->setWidth(vsGeom.width());
+                            w->setHeight(vsGeom.height());
+                            st.overlayGeometry = vsGeom;
+                            updateOverlayWindow(sid, screenPtr);
+                            return;
+                        }
+                    } else {
+                        // Physical screen: size directly from the new geometry.
+                        // Position is controlled by layer-surface anchors (AnchorAll),
+                        // setX/setY are no-ops on layer surfaces.
+                        w->setWidth(newGeom.width());
+                        w->setHeight(newGeom.height());
+                        st.overlayGeometry = newGeom;
+                        updateOverlayWindow(sid, screenPtr);
+                    }
+                }
+            });
     }
 
     if (usingShader) {
@@ -432,6 +434,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     m_screenStates[screenId].overlayWindow = window;
     m_screenStates[screenId].overlayPhysScreen = physScreen;
     m_screenStates[screenId].overlayGeometry = geometry;
+    m_screenStates[screenId].overlayGeomConnection = geomConn;
 }
 
 void OverlayService::recreateOverlayWindowsOnTypeMismatch()
@@ -525,9 +528,11 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     auto it = m_screenStates.find(screenId);
     if (it != m_screenStates.end()) {
         if (auto* window = it->overlayWindow) {
-            if (it->overlayPhysScreen) {
-                QObject::disconnect(it->overlayPhysScreen, nullptr, window, nullptr);
-            }
+            // Disconnect the stored geometryChanged connection specifically,
+            // rather than disconnecting all signals from the screen to a receiver.
+            // The connection targets `this` (not `window`), so the old blanket
+            // disconnect(screen, nullptr, window, nullptr) missed it entirely.
+            QObject::disconnect(it->overlayGeomConnection);
             window->close();
             window->destroy();
             window->deleteLater();
@@ -535,6 +540,7 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
         }
         it->overlayPhysScreen = nullptr;
         it->overlayGeometry = QRect();
+        it->overlayGeomConnection = {};
     }
 }
 

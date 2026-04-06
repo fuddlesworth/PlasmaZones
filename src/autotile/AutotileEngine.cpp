@@ -147,6 +147,7 @@ void AutotileEngine::connectSignals()
                 releasedWindows.append(it.value()->tiledWindows());
                 releasedWindows.append(it.value()->floatingWindows());
                 m_pendingInitialOrders.remove(sid);
+                m_pendingOrderGeneration.remove(sid);
                 it.value()->deleteLater();
                 it.remove();
             }
@@ -155,6 +156,15 @@ void AutotileEngine::connectSignals()
             }
             if (!releasedWindows.isEmpty()) {
                 Q_EMIT windowsReleasedFromTiling(releasedWindows);
+            }
+
+            // Clean up desktop overrides for removed virtual screens
+            auto overrideIt = m_screenDesktopOverride.begin();
+            while (overrideIt != m_screenDesktopOverride.end()) {
+                if (VirtualScreenId::isVirtual(overrideIt.key()) && !m_autotileScreens.contains(overrideIt.key()))
+                    overrideIt = m_screenDesktopOverride.erase(overrideIt);
+                else
+                    ++overrideIt;
             }
 
             // Retile the new virtual screens
@@ -204,12 +214,25 @@ void AutotileEngine::rotateWindows(bool clockwise, const QString& /*screenId*/)
     rotateWindowOrder(clockwise);
 }
 
-void AutotileEngine::moveToPosition(const QString& /*windowId*/, int position, const QString& /*screenId*/)
+void AutotileEngine::moveToPosition(const QString& windowId, int position, const QString& /*screenId*/)
 {
-    // NOTE: Currently operates on the focused window regardless of windowId.
-    // The autotile engine tracks windows by focus, not by ID. This is a known
-    // limitation of the IWindowEngine interface contract for autotiling.
-    moveFocusedToPosition(position);
+    if (windowId.isEmpty()) {
+        // Fall back to focused window when no windowId is provided
+        moveFocusedToPosition(position);
+        return;
+    }
+
+    QString resolvedScreenId;
+    TilingState* state = stateForWindow(windowId, &resolvedScreenId);
+    if (!state) {
+        qCWarning(lcAutotile) << "moveToPosition: window" << windowId << "not found in any tiling state";
+        return;
+    }
+
+    // position is 1-based (from snap-to-zone-N shortcuts), convert to 0-based
+    const int targetIndex = qBound(0, position - 1, qMax(0, state->tiledWindowCount() - 1));
+    const bool moved = state->moveToTiledPosition(windowId, targetIndex);
+    retileAfterOperation(resolvedScreenId, moved);
 }
 
 void AutotileEngine::setCurrentDesktop(int desktop)
@@ -378,6 +401,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
             // KWin effect to re-send windowOpened D-Bus calls, but during a per-screen
             // mode toggle the windows are already open — they never arrive via D-Bus.
             const QStringList order = m_pendingInitialOrders.take(screenId);
+            m_pendingOrderGeneration.remove(screenId);
             TilingState* ts = stateForScreen(screenId);
             if (ts) {
                 for (const QString& windowId : order) {
@@ -422,6 +446,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         releasedWindows.append(it.value()->floatingWindows());
         m_configResolver->removeOverridesForScreen(key.screenId);
         m_pendingInitialOrders.remove(key.screenId);
+        m_pendingOrderGeneration.remove(key.screenId);
         it.value()->deleteLater();
         it.remove();
     }
@@ -776,6 +801,7 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStrin
             return; // superseded by a newer setInitialWindowOrder call
         }
         if (m_pendingInitialOrders.remove(screenId)) {
+            m_pendingOrderGeneration.remove(screenId);
             qCWarning(lcAutotile) << "Pending initial order for screen" << screenId << "timed out after"
                                   << PendingOrderTimeoutMs << "ms - cleaning up stale entry";
         }
@@ -1399,15 +1425,10 @@ void AutotileEngine::windowClosed(const QString& windowId)
     }
 
     // Clean up saved floating state even if window isn't currently tracked
-    // (it may have been floating when autotile was disabled on its screen)
-    for (auto it = m_savedFloatingWindows.begin(); it != m_savedFloatingWindows.end();) {
-        it.value().remove(windowId);
-        if (it.value().isEmpty()) {
-            it = m_savedFloatingWindows.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    // (it may have been floating when autotile was disabled on its screen).
+    // This must happen before onWindowRemoved because removeWindow() early-returns
+    // when the window isn't in m_windowToStateKey (not tracked in any TilingState).
+    removeSavedFloatingEntry(windowId);
 
     onWindowRemoved(windowId);
 }
@@ -1666,14 +1687,7 @@ void AutotileEngine::removeWindow(const QString& windowId)
     }
 
     // Clean up saved floating state for closed windows
-    for (auto it = m_savedFloatingWindows.begin(); it != m_savedFloatingWindows.end();) {
-        it.value().remove(windowId);
-        if (it.value().isEmpty()) {
-            it = m_savedFloatingWindows.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    removeSavedFloatingEntry(windowId);
 
     // Purge closed window from pending initial orders.
     // If a pre-seeded window closes before arriving at the autotile engine,
@@ -1681,6 +1695,7 @@ void AutotileEngine::removeWindow(const QString& windowId)
     for (auto pit = m_pendingInitialOrders.begin(); pit != m_pendingInitialOrders.end();) {
         pit.value().removeAll(windowId);
         if (pit.value().isEmpty()) {
+            m_pendingOrderGeneration.remove(pit.key());
             pit = m_pendingInitialOrders.erase(pit);
         } else {
             const QString screen = pit.key();
@@ -2197,6 +2212,7 @@ bool AutotileEngine::cleanupPendingOrderIfResolved(const QString& screenId)
 
     qCDebug(lcAutotile) << "All pre-seeded windows resolved for screen" << screenId;
     m_pendingInitialOrders.erase(pit);
+    m_pendingOrderGeneration.remove(screenId);
     return true;
 }
 

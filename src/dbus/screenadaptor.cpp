@@ -81,17 +81,7 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
         // destroyed when Qt deletes the QScreen on removal. This prevents dead
         // lambda accumulation on repeated dock/undock cycles.
         connect(qGuiApp, &QGuiApplication::screenRemoved, screen, [this, screen, cachedId](QScreen* removedScreen) {
-            if (removedScreen != screen) {
-                return;
-            }
-            const QStringList effectiveIds = m_cachedEffectiveIdsPerScreen.take(cachedId);
-            if (!effectiveIds.isEmpty()) {
-                for (const QString& id : effectiveIds) {
-                    Q_EMIT screenRemoved(id);
-                }
-            } else {
-                Q_EMIT screenRemoved(cachedId);
-            }
+            handleScreenRemoved(removedScreen, screen, cachedId);
         });
     });
 
@@ -110,17 +100,7 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
         }
 
         connect(qGuiApp, &QGuiApplication::screenRemoved, screen, [this, screen, cachedId](QScreen* removedScreen) {
-            if (removedScreen != screen) {
-                return;
-            }
-            const QStringList effectiveIds = m_cachedEffectiveIdsPerScreen.take(cachedId);
-            if (!effectiveIds.isEmpty()) {
-                for (const QString& id : effectiveIds) {
-                    Q_EMIT screenRemoved(id);
-                }
-            } else {
-                Q_EMIT screenRemoved(cachedId);
-            }
+            handleScreenRemoved(removedScreen, screen, cachedId);
         });
     }
 
@@ -144,6 +124,21 @@ void ScreenAdaptor::handleScreenGeometryChanged(QScreen* screen, const QString& 
     emitForEffectiveScreens(physId, [this](const QString& id) {
         Q_EMIT screenGeometryChanged(id);
     });
+}
+
+void ScreenAdaptor::handleScreenRemoved(QScreen* removedScreen, QScreen* targetScreen, const QString& cachedId)
+{
+    if (removedScreen != targetScreen) {
+        return;
+    }
+    const QStringList effectiveIds = m_cachedEffectiveIdsPerScreen.take(cachedId);
+    if (!effectiveIds.isEmpty()) {
+        for (const QString& id : effectiveIds) {
+            Q_EMIT screenRemoved(id);
+        }
+    } else {
+        Q_EMIT screenRemoved(cachedId);
+    }
 }
 
 bool ScreenAdaptor::emitForEffectiveScreens(const QString& physId, const std::function<void(const QString&)>& emitFn)

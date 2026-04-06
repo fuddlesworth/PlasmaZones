@@ -54,6 +54,7 @@ public:
         QQuickWindow* overlayWindow = nullptr;
         QScreen* overlayPhysScreen = nullptr;
         QRect overlayGeometry;
+        QMetaObject::Connection overlayGeomConnection; ///< geometryChanged connection for overlay
         QQuickWindow* zoneSelectorWindow = nullptr;
         QScreen* zoneSelectorPhysScreen = nullptr;
         QQuickWindow* layoutOsdWindow = nullptr;

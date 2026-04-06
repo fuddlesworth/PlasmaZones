@@ -238,12 +238,18 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                                                    + K_TIME_BLOCK_OFFSET);
                 }
                 if (m_zoneDataDirty) {
+                    // Full scene data (includes zone arrays) — only when zone data actually changed
                     batch->updateDynamicBuffer(m_ubo.get(), K_SCENE_DATA_OFFSET, K_SCENE_DATA_SIZE,
                                                static_cast<const char*>(static_cast<const void*>(&m_uniforms))
                                                    + K_SCENE_DATA_OFFSET);
+                } else if (m_sceneDataDirty) {
+                    // Scene header only (resolution, mouse, date, params, colors) — skip zone arrays
+                    batch->updateDynamicBuffer(m_ubo.get(), K_SCENE_HEADER_OFFSET, K_SCENE_HEADER_SIZE,
+                                               static_cast<const char*>(static_cast<const void*>(&m_uniforms))
+                                                   + K_SCENE_HEADER_OFFSET);
                 }
                 // Defensive: if a future setter sets m_uniformsDirty without granular flags, do full upload
-                if (!m_timeDirty && !m_zoneDataDirty) {
+                if (!m_timeDirty && !m_zoneDataDirty && !m_sceneDataDirty) {
                     batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(ZoneShaderUniforms), &m_uniforms);
                 }
             }
@@ -254,6 +260,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             cb->resourceUpdate(batch);
             m_timeDirty = false;
             m_zoneDataDirty = false;
+            m_sceneDataDirty = false;
             m_uniformsDirty = false;
         }
     } else {
@@ -447,6 +454,7 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_uniformsDirty = true;
     m_timeDirty = true;
     m_zoneDataDirty = true;
+    m_sceneDataDirty = true;
     m_labelsTextureDirty = true;
     m_audioSpectrumDirty = true;
     // Next prepare() will re-create all RHI resources and do a full UBO upload

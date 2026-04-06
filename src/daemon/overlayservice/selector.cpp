@@ -343,6 +343,7 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     // Set screen properties for layout preview scaling
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
+    aspectRatio = qBound(0.5, aspectRatio, 4.0);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("screenWidth"), screenGeom.width());
 

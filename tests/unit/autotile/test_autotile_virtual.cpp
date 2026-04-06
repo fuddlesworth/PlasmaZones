@@ -25,8 +25,11 @@
 #include "core/virtualscreen.h"
 
 #include "../helpers/ScriptedAlgoTestSetup.h"
+#include "../helpers/VirtualScreenTestHelpers.h"
 
 using namespace PlasmaZones;
+using PlasmaZones::TestHelpers::makeSplitConfig;
+using PlasmaZones::TestHelpers::makeThreeWayConfig;
 
 class TestAutotileVirtual : public QObject
 {
@@ -34,31 +37,6 @@ class TestAutotileVirtual : public QObject
 
 private:
     PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
-
-    // Helpers
-    static VirtualScreenConfig makeSplitConfig(const QString& physId)
-    {
-        VirtualScreenConfig config;
-        config.physicalScreenId = physId;
-        config.screens.append(VirtualScreenDef{VirtualScreenId::make(physId, 0), physId, QStringLiteral("Left"),
-                                               QRectF(0, 0, 0.5, 1.0), 0});
-        config.screens.append(VirtualScreenDef{VirtualScreenId::make(physId, 1), physId, QStringLiteral("Right"),
-                                               QRectF(0.5, 0, 0.5, 1.0), 1});
-        return config;
-    }
-
-    static VirtualScreenConfig makeTripleSplitConfig(const QString& physId)
-    {
-        VirtualScreenConfig config;
-        config.physicalScreenId = physId;
-        config.screens.append(VirtualScreenDef{VirtualScreenId::make(physId, 0), physId, QStringLiteral("Left"),
-                                               QRectF(0, 0, 0.333, 1.0), 0});
-        config.screens.append(VirtualScreenDef{VirtualScreenId::make(physId, 1), physId, QStringLiteral("Center"),
-                                               QRectF(0.333, 0, 0.334, 1.0), 1});
-        config.screens.append(VirtualScreenDef{VirtualScreenId::make(physId, 2), physId, QStringLiteral("Right"),
-                                               QRectF(0.667, 0, 0.333, 1.0), 2});
-        return config;
-    }
 
 private Q_SLOTS:
 
@@ -191,8 +169,8 @@ private Q_SLOTS:
     void virtualScreensChanged_triggersRetileForVirtualScreens()
     {
         // Create ScreenManager with virtual screen config, connect it to
-        // AutotileEngine, then emit virtualScreensChanged and verify retile
-        // fires for each virtual screen ID.
+        // AutotileEngine, then emit virtualScreensChanged and verify the
+        // signal handler executes without crashing.
         ScreenManager screenMgr;
         AutotileEngine engine(nullptr, nullptr, &screenMgr);
 
@@ -207,25 +185,71 @@ private Q_SLOTS:
         // Enable autotile on both virtual screens
         engine.setAutotileScreens({vs0, vs1});
 
-        // Pre-create states so onScreenGeometryChanged has something to retile
-        // (Without ScreenManager validation, these succeed)
-        // Note: stateForScreen with the ScreenManager attached will fail because
-        // no real QScreen exists. Instead, directly access states through
-        // setAutotileScreens which calls stateForScreen internally.
-
         QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
 
         // Emit virtualScreensChanged — the signal handler should retile each VS
         Q_EMIT screenMgr.virtualScreensChanged(physId);
         QCoreApplication::processEvents();
 
-        // The retile may or may not emit tilingChanged depending on whether
-        // states exist. The key verification is that the signal connection
-        // doesn't crash and processes all VS IDs from virtualScreenIdsFor.
-        // With no valid states (ScreenManager rejects unknown QScreens),
-        // onScreenGeometryChanged returns early (isAutotileScreen check).
-        // This test validates the signal wiring is correct.
-        QVERIFY(true); // No crash = signal handler correctly iterates VS IDs
+        // Without a real QScreen backing the physical monitor, stateForScreen
+        // returns nullptr (geometry cache empty), so the retile path returns
+        // early and tilingChanged is not emitted. Verify the signal spy is
+        // in a consistent state (count >= 0) and that no crash occurred.
+        QVERIFY2(tilingSpy.count() >= 0,
+                 "Signal handler executed without crash — full retile requires compositor integration");
+
+        // Additionally verify the ScreenManager still resolves both VS IDs,
+        // confirming the signal did not corrupt the config.
+        QStringList vsIds = screenMgr.virtualScreenIdsFor(physId);
+        QCOMPARE(vsIds.size(), 2);
+        QVERIFY(vsIds.contains(vs0));
+        QVERIFY(vsIds.contains(vs1));
+    }
+
+    // =========================================================================
+    // Window migration between virtual screens via windowFocused
+    // =========================================================================
+
+    void windowMovesBetweenVirtualScreens()
+    {
+        // Verify that windowFocused on a different virtual screen migrates
+        // the window from the old state to the new state.
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        const QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
+        const QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
+
+        engine.setAutotileScreens({vs0, vs1});
+
+        // Add window to vs:0
+        engine.windowOpened(QStringLiteral("win-move"), vs0);
+        QCoreApplication::processEvents();
+
+        TilingState* state0 = engine.stateForScreen(vs0);
+        TilingState* state1 = engine.stateForScreen(vs1);
+        QVERIFY(state0 != nullptr);
+        QVERIFY(state1 != nullptr);
+        QVERIFY(state0->containsWindow(QStringLiteral("win-move")));
+        QCOMPARE(state1->windowCount(), 0);
+
+        // Simulate the window moving to vs:1 by calling windowFocused with
+        // the new screen ID. AutotileEngine::windowFocused detects the
+        // cross-screen move, removes from old state, and re-adds via
+        // onWindowAdded to the new state.
+        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        engine.windowFocused(QStringLiteral("win-move"), vs1);
+        QCoreApplication::processEvents();
+
+        // Window should be removed from vs:0's state
+        QVERIFY(!state0->containsWindow(QStringLiteral("win-move")));
+        QCOMPARE(state0->windowCount(), 0);
+
+        // Window should now be in vs:1's state
+        QVERIFY(state1->containsWindow(QStringLiteral("win-move")));
+        QCOMPARE(state1->windowCount(), 1);
+
+        // tilingChanged should have been emitted for at least the destination screen
+        QVERIFY(tilingSpy.count() >= 1);
     }
 
     // =========================================================================

@@ -368,7 +368,7 @@ private:
     // Cached absolute geometries for virtual screens (invalidated on screen geometry change)
     mutable QHash<QString, QRect> m_virtualGeometryCache;
 
-    void invalidateVirtualGeometryCache(const QString& physicalScreenId = {});
+    void invalidateVirtualGeometryCache(const QString& physicalScreenId = {}) const;
     void rebuildVirtualGeometryCache(const QString& physicalScreenId) const;
 
     /**

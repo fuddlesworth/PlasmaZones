@@ -12,7 +12,6 @@
 #include <QPalette>
 #include <QFile>
 #include <QTextStream>
-#include <QRegularExpression>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -544,11 +543,14 @@ void Settings::applySystemColorScheme()
 void Settings::applyAutotileBorderSystemColor()
 {
     // Use the exact snapping zone highlight/inactive colors including their alpha.
-    m_autotileBorderColor = m_highlightColor;
-    Q_EMIT autotileBorderColorChanged();
-
-    m_autotileInactiveBorderColor = m_inactiveColor;
-    Q_EMIT autotileInactiveBorderColorChanged();
+    if (m_autotileBorderColor != m_highlightColor) {
+        m_autotileBorderColor = m_highlightColor;
+        Q_EMIT autotileBorderColorChanged();
+    }
+    if (m_autotileInactiveBorderColor != m_inactiveColor) {
+        m_autotileInactiveBorderColor = m_inactiveColor;
+        Q_EMIT autotileInactiveBorderColorChanged();
+    }
 }
 
 } // namespace PlasmaZones

@@ -136,11 +136,20 @@ QVariant readPerScreenAutotileEntry(IConfigGroup& group, const QString& key)
         return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatio()));
     if (key == QLatin1String("AutotileAlgorithm") || key == QLatin1String("AnimationEasingCurve"))
         return QVariant(group.readString(key));
-    if (key == QLatin1String("AutotileUsePerSideOuterGap") || key == QLatin1String("AutotileFocusNewWindows")
-        || key == QLatin1String("AutotileSmartGaps") || key == QLatin1String("AutotileFocusFollowsMouse")
-        || key == QLatin1String("AutotileRespectMinimumSize") || key == QLatin1String("AutotileHideTitleBars")
-        || key == QLatin1String("AnimationsEnabled"))
-        return QVariant(group.readBool(key, false));
+    if (key == QLatin1String("AutotileUsePerSideOuterGap"))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileUsePerSideOuterGap()));
+    if (key == QLatin1String("AutotileFocusNewWindows"))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileFocusNewWindows()));
+    if (key == QLatin1String("AutotileSmartGaps"))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileSmartGaps()));
+    if (key == QLatin1String("AutotileFocusFollowsMouse"))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileFocusFollowsMouse()));
+    if (key == QLatin1String("AutotileRespectMinimumSize"))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileRespectMinimumSize()));
+    if (key == QLatin1String("AutotileHideTitleBars"))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileHideTitleBars()));
+    if (key == QLatin1String("AnimationsEnabled"))
+        return QVariant(group.readBool(key, ConfigDefaults::animationsEnabled()));
     return QVariant(group.readInt(key, 0));
 }
 
@@ -178,8 +187,10 @@ QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& valu
 
 QVariant readPerScreenSnappingEntry(IConfigGroup& group, const QString& key)
 {
-    if (key == QLatin1String("SnapAssistEnabled") || key == QLatin1String("ZoneSelectorEnabled"))
-        return QVariant(group.readBool(key, false));
+    if (key == QLatin1String("SnapAssistEnabled"))
+        return QVariant(group.readBool(key, ConfigDefaults::snapAssistEnabled()));
+    if (key == QLatin1String("ZoneSelectorEnabled"))
+        return QVariant(group.readBool(key, ConfigDefaults::zoneSelectorEnabled()));
     return QVariant(group.readInt(key, 0));
 }
 
@@ -187,7 +198,7 @@ QVariant readPerScreenZoneSelectorEntry(IConfigGroup& group, const QString& key)
 {
     namespace K = ZoneSelectorConfigKey;
     if (key == QLatin1String(K::PreviewLockAspect))
-        return QVariant(group.readBool(key, true));
+        return QVariant(group.readBool(key, ConfigDefaults::previewLockAspect()));
     return QVariant(group.readInt(key, 0));
 }
 

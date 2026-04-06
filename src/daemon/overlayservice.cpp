@@ -49,10 +49,32 @@ void cleanupWindow(QQuickWindow* window)
     }
 }
 
+// Disconnect physical screen signals before destroying windows in a state entry.
+// The overlay geometryChanged connection targets `this` (OverlayService), not the window,
+// so cleanupWindow's close/destroy/deleteLater would leave a dangling connection.
+void disconnectScreenSignals(OverlayService::PerScreenOverlayState& state)
+{
+    QObject::disconnect(state.overlayGeomConnection);
+    state.overlayGeomConnection = {};
+    if (state.overlayPhysScreen && state.overlayWindow) {
+        QObject::disconnect(state.overlayPhysScreen, nullptr, state.overlayWindow, nullptr);
+    }
+    if (state.zoneSelectorPhysScreen && state.zoneSelectorWindow) {
+        QObject::disconnect(state.zoneSelectorPhysScreen, nullptr, state.zoneSelectorWindow, nullptr);
+    }
+    if (state.layoutOsdPhysScreen && state.layoutOsdWindow) {
+        QObject::disconnect(state.layoutOsdPhysScreen, nullptr, state.layoutOsdWindow, nullptr);
+    }
+    if (state.navigationOsdPhysScreen && state.navigationOsdWindow) {
+        QObject::disconnect(state.navigationOsdPhysScreen, nullptr, state.navigationOsdWindow, nullptr);
+    }
+}
+
 // Clean up all windows in a per-screen state map
 void cleanupAllScreenStates(QHash<QString, OverlayService::PerScreenOverlayState>& states)
 {
     for (auto& state : states) {
+        disconnectScreenSignals(state);
         cleanupWindow(state.overlayWindow);
         cleanupWindow(state.zoneSelectorWindow);
         cleanupWindow(state.layoutOsdWindow);
@@ -67,6 +89,7 @@ void cleanupScreenStatesByPrefix(QHash<QString, OverlayService::PerScreenOverlay
 {
     for (auto it = states.begin(); it != states.end();) {
         if (it.key().startsWith(prefix)) {
+            disconnectScreenSignals(it.value());
             cleanupWindow(it.value().overlayWindow);
             cleanupWindow(it.value().zoneSelectorWindow);
             cleanupWindow(it.value().layoutOsdWindow);

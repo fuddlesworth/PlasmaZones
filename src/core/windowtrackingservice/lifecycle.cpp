@@ -480,13 +480,12 @@ void WindowTrackingService::windowClosed(const QString& windowId)
 
 void WindowTrackingService::onLayoutChanged()
 {
-    // Validate zone assignments against new layout
+    // Validate zone assignments against new layout.
+    // NOTE: Do NOT early-return when the global activeLayout() is null. With virtual
+    // screens, individual screens may have per-screen layouts via resolveLayoutForScreen().
+    // The per-window loop below (~line 718) already resolves layouts per-screen, so a
+    // null global layout does not mean "no layouts anywhere".
     Layout* newLayout = m_layoutManager->activeLayout();
-    if (!newLayout) {
-        qCInfo(lcCore) << "onLayoutChanged: no active layout, clearing buffer";
-        m_resnapBuffer.clear();
-        return;
-    }
 
     // Before removing stale assignments, capture (window, zonePosition) for resnap-to-new-layout.
     // When user presses the shortcut, we map zone N -> zone N (with cycling when layout has fewer zones).
@@ -505,8 +504,9 @@ void WindowTrackingService::onLayoutChanged()
         return;
     }
     const bool layoutSwitched = (prevLayout != newLayout);
-    qCDebug(lcCore) << "onLayoutChanged: newLayout=" << newLayout->name() << "prevLayout=" << prevLayout->name()
-                    << "switched=" << layoutSwitched << "windowAssignments=" << m_windowZoneAssignments.size();
+    qCDebug(lcCore) << "onLayoutChanged: newLayout=" << (newLayout ? newLayout->name() : QStringLiteral("null"))
+                    << "prevLayout=" << prevLayout->name() << "switched=" << layoutSwitched
+                    << "windowAssignments=" << m_windowZoneAssignments.size();
     {
         QVector<ResnapEntry> newBuffer;
 

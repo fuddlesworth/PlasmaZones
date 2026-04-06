@@ -231,9 +231,23 @@ private Q_SLOTS:
 
     void testVsConfigChange_boundaryShift_windowStaysAssigned()
     {
-        // Set up 50/50 virtual screens and snap a window to vs:0
+        // This test verifies that WTS screen assignments are keyed by virtual
+        // screen ID (e.g. "Dell:U2722D:115107/vs:0"), NOT by geometry. When
+        // ScreenManager shifts the boundary from 50/50 to 70/30, the virtual
+        // screen IDs remain the same, so WTS assignments must be stable.
+        //
+        // A full integration test would call ScreenManager::setVirtualScreenConfig
+        // with a new boundary, but WTS's test fixture uses nullptr for
+        // ScreenManager (it only needs LayoutManager + ZoneDetector). The
+        // boundary shift is a ScreenManager concern, not a WTS concern — WTS
+        // only cares about the string screen ID.
+        //
+        // We verify the invariant that matters: assigning to vs:0 and then
+        // reading back gives the same screen ID and zone, which proves WTS
+        // does not spontaneously reassign windows when no migration API is called.
         const QString physId = QStringLiteral("Dell:U2722D:115107");
         const QString vs0 = VirtualScreenId::make(physId, 0);
+        const QString vs1 = VirtualScreenId::make(physId, 1);
 
         const QString windowId = QStringLiteral("konsole|config-change");
         m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
@@ -241,17 +255,19 @@ private Q_SLOTS:
         QCOMPARE(m_service->screenAssignments().value(windowId), vs0);
         QVERIFY(m_service->isWindowSnapped(windowId));
 
-        // The boundary shifts from 50/50 to 70/30, but the window's screen
-        // assignment remains on vs:0 — the virtual screen ID doesn't change
-        // even though the boundary position changed. The window should NOT
-        // be spuriously transferred to vs:1.
-        // (In production, ScreenManager::setVirtualScreenConfig recalculates
-        // geometries but does not reassign windows between virtual screens.)
+        // Simulate "time passes, boundary shifts" — no migration API called.
+        // Assign a second window to vs:1 to prove cross-contamination doesn't occur.
+        const QString windowId2 = QStringLiteral("dolphin|config-change-2");
+        m_service->assignWindowToZone(windowId2, m_zoneIds[1], vs1, 1);
 
-        // Verify the window remains on vs:0 with its zone intact
+        // Original window must still be on vs:0 with its zone intact
         QCOMPARE(m_service->screenAssignments().value(windowId), vs0);
         QCOMPARE(m_service->zonesForWindow(windowId).first(), m_zoneIds[0]);
         QVERIFY(m_service->isWindowSnapped(windowId));
+
+        // Second window must be on vs:1
+        QCOMPARE(m_service->screenAssignments().value(windowId2), vs1);
+        QCOMPARE(m_service->zonesForWindow(windowId2).first(), m_zoneIds[1]);
     }
 
     // =====================================================================

@@ -18,12 +18,6 @@ namespace VirtualScreenId {
 /// Separator between physical screen ID and virtual index
 inline constexpr QLatin1String Separator{"/vs:"};
 
-/// @deprecated Use VirtualScreenId::Separator instead.
-inline QLatin1String separator()
-{
-    return Separator;
-}
-
 /// Check if a screen ID is a virtual screen ID (contains "/vs:")
 inline bool isVirtual(const QString& screenId)
 {

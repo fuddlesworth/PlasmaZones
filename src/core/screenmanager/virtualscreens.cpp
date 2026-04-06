@@ -27,8 +27,10 @@ constexpr int MinUsableScreenDimension = 100;
 /// pixels between adjacent virtual screens.
 qint64 edgeDistance(const QRect& rect, const QPoint& point)
 {
-    const qint64 dx = qMax(0, qMax(rect.left() - point.x(), point.x() - (rect.x() + rect.width())));
-    const qint64 dy = qMax(0, qMax(rect.top() - point.y(), point.y() - (rect.y() + rect.height())));
+    const qint64 dx =
+        qMax(qint64(0), qMax(qint64(rect.left() - point.x()), qint64(point.x() - (rect.x() + rect.width()))));
+    const qint64 dy =
+        qMax(qint64(0), qMax(qint64(rect.top() - point.y()), qint64(point.y() - (rect.y() + rect.height()))));
     return dx * dx + dy * dy;
 }
 
@@ -235,7 +237,11 @@ QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
             return QRect();
         }
 
-        // Get the physical screen's available geometry and intersect
+        // Get the physical screen's available geometry and intersect.
+        // NOTE: This duplicates the physical screen lookup already done inside
+        // screenGeometry(). Acceptable cost since QScreen* lookup is cheap
+        // (linear scan of a small list) and extracting it from screenGeometry
+        // would require an invasive signature change or internal overload.
         QString physId = VirtualScreenId::extractPhysicalId(screenId);
         QScreen* screen = Utils::findScreenByIdOrName(physId);
         if (!screen) {
@@ -380,7 +386,7 @@ QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
     return {};
 }
 
-void ScreenManager::invalidateVirtualGeometryCache(const QString& physicalScreenId)
+void ScreenManager::invalidateVirtualGeometryCache(const QString& physicalScreenId) const
 {
     if (physicalScreenId.isEmpty()) {
         m_virtualGeometryCache.clear();
@@ -414,15 +420,7 @@ void ScreenManager::rebuildVirtualGeometryCache(const QString& physicalScreenId)
     // Clear stale entries for this physical screen before inserting new ones.
     // Without this, renamed or removed virtual screen defs would leave ghost
     // entries in the cache after a config change.
-    const QString prefix = physicalScreenId + VirtualScreenId::Separator;
-    auto cacheIt = m_virtualGeometryCache.begin();
-    while (cacheIt != m_virtualGeometryCache.end()) {
-        if (cacheIt.key().startsWith(prefix)) {
-            cacheIt = m_virtualGeometryCache.erase(cacheIt);
-        } else {
-            ++cacheIt;
-        }
-    }
+    invalidateVirtualGeometryCache(physicalScreenId);
 
     QRect physGeom = screen->geometry();
     for (const auto& vs : it->screens) {

@@ -46,6 +46,9 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
         bottom = qMin(bottom, physicalGeometry.y() + physicalGeometry.height());
         left = qMax(left, physicalGeometry.x());
         top = qMax(top, physicalGeometry.y());
+        // Prevent degenerate geometry when tolerance overshoot pushes left/top past right/bottom
+        left = qMin(left, right - 1);
+        top = qMin(top, bottom - 1);
         int w = qMax(1, right - left);
         int h = qMax(1, bottom - top);
         return QRect(left, top, w, h);

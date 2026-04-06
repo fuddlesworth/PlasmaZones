@@ -307,10 +307,12 @@ void OverlayService::createSnapAssistWindow(QScreen* physScreen)
     m_snapAssistWindow = window;
     m_snapAssistScreen = screen;
 
-    connect(window, &QObject::destroyed, this, [this]() {
-        m_snapAssistWindow = nullptr;
-        m_snapAssistScreen = nullptr;
-        m_snapAssistScreenId.clear();
+    connect(window, &QObject::destroyed, this, [this, win = window]() {
+        if (m_snapAssistWindow == win) {
+            m_snapAssistWindow = nullptr;
+            m_snapAssistScreen = nullptr;
+            m_snapAssistScreenId.clear();
+        }
     });
 
     // Emit snapAssistDismissed when the window is closed by QML (backdrop click, Escape)
@@ -509,8 +511,10 @@ void OverlayService::createLayoutPickerWindow(QScreen* physScreen)
         return;
     }
 
-    connect(window, &QObject::destroyed, this, [this]() {
-        m_layoutPickerWindow = nullptr;
+    connect(window, &QObject::destroyed, this, [this, win = window]() {
+        if (m_layoutPickerWindow == win) {
+            m_layoutPickerWindow = nullptr;
+        }
     });
 
     // Connect layoutSelected and dismissed signals from QML

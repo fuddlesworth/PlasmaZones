@@ -405,9 +405,8 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             if (workspace && m_daemonServiceRegistered) {
                 const auto outputs = workspace->outputOrder();
                 if (!outputs.isEmpty()) {
-                    fireAndForgetDBusCall(QStringLiteral("org.plasmazones.Screen"),
-                                          QStringLiteral("setPrimaryScreenFromKWin"), {outputs.first()->name()},
-                                          QStringLiteral("setPrimaryScreenFromKWin"));
+                    fireAndForgetDBusCall(DBus::Interface::Screen, QStringLiteral("setPrimaryScreenFromKWin"),
+                                          {outputs.first()->name()}, QStringLiteral("setPrimaryScreenFromKWin"));
                 }
             }
         });
@@ -1025,7 +1024,7 @@ void PlasmaZonesEffect::slotDaemonReady()
     if (ws) {
         const auto outputs = ws->outputOrder();
         if (!outputs.isEmpty()) {
-            fireAndForgetDBusCall(QStringLiteral("org.plasmazones.Screen"), QStringLiteral("setPrimaryScreenFromKWin"),
+            fireAndForgetDBusCall(DBus::Interface::Screen, QStringLiteral("setPrimaryScreenFromKWin"),
                                   {outputs.first()->name()}, QStringLiteral("setPrimaryScreenFromKWin"));
         }
     }
@@ -1999,12 +1998,12 @@ QString PlasmaZonesEffect::resolveEffectiveScreenId(const QPoint& pos, const KWi
         if (pos.x() < vs.geometry.left()) {
             dx = vs.geometry.left() - pos.x();
         } else if (pos.x() >= exRight) {
-            dx = pos.x() - exRight + 1;
+            dx = pos.x() - exRight;
         }
         if (pos.y() < vs.geometry.top()) {
             dy = vs.geometry.top() - pos.y();
         } else if (pos.y() >= exBottom) {
-            dy = pos.y() - exBottom + 1;
+            dy = pos.y() - exBottom;
         }
         int dist = dx + dy;
         if (dist < minDist) {

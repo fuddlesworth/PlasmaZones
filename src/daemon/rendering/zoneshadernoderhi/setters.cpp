@@ -74,21 +74,22 @@ void ZoneShaderNodeRhi::setTime(float time)
     m_time = time;
     m_uniformsDirty = true;
     m_timeDirty = true;
-    m_zoneDataDirty = true; // iDate is in scene block; re-upload when time changes
+    // iDate is in the scene data region but is recomputed from the system clock
+    // in syncUniformsFromData(), so it updates whenever m_sceneDataDirty is set.
+    // Do NOT set m_zoneDataDirty — the time block has its own upload region.
+    m_sceneDataDirty = true;
 }
 void ZoneShaderNodeRhi::setTimeDelta(float delta)
 {
     m_timeDelta = delta;
     m_uniformsDirty = true;
     m_timeDirty = true;
-    m_zoneDataDirty = true; // iDate is in scene block; re-upload when time changes
 }
 void ZoneShaderNodeRhi::setFrame(int frame)
 {
     m_frame = frame;
     m_uniformsDirty = true;
     m_timeDirty = true;
-    m_zoneDataDirty = true; // iDate is in scene block; re-upload when time changes
 }
 void ZoneShaderNodeRhi::setResolution(float width, float height)
 {
@@ -96,14 +97,14 @@ void ZoneShaderNodeRhi::setResolution(float width, float height)
         m_width = width;
         m_height = height;
         m_uniformsDirty = true;
-        m_zoneDataDirty = true;
+        m_sceneDataDirty = true;
     }
 }
 void ZoneShaderNodeRhi::setMousePosition(const QPointF& pos)
 {
     m_mousePosition = pos;
     m_uniformsDirty = true;
-    m_zoneDataDirty = true;
+    m_sceneDataDirty = true;
 }
 
 // ============================================================================
@@ -540,6 +541,7 @@ void ZoneShaderNodeRhi::invalidateUniforms()
     m_uniformsDirty = true;
     m_timeDirty = true;
     m_zoneDataDirty = true;
+    m_sceneDataDirty = true;
 }
 
 } // namespace PlasmaZones

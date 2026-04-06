@@ -54,6 +54,10 @@ Q_SIGNALS:
 private:
     void handleScreenGeometryChanged(QScreen* screen, const QString& physId);
 
+    /// Handle physical screen removal: emit screenRemoved for each cached
+    /// effective (virtual) screen ID, or fall back to the physical screen ID.
+    void handleScreenRemoved(QScreen* removedScreen, QScreen* targetScreen, const QString& cachedId);
+
     /// Emit per-virtual-screen or fall back to physical screen ID.
     /// Returns true if virtual screen IDs were emitted, false if physical.
     bool emitForEffectiveScreens(const QString& physId, const std::function<void(const QString&)>& emitFn);

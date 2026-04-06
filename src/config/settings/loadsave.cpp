@@ -540,18 +540,30 @@ void Settings::loadEditorConfig(IConfigGroup& editor)
     double intervalX = editor.readDouble(ConfigDefaults::editorSnapIntervalXKey(), -1.0);
     if (intervalX < 0.0)
         intervalX = editor.readDouble(ConfigDefaults::editorSnapIntervalKey(), ConfigDefaults::editorSnapInterval());
-    m_editorSnapIntervalX = intervalX;
+    m_editorSnapIntervalX = qBound(0.01, intervalX, 1.0);
 
     double intervalY = editor.readDouble(ConfigDefaults::editorSnapIntervalYKey(), -1.0);
     if (intervalY < 0.0)
         intervalY = editor.readDouble(ConfigDefaults::editorSnapIntervalKey(), ConfigDefaults::editorSnapInterval());
-    m_editorSnapIntervalY = intervalY;
+    m_editorSnapIntervalY = qBound(0.01, intervalY, 1.0);
 
-    m_editorSnapOverrideModifier =
-        editor.readInt(ConfigDefaults::editorSnapOverrideModifierKey(), ConfigDefaults::editorSnapOverrideModifier());
+    {
+        const int rawSnapMod = editor.readInt(ConfigDefaults::editorSnapOverrideModifierKey(),
+                                              ConfigDefaults::editorSnapOverrideModifier());
+        constexpr int validModifiers = Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
+        m_editorSnapOverrideModifier = (rawSnapMod == Qt::NoModifier || (rawSnapMod & validModifiers) == rawSnapMod)
+            ? rawSnapMod
+            : ConfigDefaults::editorSnapOverrideModifier();
+    }
     m_fillOnDropEnabled = editor.readBool(ConfigDefaults::fillOnDropEnabledKey(), ConfigDefaults::fillOnDropEnabled());
-    m_fillOnDropModifier =
-        editor.readInt(ConfigDefaults::fillOnDropModifierKey(), ConfigDefaults::fillOnDropModifier());
+    {
+        const int rawFillMod =
+            editor.readInt(ConfigDefaults::fillOnDropModifierKey(), ConfigDefaults::fillOnDropModifier());
+        constexpr int validModifiers = Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
+        m_fillOnDropModifier = (rawFillMod == Qt::NoModifier || (rawFillMod & validModifiers) == rawFillMod)
+            ? rawFillMod
+            : ConfigDefaults::fillOnDropModifier();
+    }
 
     if (m_editorDuplicateShortcut != oldDupShortcut)
         Q_EMIT editorDuplicateShortcutChanged();
@@ -868,23 +880,6 @@ void Settings::loadVirtualScreenConfigs(IConfigBackend* backend)
         // Need at least minVirtualScreensPerPhysical() screens for a meaningful subdivision
         if (config.screens.size() < ConfigDefaults::minVirtualScreensPerPhysical())
             continue;
-
-        // Validate unique indices
-        {
-            QSet<int> seenIndices;
-            bool duplicateIndex = false;
-            for (const auto& vs : config.screens) {
-                if (seenIndices.contains(vs.index)) {
-                    qCWarning(lcConfig) << "loadVirtualScreenConfigs: duplicate index" << vs.index << "for" << physId
-                                        << "- skipping config";
-                    duplicateIndex = true;
-                    break;
-                }
-                seenIndices.insert(vs.index);
-            }
-            if (duplicateIndex)
-                continue;
-        }
 
         // Validate no overlapping regions (pairwise intersection, tolerance-aware)
         {

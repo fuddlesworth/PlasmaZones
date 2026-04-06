@@ -138,6 +138,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     const QRect screenGeom = resolveScreenGeometry(screenId);
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
+    aspectRatio = qBound(0.5, aspectRatio, 4.0);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("screenWidth"), screenGeom.width());
 
@@ -147,11 +148,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
 
     // Update settings-based properties
     if (m_settings) {
-        writeQmlProperty(window, QStringLiteral("highlightColor"), m_settings->highlightColor());
-        writeQmlProperty(window, QStringLiteral("inactiveColor"), m_settings->inactiveColor());
-        writeQmlProperty(window, QStringLiteral("borderColor"), m_settings->borderColor());
-        writeQmlProperty(window, QStringLiteral("activeOpacity"), m_settings->activeOpacity());
-        writeQmlProperty(window, QStringLiteral("inactiveOpacity"), m_settings->inactiveOpacity());
+        writeColorSettings(window, m_settings);
         // Zone appearance settings for scaled preview (global)
         writeQmlProperty(window, QStringLiteral("zonePadding"), m_settings->zonePadding());
         writeQmlProperty(window, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());

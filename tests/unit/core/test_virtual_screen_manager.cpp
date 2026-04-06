@@ -24,27 +24,6 @@
 using namespace PlasmaZones;
 using namespace PlasmaZones::TestHelpers;
 
-// Helper to build a simple two-way split config
-static VirtualScreenConfig makeSplitConfig(const QString& physId)
-{
-    VirtualScreenConfig config;
-    config.physicalScreenId = physId;
-    config.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0, 0, 0.5, 1.0)));
-    config.screens.append(makeDef(physId, 1, QStringLiteral("Right"), QRectF(0.5, 0, 0.5, 1.0)));
-    return config;
-}
-
-// Helper to build a three-way split config
-static VirtualScreenConfig makeThreeWayConfig(const QString& physId)
-{
-    VirtualScreenConfig config;
-    config.physicalScreenId = physId;
-    config.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0, 0, 0.333, 1.0)));
-    config.screens.append(makeDef(physId, 1, QStringLiteral("Center"), QRectF(0.333, 0, 0.334, 1.0)));
-    config.screens.append(makeDef(physId, 2, QStringLiteral("Right"), QRectF(0.667, 0, 0.333, 1.0)));
-    return config;
-}
-
 class TestVirtualScreenManager : public QObject
 {
     Q_OBJECT

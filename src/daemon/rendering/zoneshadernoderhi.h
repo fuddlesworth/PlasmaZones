@@ -200,6 +200,8 @@ private:
     bool m_uniformsDirty = true;
     bool m_timeDirty = true;
     bool m_zoneDataDirty = true;
+    bool m_sceneDataDirty =
+        true; ///< Scene header (resolution, mouse, date, params) changed; avoids re-uploading zone arrays
     bool m_didFullUploadOnce = false;
 
     ZoneShaderUniforms m_uniforms = {};
