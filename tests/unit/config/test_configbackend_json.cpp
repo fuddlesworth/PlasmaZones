@@ -490,6 +490,224 @@ private Q_SLOTS:
         QCOMPARE(PlasmaZones::categoryToPrefix(QStringLiteral("Snapping")), QStringLiteral("SnappingScreen"));
         QCOMPARE(PlasmaZones::categoryToPrefix(QStringLiteral("ZoneSelector")), QStringLiteral("ZoneSelector"));
     }
+
+    // =========================================================================
+    // Dot-path group operations
+    // =========================================================================
+
+    void testDotPathDeleteGroup_prunesEmptyParents()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Write a value into a deeply nested dot-path group
+        {
+            auto g = backend->group(QStringLiteral("A.B.C"));
+            g->writeString(QStringLiteral("Key"), QStringLiteral("Value"));
+        }
+        backend->sync();
+
+        // Verify it was written
+        {
+            auto g = backend->group(QStringLiteral("A.B.C"));
+            QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("Value"));
+        }
+
+        // Delete the leaf group
+        backend->deleteGroup(QStringLiteral("A.B.C"));
+        backend->sync();
+
+        // The leaf group should be gone
+        QVERIFY(!backend->groupList().contains(QStringLiteral("A.B.C")));
+
+        // Empty parents should be pruned — "A.B" and "A" should also be gone
+        QVERIFY(!backend->groupList().contains(QStringLiteral("A.B")));
+        QVERIFY(!backend->groupList().contains(QStringLiteral("A")));
+    }
+
+    void testDotPathDeleteGroup_preservesSiblings()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Write values into sibling dot-path groups
+        {
+            auto g = backend->group(QStringLiteral("Parent.Child1"));
+            g->writeString(QStringLiteral("Key1"), QStringLiteral("V1"));
+        }
+        {
+            auto g = backend->group(QStringLiteral("Parent.Child2"));
+            g->writeString(QStringLiteral("Key2"), QStringLiteral("V2"));
+        }
+        backend->sync();
+
+        // Delete one child
+        backend->deleteGroup(QStringLiteral("Parent.Child1"));
+
+        // Sibling should survive
+        {
+            auto g = backend->group(QStringLiteral("Parent.Child2"));
+            QCOMPARE(g->readString(QStringLiteral("Key2")), QStringLiteral("V2"));
+        }
+        // Parent should survive (not empty — still has Child2)
+        QVERIFY(backend->groupList().contains(QStringLiteral("Parent")));
+        QVERIFY(backend->groupList().contains(QStringLiteral("Parent.Child2")));
+    }
+
+    void testGroupList_returnsNestedDotPaths()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Write into nested groups
+        {
+            auto g = backend->group(QStringLiteral("Snapping"));
+            g->writeBool(QStringLiteral("Enabled"), true);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Snapping.Behavior.ZoneSpan"));
+            g->writeBool(QStringLiteral("Enabled"), true);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Snapping.Gaps"));
+            g->writeInt(QStringLiteral("Inner"), 8);
+        }
+        backend->sync();
+
+        const QStringList groups = backend->groupList();
+
+        // Should contain the intermediate and leaf groups
+        QVERIFY(groups.contains(QStringLiteral("Snapping")));
+        QVERIFY(groups.contains(QStringLiteral("Snapping.Behavior")));
+        QVERIFY(groups.contains(QStringLiteral("Snapping.Behavior.ZoneSpan")));
+        QVERIFY(groups.contains(QStringLiteral("Snapping.Gaps")));
+    }
+
+    // =========================================================================
+    // Dot-path depth limit
+    // =========================================================================
+
+    void testDotPathDepthLimit_withinLimit()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // 8 segments is at the limit — should work fine
+        const QString deepGroup = QStringLiteral("A.B.C.D.E.F.G.H");
+        {
+            auto g = backend->group(deepGroup);
+            g->writeString(QStringLiteral("Key"), QStringLiteral("value"));
+        }
+        {
+            auto g = backend->group(deepGroup);
+            QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("value"));
+        }
+    }
+
+    void testDotPathDepthLimit_exceedsLimit_rejectsWrite()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // 10 segments exceeds MaxDotPathDepth=8 — should be rejected (no-op)
+        const QString tooDeep = QStringLiteral("A.B.C.D.E.F.G.H.I.J");
+        {
+            auto g = backend->group(tooDeep);
+            g->writeString(QStringLiteral("Key"), QStringLiteral("value"));
+        }
+        // The write should have been rejected — nothing stored at any path
+        {
+            auto g = backend->group(QStringLiteral("A.B.C.D.E.F.G.H"));
+            QCOMPARE(g->readString(QStringLiteral("Key"), QStringLiteral("missing")), QStringLiteral("missing"));
+        }
+        {
+            auto g = backend->group(tooDeep);
+            QCOMPARE(g->readString(QStringLiteral("Key"), QStringLiteral("missing")), QStringLiteral("missing"));
+        }
+    }
+
+    // =========================================================================
+    // Dot-path sync + reparse round-trip
+    // =========================================================================
+
+    void testDotPathSyncReparse_roundTrip()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Write to a dot-path group
+        {
+            auto g = backend->group(QStringLiteral("Snapping.Behavior.ZoneSpan"));
+            g->writeBool(QStringLiteral("Enabled"), true);
+            g->writeString(QStringLiteral("Triggers"), QStringLiteral("[{\"modifier\":1,\"mouseButton\":0}]"));
+        }
+        backend->sync();
+
+        // Reparse from disk
+        backend->reparseConfiguration();
+
+        // Verify values survived the round-trip
+        {
+            auto g = backend->group(QStringLiteral("Snapping.Behavior.ZoneSpan"));
+            QCOMPARE(g->readBool(QStringLiteral("Enabled"), false), true);
+            QVERIFY(g->readString(QStringLiteral("Triggers")).contains(QStringLiteral("modifier")));
+        }
+    }
+
+    // =========================================================================
+    // readString handles non-string JSON types
+    // =========================================================================
+
+    void testReadString_boolValue_convertsToString()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            g->writeBool(QStringLiteral("Flag"), true);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            // readString on a bool should return "true", not the default
+            QCOMPARE(g->readString(QStringLiteral("Flag"), QStringLiteral("fallback")), QStringLiteral("true"));
+        }
+    }
+
+    void testReadString_numberValue_convertsToString()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            g->writeInt(QStringLiteral("Count"), 42);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            QCOMPARE(g->readString(QStringLiteral("Count"), QStringLiteral("fallback")), QStringLiteral("42"));
+        }
+    }
+    // =========================================================================
+    // writeString: non-JSON bracket string stays as string
+    // =========================================================================
+
+    void testWriteString_bracketNonJson_staysAsString()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // "[Main Monitor]" starts with '[' but is not valid JSON — must stay as string
+        const QString value = QStringLiteral("[Main Monitor]");
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            g->writeString(QStringLiteral("Monitor"), value);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            QCOMPARE(g->readString(QStringLiteral("Monitor")), value);
+        }
+    }
 };
 
 QTEST_MAIN(TestJsonConfigBackend)

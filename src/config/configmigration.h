@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// One-time config migration from INI (plasmazonesrc) to JSON (config.json).
-// Runs on first startup after upgrade.  Old file is renamed to .bak.
+// Config migration system with versioned migration chain.
+// Handles INI→JSON conversion and sequential schema upgrades (v1→v2→v3→...).
+// Each version bump adds one migration function; the chain runs automatically.
 
 #pragma once
 
@@ -11,28 +12,56 @@
 #include <QMap>
 #include <QString>
 #include <QVariant>
+#include <span>
 
 namespace PlasmaZones {
+
+/// A single schema migration step: transforms root JSON in-place from
+/// fromVersion to fromVersion+1, then stamps the new _version.
+struct MigrationStep
+{
+    int fromVersion;
+    void (*migrate)(QJsonObject& root);
+};
 
 class PLASMAZONES_EXPORT ConfigMigration
 {
 public:
-    /// Run the migration if needed.
+    /// Run all needed migrations (INI→JSON and/or schema upgrades).
     ///
     /// Returns true if:
-    /// - config.json already exists (no migration needed), or
-    /// - No old plasmazonesrc exists (fresh install), or
-    /// - Migration succeeded (JSON written, old file renamed to .bak)
+    /// - config.json already exists at current version, or
+    /// - No old config exists (fresh install), or
+    /// - All migrations succeeded
     ///
-    /// Returns false if migration failed (old file preserved, error logged).
+    /// Returns false if any migration failed (old file preserved, error logged).
     static bool ensureJsonConfig();
 
-    /// Convert an INI config file to JSON format. Used by ensureJsonConfig()
-    /// for one-time migration, and by settings import for legacy INI files.
+    /// Convert an INI config file to JSON format. Produces v1 JSON.
+    /// Used by ensureJsonConfig() for one-time INI migration,
+    /// and by settings import for legacy INI files.
     static bool migrateIniToJson(const QString& iniPath, const QString& jsonPath);
+
+    /// Run the schema migration chain on a JSON config file.
+    /// Reads the file, applies all steps from current _version to
+    /// ConfigSchemaVersion, writes atomically.
+    static bool runMigrationChain(const QString& jsonPath);
+
+    /// Run the migration chain in-memory (for INI→JSON + upgrade in one pass).
+    static void runMigrationChainInMemory(QJsonObject& root);
+
+    /// The ordered list of all migration steps.
+    static std::span<const MigrationStep> migrationSteps();
+
+    // Schema migration functions (one per version bump).
+    // Public so the MigrationStep function pointers can reference them.
+    static void migrateV1ToV2(QJsonObject& root);
+    // static void migrateV2ToV3(QJsonObject& root);  // future
 
 private:
     ConfigMigration() = default;
+
+    // INI→JSON helpers
     static QJsonObject iniMapToJson(const QMap<QString, QVariant>& flatMap);
     static QJsonValue convertValue(const QVariant& value);
 };

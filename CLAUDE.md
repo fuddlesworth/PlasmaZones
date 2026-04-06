@@ -89,15 +89,25 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 
 ### Config Key Strings
 - ALL config group names and key strings MUST use `ConfigDefaults::` accessors — never inline `QStringLiteral("...")`
-- Group accessors: `ConfigDefaults::activationGroup()`, key accessors: `ConfigDefaults::snappingEnabledKey()`
+- Group accessors: `ConfigDefaults::snappingBehaviorGroup()`, key accessors: `ConfigDefaults::enabledKey()`
+- v2 groups use dot-paths mirroring the UI hierarchy (e.g. `"Snapping.Behavior.ZoneSpan"`)
+- Key accessors are generic (e.g. `enabledKey()`, `triggersKey()`) — the group context disambiguates
 
-### No Backwards Compatibility / Legacy Migration
-- NEVER add migration code for old config keys, renamed settings, or deprecated formats
-- If a setting is renamed or restructured, just use the new key — old values are silently dropped
+### No Ad-Hoc Backwards Compatibility
+- NEVER add migration code for individual renamed keys or deprecated settings within the same schema version
+- If a setting is renamed or restructured within a version, just use the new key — old values are silently dropped
 - Users get the default value if their config doesn't have the current key; this is acceptable
 - NEVER write empty strings to "clear" obsolete keys on save
 - NEVER read from a fallback/legacy group when the primary group is empty
-- Rationale: migration code is write-once, test-forever complexity that rots and never gets removed
+- Rationale: ad-hoc migration code is write-once, test-forever complexity that rots and never gets removed
+
+### Schema Version Migrations (ConfigSchemaVersion bumps)
+- Schema version migrations (`migrateV1ToV2`, etc.) are the ONE exception — they live in `configmigration.cpp`
+- Each version bump gets exactly one migration function + one `MigrationStep` registry entry
+- Migration functions transform the entire JSON root in-place and stamp the new `_version`
+- v1 group/key accessors in `configkeys.h` (prefixed `v1*`) exist ONLY for migration code readability
+- The migration chain runs automatically via `ensureJsonConfig()` on startup
+- NEVER add per-key fallback reads outside of migration functions — that's ad-hoc migration
 
 ### Shortcuts
 - `IShortcutBackend` (KGlobalAccel / XDG Portal / D-Bus fallback) — never use KGlobalAccel directly

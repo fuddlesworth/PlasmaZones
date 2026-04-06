@@ -103,8 +103,10 @@ std::optional<QVariantList> Settings::parseTriggerListJson(const QString& json)
         if (val.isObject()) {
             QJsonObject obj = val.toObject();
             QVariantMap trigger;
-            trigger[ConfigDefaults::triggerModifierField()] = obj.value(QLatin1String("modifier")).toInt(0);
-            trigger[ConfigDefaults::triggerMouseButtonField()] = obj.value(QLatin1String("mouseButton")).toInt(0);
+            trigger[ConfigDefaults::triggerModifierField()] =
+                obj.value(ConfigDefaults::triggerModifierField()).toInt(0);
+            trigger[ConfigDefaults::triggerMouseButtonField()] =
+                obj.value(ConfigDefaults::triggerMouseButtonField()).toInt(0);
             result.append(trigger);
         } else {
             qCWarning(lcConfig) << "Trigger array: non-object element at index" << result.size() << ", skipping";
@@ -122,8 +124,9 @@ void Settings::saveTriggerList(IConfigGroup& group, const QString& key, const QV
     for (const QVariant& t : triggers) {
         auto map = t.toMap();
         QJsonObject obj;
-        obj[QLatin1String("modifier")] = map.value(ConfigDefaults::triggerModifierField(), 0).toInt();
-        obj[QLatin1String("mouseButton")] = map.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt();
+        obj[ConfigDefaults::triggerModifierField()] = map.value(ConfigDefaults::triggerModifierField(), 0).toInt();
+        obj[ConfigDefaults::triggerMouseButtonField()] =
+            map.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt();
         arr.append(obj);
     }
     group.writeString(key, QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
@@ -149,62 +152,39 @@ void Settings::load()
     const bool oldAutotileEnabled = m_autotileEnabled;
     const QString oldDefaultAlgorithm = m_defaultAutotileAlgorithm;
 
-    {
-        auto activation = m_configBackend->group(ConfigDefaults::activationGroup());
-        loadActivationConfig(*activation);
-    }
-    {
-        auto display = m_configBackend->group(ConfigDefaults::displayGroup());
-        loadDisplayConfig(*display);
-    }
-    {
-        auto appearance = m_configBackend->group(ConfigDefaults::appearanceGroup());
-        loadAppearanceConfig(*appearance);
-    }
-    {
-        auto zones = m_configBackend->group(ConfigDefaults::zonesGroup());
-        loadZoneGeometryConfig(*zones);
-    }
+    loadActivationConfig(m_configBackend);
+    loadDisplayConfig(m_configBackend);
+    loadAppearanceConfig(m_configBackend);
+    loadZoneGeometryConfig(m_configBackend);
     loadBehaviorConfig(m_configBackend);
-    {
-        auto zoneSelector = m_configBackend->group(ConfigDefaults::zoneSelectorGroup());
-        loadZoneSelectorConfig(*zoneSelector);
-    }
+    loadZoneSelectorConfig(m_configBackend);
     loadPerScreenOverrides(m_configBackend);
 
     // Rendering backend
     {
         auto rendering = m_configBackend->group(ConfigDefaults::renderingGroup());
         m_renderingBackend = ConfigDefaults::normalizeRenderingBackend(
-            rendering->readString(ConfigDefaults::renderingBackendKey(), ConfigDefaults::renderingBackend()));
+            rendering->readString(ConfigDefaults::backendKey(), ConfigDefaults::renderingBackend()));
     }
 
     // Shaders (small enough to stay inline)
     {
         auto shaders = m_configBackend->group(ConfigDefaults::shadersGroup());
-        m_enableShaderEffects =
-            shaders->readBool(ConfigDefaults::enableShaderEffectsKey(), ConfigDefaults::enableShaderEffects());
-        m_shaderFrameRate =
-            qBound(ConfigDefaults::shaderFrameRateMin(),
-                   shaders->readInt(ConfigDefaults::shaderFrameRateKey(), ConfigDefaults::shaderFrameRate()),
-                   ConfigDefaults::shaderFrameRateMax());
+        m_enableShaderEffects = shaders->readBool(ConfigDefaults::enabledKey(), ConfigDefaults::enableShaderEffects());
+        m_shaderFrameRate = qBound(ConfigDefaults::shaderFrameRateMin(),
+                                   shaders->readInt(ConfigDefaults::frameRateKey(), ConfigDefaults::shaderFrameRate()),
+                                   ConfigDefaults::shaderFrameRateMax());
         m_enableAudioVisualizer =
-            shaders->readBool(ConfigDefaults::enableAudioVisualizerKey(), ConfigDefaults::enableAudioVisualizer());
+            shaders->readBool(ConfigDefaults::audioVisualizerKey(), ConfigDefaults::enableAudioVisualizer());
         m_audioSpectrumBarCount = qBound(
             ConfigDefaults::audioSpectrumBarCountMin(),
             shaders->readInt(ConfigDefaults::audioSpectrumBarCountKey(), ConfigDefaults::audioSpectrumBarCount()),
             ConfigDefaults::audioSpectrumBarCountMax());
     }
 
-    {
-        auto globalShortcuts = m_configBackend->group(ConfigDefaults::globalShortcutsGroup());
-        loadShortcutConfig(*globalShortcuts);
-    }
+    loadShortcutConfig(m_configBackend);
     loadAutotilingConfig(m_configBackend);
-    {
-        auto editor = m_configBackend->group(ConfigDefaults::editorGroup());
-        loadEditorConfig(*editor);
-    }
+    loadEditorConfig(m_configBackend);
 
     // Ordering (small enough to stay inline)
     {
@@ -281,14 +261,17 @@ void Settings::load()
 QStringList Settings::managedGroupNames()
 {
     return {
-        ConfigDefaults::generalGroup(),    ConfigDefaults::activationGroup(),
-        ConfigDefaults::displayGroup(),    ConfigDefaults::appearanceGroup(),
-        ConfigDefaults::zonesGroup(),      ConfigDefaults::behaviorGroup(),
-        ConfigDefaults::exclusionsGroup(), ConfigDefaults::zoneSelectorGroup(),
-        ConfigDefaults::shadersGroup(),    ConfigDefaults::globalShortcutsGroup(),
-        ConfigDefaults::autotilingGroup(), ConfigDefaults::autotileShortcutsGroup(),
-        ConfigDefaults::animationsGroup(), ConfigDefaults::editorGroup(),
-        ConfigDefaults::orderingGroup(),
+        ConfigDefaults::generalGroup(), // "General"
+        ConfigDefaults::snappingGroup(), // "Snapping"
+        ConfigDefaults::tilingGroup(), // "Tiling"
+        ConfigDefaults::exclusionsGroup(), // "Exclusions"
+        ConfigDefaults::performanceGroup(), // "Performance"
+        ConfigDefaults::renderingGroup(), // "Rendering"
+        ConfigDefaults::shadersGroup(), // "Shaders"
+        ConfigDefaults::shortcutsGroup(), // "Shortcuts" — covers Shortcuts.Global + Shortcuts.Tiling
+        ConfigDefaults::animationsGroup(), // "Animations"
+        ConfigDefaults::editorGroup(), // "Editor" — covers Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
+        ConfigDefaults::orderingGroup(), // "Ordering"
     };
 }
 
@@ -318,55 +301,34 @@ void Settings::save()
 {
     purgeStaleKeys();
 
-    {
-        auto activation = m_configBackend->group(ConfigDefaults::activationGroup());
-        saveActivationConfig(*activation);
-    }
-    {
-        auto display = m_configBackend->group(ConfigDefaults::displayGroup());
-        saveDisplayConfig(*display);
-    }
-    {
-        auto appearance = m_configBackend->group(ConfigDefaults::appearanceGroup());
-        saveAppearanceConfig(*appearance);
-    }
-    {
-        auto zones = m_configBackend->group(ConfigDefaults::zonesGroup());
-        saveZoneGeometryConfig(*zones);
-    }
+    saveActivationConfig(m_configBackend);
+    saveDisplayConfig(m_configBackend);
+    saveAppearanceConfig(m_configBackend);
+    saveZoneGeometryConfig(m_configBackend);
     saveBehaviorConfig(m_configBackend);
-    {
-        auto zoneSelector = m_configBackend->group(ConfigDefaults::zoneSelectorGroup());
-        saveZoneSelectorConfig(*zoneSelector);
-    }
+    saveZoneSelectorConfig(m_configBackend);
     saveAllPerScreenOverrides(m_configBackend);
-    {
-        auto globalShortcuts = m_configBackend->group(ConfigDefaults::globalShortcutsGroup());
-        saveShortcutConfig(*globalShortcuts);
-    }
+    saveShortcutConfig(m_configBackend);
     saveAutotilingConfig(m_configBackend);
     {
         auto ordering = m_configBackend->group(ConfigDefaults::orderingGroup());
         ordering->writeString(ConfigDefaults::snappingLayoutOrderKey(), m_snappingLayoutOrder.join(QLatin1Char(',')));
         ordering->writeString(ConfigDefaults::tilingAlgorithmOrderKey(), m_tilingAlgorithmOrder.join(QLatin1Char(',')));
     }
-    {
-        auto editor = m_configBackend->group(ConfigDefaults::editorGroup());
-        saveEditorConfig(*editor);
-    }
+    saveEditorConfig(m_configBackend);
 
     // Rendering backend
     {
         auto rendering = m_configBackend->group(ConfigDefaults::renderingGroup());
-        rendering->writeString(ConfigDefaults::renderingBackendKey(), m_renderingBackend);
+        rendering->writeString(ConfigDefaults::backendKey(), m_renderingBackend);
     }
 
     // Shader Effects
     {
         auto shaders = m_configBackend->group(ConfigDefaults::shadersGroup());
-        shaders->writeBool(ConfigDefaults::enableShaderEffectsKey(), m_enableShaderEffects);
-        shaders->writeInt(ConfigDefaults::shaderFrameRateKey(), m_shaderFrameRate);
-        shaders->writeBool(ConfigDefaults::enableAudioVisualizerKey(), m_enableAudioVisualizer);
+        shaders->writeBool(ConfigDefaults::enabledKey(), m_enableShaderEffects);
+        shaders->writeInt(ConfigDefaults::frameRateKey(), m_shaderFrameRate);
+        shaders->writeBool(ConfigDefaults::audioVisualizerKey(), m_enableAudioVisualizer);
         shaders->writeInt(ConfigDefaults::audioSpectrumBarCountKey(), m_audioSpectrumBarCount);
     }
 
@@ -519,8 +481,10 @@ QString Settings::loadColorsFromFile(const QString& filePath)
     setInactiveColor(result.inactiveColor);
     setBorderColor(result.borderColor);
     setLabelFontColor(result.labelFontColor);
-    m_useSystemColors = false;
-    Q_EMIT useSystemColorsChanged();
+    if (m_useSystemColors) {
+        m_useSystemColors = false;
+        Q_EMIT useSystemColorsChanged();
+    }
     return QString(); // Success - no error
 }
 
@@ -532,32 +496,44 @@ void Settings::applySystemColorScheme()
 
     QColor highlight = pal.color(QPalette::Active, QPalette::Highlight);
     highlight.setAlpha(Defaults::HighlightAlpha);
-    m_highlightColor = highlight;
+    if (m_highlightColor != highlight) {
+        m_highlightColor = highlight;
+        Q_EMIT highlightColorChanged();
+    }
 
     QColor inactive = pal.color(QPalette::Active, QPalette::Text);
     inactive.setAlpha(Defaults::InactiveAlpha);
-    m_inactiveColor = inactive;
+    if (m_inactiveColor != inactive) {
+        m_inactiveColor = inactive;
+        Q_EMIT inactiveColorChanged();
+    }
 
     QColor border = pal.color(QPalette::Active, QPalette::Text);
     border.setAlpha(Defaults::BorderAlpha);
-    m_borderColor = border;
+    if (m_borderColor != border) {
+        m_borderColor = border;
+        Q_EMIT borderColorChanged();
+    }
 
-    m_labelFontColor = pal.color(QPalette::Active, QPalette::Text);
-
-    Q_EMIT highlightColorChanged();
-    Q_EMIT inactiveColorChanged();
-    Q_EMIT borderColorChanged();
-    Q_EMIT labelFontColorChanged();
+    const QColor fontColor = pal.color(QPalette::Active, QPalette::Text);
+    if (m_labelFontColor != fontColor) {
+        m_labelFontColor = fontColor;
+        Q_EMIT labelFontColorChanged();
+    }
 }
 
 void Settings::applyAutotileBorderSystemColor()
 {
     // Use the exact snapping zone highlight/inactive colors including their alpha.
-    m_autotileBorderColor = m_highlightColor;
-    Q_EMIT autotileBorderColorChanged();
+    if (m_autotileBorderColor != m_highlightColor) {
+        m_autotileBorderColor = m_highlightColor;
+        Q_EMIT autotileBorderColorChanged();
+    }
 
-    m_autotileInactiveBorderColor = m_inactiveColor;
-    Q_EMIT autotileInactiveBorderColorChanged();
+    if (m_autotileInactiveBorderColor != m_inactiveColor) {
+        m_autotileInactiveBorderColor = m_inactiveColor;
+        Q_EMIT autotileInactiveBorderColorChanged();
+    }
 }
 
 } // namespace PlasmaZones
