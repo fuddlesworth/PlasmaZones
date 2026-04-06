@@ -367,6 +367,7 @@ inline constexpr QLatin1String FloatingWindows{"floatingWindows"};
 inline constexpr QLatin1String FocusedWindow{"focusedWindow"};
 inline constexpr QLatin1String MasterCount{"masterCount"};
 inline constexpr QLatin1String SplitRatio{"splitRatio"};
+inline constexpr QLatin1String SplitRatioStep{"splitRatioStep"};
 inline constexpr QLatin1String CustomParams{"customParams"};
 
 // AutotileConfig keys

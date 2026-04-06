@@ -79,11 +79,12 @@ constexpr const char* kPerScreenKeys[] = {
 };
 
 constexpr const char* kPerScreenAutotileKeys[] = {
-    "AutotileAlgorithm",     "AutotileSplitRatio",         "AutotileMasterCount",       "AutotileInnerGap",
-    "AutotileOuterGap",      "AutotileUsePerSideOuterGap", "AutotileOuterGapTop",       "AutotileOuterGapBottom",
-    "AutotileOuterGapLeft",  "AutotileOuterGapRight",      "AutotileFocusNewWindows",   "AutotileSmartGaps",
-    "AutotileMaxWindows",    "AutotileInsertPosition",     "AutotileFocusFollowsMouse", "AutotileRespectMinimumSize",
-    "AutotileHideTitleBars", "AnimationsEnabled",          "AnimationDuration",         "AnimationEasingCurve",
+    "AutotileAlgorithm",          "AutotileSplitRatio",    "AutotileSplitRatioStep",     "AutotileMasterCount",
+    "AutotileInnerGap",           "AutotileOuterGap",      "AutotileUsePerSideOuterGap", "AutotileOuterGapTop",
+    "AutotileOuterGapBottom",     "AutotileOuterGapLeft",  "AutotileOuterGapRight",      "AutotileFocusNewWindows",
+    "AutotileSmartGaps",          "AutotileMaxWindows",    "AutotileInsertPosition",     "AutotileFocusFollowsMouse",
+    "AutotileRespectMinimumSize", "AutotileHideTitleBars", "AnimationsEnabled",          "AnimationDuration",
+    "AnimationEasingCurve",
 };
 
 QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& value)
@@ -95,6 +96,11 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     if (k == QLatin1String("SplitRatio")) {
         double v = value.toDouble();
         return QVariant(qBound(ConfigDefaults::autotileSplitRatioMin(), v, ConfigDefaults::autotileSplitRatioMax()));
+    }
+    if (k == QLatin1String("SplitRatioStep")) {
+        double v = value.toDouble();
+        return QVariant(
+            qBound(ConfigDefaults::autotileSplitRatioStepMin(), v, ConfigDefaults::autotileSplitRatioStepMax()));
     }
     if (k == QLatin1String("MasterCount"))
         return QVariant(

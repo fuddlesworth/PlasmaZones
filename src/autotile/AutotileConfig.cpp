@@ -93,8 +93,9 @@ bool AutotileConfig::operator==(const AutotileConfig& other) const
 {
     // Use qFuzzyCompare properly (add 1.0 for values that could be near zero)
     return algorithmId == other.algorithmId && qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio)
-        && masterCount == other.masterCount && savedAlgorithmSettings == other.savedAlgorithmSettings
-        && innerGap == other.innerGap && outerGap == other.outerGap && usePerSideOuterGap == other.usePerSideOuterGap
+        && qFuzzyCompare(1.0 + splitRatioStep, 1.0 + other.splitRatioStep) && masterCount == other.masterCount
+        && savedAlgorithmSettings == other.savedAlgorithmSettings && innerGap == other.innerGap
+        && outerGap == other.outerGap && usePerSideOuterGap == other.usePerSideOuterGap
         && outerGapTop == other.outerGapTop && outerGapBottom == other.outerGapBottom
         && outerGapLeft == other.outerGapLeft && outerGapRight == other.outerGapRight
         && insertPosition == other.insertPosition && focusFollowsMouse == other.focusFollowsMouse
@@ -112,6 +113,7 @@ QJsonObject AutotileConfig::toJson() const
     QJsonObject json;
     json[AlgorithmId] = algorithmId;
     json[SplitRatio] = splitRatio;
+    json[SplitRatioStep] = splitRatioStep;
     json[MasterCount] = masterCount;
     if (!savedAlgorithmSettings.isEmpty()) {
         const auto varMap = perAlgoToVariantMap(savedAlgorithmSettings);
@@ -143,6 +145,11 @@ AutotileConfig AutotileConfig::fromJson(const QJsonObject& json)
     if (json.contains(SplitRatio)) {
         config.splitRatio = json[SplitRatio].toDouble(config.splitRatio);
         config.splitRatio = std::clamp(config.splitRatio, MinSplitRatio, MaxSplitRatio);
+    }
+    if (json.contains(SplitRatioStep)) {
+        config.splitRatioStep = json[SplitRatioStep].toDouble(config.splitRatioStep);
+        config.splitRatioStep = std::clamp(config.splitRatioStep, ConfigDefaults::autotileSplitRatioStepMin(),
+                                           ConfigDefaults::autotileSplitRatioStepMax());
     }
     if (json.contains(MasterCount)) {
         config.masterCount = json[MasterCount].toInt(config.masterCount);
