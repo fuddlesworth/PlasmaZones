@@ -96,12 +96,14 @@ private Q_SLOTS:
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
         QCOMPARE(root.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
 
-        QJsonObject activation = root.value(QStringLiteral("Activation")).toObject();
-        QCOMPARE(activation.value(QStringLiteral("SnappingEnabled")).toBool(), true);
-        QCOMPARE(activation.value(QStringLiteral("ToggleActivation")).toBool(), false);
+        QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
+        QCOMPARE(snapping.value(QStringLiteral("Enabled")).toBool(), true);
 
-        QJsonObject display = root.value(QStringLiteral("Display")).toObject();
-        QCOMPARE(display.value(QStringLiteral("ShowOnAllMonitors")).toBool(), true);
+        QJsonObject behavior = snapping.value(QStringLiteral("Behavior")).toObject();
+        QCOMPARE(behavior.value(QStringLiteral("ToggleActivation")).toBool(), false);
+
+        QJsonObject behaviorDisplay = behavior.value(QStringLiteral("Display")).toObject();
+        QCOMPARE(behaviorDisplay.value(QStringLiteral("ShowOnAllMonitors")).toBool(), true);
     }
 
     void testMigrateColors()
@@ -115,10 +117,12 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
-        QJsonObject appearance = root.value(QStringLiteral("Appearance")).toObject();
+        QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
+        QJsonObject appearance = snapping.value(QStringLiteral("Appearance")).toObject();
+        QJsonObject colors = appearance.value(QStringLiteral("Colors")).toObject();
 
         // Colors should be converted to hex
-        QString highlight = appearance.value(QStringLiteral("HighlightColor")).toString();
+        QString highlight = colors.value(QStringLiteral("Highlight")).toString();
         QVERIFY2(highlight.startsWith(QLatin1Char('#')),
                  qPrintable(QStringLiteral("Expected hex color, got: ") + highlight));
 
@@ -140,11 +144,12 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
-        QJsonObject activation = root.value(QStringLiteral("Activation")).toObject();
+        QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
+        QJsonObject behavior = snapping.value(QStringLiteral("Behavior")).toObject();
 
         // Should be stored as native JSON array, not a string
-        QJsonValue triggers = activation.value(QStringLiteral("DragActivationTriggers"));
-        QVERIFY2(triggers.isArray(), "DragActivationTriggers should be a native JSON array after migration");
+        QJsonValue triggers = behavior.value(QStringLiteral("Triggers"));
+        QVERIFY2(triggers.isArray(), "Triggers should be a native JSON array after migration");
 
         QJsonArray arr = triggers.toArray();
         QCOMPARE(arr.size(), 1);
@@ -248,12 +253,14 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
-        QJsonObject zones = root.value(QStringLiteral("Zones")).toObject();
-        QCOMPARE(zones.value(QStringLiteral("Padding")).toInt(), 8);
-        QCOMPARE(zones.value(QStringLiteral("OuterGap")).toInt(), 4);
+        QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
+        QJsonObject gaps = snapping.value(QStringLiteral("Gaps")).toObject();
+        QCOMPARE(gaps.value(QStringLiteral("Inner")).toInt(), 8);
+        QCOMPARE(gaps.value(QStringLiteral("Outer")).toInt(), 4);
 
-        QJsonObject appearance = root.value(QStringLiteral("Appearance")).toObject();
-        QCOMPARE(appearance.value(QStringLiteral("ActiveOpacity")).toDouble(), 0.3);
+        QJsonObject appearance = snapping.value(QStringLiteral("Appearance")).toObject();
+        QJsonObject opacity = appearance.value(QStringLiteral("Opacity")).toObject();
+        QCOMPARE(opacity.value(QStringLiteral("Active")).toDouble(), 0.3);
     }
 
     void testMigrateRootLevelKeys()
@@ -268,9 +275,9 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
-        // RenderingBackend should be under "Rendering" group
+        // RenderingBackend should be under "Rendering" group as "Backend"
         QJsonObject rendering = root.value(QStringLiteral("Rendering")).toObject();
-        QCOMPARE(rendering.value(QStringLiteral("RenderingBackend")).toString(), QStringLiteral("vulkan"));
+        QCOMPARE(rendering.value(QStringLiteral("Backend")).toString(), QStringLiteral("vulkan"));
     }
 
     void testMigrateRenderingBackendFromGeneralGroup()
@@ -289,7 +296,7 @@ private Q_SLOTS:
 
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
         QJsonObject rendering = root.value(QStringLiteral("Rendering")).toObject();
-        QCOMPARE(rendering.value(QStringLiteral("RenderingBackend")).toString(), QStringLiteral("vulkan"));
+        QCOMPARE(rendering.value(QStringLiteral("Backend")).toString(), QStringLiteral("vulkan"));
 
         // Must NOT be under General
         QJsonObject general = root.value(QStringLiteral("General")).toObject();
@@ -334,16 +341,19 @@ private Q_SLOTS:
 
         auto backend = PlasmaZones::createDefaultConfigBackend();
         {
-            auto g = backend->group(QStringLiteral("Activation"));
-            QCOMPARE(g->readBool(QStringLiteral("SnappingEnabled")), true);
+            auto g = backend->group(QStringLiteral("Snapping"));
+            QCOMPARE(g->readBool(QStringLiteral("Enabled")), true);
         }
         {
-            auto g = backend->group(QStringLiteral("Appearance"));
-            QColor c = g->readColor(QStringLiteral("HighlightColor"));
+            auto g = backend->group(QStringLiteral("Snapping.Appearance.Colors"));
+            QColor c = g->readColor(QStringLiteral("Highlight"));
             QCOMPARE(c.red(), 82);
             QCOMPARE(c.green(), 148);
             QCOMPARE(c.blue(), 226);
-            QCOMPARE(g->readDouble(QStringLiteral("ActiveOpacity")), 0.3);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Snapping.Appearance.Opacity"));
+            QCOMPARE(g->readDouble(QStringLiteral("Active")), 0.3);
         }
     }
 };

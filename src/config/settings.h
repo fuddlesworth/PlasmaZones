@@ -1564,28 +1564,28 @@ private:
                             const ShortcutSignalFn (&signals)[9]);
 
     // ─── load() helpers (decomposed for SRP) ─────────────────────────────
-    void loadActivationConfig(IConfigGroup& activation);
-    void loadDisplayConfig(IConfigGroup& display);
-    void loadAppearanceConfig(IConfigGroup& appearance);
-    void loadZoneGeometryConfig(IConfigGroup& zones);
+    void loadActivationConfig(IConfigBackend* backend);
+    void loadDisplayConfig(IConfigBackend* backend);
+    void loadAppearanceConfig(IConfigBackend* backend);
+    void loadZoneGeometryConfig(IConfigBackend* backend);
     void loadBehaviorConfig(IConfigBackend* backend);
-    void loadZoneSelectorConfig(IConfigGroup& zoneSelector);
+    void loadZoneSelectorConfig(IConfigBackend* backend);
     void loadPerScreenOverrides(IConfigBackend* backend);
-    void loadShortcutConfig(IConfigGroup& globalShortcuts);
+    void loadShortcutConfig(IConfigBackend* backend);
     void loadAutotilingConfig(IConfigBackend* backend);
-    void loadEditorConfig(IConfigGroup& editor);
+    void loadEditorConfig(IConfigBackend* backend);
 
     // ─── save() helpers (decomposed for SRP) ────────────────────────────
-    void saveActivationConfig(IConfigGroup& activation);
-    void saveDisplayConfig(IConfigGroup& display);
-    void saveAppearanceConfig(IConfigGroup& appearance);
-    void saveZoneGeometryConfig(IConfigGroup& zones);
+    void saveActivationConfig(IConfigBackend* backend);
+    void saveDisplayConfig(IConfigBackend* backend);
+    void saveAppearanceConfig(IConfigBackend* backend);
+    void saveZoneGeometryConfig(IConfigBackend* backend);
     void saveBehaviorConfig(IConfigBackend* backend);
-    void saveZoneSelectorConfig(IConfigGroup& zoneSelector);
+    void saveZoneSelectorConfig(IConfigBackend* backend);
     void saveAllPerScreenOverrides(IConfigBackend* backend);
-    void saveShortcutConfig(IConfigGroup& globalShortcuts);
+    void saveShortcutConfig(IConfigBackend* backend);
     void saveAutotilingConfig(IConfigBackend* backend);
-    void saveEditorConfig(IConfigGroup& editor);
+    void saveEditorConfig(IConfigBackend* backend);
 
     // Groups that save() writes exhaustively (excludes unmanaged groups).
     static QStringList managedGroupNames();

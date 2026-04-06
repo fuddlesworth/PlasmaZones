@@ -149,62 +149,39 @@ void Settings::load()
     const bool oldAutotileEnabled = m_autotileEnabled;
     const QString oldDefaultAlgorithm = m_defaultAutotileAlgorithm;
 
-    {
-        auto activation = m_configBackend->group(ConfigDefaults::activationGroup());
-        loadActivationConfig(*activation);
-    }
-    {
-        auto display = m_configBackend->group(ConfigDefaults::displayGroup());
-        loadDisplayConfig(*display);
-    }
-    {
-        auto appearance = m_configBackend->group(ConfigDefaults::appearanceGroup());
-        loadAppearanceConfig(*appearance);
-    }
-    {
-        auto zones = m_configBackend->group(ConfigDefaults::zonesGroup());
-        loadZoneGeometryConfig(*zones);
-    }
+    loadActivationConfig(m_configBackend);
+    loadDisplayConfig(m_configBackend);
+    loadAppearanceConfig(m_configBackend);
+    loadZoneGeometryConfig(m_configBackend);
     loadBehaviorConfig(m_configBackend);
-    {
-        auto zoneSelector = m_configBackend->group(ConfigDefaults::zoneSelectorGroup());
-        loadZoneSelectorConfig(*zoneSelector);
-    }
+    loadZoneSelectorConfig(m_configBackend);
     loadPerScreenOverrides(m_configBackend);
 
     // Rendering backend
     {
         auto rendering = m_configBackend->group(ConfigDefaults::renderingGroup());
         m_renderingBackend = ConfigDefaults::normalizeRenderingBackend(
-            rendering->readString(ConfigDefaults::renderingBackendKey(), ConfigDefaults::renderingBackend()));
+            rendering->readString(ConfigDefaults::backendKey(), ConfigDefaults::renderingBackend()));
     }
 
     // Shaders (small enough to stay inline)
     {
         auto shaders = m_configBackend->group(ConfigDefaults::shadersGroup());
-        m_enableShaderEffects =
-            shaders->readBool(ConfigDefaults::enableShaderEffectsKey(), ConfigDefaults::enableShaderEffects());
-        m_shaderFrameRate =
-            qBound(ConfigDefaults::shaderFrameRateMin(),
-                   shaders->readInt(ConfigDefaults::shaderFrameRateKey(), ConfigDefaults::shaderFrameRate()),
-                   ConfigDefaults::shaderFrameRateMax());
+        m_enableShaderEffects = shaders->readBool(ConfigDefaults::enabledKey(), ConfigDefaults::enableShaderEffects());
+        m_shaderFrameRate = qBound(ConfigDefaults::shaderFrameRateMin(),
+                                   shaders->readInt(ConfigDefaults::frameRateKey(), ConfigDefaults::shaderFrameRate()),
+                                   ConfigDefaults::shaderFrameRateMax());
         m_enableAudioVisualizer =
-            shaders->readBool(ConfigDefaults::enableAudioVisualizerKey(), ConfigDefaults::enableAudioVisualizer());
+            shaders->readBool(ConfigDefaults::audioVisualizerKey(), ConfigDefaults::enableAudioVisualizer());
         m_audioSpectrumBarCount = qBound(
             ConfigDefaults::audioSpectrumBarCountMin(),
             shaders->readInt(ConfigDefaults::audioSpectrumBarCountKey(), ConfigDefaults::audioSpectrumBarCount()),
             ConfigDefaults::audioSpectrumBarCountMax());
     }
 
-    {
-        auto globalShortcuts = m_configBackend->group(ConfigDefaults::globalShortcutsGroup());
-        loadShortcutConfig(*globalShortcuts);
-    }
+    loadShortcutConfig(m_configBackend);
     loadAutotilingConfig(m_configBackend);
-    {
-        auto editor = m_configBackend->group(ConfigDefaults::editorGroup());
-        loadEditorConfig(*editor);
-    }
+    loadEditorConfig(m_configBackend);
 
     // Ordering (small enough to stay inline)
     {
@@ -281,14 +258,17 @@ void Settings::load()
 QStringList Settings::managedGroupNames()
 {
     return {
-        ConfigDefaults::generalGroup(),    ConfigDefaults::activationGroup(),
-        ConfigDefaults::displayGroup(),    ConfigDefaults::appearanceGroup(),
-        ConfigDefaults::zonesGroup(),      ConfigDefaults::behaviorGroup(),
-        ConfigDefaults::exclusionsGroup(), ConfigDefaults::zoneSelectorGroup(),
-        ConfigDefaults::shadersGroup(),    ConfigDefaults::globalShortcutsGroup(),
-        ConfigDefaults::autotilingGroup(), ConfigDefaults::autotileShortcutsGroup(),
-        ConfigDefaults::animationsGroup(), ConfigDefaults::editorGroup(),
-        ConfigDefaults::orderingGroup(),
+        ConfigDefaults::generalGroup(), // "General"
+        ConfigDefaults::snappingGroup(), // "Snapping"
+        ConfigDefaults::tilingGroup(), // "Tiling"
+        ConfigDefaults::exclusionsGroup(), // "Exclusions"
+        ConfigDefaults::performanceGroup(), // "Performance"
+        ConfigDefaults::renderingGroup(), // "Rendering"
+        ConfigDefaults::shadersGroup(), // "Shaders"
+        QStringLiteral("Shortcuts"), // covers Shortcuts.Global + Shortcuts.Tiling
+        ConfigDefaults::animationsGroup(), // "Animations"
+        QStringLiteral("Editor"), // covers Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
+        ConfigDefaults::orderingGroup(), // "Ordering"
     };
 }
 
@@ -318,55 +298,34 @@ void Settings::save()
 {
     purgeStaleKeys();
 
-    {
-        auto activation = m_configBackend->group(ConfigDefaults::activationGroup());
-        saveActivationConfig(*activation);
-    }
-    {
-        auto display = m_configBackend->group(ConfigDefaults::displayGroup());
-        saveDisplayConfig(*display);
-    }
-    {
-        auto appearance = m_configBackend->group(ConfigDefaults::appearanceGroup());
-        saveAppearanceConfig(*appearance);
-    }
-    {
-        auto zones = m_configBackend->group(ConfigDefaults::zonesGroup());
-        saveZoneGeometryConfig(*zones);
-    }
+    saveActivationConfig(m_configBackend);
+    saveDisplayConfig(m_configBackend);
+    saveAppearanceConfig(m_configBackend);
+    saveZoneGeometryConfig(m_configBackend);
     saveBehaviorConfig(m_configBackend);
-    {
-        auto zoneSelector = m_configBackend->group(ConfigDefaults::zoneSelectorGroup());
-        saveZoneSelectorConfig(*zoneSelector);
-    }
+    saveZoneSelectorConfig(m_configBackend);
     saveAllPerScreenOverrides(m_configBackend);
-    {
-        auto globalShortcuts = m_configBackend->group(ConfigDefaults::globalShortcutsGroup());
-        saveShortcutConfig(*globalShortcuts);
-    }
+    saveShortcutConfig(m_configBackend);
     saveAutotilingConfig(m_configBackend);
     {
         auto ordering = m_configBackend->group(ConfigDefaults::orderingGroup());
         ordering->writeString(ConfigDefaults::snappingLayoutOrderKey(), m_snappingLayoutOrder.join(QLatin1Char(',')));
         ordering->writeString(ConfigDefaults::tilingAlgorithmOrderKey(), m_tilingAlgorithmOrder.join(QLatin1Char(',')));
     }
-    {
-        auto editor = m_configBackend->group(ConfigDefaults::editorGroup());
-        saveEditorConfig(*editor);
-    }
+    saveEditorConfig(m_configBackend);
 
     // Rendering backend
     {
         auto rendering = m_configBackend->group(ConfigDefaults::renderingGroup());
-        rendering->writeString(ConfigDefaults::renderingBackendKey(), m_renderingBackend);
+        rendering->writeString(ConfigDefaults::backendKey(), m_renderingBackend);
     }
 
     // Shader Effects
     {
         auto shaders = m_configBackend->group(ConfigDefaults::shadersGroup());
-        shaders->writeBool(ConfigDefaults::enableShaderEffectsKey(), m_enableShaderEffects);
-        shaders->writeInt(ConfigDefaults::shaderFrameRateKey(), m_shaderFrameRate);
-        shaders->writeBool(ConfigDefaults::enableAudioVisualizerKey(), m_enableAudioVisualizer);
+        shaders->writeBool(ConfigDefaults::enabledKey(), m_enableShaderEffects);
+        shaders->writeInt(ConfigDefaults::frameRateKey(), m_shaderFrameRate);
+        shaders->writeBool(ConfigDefaults::audioVisualizerKey(), m_enableAudioVisualizer);
         shaders->writeInt(ConfigDefaults::audioSpectrumBarCountKey(), m_audioSpectrumBarCount);
     }
 

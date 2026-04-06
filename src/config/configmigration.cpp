@@ -11,16 +11,75 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLatin1String>
+#include <array>
 
 namespace PlasmaZones {
+
+// ── Migration step registry ─────────────────────────────────────────────────
+// To add a new version: implement migrateVxToVy(), append here, bump ConfigSchemaVersion.
+
+static constexpr auto s_migrationSteps = std::to_array<MigrationStep>({
+    {1, &ConfigMigration::migrateV1ToV2},
+    // {2, &ConfigMigration::migrateV2ToV3},
+});
+
+std::span<const MigrationStep> ConfigMigration::migrationSteps()
+{
+    return s_migrationSteps;
+}
+
+// ── Migration chain runner ──────────────────────────────────────────────────
+
+void ConfigMigration::runMigrationChainInMemory(QJsonObject& root)
+{
+    int version = root.value(QLatin1String("_version")).toInt(1);
+    for (const auto& step : s_migrationSteps) {
+        if (version == step.fromVersion) {
+            qInfo("ConfigMigration: running schema migration v%d → v%d", step.fromVersion, step.fromVersion + 1);
+            step.migrate(root);
+            version = root.value(QLatin1String("_version")).toInt();
+        }
+    }
+}
+
+bool ConfigMigration::runMigrationChain(const QString& jsonPath)
+{
+    QFile f(jsonPath);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qWarning("ConfigMigration: failed to open %s for schema migration", qPrintable(jsonPath));
+        return false;
+    }
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    f.close();
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        qWarning("ConfigMigration: invalid JSON in %s during schema migration", qPrintable(jsonPath));
+        return false;
+    }
+
+    QJsonObject root = doc.object();
+    const int oldVersion = root.value(QLatin1String("_version")).toInt(1);
+    runMigrationChainInMemory(root);
+    const int newVersion = root.value(QLatin1String("_version")).toInt();
+
+    if (newVersion == oldVersion) {
+        return true; // Nothing to do
+    }
+
+    if (!JsonConfigBackend::writeJsonAtomically(jsonPath, root)) {
+        qWarning("ConfigMigration: failed to write migrated config to %s", qPrintable(jsonPath));
+        return false;
+    }
+    qInfo("ConfigMigration: schema migration v%d → v%d complete", oldVersion, newVersion);
+    return true;
+}
+
+// ── ensureJsonConfig ────────────────────────────────────────────────────────
 
 bool ConfigMigration::ensureJsonConfig()
 {
     const QString jsonPath = ConfigDefaults::configFilePath();
     if (QFile::exists(jsonPath)) {
-        // Verify the file is non-empty and contains valid JSON with data.
-        // An empty or corrupt file (e.g. from interrupted write) should not
-        // block migration — fall through to re-migrate from INI if available.
         QFile f(jsonPath);
         if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
             const QByteArray data = f.readAll();
@@ -28,16 +87,15 @@ bool ConfigMigration::ensureJsonConfig()
                 QJsonParseError err;
                 QJsonDocument doc = QJsonDocument::fromJson(data, &err);
                 if (err.error == QJsonParseError::NoError && doc.isObject()) {
-                    return true; // Already migrated or fresh JSON config (including empty {})
+                    const int version = doc.object().value(QLatin1String("_version")).toInt(0);
+                    if (version < ConfigSchemaVersion) {
+                        return runMigrationChain(jsonPath);
+                    }
+                    return true; // Already at current version
                 }
             }
         }
         // Corrupt or empty JSON — check if INI backup exists for re-migration.
-        // If no INI exists either, preserve the corrupt file as .corrupt.bak
-        // so the user has a recovery path (rather than silently losing data).
-        // Note: if multiple processes hit this path concurrently, the second rename
-        // fails (source already moved by the first) — non-fatal, corrupt data is
-        // preserved by whichever process succeeds first.
         const QString iniPath = ConfigDefaults::legacyConfigFilePath();
         if (!QFile::exists(iniPath)) {
             const QString corruptBak = jsonPath + QStringLiteral(".corrupt.bak");
@@ -51,7 +109,6 @@ bool ConfigMigration::ensureJsonConfig()
                 qPrintable(corruptBak));
             return true;
         }
-        // INI exists — remove corrupt JSON so migration can re-create it
         QFile::remove(jsonPath);
     }
 
@@ -67,13 +124,11 @@ bool ConfigMigration::ensureJsonConfig()
         return false;
     }
 
-    // Rename old file to .bak
     const QString bakPath = iniPath + QStringLiteral(".bak");
     if (QFile::exists(bakPath)) {
         QFile::remove(bakPath);
     }
     if (!QFile::rename(iniPath, bakPath)) {
-        // Non-fatal: migration succeeded, just couldn't rename
         qWarning("ConfigMigration: could not rename %s to %s", qPrintable(iniPath), qPrintable(bakPath));
     }
 
@@ -81,18 +136,19 @@ bool ConfigMigration::ensureJsonConfig()
     return true;
 }
 
+// ── INI → JSON ──────────────────────────────────────────────────────────────
+
 bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& jsonPath)
 {
-    // Read old INI using the QSettings backend's static reader
     const QMap<QString, QVariant> flatMap = QSettingsConfigBackend::readConfigFromDisk(iniPath);
     if (flatMap.isEmpty()) {
         qInfo("ConfigMigration: old config is empty — writing minimal JSON to complete migration");
     }
 
     QJsonObject root = iniMapToJson(flatMap);
-    // Schema version for future migration steps (e.g. v2 might restructure groups).
-    // Currently write-only — checked when a future migration needs to distinguish formats.
-    root[QLatin1String("_version")] = ConfigSchemaVersion;
+    // INI migration produces v1 format; the chain upgrades to current version.
+    root[QLatin1String("_version")] = 1;
+    runMigrationChainInMemory(root);
 
     return JsonConfigBackend::writeJsonAtomically(jsonPath, root);
 }
@@ -103,7 +159,8 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
 
     const QString renderingGroup = ConfigDefaults::renderingGroup();
     const QString generalGroup = ConfigDefaults::generalGroup();
-    const QString renderingKey = ConfigDefaults::renderingBackendKey();
+    // Hardcoded v1 key name — the INI file uses "RenderingBackend"
+    const QString renderingKey = QStringLiteral("RenderingBackend");
     const QLatin1String PerScreenKeyStr(PerScreenKey);
 
     for (auto it = flatMap.constBegin(); it != flatMap.constEnd(); ++it) {
@@ -251,6 +308,373 @@ QJsonValue ConfigMigration::convertValue(const QVariant& value)
 
     // Default: keep as string
     return QJsonValue(s);
+}
+
+// ── Schema migration: v1 → v2 ───────────────────────────────────────────────
+// Restructures flat groups (Activation, Display, etc.) into nested dot-path
+// hierarchy (Snapping.Behavior.ZoneSpan, Tiling.Gaps, etc.).
+
+namespace {
+// Helper: move a key from one JSON object to another, renaming it.
+void moveKey(const QJsonObject& src, const QString& srcKey, QJsonObject& dst, const QString& dstKey)
+{
+    if (src.contains(srcKey)) {
+        dst[dstKey] = src.value(srcKey);
+    }
+}
+} // anonymous namespace
+
+void ConfigMigration::migrateV1ToV2(QJsonObject& root)
+{
+    // ── Read all v1 groups ──────────────────────────────────────────────────
+    const QJsonObject v1Activation = root.value(QLatin1String("Activation")).toObject();
+    const QJsonObject v1Display = root.value(QLatin1String("Display")).toObject();
+    const QJsonObject v1Appearance = root.value(QLatin1String("Appearance")).toObject();
+    const QJsonObject v1Zones = root.value(QLatin1String("Zones")).toObject();
+    const QJsonObject v1Behavior = root.value(QLatin1String("Behavior")).toObject();
+    const QJsonObject v1Exclusions = root.value(QLatin1String("Exclusions")).toObject();
+    const QJsonObject v1ZoneSelector = root.value(QLatin1String("ZoneSelector")).toObject();
+    const QJsonObject v1Autotiling = root.value(QLatin1String("Autotiling")).toObject();
+    const QJsonObject v1AutotileShortcuts = root.value(QLatin1String("AutotileShortcuts")).toObject();
+    const QJsonObject v1Animations = root.value(QLatin1String("Animations")).toObject();
+    const QJsonObject v1GlobalShortcuts = root.value(QLatin1String("GlobalShortcuts")).toObject();
+    const QJsonObject v1Editor = root.value(QLatin1String("Editor")).toObject();
+    const QJsonObject v1Ordering = root.value(QLatin1String("Ordering")).toObject();
+    const QJsonObject v1Rendering = root.value(QLatin1String("Rendering")).toObject();
+    const QJsonObject v1Shaders = root.value(QLatin1String("Shaders")).toObject();
+
+    // ── Remove all v1 groups ────────────────────────────────────────────────
+    for (const auto& key :
+         {"Activation", "Display", "Appearance", "Zones", "Behavior", "Exclusions", "ZoneSelector", "Autotiling",
+          "AutotileShortcuts", "Animations", "GlobalShortcuts", "Editor", "Ordering", "Rendering", "Shaders"}) {
+        root.remove(QLatin1String(key));
+    }
+
+    // ── Snapping (top-level) ────────────────────────────────────────────────
+    QJsonObject snappingTop;
+    moveKey(v1Activation, QLatin1String("SnappingEnabled"), snappingTop, QLatin1String("Enabled"));
+
+    // ── Snapping.Behavior ───────────────────────────────────────────────────
+    QJsonObject snappingBehavior;
+    moveKey(v1Activation, QLatin1String("DragActivationTriggers"), snappingBehavior, QLatin1String("Triggers"));
+    moveKey(v1Activation, QLatin1String("ToggleActivation"), snappingBehavior, QLatin1String("ToggleActivation"));
+
+    // Snapping.Behavior.ZoneSpan
+    QJsonObject zoneSpan;
+    moveKey(v1Activation, QLatin1String("ZoneSpanEnabled"), zoneSpan, QLatin1String("Enabled"));
+    moveKey(v1Activation, QLatin1String("ZoneSpanModifier"), zoneSpan, QLatin1String("Modifier"));
+    moveKey(v1Activation, QLatin1String("ZoneSpanTriggers"), zoneSpan, QLatin1String("Triggers"));
+
+    // Snapping.Behavior.SnapAssist
+    QJsonObject snapAssist;
+    moveKey(v1Activation, QLatin1String("SnapAssistFeatureEnabled"), snapAssist, QLatin1String("FeatureEnabled"));
+    moveKey(v1Activation, QLatin1String("SnapAssistEnabled"), snapAssist, QLatin1String("Enabled"));
+    moveKey(v1Activation, QLatin1String("SnapAssistTriggers"), snapAssist, QLatin1String("Triggers"));
+
+    // Snapping.Behavior.Display
+    QJsonObject snappingDisplay;
+    moveKey(v1Display, QLatin1String("ShowOnAllMonitors"), snappingDisplay, QLatin1String("ShowOnAllMonitors"));
+    moveKey(v1Display, QLatin1String("DisabledMonitors"), snappingDisplay, QLatin1String("DisabledMonitors"));
+    moveKey(v1Display, QLatin1String("DisabledDesktops"), snappingDisplay, QLatin1String("DisabledDesktops"));
+    moveKey(v1Display, QLatin1String("DisabledActivities"), snappingDisplay, QLatin1String("DisabledActivities"));
+    moveKey(v1Behavior, QLatin1String("FilterLayoutsByAspectRatio"), snappingDisplay,
+            QLatin1String("FilterByAspectRatio"));
+
+    // Snapping.Behavior.WindowHandling
+    QJsonObject windowHandling;
+    moveKey(v1Behavior, QLatin1String("KeepOnResolutionChange"), windowHandling,
+            QLatin1String("KeepOnResolutionChange"));
+    moveKey(v1Behavior, QLatin1String("MoveNewToLastZone"), windowHandling, QLatin1String("MoveNewToLastZone"));
+    moveKey(v1Behavior, QLatin1String("RestoreSizeOnUnsnap"), windowHandling, QLatin1String("RestoreOnUnsnap"));
+    moveKey(v1Behavior, QLatin1String("StickyWindowHandling"), windowHandling, QLatin1String("StickyWindowHandling"));
+    moveKey(v1Behavior, QLatin1String("RestoreWindowsToZonesOnLogin"), windowHandling, QLatin1String("RestoreOnLogin"));
+    moveKey(v1Behavior, QLatin1String("DefaultLayoutId"), windowHandling, QLatin1String("DefaultLayoutId"));
+
+    // Assemble Snapping.Behavior
+    if (!zoneSpan.isEmpty())
+        snappingBehavior[QLatin1String("ZoneSpan")] = zoneSpan;
+    if (!snapAssist.isEmpty())
+        snappingBehavior[QLatin1String("SnapAssist")] = snapAssist;
+    if (!snappingDisplay.isEmpty())
+        snappingBehavior[QLatin1String("Display")] = snappingDisplay;
+    if (!windowHandling.isEmpty())
+        snappingBehavior[QLatin1String("WindowHandling")] = windowHandling;
+
+    // ── Snapping.Appearance ─────────────────────────────────────────────────
+    QJsonObject sColors;
+    moveKey(v1Appearance, QLatin1String("UseSystemColors"), sColors, QLatin1String("UseSystem"));
+    moveKey(v1Appearance, QLatin1String("HighlightColor"), sColors, QLatin1String("Highlight"));
+    moveKey(v1Appearance, QLatin1String("InactiveColor"), sColors, QLatin1String("Inactive"));
+    moveKey(v1Appearance, QLatin1String("BorderColor"), sColors, QLatin1String("Border"));
+
+    QJsonObject sOpacity;
+    moveKey(v1Appearance, QLatin1String("ActiveOpacity"), sOpacity, QLatin1String("Active"));
+    moveKey(v1Appearance, QLatin1String("InactiveOpacity"), sOpacity, QLatin1String("Inactive"));
+
+    QJsonObject sBorder;
+    moveKey(v1Appearance, QLatin1String("BorderWidth"), sBorder, QLatin1String("Width"));
+    moveKey(v1Appearance, QLatin1String("BorderRadius"), sBorder, QLatin1String("Radius"));
+
+    QJsonObject sLabels;
+    moveKey(v1Appearance, QLatin1String("LabelFontColor"), sLabels, QLatin1String("FontColor"));
+    moveKey(v1Appearance, QLatin1String("LabelFontFamily"), sLabels, QLatin1String("FontFamily"));
+    moveKey(v1Appearance, QLatin1String("LabelFontSizeScale"), sLabels, QLatin1String("FontSizeScale"));
+    moveKey(v1Appearance, QLatin1String("LabelFontWeight"), sLabels, QLatin1String("FontWeight"));
+    moveKey(v1Appearance, QLatin1String("LabelFontItalic"), sLabels, QLatin1String("FontItalic"));
+    moveKey(v1Appearance, QLatin1String("LabelFontUnderline"), sLabels, QLatin1String("FontUnderline"));
+    moveKey(v1Appearance, QLatin1String("LabelFontStrikeout"), sLabels, QLatin1String("FontStrikeout"));
+
+    QJsonObject snappingAppearance;
+    if (!sColors.isEmpty())
+        snappingAppearance[QLatin1String("Colors")] = sColors;
+    if (!sOpacity.isEmpty())
+        snappingAppearance[QLatin1String("Opacity")] = sOpacity;
+    if (!sBorder.isEmpty())
+        snappingAppearance[QLatin1String("Border")] = sBorder;
+    if (!sLabels.isEmpty())
+        snappingAppearance[QLatin1String("Labels")] = sLabels;
+
+    // ── Snapping.Effects ────────────────────────────────────────────────────
+    QJsonObject effects;
+    moveKey(v1Appearance, QLatin1String("EnableBlur"), effects, QLatin1String("Blur"));
+    moveKey(v1Display, QLatin1String("ShowNumbers"), effects, QLatin1String("ShowNumbers"));
+    moveKey(v1Display, QLatin1String("FlashOnSwitch"), effects, QLatin1String("FlashOnSwitch"));
+    moveKey(v1Display, QLatin1String("ShowOsdOnLayoutSwitch"), effects, QLatin1String("OsdOnLayoutSwitch"));
+    moveKey(v1Display, QLatin1String("ShowNavigationOsd"), effects, QLatin1String("NavigationOsd"));
+    moveKey(v1Display, QLatin1String("OsdStyle"), effects, QLatin1String("OsdStyle"));
+    moveKey(v1Display, QLatin1String("OverlayDisplayMode"), effects, QLatin1String("OverlayDisplayMode"));
+
+    // ── Snapping.ZoneSelector (keys mostly unchanged) ───────────────────────
+    // v1 ZoneSelector keys don't have prefixes, so they stay the same
+    QJsonObject zoneSelector = v1ZoneSelector;
+
+    // ── Snapping.Gaps ───────────────────────────────────────────────────────
+    QJsonObject snappingGaps;
+    moveKey(v1Zones, QLatin1String("Padding"), snappingGaps, QLatin1String("Inner"));
+    moveKey(v1Zones, QLatin1String("OuterGap"), snappingGaps, QLatin1String("Outer"));
+    moveKey(v1Zones, QLatin1String("UsePerSideOuterGap"), snappingGaps, QLatin1String("UsePerSide"));
+    moveKey(v1Zones, QLatin1String("OuterGapTop"), snappingGaps, QLatin1String("Top"));
+    moveKey(v1Zones, QLatin1String("OuterGapBottom"), snappingGaps, QLatin1String("Bottom"));
+    moveKey(v1Zones, QLatin1String("OuterGapLeft"), snappingGaps, QLatin1String("Left"));
+    moveKey(v1Zones, QLatin1String("OuterGapRight"), snappingGaps, QLatin1String("Right"));
+    moveKey(v1Zones, QLatin1String("AdjacentThreshold"), snappingGaps, QLatin1String("AdjacentThreshold"));
+
+    // ── Assemble Snapping ───────────────────────────────────────────────────
+    QJsonObject snapping = snappingTop;
+    if (!snappingBehavior.isEmpty())
+        snapping[QLatin1String("Behavior")] = snappingBehavior;
+    if (!snappingAppearance.isEmpty())
+        snapping[QLatin1String("Appearance")] = snappingAppearance;
+    if (!effects.isEmpty())
+        snapping[QLatin1String("Effects")] = effects;
+    if (!zoneSelector.isEmpty())
+        snapping[QLatin1String("ZoneSelector")] = zoneSelector;
+    if (!snappingGaps.isEmpty())
+        snapping[QLatin1String("Gaps")] = snappingGaps;
+    if (!snapping.isEmpty())
+        root[QLatin1String("Snapping")] = snapping;
+
+    // ── Performance ─────────────────────────────────────────────────────────
+    QJsonObject performance;
+    moveKey(v1Zones, QLatin1String("PollIntervalMs"), performance, QLatin1String("PollIntervalMs"));
+    moveKey(v1Zones, QLatin1String("MinimumZoneSizePx"), performance, QLatin1String("MinimumZoneSizePx"));
+    moveKey(v1Zones, QLatin1String("MinimumZoneDisplaySizePx"), performance, QLatin1String("MinimumZoneDisplaySizePx"));
+    if (!performance.isEmpty())
+        root[QLatin1String("Performance")] = performance;
+
+    // ── Tiling ──────────────────────────────────────────────────────────────
+    QJsonObject tilingTop;
+    moveKey(v1Autotiling, QLatin1String("AutotileEnabled"), tilingTop, QLatin1String("Enabled"));
+
+    QJsonObject tilingAlgo;
+    moveKey(v1Autotiling, QLatin1String("DefaultAutotileAlgorithm"), tilingAlgo, QLatin1String("Default"));
+    moveKey(v1Autotiling, QLatin1String("AutotileSplitRatio"), tilingAlgo, QLatin1String("SplitRatio"));
+    moveKey(v1Autotiling, QLatin1String("AutotileSplitRatioStep"), tilingAlgo, QLatin1String("SplitRatioStep"));
+    moveKey(v1Autotiling, QLatin1String("AutotileMasterCount"), tilingAlgo, QLatin1String("MasterCount"));
+    moveKey(v1Autotiling, QLatin1String("AutotileMaxWindows"), tilingAlgo, QLatin1String("MaxWindows"));
+    moveKey(v1Autotiling, QLatin1String("AutotilePerAlgorithmSettings"), tilingAlgo,
+            QLatin1String("PerAlgorithmSettings"));
+
+    QJsonObject tilingBehavior;
+    moveKey(v1Autotiling, QLatin1String("AutotileInsertPosition"), tilingBehavior, QLatin1String("InsertPosition"));
+    moveKey(v1Autotiling, QLatin1String("AutotileFocusNewWindows"), tilingBehavior, QLatin1String("FocusNewWindows"));
+    moveKey(v1Autotiling, QLatin1String("AutotileFocusFollowsMouse"), tilingBehavior,
+            QLatin1String("FocusFollowsMouse"));
+    moveKey(v1Autotiling, QLatin1String("AutotileRespectMinimumSize"), tilingBehavior,
+            QLatin1String("RespectMinimumSize"));
+    moveKey(v1Autotiling, QLatin1String("AutotileStickyWindowHandling"), tilingBehavior,
+            QLatin1String("StickyWindowHandling"));
+    moveKey(v1Autotiling, QLatin1String("LockedScreens"), tilingBehavior, QLatin1String("LockedScreens"));
+
+    QJsonObject tColors;
+    moveKey(v1Autotiling, QLatin1String("AutotileUseSystemBorderColors"), tColors, QLatin1String("UseSystem"));
+    moveKey(v1Autotiling, QLatin1String("AutotileBorderColor"), tColors, QLatin1String("Active"));
+    moveKey(v1Autotiling, QLatin1String("AutotileInactiveBorderColor"), tColors, QLatin1String("Inactive"));
+
+    QJsonObject tDecorations;
+    moveKey(v1Autotiling, QLatin1String("AutotileHideTitleBars"), tDecorations, QLatin1String("HideTitleBars"));
+
+    QJsonObject tBorders;
+    moveKey(v1Autotiling, QLatin1String("AutotileShowBorder"), tBorders, QLatin1String("ShowBorder"));
+    moveKey(v1Autotiling, QLatin1String("AutotileBorderWidth"), tBorders, QLatin1String("Width"));
+    moveKey(v1Autotiling, QLatin1String("AutotileBorderRadius"), tBorders, QLatin1String("Radius"));
+
+    QJsonObject tilingAppearance;
+    if (!tColors.isEmpty())
+        tilingAppearance[QLatin1String("Colors")] = tColors;
+    if (!tDecorations.isEmpty())
+        tilingAppearance[QLatin1String("Decorations")] = tDecorations;
+    if (!tBorders.isEmpty())
+        tilingAppearance[QLatin1String("Borders")] = tBorders;
+
+    QJsonObject tilingGaps;
+    moveKey(v1Autotiling, QLatin1String("AutotileInnerGap"), tilingGaps, QLatin1String("Inner"));
+    moveKey(v1Autotiling, QLatin1String("AutotileOuterGap"), tilingGaps, QLatin1String("Outer"));
+    moveKey(v1Autotiling, QLatin1String("AutotileUsePerSideOuterGap"), tilingGaps, QLatin1String("UsePerSide"));
+    moveKey(v1Autotiling, QLatin1String("AutotileOuterGapTop"), tilingGaps, QLatin1String("Top"));
+    moveKey(v1Autotiling, QLatin1String("AutotileOuterGapBottom"), tilingGaps, QLatin1String("Bottom"));
+    moveKey(v1Autotiling, QLatin1String("AutotileOuterGapLeft"), tilingGaps, QLatin1String("Left"));
+    moveKey(v1Autotiling, QLatin1String("AutotileOuterGapRight"), tilingGaps, QLatin1String("Right"));
+    moveKey(v1Autotiling, QLatin1String("AutotileSmartGaps"), tilingGaps, QLatin1String("SmartGaps"));
+
+    QJsonObject tiling = tilingTop;
+    if (!tilingAlgo.isEmpty())
+        tiling[QLatin1String("Algorithm")] = tilingAlgo;
+    if (!tilingBehavior.isEmpty())
+        tiling[QLatin1String("Behavior")] = tilingBehavior;
+    if (!tilingAppearance.isEmpty())
+        tiling[QLatin1String("Appearance")] = tilingAppearance;
+    if (!tilingGaps.isEmpty())
+        tiling[QLatin1String("Gaps")] = tilingGaps;
+    if (!tiling.isEmpty())
+        root[QLatin1String("Tiling")] = tiling;
+
+    // ── Exclusions (key renames) ────────────────────────────────────────────
+    QJsonObject exclusions;
+    moveKey(v1Exclusions, QLatin1String("ExcludeTransientWindows"), exclusions, QLatin1String("TransientWindows"));
+    moveKey(v1Exclusions, QLatin1String("MinimumWindowWidth"), exclusions, QLatin1String("MinimumWindowWidth"));
+    moveKey(v1Exclusions, QLatin1String("MinimumWindowHeight"), exclusions, QLatin1String("MinimumWindowHeight"));
+    moveKey(v1Exclusions, QLatin1String("Applications"), exclusions, QLatin1String("Applications"));
+    moveKey(v1Exclusions, QLatin1String("WindowClasses"), exclusions, QLatin1String("WindowClasses"));
+    if (!exclusions.isEmpty())
+        root[QLatin1String("Exclusions")] = exclusions;
+
+    // ── Rendering (key rename) ──────────────────────────────────────────────
+    QJsonObject rendering;
+    moveKey(v1Rendering, QLatin1String("RenderingBackend"), rendering, QLatin1String("Backend"));
+    if (!rendering.isEmpty())
+        root[QLatin1String("Rendering")] = rendering;
+
+    // ── Shaders (key renames) ───────────────────────────────────────────────
+    QJsonObject shaders;
+    moveKey(v1Shaders, QLatin1String("EnableShaderEffects"), shaders, QLatin1String("Enabled"));
+    moveKey(v1Shaders, QLatin1String("ShaderFrameRate"), shaders, QLatin1String("FrameRate"));
+    moveKey(v1Shaders, QLatin1String("EnableAudioVisualizer"), shaders, QLatin1String("AudioVisualizer"));
+    moveKey(v1Shaders, QLatin1String("AudioSpectrumBarCount"), shaders, QLatin1String("AudioSpectrumBarCount"));
+    if (!shaders.isEmpty())
+        root[QLatin1String("Shaders")] = shaders;
+
+    // ── Animations (key renames) ────────────────────────────────────────────
+    QJsonObject animations;
+    moveKey(v1Animations, QLatin1String("AnimationsEnabled"), animations, QLatin1String("Enabled"));
+    moveKey(v1Animations, QLatin1String("AnimationDuration"), animations, QLatin1String("Duration"));
+    moveKey(v1Animations, QLatin1String("AnimationEasingCurve"), animations, QLatin1String("EasingCurve"));
+    moveKey(v1Animations, QLatin1String("AnimationMinDistance"), animations, QLatin1String("MinDistance"));
+    moveKey(v1Animations, QLatin1String("AnimationSequenceMode"), animations, QLatin1String("SequenceMode"));
+    moveKey(v1Animations, QLatin1String("AnimationStaggerInterval"), animations, QLatin1String("StaggerInterval"));
+    if (!animations.isEmpty())
+        root[QLatin1String("Animations")] = animations;
+
+    // ── Shortcuts.Global (drop "Shortcut" suffix from some keys) ────────────
+    QJsonObject globalShortcuts;
+    moveKey(v1GlobalShortcuts, QLatin1String("OpenEditorShortcut"), globalShortcuts, QLatin1String("OpenEditor"));
+    moveKey(v1GlobalShortcuts, QLatin1String("OpenSettingsShortcut"), globalShortcuts, QLatin1String("OpenSettings"));
+    moveKey(v1GlobalShortcuts, QLatin1String("PreviousLayoutShortcut"), globalShortcuts,
+            QLatin1String("PreviousLayout"));
+    moveKey(v1GlobalShortcuts, QLatin1String("NextLayoutShortcut"), globalShortcuts, QLatin1String("NextLayout"));
+    for (int i = 1; i <= 9; ++i) {
+        moveKey(v1GlobalShortcuts, QStringLiteral("QuickLayout%1Shortcut").arg(i), globalShortcuts,
+                QStringLiteral("QuickLayout%1").arg(i));
+    }
+    // Navigation keys — same names in v1 and v2
+    for (const auto& key :
+         {"MoveWindowLeft", "MoveWindowRight", "MoveWindowUp", "MoveWindowDown", "FocusZoneLeft", "FocusZoneRight",
+          "FocusZoneUp", "FocusZoneDown", "PushToEmptyZone", "RestoreWindowSize", "ToggleWindowFloat", "SwapWindowLeft",
+          "SwapWindowRight", "SwapWindowUp", "SwapWindowDown", "RotateWindowsClockwise",
+          "RotateWindowsCounterclockwise", "CycleWindowForward", "CycleWindowBackward"}) {
+        moveKey(v1GlobalShortcuts, QLatin1String(key), globalShortcuts, QLatin1String(key));
+    }
+    for (int i = 1; i <= 9; ++i) {
+        const QString key = QStringLiteral("SnapToZone%1").arg(i);
+        moveKey(v1GlobalShortcuts, key, globalShortcuts, key);
+    }
+    moveKey(v1GlobalShortcuts, QLatin1String("ResnapToNewLayoutShortcut"), globalShortcuts,
+            QLatin1String("ResnapToNewLayout"));
+    moveKey(v1GlobalShortcuts, QLatin1String("SnapAllWindowsShortcut"), globalShortcuts,
+            QLatin1String("SnapAllWindows"));
+    moveKey(v1GlobalShortcuts, QLatin1String("LayoutPickerShortcut"), globalShortcuts, QLatin1String("LayoutPicker"));
+    moveKey(v1GlobalShortcuts, QLatin1String("ToggleLayoutLockShortcut"), globalShortcuts,
+            QLatin1String("ToggleLayoutLock"));
+
+    // ── Shortcuts.Tiling (drop "Shortcut" suffix) ───────────────────────────
+    QJsonObject tilingShortcuts;
+    moveKey(v1AutotileShortcuts, QLatin1String("ToggleShortcut"), tilingShortcuts, QLatin1String("Toggle"));
+    moveKey(v1AutotileShortcuts, QLatin1String("FocusMasterShortcut"), tilingShortcuts, QLatin1String("FocusMaster"));
+    moveKey(v1AutotileShortcuts, QLatin1String("SwapMasterShortcut"), tilingShortcuts, QLatin1String("SwapMaster"));
+    moveKey(v1AutotileShortcuts, QLatin1String("IncMasterRatioShortcut"), tilingShortcuts,
+            QLatin1String("IncMasterRatio"));
+    moveKey(v1AutotileShortcuts, QLatin1String("DecMasterRatioShortcut"), tilingShortcuts,
+            QLatin1String("DecMasterRatio"));
+    moveKey(v1AutotileShortcuts, QLatin1String("IncMasterCountShortcut"), tilingShortcuts,
+            QLatin1String("IncMasterCount"));
+    moveKey(v1AutotileShortcuts, QLatin1String("DecMasterCountShortcut"), tilingShortcuts,
+            QLatin1String("DecMasterCount"));
+    moveKey(v1AutotileShortcuts, QLatin1String("RetileShortcut"), tilingShortcuts, QLatin1String("Retile"));
+
+    QJsonObject shortcuts;
+    if (!globalShortcuts.isEmpty())
+        shortcuts[QLatin1String("Global")] = globalShortcuts;
+    if (!tilingShortcuts.isEmpty())
+        shortcuts[QLatin1String("Tiling")] = tilingShortcuts;
+    if (!shortcuts.isEmpty())
+        root[QLatin1String("Shortcuts")] = shortcuts;
+
+    // ── Editor (split into sub-groups) ──────────────────────────────────────
+    QJsonObject editorShortcuts;
+    moveKey(v1Editor, QLatin1String("EditorDuplicateShortcut"), editorShortcuts, QLatin1String("Duplicate"));
+    moveKey(v1Editor, QLatin1String("EditorSplitHorizontalShortcut"), editorShortcuts,
+            QLatin1String("SplitHorizontal"));
+    moveKey(v1Editor, QLatin1String("EditorSplitVerticalShortcut"), editorShortcuts, QLatin1String("SplitVertical"));
+    moveKey(v1Editor, QLatin1String("EditorFillShortcut"), editorShortcuts, QLatin1String("Fill"));
+
+    QJsonObject editorSnapping;
+    moveKey(v1Editor, QLatin1String("GridSnappingEnabled"), editorSnapping, QLatin1String("GridEnabled"));
+    moveKey(v1Editor, QLatin1String("EdgeSnappingEnabled"), editorSnapping, QLatin1String("EdgeEnabled"));
+    moveKey(v1Editor, QLatin1String("SnapInterval"), editorSnapping, QLatin1String("Interval"));
+    moveKey(v1Editor, QLatin1String("SnapIntervalX"), editorSnapping, QLatin1String("IntervalX"));
+    moveKey(v1Editor, QLatin1String("SnapIntervalY"), editorSnapping, QLatin1String("IntervalY"));
+    moveKey(v1Editor, QLatin1String("SnapOverrideModifier"), editorSnapping, QLatin1String("OverrideModifier"));
+
+    QJsonObject editorFillOnDrop;
+    moveKey(v1Editor, QLatin1String("FillOnDropEnabled"), editorFillOnDrop, QLatin1String("Enabled"));
+    moveKey(v1Editor, QLatin1String("FillOnDropModifier"), editorFillOnDrop, QLatin1String("Modifier"));
+
+    QJsonObject editor;
+    if (!editorShortcuts.isEmpty())
+        editor[QLatin1String("Shortcuts")] = editorShortcuts;
+    if (!editorSnapping.isEmpty())
+        editor[QLatin1String("Snapping")] = editorSnapping;
+    if (!editorFillOnDrop.isEmpty())
+        editor[QLatin1String("FillOnDrop")] = editorFillOnDrop;
+    if (!editor.isEmpty())
+        root[QLatin1String("Editor")] = editor;
+
+    // ── Ordering (keys unchanged) ───────────────────────────────────────────
+    if (!v1Ordering.isEmpty())
+        root[QLatin1String("Ordering")] = v1Ordering;
+
+    // ── Bump version ────────────────────────────────────────────────────────
+    root[QLatin1String("_version")] = ConfigSchemaVersion;
 }
 
 } // namespace PlasmaZones

@@ -43,9 +43,8 @@ QString ConfigDefaults::readRenderingBackendFromDisk()
             QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
             if (err.error == QJsonParseError::NoError && doc.isObject()) {
                 const QJsonObject rendering = doc.object().value(renderingGroup()).toObject();
-                if (rendering.contains(renderingBackendKey())) {
-                    return normalizeRenderingBackend(
-                        rendering.value(renderingBackendKey()).toString(renderingBackend()));
+                if (rendering.contains(backendKey())) {
+                    return normalizeRenderingBackend(rendering.value(backendKey()).toString(renderingBackend()));
                 }
             }
         }
@@ -56,7 +55,7 @@ QString ConfigDefaults::readRenderingBackendFromDisk()
     const QString iniPath = legacyConfigFilePath();
     if (QFile::exists(iniPath)) {
         QSettings cfg(iniPath, QSettings::IniFormat);
-        const QString raw = cfg.value(renderingBackendKey(), renderingBackend()).toString();
+        const QString raw = cfg.value(backendKey(), renderingBackend()).toString();
         return normalizeRenderingBackend(raw);
     }
 
