@@ -378,6 +378,38 @@ Flickable {
 
                 }
 
+                SettingsRow {
+                    visible: root.algoSupportsSplitRatio
+                    title: i18n("Ratio step size")
+                    description: i18n("Amount the ratio changes per keyboard shortcut press")
+
+                    SettingsSlider {
+                        id: splitRatioStepSlider
+
+                        Accessible.name: i18n("Ratio step size")
+                        from: settingsController.autotileSplitRatioStepMin
+                        to: settingsController.autotileSplitRatioStepMax
+                        stepSize: 0.01
+                        formatValue: function(v) {
+                            return Math.round(v * 100) + "%";
+                        }
+                        onMoved: (value) => {
+                            root.writeSetting("SplitRatioStep", value, function(v) {
+                                appSettings.autotileSplitRatioStep = v;
+                            });
+                        }
+                    }
+
+                    Binding {
+                        target: splitRatioStepSlider.slider
+                        property: "value"
+                        value: root.settingValue("SplitRatioStep", appSettings.autotileSplitRatioStep)
+                        when: !splitRatioStepSlider.slider.pressed
+                        restoreMode: Binding.RestoreNone
+                    }
+
+                }
+
                 SettingsSeparator {
                     visible: root.algoSupportsMasterCount
                 }
