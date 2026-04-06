@@ -32,12 +32,12 @@ std::span<const MigrationStep> ConfigMigration::migrationSteps()
 
 void ConfigMigration::runMigrationChainInMemory(QJsonObject& root)
 {
-    int version = root.value(QLatin1String("_version")).toInt(1);
+    int version = root.value(ConfigKeys::versionKey()).toInt(1);
     for (const auto& step : s_migrationSteps) {
         if (version == step.fromVersion) {
             qInfo("ConfigMigration: running schema migration v%d → v%d", step.fromVersion, step.fromVersion + 1);
             step.migrate(root);
-            version = root.value(QLatin1String("_version")).toInt();
+            version = root.value(ConfigKeys::versionKey()).toInt();
             if (version != step.fromVersion + 1) {
                 qCritical("ConfigMigration: migration step v%d did not bump _version correctly (got %d)",
                           step.fromVersion, version);
@@ -63,9 +63,9 @@ bool ConfigMigration::runMigrationChain(const QString& jsonPath)
     }
 
     QJsonObject root = doc.object();
-    const int oldVersion = root.value(QLatin1String("_version")).toInt(1);
+    const int oldVersion = root.value(ConfigKeys::versionKey()).toInt(1);
     runMigrationChainInMemory(root);
-    const int newVersion = root.value(QLatin1String("_version")).toInt();
+    const int newVersion = root.value(ConfigKeys::versionKey()).toInt();
 
     if (newVersion == oldVersion) {
         return true; // Nothing to do
@@ -92,7 +92,7 @@ bool ConfigMigration::ensureJsonConfig()
                 QJsonParseError err;
                 QJsonDocument doc = QJsonDocument::fromJson(data, &err);
                 if (err.error == QJsonParseError::NoError && doc.isObject()) {
-                    const int version = doc.object().value(QLatin1String("_version")).toInt(0);
+                    const int version = doc.object().value(ConfigKeys::versionKey()).toInt(0);
                     if (version < ConfigSchemaVersion) {
                         return runMigrationChain(jsonPath);
                     }
@@ -152,7 +152,7 @@ bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& js
 
     QJsonObject root = iniMapToJson(flatMap);
     // INI migration produces v1 format; the chain upgrades to current version.
-    root[QLatin1String("_version")] = 1;
+    root[ConfigKeys::versionKey()] = 1;
     runMigrationChainInMemory(root);
 
     return JsonConfigBackend::writeJsonAtomically(jsonPath, root);
@@ -684,7 +684,9 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         root[QLatin1String("Ordering")] = v1Ordering;
 
     // ── Bump version ────────────────────────────────────────────────────────
-    root[QLatin1String("_version")] = 2;
+    // Stamp literal 2, not ConfigSchemaVersion — prevents future version bumps
+    // (e.g. to 3) from making this step stamp 3 and skipping a v2→v3 migration.
+    root[ConfigKeys::versionKey()] = 2;
 }
 
 } // namespace PlasmaZones

@@ -30,9 +30,9 @@ QStringList splitDotPath(const QString& groupName, const char* caller)
         return segments;
     }
     if (segments.size() > MaxDotPathDepth) {
-        qWarning("splitDotPath (%s): group '%s' exceeds MaxDotPathDepth (%d segments, max %d) — truncating", caller,
+        qWarning("splitDotPath (%s): group '%s' exceeds MaxDotPathDepth (%d segments, max %d) — rejecting", caller,
                  qPrintable(groupName), segments.size(), MaxDotPathDepth);
-        segments = segments.mid(0, MaxDotPathDepth);
+        return {};
     }
     return segments;
 }
@@ -200,7 +200,7 @@ QString JsonConfigGroup::readString(const QString& key, const QString& defaultVa
         return val.toBool() ? QStringLiteral("true") : QStringLiteral("false");
     }
     if (val.isDouble()) {
-        return QString::number(val.toDouble());
+        return QString::number(val.toDouble(), 'g', 17);
     }
     return val.toString(defaultValue);
 }

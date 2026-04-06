@@ -604,22 +604,25 @@ private Q_SLOTS:
         }
     }
 
-    void testDotPathDepthLimit_exceedsLimit_truncates()
+    void testDotPathDepthLimit_exceedsLimit_rejectsWrite()
     {
         IsolatedConfigGuard guard;
         auto backend = PlasmaZones::createDefaultConfigBackend();
 
-        // 10 segments exceeds MaxDotPathDepth=8 — should be truncated to 8
+        // 10 segments exceeds MaxDotPathDepth=8 — should be rejected (no-op)
         const QString tooDeep = QStringLiteral("A.B.C.D.E.F.G.H.I.J");
         {
             auto g = backend->group(tooDeep);
             g->writeString(QStringLiteral("Key"), QStringLiteral("value"));
         }
-        // The write should have been truncated to depth 8 (A.B.C.D.E.F.G.H)
-        // Reading the truncated path should find the value
+        // The write should have been rejected — nothing stored at any path
         {
             auto g = backend->group(QStringLiteral("A.B.C.D.E.F.G.H"));
-            QCOMPARE(g->readString(QStringLiteral("Key")), QStringLiteral("value"));
+            QCOMPARE(g->readString(QStringLiteral("Key"), QStringLiteral("missing")), QStringLiteral("missing"));
+        }
+        {
+            auto g = backend->group(tooDeep);
+            QCOMPARE(g->readString(QStringLiteral("Key"), QStringLiteral("missing")), QStringLiteral("missing"));
         }
     }
 
@@ -683,6 +686,26 @@ private Q_SLOTS:
         {
             auto g = backend->group(QStringLiteral("Test"));
             QCOMPARE(g->readString(QStringLiteral("Count"), QStringLiteral("fallback")), QStringLiteral("42"));
+        }
+    }
+    // =========================================================================
+    // writeString: non-JSON bracket string stays as string
+    // =========================================================================
+
+    void testWriteString_bracketNonJson_staysAsString()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // "[Main Monitor]" starts with '[' but is not valid JSON — must stay as string
+        const QString value = QStringLiteral("[Main Monitor]");
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            g->writeString(QStringLiteral("Monitor"), value);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Test"));
+            QCOMPARE(g->readString(QStringLiteral("Monitor")), value);
         }
     }
 };

@@ -461,6 +461,45 @@ private Q_SLOTS:
         QVERIFY(!migrated.contains(QStringLiteral("AutotileShortcuts")));
     }
 
+    void testV1JsonMigration_preservesPerScreenGroups()
+    {
+        IsolatedConfigGuard guard;
+        // Create a v1 JSON config with PerScreen data — migration must preserve it
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        QJsonObject activation;
+        activation[QStringLiteral("SnappingEnabled")] = true;
+        root[QStringLiteral("Activation")] = activation;
+
+        QJsonObject perScreen;
+        QJsonObject zsCategory;
+        QJsonObject edp;
+        edp[QStringLiteral("Position")] = 3;
+        edp[QStringLiteral("MaxRows")] = 5;
+        zsCategory[QStringLiteral("eDP-1")] = edp;
+        perScreen[QStringLiteral("ZoneSelector")] = zsCategory;
+        root[QStringLiteral("PerScreen")] = perScreen;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
+        QCOMPARE(migrated.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
+
+        // PerScreen data must survive migration untouched
+        QJsonObject migratedPerScreen = migrated.value(QStringLiteral("PerScreen")).toObject();
+        QJsonObject migratedZs = migratedPerScreen.value(QStringLiteral("ZoneSelector")).toObject();
+        QJsonObject migratedEdp = migratedZs.value(QStringLiteral("eDP-1")).toObject();
+        QCOMPARE(migratedEdp.value(QStringLiteral("Position")).toInt(), 3);
+        QCOMPARE(migratedEdp.value(QStringLiteral("MaxRows")).toInt(), 5);
+
+        // v1 groups should still be removed
+        QVERIFY(!migrated.contains(QStringLiteral("Activation")));
+    }
+
     // =========================================================================
     // Round-trip with JsonConfigBackend
     // =========================================================================
