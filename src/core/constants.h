@@ -367,6 +367,7 @@ inline constexpr QLatin1String FloatingWindows{"floatingWindows"};
 inline constexpr QLatin1String FocusedWindow{"focusedWindow"};
 inline constexpr QLatin1String MasterCount{"masterCount"};
 inline constexpr QLatin1String SplitRatio{"splitRatio"};
+inline constexpr QLatin1String SplitRatioStep{"splitRatioStep"};
 inline constexpr QLatin1String CustomParams{"customParams"};
 
 // AutotileConfig keys
@@ -393,6 +394,22 @@ inline constexpr QLatin1String InsertEnd{"end"};
 inline constexpr QLatin1String InsertAfterFocused{"afterFocused"};
 inline constexpr QLatin1String InsertAsMaster{"asMaster"};
 inline constexpr QLatin1String SplitTreeKey{"splitTree"};
+}
+
+/**
+ * @brief Per-screen override key names (PascalCase — distinct from camelCase JSON keys)
+ *
+ * These are the keys used in PerScreenConfigResolver's override map and in
+ * NavigationController's shortcut handlers. They match the key names written
+ * by the per-screen config system in perscreen.cpp (with the "Autotile" prefix
+ * stripped during lookup).
+ */
+namespace PerScreenKeys {
+inline constexpr QLatin1String SplitRatio{"SplitRatio"};
+inline constexpr QLatin1String SplitRatioStep{"SplitRatioStep"};
+inline constexpr QLatin1String MasterCount{"MasterCount"};
+inline constexpr QLatin1String Algorithm{"Algorithm"};
+inline constexpr QLatin1String MaxWindows{"MaxWindows"};
 }
 
 /**

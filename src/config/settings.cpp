@@ -142,6 +142,12 @@ void Settings::load()
     const int oldShaderFrameRate = m_shaderFrameRate;
     const bool oldEnableAudioViz = m_enableAudioVisualizer;
     const int oldBarCount = m_audioSpectrumBarCount;
+    const qreal oldSplitRatio = m_autotileSplitRatio;
+    const qreal oldSplitRatioStep = m_autotileSplitRatioStep;
+    const int oldMasterCount = m_autotileMasterCount;
+    const QVariantMap oldPerAlgoSettings = m_autotilePerAlgorithmSettings;
+    const bool oldAutotileEnabled = m_autotileEnabled;
+    const QString oldDefaultAlgorithm = m_defaultAutotileAlgorithm;
 
     {
         auto activation = m_configBackend->group(ConfigDefaults::activationGroup());
@@ -234,6 +240,23 @@ void Settings::load()
 
     qCInfo(lcConfig) << "Settings loaded";
     Q_EMIT settingsChanged();
+
+    // Emit autotile property signals so QML bindings update after load/reset.
+    // load() sets members directly (not via setters) so NOTIFY signals don't
+    // fire automatically. Guard each with a change check to avoid triggering
+    // unnecessary retiles or downstream side-effects on startup.
+    if (!qFuzzyCompare(1.0 + m_autotileSplitRatio, 1.0 + oldSplitRatio))
+        Q_EMIT autotileSplitRatioChanged();
+    if (!qFuzzyCompare(1.0 + m_autotileSplitRatioStep, 1.0 + oldSplitRatioStep))
+        Q_EMIT autotileSplitRatioStepChanged();
+    if (m_autotileMasterCount != oldMasterCount)
+        Q_EMIT autotileMasterCountChanged();
+    if (m_autotilePerAlgorithmSettings != oldPerAlgoSettings)
+        Q_EMIT autotilePerAlgorithmSettingsChanged();
+    if (m_autotileEnabled != oldAutotileEnabled)
+        Q_EMIT autotileEnabledChanged();
+    if (m_defaultAutotileAlgorithm != oldDefaultAlgorithm)
+        Q_EMIT defaultAutotileAlgorithmChanged();
 
     // Emit specific signals for settings with runtime side-effects
     if (m_renderingBackend != oldRenderingBackend)
@@ -360,6 +383,7 @@ void Settings::reset()
     }
     m_configBackend->deleteGroup(ConfigDefaults::updatesGroup());
     m_configBackend->deleteGroup(ConfigDefaults::tilingQuickLayoutSlotsGroup());
+    m_configBackend->deleteGroup(ConfigDefaults::autoTileStateGroup());
     deletePerScreenGroups(m_configBackend);
     m_configBackend->sync();
     load();

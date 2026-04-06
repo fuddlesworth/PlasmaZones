@@ -55,6 +55,7 @@ public:
     PZ_CONFIG_GROUP(editorGroup, "Editor")
     PZ_CONFIG_GROUP(tilingQuickLayoutSlotsGroup, "TilingQuickLayoutSlots")
     PZ_CONFIG_GROUP(orderingGroup, "Ordering")
+    PZ_CONFIG_GROUP(autoTileStateGroup, "AutoTileState")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Trigger JSON Field Names
@@ -236,6 +237,7 @@ public:
     PZ_CONFIG_KEY(autotileEnabledKey, "AutotileEnabled")
     PZ_CONFIG_KEY(defaultAutotileAlgorithmKey, "DefaultAutotileAlgorithm")
     PZ_CONFIG_KEY(autotileSplitRatioKey, "AutotileSplitRatio")
+    PZ_CONFIG_KEY(autotileSplitRatioStepKey, "AutotileSplitRatioStep")
     PZ_CONFIG_KEY(autotileMasterCountKey, "AutotileMasterCount")
     PZ_CONFIG_KEY(autotilePerAlgorithmSettingsKey, "AutotilePerAlgorithmSettings")
     PZ_CONFIG_KEY(autotileInnerGapKey, "AutotileInnerGap")

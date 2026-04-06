@@ -228,8 +228,25 @@ void Daemon::handleSnapAll()
 // DRY macro invocations for identical autotile-only handlers
 HANDLE_AUTOTILE_ONLY(FocusMaster, focusMaster())
 HANDLE_AUTOTILE_ONLY(SwapWithMaster, swapFocusedWithMaster())
-HANDLE_AUTOTILE_ONLY(IncreaseMasterRatio, increaseMasterRatio())
-HANDLE_AUTOTILE_ONLY(DecreaseMasterRatio, decreaseMasterRatio())
+void Daemon::handleIncreaseMasterRatio()
+{
+    if (!m_autotileEngine || !m_autotileEngine->isEnabled())
+        return;
+    const QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+    const QString screenId = screen ? Utils::screenIdentifier(screen) : QString();
+    const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
+    m_autotileEngine->increaseMasterRatio(step);
+}
+
+void Daemon::handleDecreaseMasterRatio()
+{
+    if (!m_autotileEngine || !m_autotileEngine->isEnabled())
+        return;
+    const QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+    const QString screenId = screen ? Utils::screenIdentifier(screen) : QString();
+    const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
+    m_autotileEngine->decreaseMasterRatio(step);
+}
 HANDLE_AUTOTILE_ONLY(IncreaseMasterCount, increaseMasterCount())
 HANDLE_AUTOTILE_ONLY(DecreaseMasterCount, decreaseMasterCount())
 
