@@ -47,6 +47,18 @@ Flickable {
     }
     readonly property bool algoSupportsSplitRatio: algoCapabilities ? (algoCapabilities.supportsSplitRatio === true) : false
     readonly property bool algoSupportsMasterCount: algoCapabilities ? (algoCapabilities.supportsMasterCount === true) : false
+    readonly property bool algoSupportsCustomParams: algoCapabilities ? (algoCapabilities.supportsCustomParams === true) : false
+    // Custom param definitions for the selected algorithm.  The binding only
+    // depends on algoSupportsCustomParams / selectedAlgorithm.  Because
+    // customParamsForAlgorithm() is a Q_INVOKABLE (not a Q_PROPERTY with
+    // NOTIFY), QML's binding engine will NOT re-call it when saved values
+    // change — so the Repeater model stays stable during slider drags.
+    readonly property var customParamDefs: {
+        if (!root.algoSupportsCustomParams)
+            return [];
+
+        return settingsController.customParamsForAlgorithm(root.selectedAlgorithm);
+    }
     // Whether the algorithm uses a center layout (ratio/count labels say "Center" instead of "Master").
     // Check capabilities map first (for future extensibility via scripted algorithm metadata),
     // falling back to hardcoded IDs for built-in algorithms. See PR #256 / M13.
@@ -414,6 +426,105 @@ Flickable {
                                 appSettings.autotileMasterCount = v;
                             });
                         }
+                    }
+
+                }
+
+                // =============================================================
+                // Custom Algorithm Parameters
+                // =============================================================
+                Repeater {
+                    model: root.customParamDefs
+
+                    delegate: ColumnLayout {
+                        required property var modelData
+                        required property int index
+                        readonly property string paramLabel: modelData.description || modelData.name
+                        // Show the raw param name as subtitle when description was used as title
+                        readonly property string paramDescription: modelData.description ? modelData.name : ""
+                        readonly property var paramValue: modelData.value !== undefined ? modelData.value : modelData.defaultValue
+                        readonly property real paramMin: modelData.minValue !== undefined ? modelData.minValue : 0
+                        readonly property real paramMax: {
+                            let mx = modelData.maxValue !== undefined ? modelData.maxValue : 1;
+                            // Guard against degenerate range from malformed script metadata
+                            return mx > paramMin ? mx : paramMin + 1;
+                        }
+                        readonly property real paramRange: paramMax - paramMin
+
+                        Layout.fillWidth: true
+                        spacing: 0
+
+                        SettingsSeparator {
+                        }
+
+                        SettingsRow {
+                            Layout.fillWidth: true
+                            title: paramLabel
+                            description: paramDescription
+
+                            // Number parameter: rendered as a SettingsSlider
+                            SettingsSlider {
+                                visible: modelData.type === "number"
+                                Accessible.name: paramLabel
+                                from: paramMin
+                                to: paramMax
+                                stepSize: {
+                                    if (paramRange <= 1)
+                                        return 0.01;
+
+                                    if (paramRange <= 10)
+                                        return 0.1;
+
+                                    return 1;
+                                }
+                                value: paramValue
+                                formatValue: function(v) {
+                                    if (paramRange <= 1)
+                                        return Math.round(v * 100) + "%";
+
+                                    if (paramRange <= 10)
+                                        return v.toFixed(1);
+
+                                    return Math.round(v).toString();
+                                }
+                                onMoved: (value) => {
+                                    settingsController.setCustomParam(root.selectedAlgorithm, modelData.name, value);
+                                }
+                            }
+
+                            // Bool parameter: rendered as a Switch
+                            Switch {
+                                visible: modelData.type === "bool"
+                                Accessible.name: paramLabel
+                                checked: paramValue === true
+                                onToggled: {
+                                    settingsController.setCustomParam(root.selectedAlgorithm, modelData.name, checked);
+                                }
+                            }
+
+                            // Enum parameter: rendered as a ComboBox
+                            ComboBox {
+                                id: enumCombo
+
+                                visible: modelData.type === "enum"
+                                Accessible.name: paramLabel
+                                model: modelData.enumOptions || []
+                                currentIndex: {
+                                    let opts = modelData.enumOptions || [];
+                                    let idx = opts.indexOf(paramValue);
+                                    return idx >= 0 ? idx : 0;
+                                }
+                                onActivated: {
+                                    // Imperative assignment breaks the declarative currentIndex
+                                    // binding above, preventing it from snapping back to the
+                                    // old value after the user makes a selection.
+                                    currentIndex = enumCombo.currentIndex;
+                                    settingsController.setCustomParam(root.selectedAlgorithm, modelData.name, currentText);
+                                }
+                            }
+
+                        }
+
                     }
 
                 }
