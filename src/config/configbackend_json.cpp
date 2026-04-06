@@ -30,8 +30,8 @@ QStringList splitDotPath(const QString& groupName, const char* caller)
         return segments;
     }
     if (segments.size() > MaxDotPathDepth) {
-        qWarning("splitDotPath (%s): group '%s' exceeds MaxDotPathDepth (%d segments, max %d) — rejecting", caller,
-                 qPrintable(groupName), segments.size(), MaxDotPathDepth);
+        qWarning("splitDotPath (%s): group '%s' exceeds MaxDotPathDepth (%lld segments, max %d) — rejecting", caller,
+                 qPrintable(groupName), static_cast<long long>(segments.size()), MaxDotPathDepth);
         return {};
     }
     return segments;

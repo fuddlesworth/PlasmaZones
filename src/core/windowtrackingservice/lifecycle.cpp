@@ -807,23 +807,7 @@ QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
         }
 
         if (nearestGeo.isValid()) {
-            QRect adjusted = geometry;
-            // Clamp to screen bounds. Prioritize top-left origin so oversized
-            // windows keep their top-left corner visible rather than being
-            // pushed past the origin by the right/bottom clamp.
-            if (adjusted.right() > nearestGeo.right()) {
-                adjusted.moveRight(nearestGeo.right());
-            }
-            if (adjusted.left() < nearestGeo.left()) {
-                adjusted.moveLeft(nearestGeo.left());
-            }
-            if (adjusted.bottom() > nearestGeo.bottom()) {
-                adjusted.moveBottom(nearestGeo.bottom());
-            }
-            if (adjusted.top() < nearestGeo.top()) {
-                adjusted.moveTop(nearestGeo.top());
-            }
-            return adjusted;
+            return clampToRect(geometry, nearestGeo);
         }
     }
 
@@ -833,26 +817,7 @@ QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
         return geometry;
     }
 
-    QRect screenGeo = nearest->geometry();
-    QRect adjusted = geometry;
-
-    // Clamp to screen bounds. Prioritize top-left origin so oversized
-    // windows keep their top-left corner visible rather than being
-    // pushed past the origin by the right/bottom clamp.
-    if (adjusted.right() > screenGeo.right()) {
-        adjusted.moveRight(screenGeo.right());
-    }
-    if (adjusted.left() < screenGeo.left()) {
-        adjusted.moveLeft(screenGeo.left());
-    }
-    if (adjusted.bottom() > screenGeo.bottom()) {
-        adjusted.moveBottom(screenGeo.bottom());
-    }
-    if (adjusted.top() < screenGeo.top()) {
-        adjusted.moveTop(screenGeo.top());
-    }
-
-    return adjusted;
+    return clampToRect(geometry, nearest->geometry());
 }
 
 void WindowTrackingService::validateLastUsedZone(const QString& targetScreen)
