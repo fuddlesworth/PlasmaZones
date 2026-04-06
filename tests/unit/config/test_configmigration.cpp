@@ -504,6 +504,82 @@ private Q_SLOTS:
     // Round-trip with JsonConfigBackend
     // =========================================================================
 
+    void testV1JsonMigration_unifiedSnapInterval()
+    {
+        IsolatedConfigGuard guard;
+        // v1 config with only SnapInterval (no per-axis SnapIntervalX/Y).
+        // Migration must propagate Interval → IntervalX and IntervalY so the
+        // v2 load code (which reads IntervalX/IntervalY directly) picks it up.
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        QJsonObject editor;
+        editor[QStringLiteral("SnapInterval")] = 0.05;
+        root[QStringLiteral("Editor")] = editor;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
+        QJsonObject editorMigrated = migrated.value(QStringLiteral("Editor")).toObject();
+        QJsonObject editorSnapping = editorMigrated.value(QStringLiteral("Snapping")).toObject();
+        QCOMPARE(editorSnapping.value(QStringLiteral("IntervalX")).toDouble(), 0.05);
+        QCOMPARE(editorSnapping.value(QStringLiteral("IntervalY")).toDouble(), 0.05);
+    }
+
+    void testV1JsonMigration_perAxisSnapIntervalPreserved()
+    {
+        IsolatedConfigGuard guard;
+        // v1 config with both SnapInterval and per-axis overrides.
+        // The per-axis values should take priority over the unified one.
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        QJsonObject editor;
+        editor[QStringLiteral("SnapInterval")] = 0.05;
+        editor[QStringLiteral("SnapIntervalX")] = 0.1;
+        editor[QStringLiteral("SnapIntervalY")] = 0.2;
+        root[QStringLiteral("Editor")] = editor;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
+        QJsonObject editorMigrated = migrated.value(QStringLiteral("Editor")).toObject();
+        QJsonObject editorSnapping = editorMigrated.value(QStringLiteral("Snapping")).toObject();
+        QCOMPARE(editorSnapping.value(QStringLiteral("IntervalX")).toDouble(), 0.1);
+        QCOMPARE(editorSnapping.value(QStringLiteral("IntervalY")).toDouble(), 0.2);
+    }
+
+    void testMigrationChain_versionZeroTreatedAsV1()
+    {
+        IsolatedConfigGuard guard;
+        // A hand-edited config with _version: 0 should still get migrated
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 0;
+
+        QJsonObject activation;
+        activation[QStringLiteral("SnappingEnabled")] = true;
+        root[QStringLiteral("Activation")] = activation;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
+        QCOMPARE(migrated.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
+
+        // Should have migrated Activation → Snapping
+        QJsonObject snapping = migrated.value(QStringLiteral("Snapping")).toObject();
+        QCOMPARE(snapping.value(QStringLiteral("Enabled")).toBool(), true);
+        QVERIFY(!migrated.contains(QStringLiteral("Activation")));
+    }
+
     void testMigratedConfigReadableByBackend()
     {
         IsolatedConfigGuard guard;

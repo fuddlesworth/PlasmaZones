@@ -404,12 +404,6 @@ public:
     PZ_CONFIG_KEY(tilingAlgorithmOrderKey, "TilingAlgorithmOrder")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Updates
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    PZ_CONFIG_KEY(dismissedVersionKey, "DismissedVersion")
-
-    // ═══════════════════════════════════════════════════════════════════════════
     // Legacy v1 key accessors — used ONLY by migration code.
     // Some names are identical to their v2 counterparts (marked "= v2") because
     // the group name didn't change — only the keys inside were restructured.

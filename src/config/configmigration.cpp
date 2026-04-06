@@ -33,6 +33,9 @@ std::span<const MigrationStep> ConfigMigration::migrationSteps()
 void ConfigMigration::runMigrationChainInMemory(QJsonObject& root)
 {
     int version = root.value(ConfigKeys::versionKey()).toInt(1);
+    if (version < 1) {
+        version = 1;
+    }
     for (const auto& step : s_migrationSteps) {
         if (version == step.fromVersion) {
             qInfo("ConfigMigration: running schema migration v%d → v%d", step.fromVersion, step.fromVersion + 1);
@@ -660,9 +663,17 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     QJsonObject editorSnapping;
     moveKey(v1Editor, QLatin1String("GridSnappingEnabled"), editorSnapping, QLatin1String("GridEnabled"));
     moveKey(v1Editor, QLatin1String("EdgeSnappingEnabled"), editorSnapping, QLatin1String("EdgeEnabled"));
-    moveKey(v1Editor, QLatin1String("SnapInterval"), editorSnapping, QLatin1String("Interval"));
     moveKey(v1Editor, QLatin1String("SnapIntervalX"), editorSnapping, QLatin1String("IntervalX"));
     moveKey(v1Editor, QLatin1String("SnapIntervalY"), editorSnapping, QLatin1String("IntervalY"));
+    // If per-axis intervals don't exist, propagate the unified SnapInterval to both.
+    // Without this, configs that only set SnapInterval (no per-axis override) would
+    // lose their value because the v2 load code reads IntervalX/IntervalY directly.
+    if (!editorSnapping.contains(QLatin1String("IntervalX"))) {
+        moveKey(v1Editor, QLatin1String("SnapInterval"), editorSnapping, QLatin1String("IntervalX"));
+    }
+    if (!editorSnapping.contains(QLatin1String("IntervalY"))) {
+        moveKey(v1Editor, QLatin1String("SnapInterval"), editorSnapping, QLatin1String("IntervalY"));
+    }
     moveKey(v1Editor, QLatin1String("SnapOverrideModifier"), editorSnapping, QLatin1String("OverrideModifier"));
 
     QJsonObject editorFillOnDrop;

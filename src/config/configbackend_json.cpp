@@ -161,7 +161,6 @@ void JsonConfigGroup::setGroupObject(const QJsonObject& obj)
         // e.g. "Snapping.Behavior.ZoneSpan" → root["Snapping"]["Behavior"]["ZoneSpan"] = obj
         const QStringList segments = splitDotPath(m_groupName, "JsonConfigGroup::setGroupObject");
         if (segments.isEmpty()) {
-            m_backend->markDirty();
             return;
         }
         const auto chain = buildDotPathChain(m_root, segments);
