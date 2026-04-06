@@ -47,6 +47,15 @@ Flickable {
     }
     readonly property bool algoSupportsSplitRatio: algoCapabilities ? (algoCapabilities.supportsSplitRatio === true) : false
     readonly property bool algoSupportsMasterCount: algoCapabilities ? (algoCapabilities.supportsMasterCount === true) : false
+    readonly property bool algoSupportsCustomParams: algoCapabilities ? (algoCapabilities.supportsCustomParams === true) : false
+    // Custom param definitions for the selected algorithm (re-fetched on algorithm change only,
+    // NOT on value saves — rebuilding the Repeater model mid-drag destroys the slider).
+    readonly property var customParamDefs: {
+        if (!root.algoSupportsCustomParams)
+            return [];
+
+        return settingsController.customParamsForAlgorithm(root.selectedAlgorithm);
+    }
     // Whether the algorithm uses a center layout (ratio/count labels say "Center" instead of "Master").
     // Check capabilities map first (for future extensibility via scripted algorithm metadata),
     // falling back to hardcoded IDs for built-in algorithms. See PR #256 / M13.
@@ -414,6 +423,88 @@ Flickable {
                                 appSettings.autotileMasterCount = v;
                             });
                         }
+                    }
+
+                }
+
+                // =============================================================
+                // Custom Algorithm Parameters
+                // =============================================================
+                Repeater {
+                    model: root.customParamDefs
+
+                    delegate: ColumnLayout {
+                        required property var modelData
+                        required property int index
+
+                        Layout.fillWidth: true
+                        spacing: 0
+
+                        SettingsSeparator {
+                        }
+
+                        SettingsRow {
+                            Layout.fillWidth: true
+                            title: modelData.description || modelData.name
+                            description: ""
+
+                            // Number parameter: rendered as a SettingsSlider
+                            SettingsSlider {
+                                visible: modelData.type === "number"
+                                Accessible.name: modelData.description || modelData.name
+                                from: modelData.minValue !== undefined ? modelData.minValue : 0
+                                to: modelData.maxValue !== undefined ? modelData.maxValue : 1
+                                stepSize: {
+                                    let range = (modelData.maxValue || 1) - (modelData.minValue || 0);
+                                    if (range <= 10)
+                                        return 0.05;
+
+                                    return 1;
+                                }
+                                value: modelData.value !== undefined ? modelData.value : modelData.defaultValue
+                                formatValue: function(v) {
+                                    let range = (modelData.maxValue || 1) - (modelData.minValue || 0);
+                                    if (range <= 1)
+                                        return Math.round(v * 100) + "%";
+
+                                    if (range <= 10)
+                                        return v.toFixed(1);
+
+                                    return Math.round(v).toString();
+                                }
+                                onMoved: (value) => {
+                                    settingsController.setCustomParam(root.selectedAlgorithm, modelData.name, value);
+                                }
+                            }
+
+                            // Bool parameter: rendered as a Switch
+                            Switch {
+                                visible: modelData.type === "bool"
+                                Accessible.name: modelData.description || modelData.name
+                                checked: modelData.value !== undefined ? modelData.value : modelData.defaultValue
+                                onToggled: {
+                                    settingsController.setCustomParam(root.selectedAlgorithm, modelData.name, checked);
+                                }
+                            }
+
+                            // Enum parameter: rendered as a ComboBox
+                            ComboBox {
+                                visible: modelData.type === "enum"
+                                Accessible.name: modelData.description || modelData.name
+                                model: modelData.enumOptions || []
+                                currentIndex: {
+                                    let opts = modelData.enumOptions || [];
+                                    let val = modelData.value !== undefined ? modelData.value : modelData.defaultValue;
+                                    let idx = opts.indexOf(val);
+                                    return idx >= 0 ? idx : 0;
+                                }
+                                onActivated: {
+                                    settingsController.setCustomParam(root.selectedAlgorithm, modelData.name, currentText);
+                                }
+                            }
+
+                        }
+
                     }
 
                 }
