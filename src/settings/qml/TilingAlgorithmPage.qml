@@ -436,6 +436,11 @@ Flickable {
                     delegate: ColumnLayout {
                         required property var modelData
                         required property int index
+                        readonly property string paramLabel: modelData.description || modelData.name
+                        readonly property var paramValue: modelData.value !== undefined ? modelData.value : modelData.defaultValue
+                        readonly property real paramMin: modelData.minValue !== undefined ? modelData.minValue : 0
+                        readonly property real paramMax: modelData.maxValue !== undefined ? modelData.maxValue : 1
+                        readonly property real paramRange: paramMax - paramMin
 
                         Layout.fillWidth: true
                         spacing: 0
@@ -445,29 +450,29 @@ Flickable {
 
                         SettingsRow {
                             Layout.fillWidth: true
-                            title: modelData.description || modelData.name
-                            description: ""
+                            title: paramLabel
 
                             // Number parameter: rendered as a SettingsSlider
                             SettingsSlider {
                                 visible: modelData.type === "number"
-                                Accessible.name: modelData.description || modelData.name
-                                from: modelData.minValue !== undefined ? modelData.minValue : 0
-                                to: modelData.maxValue !== undefined ? modelData.maxValue : 1
+                                Accessible.name: paramLabel
+                                from: paramMin
+                                to: paramMax
                                 stepSize: {
-                                    let range = (modelData.maxValue || 1) - (modelData.minValue || 0);
-                                    if (range <= 10)
-                                        return 0.05;
+                                    if (paramRange <= 1)
+                                        return 0.01;
+
+                                    if (paramRange <= 10)
+                                        return 0.1;
 
                                     return 1;
                                 }
-                                value: modelData.value !== undefined ? modelData.value : modelData.defaultValue
+                                value: paramValue
                                 formatValue: function(v) {
-                                    let range = (modelData.maxValue || 1) - (modelData.minValue || 0);
-                                    if (range <= 1)
+                                    if (paramRange <= 1)
                                         return Math.round(v * 100) + "%";
 
-                                    if (range <= 10)
+                                    if (paramRange <= 10)
                                         return v.toFixed(1);
 
                                     return Math.round(v).toString();
@@ -480,8 +485,8 @@ Flickable {
                             // Bool parameter: rendered as a Switch
                             Switch {
                                 visible: modelData.type === "bool"
-                                Accessible.name: modelData.description || modelData.name
-                                checked: modelData.value !== undefined ? modelData.value : modelData.defaultValue
+                                Accessible.name: paramLabel
+                                checked: paramValue
                                 onToggled: {
                                     settingsController.setCustomParam(root.selectedAlgorithm, modelData.name, checked);
                                 }
@@ -489,16 +494,18 @@ Flickable {
 
                             // Enum parameter: rendered as a ComboBox
                             ComboBox {
+                                id: enumCombo
+
                                 visible: modelData.type === "enum"
-                                Accessible.name: modelData.description || modelData.name
+                                Accessible.name: paramLabel
                                 model: modelData.enumOptions || []
                                 currentIndex: {
                                     let opts = modelData.enumOptions || [];
-                                    let val = modelData.value !== undefined ? modelData.value : modelData.defaultValue;
-                                    let idx = opts.indexOf(val);
+                                    let idx = opts.indexOf(paramValue);
                                     return idx >= 0 ? idx : 0;
                                 }
                                 onActivated: {
+                                    currentIndex = enumCombo.currentIndex;
                                     settingsController.setCustomParam(root.selectedAlgorithm, modelData.name, currentText);
                                 }
                             }
