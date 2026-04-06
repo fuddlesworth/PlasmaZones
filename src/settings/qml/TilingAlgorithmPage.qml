@@ -48,8 +48,11 @@ Flickable {
     readonly property bool algoSupportsSplitRatio: algoCapabilities ? (algoCapabilities.supportsSplitRatio === true) : false
     readonly property bool algoSupportsMasterCount: algoCapabilities ? (algoCapabilities.supportsMasterCount === true) : false
     readonly property bool algoSupportsCustomParams: algoCapabilities ? (algoCapabilities.supportsCustomParams === true) : false
-    // Custom param definitions for the selected algorithm (re-fetched on algorithm change only,
-    // NOT on value saves — rebuilding the Repeater model mid-drag destroys the slider).
+    // Custom param definitions for the selected algorithm.  The binding only
+    // depends on algoSupportsCustomParams / selectedAlgorithm.  Because
+    // customParamsForAlgorithm() is a Q_INVOKABLE (not a Q_PROPERTY with
+    // NOTIFY), QML's binding engine will NOT re-call it when saved values
+    // change — so the Repeater model stays stable during slider drags.
     readonly property var customParamDefs: {
         if (!root.algoSupportsCustomParams)
             return [];
@@ -437,9 +440,15 @@ Flickable {
                         required property var modelData
                         required property int index
                         readonly property string paramLabel: modelData.description || modelData.name
+                        // Show the raw param name as subtitle when description was used as title
+                        readonly property string paramDescription: modelData.description ? modelData.name : ""
                         readonly property var paramValue: modelData.value !== undefined ? modelData.value : modelData.defaultValue
                         readonly property real paramMin: modelData.minValue !== undefined ? modelData.minValue : 0
-                        readonly property real paramMax: modelData.maxValue !== undefined ? modelData.maxValue : 1
+                        readonly property real paramMax: {
+                            let mx = modelData.maxValue !== undefined ? modelData.maxValue : 1;
+                            // Guard against degenerate range from malformed script metadata
+                            return mx > paramMin ? mx : paramMin + 1;
+                        }
                         readonly property real paramRange: paramMax - paramMin
 
                         Layout.fillWidth: true
@@ -451,6 +460,7 @@ Flickable {
                         SettingsRow {
                             Layout.fillWidth: true
                             title: paramLabel
+                            description: paramDescription
 
                             // Number parameter: rendered as a SettingsSlider
                             SettingsSlider {
@@ -486,7 +496,7 @@ Flickable {
                             Switch {
                                 visible: modelData.type === "bool"
                                 Accessible.name: paramLabel
-                                checked: paramValue
+                                checked: paramValue === true
                                 onToggled: {
                                     settingsController.setCustomParam(root.selectedAlgorithm, modelData.name, checked);
                                 }
@@ -505,6 +515,9 @@ Flickable {
                                     return idx >= 0 ? idx : 0;
                                 }
                                 onActivated: {
+                                    // Imperative assignment breaks the declarative currentIndex
+                                    // binding above, preventing it from snapping back to the
+                                    // old value after the user makes a selection.
                                     currentIndex = enumCombo.currentIndex;
                                     settingsController.setCustomParam(root.selectedAlgorithm, modelData.name, currentText);
                                 }
