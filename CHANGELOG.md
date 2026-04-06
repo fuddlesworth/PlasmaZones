@@ -7,6 +7,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.7.1] - 2026-04-06
+
+### Added
+- **Custom algorithm parameter UI** ([#294]): Scripted algorithms declaring `@param` metadata now get auto-generated controls in the Tiling settings page — sliders for numbers, switches for bools, and combo boxes for enums.
+- **Ratio step size slider** ([#292]): Configurable step size for master ratio keyboard shortcut adjustments.
+
+### Fixed
+- **Per-screen master ratio and count** ([#292]): Per-screen overrides for master ratio and count were not persisted correctly. Fixed key constants, slider bindings, and race conditions in the per-screen config path.
+- **Reset to defaults clears per-algorithm settings** ([#292]): Resetting to defaults now properly clears saved per-algorithm autotile settings.
+- **OSD shown at ratio bounds** ([#292]): Master ratio OSD was suppressed when the value hit min/max; now always shown on shortcut press.
+- **Shader dark band at adjacent zone edges**: Eliminated a visible seam in the Aretha Shell shader where neighboring zones shared an edge.
+- **Shader category duplication in settings**: Fixed duplicate shader categories and easing preview binding errors.
+- **Editor shader error box**: Restored the shader compilation error display in the layout editor preview.
+
 ## [2.7.0] - 2026-04-04
 
 ### Added
