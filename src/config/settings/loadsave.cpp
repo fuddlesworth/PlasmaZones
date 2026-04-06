@@ -379,7 +379,8 @@ void Settings::loadAutotilingConfig(IConfigBackend* backend)
     }
     m_autotileMasterCount = masterCount;
 
-    // Load per-algorithm settings map
+    // Load per-algorithm settings map (clear first so reset-to-defaults works)
+    m_autotilePerAlgorithmSettings.clear();
     const QString perAlgoStr = autotiling->readString(ConfigDefaults::autotilePerAlgorithmSettingsKey(), QString());
     if (!perAlgoStr.isEmpty()) {
         // Deserialize JSON → QVariantMap → QHash → QVariantMap: the round-trip

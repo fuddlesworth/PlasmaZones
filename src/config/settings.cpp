@@ -235,6 +235,17 @@ void Settings::load()
     qCInfo(lcConfig) << "Settings loaded";
     Q_EMIT settingsChanged();
 
+    // Emit autotile property signals so QML bindings update after load/reset.
+    // load() sets members directly (not via setters) so NOTIFY signals don't
+    // fire automatically. These are unconditional because load() is a full
+    // reload — the cost of redundant signal emissions is negligible.
+    Q_EMIT autotileSplitRatioChanged();
+    Q_EMIT autotileSplitRatioStepChanged();
+    Q_EMIT autotileMasterCountChanged();
+    Q_EMIT autotilePerAlgorithmSettingsChanged();
+    Q_EMIT autotileEnabledChanged();
+    Q_EMIT defaultAutotileAlgorithmChanged();
+
     // Emit specific signals for settings with runtime side-effects
     if (m_renderingBackend != oldRenderingBackend)
         Q_EMIT renderingBackendChanged();
@@ -360,6 +371,7 @@ void Settings::reset()
     }
     m_configBackend->deleteGroup(ConfigDefaults::updatesGroup());
     m_configBackend->deleteGroup(ConfigDefaults::tilingQuickLayoutSlotsGroup());
+    m_configBackend->deleteGroup(QStringLiteral("AutoTileState"));
     deletePerScreenGroups(m_configBackend);
     m_configBackend->sync();
     load();
