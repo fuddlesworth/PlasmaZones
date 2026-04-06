@@ -558,6 +558,19 @@ void Settings::loadAutotilingConfig(IConfigBackend* backend)
 
 void Settings::loadEditorConfig(IConfigBackend* backend)
 {
+    // Capture old values for post-load change-guarded signal emission
+    const QString oldDuplicate = m_editorDuplicateShortcut;
+    const QString oldSplitH = m_editorSplitHorizontalShortcut;
+    const QString oldSplitV = m_editorSplitVerticalShortcut;
+    const QString oldFill = m_editorFillShortcut;
+    const bool oldGridEnabled = m_editorGridSnappingEnabled;
+    const bool oldEdgeEnabled = m_editorEdgeSnappingEnabled;
+    const qreal oldIntervalX = m_editorSnapIntervalX;
+    const qreal oldIntervalY = m_editorSnapIntervalY;
+    const int oldOverrideMod = m_editorSnapOverrideModifier;
+    const bool oldFillOnDropEnabled = m_fillOnDropEnabled;
+    const int oldFillOnDropMod = m_fillOnDropModifier;
+
     {
         auto shortcuts = backend->group(ConfigDefaults::editorShortcutsGroup());
         m_editorDuplicateShortcut =
@@ -594,17 +607,28 @@ void Settings::loadEditorConfig(IConfigBackend* backend)
         m_fillOnDropModifier = fillOnDrop->readInt(ConfigDefaults::modifierKey(), ConfigDefaults::fillOnDropModifier());
     }
 
-    Q_EMIT editorDuplicateShortcutChanged();
-    Q_EMIT editorSplitHorizontalShortcutChanged();
-    Q_EMIT editorSplitVerticalShortcutChanged();
-    Q_EMIT editorFillShortcutChanged();
-    Q_EMIT editorGridSnappingEnabledChanged();
-    Q_EMIT editorEdgeSnappingEnabledChanged();
-    Q_EMIT editorSnapIntervalXChanged();
-    Q_EMIT editorSnapIntervalYChanged();
-    Q_EMIT editorSnapOverrideModifierChanged();
-    Q_EMIT fillOnDropEnabledChanged();
-    Q_EMIT fillOnDropModifierChanged();
+    if (m_editorDuplicateShortcut != oldDuplicate)
+        Q_EMIT editorDuplicateShortcutChanged();
+    if (m_editorSplitHorizontalShortcut != oldSplitH)
+        Q_EMIT editorSplitHorizontalShortcutChanged();
+    if (m_editorSplitVerticalShortcut != oldSplitV)
+        Q_EMIT editorSplitVerticalShortcutChanged();
+    if (m_editorFillShortcut != oldFill)
+        Q_EMIT editorFillShortcutChanged();
+    if (m_editorGridSnappingEnabled != oldGridEnabled)
+        Q_EMIT editorGridSnappingEnabledChanged();
+    if (m_editorEdgeSnappingEnabled != oldEdgeEnabled)
+        Q_EMIT editorEdgeSnappingEnabledChanged();
+    if (!qFuzzyCompare(m_editorSnapIntervalX, oldIntervalX))
+        Q_EMIT editorSnapIntervalXChanged();
+    if (!qFuzzyCompare(m_editorSnapIntervalY, oldIntervalY))
+        Q_EMIT editorSnapIntervalYChanged();
+    if (m_editorSnapOverrideModifier != oldOverrideMod)
+        Q_EMIT editorSnapOverrideModifierChanged();
+    if (m_fillOnDropEnabled != oldFillOnDropEnabled)
+        Q_EMIT fillOnDropEnabledChanged();
+    if (m_fillOnDropModifier != oldFillOnDropMod)
+        Q_EMIT fillOnDropModifierChanged();
 }
 
 // ── save() helpers ───────────────────────────────────────────────────────────

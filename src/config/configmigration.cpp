@@ -328,28 +328,33 @@ void moveKey(const QJsonObject& src, const QString& srcKey, QJsonObject& dst, co
 
 void ConfigMigration::migrateV1ToV2(QJsonObject& root)
 {
-    // ── Read all v1 groups ──────────────────────────────────────────────────
-    const QJsonObject v1Activation = root.value(QLatin1String("Activation")).toObject();
-    const QJsonObject v1Display = root.value(QLatin1String("Display")).toObject();
-    const QJsonObject v1Appearance = root.value(QLatin1String("Appearance")).toObject();
-    const QJsonObject v1Zones = root.value(QLatin1String("Zones")).toObject();
-    const QJsonObject v1Behavior = root.value(QLatin1String("Behavior")).toObject();
-    const QJsonObject v1Exclusions = root.value(QLatin1String("Exclusions")).toObject();
-    const QJsonObject v1ZoneSelector = root.value(QLatin1String("ZoneSelector")).toObject();
-    const QJsonObject v1Autotiling = root.value(QLatin1String("Autotiling")).toObject();
-    const QJsonObject v1AutotileShortcuts = root.value(QLatin1String("AutotileShortcuts")).toObject();
-    const QJsonObject v1Animations = root.value(QLatin1String("Animations")).toObject();
-    const QJsonObject v1GlobalShortcuts = root.value(QLatin1String("GlobalShortcuts")).toObject();
-    const QJsonObject v1Editor = root.value(QLatin1String("Editor")).toObject();
-    const QJsonObject v1Ordering = root.value(QLatin1String("Ordering")).toObject();
-    const QJsonObject v1Rendering = root.value(QLatin1String("Rendering")).toObject();
-    const QJsonObject v1Shaders = root.value(QLatin1String("Shaders")).toObject();
+    // ── Read all v1 groups (using ConfigKeys v1 accessors) ────────────────
+    const QJsonObject v1Activation = root.value(ConfigKeys::v1ActivationGroup()).toObject();
+    const QJsonObject v1Display = root.value(ConfigKeys::v1DisplayGroup()).toObject();
+    const QJsonObject v1Appearance = root.value(ConfigKeys::v1AppearanceGroup()).toObject();
+    const QJsonObject v1Zones = root.value(ConfigKeys::v1ZonesGroup()).toObject();
+    const QJsonObject v1Behavior = root.value(ConfigKeys::v1BehaviorGroup()).toObject();
+    const QJsonObject v1Exclusions = root.value(ConfigKeys::v1ExclusionsGroup()).toObject();
+    const QJsonObject v1ZoneSelector = root.value(ConfigKeys::v1ZoneSelectorGroup()).toObject();
+    const QJsonObject v1Autotiling = root.value(ConfigKeys::v1AutotilingGroup()).toObject();
+    const QJsonObject v1AutotileShortcuts = root.value(ConfigKeys::v1AutotileShortcutsGroup()).toObject();
+    const QJsonObject v1Animations = root.value(ConfigKeys::v1AnimationsGroup()).toObject();
+    const QJsonObject v1GlobalShortcuts = root.value(ConfigKeys::v1GlobalShortcutsGroup()).toObject();
+    const QJsonObject v1Editor = root.value(ConfigKeys::v1EditorGroup()).toObject();
+    const QJsonObject v1Ordering = root.value(ConfigKeys::v1OrderingGroup()).toObject();
+    const QJsonObject v1Rendering = root.value(ConfigKeys::v1RenderingGroup()).toObject();
+    const QJsonObject v1Shaders = root.value(ConfigKeys::v1ShadersGroup()).toObject();
 
     // ── Remove all v1 groups ────────────────────────────────────────────────
-    for (const auto& key :
-         {"Activation", "Display", "Appearance", "Zones", "Behavior", "Exclusions", "ZoneSelector", "Autotiling",
-          "AutotileShortcuts", "Animations", "GlobalShortcuts", "Editor", "Ordering", "Rendering", "Shaders"}) {
-        root.remove(QLatin1String(key));
+    const QString v1Groups[] = {
+        ConfigKeys::v1ActivationGroup(),   ConfigKeys::v1DisplayGroup(),         ConfigKeys::v1AppearanceGroup(),
+        ConfigKeys::v1ZonesGroup(),        ConfigKeys::v1BehaviorGroup(),        ConfigKeys::v1ExclusionsGroup(),
+        ConfigKeys::v1ZoneSelectorGroup(), ConfigKeys::v1AutotilingGroup(),      ConfigKeys::v1AutotileShortcutsGroup(),
+        ConfigKeys::v1AnimationsGroup(),   ConfigKeys::v1GlobalShortcutsGroup(), ConfigKeys::v1EditorGroup(),
+        ConfigKeys::v1OrderingGroup(),     ConfigKeys::v1RenderingGroup(),       ConfigKeys::v1ShadersGroup(),
+    };
+    for (const auto& key : v1Groups) {
+        root.remove(key);
     }
 
     // ── Snapping (top-level) ────────────────────────────────────────────────

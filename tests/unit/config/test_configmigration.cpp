@@ -55,10 +55,23 @@ private Q_SLOTS:
         QVERIFY(!QFile::exists(ConfigDefaults::configFilePath()));
     }
 
-    void testJsonAlreadyExists()
+    void testJsonAlreadyAtCurrentVersion()
     {
         IsolatedConfigGuard guard;
-        // Create JSON config
+        // Create JSON config at current schema version — should be a no-op
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QFile f(ConfigDefaults::configFilePath());
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(QStringLiteral("{\"_version\":%1}").arg(PlasmaZones::ConfigSchemaVersion).toUtf8());
+        f.close();
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+    }
+
+    void testJsonAtOlderVersion_runsMigration()
+    {
+        IsolatedConfigGuard guard;
+        // Create JSON config at v1 — migration chain should upgrade to current version
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
         QFile f(ConfigDefaults::configFilePath());
         QVERIFY(f.open(QIODevice::WriteOnly));
@@ -66,6 +79,9 @@ private Q_SLOTS:
         f.close();
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        QCOMPARE(root.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
     }
 
     // =========================================================================

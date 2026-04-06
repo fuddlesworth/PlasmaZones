@@ -97,7 +97,8 @@ QJsonObject JsonConfigGroup::groupObject() const
     }
     // Dot-path navigation: "Snapping.Behavior.ZoneSpan" → root["Snapping"]["Behavior"]["ZoneSpan"]
     if (m_groupName.contains(QLatin1Char('.'))) {
-        const QStringList segments = m_groupName.split(QLatin1Char('.'));
+        const QStringList segments = m_groupName.split(QLatin1Char('.'), Qt::SkipEmptyParts);
+        Q_ASSERT_X(!segments.isEmpty(), "JsonConfigGroup::groupObject", "Dot-path group name resolved to no segments");
         QJsonObject current = m_root;
         for (const QString& seg : segments) {
             current = current.value(seg).toObject();
@@ -125,7 +126,9 @@ void JsonConfigGroup::setGroupObject(const QJsonObject& obj)
     } else if (m_groupName.contains(QLatin1Char('.'))) {
         // Dot-path write: rebuild the nested chain from root.
         // e.g. "Snapping.Behavior.ZoneSpan" → root["Snapping"]["Behavior"]["ZoneSpan"] = obj
-        const QStringList segments = m_groupName.split(QLatin1Char('.'));
+        const QStringList segments = m_groupName.split(QLatin1Char('.'), Qt::SkipEmptyParts);
+        Q_ASSERT_X(!segments.isEmpty(), "JsonConfigGroup::setGroupObject",
+                   "Dot-path group name resolved to no segments");
 
         // Read existing objects at each level (except the leaf)
         QList<QJsonObject> chain;
@@ -498,7 +501,7 @@ void JsonConfigBackend::deleteGroup(const QString& name)
         // Dot-path delete: remove the leaf and clean up empty parents.
         // e.g. "Snapping.Behavior.ZoneSpan" removes ZoneSpan from Behavior,
         // then removes Behavior if empty, then Snapping if empty.
-        const QStringList segments = name.split(QLatin1Char('.'));
+        const QStringList segments = name.split(QLatin1Char('.'), Qt::SkipEmptyParts);
 
         // Read existing objects at each level (chain[0] = root's child, etc.)
         QList<QJsonObject> chain;
@@ -654,11 +657,21 @@ QMap<QString, QVariant> readJsonConfigFromDisk(const QString& filePath)
                     }
                 }
             } else {
-                // Regular group: Group/Key
-                const QJsonObject groupObj = it.value().toObject();
-                for (auto kIt = groupObj.constBegin(); kIt != groupObj.constEnd(); ++kIt) {
-                    map.insert(it.key() + QLatin1Char('/') + kIt.key(), jsonValueToFlatVariant(kIt.value()));
-                }
+                // Recursively flatten nested groups into dot-path "Group/Key" format.
+                // v2 nesting like {"Snapping": {"Behavior": {"Triggers": [...]}}}
+                // produces "Snapping.Behavior/Triggers" → [...].
+                std::function<void(const QJsonObject&, const QString&)> flattenGroup = [&](const QJsonObject& obj,
+                                                                                           const QString& groupPath) {
+                    for (auto kIt = obj.constBegin(); kIt != obj.constEnd(); ++kIt) {
+                        if (kIt.value().isObject()) {
+                            const QString childPath = groupPath + QLatin1Char('.') + kIt.key();
+                            flattenGroup(kIt.value().toObject(), childPath);
+                        } else {
+                            map.insert(groupPath + QLatin1Char('/') + kIt.key(), jsonValueToFlatVariant(kIt.value()));
+                        }
+                    }
+                };
+                flattenGroup(it.value().toObject(), it.key());
             }
         } else {
             // Root-level non-object key
