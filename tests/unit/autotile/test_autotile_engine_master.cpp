@@ -42,83 +42,234 @@ private Q_SLOTS:
     // Master ratio adjustment tests
     // =========================================================================
 
-    void testIncreaseMasterRatio_updatesAllScreens()
+    void testIncreaseMasterRatio_updatesFocusedScreenOnly()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
-        TilingState* state1 = engine.stateForScreen(QStringLiteral("Screen1"));
-        TilingState* state2 = engine.stateForScreen(QStringLiteral("Screen2"));
+        const QString screen1 = QStringLiteral("Screen1");
+        const QString screen2 = QStringLiteral("Screen2");
+        engine.setAutotileScreens({screen1, screen2});
+
+        // Use windowOpened to properly set up m_windowToStateKey mappings
+        engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win2"), screen2, 0, 0);
+        QCoreApplication::processEvents(); // flush deferred retile
+
+        TilingState* state1 = engine.stateForScreen(screen1);
+        TilingState* state2 = engine.stateForScreen(screen2);
 
         const qreal initial1 = state1->splitRatio();
         const qreal initial2 = state2->splitRatio();
+
+        // Use windowFocused to properly set m_activeScreen on the engine
+        engine.windowFocused(QStringLiteral("win1"), screen1);
 
         engine.increaseMasterRatio(0.1);
 
+        // Only the focused screen's ratio should change
         QVERIFY(qFuzzyCompare(state1->splitRatio(), initial1 + 0.1));
-        QVERIFY(qFuzzyCompare(state2->splitRatio(), initial2 + 0.1));
+        QVERIFY(qFuzzyCompare(state2->splitRatio(), initial2));
     }
 
-    void testDecreaseMasterRatio_updatesAllScreens()
+    void testDecreaseMasterRatio_updatesFocusedScreenOnly()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
-        TilingState* state1 = engine.stateForScreen(QStringLiteral("Screen1"));
-        TilingState* state2 = engine.stateForScreen(QStringLiteral("Screen2"));
+        const QString screen1 = QStringLiteral("Screen1");
+        const QString screen2 = QStringLiteral("Screen2");
+        engine.setAutotileScreens({screen1, screen2});
+
+        // Use windowOpened to properly set up m_windowToStateKey mappings
+        engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win2"), screen2, 0, 0);
+        QCoreApplication::processEvents(); // flush deferred retile
+
+        TilingState* state1 = engine.stateForScreen(screen1);
+        TilingState* state2 = engine.stateForScreen(screen2);
+
         const qreal initial1 = state1->splitRatio();
         const qreal initial2 = state2->splitRatio();
 
+        // Use windowFocused to properly set m_activeScreen on the engine
+        engine.windowFocused(QStringLiteral("win1"), screen1);
+
         engine.decreaseMasterRatio(0.1);
 
+        // Only the focused screen's ratio should change
         QVERIFY(qFuzzyCompare(state1->splitRatio(), initial1 - 0.1));
-        QVERIFY(qFuzzyCompare(state2->splitRatio(), initial2 - 0.1));
+        QVERIFY(qFuzzyCompare(state2->splitRatio(), initial2));
     }
 
     // =========================================================================
     // Master count adjustment tests
     // =========================================================================
 
-    void testIncreaseMasterCount_updatesAllScreens()
+    void testIncreaseMasterCount_updatesFocusedScreenOnly()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
-        TilingState* state = engine.stateForScreen(QStringLiteral("Screen1"));
+        const QString screen1 = QStringLiteral("Screen1");
+        const QString screen2 = QStringLiteral("Screen2");
+        engine.setAutotileScreens({screen1, screen2});
 
-        state->addWindow(QStringLiteral("win1"));
-        state->addWindow(QStringLiteral("win2"));
-        state->addWindow(QStringLiteral("win3"));
+        engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win2"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win3"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win4"), screen2, 0, 0);
+        engine.windowOpened(QStringLiteral("win5"), screen2, 0, 0);
+        QCoreApplication::processEvents();
 
-        const int initial = state->masterCount();
+        TilingState* state1 = engine.stateForScreen(screen1);
+        TilingState* state2 = engine.stateForScreen(screen2);
+        const int initial1 = state1->masterCount();
+        const int initial2 = state2->masterCount();
 
+        engine.windowFocused(QStringLiteral("win1"), screen1);
         engine.increaseMasterCount();
 
-        QCOMPARE(state->masterCount(), initial + 1);
+        QCOMPARE(state1->masterCount(), initial1 + 1);
+        QCOMPARE(state2->masterCount(), initial2);
     }
 
-    void testDecreaseMasterCount_updatesAllScreens()
+    void testDecreaseMasterCount_updatesFocusedScreenOnly()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
-        TilingState* state = engine.stateForScreen(QStringLiteral("Screen1"));
-        state->addWindow(QStringLiteral("win1"));
-        state->addWindow(QStringLiteral("win2"));
-        state->setMasterCount(2);
+        const QString screen1 = QStringLiteral("Screen1");
+        const QString screen2 = QStringLiteral("Screen2");
+        engine.setAutotileScreens({screen1, screen2});
 
+        engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win2"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win3"), screen2, 0, 0);
+        engine.windowOpened(QStringLiteral("win4"), screen2, 0, 0);
+        QCoreApplication::processEvents();
+
+        TilingState* state1 = engine.stateForScreen(screen1);
+        TilingState* state2 = engine.stateForScreen(screen2);
+        state1->setMasterCount(2);
+        state2->setMasterCount(2);
+
+        engine.windowFocused(QStringLiteral("win1"), screen1);
         engine.decreaseMasterCount();
 
-        QCOMPARE(state->masterCount(), 1);
+        QCOMPARE(state1->masterCount(), 1);
+        QCOMPARE(state2->masterCount(), 2);
     }
 
     void testDecreaseMasterCount_doesNotGoBelowOne()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
-        TilingState* state = engine.stateForScreen(QStringLiteral("Screen1"));
-        state->addWindow(QStringLiteral("win1"));
+        const QString screen1 = QStringLiteral("Screen1");
+        engine.setAutotileScreens({screen1});
+
+        engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+
+        TilingState* state = engine.stateForScreen(screen1);
         QCOMPARE(state->masterCount(), 1);
 
+        engine.windowFocused(QStringLiteral("win1"), screen1);
         engine.decreaseMasterCount();
 
         QCOMPARE(state->masterCount(), 1);
+    }
+
+    // =========================================================================
+    // Per-screen override interaction tests
+    // =========================================================================
+
+    void testIncreaseMasterRatio_withPerScreenOverride_updatesOverrideNotGlobal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        const QString screen1 = QStringLiteral("Screen1");
+        engine.setAutotileScreens({screen1});
+
+        engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+
+        // Apply a per-screen SplitRatio override
+        QVariantMap overrides;
+        overrides[QStringLiteral("SplitRatio")] = 0.5;
+        engine.applyPerScreenConfig(screen1, overrides);
+
+        TilingState* state = engine.stateForScreen(screen1);
+        state->setSplitRatio(0.5);
+        const qreal globalBefore = engine.config()->splitRatio;
+
+        engine.windowFocused(QStringLiteral("win1"), screen1);
+        engine.increaseMasterRatio(0.1);
+
+        // The per-screen state should be updated
+        QVERIFY(qFuzzyCompare(state->splitRatio(), 0.6));
+        // The global config should NOT be updated
+        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, globalBefore));
+        // The stored per-screen override should reflect the new value
+        QVariantMap updatedOverrides = engine.perScreenOverrides(screen1);
+        QVERIFY(qFuzzyCompare(updatedOverrides.value(QStringLiteral("SplitRatio")).toDouble(), 0.6));
+    }
+
+    void testDecreaseMasterRatio_withPerScreenOverride_updatesOverrideNotGlobal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        const QString screen1 = QStringLiteral("Screen1");
+        engine.setAutotileScreens({screen1});
+
+        engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+
+        // Apply a per-screen SplitRatio override
+        QVariantMap overrides;
+        overrides[QStringLiteral("SplitRatio")] = 0.5;
+        engine.applyPerScreenConfig(screen1, overrides);
+
+        TilingState* state = engine.stateForScreen(screen1);
+        state->setSplitRatio(0.5);
+        const qreal globalBefore = engine.config()->splitRatio;
+
+        engine.windowFocused(QStringLiteral("win1"), screen1);
+        engine.decreaseMasterRatio(0.1);
+
+        // The per-screen state should be updated
+        QVERIFY(qFuzzyCompare(state->splitRatio(), 0.4));
+        // The global config should NOT be updated
+        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, globalBefore));
+        // The stored per-screen override should reflect the new value
+        QVariantMap updatedOverrides = engine.perScreenOverrides(screen1);
+        QVERIFY(qFuzzyCompare(updatedOverrides.value(QStringLiteral("SplitRatio")).toDouble(), 0.4));
+    }
+
+    void testIncreaseMasterCount_withPerScreenOverride_updatesOverrideNotGlobal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        const QString screen1 = QStringLiteral("Screen1");
+        engine.setAutotileScreens({screen1});
+
+        engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win2"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win3"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+
+        QVariantMap overrides;
+        overrides[QStringLiteral("MasterCount")] = 1;
+        engine.applyPerScreenConfig(screen1, overrides);
+
+        const int globalBefore = engine.config()->masterCount;
+
+        engine.windowFocused(QStringLiteral("win1"), screen1);
+        engine.increaseMasterCount();
+
+        TilingState* state = engine.stateForScreen(screen1);
+        QCOMPARE(state->masterCount(), 2);
+        // Global config unchanged
+        QCOMPARE(engine.config()->masterCount, globalBefore);
+        // Stored override updated
+        QVariantMap updatedOverrides = engine.perScreenOverrides(screen1);
+        QCOMPARE(updatedOverrides.value(QStringLiteral("MasterCount")).toInt(), 2);
     }
 
     // =========================================================================

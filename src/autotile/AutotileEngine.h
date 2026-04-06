@@ -295,6 +295,7 @@ public:
     void clearPerScreenConfig(const QString& screenId);
     QVariantMap perScreenOverrides(const QString& screenId) const;
     bool hasPerScreenOverride(const QString& screenId, const QString& key) const;
+    void updatePerScreenOverride(const QString& screenId, const QString& key, const QVariant& value);
 
     // Effective per-screen values — forwarded to PerScreenConfigResolver
     int effectiveInnerGap(const QString& screenId) const;
@@ -303,6 +304,7 @@ public:
     bool effectiveSmartGaps(const QString& screenId) const;
     bool effectiveRespectMinimumSize(const QString& screenId) const;
     int effectiveMaxWindows(const QString& screenId) const;
+    qreal effectiveSplitRatioStep(const QString& screenId) const;
     QString effectiveAlgorithmId(const QString& screenId) const;
     TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
 

@@ -4,6 +4,7 @@
 #include "../settings.h"
 #include "../iconfigbackend.h"
 #include "../configdefaults.h"
+#include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 
@@ -80,16 +81,27 @@ constexpr const char* kPerScreenKeys[] = {
 
 // Per-screen override key strings — defined in PerScreenAutotileKey (settings_interfaces.h).
 constexpr const char* kPerScreenAutotileKeys[] = {
-    PerScreenAutotileKey::Algorithm,         PerScreenAutotileKey::SplitRatio,
-    PerScreenAutotileKey::MasterCount,       PerScreenAutotileKey::InnerGap,
-    PerScreenAutotileKey::OuterGap,          PerScreenAutotileKey::UsePerSideOuterGap,
-    PerScreenAutotileKey::OuterGapTop,       PerScreenAutotileKey::OuterGapBottom,
-    PerScreenAutotileKey::OuterGapLeft,      PerScreenAutotileKey::OuterGapRight,
-    PerScreenAutotileKey::FocusNewWindows,   PerScreenAutotileKey::SmartGaps,
-    PerScreenAutotileKey::MaxWindows,        PerScreenAutotileKey::InsertPosition,
-    PerScreenAutotileKey::FocusFollowsMouse, PerScreenAutotileKey::RespectMinimumSize,
-    PerScreenAutotileKey::HideTitleBars,     PerScreenAutotileKey::AnimationsEnabled,
-    PerScreenAutotileKey::AnimationDuration, PerScreenAutotileKey::AnimationEasingCurve,
+    PerScreenAutotileKey::Algorithm,
+    PerScreenAutotileKey::SplitRatio,
+    "AutotileSplitRatioStep",
+    PerScreenAutotileKey::MasterCount,
+    PerScreenAutotileKey::InnerGap,
+    PerScreenAutotileKey::OuterGap,
+    PerScreenAutotileKey::UsePerSideOuterGap,
+    PerScreenAutotileKey::OuterGapTop,
+    PerScreenAutotileKey::OuterGapBottom,
+    PerScreenAutotileKey::OuterGapLeft,
+    PerScreenAutotileKey::OuterGapRight,
+    PerScreenAutotileKey::FocusNewWindows,
+    PerScreenAutotileKey::SmartGaps,
+    PerScreenAutotileKey::MaxWindows,
+    PerScreenAutotileKey::InsertPosition,
+    PerScreenAutotileKey::FocusFollowsMouse,
+    PerScreenAutotileKey::RespectMinimumSize,
+    PerScreenAutotileKey::HideTitleBars,
+    PerScreenAutotileKey::AnimationsEnabled,
+    PerScreenAutotileKey::AnimationDuration,
+    PerScreenAutotileKey::AnimationEasingCurve,
 };
 
 QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& value)
@@ -98,11 +110,16 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     // QML PerScreenOverrideHelper sends short keys; config storage uses prefixed keys.
     const QString k = key.startsWith(QLatin1String("Autotile")) ? key.mid(8) : key;
 
-    if (k == QLatin1String("SplitRatio")) {
+    if (k == PerScreenKeys::SplitRatio) {
         double v = value.toDouble();
         return QVariant(qBound(ConfigDefaults::autotileSplitRatioMin(), v, ConfigDefaults::autotileSplitRatioMax()));
     }
-    if (k == QLatin1String("MasterCount"))
+    if (k == PerScreenKeys::SplitRatioStep) {
+        double v = value.toDouble();
+        return QVariant(
+            qBound(ConfigDefaults::autotileSplitRatioStepMin(), v, ConfigDefaults::autotileSplitRatioStepMax()));
+    }
+    if (k == PerScreenKeys::MasterCount)
         return QVariant(
             qBound(ConfigDefaults::autotileMasterCountMin(), value.toInt(), ConfigDefaults::autotileMasterCountMax()));
     if (k == QLatin1String("InnerGap"))
@@ -111,13 +128,13 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     if (k.startsWith(QLatin1String("OuterGap")))
         return QVariant(
             qBound(ConfigDefaults::autotileOuterGapMin(), value.toInt(), ConfigDefaults::autotileOuterGapMax()));
-    if (k == QLatin1String("MaxWindows"))
+    if (k == PerScreenKeys::MaxWindows)
         return QVariant(
             qBound(ConfigDefaults::autotileMaxWindowsMin(), value.toInt(), ConfigDefaults::autotileMaxWindowsMax()));
     if (k == QLatin1String("InsertPosition"))
         return QVariant(qBound(ConfigDefaults::autotileInsertPositionMin(), value.toInt(),
                                ConfigDefaults::autotileInsertPositionMax()));
-    if (k == QLatin1String("Algorithm") || key == QLatin1String("AnimationEasingCurve"))
+    if (k == PerScreenKeys::Algorithm || key == QLatin1String("AnimationEasingCurve"))
         return value;
     if (k == QLatin1String("UsePerSideOuterGap") || k == QLatin1String("FocusNewWindows")
         || k == QLatin1String("SmartGaps") || k == QLatin1String("FocusFollowsMouse")

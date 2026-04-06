@@ -100,6 +100,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Default: 0.6 (60% master, 40% stack)
      */
     qreal splitRatio = ConfigDefaults::autotileSplitRatio();
+    qreal splitRatioStep = ConfigDefaults::autotileSplitRatioStep();
 
     /**
      * @brief Number of windows in master area

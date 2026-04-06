@@ -140,54 +140,63 @@ private Q_SLOTS:
         settings.save();
 
         // Verify the round-trip by reading from a fresh config backend
-        // (re-reads from disk after save() flushed).
+        // (re-reads from disk after save() flushed). Uses v2 dot-path groups.
         auto backend = PlasmaZones::createDefaultConfigBackend();
 
         {
-            auto zones = backend->group(QStringLiteral("Zones"));
-            QCOMPARE(zones->readInt(QStringLiteral("Padding"), 0), 15);
-            QCOMPARE(zones->readInt(QStringLiteral("OuterGap"), 0), 20);
+            auto gaps = backend->group(ConfigDefaults::snappingGapsGroup());
+            QCOMPARE(gaps->readInt(ConfigDefaults::innerKey(), 0), 15);
+            QCOMPARE(gaps->readInt(ConfigDefaults::outerKey(), 0), 20);
         }
 
         {
-            auto appearance = backend->group(QStringLiteral("Appearance"));
-            QCOMPARE(appearance->readInt(QStringLiteral("BorderWidth"), 0), 5);
-            QCOMPARE(appearance->readInt(QStringLiteral("BorderRadius"), 0), 25);
-            QVERIFY(qFuzzyCompare(appearance->readDouble(QStringLiteral("ActiveOpacity"), 0.0), 0.8));
-            QVERIFY(qFuzzyCompare(appearance->readDouble(QStringLiteral("InactiveOpacity"), 0.0), 0.2));
-            QCOMPARE(appearance->readInt(QStringLiteral("LabelFontWeight"), 0), 400);
+            auto border = backend->group(ConfigDefaults::snappingAppearanceBorderGroup());
+            QCOMPARE(border->readInt(ConfigDefaults::widthKey(), 0), 5);
+            QCOMPARE(border->readInt(ConfigDefaults::radiusKey(), 0), 25);
+        }
+        {
+            auto opacity = backend->group(ConfigDefaults::snappingAppearanceOpacityGroup());
+            QVERIFY(qFuzzyCompare(opacity->readDouble(ConfigDefaults::activeKey(), 0.0), 0.8));
+            QVERIFY(qFuzzyCompare(opacity->readDouble(ConfigDefaults::inactiveKey(), 0.0), 0.2));
+        }
+        {
+            auto labels = backend->group(ConfigDefaults::snappingAppearanceLabelsGroup());
+            QCOMPARE(labels->readInt(ConfigDefaults::fontWeightKey(), 0), 400);
         }
 
         {
-            auto display = backend->group(QStringLiteral("Display"));
-            QCOMPARE(display->readBool(QStringLiteral("ShowNumbers"), true), false);
+            auto effects = backend->group(ConfigDefaults::snappingEffectsGroup());
+            QCOMPARE(effects->readBool(ConfigDefaults::showNumbersKey(), true), false);
         }
 
         {
-            auto activation = backend->group(QStringLiteral("Activation"));
-            QCOMPARE(activation->readBool(QStringLiteral("ToggleActivation"), false), true);
+            auto behavior = backend->group(ConfigDefaults::snappingBehaviorGroup());
+            QCOMPARE(behavior->readBool(ConfigDefaults::toggleActivationKey(), false), true);
         }
 
         {
-            auto zoneSelector = backend->group(QStringLiteral("ZoneSelector"));
-            QCOMPARE(zoneSelector->readBool(QStringLiteral("Enabled"), true), false);
-            QCOMPARE(zoneSelector->readInt(QStringLiteral("TriggerDistance"), 0), 100);
-            QCOMPARE(zoneSelector->readInt(QStringLiteral("GridColumns"), 0), 3);
+            auto zoneSelector = backend->group(ConfigDefaults::snappingZoneSelectorGroup());
+            QCOMPARE(zoneSelector->readBool(ConfigDefaults::enabledKey(), true), false);
+            QCOMPARE(zoneSelector->readInt(ConfigDefaults::triggerDistanceKey(), 0), 100);
+            QCOMPARE(zoneSelector->readInt(ConfigDefaults::gridColumnsKey(), 0), 3);
         }
 
         {
-            auto autotiling = backend->group(QStringLiteral("Autotiling"));
-            double readRatio = autotiling->readDouble(QStringLiteral("AutotileSplitRatio"), 0.0);
+            auto algo = backend->group(ConfigDefaults::tilingAlgorithmGroup());
+            double readRatio = algo->readDouble(ConfigDefaults::splitRatioKey(), 0.0);
             QVERIFY2(qAbs(readRatio - 0.7) < 0.001,
-                     qPrintable(QStringLiteral("AutotileSplitRatio: expected 0.7, got %1").arg(readRatio)));
-            QCOMPARE(autotiling->readInt(QStringLiteral("AutotileMasterCount"), 0), 3);
-            QCOMPARE(autotiling->readInt(QStringLiteral("AutotileInnerGap"), 0), 12);
+                     qPrintable(QStringLiteral("SplitRatio: expected 0.7, got %1").arg(readRatio)));
+            QCOMPARE(algo->readInt(ConfigDefaults::masterCountKey(), 0), 3);
+        }
+        {
+            auto tilingGaps = backend->group(ConfigDefaults::tilingGapsGroup());
+            QCOMPARE(tilingGaps->readInt(ConfigDefaults::innerKey(), 0), 12);
         }
 
         {
-            auto animations = backend->group(QStringLiteral("Animations"));
-            QCOMPARE(animations->readInt(QStringLiteral("AnimationDuration"), 0), 300);
-            QCOMPARE(animations->readInt(QStringLiteral("AnimationSequenceMode"), -1), 0);
+            auto animations = backend->group(ConfigDefaults::animationsGroup());
+            QCOMPARE(animations->readInt(ConfigDefaults::durationKey(), 0), 300);
+            QCOMPARE(animations->readInt(ConfigDefaults::sequenceModeKey(), -1), 0);
         }
     }
 
@@ -274,11 +283,11 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
 
-        // Write activation config without DragActivationTriggers
+        // Write v2 snapping behavior config without DragActivationTriggers
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto activation = backend->group(QStringLiteral("Activation"));
-            activation->writeBool(QStringLiteral("SnappingEnabled"), true);
+            auto activation = backend->group(ConfigDefaults::snappingBehaviorGroup());
+            activation->writeBool(ConfigDefaults::enabledKey(), true);
             // Deliberately do NOT write DragActivationTriggers
             activation.reset();
             backend->sync();
@@ -304,9 +313,9 @@ private Q_SLOTS:
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto activation = backend->group(QStringLiteral("Activation"));
-            activation->writeString(QStringLiteral("DragActivationTriggers"), QStringLiteral("{not valid json!}"));
-            activation.reset();
+            auto behavior = backend->group(ConfigDefaults::snappingBehaviorGroup());
+            behavior->writeString(ConfigDefaults::triggersKey(), QStringLiteral("{not valid json!}"));
+            behavior.reset();
             backend->sync();
         }
 
@@ -330,10 +339,10 @@ private Q_SLOTS:
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto activation = backend->group(QStringLiteral("Activation"));
-            activation->writeInt(QStringLiteral("ZoneSpanModifier"), 3); // Alt
-            // Deliberately do NOT write ZoneSpanTriggers
-            activation.reset();
+            auto zoneSpan = backend->group(ConfigDefaults::snappingBehaviorZoneSpanGroup());
+            zoneSpan->writeInt(ConfigDefaults::modifierKey(), 3); // Alt
+            // Deliberately do NOT write Triggers
+            zoneSpan.reset();
             backend->sync();
         }
 
@@ -357,23 +366,23 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
 
-        // Inject stale keys into several groups
+        // Inject stale keys into several v2 groups
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
             {
-                auto g = backend->group(ConfigDefaults::activationGroup());
+                auto g = backend->group(ConfigDefaults::snappingBehaviorGroup());
                 g->writeString(QStringLiteral("ObsoleteActivationKey"), QStringLiteral("stale"));
             }
             {
-                auto g = backend->group(ConfigDefaults::displayGroup());
+                auto g = backend->group(ConfigDefaults::snappingEffectsGroup());
                 g->writeBool(QStringLiteral("OldDisplayToggle"), true);
             }
             {
-                auto g = backend->group(ConfigDefaults::appearanceGroup());
+                auto g = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
                 g->writeInt(QStringLiteral("DeprecatedThemeIndex"), 42);
             }
             {
-                auto g = backend->group(ConfigDefaults::autotilingGroup());
+                auto g = backend->group(ConfigDefaults::tilingAlgorithmGroup());
                 g->writeString(QStringLiteral("RemovedAutotileSetting"), QStringLiteral("gone"));
             }
             backend->sync();
@@ -389,28 +398,29 @@ private Q_SLOTS:
         // Re-read the file and verify stale keys are gone
         auto backend = PlasmaZones::createDefaultConfigBackend();
         {
-            auto g = backend->group(ConfigDefaults::activationGroup());
+            auto g = backend->group(ConfigDefaults::snappingBehaviorGroup());
             QVERIFY2(!g->hasKey(QStringLiteral("ObsoleteActivationKey")),
-                     "Stale key in Activation group must be purged by save()");
+                     "Stale key in Snapping.Behavior group must be purged by save()");
             // Valid key must survive
-            QVERIFY2(g->hasKey(ConfigDefaults::snappingEnabledKey()), "Valid key SnappingEnabled must survive save()");
+            QVERIFY2(g->hasKey(ConfigDefaults::toggleActivationKey()),
+                     "Valid key ToggleActivation must survive save()");
         }
         {
-            auto g = backend->group(ConfigDefaults::displayGroup());
+            auto g = backend->group(ConfigDefaults::snappingEffectsGroup());
             QVERIFY2(!g->hasKey(QStringLiteral("OldDisplayToggle")),
-                     "Stale key in Display group must be purged by save()");
+                     "Stale key in Snapping.Effects group must be purged by save()");
             QVERIFY2(g->hasKey(ConfigDefaults::showNumbersKey()), "Valid key ShowNumbers must survive save()");
         }
         {
-            auto g = backend->group(ConfigDefaults::appearanceGroup());
+            auto g = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
             QVERIFY2(!g->hasKey(QStringLiteral("DeprecatedThemeIndex")),
-                     "Stale key in Appearance group must be purged by save()");
+                     "Stale key in Snapping.Appearance.Colors group must be purged by save()");
         }
         {
-            auto g = backend->group(ConfigDefaults::autotilingGroup());
+            auto g = backend->group(ConfigDefaults::tilingGroup());
             QVERIFY2(!g->hasKey(QStringLiteral("RemovedAutotileSetting")),
-                     "Stale key in Autotiling group must be purged by save()");
-            QVERIFY2(g->hasKey(ConfigDefaults::autotileEnabledKey()), "Valid key AutotileEnabled must survive save()");
+                     "Stale key in Tiling group must be purged by save()");
+            QVERIFY2(g->hasKey(ConfigDefaults::enabledKey()), "Valid key Enabled must survive save()");
         }
     }
 
@@ -428,7 +438,7 @@ private Q_SLOTS:
             auto backend = PlasmaZones::createDefaultConfigBackend();
             {
                 auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
-                g->writeInt(ConfigDefaults::zoneSelectorPositionKey(), 2);
+                g->writeInt(ConfigDefaults::positionKey(), 2);
                 g->writeString(QStringLiteral("ObsoletePerScreenKey"), QStringLiteral("stale"));
             }
             backend->sync();

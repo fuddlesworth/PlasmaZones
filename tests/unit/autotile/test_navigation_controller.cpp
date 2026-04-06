@@ -205,27 +205,33 @@ private Q_SLOTS:
     // Master ratio propagation
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testNavigation_increaseMasterRatio_propagatesToAllStates()
+    void testNavigation_increaseMasterRatio_updatesFocusedScreenOnly()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
         const QString screen1 = QStringLiteral("eDP-1");
         const QString screen2 = QStringLiteral("HDMI-1");
+        engine.setAutotileScreens({screen1, screen2});
+
+        // Use windowOpened to properly set up m_windowToStateKey mappings
+        engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win2"), screen2, 0, 0);
+        QCoreApplication::processEvents();
 
         TilingState* state1 = engine.stateForScreen(screen1);
         TilingState* state2 = engine.stateForScreen(screen2);
-        state1->addWindow(QStringLiteral("win1"));
-        state2->addWindow(QStringLiteral("win2"));
 
         // Set a known initial ratio
         state1->setSplitRatio(0.5);
         state2->setSplitRatio(0.5);
 
-        state1->setFocusedWindow(QStringLiteral("win1"));
+        // Use windowFocused to properly set m_activeScreen on the engine
+        engine.windowFocused(QStringLiteral("win1"), screen1);
 
         engine.increaseMasterRatio(0.1);
 
+        // Only the focused screen (eDP-1) should change
         QVERIFY(qFuzzyCompare(state1->splitRatio(), 0.6));
-        QVERIFY(qFuzzyCompare(state2->splitRatio(), 0.6));
+        QVERIFY(qFuzzyCompare(state2->splitRatio(), 0.5));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

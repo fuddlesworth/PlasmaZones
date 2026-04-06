@@ -11,6 +11,7 @@
 #include "autotile/TilingState.h"
 #include "core/constants.h"
 #include "config/configbackend_json.h"
+#include "config/settings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/ScriptedAlgoTestSetup.h"
 
@@ -240,6 +241,97 @@ private Q_SLOTS:
 
         // Unknown algorithm should be silently ignored — the original default stays
         QCOMPARE(engine.algorithm(), originalAlgo);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Race condition: shortcut adjustment vs syncFromSettings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testSyncFromSettings_duringShortcutDebounce_preservesRuntimeRatio()
+    {
+        // When a shortcut adjustment is pending save (debounce timer active),
+        // syncFromSettings must NOT overwrite the runtime splitRatio or
+        // masterCount with stale Settings values.
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+
+        engine.windowOpened(QStringLiteral("win1"), screen, 0, 0);
+        engine.windowOpened(QStringLiteral("win2"), screen, 0, 0);
+        QCoreApplication::processEvents();
+
+        // Wire up a real Settings object so syncShortcutAdjustment can start
+        // the debounce timer.
+        Settings settings;
+        engine.connectToSettings(&settings);
+
+        // Establish a known baseline ratio
+        settings.setAutotileSplitRatio(0.5);
+        engine.syncFromSettings(&settings);
+        TilingState* state = engine.stateForScreen(screen);
+        QVERIFY(state);
+        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, 0.5));
+
+        // Simulate a shortcut-driven ratio increase on the focused screen.
+        engine.windowFocused(QStringLiteral("win1"), screen);
+        engine.increaseMasterRatio(0.1);
+        const qreal adjustedRatio = state->splitRatio();
+        QVERIFY(qFuzzyCompare(adjustedRatio, 0.6));
+
+        // Now simulate Settings firing a change (e.g., KCM opened and saved
+        // while the debounce timer is still active). The Settings object still
+        // holds the old 0.5 value written by syncShortcutAdjustment with
+        // signals blocked — but the runtime config was already updated to 0.6.
+        // Manually set Settings to a stale value to simulate the race:
+        {
+            const QSignalBlocker blocker(&settings);
+            settings.setAutotileSplitRatio(0.5);
+        }
+
+        // syncFromSettings should skip overwriting splitRatio because the
+        // shortcut save timer is active.
+        engine.syncFromSettings(&settings);
+
+        QVERIFY2(qFuzzyCompare(engine.config()->splitRatio, adjustedRatio),
+                 qPrintable(QStringLiteral("syncFromSettings overwrote shortcut-adjusted ratio: expected %1, got %2")
+                                .arg(adjustedRatio)
+                                .arg(engine.config()->splitRatio)));
+    }
+
+    void testSyncFromSettings_duringShortcutDebounce_preservesRuntimeMasterCount()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+
+        engine.windowOpened(QStringLiteral("win1"), screen, 0, 0);
+        engine.windowOpened(QStringLiteral("win2"), screen, 0, 0);
+        engine.windowOpened(QStringLiteral("win3"), screen, 0, 0);
+        QCoreApplication::processEvents();
+
+        Settings settings;
+        engine.connectToSettings(&settings);
+
+        settings.setAutotileMasterCount(1);
+        engine.syncFromSettings(&settings);
+        TilingState* state = engine.stateForScreen(screen);
+        QVERIFY(state);
+        QCOMPARE(engine.config()->masterCount, 1);
+
+        engine.windowFocused(QStringLiteral("win1"), screen);
+        engine.increaseMasterCount();
+        QCOMPARE(state->masterCount(), 2);
+
+        // Set Settings to the stale value with signals blocked
+        {
+            const QSignalBlocker blocker(&settings);
+            settings.setAutotileMasterCount(1);
+        }
+
+        // syncFromSettings should preserve the runtime masterCount
+        engine.syncFromSettings(&settings);
+
+        QCOMPARE(engine.config()->masterCount, 2);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

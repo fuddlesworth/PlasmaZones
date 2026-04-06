@@ -494,6 +494,8 @@ void Settings::setDefaultAutotileAlgorithm(const QString& algorithm)
 
 SETTINGS_SETTER_CLAMPED_QREAL(AutotileSplitRatio, m_autotileSplitRatio, autotileSplitRatioChanged,
                               ConfigDefaults::autotileSplitRatioMin(), ConfigDefaults::autotileSplitRatioMax())
+SETTINGS_SETTER_CLAMPED_QREAL(AutotileSplitRatioStep, m_autotileSplitRatioStep, autotileSplitRatioStepChanged,
+                              ConfigDefaults::autotileSplitRatioStepMin(), ConfigDefaults::autotileSplitRatioStepMax())
 SETTINGS_SETTER_CLAMPED(AutotileMasterCount, m_autotileMasterCount, autotileMasterCountChanged,
                         ConfigDefaults::autotileMasterCountMin(), ConfigDefaults::autotileMasterCountMax())
 void Settings::setAutotilePerAlgorithmSettings(const QVariantMap& value)

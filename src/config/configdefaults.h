@@ -684,6 +684,18 @@ public:
     {
         return AutotileDefaults::MaxSplitRatio;
     }
+    static constexpr qreal autotileSplitRatioStep()
+    {
+        return 0.05;
+    }
+    static constexpr qreal autotileSplitRatioStepMin()
+    {
+        return 0.01;
+    }
+    static constexpr qreal autotileSplitRatioStepMax()
+    {
+        return 0.25;
+    }
     static constexpr int autotileMasterCount()
     {
         return 1;

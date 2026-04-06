@@ -1,6 +1,18 @@
 {
     "releases": [
         {
+            "version": "2.7.1",
+            "date": "2026-04-06",
+            "highlights": [
+                "Scripted algorithms with @param metadata now get auto-generated UI controls (sliders, switches, combo boxes)",
+                "Configurable ratio step size for master ratio keyboard adjustments",
+                "Per-screen master ratio and count overrides now persist correctly",
+                "Fixed shader dark band at adjacent zone edges in Aretha Shell",
+                "Reset to defaults now clears per-algorithm autotile settings",
+                "Editor shader error box restored, shader category duplication fixed"
+            ]
+        },
+        {
             "version": "2.7.0",
             "date": "2026-04-04",
             "highlights": [

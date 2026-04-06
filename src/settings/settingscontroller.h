@@ -131,6 +131,8 @@ class SettingsController : public QObject
     Q_PROPERTY(int autotileMaxWindowsMin READ autotileMaxWindowsMin CONSTANT)
     Q_PROPERTY(int autotileMasterCountMin READ autotileMasterCountMin CONSTANT)
     Q_PROPERTY(qreal autotileSplitRatioMin READ autotileSplitRatioMin CONSTANT)
+    Q_PROPERTY(qreal autotileSplitRatioStepMin READ autotileSplitRatioStepMin CONSTANT)
+    Q_PROPERTY(qreal autotileSplitRatioStepMax READ autotileSplitRatioStepMax CONSTANT)
     Q_PROPERTY(int animationMinDistanceMin READ animationMinDistanceMin CONSTANT)
     Q_PROPERTY(int zoneSelectorGridColumnsMin READ zoneSelectorGridColumnsMin CONSTANT)
     Q_PROPERTY(int zoneSelectorMaxRowsMin READ zoneSelectorMaxRowsMin CONSTANT)
@@ -524,6 +526,14 @@ public:
     qreal autotileSplitRatioMin() const
     {
         return ConfigDefaults::autotileSplitRatioMin();
+    }
+    qreal autotileSplitRatioStepMin() const
+    {
+        return ConfigDefaults::autotileSplitRatioStepMin();
+    }
+    qreal autotileSplitRatioStepMax() const
+    {
+        return ConfigDefaults::autotileSplitRatioStepMax();
     }
     int animationMinDistanceMin() const
     {

@@ -184,6 +184,8 @@ public:
                    defaultAutotileAlgorithmChanged)
     Q_PROPERTY(
         qreal autotileSplitRatio READ autotileSplitRatio WRITE setAutotileSplitRatio NOTIFY autotileSplitRatioChanged)
+    Q_PROPERTY(qreal autotileSplitRatioStep READ autotileSplitRatioStep WRITE setAutotileSplitRatioStep NOTIFY
+                   autotileSplitRatioStepChanged)
     Q_PROPERTY(
         int autotileMasterCount READ autotileMasterCount WRITE setAutotileMasterCount NOTIFY autotileMasterCountChanged)
     Q_PROPERTY(QVariantMap autotilePerAlgorithmSettings READ autotilePerAlgorithmSettings WRITE
@@ -879,6 +881,12 @@ public:
     }
     void setAutotileSplitRatio(qreal ratio);
 
+    qreal autotileSplitRatioStep() const
+    {
+        return m_autotileSplitRatioStep;
+    }
+    void setAutotileSplitRatioStep(qreal step);
+
     int autotileMasterCount() const
     {
         return m_autotileMasterCount;
@@ -1564,29 +1572,29 @@ private:
                             const ShortcutSignalFn (&signals)[9]);
 
     // ─── load() helpers (decomposed for SRP) ─────────────────────────────
-    void loadActivationConfig(IConfigGroup& activation);
-    void loadDisplayConfig(IConfigGroup& display);
-    void loadAppearanceConfig(IConfigGroup& appearance);
-    void loadZoneGeometryConfig(IConfigGroup& zones);
+    void loadActivationConfig(IConfigBackend* backend);
+    void loadDisplayConfig(IConfigBackend* backend);
+    void loadAppearanceConfig(IConfigBackend* backend);
+    void loadZoneGeometryConfig(IConfigBackend* backend);
     void loadBehaviorConfig(IConfigBackend* backend);
-    void loadZoneSelectorConfig(IConfigGroup& zoneSelector);
+    void loadZoneSelectorConfig(IConfigBackend* backend);
     void loadPerScreenOverrides(IConfigBackend* backend);
-    void loadShortcutConfig(IConfigGroup& globalShortcuts);
+    void loadShortcutConfig(IConfigBackend* backend);
     void loadAutotilingConfig(IConfigBackend* backend);
-    void loadEditorConfig(IConfigGroup& editor);
+    void loadEditorConfig(IConfigBackend* backend);
     void loadVirtualScreenConfigs(IConfigBackend* backend);
 
     // ─── save() helpers (decomposed for SRP) ────────────────────────────
-    void saveActivationConfig(IConfigGroup& activation);
-    void saveDisplayConfig(IConfigGroup& display);
-    void saveAppearanceConfig(IConfigGroup& appearance);
-    void saveZoneGeometryConfig(IConfigGroup& zones);
+    void saveActivationConfig(IConfigBackend* backend);
+    void saveDisplayConfig(IConfigBackend* backend);
+    void saveAppearanceConfig(IConfigBackend* backend);
+    void saveZoneGeometryConfig(IConfigBackend* backend);
     void saveBehaviorConfig(IConfigBackend* backend);
-    void saveZoneSelectorConfig(IConfigGroup& zoneSelector);
+    void saveZoneSelectorConfig(IConfigBackend* backend);
     void saveAllPerScreenOverrides(IConfigBackend* backend);
-    void saveShortcutConfig(IConfigGroup& globalShortcuts);
+    void saveShortcutConfig(IConfigBackend* backend);
     void saveAutotilingConfig(IConfigBackend* backend);
-    void saveEditorConfig(IConfigGroup& editor);
+    void saveEditorConfig(IConfigBackend* backend);
     void saveVirtualScreenConfigs(IConfigBackend* backend);
 
     // Groups that save() writes exhaustively (excludes unmanaged groups).
@@ -1634,7 +1642,7 @@ private:
     bool m_enableBlur = ConfigDefaults::enableBlur();
     QString m_labelFontFamily;
     qreal m_labelFontSizeScale = ConfigDefaults::labelFontSizeScale();
-    int m_labelFontWeight = QFont::Bold;
+    int m_labelFontWeight = ConfigDefaults::labelFontWeight();
     bool m_labelFontItalic = ConfigDefaults::labelFontItalic();
     bool m_labelFontUnderline = ConfigDefaults::labelFontUnderline();
     bool m_labelFontStrikeout = ConfigDefaults::labelFontStrikeout();
@@ -1709,6 +1717,7 @@ private:
     bool m_autotileEnabled = ConfigDefaults::autotileEnabled();
     QString m_defaultAutotileAlgorithm = ConfigDefaults::defaultAutotileAlgorithm();
     qreal m_autotileSplitRatio = ConfigDefaults::autotileSplitRatio();
+    qreal m_autotileSplitRatioStep = ConfigDefaults::autotileSplitRatioStep();
     int m_autotileMasterCount = ConfigDefaults::autotileMasterCount();
     QVariantMap m_autotilePerAlgorithmSettings;
     int m_autotileInnerGap = ConfigDefaults::autotileInnerGap();
@@ -1738,8 +1747,8 @@ private:
     bool m_autotileShowBorder = ConfigDefaults::autotileShowBorder();
     int m_autotileBorderWidth = ConfigDefaults::autotileBorderWidth();
     int m_autotileBorderRadius = ConfigDefaults::autotileBorderRadius();
-    QColor m_autotileBorderColor = QColor(0, 120, 212, 128); // #800078D4 — same as highlightColor
-    QColor m_autotileInactiveBorderColor = QColor(128, 128, 128, 64); // #40808080 — same as inactiveColor
+    QColor m_autotileBorderColor = ConfigDefaults::autotileBorderColor();
+    QColor m_autotileInactiveBorderColor = ConfigDefaults::autotileInactiveBorderColor();
     bool m_autotileUseSystemBorderColors = ConfigDefaults::autotileUseSystemBorderColors();
     StickyWindowHandling m_autotileStickyWindowHandling = StickyWindowHandling::TreatAsNormal;
     QStringList m_lockedScreens;
@@ -1837,9 +1846,9 @@ private:
     bool m_editorEdgeSnappingEnabled = ConfigDefaults::editorEdgeSnappingEnabled();
     qreal m_editorSnapIntervalX = ConfigDefaults::editorSnapInterval();
     qreal m_editorSnapIntervalY = ConfigDefaults::editorSnapInterval();
-    int m_editorSnapOverrideModifier = static_cast<int>(Qt::ShiftModifier);
+    int m_editorSnapOverrideModifier = ConfigDefaults::editorSnapOverrideModifier();
     bool m_fillOnDropEnabled = ConfigDefaults::fillOnDropEnabled();
-    int m_fillOnDropModifier = static_cast<int>(Qt::ControlModifier);
+    int m_fillOnDropModifier = ConfigDefaults::fillOnDropModifier();
 };
 
 } // namespace PlasmaZones

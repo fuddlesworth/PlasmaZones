@@ -55,10 +55,23 @@ private Q_SLOTS:
         QVERIFY(!QFile::exists(ConfigDefaults::configFilePath()));
     }
 
-    void testJsonAlreadyExists()
+    void testJsonAlreadyAtCurrentVersion()
     {
         IsolatedConfigGuard guard;
-        // Create JSON config
+        // Create JSON config at current schema version — should be a no-op
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QFile f(ConfigDefaults::configFilePath());
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(QStringLiteral("{\"_version\":%1}").arg(PlasmaZones::ConfigSchemaVersion).toUtf8());
+        f.close();
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+    }
+
+    void testJsonAtOlderVersion_runsMigration()
+    {
+        IsolatedConfigGuard guard;
+        // Create JSON config at v1 — migration chain should upgrade to current version
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
         QFile f(ConfigDefaults::configFilePath());
         QVERIFY(f.open(QIODevice::WriteOnly));
@@ -66,6 +79,9 @@ private Q_SLOTS:
         f.close();
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        QCOMPARE(root.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
     }
 
     // =========================================================================
@@ -96,12 +112,14 @@ private Q_SLOTS:
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
         QCOMPARE(root.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
 
-        QJsonObject activation = root.value(QStringLiteral("Activation")).toObject();
-        QCOMPARE(activation.value(QStringLiteral("SnappingEnabled")).toBool(), true);
-        QCOMPARE(activation.value(QStringLiteral("ToggleActivation")).toBool(), false);
+        QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
+        QCOMPARE(snapping.value(QStringLiteral("Enabled")).toBool(), true);
 
-        QJsonObject display = root.value(QStringLiteral("Display")).toObject();
-        QCOMPARE(display.value(QStringLiteral("ShowOnAllMonitors")).toBool(), true);
+        QJsonObject behavior = snapping.value(QStringLiteral("Behavior")).toObject();
+        QCOMPARE(behavior.value(QStringLiteral("ToggleActivation")).toBool(), false);
+
+        QJsonObject behaviorDisplay = behavior.value(QStringLiteral("Display")).toObject();
+        QCOMPARE(behaviorDisplay.value(QStringLiteral("ShowOnAllMonitors")).toBool(), true);
     }
 
     void testMigrateColors()
@@ -115,10 +133,12 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
-        QJsonObject appearance = root.value(QStringLiteral("Appearance")).toObject();
+        QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
+        QJsonObject appearance = snapping.value(QStringLiteral("Appearance")).toObject();
+        QJsonObject colors = appearance.value(QStringLiteral("Colors")).toObject();
 
         // Colors should be converted to hex
-        QString highlight = appearance.value(QStringLiteral("HighlightColor")).toString();
+        QString highlight = colors.value(QStringLiteral("Highlight")).toString();
         QVERIFY2(highlight.startsWith(QLatin1Char('#')),
                  qPrintable(QStringLiteral("Expected hex color, got: ") + highlight));
 
@@ -140,11 +160,12 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
-        QJsonObject activation = root.value(QStringLiteral("Activation")).toObject();
+        QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
+        QJsonObject behavior = snapping.value(QStringLiteral("Behavior")).toObject();
 
         // Should be stored as native JSON array, not a string
-        QJsonValue triggers = activation.value(QStringLiteral("DragActivationTriggers"));
-        QVERIFY2(triggers.isArray(), "DragActivationTriggers should be a native JSON array after migration");
+        QJsonValue triggers = behavior.value(QStringLiteral("Triggers"));
+        QVERIFY2(triggers.isArray(), "Triggers should be a native JSON array after migration");
 
         QJsonArray arr = triggers.toArray();
         QCOMPARE(arr.size(), 1);
@@ -248,12 +269,14 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
-        QJsonObject zones = root.value(QStringLiteral("Zones")).toObject();
-        QCOMPARE(zones.value(QStringLiteral("Padding")).toInt(), 8);
-        QCOMPARE(zones.value(QStringLiteral("OuterGap")).toInt(), 4);
+        QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
+        QJsonObject gaps = snapping.value(QStringLiteral("Gaps")).toObject();
+        QCOMPARE(gaps.value(QStringLiteral("Inner")).toInt(), 8);
+        QCOMPARE(gaps.value(QStringLiteral("Outer")).toInt(), 4);
 
-        QJsonObject appearance = root.value(QStringLiteral("Appearance")).toObject();
-        QCOMPARE(appearance.value(QStringLiteral("ActiveOpacity")).toDouble(), 0.3);
+        QJsonObject appearance = snapping.value(QStringLiteral("Appearance")).toObject();
+        QJsonObject opacity = appearance.value(QStringLiteral("Opacity")).toObject();
+        QCOMPARE(opacity.value(QStringLiteral("Active")).toDouble(), 0.3);
     }
 
     void testMigrateRootLevelKeys()
@@ -268,9 +291,9 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
-        // RenderingBackend should be under "Rendering" group
+        // RenderingBackend should be under "Rendering" group as "Backend"
         QJsonObject rendering = root.value(QStringLiteral("Rendering")).toObject();
-        QCOMPARE(rendering.value(QStringLiteral("RenderingBackend")).toString(), QStringLiteral("vulkan"));
+        QCOMPARE(rendering.value(QStringLiteral("Backend")).toString(), QStringLiteral("vulkan"));
     }
 
     void testMigrateRenderingBackendFromGeneralGroup()
@@ -289,7 +312,7 @@ private Q_SLOTS:
 
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
         QJsonObject rendering = root.value(QStringLiteral("Rendering")).toObject();
-        QCOMPARE(rendering.value(QStringLiteral("RenderingBackend")).toString(), QStringLiteral("vulkan"));
+        QCOMPARE(rendering.value(QStringLiteral("Backend")).toString(), QStringLiteral("vulkan"));
 
         // Must NOT be under General
         QJsonObject general = root.value(QStringLiteral("General")).toObject();
@@ -319,6 +342,244 @@ private Q_SLOTS:
     // Round-trip with JsonConfigBackend
     // =========================================================================
 
+    // =========================================================================
+    // v1 JSON migration (not from INI)
+    // =========================================================================
+
+    void testV1JsonMigration_withActualData()
+    {
+        IsolatedConfigGuard guard;
+        // Create a v1 JSON config with actual data (not just _version:1)
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        QJsonObject activation;
+        activation[QStringLiteral("SnappingEnabled")] = true;
+        activation[QStringLiteral("ToggleActivation")] = false;
+        root[QStringLiteral("Activation")] = activation;
+
+        QJsonObject display;
+        display[QStringLiteral("ShowOnAllMonitors")] = true;
+        root[QStringLiteral("Display")] = display;
+
+        QJsonObject editor;
+        editor[QStringLiteral("EditorDuplicateShortcut")] = QStringLiteral("Ctrl+D");
+        editor[QStringLiteral("GridSnappingEnabled")] = true;
+        editor[QStringLiteral("FillOnDropEnabled")] = false;
+        root[QStringLiteral("Editor")] = editor;
+
+        // Write the v1 JSON to disk
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        // Run migration
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        // Verify v2 structure
+        QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
+        QCOMPARE(migrated.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
+
+        // Activation → Snapping.Behavior + Snapping (Enabled)
+        QJsonObject snapping = migrated.value(QStringLiteral("Snapping")).toObject();
+        QCOMPARE(snapping.value(QStringLiteral("Enabled")).toBool(), true);
+        QJsonObject behavior = snapping.value(QStringLiteral("Behavior")).toObject();
+        QCOMPARE(behavior.value(QStringLiteral("ToggleActivation")).toBool(), false);
+
+        // Display → Snapping.Behavior.Display
+        QJsonObject behaviorDisplay = behavior.value(QStringLiteral("Display")).toObject();
+        QCOMPARE(behaviorDisplay.value(QStringLiteral("ShowOnAllMonitors")).toBool(), true);
+
+        // Editor → Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
+        QJsonObject editorMigrated = migrated.value(QStringLiteral("Editor")).toObject();
+        QJsonObject editorShortcuts = editorMigrated.value(QStringLiteral("Shortcuts")).toObject();
+        QCOMPARE(editorShortcuts.value(QStringLiteral("Duplicate")).toString(), QStringLiteral("Ctrl+D"));
+        QJsonObject editorSnapping = editorMigrated.value(QStringLiteral("Snapping")).toObject();
+        QCOMPARE(editorSnapping.value(QStringLiteral("GridEnabled")).toBool(), true);
+        QJsonObject editorFillOnDrop = editorMigrated.value(QStringLiteral("FillOnDrop")).toObject();
+        QCOMPARE(editorFillOnDrop.value(QStringLiteral("Enabled")).toBool(), false);
+
+        // v1 groups should be removed
+        QVERIFY(!migrated.contains(QStringLiteral("Activation")));
+        QVERIFY(!migrated.contains(QStringLiteral("Display")));
+    }
+
+    void testDoubleMigration_idempotent()
+    {
+        IsolatedConfigGuard guard;
+        // Create v1 JSON, migrate once, migrate again — should be unchanged
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+        QJsonObject activation;
+        activation[QStringLiteral("SnappingEnabled")] = true;
+        root[QStringLiteral("Activation")] = activation;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        // First migration
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QJsonObject afterFirst = readJsonConfig(ConfigDefaults::configFilePath());
+
+        // Second migration — should be a no-op
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QJsonObject afterSecond = readJsonConfig(ConfigDefaults::configFilePath());
+
+        QCOMPARE(afterFirst, afterSecond);
+    }
+
+    void testMigrateShortcuts_v1ToV2()
+    {
+        IsolatedConfigGuard guard;
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        QJsonObject globalShortcuts;
+        globalShortcuts[QStringLiteral("OpenEditorShortcut")] = QStringLiteral("Meta+E");
+        globalShortcuts[QStringLiteral("NextLayoutShortcut")] = QStringLiteral("Meta+N");
+        root[QStringLiteral("GlobalShortcuts")] = globalShortcuts;
+
+        QJsonObject autotileShortcuts;
+        autotileShortcuts[QStringLiteral("ToggleShortcut")] = QStringLiteral("Meta+T");
+        root[QStringLiteral("AutotileShortcuts")] = autotileShortcuts;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
+        QJsonObject shortcuts = migrated.value(QStringLiteral("Shortcuts")).toObject();
+        QJsonObject global = shortcuts.value(QStringLiteral("Global")).toObject();
+        QCOMPARE(global.value(QStringLiteral("OpenEditor")).toString(), QStringLiteral("Meta+E"));
+        QCOMPARE(global.value(QStringLiteral("NextLayout")).toString(), QStringLiteral("Meta+N"));
+
+        QJsonObject tiling = shortcuts.value(QStringLiteral("Tiling")).toObject();
+        QCOMPARE(tiling.value(QStringLiteral("Toggle")).toString(), QStringLiteral("Meta+T"));
+
+        // v1 groups should be removed
+        QVERIFY(!migrated.contains(QStringLiteral("GlobalShortcuts")));
+        QVERIFY(!migrated.contains(QStringLiteral("AutotileShortcuts")));
+    }
+
+    void testV1JsonMigration_preservesPerScreenGroups()
+    {
+        IsolatedConfigGuard guard;
+        // Create a v1 JSON config with PerScreen data — migration must preserve it
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        QJsonObject activation;
+        activation[QStringLiteral("SnappingEnabled")] = true;
+        root[QStringLiteral("Activation")] = activation;
+
+        QJsonObject perScreen;
+        QJsonObject zsCategory;
+        QJsonObject edp;
+        edp[QStringLiteral("Position")] = 3;
+        edp[QStringLiteral("MaxRows")] = 5;
+        zsCategory[QStringLiteral("eDP-1")] = edp;
+        perScreen[QStringLiteral("ZoneSelector")] = zsCategory;
+        root[QStringLiteral("PerScreen")] = perScreen;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
+        QCOMPARE(migrated.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
+
+        // PerScreen data must survive migration untouched
+        QJsonObject migratedPerScreen = migrated.value(QStringLiteral("PerScreen")).toObject();
+        QJsonObject migratedZs = migratedPerScreen.value(QStringLiteral("ZoneSelector")).toObject();
+        QJsonObject migratedEdp = migratedZs.value(QStringLiteral("eDP-1")).toObject();
+        QCOMPARE(migratedEdp.value(QStringLiteral("Position")).toInt(), 3);
+        QCOMPARE(migratedEdp.value(QStringLiteral("MaxRows")).toInt(), 5);
+
+        // v1 groups should still be removed
+        QVERIFY(!migrated.contains(QStringLiteral("Activation")));
+    }
+
+    // =========================================================================
+    // Round-trip with JsonConfigBackend
+    // =========================================================================
+
+    void testV1JsonMigration_unifiedSnapInterval()
+    {
+        IsolatedConfigGuard guard;
+        // v1 config with only SnapInterval (no per-axis SnapIntervalX/Y).
+        // Migration must propagate Interval → IntervalX and IntervalY so the
+        // v2 load code (which reads IntervalX/IntervalY directly) picks it up.
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        QJsonObject editor;
+        editor[QStringLiteral("SnapInterval")] = 0.05;
+        root[QStringLiteral("Editor")] = editor;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
+        QJsonObject editorMigrated = migrated.value(QStringLiteral("Editor")).toObject();
+        QJsonObject editorSnapping = editorMigrated.value(QStringLiteral("Snapping")).toObject();
+        QCOMPARE(editorSnapping.value(QStringLiteral("IntervalX")).toDouble(), 0.05);
+        QCOMPARE(editorSnapping.value(QStringLiteral("IntervalY")).toDouble(), 0.05);
+    }
+
+    void testV1JsonMigration_perAxisSnapIntervalPreserved()
+    {
+        IsolatedConfigGuard guard;
+        // v1 config with both SnapInterval and per-axis overrides.
+        // The per-axis values should take priority over the unified one.
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        QJsonObject editor;
+        editor[QStringLiteral("SnapInterval")] = 0.05;
+        editor[QStringLiteral("SnapIntervalX")] = 0.1;
+        editor[QStringLiteral("SnapIntervalY")] = 0.2;
+        root[QStringLiteral("Editor")] = editor;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
+        QJsonObject editorMigrated = migrated.value(QStringLiteral("Editor")).toObject();
+        QJsonObject editorSnapping = editorMigrated.value(QStringLiteral("Snapping")).toObject();
+        QCOMPARE(editorSnapping.value(QStringLiteral("IntervalX")).toDouble(), 0.1);
+        QCOMPARE(editorSnapping.value(QStringLiteral("IntervalY")).toDouble(), 0.2);
+    }
+
+    void testMigrationChain_versionZeroTreatedAsV1()
+    {
+        IsolatedConfigGuard guard;
+        // A hand-edited config with _version: 0 should still get migrated
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 0;
+
+        QJsonObject activation;
+        activation[QStringLiteral("SnappingEnabled")] = true;
+        root[QStringLiteral("Activation")] = activation;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
+        QCOMPARE(migrated.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
+
+        // Should have migrated Activation → Snapping
+        QJsonObject snapping = migrated.value(QStringLiteral("Snapping")).toObject();
+        QCOMPARE(snapping.value(QStringLiteral("Enabled")).toBool(), true);
+        QVERIFY(!migrated.contains(QStringLiteral("Activation")));
+    }
+
     void testMigratedConfigReadableByBackend()
     {
         IsolatedConfigGuard guard;
@@ -334,16 +595,19 @@ private Q_SLOTS:
 
         auto backend = PlasmaZones::createDefaultConfigBackend();
         {
-            auto g = backend->group(QStringLiteral("Activation"));
-            QCOMPARE(g->readBool(QStringLiteral("SnappingEnabled")), true);
+            auto g = backend->group(QStringLiteral("Snapping"));
+            QCOMPARE(g->readBool(QStringLiteral("Enabled")), true);
         }
         {
-            auto g = backend->group(QStringLiteral("Appearance"));
-            QColor c = g->readColor(QStringLiteral("HighlightColor"));
+            auto g = backend->group(QStringLiteral("Snapping.Appearance.Colors"));
+            QColor c = g->readColor(QStringLiteral("Highlight"));
             QCOMPARE(c.red(), 82);
             QCOMPARE(c.green(), 148);
             QCOMPARE(c.blue(), 226);
-            QCOMPARE(g->readDouble(QStringLiteral("ActiveOpacity")), 0.3);
+        }
+        {
+            auto g = backend->group(QStringLiteral("Snapping.Appearance.Opacity"));
+            QCOMPARE(g->readDouble(QStringLiteral("Active")), 0.3);
         }
     }
 };
