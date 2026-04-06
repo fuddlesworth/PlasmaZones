@@ -65,7 +65,7 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
         // Cache screen ID now — QScreen may be partially destroyed when
         // geometryChanged fires during screen hot-unplug sequences.
         const QString cachedId = physId;
-        connect(screen, &QScreen::geometryChanged, this, [this, screen, cachedId]() {
+        connect(screen, &QScreen::geometryChanged, screen, [this, screen, cachedId]() {
             handleScreenGeometryChanged(screen, cachedId);
         });
 
@@ -89,7 +89,7 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
     for (auto* screen : Utils::allScreens()) {
         // Cache screen ID at connection time to avoid querying a partially-destroyed QScreen.
         const QString cachedId = Utils::screenIdentifier(screen);
-        connect(screen, &QScreen::geometryChanged, this, [this, screen, cachedId]() {
+        connect(screen, &QScreen::geometryChanged, screen, [this, screen, cachedId]() {
             handleScreenGeometryChanged(screen, cachedId);
         });
 
@@ -371,12 +371,12 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
             continue;
         }
 
-        // Reject duplicate indices — two entries with the same index would
+        // Skip duplicate indices — two entries with the same index would
         // generate the same virtual screen ID, silently clobbering one.
         if (seenIndices.contains(def.index)) {
-            qCWarning(lcDbus) << "setVirtualScreenConfig: duplicate virtual screen index" << def.index << "for"
+            qCWarning(lcDbus) << "setVirtualScreenConfig: skipping duplicate virtual screen index" << def.index << "for"
                               << physicalScreenId;
-            return;
+            continue;
         }
         seenIndices.insert(def.index);
 

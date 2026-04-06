@@ -793,6 +793,9 @@ private:
     /// screen ID if a virtual screen no longer exists in the current configuration.
     QString resolveEffectiveScreenId(const QString& screenId) const;
 
+    /// Clear m_lastUsedZoneId if it doesn't exist in the layout for targetScreen.
+    void validateLastUsedZone(const QString& targetScreen);
+
     /// Sort zones by zone number ascending, with UUID tie-breaker for determinism
     /// when multiple zones share the same number.
     static void sortZonesByNumber(QVector<Zone*>& zones);

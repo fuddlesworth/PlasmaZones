@@ -76,6 +76,7 @@ inline constexpr const char InsertPosition[] = "AutotileInsertPosition";
 inline constexpr const char FocusFollowsMouse[] = "AutotileFocusFollowsMouse";
 inline constexpr const char RespectMinimumSize[] = "AutotileRespectMinimumSize";
 inline constexpr const char HideTitleBars[] = "AutotileHideTitleBars";
+inline constexpr const char SplitRatioStep[] = "AutotileSplitRatioStep";
 inline constexpr const char AnimationsEnabled[] = "AnimationsEnabled";
 inline constexpr const char AnimationDuration[] = "AnimationDuration";
 inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
@@ -416,6 +417,9 @@ inline bool pruneDisabledDesktopEntries(QStringList& entries, int maxDesktop)
 {
     const int before = entries.size();
     entries.removeIf([maxDesktop](const QString& entry) {
+        // Composite key format: "screenId/desktopNumber". Virtual screen IDs
+        // (e.g. "physId/vs:N") contain '/', but the desktop suffix is always the
+        // last segment, so lastIndexOf('/') correctly splits at the boundary.
         int slashIdx = entry.lastIndexOf(QLatin1Char('/'));
         if (slashIdx < 0)
             return true; // malformed entry
@@ -436,6 +440,9 @@ inline bool pruneDisabledActivityEntries(QStringList& entries, const QSet<QStrin
 {
     const int before = entries.size();
     entries.removeIf([&validActivityIds](const QString& entry) {
+        // Composite key format: "screenId/activityUuid". Virtual screen IDs
+        // (e.g. "physId/vs:N") contain '/', but the activity suffix is always the
+        // last segment, so lastIndexOf('/') correctly splits at the boundary.
         int slashIdx = entry.lastIndexOf(QLatin1Char('/'));
         if (slashIdx < 0)
             return true; // malformed entry

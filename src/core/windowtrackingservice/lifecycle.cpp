@@ -20,6 +20,28 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+static QRect clampToRect(const QRect& geometry, const QRect& bounds)
+{
+    QRect adjusted = geometry;
+    if (adjusted.right() > bounds.right()) {
+        adjusted.moveRight(bounds.right());
+    }
+    if (adjusted.left() < bounds.left()) {
+        adjusted.moveLeft(bounds.left());
+    }
+    if (adjusted.bottom() > bounds.bottom()) {
+        adjusted.moveBottom(bounds.bottom());
+    }
+    if (adjusted.top() < bounds.top()) {
+        adjusted.moveTop(bounds.top());
+    }
+    return adjusted;
+}
+
+} // anonymous namespace
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Zone–Layout Validation Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -239,21 +261,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         }
         m_lastUsedScreenId = targetVs;
         anyStateMigrated = true;
-        // Only clear the zone ID if it doesn't exist in the target virtual screen's layout.
-        // If the zone is still valid in the new layout, preserve it for last-zone-snap.
-        bool zoneStillValid = false;
-        if (!m_lastUsedZoneId.isEmpty() && m_layoutManager) {
-            Layout* targetLayout = m_layoutManager->resolveLayoutForScreen(targetVs);
-            if (targetLayout) {
-                auto uuidOpt = Utils::parseUuid(m_lastUsedZoneId);
-                if (uuidOpt && targetLayout->zoneById(*uuidOpt)) {
-                    zoneStillValid = true;
-                }
-            }
-        }
-        if (!zoneStillValid) {
-            m_lastUsedZoneId.clear();
-        }
+        validateLastUsedZone(targetVs);
     }
 
     // Migrate pre-tile geometry connectorName fields from physical (or old virtual) to new virtual
@@ -316,22 +324,7 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
     if (VirtualScreenId::isVirtual(m_lastUsedScreenId)
         && VirtualScreenId::extractPhysicalId(m_lastUsedScreenId) == physicalScreenId) {
         m_lastUsedScreenId = physicalScreenId;
-        // Only clear the zone ID if it doesn't exist in the physical screen's layout.
-        // If the zone is still valid in the physical layout, preserve it for last-zone-snap.
-        // This mirrors the forward migration logic in migrateScreenAssignmentsToVirtual.
-        bool zoneStillValid = false;
-        if (!m_lastUsedZoneId.isEmpty() && m_layoutManager) {
-            Layout* physLayout2 = m_layoutManager->resolveLayoutForScreen(physicalScreenId);
-            if (physLayout2) {
-                auto uuidOpt = Utils::parseUuid(m_lastUsedZoneId);
-                if (uuidOpt && physLayout2->zoneById(*uuidOpt)) {
-                    zoneStillValid = true;
-                }
-            }
-        }
-        if (!zoneStillValid) {
-            m_lastUsedZoneId.clear();
-        }
+        validateLastUsedZone(physicalScreenId);
     }
 
     // B3: Migrate pre-tile geometry connectorName fields
@@ -371,6 +364,7 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
             m_windowDesktopAssignments.remove(wId);
             m_preFloatZoneAssignments.remove(wId);
             m_preFloatScreenAssignments.remove(wId);
+            anyStateMigrated = true;
         }
     }
 
@@ -859,6 +853,21 @@ QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
     }
 
     return adjusted;
+}
+
+void WindowTrackingService::validateLastUsedZone(const QString& targetScreen)
+{
+    if (m_lastUsedZoneId.isEmpty() || !m_layoutManager) {
+        return;
+    }
+    Layout* layout = m_layoutManager->resolveLayoutForScreen(targetScreen);
+    if (layout) {
+        auto uuidOpt = Utils::parseUuid(m_lastUsedZoneId);
+        if (uuidOpt && layout->zoneById(*uuidOpt)) {
+            return;
+        }
+    }
+    m_lastUsedZoneId.clear();
 }
 
 QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId) const

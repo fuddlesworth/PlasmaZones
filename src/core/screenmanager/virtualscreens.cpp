@@ -393,11 +393,12 @@ void ScreenManager::invalidateVirtualGeometryCache(const QString& physicalScreen
         return;
     }
 
-    // Remove all cached entries belonging to this physical screen
-    const QString prefix = physicalScreenId + VirtualScreenId::Separator;
+    // Remove all cached entries belonging to this physical screen.
+    // Use extractPhysicalId() for exact matching instead of prefix matching,
+    // which would false-match if one physical screen ID is a prefix of another.
     auto it = m_virtualGeometryCache.begin();
     while (it != m_virtualGeometryCache.end()) {
-        if (it.key().startsWith(prefix)) {
+        if (VirtualScreenId::extractPhysicalId(it.key()) == physicalScreenId) {
             it = m_virtualGeometryCache.erase(it);
         } else {
             ++it;

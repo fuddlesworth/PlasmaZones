@@ -148,10 +148,10 @@ struct PLASMAZONES_EXPORT AutotileConfig
     /**
      * @brief Per-side outer gap values (used when usePerSideOuterGap is true)
      */
-    int outerGapTop = ConfigDefaults::outerGapTop();
-    int outerGapBottom = ConfigDefaults::outerGapBottom();
-    int outerGapLeft = ConfigDefaults::outerGapLeft();
-    int outerGapRight = ConfigDefaults::outerGapRight();
+    int outerGapTop = ConfigDefaults::autotileOuterGapTop();
+    int outerGapBottom = ConfigDefaults::autotileOuterGapBottom();
+    int outerGapLeft = ConfigDefaults::autotileOuterGapLeft();
+    int outerGapRight = ConfigDefaults::autotileOuterGapRight();
 
     // ═══════════════════════════════════════════════════════════════════════
     // Window Insertion Behavior

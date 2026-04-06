@@ -23,6 +23,23 @@
 
 namespace PlasmaZones {
 
+void OverlayService::destroyIfTypeMismatch(const QString& screenId)
+{
+    auto it = m_screenStates.find(screenId);
+    if (it == m_screenStates.end()) {
+        return;
+    }
+    auto* existing = it->overlayWindow;
+    if (!existing) {
+        return;
+    }
+    const bool windowIsShader = existing->property("isShaderOverlay").toBool();
+    const bool shouldUseShader = useShaderForScreen(screenId);
+    if (windowIsShader != shouldUseShader) {
+        destroyOverlayWindow(screenId);
+    }
+}
+
 void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& cursorPos)
 {
     // Determine if we should show on all monitors (cursorScreen == nullptr means all)
@@ -90,19 +107,8 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
 
             const QRect geom = mgr->screenGeometry(screenId);
 
-            // Type-mismatch check: non-shader windows survive hide() and may be
-            // stale if shader settings changed while the overlay was hidden.
-            // Destroy and recreate if the window type no longer matches.
-            if (m_screenStates.contains(screenId) && m_screenStates[screenId].overlayWindow) {
-                auto* existing = m_screenStates.value(screenId).overlayWindow;
-                if (existing) {
-                    const bool windowIsShader = existing->property("isShaderOverlay").toBool();
-                    const bool shouldUseShader = useShaderForScreen(screenId);
-                    if (windowIsShader != shouldUseShader) {
-                        destroyOverlayWindow(screenId);
-                    }
-                }
-            }
+            // Destroy and recreate if the window type no longer matches shader settings.
+            destroyIfTypeMismatch(screenId);
             if (!m_screenStates.contains(screenId) || !m_screenStates[screenId].overlayWindow) {
                 createOverlayWindow(screenId, physScreen, geom);
             }
@@ -135,17 +141,8 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
 
             const QString screenId = Utils::screenIdentifier(screen);
 
-            // Type-mismatch check for physical screen fallback path
-            if (m_screenStates.contains(screenId) && m_screenStates[screenId].overlayWindow) {
-                auto* existing = m_screenStates.value(screenId).overlayWindow;
-                if (existing) {
-                    const bool windowIsShader = existing->property("isShaderOverlay").toBool();
-                    const bool shouldUseShader = useShaderForScreen(screen);
-                    if (windowIsShader != shouldUseShader) {
-                        destroyOverlayWindow(screenId);
-                    }
-                }
-            }
+            // Destroy and recreate if the window type no longer matches shader settings.
+            destroyIfTypeMismatch(screenId);
             if (!m_screenStates.contains(screenId) || !m_screenStates[screenId].overlayWindow) {
                 createOverlayWindow(screen);
             }

@@ -514,6 +514,8 @@ void OverlayService::createLayoutPickerWindow(QScreen* physScreen)
     connect(window, &QObject::destroyed, this, [this, win = window]() {
         if (m_layoutPickerWindow == win) {
             m_layoutPickerWindow = nullptr;
+            m_layoutPickerScreen = nullptr;
+            m_layoutPickerScreenId.clear();
         }
     });
 

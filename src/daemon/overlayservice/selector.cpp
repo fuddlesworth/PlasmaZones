@@ -154,6 +154,12 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
     // Update the zone selector window with cursor position for hover effects
     // Resolve to effective (virtual) screen ID if applicable
     QString cursorScreenId = Utils::effectiveScreenIdAt(QPoint(cursorX, cursorY), screen);
+
+    // Skip excluded screens (autotile-managed) — matches showZoneSelector exclusion
+    if (m_excludedScreens.contains(cursorScreenId)) {
+        return;
+    }
+
     auto* mgr = ScreenManager::instance();
     // Clear selection highlight on all OTHER zone selector windows when cursor moves
     // to a different virtual screen, preventing stale highlights from previous screen.

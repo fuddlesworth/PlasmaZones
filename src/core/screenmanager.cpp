@@ -43,6 +43,7 @@ ScreenManager::ScreenManager(QObject* parent)
         return;
     }
     s_instance = this;
+    m_valid = true;
     m_delayedPanelRequeryTimer.setSingleShot(true);
     connect(&m_delayedPanelRequeryTimer, &QTimer::timeout, this, [this]() {
         queryKdePlasmaPanels(true); // true = emit delayedPanelRequeryCompleted when done
@@ -65,7 +66,7 @@ bool ScreenManager::init()
 
 void ScreenManager::start()
 {
-    if (m_running) {
+    if (m_running || !m_valid) {
         return;
     }
 

@@ -193,6 +193,8 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
     };
 
     removeIfNotAlive(m_windowStickyStates);
+    removeIfNotAlive(m_preFloatZoneAssignments);
+    removeIfNotAlive(m_preFloatScreenAssignments);
 
     // Sweep QSet members (different iterator API)
     auto removeSetIfNotAlive = [&](auto& set) {

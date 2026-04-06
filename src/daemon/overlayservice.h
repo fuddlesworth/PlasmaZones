@@ -280,7 +280,7 @@ private:
 
     // Shader preview overlay (editor dialog)
     QQuickWindow* m_shaderPreviewWindow = nullptr;
-    QScreen* m_shaderPreviewScreen = nullptr;
+    QPointer<QScreen> m_shaderPreviewScreen;
     QString m_shaderPreviewShaderId; // Shader ID for param translation in updateShaderPreview
     QString m_shaderPreviewScreenId; // Virtual screen ID from showShaderPreview (avoids re-resolving from QScreen*)
 
@@ -301,7 +301,7 @@ private:
 
     // Persistent 1x1 keep-alive window that prevents Qt from tearing down
     // global Wayland/Vulkan protocol objects when all other windows are destroyed.
-    QQuickWindow* m_keepAliveWindow = nullptr;
+    QPointer<QQuickWindow> m_keepAliveWindow;
 
     // Track screens with failed window creation to prevent log spam
     QHash<QString, bool> m_navigationOsdCreationFailed;
@@ -319,6 +319,7 @@ private:
     void createNavigationOsdWindow(const QString& screenId, QScreen* physScreen);
     void destroyNavigationOsdWindow(const QString& screenId);
 
+    void destroyIfTypeMismatch(const QString& screenId);
     void createShaderPreviewWindow(QScreen* screen, const QString& screenId = QString());
     void destroyShaderPreviewWindow();
 

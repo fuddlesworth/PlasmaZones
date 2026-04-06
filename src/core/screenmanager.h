@@ -342,6 +342,7 @@ private:
      */
     void scheduleDbusQuery();
 
+    bool m_valid = false;
     bool m_running = false;
     bool m_dbusQueryPending = false;
     bool m_panelGeometryReceived = false; // True after first panel D-Bus query completes

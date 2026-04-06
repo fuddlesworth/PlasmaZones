@@ -331,7 +331,13 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
             // so the stored virtual screen ID is still valid.
             resolvedNewScreen = storedScreen;
         } else {
-            // Different physical screen — resolve via zone geometry as fallback
+            // Different physical screen — resolve via zone geometry as fallback.
+            // NOTE: Ideally we'd use the window's actual position, but window
+            // geometry is not available in this context (KWin only reports the
+            // physical screen name). Using the zone center is imprecise when the
+            // zone straddles a virtual screen boundary; however, the resolved ID
+            // will still differ from storedScreen (different physical parent), so
+            // the window correctly unsnaps regardless.
             QRect zoneGeo = m_service->zoneGeometry(currentZoneId, storedScreen);
             if (zoneGeo.isValid()) {
                 QString vsId = Utils::effectiveScreenIdAt(zoneGeo.center());

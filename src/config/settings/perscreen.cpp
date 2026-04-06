@@ -83,7 +83,7 @@ constexpr const char* kPerScreenKeys[] = {
 constexpr const char* kPerScreenAutotileKeys[] = {
     PerScreenAutotileKey::Algorithm,
     PerScreenAutotileKey::SplitRatio,
-    "AutotileSplitRatioStep",
+    PerScreenAutotileKey::SplitRatioStep,
     PerScreenAutotileKey::MasterCount,
     PerScreenAutotileKey::InnerGap,
     PerScreenAutotileKey::OuterGap,
@@ -134,14 +134,14 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     if (k == QLatin1String("InsertPosition"))
         return QVariant(qBound(ConfigDefaults::autotileInsertPositionMin(), value.toInt(),
                                ConfigDefaults::autotileInsertPositionMax()));
-    if (k == PerScreenKeys::Algorithm || key == QLatin1String("AnimationEasingCurve"))
+    if (k == PerScreenKeys::Algorithm || k == QLatin1String("AnimationEasingCurve"))
         return value;
     if (k == QLatin1String("UsePerSideOuterGap") || k == QLatin1String("FocusNewWindows")
         || k == QLatin1String("SmartGaps") || k == QLatin1String("FocusFollowsMouse")
         || k == QLatin1String("RespectMinimumSize") || k == QLatin1String("HideTitleBars")
-        || key == QLatin1String("AnimationsEnabled"))
+        || k == QLatin1String("AnimationsEnabled"))
         return QVariant(value.toBool());
-    if (key == QLatin1String("AnimationDuration"))
+    if (k == QLatin1String("AnimationDuration"))
         return QVariant(
             qBound(ConfigDefaults::animationDurationMin(), value.toInt(), ConfigDefaults::animationDurationMax()));
     return QVariant();
