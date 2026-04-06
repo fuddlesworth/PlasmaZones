@@ -194,28 +194,28 @@ void WindowTrackingAdaptor::saveStateOnShutdown()
 
 void WindowTrackingAdaptor::loadState()
 {
-    // Read config as a flat key map for structured parsing below.
-    // readJsonConfigFromDisk() reads the file directly, bypassing QSettings cache.
-    // QSettingsConfigGroup doesn't expose key enumeration, and the flat map is
-    // convenient for this function's parsing pattern.
+    // Read config via the IConfigBackend group API (readString/readInt).
+    // This correctly handles values stored as native JSON objects/arrays
+    // (e.g. PendingRestoreQueues, PreTileGeometries) — the group's readString()
+    // serializes them back to compact JSON strings.
+    //
+    // The previous approach used readJsonConfigFromDisk() which flattened the
+    // entire config into a QMap. Its flattener recursed into native JSON objects
+    // as if they were config groups, making object-type values like
+    // PendingRestoreQueues invisible to key lookups — the root cause of the
+    // window restore bug after v2 config migration.
     //
     // Sync the shared backend first so any in-memory writes (e.g., from a
-    // concurrent saveState()) are flushed to disk before we read the file.
-    if (m_configBackend) {
-        m_configBackend->sync();
-    }
-    const auto configMap = PlasmaZones::readJsonConfigFromDisk();
-    const QString wt = QStringLiteral("WindowTracking");
+    // concurrent saveState()) are flushed to disk before we read.
+    std::unique_ptr<IConfigBackend> fallback;
+    IConfigBackend* backend = resolveBackend(m_configBackend, fallback);
+    backend->sync();
+    auto tracking = backend->group(QStringLiteral("WindowTracking"));
     auto readVal = [&](const QString& key, const QString& def = QString()) -> QString {
-        return configMap.value(wt + QLatin1Char('/') + key, def).toString();
+        return tracking->readString(key, def);
     };
     auto readIntVal = [&](const QString& key, int def = 0) -> int {
-        QVariant v = configMap.value(wt + QLatin1Char('/') + key);
-        if (!v.isValid())
-            return def;
-        bool ok = false;
-        int result = v.toInt(&ok);
-        return ok ? result : def;
+        return tracking->readInt(key, def);
     };
 
     // Build pending restore queues from:
