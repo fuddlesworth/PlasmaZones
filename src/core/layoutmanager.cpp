@@ -18,7 +18,7 @@ namespace PlasmaZones {
 LayoutManager::LayoutManager(QObject* parent)
     : QObject(parent)
     , ILayoutManager()
-    , m_ownedBackend(createDefaultConfigBackend())
+    , m_ownedBackend(createAssignmentsBackend())
     , m_configBackend(m_ownedBackend.get())
 {
     // Default layout directory

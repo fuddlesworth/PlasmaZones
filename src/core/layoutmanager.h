@@ -254,6 +254,8 @@ private:
     void loadLayoutsFromDirectory(const QString& directory);
     Layout* restoreSystemLayout(const QUuid& id, const QString& systemPath);
     QString layoutFilePath(const QUuid& id) const;
+    void readAssignmentGroups(IConfigBackend* backend);
+    void readQuickLayouts(IConfigBackend* backend);
     Layout* cycleLayoutImpl(const QString& screenId, int direction);
     bool shouldSkipLayoutAssignment(const QString& layoutId, const QString& context) const;
     void emitLayoutAssigned(const QString& screenId, int virtualDesktop, const QString& layoutId);

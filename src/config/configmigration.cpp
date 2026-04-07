@@ -709,6 +709,45 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         root.remove(wtGroup);
     }
 
+    // ── Extract Assignment/QuickLayouts to assignments.json ─────────────────
+    // LayoutManager owns its own persistence file, separate from config.json.
+    // Note: LayoutManager::loadAssignments() has a runtime migration fallback
+    // for users already on v2 whose Assignment:* groups were never extracted
+    // by this path (e.g. upgraded between the v2 stamp and this split).
+    {
+        QJsonObject assignRoot;
+        const QString assignPrefix = ConfigDefaults::assignmentGroupPrefix();
+        QStringList keysToRemove;
+        for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
+            if (it.key().startsWith(assignPrefix)) {
+                assignRoot[it.key()] = it.value();
+                keysToRemove.append(it.key());
+            }
+        }
+        const QString quickLayoutsKey = ConfigDefaults::quickLayoutsGroup();
+        if (root.contains(quickLayoutsKey)) {
+            assignRoot[quickLayoutsKey] = root.value(quickLayoutsKey);
+            keysToRemove.append(quickLayoutsKey);
+        }
+        // ModeTracking is NOT extracted to assignments.json — it is consumed
+        // by LayoutManager::loadAssignments() directly from config.json and
+        // deleted after application.  Extracting it here would leave dead data
+        // in assignments.json that nothing reads.
+        const QString modeTrackingKey = ConfigDefaults::modeTrackingGroup();
+        if (root.contains(modeTrackingKey)) {
+            keysToRemove.append(modeTrackingKey);
+        }
+        if (!assignRoot.isEmpty()) {
+            const QString assignPath = ConfigDefaults::assignmentsFilePath();
+            if (!JsonConfigBackend::writeJsonAtomically(assignPath, assignRoot)) {
+                qWarning("ConfigMigration: failed to write assignments to %s", qPrintable(assignPath));
+            }
+        }
+        for (const QString& key : keysToRemove) {
+            root.remove(key);
+        }
+    }
+
     // ── Bump version ────────────────────────────────────────────────────────
     // Stamp literal 2, not ConfigSchemaVersion — prevents future version bumps
     // (e.g. to 3) from making this step stamp 3 and skipping a v2→v3 migration.
