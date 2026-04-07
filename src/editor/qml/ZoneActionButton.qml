@@ -19,12 +19,13 @@ Rectangle {
     required property string accessibleDescription
     required property string tooltipText
     property bool useNegativeColor: false
+    property real buttonSize: Kirigami.Units.gridUnit * 2.5
     property alias containsMouse: buttonMouseArea.containsMouse
 
     signal activated()
 
-    width: Kirigami.Units.gridUnit * 2.5
-    height: Kirigami.Units.gridUnit * 2.5
+    width: buttonSize
+    height: buttonSize
     radius: Kirigami.Units.smallSpacing * 1.5
     color: {
         if (useNegativeColor && buttonMouseArea.containsMouse)

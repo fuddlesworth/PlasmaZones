@@ -49,42 +49,35 @@ ToolBar {
             Repeater {
                 model: availableScreens || []
 
-                delegate: Rectangle {
+                delegate: ToolButton {
                     id: screenButton
 
                     required property var modelData
                     property bool isActive: editorController && modelData && modelData.name === editorController.targetScreen
-                    property bool isHovered: screenButtonMouse.containsMouse || activeFocus
 
-                    width: screenButtonLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
-                    height: Kirigami.Units.gridUnit * 3
-                    radius: Kirigami.Units.smallSpacing * 1.5
-                    color: isActive ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (isHovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent")
-                    border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                    border.color: isActive ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : (isHovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15) : "transparent")
+                    text: modelData ? (modelData.name || "") : ""
+                    enabled: editorController !== null
+                    checkable: true
+                    checked: isActive
+                    implicitWidth: Math.max(contentItem.implicitWidth + Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 4)
+                    implicitHeight: Kirigami.Units.gridUnit * 3
                     Accessible.name: modelData ? modelData.name : ""
                     Accessible.description: i18nc("@info", "Select screen for layout editing")
-                    Accessible.role: Accessible.Button
-                    activeFocusOnTab: true
-                    Keys.onReturnPressed: {
-                        if (editorController && modelData)
-                            editorController.targetScreen = modelData.name;
-
-                    }
-                    Keys.onSpacePressed: {
+                    onClicked: {
                         if (editorController && modelData)
                             editorController.targetScreen = modelData.name;
 
                     }
 
-                    Label {
+                    contentItem: Label {
                         id: screenButtonLabel
 
-                        anchors.centerIn: parent
-                        text: modelData ? (modelData.name || "") : ""
+                        text: screenButton.text
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                         color: screenButton.isActive ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
                         font.weight: screenButton.isActive ? Font.DemiBold : Font.Normal
-                        opacity: screenButton.isActive ? 1 : 0.8
+                        opacity: screenButton.isActive ? 1 : (screenButton.enabled ? 0.8 : 0.4)
 
                         Behavior on color {
                             ColorAnimation {
@@ -96,31 +89,26 @@ ToolBar {
 
                     }
 
-                    MouseArea {
-                        id: screenButtonMouse
+                    background: Rectangle {
+                        radius: Kirigami.Units.smallSpacing * 1.5
+                        color: screenButton.isActive ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (screenButton.hovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent")
+                        border.width: Math.round(Kirigami.Units.devicePixelRatio)
+                        border.color: screenButton.isActive ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : (screenButton.hovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15) : "transparent")
 
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (editorController && modelData)
-                                editorController.targetScreen = modelData.name;
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 200
+                                easing.type: Easing.OutCubic
+                            }
 
                         }
-                    }
 
-                    Behavior on color {
-                        ColorAnimation {
-                            duration: 200
-                            easing.type: Easing.OutCubic
-                        }
+                        Behavior on border.color {
+                            ColorAnimation {
+                                duration: 200
+                                easing.type: Easing.OutCubic
+                            }
 
-                    }
-
-                    Behavior on border.color {
-                        ColorAnimation {
-                            duration: 200
-                            easing.type: Easing.OutCubic
                         }
 
                     }

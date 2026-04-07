@@ -400,28 +400,28 @@ ToolBar {
                 Accessible.role: Accessible.AlertMessage
             }
 
-            SequentialAnimation {
-                running: statusSection.visible
-                loops: Animation.Infinite
+        }
 
-                NumberAnimation {
-                    targets: [unsavedIcon, unsavedIndicator]
-                    property: "opacity"
-                    from: 0.4
-                    to: 1
-                    duration: 500
-                    easing.type: Easing.InOutSine
-                }
+        SequentialAnimation {
+            running: statusSection.visible
+            loops: Animation.Infinite
 
-                NumberAnimation {
-                    targets: [unsavedIcon, unsavedIndicator]
-                    property: "opacity"
-                    from: 1
-                    to: 0.4
-                    duration: 500
-                    easing.type: Easing.InOutSine
-                }
+            NumberAnimation {
+                targets: [unsavedIcon, unsavedIndicator]
+                property: "opacity"
+                from: 0.4
+                to: 1
+                duration: 500
+                easing.type: Easing.InOutSine
+            }
 
+            NumberAnimation {
+                targets: [unsavedIcon, unsavedIndicator]
+                property: "opacity"
+                from: 1
+                to: 0.4
+                duration: 500
+                easing.type: Easing.InOutSine
             }
 
         }

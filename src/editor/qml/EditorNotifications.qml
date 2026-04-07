@@ -44,8 +44,14 @@ Item {
 
         function show(message) {
             successNotificationLabel.text = message;
-            successNotification.opacity = 1;
+            successHideAnim.stop();
+            successShowAnim.start();
             successNotificationTimer.restart();
+        }
+
+        function hide() {
+            successShowAnim.stop();
+            successHideAnim.start();
         }
 
         anchors.horizontalCenter: parent.horizontalCenter
@@ -62,12 +68,6 @@ Item {
         Accessible.name: i18nc("@info:accessibility", "Success notification")
         Accessible.description: successNotificationLabel.text || ""
         Accessible.role: Accessible.AlertMessage
-        onOpacityChanged: {
-            if (opacity === 1)
-                successTranslate.y = 0;
-            else if (opacity === 0)
-                successTranslate.y = Kirigami.Units.smallSpacing;
-        }
 
         ColumnLayout {
             id: successNotificationContent
@@ -104,32 +104,55 @@ Item {
             id: successNotificationTimer
 
             interval: 3000 // Show for 3 seconds
-            onTriggered: {
-                successNotification.opacity = 0;
+            onTriggered: successNotification.hide()
+        }
+
+        ParallelAnimation {
+            id: successShowAnim
+
+            NumberAnimation {
+                target: successNotification
+                property: "opacity"
+                to: 1
+                duration: 200
+                easing.type: Easing.OutCubic
             }
+
+            NumberAnimation {
+                target: successTranslate
+                property: "y"
+                to: 0
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
+        ParallelAnimation {
+            id: successHideAnim
+
+            NumberAnimation {
+                target: successNotification
+                property: "opacity"
+                to: 0
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
+            NumberAnimation {
+                target: successTranslate
+                property: "y"
+                to: Kirigami.Units.smallSpacing
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
         }
 
         transform: Translate {
             id: successTranslate
 
             y: Kirigami.Units.smallSpacing
-
-            Behavior on y {
-                NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.OutCubic
-                }
-
-            }
-
-        }
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
-            }
-
         }
 
     }
@@ -142,8 +165,14 @@ Item {
 
         function show(message) {
             errorNotificationLabel.text = message;
-            errorNotification.opacity = 1;
+            errorHideAnim.stop();
+            errorShowAnim.start();
             errorNotificationTimer.restart();
+        }
+
+        function hide() {
+            errorShowAnim.stop();
+            errorHideAnim.start();
         }
 
         anchors.horizontalCenter: parent.horizontalCenter
@@ -160,12 +189,6 @@ Item {
         Accessible.name: i18nc("@info:accessibility", "Error notification")
         Accessible.description: errorNotificationLabel.text || ""
         Accessible.role: Accessible.AlertMessage
-        onOpacityChanged: {
-            if (opacity === 1)
-                errorTranslate.y = 0;
-            else if (opacity === 0)
-                errorTranslate.y = Kirigami.Units.smallSpacing;
-        }
 
         ColumnLayout {
             id: errorNotificationContent
@@ -197,8 +220,8 @@ Item {
                 ToolButton {
                     icon.name: "window-close"
                     onClicked: {
-                        errorNotification.opacity = 0;
                         errorNotificationTimer.stop();
+                        errorNotification.hide();
                     }
                     ToolTip.text: i18nc("@tooltip", "Dismiss")
                     ToolTip.visible: hovered
@@ -214,32 +237,55 @@ Item {
             id: errorNotificationTimer
 
             interval: 5000 // Show for 5 seconds (errors stay longer)
-            onTriggered: {
-                errorNotification.opacity = 0;
+            onTriggered: errorNotification.hide()
+        }
+
+        ParallelAnimation {
+            id: errorShowAnim
+
+            NumberAnimation {
+                target: errorNotification
+                property: "opacity"
+                to: 1
+                duration: 200
+                easing.type: Easing.OutCubic
             }
+
+            NumberAnimation {
+                target: errorTranslate
+                property: "y"
+                to: 0
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
+        ParallelAnimation {
+            id: errorHideAnim
+
+            NumberAnimation {
+                target: errorNotification
+                property: "opacity"
+                to: 0
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
+            NumberAnimation {
+                target: errorTranslate
+                property: "y"
+                to: Kirigami.Units.smallSpacing
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
         }
 
         transform: Translate {
             id: errorTranslate
 
             y: Kirigami.Units.smallSpacing
-
-            Behavior on y {
-                NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.OutCubic
-                }
-
-            }
-
-        }
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
-            }
-
         }
 
     }

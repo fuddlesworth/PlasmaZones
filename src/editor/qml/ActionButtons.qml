@@ -24,7 +24,7 @@ Row {
     readonly property real requiredHeight: buttonSize + 2 * anchors.margins
     readonly property bool buttonsFit: root.visualWidth >= requiredWidth && root.visualHeight >= requiredHeight
 
-    function updateHoverState(hoveredArea) {
+    function updateHoverState() {
         var anyHovered = splitHorizontalButton.containsMouse || splitVerticalButton.containsMouse || fillButton.containsMouse || duplicateButton.containsMouse || deleteButton.containsMouse;
         actionButtons.anyButtonHovered = anyHovered;
         actionButtons.root.anyButtonHovered = anyHovered;
@@ -44,7 +44,7 @@ Row {
         accessibleName: i18nc("@action:button", "Split horizontally")
         accessibleDescription: i18nc("@info:tooltip", "Split this zone into two horizontal sections")
         tooltipText: i18nc("@tooltip", "Split horizontally")
-        onContainsMouseChanged: actionButtons.updateHoverState(this)
+        onContainsMouseChanged: actionButtons.updateHoverState()
         onActivated: actionButtons.root.splitHorizontalRequested()
     }
 
@@ -55,7 +55,7 @@ Row {
         accessibleName: i18nc("@action:button", "Split vertically")
         accessibleDescription: i18nc("@info:tooltip", "Split this zone into two vertical sections")
         tooltipText: i18nc("@tooltip", "Split vertically")
-        onContainsMouseChanged: actionButtons.updateHoverState(this)
+        onContainsMouseChanged: actionButtons.updateHoverState()
         onActivated: actionButtons.root.splitVerticalRequested()
     }
 
@@ -66,7 +66,7 @@ Row {
         accessibleName: i18nc("@action:button", "Fill available space")
         accessibleDescription: i18nc("@info:tooltip", "Expand zone to fill available empty space")
         tooltipText: i18nc("@tooltip", "Fill available space")
-        onContainsMouseChanged: actionButtons.updateHoverState(this)
+        onContainsMouseChanged: actionButtons.updateHoverState()
         onActivated: actionButtons.root.animatedExpandToFill()
     }
 
@@ -77,7 +77,7 @@ Row {
         accessibleName: i18nc("@action:button", "Duplicate zone")
         accessibleDescription: i18nc("@info:tooltip", "Create a copy of this zone")
         tooltipText: i18nc("@tooltip", "Duplicate zone")
-        onContainsMouseChanged: actionButtons.updateHoverState(this)
+        onContainsMouseChanged: actionButtons.updateHoverState()
         onActivated: actionButtons.root.duplicateRequested()
     }
 
@@ -89,7 +89,7 @@ Row {
         accessibleDescription: i18nc("@info:tooltip", "Remove this zone from the layout")
         tooltipText: i18nc("@tooltip", "Delete zone")
         useNegativeColor: true
-        onContainsMouseChanged: actionButtons.updateHoverState(this)
+        onContainsMouseChanged: actionButtons.updateHoverState()
         onActivated: actionButtons.root.deleteRequested()
     }
 
