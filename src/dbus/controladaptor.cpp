@@ -150,14 +150,22 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
     // Run blocking work (file I/O, journalctl) off the main thread.
     auto* watcher = new QFutureWatcher<QString>(this);
     m_reportWatcher = watcher;
-    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, message, watcher]() {
-        QDBusConnection::sessionBus().send(message.createReply(watcher->result()));
-        m_reportWatcher = nullptr;
+    // Use QPointer to detect adaptor destruction inside the finished handler,
+    // preventing writes to dangling `this` if the adaptor is destroyed while
+    // the future is still running but finishes after destruction starts.
+    QPointer<ControlAdaptor> guard(this);
+    connect(watcher, &QFutureWatcher<QString>::finished, this, [guard, message, watcher]() {
+        if (guard) {
+            QDBusConnection::sessionBus().send(message.createReply(watcher->result()));
+            guard->m_reportWatcher = nullptr;
+        }
         watcher->deleteLater();
     });
     // If the adaptor is destroyed while the future is running, send an error reply
-    // so the D-Bus caller doesn't hang until timeout.
+    // so the D-Bus caller doesn't hang until timeout. Disconnect the finished signal
+    // first to prevent a double-reply race.
     connect(this, &QObject::destroyed, watcher, [message, watcher]() {
+        QObject::disconnect(watcher, &QFutureWatcher<QString>::finished, nullptr, nullptr);
         watcher->cancel();
         auto error = message.createErrorReply(QStringLiteral("org.plasmazones.Error.Shutdown"),
                                               QStringLiteral("Daemon shutting down"));

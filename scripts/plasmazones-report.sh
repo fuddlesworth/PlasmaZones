@@ -139,12 +139,13 @@ fi
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/plasmazones"
 if [[ -d "$DATA_DIR" ]]; then
     mkdir -p "$STAGING/data"
-    # Copy tree structure, redacting home paths in text files
-    find -P "$DATA_DIR" -type f | while IFS= read -r f; do
+    # Copy tree structure, redacting home paths in text files.
+    # Use -print0/read -d '' for filenames with newlines or special chars.
+    find -P "$DATA_DIR" -type f -print0 | while IFS= read -r -d '' f; do
         rel="${f#"$DATA_DIR"/}"
         mkdir -p "$STAGING/data/$(dirname "$rel")"
         case "$f" in
-            *.json|*.js|*.glsl|*.frag|*.vert|*.conf|*.txt)
+            *.json|*.js|*.glsl|*.frag|*.vert|*.conf|*.txt|*.qml|*.yaml|*.yml|*.toml|*.css|*.ini)
                 redact_home "$f" > "$STAGING/data/$rel" ;;
             *)
                 cp "$f" "$STAGING/data/$rel" ;;
@@ -164,9 +165,15 @@ if command -v journalctl &>/dev/null; then
     fi
 
     collect_journal() {
-        timeout 15 journalctl --user "$@" \
+        local out exit_code=0
+        out=$(timeout 15 journalctl --user "$@" \
             --since "$JOURNAL_SINCE min ago" \
-            --no-pager -o short-iso 2>/dev/null || true
+            --no-pager -o short-iso 2>&1) || exit_code=$?
+        if [[ $exit_code -ne 0 ]] && [[ $exit_code -ne 1 ]]; then
+            # exit 1 = no entries matched; anything else is an actual error
+            echo "Warning: journalctl failed (exit $exit_code): $out" >&2
+        fi
+        printf '%s' "$out"
     }
 
     JOURNAL=$(collect_journal -t plasmazonesd)

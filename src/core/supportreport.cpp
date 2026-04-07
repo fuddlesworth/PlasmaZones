@@ -226,7 +226,7 @@ static QByteArray runJournalctl(const QStringList& args)
     proc.setProgram(QStringLiteral("journalctl"));
     proc.setArguments(args);
     proc.start();
-    if (!proc.waitForStarted(3000) || !proc.waitForFinished(10000))
+    if (!proc.waitForStarted(3000) || !proc.waitForFinished(15000))
         return {};
     return proc.readAllStandardOutput();
 }
