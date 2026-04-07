@@ -124,7 +124,7 @@ redact_home() {
     if [[ -n "${HOME:-}" ]]; then
         # Pass HOME via environment to avoid shell quoting issues (e.g., HOME containing
         # single quotes). Perl reads $ENV{HOME} directly, and \Q..\E quotes it as literal.
-        HOME="$HOME" perl -pe 's/\Q$ENV{HOME}\E(?=[\/\s]|$)/~/g' "$@"
+        HOME="$HOME" perl -pe 's/\Q$ENV{HOME}\E(?=[\/\s]|$)/~/g' -- "$@"
     else
         cat "$@"
     fi
@@ -177,7 +177,8 @@ if command -v journalctl &>/dev/null; then
             --since "$JOURNAL_SINCE min ago" \
             --no-pager -o short-iso 2>"$err") || exit_code=$?
         if [[ $exit_code -ne 0 ]] && [[ $exit_code -ne 1 ]]; then
-            # exit 1 = no entries matched; anything else is an actual error
+            # exit 1 = no entries matched; 124 = timeout killed the process;
+            # anything else is an actual error
             echo "Warning: journalctl failed (exit $exit_code): $(cat "$err")" >&2
         fi
         rm -f "$err"

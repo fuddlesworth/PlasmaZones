@@ -72,7 +72,8 @@ public Q_SLOTS:
     /**
      * @brief Generate a redacted support report for bug reports
      * @param sinceMinutes Minutes of journal logs to include (0 = default 30, max 120)
-     * @return Markdown-formatted support report (delivered asynchronously via delayed D-Bus reply)
+     * @return Empty string — the actual report is delivered asynchronously via delayed D-Bus reply.
+     *         On error (concurrent call, shutdown), a D-Bus error reply is sent instead.
      */
     QString generateSupportReport(int sinceMinutes, const QDBusMessage& message);
 

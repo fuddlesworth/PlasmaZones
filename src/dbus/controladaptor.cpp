@@ -132,9 +132,14 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
 {
     qCInfo(lcDbus) << "generateSupportReport: sinceMinutes=" << sinceMinutes;
 
-    // Reject concurrent calls synchronously — no delayed reply needed for the error path.
+    // Reject concurrent calls with a proper D-Bus error so callers get a typed failure
+    // instead of having to parse the report string for "ERROR:".
     if (m_reportWatcher) {
-        return QStringLiteral("ERROR: A support report is already being generated");
+        message.setDelayedReply(true);
+        auto error = message.createErrorReply(QStringLiteral("org.plasmazones.Error.Busy"),
+                                              QStringLiteral("A support report is already being generated"));
+        QDBusConnection::sessionBus().send(error);
+        return {};
     }
 
     // Delay the D-Bus reply so we don't block the event loop while journalctl runs.

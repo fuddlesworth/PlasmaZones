@@ -35,10 +35,11 @@ QString SupportReport::redactHomePath(const QString& input)
 
     // Match home path when followed by a separator (/ or end-of-string),
     // preventing partial matches (e.g., /home/user must not match /home/username).
-    // Cache the compiled regex — redactHomePath is called per-line on potentially 2000+ log lines.
-    // Rebuild if HOME changes (unlikely in production, but correct for tests).
-    static QString cachedHome;
-    static QRegularExpression re;
+    // Cache the compiled regex per-thread — redactHomePath is called per-line on
+    // potentially 2000+ log lines, and generateFromSnapshot runs off the main thread
+    // via QtConcurrent::run, so plain `static` would be a data race.
+    thread_local QString cachedHome;
+    thread_local QRegularExpression re;
     if (cachedHome != home) {
         cachedHome = home;
         re = QRegularExpression(QRegularExpression::escape(home) + QStringLiteral("(?=[/\\s]|$)"));
@@ -217,14 +218,25 @@ QString SupportReport::sectionSession()
     return readAndRedactFile(ConfigDefaults::sessionFilePath(), QStringLiteral("session file"));
 }
 
-static QStringList journalctlArgs(const QString& tagFlag, const QString& tagValue, int sinceMinutes)
+static QStringList journalctlArgs(const QString& identifier, int sinceMinutes)
 {
-    QStringList args{QStringLiteral("--user")};
-    args << tagFlag;
-    if (!tagValue.isEmpty())
-        args << tagValue;
-    args << QStringLiteral("--since") << QStringLiteral("%1 min ago").arg(sinceMinutes) << QStringLiteral("--no-pager")
-         << QStringLiteral("-o") << QStringLiteral("short-iso");
+    QStringList args{QStringLiteral("--user"),
+                     QStringLiteral("-t"),
+                     identifier,
+                     QStringLiteral("--since"),
+                     QStringLiteral("%1 min ago").arg(sinceMinutes),
+                     QStringLiteral("--no-pager"),
+                     QStringLiteral("-o"),
+                     QStringLiteral("short-iso")};
+    return args;
+}
+
+static QStringList journalctlArgsIdentifier(const QString& identifier, int sinceMinutes)
+{
+    QStringList args{QStringLiteral("--user"),     QStringLiteral("--identifier=%1").arg(identifier),
+                     QStringLiteral("--since"),    QStringLiteral("%1 min ago").arg(sinceMinutes),
+                     QStringLiteral("--no-pager"), QStringLiteral("-o"),
+                     QStringLiteral("short-iso")};
     return args;
 }
 
@@ -244,13 +256,13 @@ static QByteArray runJournalctl(const QStringList& args)
 
 QString SupportReport::sectionLogs(int sinceMinutes)
 {
-    QByteArray rawOutput =
-        runJournalctl(journalctlArgs(QStringLiteral("-t"), QStringLiteral("plasmazonesd"), sinceMinutes));
+    static const QString tag = QStringLiteral("plasmazonesd");
+    QByteArray rawOutput = runJournalctl(journalctlArgs(tag, sinceMinutes));
 
     // Fall back to --identifier if -t returned nothing useful.
     // Some systemd versions report the syslog tag differently.
     if (QString::fromUtf8(rawOutput).trimmed().isEmpty()) {
-        rawOutput = runJournalctl(journalctlArgs(QStringLiteral("--identifier=plasmazonesd"), QString(), sinceMinutes));
+        rawOutput = runJournalctl(journalctlArgsIdentifier(tag, sinceMinutes));
     }
 
     if (rawOutput.isEmpty())
@@ -308,6 +320,10 @@ QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceM
     report += QStringLiteral("## Recent Logs (last %1 minutes)\n").arg(sinceMinutes);
     report += sectionLogs(sinceMinutes);
     report += QLatin1Char('\n');
+
+    // Sanitize any literal </details> in section content that would prematurely
+    // close the collapsible block when rendered in GitHub Issues/Discussions.
+    report.replace(QStringLiteral("</details>"), QStringLiteral("&lt;/details&gt;"));
 
     report += QStringLiteral("</details>\n");
 

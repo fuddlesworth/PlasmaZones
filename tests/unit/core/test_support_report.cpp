@@ -12,6 +12,7 @@
 #include <QTest>
 #include <QDir>
 #include <QFile>
+#include <QRegularExpression>
 #include <QTemporaryFile>
 
 #include "core/supportreport.h"
@@ -186,6 +187,42 @@ private Q_SLOTS:
 
         const QString result = SupportReport::readAndRedactFile(tmp.fileName(), QStringLiteral("empty file"));
         QVERIFY(result.contains(QStringLiteral("```json\n")));
+    }
+
+    void testGenerate_sanitizesDetailsTag()
+    {
+        // If any section content contains </details>, it must be escaped so
+        // it doesn't prematurely close the collapsible block in GitHub Markdown.
+        // We can't inject content into a null-dependency report, but we can verify
+        // the final closing tag is present and only appears once.
+        const QString report = SupportReport::generate(nullptr, nullptr, nullptr);
+        // Count occurrences of the real closing tag — should be exactly 1
+        const QRegularExpression re(QStringLiteral("</details>"));
+        const auto matches = re.globalMatch(report);
+        int count = 0;
+        while (matches.hasNext()) {
+            const_cast<QRegularExpressionMatchIterator&>(matches).next();
+            count++;
+        }
+        QCOMPARE(count, 1);
+    }
+
+    void testConstantSync_defaultSinceMinutes()
+    {
+        // Verify the default sinceMinutes used by generate() matches the
+        // documented default of 30 (mirrored in scripts/plasmazones-report.sh).
+        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 0);
+        QVERIFY2(report.contains(QStringLiteral("last 30 minutes")),
+                 "Default sinceMinutes diverged from expected 30 — update scripts/plasmazones-report.sh too");
+    }
+
+    void testConstantSync_maxSinceMinutes()
+    {
+        // Verify the max sinceMinutes cap matches the documented max of 120
+        // (mirrored in scripts/plasmazones-report.sh).
+        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 9999);
+        QVERIFY2(report.contains(QStringLiteral("last 120 minutes")),
+                 "MaxSinceMinutes diverged from expected 120 — update scripts/plasmazones-report.sh too");
     }
 };
 

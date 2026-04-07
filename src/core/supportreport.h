@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <QLatin1String>
 #include <QRect>
 #include <QString>
 #include <QVector>
@@ -102,7 +103,7 @@ public:
      * @return Markdown code block with redacted content, or error message if unreadable
      */
     static QString readAndRedactFile(const QString& path, const QString& label,
-                                     const QString& lang = QStringLiteral("json"));
+                                     const QString& lang = QLatin1String("json"));
 
 private:
     SupportReport() = delete;
