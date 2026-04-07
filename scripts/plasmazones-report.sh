@@ -12,7 +12,7 @@
 # but we also include the raw files (config.json, session.json, data/) so that
 # triagers can inspect exact JSON without re-serialization artefacts.
 #
-# Requires: plasmazonesd running, qdbus6 or busctl, perl
+# Requires: plasmazonesd running, qdbus6 or busctl, perl (with JSON::PP for busctl)
 
 set -euo pipefail
 
@@ -75,22 +75,15 @@ call_dbus() {
     elif command -v busctl &>/dev/null; then
         local raw
         if raw=$(busctl --user --json=short call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>/dev/null); then
-            python3 -c "import sys,json; print(json.load(sys.stdin)['data'][0])" <<< "$raw"
+            # Parse busctl JSON output: {"type":"s","data":["..."]}
+            perl -MJSON::PP -e 'print decode_json(do{local $/;<STDIN>})->{data}[0]' <<< "$raw"
         else
             raw=$(busctl --user call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>&1) || {
                 echo "Error: D-Bus call failed: $raw" >&2
                 return 1
             }
-            # busctl plain output: 's "content..."' — use python3 for reliable unescaping
-            python3 -c "
-import sys, re
-raw = sys.stdin.read()
-m = re.match(r'^s \"(.*)\"$', raw, re.DOTALL)
-if m:
-    print(m.group(1).replace(r'\"', '\"'))
-else:
-    print(raw)
-" <<< "$raw"
+            # busctl plain output: 's "content..."' — extract and unescape
+            perl -e '$_=do{local $/;<STDIN>}; s/^s "//; s/"$//; s/\\"/"/g; print' <<< "$raw"
         fi
     else
         echo "Error: No D-Bus CLI tool found (qdbus6, qdbus, or busctl required)" >&2
