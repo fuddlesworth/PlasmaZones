@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "OverflowManager.h"
+#include "core/utils.h"
 
 #include <QHashFunctions>
 
@@ -46,6 +47,22 @@ inline size_t qHash(const TilingStateKey& key, size_t seed = 0)
 {
     return qHashMulti(seed, key.screenId, key.desktop, key.activity);
 }
+
+/**
+ * @brief Saved position for a window removed from autotile, keyed by appId.
+ *
+ * When a window closes while autotiled, its position is captured so that
+ * reopening the same app restores it to the same tiling position. Analogous
+ * to snapping's PendingRestoreQueues but for autotile's order-based model.
+ */
+struct PendingAutotileRestore
+{
+    int position = -1; ///< Index in window order at time of removal
+    QString screenId; ///< Screen where the window was tiled
+    int desktop = 1; ///< Virtual desktop context
+    QString activity; ///< Activity context
+    bool wasFloating = false; ///< Whether the window was floating when removed
+};
 
 class AutotileConfig;
 class Layout;
@@ -1010,6 +1027,12 @@ private:
     // m_pendingInitialOrders so windows arriving on the new desktop get their
     // saved ordering. Consumed once per context (removed after promotion).
     QHash<TilingStateKey, QStringList> m_savedWindowOrders;
+
+    // Pending restore queue for windows removed from autotile (close/reopen).
+    // Keyed by appId (stable across KWin restarts). Multiple entries per appId
+    // support multi-instance apps; consumed FIFO by insertWindow().
+    // Analogous to snapping's PendingRestoreQueues.
+    QHash<QString, QList<PendingAutotileRestore>> m_pendingAutotileRestores;
 
     // Zero-delay timer to coalesce promoteSavedWindowOrders() calls during
     // simultaneous desktop+activity switches. Without coalescing, the first
