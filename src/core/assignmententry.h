@@ -21,6 +21,37 @@ struct LayoutAssignmentKey
     {
         return screenId == other.screenId && virtualDesktop == other.virtualDesktop && activity == other.activity;
     }
+
+    /**
+     * @brief Parse an "Assignment:screenId[:Desktop:N][:Activity:uuid]" group name
+     * @return Key with populated fields; screenId is empty on parse failure
+     */
+    static LayoutAssignmentKey fromGroupName(const QString& groupName)
+    {
+        LayoutAssignmentKey result;
+        const QLatin1String prefix("Assignment:");
+        if (!groupName.startsWith(prefix))
+            return result;
+        QString remainder = groupName.mid(prefix.size());
+        if (remainder.isEmpty())
+            return result;
+
+        int actIdx = remainder.indexOf(QLatin1String(":Activity:"));
+        if (actIdx >= 0) {
+            result.activity = remainder.mid(actIdx + 10);
+            remainder = remainder.left(actIdx);
+        }
+        int deskIdx = remainder.indexOf(QLatin1String(":Desktop:"));
+        if (deskIdx >= 0) {
+            bool ok = false;
+            result.virtualDesktop = remainder.mid(deskIdx + 9).toInt(&ok);
+            if (!ok)
+                result.virtualDesktop = 0;
+            remainder = remainder.left(deskIdx);
+        }
+        result.screenId = remainder;
+        return result;
+    }
 };
 
 inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)

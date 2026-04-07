@@ -434,39 +434,22 @@ void LayoutManager::loadAssignments()
     // config.json alongside Settings-owned groups.  If assignments.json is
     // still empty, check config.json for legacy groups and migrate them.
     if (!foundGroups && m_quickLayoutShortcuts.isEmpty()) {
+        // Note: concurrent startup of daemon + settings app could race on this
+        // migration (both read config.json, both write assignments.json).  The
+        // atomic-write pattern means last-writer-wins, which is acceptable for
+        // a one-time migration that produces identical output from identical input.
         auto configBackend = createDefaultConfigBackend();
         const QStringList configGroups = configBackend->groupList();
-        const QString assignmentPrefix2 = QStringLiteral("Assignment:");
+        const QLatin1String configAssignPrefix("Assignment:");
         bool migratedFromConfig = false;
 
         for (const QString& groupName : configGroups) {
-            if (!groupName.startsWith(assignmentPrefix2))
+            if (!groupName.startsWith(configAssignPrefix))
                 continue;
 
             migratedFromConfig = true;
-            QString remainder = groupName.mid(assignmentPrefix2.size());
-            if (remainder.isEmpty())
-                continue;
-
-            QString screenId;
-            int virtualDesktop = 0;
-            QString activity;
-
-            int actIdx = remainder.indexOf(QLatin1String(":Activity:"));
-            if (actIdx >= 0) {
-                activity = remainder.mid(actIdx + 10);
-                remainder = remainder.left(actIdx);
-            }
-            int deskIdx = remainder.indexOf(QLatin1String(":Desktop:"));
-            if (deskIdx >= 0) {
-                bool ok = false;
-                virtualDesktop = remainder.mid(deskIdx + 9).toInt(&ok);
-                if (!ok)
-                    virtualDesktop = 0;
-                remainder = remainder.left(deskIdx);
-            }
-            screenId = remainder;
-            if (screenId.isEmpty())
+            const auto key = LayoutAssignmentKey::fromGroupName(groupName);
+            if (key.screenId.isEmpty())
                 continue;
 
             auto grp = configBackend->group(groupName);
@@ -476,7 +459,6 @@ void LayoutManager::loadAssignments()
             entry.snappingLayout = grp->readString(QStringLiteral("SnappingLayout"));
             entry.tilingAlgorithm = grp->readString(QStringLiteral("TilingAlgorithm"));
 
-            LayoutAssignmentKey key{screenId, virtualDesktop, activity};
             m_assignments[key] = entry;
         }
 
@@ -497,14 +479,13 @@ void LayoutManager::loadAssignments()
             // Write to assignments.json
             saveAssignments();
 
-            // Delete from config.json
+            // Delete migrated groups from config.json
             for (const QString& groupName : configGroups) {
-                if (groupName.startsWith(assignmentPrefix2)) {
+                if (groupName.startsWith(configAssignPrefix)) {
                     configBackend->deleteGroup(groupName);
                 }
             }
             configBackend->deleteGroup(QStringLiteral("QuickLayouts"));
-            configBackend->sync();
             qCInfo(lcLayout) << "Migrated Assignment/QuickLayouts from config.json to assignments.json";
         }
 
@@ -533,7 +514,6 @@ void LayoutManager::loadAssignments()
                 }
                 modeGroup.reset();
                 configBackend->deleteGroup(QStringLiteral("ModeTracking"));
-                configBackend->sync();
                 if (migrated) {
                     saveAssignments();
                     qCInfo(lcLayout) << "Migrated [ModeTracking] into base screen entries";
@@ -556,10 +536,12 @@ void LayoutManager::loadAssignments()
                 }
             }
             if (cleaned) {
-                configBackend->sync();
                 qCInfo(lcLayout) << "Cleaned up obsolete TilingScreen/TilingActivity/TilingDesktop groups";
             }
         }
+
+        // Single sync for all config.json cleanup operations
+        configBackend->sync();
     }
 
     qCInfo(lcLayout) << "Loaded assignments=" << m_assignments.size()

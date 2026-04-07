@@ -512,10 +512,14 @@ private Q_SLOTS:
                 auto g = backend->group(QStringLiteral("OldGroupFromV0"));
                 g->writeBool(QStringLiteral("Flag"), true);
             }
-            // Inject a valid unmanaged group to prove it survives
+            // Inject valid unmanaged groups to prove they survive
             {
                 auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
                 g->writeString(QStringLiteral("1"), QStringLiteral("layout-id"));
+            }
+            {
+                auto g = backend->group(QStringLiteral("Updates"));
+                g->writeString(QStringLiteral("LastCheck"), QStringLiteral("2026-04-07"));
             }
             backend->sync();
         }
@@ -538,10 +542,14 @@ private Q_SLOTS:
         QVERIFY2(!hasObsolete, "Unknown root-level group 'ObsoleteFeature' must be purged by save()");
         QVERIFY2(!hasOldGroup, "Unknown root-level group 'OldGroupFromV0' must be purged by save()");
 
-        // Unmanaged group must survive
+        // Unmanaged groups must survive
         {
             auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
             QCOMPARE(g->readString(QStringLiteral("1")), QStringLiteral("layout-id"));
+        }
+        {
+            auto g = backend->group(QStringLiteral("Updates"));
+            QCOMPARE(g->readString(QStringLiteral("LastCheck")), QStringLiteral("2026-04-07"));
         }
     }
 

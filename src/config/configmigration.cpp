@@ -711,6 +711,9 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
 
     // ── Extract Assignment/QuickLayouts to assignments.json ─────────────────
     // LayoutManager owns its own persistence file, separate from config.json.
+    // Note: LayoutManager::loadAssignments() has a runtime migration fallback
+    // for users already on v2 whose Assignment:* groups were never extracted
+    // by this path (e.g. upgraded between the v2 stamp and this split).
     {
         QJsonObject assignRoot;
         const QLatin1String assignPrefix("Assignment:");
@@ -725,8 +728,11 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
             assignRoot[QLatin1String("QuickLayouts")] = root.value(QLatin1String("QuickLayouts"));
             keysToRemove.append(QLatin1String("QuickLayouts"));
         }
+        // ModeTracking is NOT extracted to assignments.json — it is consumed
+        // by LayoutManager::loadAssignments() directly from config.json and
+        // deleted after application.  Extracting it here would leave dead data
+        // in assignments.json that nothing reads.
         if (root.contains(QLatin1String("ModeTracking"))) {
-            assignRoot[QLatin1String("ModeTracking")] = root.value(QLatin1String("ModeTracking"));
             keysToRemove.append(QLatin1String("ModeTracking"));
         }
         if (!assignRoot.isEmpty()) {
@@ -734,9 +740,9 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
             if (!JsonConfigBackend::writeJsonAtomically(assignPath, assignRoot)) {
                 qWarning("ConfigMigration: failed to write assignments to %s", qPrintable(assignPath));
             }
-            for (const QString& key : keysToRemove) {
-                root.remove(key);
-            }
+        }
+        for (const QString& key : keysToRemove) {
+            root.remove(key);
         }
     }
 
