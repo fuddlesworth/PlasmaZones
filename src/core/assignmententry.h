@@ -4,6 +4,7 @@
 #pragma once
 
 #include "constants.h"
+#include "../config/configdefaults.h"
 #include <QString>
 
 namespace PlasmaZones {
@@ -20,6 +21,42 @@ struct LayoutAssignmentKey
     bool operator==(const LayoutAssignmentKey& other) const
     {
         return screenId == other.screenId && virtualDesktop == other.virtualDesktop && activity == other.activity;
+    }
+
+    /**
+     * @brief Parse an "Assignment:screenId[:Desktop:N][:Activity:uuid]" group name
+     *
+     * Expects suffixes in canonical order: :Desktop:N before :Activity:uuid.
+     * Group names are always constructed internally in this order.
+     * @return Key with populated fields; screenId is empty on parse failure
+     */
+    static LayoutAssignmentKey fromGroupName(const QString& groupName)
+    {
+        LayoutAssignmentKey result;
+        const QString prefix = ConfigDefaults::assignmentGroupPrefix();
+        if (!groupName.startsWith(prefix))
+            return result;
+        QString remainder = groupName.mid(prefix.size());
+        if (remainder.isEmpty())
+            return result;
+
+        int actIdx = remainder.indexOf(QLatin1String(":Activity:"));
+        if (actIdx >= 0) {
+            const QString activity = remainder.mid(actIdx + 10);
+            if (!activity.isEmpty())
+                result.activity = activity;
+            remainder = remainder.left(actIdx);
+        }
+        int deskIdx = remainder.indexOf(QLatin1String(":Desktop:"));
+        if (deskIdx >= 0) {
+            bool ok = false;
+            int desktop = remainder.mid(deskIdx + 9).toInt(&ok);
+            if (ok && desktop > 0)
+                result.virtualDesktop = desktop;
+            remainder = remainder.left(deskIdx);
+        }
+        result.screenId = remainder;
+        return result;
     }
 };
 

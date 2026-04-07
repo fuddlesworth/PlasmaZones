@@ -90,6 +90,10 @@ PLASMAZONES_EXPORT std::unique_ptr<IConfigBackend> createDefaultConfigBackend();
 /// Separate file from config.json to avoid write contention.
 PLASMAZONES_EXPORT std::unique_ptr<IConfigBackend> createSessionBackend();
 
+/// Create a backend for assignments.json (layout assignments and quick shortcuts).
+/// Separate file from config.json so LayoutManager owns its persistence independently.
+PLASMAZONES_EXPORT std::unique_ptr<IConfigBackend> createAssignmentsBackend();
+
 // ── Per-screen group helpers ─────────────────────────────────────────────
 // Backend-agnostic utilities for per-screen group name resolution.
 // Used by Settings, ConfigMigration, and config backend implementations.

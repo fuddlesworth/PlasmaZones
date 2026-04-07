@@ -401,6 +401,15 @@ bool Daemon::init()
                 engine->deserializeWindowOrders(orders);
         });
 
+    m_windowTrackingAdaptor->setTilingPendingRestoreDelegates(
+        [engine = QPointer(m_autotileEngine.get())]() -> QJsonObject {
+            return engine ? engine->serializePendingRestores() : QJsonObject{};
+        },
+        [engine = QPointer(m_autotileEngine.get())](const QJsonObject& obj) {
+            if (engine)
+                engine->deserializePendingRestores(obj);
+        });
+
     // Trigger WTA save on autotile state changes (window order, split ratio, master count)
     connect(m_autotileEngine.get(), &AutotileEngine::tilingChanged, m_windowTrackingAdaptor,
             &WindowTrackingAdaptor::scheduleSaveState);

@@ -220,16 +220,17 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
-
-        // Assignment groups must NOT end up under PerScreen
-        QVERIFY2(!root.contains(QStringLiteral("PerScreen")), "Assignment groups should not be under PerScreen");
-
-        // They should be a regular top-level group
+        // Assignment groups must NOT be in config.json (they're extracted to assignments.json)
+        QJsonObject configRoot = readJsonConfig(ConfigDefaults::configFilePath());
+        QVERIFY2(!configRoot.contains(QStringLiteral("PerScreen")), "Assignment groups should not be under PerScreen");
         const QString groupName = QStringLiteral("Assignment:eDP-1:Desktop:1:Activity:abc-123");
-        QVERIFY2(root.contains(groupName), "Assignment group should be at root level");
+        QVERIFY2(!configRoot.contains(groupName), "Assignment group should not remain in config.json");
 
-        QJsonObject assignment = root.value(groupName).toObject();
+        // They should be in assignments.json
+        QJsonObject assignRoot = readJsonConfig(ConfigDefaults::assignmentsFilePath());
+        QVERIFY2(assignRoot.contains(groupName), "Assignment group should be in assignments.json");
+
+        QJsonObject assignment = assignRoot.value(groupName).toObject();
         QCOMPARE(assignment.value(QStringLiteral("Mode")).toInt(), 0);
         QCOMPARE(assignment.value(QStringLiteral("TilingAlgorithm")).toString(), QStringLiteral("bsp"));
     }
@@ -244,8 +245,8 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        auto backend = PlasmaZones::createDefaultConfigBackend();
-        // groupList should contain the assignment group
+        // Assignment groups are now in assignments.json, not config.json
+        auto backend = PlasmaZones::createAssignmentsBackend();
         QStringList groups = backend->groupList();
         QVERIFY(groups.contains(QStringLiteral("Assignment:eDP-1:Desktop:1")));
 

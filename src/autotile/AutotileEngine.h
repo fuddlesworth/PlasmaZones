@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "OverflowManager.h"
+#include "core/utils.h"
 
 #include <QHashFunctions>
 
@@ -46,6 +47,31 @@ inline size_t qHash(const TilingStateKey& key, size_t seed = 0)
 {
     return qHashMulti(seed, key.screenId, key.desktop, key.activity);
 }
+
+/**
+ * @brief Saved position for a window removed from autotile, keyed by appId.
+ *
+ * When a window closes while autotiled, its position is captured so that
+ * reopening the same app restores it to the same tiling position. Analogous
+ * to snapping's PendingRestoreQueues but for autotile's order-based model.
+ */
+struct PendingAutotileRestore
+{
+    PendingAutotileRestore() = default;
+    PendingAutotileRestore(int pos, TilingStateKey ctx, bool floating)
+        : position(pos)
+        , context(std::move(ctx))
+        , wasFloating(floating)
+    {
+    }
+
+    int position = -1; ///< Index in window order at time of removal
+    TilingStateKey context; ///< Screen/desktop/activity where the window was tiled
+    bool wasFloating = false; ///< Whether the window was floating when removed
+};
+
+/// Maximum pending restore entries per appId (prevents unbounded growth).
+constexpr int MaxPendingRestoresPerApp = 16;
 
 class AutotileConfig;
 class Layout;
@@ -302,6 +328,20 @@ public:
      * @param orders JSON array produced by serializeWindowOrders()
      */
     void deserializeWindowOrders(const QJsonArray& orders);
+
+    /**
+     * @brief Serialize pending autotile restore queues to JSON
+     *
+     * Forwarded to SettingsBridge. Returns appId-keyed pending restore entries.
+     */
+    QJsonObject serializePendingRestores() const;
+
+    /**
+     * @brief Deserialize pending autotile restore queues from JSON
+     *
+     * Forwarded to SettingsBridge. Restores close/reopen queue.
+     */
+    void deserializePendingRestores(const QJsonObject& obj);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings synchronization
@@ -814,6 +854,7 @@ private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
     void removeWindow(const QString& windowId);
+    void pruneStaleRestores(const QString& appId);
     bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
     bool recalculateLayout(const QString& screenId);
     void applyTiling(const QString& screenId);
@@ -1030,6 +1071,12 @@ private:
     // m_pendingInitialOrders so windows arriving on the new desktop get their
     // saved ordering. Consumed once per context (removed after promotion).
     QHash<TilingStateKey, QStringList> m_savedWindowOrders;
+
+    // Pending restore queue for windows removed from autotile (close/reopen).
+    // Keyed by appId (stable across KWin restarts). Multiple entries per appId
+    // support multi-instance apps; consumed FIFO by insertWindow().
+    // Analogous to snapping's PendingRestoreQueues.
+    QHash<QString, QList<PendingAutotileRestore>> m_pendingAutotileRestores;
 
     // Zero-delay timer to coalesce promoteSavedWindowOrders() calls during
     // simultaneous desktop+activity switches. Without coalescing, the first

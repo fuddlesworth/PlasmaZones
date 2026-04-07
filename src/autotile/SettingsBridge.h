@@ -110,6 +110,25 @@ public:
      */
     void deserializeWindowOrders(const QJsonArray& orders);
 
+    /**
+     * @brief Serialize pending autotile restore queues to JSON
+     *
+     * Returns a JSON object keyed by appId, each containing an array of
+     * pending restore entries (position, context, floating state).
+     * Called by WTA's save cycle via persistence delegate.
+     */
+    QJsonObject serializePendingRestores() const;
+
+    /**
+     * @brief Deserialize pending autotile restore queues from JSON
+     *
+     * Restores the close/reopen queue so windows reopened after daemon
+     * restart return to their saved positions.
+     *
+     * @param obj JSON object produced by serializePendingRestores()
+     */
+    void deserializePendingRestores(const QJsonObject& obj);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings access
     // ═══════════════════════════════════════════════════════════════════════════

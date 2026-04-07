@@ -180,6 +180,20 @@ void WindowTrackingAdaptor::saveState()
         tracking->deleteKey(ConfigKeys::autotileWindowOrdersKey());
     }
 
+    // Save autotile pending restore queues (close/reopen window preservation).
+    // Separate key from window orders to keep the orders array homogeneous.
+    if (m_serializePendingRestoresFn) {
+        const QJsonObject pendingRestores = m_serializePendingRestoresFn();
+        if (!pendingRestores.isEmpty()) {
+            tracking->writeString(ConfigKeys::autotilePendingRestoresKey(),
+                                  QString::fromUtf8(QJsonDocument(pendingRestores).toJson(QJsonDocument::Compact)));
+        } else {
+            tracking->deleteKey(ConfigKeys::autotilePendingRestoresKey());
+        }
+    } else {
+        tracking->deleteKey(ConfigKeys::autotilePendingRestoresKey());
+    }
+
     tracking.reset(); // release group before sync
     m_sessionBackend->sync();
     qCInfo(lcDbusWindow) << "Saved state:"
@@ -529,6 +543,21 @@ void WindowTrackingAdaptor::loadState()
                 m_deserializeTilingStatesFn(doc.array());
             } else {
                 qCWarning(lcDbusWindow) << "Failed to parse saved autotile window orders:" << parseError.errorString();
+            }
+        }
+    }
+
+    // Restore autotile pending restore queues (close/reopen window preservation)
+    if (m_deserializePendingRestoresFn) {
+        const QString pendingRestoresStr = readVal(ConfigKeys::autotilePendingRestoresKey(), QString());
+        if (!pendingRestoresStr.isEmpty()) {
+            QJsonParseError parseError;
+            const QJsonDocument doc = QJsonDocument::fromJson(pendingRestoresStr.toUtf8(), &parseError);
+            if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+                m_deserializePendingRestoresFn(doc.object());
+            } else {
+                qCWarning(lcDbusWindow) << "Failed to parse saved autotile pending restores:"
+                                        << parseError.errorString();
             }
         }
     }

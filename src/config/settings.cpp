@@ -16,6 +16,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
 #include <QUuid>
 #include "../autotile/AlgorithmRegistry.h"
 #include <climits> // For INT_MAX in readValidatedInt
@@ -255,7 +256,7 @@ void Settings::load()
 
 // ── save() dispatcher ────────────────────────────────────────────────────────
 
-// Groups that save() writes exhaustively — shared by purgeStaleKeys() and reset().
+// Groups that save() writes exhaustively — shared by reset().
 // Does NOT include unmanaged groups (TilingQuickLayoutSlots, Updates) which are
 // written independently and must survive a normal save.
 QStringList Settings::managedGroupNames()
@@ -287,13 +288,32 @@ void Settings::deletePerScreenGroups(IConfigBackend* backend)
 
 void Settings::purgeStaleKeys()
 {
-    // Delete all groups that save() writes exhaustively.
-    // After deletion, save() rewrites only currently-valid keys,
-    // so any stale keys from past refactors are culled.
-    // Per-screen groups are not purged here — savePerScreenOverrides()
-    // already deletes and rewrites them individually.
-    for (const QString& groupName : managedGroupNames()) {
-        m_configBackend->deleteGroup(groupName);
+    // Root-level groups that must survive a save() cycle.
+    // Everything else at the JSON root is considered stale and is deleted.
+    // Assignment:* and QuickLayouts now live in assignments.json, so they
+    // no longer need to be preserved here.
+    const QStringList preservedGroups = {
+        ConfigDefaults::tilingQuickLayoutSlotsGroup(), // written independently
+        ConfigDefaults::updatesGroup(), // written independently
+    };
+
+    // Collect unique top-level group names from the backend, then delete any
+    // that are not in the preserved set and are not per-screen groups.
+    // Per-screen groups are handled by saveAllPerScreenOverrides().
+    // Managed groups (Snapping, Tiling, …) are intentionally NOT preserved here
+    // — save() rewrites them from scratch with only currently-valid keys.
+    QSet<QString> deleted;
+    for (const QString& groupName : m_configBackend->groupList()) {
+        if (isPerScreenPrefix(groupName)) {
+            continue;
+        }
+        const int dotIdx = groupName.indexOf(QLatin1Char('.'));
+        const QString topLevel = (dotIdx >= 0) ? groupName.left(dotIdx) : groupName;
+        if (deleted.contains(topLevel) || preservedGroups.contains(topLevel)) {
+            continue;
+        }
+        m_configBackend->deleteGroup(topLevel);
+        deleted.insert(topLevel);
     }
 }
 

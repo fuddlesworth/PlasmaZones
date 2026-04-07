@@ -93,6 +93,11 @@ public:
     PZ_CONFIG_GROUP(tilingQuickLayoutSlotsGroup, "TilingQuickLayoutSlots")
     PZ_CONFIG_GROUP(windowTrackingGroup, "WindowTracking")
 
+    // Assignment group prefix (used in assignments.json and migration code)
+    PZ_CONFIG_GROUP(assignmentGroupPrefix, "Assignment:")
+    PZ_CONFIG_GROUP(quickLayoutsGroup, "QuickLayouts")
+    PZ_CONFIG_GROUP(modeTrackingGroup, "ModeTracking")
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Window Tracking (session.json, written by WTA)
     //
@@ -138,6 +143,8 @@ public:
 
     // Autotile mode — per-context window order and floating state
     PZ_CONFIG_KEY(autotileWindowOrdersKey, "AutotileWindowOrders")
+    // Autotile mode — pending restore queue for close/reopen window preservation
+    PZ_CONFIG_KEY(autotilePendingRestoresKey, "AutotilePendingRestores")
 
     // Obsolete keys (cleaned up on save to prevent stale data)
     PZ_CONFIG_KEY(obsoleteFloatingWindowsKey, "FloatingWindows")
