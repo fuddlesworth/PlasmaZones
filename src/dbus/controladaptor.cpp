@@ -127,11 +127,6 @@ QString ControlAdaptor::getFullState()
 
 QString ControlAdaptor::generateSupportReport(int sinceMinutes)
 {
-    // D-Bus uses signed int; treat non-positive as "use default".
-    // SupportReport::sectionLogs further clamps to [1, 120].
-    if (sinceMinutes <= 0)
-        sinceMinutes = 30;
-
     qCInfo(lcDbus) << "generateSupportReport: sinceMinutes=" << sinceMinutes;
     return SupportReport::generate(m_screenManager, m_layoutManager, m_autotileEngine, sinceMinutes);
 }

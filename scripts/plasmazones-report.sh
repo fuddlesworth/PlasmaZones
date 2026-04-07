@@ -68,9 +68,11 @@ call_dbus() {
     elif command -v qdbus &>/dev/null; then
         qdbus org.plasmazones /PlasmaZones org.plasmazones.Control.generateSupportReport "$SINCE_MINUTES"
     elif command -v busctl &>/dev/null; then
-        busctl --user --json=short call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>/dev/null \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)['data'][0])" 2>/dev/null \
-            || busctl --user call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" | sed 's/^s "//' | sed 's/"$//'
+        local busctl_err
+        busctl_err=$(busctl --user --json=short call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>&1) \
+            && python3 -c "import sys,json; print(json.load(sys.stdin)['data'][0])" <<< "$busctl_err" 2>/dev/null \
+            || busctl --user call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>&1 \
+            | sed 's/^s "//' | sed 's/"$//'
     else
         echo "Error: No D-Bus CLI tool found (qdbus6, qdbus, or busctl required)" >&2
         exit 1
@@ -98,15 +100,29 @@ echo "$REPORT" > "$STAGING/report.md"
 
 # 2. Config file (redact home paths)
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/plasmazones"
-# Escape BRE metacharacters in HOME for safe use in sed patterns (| delimiter)
-HOME_ESC=$(printf '%s' "$HOME" | sed 's/\./\\./g')
+# Guard against empty HOME (e.g., running from a systemd service without User=)
+if [[ -z "${HOME:-}" ]]; then
+    echo "Warning: \$HOME is not set — skipping home path redaction" >&2
+    HOME_ESC=""
+else
+    # Escape all sed metacharacters in HOME for safe use in sed patterns (| delimiter)
+    HOME_ESC=$(printf '%s' "$HOME" | sed 's/[][\\.^$*+?{}()|]/\\&/g')
+fi
+redact_home() {
+    if [[ -n "$HOME_ESC" ]]; then
+        sed "s|$HOME_ESC|~|g" "$@"
+    else
+        cat "$@"
+    fi
+}
+
 if [[ -f "$CONFIG_DIR/config.json" ]]; then
-    sed "s|$HOME_ESC|~|g" "$CONFIG_DIR/config.json" > "$STAGING/config.json"
+    redact_home "$CONFIG_DIR/config.json" > "$STAGING/config.json"
 fi
 
 # 3. Session file (redact home paths — window classes/titles kept for diagnostic value)
 if [[ -f "$CONFIG_DIR/session.json" ]]; then
-    sed "s|$HOME_ESC|~|g" "$CONFIG_DIR/session.json" > "$STAGING/session.json"
+    redact_home "$CONFIG_DIR/session.json" > "$STAGING/session.json"
 fi
 
 # 4. User data directory (layouts, custom algorithms, shaders, etc.)
@@ -119,7 +135,7 @@ if [[ -d "$DATA_DIR" ]]; then
         mkdir -p "$STAGING/data/$(dirname "$rel")"
         case "$f" in
             *.json|*.js|*.glsl|*.frag|*.vert|*.conf|*.txt)
-                sed "s|$HOME_ESC|~|g" "$f" > "$STAGING/data/$rel" ;;
+                redact_home "$f" > "$STAGING/data/$rel" ;;
             *)
                 cp "$f" "$STAGING/data/$rel" ;;
         esac
@@ -132,7 +148,7 @@ if command -v journalctl &>/dev/null; then
         --since "$SINCE_MINUTES min ago" \
         --no-pager -o short-iso 2>/dev/null \
         | head -n 2000 \
-        | sed "s|$HOME_ESC|~|g") || true
+        | redact_home) || true
 
     # Fallback: try --identifier if -t returned nothing
     if [[ -z "$JOURNAL" ]]; then
@@ -140,7 +156,7 @@ if command -v journalctl &>/dev/null; then
             --since "$SINCE_MINUTES min ago" \
             --no-pager -o short-iso 2>/dev/null \
             | head -n 2000 \
-            | sed "s|$HOME_ESC|~|g") || true
+            | redact_home) || true
     fi
 
     if [[ -n "$JOURNAL" ]]; then

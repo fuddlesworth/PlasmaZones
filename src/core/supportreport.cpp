@@ -21,6 +21,7 @@
 
 namespace PlasmaZones {
 
+static constexpr int DefaultSinceMinutes = 30;
 static constexpr int MaxLogLines = 2000;
 static constexpr int MaxSinceMinutes = 120;
 static constexpr qint64 MaxFileSize = 1024 * 1024; // 1 MB
@@ -104,21 +105,25 @@ QString SupportReport::sectionScreens(ScreenManager* screenManager)
     return out;
 }
 
-QString SupportReport::sectionConfig()
+QString SupportReport::readAndRedactFile(const QString& path, const QString& label)
 {
-    const QString configPath = ConfigDefaults::configFilePath();
-    QFile file(configPath);
-    if (!file.exists())
-        return QStringLiteral("*(config file not found: %1)*\n").arg(redactHomePath(configPath));
-
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-        return QStringLiteral("*(could not read config file)*\n");
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        if (!QFile::exists(path))
+            return QStringLiteral("*(%1 not found: %2)*\n").arg(label, redactHomePath(path));
+        return QStringLiteral("*(could not read %1)*\n").arg(label);
+    }
 
     if (file.size() > MaxFileSize)
-        return QStringLiteral("*(config file too large: %1 bytes)*\n").arg(file.size());
+        return QStringLiteral("*(%1 too large: %2 bytes)*\n").arg(label).arg(file.size());
 
     const QString content = QString::fromUtf8(file.readAll());
     return QStringLiteral("```json\n%1\n```\n").arg(redactHomePath(content));
+}
+
+QString SupportReport::sectionConfig()
+{
+    return readAndRedactFile(ConfigDefaults::configFilePath(), QStringLiteral("config file"));
 }
 
 QString SupportReport::sectionLayouts(LayoutManager* layoutManager)
@@ -164,19 +169,7 @@ QString SupportReport::sectionAutotile(AutotileEngine* autotileEngine)
 
 QString SupportReport::sectionSession()
 {
-    const QString sessionPath = ConfigDefaults::sessionFilePath();
-    QFile file(sessionPath);
-    if (!file.exists())
-        return QStringLiteral("*(no session file)*\n");
-
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-        return QStringLiteral("*(could not read session file)*\n");
-
-    if (file.size() > MaxFileSize)
-        return QStringLiteral("*(session file too large: %1 bytes)*\n").arg(file.size());
-
-    const QString content = QString::fromUtf8(file.readAll());
-    return QStringLiteral("```json\n%1\n```\n").arg(redactHomePath(content));
+    return readAndRedactFile(ConfigDefaults::sessionFilePath(), QStringLiteral("session file"));
 }
 
 QString SupportReport::sectionLogs(int sinceMinutes)
@@ -190,7 +183,7 @@ QString SupportReport::sectionLogs(int sinceMinutes)
                        QStringLiteral("--no-pager"), QStringLiteral("-o"), QStringLiteral("short-iso")});
     proc.start();
 
-    if (!proc.waitForFinished(10000)) {
+    if (!proc.waitForStarted(3000) || !proc.waitForFinished(10000)) {
         return QStringLiteral("*(journalctl timed out or not available)*\n");
     }
 
@@ -205,7 +198,7 @@ QString SupportReport::sectionLogs(int sinceMinutes)
                                QStringLiteral("--since"), QStringLiteral("%1 min ago").arg(sinceMinutes),
                                QStringLiteral("--no-pager"), QStringLiteral("-o"), QStringLiteral("short-iso")});
         fallback.start();
-        if (!fallback.waitForFinished(10000))
+        if (!fallback.waitForStarted(3000) || !fallback.waitForFinished(10000))
             return QStringLiteral("*(journalctl not available)*\n");
         rawOutput = fallback.readAllStandardOutput();
     }
@@ -227,6 +220,9 @@ QString SupportReport::sectionLogs(int sinceMinutes)
 QString SupportReport::generate(ScreenManager* screenManager, LayoutManager* layoutManager,
                                 AutotileEngine* autotileEngine, int sinceMinutes)
 {
+    if (sinceMinutes <= 0)
+        sinceMinutes = DefaultSinceMinutes;
+
     QString report;
     report += QStringLiteral("<details>\n<summary>PlasmaZones Support Report</summary>\n\n");
 

@@ -50,6 +50,7 @@ private:
     static QString sectionVersion();
     static QString sectionEnvironment();
     static QString sectionScreens(ScreenManager* screenManager);
+    static QString readAndRedactFile(const QString& path, const QString& label);
     static QString sectionConfig();
     static QString sectionLayouts(LayoutManager* layoutManager);
     static QString sectionAutotile(AutotileEngine* autotileEngine);
