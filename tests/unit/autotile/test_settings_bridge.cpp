@@ -238,7 +238,8 @@ private Q_SLOTS:
     {
         // Build JSON with two entries for the same screen on different desktops.
         // Only the entry matching the engine's current desktop should populate
-        // m_pendingInitialOrders (keyed by screenId, so only one can exist).
+        // m_pendingInitialOrders immediately. Desktop 2's orders are saved for
+        // promotion when the user switches to that desktop.
         QJsonArray multiDesktopData;
         {
             QJsonObject entry1;
@@ -256,18 +257,9 @@ private Q_SLOTS:
             multiDesktopData.append(entry2);
         }
 
-        // Engine defaults to desktop=1 — only desktop 1's order should be restored
+        // Engine defaults to desktop=1 — only desktop 1's order should be pending immediately
         AutotileEngine engine(nullptr, nullptr, nullptr);
         engine.settingsBridge()->deserializeWindowOrders(multiDesktopData);
-
-        // Verify via serialization that only current desktop's windows ended up
-        // in the pending orders. We can't inspect m_pendingInitialOrders directly,
-        // but we can check the engine doesn't have desktop 2's windows pre-seeded
-        // by setting up windows and checking order.
-        //
-        // Indirect check: setInitialWindowOrder would warn if overwriting, and
-        // the engine should have pending orders containing win1/win2, not win3/win4.
-        // Use setCurrentDesktop to switch and verify no cross-contamination.
 
         // Desktop 1 should have pending orders
         engine.setAutotileScreens({QStringLiteral("eDP-1")});
@@ -282,6 +274,48 @@ private Q_SLOTS:
         QCOMPARE(order.size(), 2);
         QCOMPARE(order.at(0), QStringLiteral("win1"));
         QCOMPARE(order.at(1), QStringLiteral("win2"));
+    }
+
+    void testSettingsBridge_deserializeWindowOrders_multiDesktop_promotesOnSwitch()
+    {
+        // Desktop 2's saved window orders should be promoted into pending orders
+        // when the engine switches to desktop 2.
+        QJsonArray multiDesktopData;
+        {
+            QJsonObject entry1;
+            entry1[QLatin1String("screen")] = QStringLiteral("eDP-1");
+            entry1[QLatin1String("desktop")] = 1;
+            entry1[QLatin1String("activity")] = QString();
+            entry1[QLatin1String("windowOrder")] = QJsonArray{QStringLiteral("win1"), QStringLiteral("win2")};
+            multiDesktopData.append(entry1);
+
+            QJsonObject entry2;
+            entry2[QLatin1String("screen")] = QStringLiteral("eDP-1");
+            entry2[QLatin1String("desktop")] = 2;
+            entry2[QLatin1String("activity")] = QString();
+            entry2[QLatin1String("windowOrder")] = QJsonArray{QStringLiteral("win3"), QStringLiteral("win4")};
+            multiDesktopData.append(entry2);
+        }
+
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        engine.settingsBridge()->deserializeWindowOrders(multiDesktopData);
+
+        // Switch to desktop 2 — should promote saved orders for desktop 2
+        engine.setAutotileScreens({QStringLiteral("eDP-1")});
+        engine.setCurrentDesktop(2);
+
+        // Open desktop 2's windows in reverse order
+        engine.windowOpened(QStringLiteral("win4"), QStringLiteral("eDP-1"), 0, 0);
+        engine.windowOpened(QStringLiteral("win3"), QStringLiteral("eDP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        QVERIFY(state);
+        // Pre-seeded order should place win3 before win4 (matching desktop 2's saved order)
+        const QStringList order = state->windowOrder();
+        QCOMPARE(order.size(), 2);
+        QCOMPARE(order.at(0), QStringLiteral("win3"));
+        QCOMPARE(order.at(1), QStringLiteral("win4"));
     }
 
     void testSettingsBridge_deserializeWindowOrders_floatingRestoresAllContexts()

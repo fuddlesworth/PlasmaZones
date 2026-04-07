@@ -887,6 +887,15 @@ private:
     bool cleanupPendingOrderIfResolved(const QString& screenId);
 
     /**
+     * @brief Promote saved window orders for the current context into pending orders
+     *
+     * Called after desktop/activity switches. Moves orders from m_savedWindowOrders
+     * (populated by deserializeWindowOrders for all contexts) into m_pendingInitialOrders
+     * so windows arriving on the new desktop get their saved ordering.
+     */
+    void promoteSavedWindowOrders();
+
+    /**
      * @brief Validate that a windowId is not empty, logging a warning if it is
      * @param windowId Window ID to validate
      * @param operation Operation name for the warning message
@@ -969,6 +978,12 @@ private:
     // removeWindow() if a pre-seeded window closes before arriving.
     QHash<QString, QStringList> m_pendingInitialOrders;
     QHash<QString, uint64_t> m_pendingOrderGeneration;
+
+    // Saved window orders from session persistence, keyed by full context.
+    // On desktop/activity switch, orders for the new context are promoted into
+    // m_pendingInitialOrders so windows arriving on the new desktop get their
+    // saved ordering. Consumed once per context (removed after promotion).
+    QHash<TilingStateKey, QStringList> m_savedWindowOrders;
 
     // Per-screen overflow tracking with O(1) reverse-index lookups.
     OverflowManager m_overflow;

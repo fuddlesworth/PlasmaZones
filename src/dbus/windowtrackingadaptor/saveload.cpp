@@ -13,6 +13,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include "../../config/iconfigbackend.h"
+#include "../../config/configkeys.h"
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -52,7 +53,7 @@ void WindowTrackingAdaptor::saveState()
 {
     std::unique_ptr<IConfigBackend> fallback;
     IConfigBackend* backend = resolveBackend(m_configBackend, fallback);
-    auto tracking = backend->group(QStringLiteral("WindowTracking"));
+    auto tracking = backend->group(ConfigKeys::windowTrackingGroup());
 
     // Save active layout ID so we can restore it after daemon restart.
     if (m_layoutManager && m_layoutManager->activeLayout()) {
@@ -170,15 +171,15 @@ void WindowTrackingAdaptor::saveState()
     if (m_serializeTilingStatesFn) {
         const QJsonArray autotileOrders = m_serializeTilingStatesFn();
         if (!autotileOrders.isEmpty()) {
-            tracking->writeString(QStringLiteral("AutotileWindowOrders"),
+            tracking->writeString(ConfigKeys::autotileWindowOrdersKey(),
                                   QString::fromUtf8(QJsonDocument(autotileOrders).toJson(QJsonDocument::Compact)));
         } else {
-            tracking->deleteKey(QStringLiteral("AutotileWindowOrders"));
+            tracking->deleteKey(ConfigKeys::autotileWindowOrdersKey());
         }
     } else {
         // No serialize delegate — clean up any stale key from a prior session
         // where autotile was enabled. Prevents restoring orphaned window orders.
-        tracking->deleteKey(QStringLiteral("AutotileWindowOrders"));
+        tracking->deleteKey(ConfigKeys::autotileWindowOrdersKey());
     }
 
     tracking.reset(); // release group before sync
@@ -227,7 +228,7 @@ void WindowTrackingAdaptor::loadState()
     std::unique_ptr<IConfigBackend> fallback;
     IConfigBackend* backend = resolveBackend(m_configBackend, fallback);
     backend->sync();
-    auto tracking = backend->group(QStringLiteral("WindowTracking"));
+    auto tracking = backend->group(ConfigKeys::windowTrackingGroup());
     auto readVal = [&](const QString& key, const QString& def = QString()) -> QString {
         return tracking->readString(key, def);
     };
@@ -524,7 +525,7 @@ void WindowTrackingAdaptor::loadState()
 
     // Restore autotile per-context window orders (analogous to WindowZoneAssignmentsFull)
     if (m_deserializeTilingStatesFn) {
-        const QString autotileOrdersStr = readVal(QStringLiteral("AutotileWindowOrders"), QString());
+        const QString autotileOrdersStr = readVal(ConfigKeys::autotileWindowOrdersKey(), QString());
         if (!autotileOrdersStr.isEmpty()) {
             QJsonParseError parseError;
             const QJsonDocument doc = QJsonDocument::fromJson(autotileOrdersStr.toUtf8(), &parseError);

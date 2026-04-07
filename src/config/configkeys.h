@@ -91,6 +91,13 @@ public:
 
     // Unmanaged groups (not purged by save(), written independently)
     PZ_CONFIG_GROUP(tilingQuickLayoutSlotsGroup, "TilingQuickLayoutSlots")
+    PZ_CONFIG_GROUP(windowTrackingGroup, "WindowTracking")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Window Tracking (unmanaged group, written by WTA)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    PZ_CONFIG_KEY(autotileWindowOrdersKey, "AutotileWindowOrders")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Trigger JSON Field Names

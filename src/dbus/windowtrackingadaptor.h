@@ -678,7 +678,10 @@ public Q_SLOTS:
      * @param serializeFn Returns JSON array of per-screen tiling states
      * @param deserializeFn Restores tiling states from JSON array
      */
-#ifndef Q_MOC_RUN // std::function types confuse MOC's introspection parser
+    // MOC misparses std::function<void(const QJsonArray&)> as function<const void(QJsonArray&)>,
+    // generating code that fails to compile. This method is not a signal/slot, but MOC still
+    // processes all public member declarations in Q_OBJECT classes. Guard is required.
+#ifndef Q_MOC_RUN
     void setTilingStateDelegates(std::function<QJsonArray()> serializeFn,
                                  std::function<void(const QJsonArray&)> deserializeFn);
 #endif
