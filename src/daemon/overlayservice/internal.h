@@ -24,6 +24,16 @@ namespace PlasmaZones {
 // so tests can include them without pulling in ConfigDefaults/ShaderRegistry.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+inline void resetOsdOverlayState(QObject* window)
+{
+    if (!window) {
+        return;
+    }
+    writeQmlProperty(window, QStringLiteral("locked"), false);
+    writeQmlProperty(window, QStringLiteral("disabled"), false);
+    writeQmlProperty(window, QStringLiteral("disabledReason"), QString());
+}
+
 inline void writeFontProperties(QObject* window, const IZoneVisualizationSettings* settings)
 {
     if (!window || !settings) {

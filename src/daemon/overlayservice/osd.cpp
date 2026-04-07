@@ -120,9 +120,8 @@ void OverlayService::showLayoutOsdImpl(Layout* layout, const QString& screenId, 
         return;
     }
 
+    resetOsdOverlayState(window);
     writeQmlProperty(window, QStringLiteral("locked"), locked);
-    writeQmlProperty(window, QStringLiteral("disabled"), false);
-    writeQmlProperty(window, QStringLiteral("disabledReason"), QString());
     writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
     writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
@@ -160,9 +159,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
 
     // Reset locked/disabled state — window is reused across show calls, so a prior
     // showLockedLayoutOsd() or showDisabledOsd() would leave the overlay stuck on.
-    writeQmlProperty(window, QStringLiteral("locked"), false);
-    writeQmlProperty(window, QStringLiteral("disabled"), false);
-    writeQmlProperty(window, QStringLiteral("disabledReason"), QString());
+    resetOsdOverlayState(window);
     writeQmlProperty(window, QStringLiteral("layoutId"), id);
     writeQmlProperty(window, QStringLiteral("layoutName"), name);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
@@ -200,7 +197,9 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
         return;
     }
 
-    writeQmlProperty(window, QStringLiteral("locked"), false);
+    // Reset overlay state then set disabled — locked is intentionally false
+    // (mutually exclusive with disabled, also enforced in QML).
+    resetOsdOverlayState(window);
     writeQmlProperty(window, QStringLiteral("disabled"), true);
     writeQmlProperty(window, QStringLiteral("disabledReason"), reason);
     writeQmlProperty(window, QStringLiteral("layoutId"), QString());

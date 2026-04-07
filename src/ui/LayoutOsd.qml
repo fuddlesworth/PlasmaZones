@@ -70,7 +70,7 @@ Window {
     property bool fontStrikeout: false
     property bool locked: false
     property bool disabled: false
-    property string disabledReason: ""
+    property string disabledReason
 
     // Signals
     signal dismissed()
@@ -181,7 +181,7 @@ Window {
     Item {
         id: contentWrapper
 
-        Accessible.name: i18n("Layout indicator")
+        Accessible.name: root.disabled ? root.disabledReason : i18n("Layout indicator")
         anchors.fill: parent
         opacity: 0
 

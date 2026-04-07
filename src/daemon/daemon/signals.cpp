@@ -202,8 +202,9 @@ void Daemon::initializeAutotile()
             // show a visual OSD explaining why instead of silently ignoring the toggle.
             // Note: intentionally shown regardless of showOsdOnLayoutSwitch — this is
             // direct feedback to an explicit user action, not a passive layout-switch OSD.
-            if (isContextDisabled(m_settings.get(), screenId, desktop, activity)) {
-                showContextDisabledOsd(screenId, desktop, activity);
+            const DisabledReason why = contextDisabledReason(m_settings.get(), screenId, desktop, activity);
+            if (why != DisabledReason::NotDisabled) {
+                showContextDisabledOsd(screenId, desktop, why);
                 return;
             }
 
