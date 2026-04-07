@@ -944,6 +944,9 @@ void AutotileEngine::scheduleRetileRetry(const QString& screenId)
     m_retileRetryScreens.insert(screenId);
     qCInfo(lcAutotile) << "scheduleRetileRetry: attempt" << count << "/" << MaxRetileRetries << "for screen" << screenId
                        << "in" << RetileRetryIntervalMs << "ms";
+    // Single shared timer across all screens — a screen queued later in the
+    // same interval gets a shorter effective wait, which is harmless (it just
+    // retries sooner and re-schedules if geometry is still unavailable).
     if (!m_retileRetryTimer.isActive()) {
         m_retileRetryTimer.start();
     }
@@ -2135,12 +2138,18 @@ void AutotileEngine::retileScreen(const QString& screenId)
             });
         for (const QString& wid : unfloated) {
             state->setFloating(wid, false);
+            m_windowMinSizes.remove(wid);
         }
     }
 
     // Step 2-3: Recalculate layout and apply tiling (applyTiling also handles
     // new overflow detection and collects overflow signals internally).
-    recalculateLayout(screenId);
+    // On failure, zones are unchanged from the last successful recalc —
+    // applyTiling must still run to handle overflow recovery from step 1.
+    if (!recalculateLayout(screenId)) {
+        qCWarning(lcAutotile) << "retileScreen: recalculateLayout failed for" << screenId
+                              << "- applying previous zone layout";
+    }
     applyTiling(screenId);
 
     // Step 4: Emit all deferred signals after state is fully consistent.

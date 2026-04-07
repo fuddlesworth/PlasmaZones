@@ -97,6 +97,7 @@ pz_add_test(test_autotile_engine_master autotile/test_autotile_engine_master.cpp
 target_compile_definitions(test_autotile_engine_master PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_autotile_engine_minsize autotile/test_autotile_engine_minsize.cpp)
 pz_add_test(test_autotile_engine_overflow autotile/test_autotile_engine_overflow.cpp)
+pz_add_test(test_autotile_engine_retry autotile/test_autotile_engine_retry.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Autotile Engine Extended Tests (startup, float, algoswitch, overflow)
@@ -255,6 +256,7 @@ set(_all_tests
     test_scripted_algorithm test_split_tree test_scripted_algorithm_loader
     test_autotile_engine_core test_autotile_engine_master
     test_autotile_engine_minsize test_autotile_engine_overflow
+    test_autotile_engine_retry
     test_autotile_ext_startup_float test_autotile_ext_algoswitch
     test_autotile_ext_overflow
     test_tiling_state_windows test_tiling_state_config test_tiling_state_serial
