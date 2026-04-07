@@ -334,7 +334,7 @@ bool Daemon::init()
 
     // Initialize autotile engine
     m_autotileEngine = std::make_unique<AutotileEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(),
-                                                        m_screenManager.get(), m_configBackend.get(), this);
+                                                        m_screenManager.get(), this);
 
     // Initialize scripted algorithm loader BEFORE syncFromSettings so that
     // user-defined algorithms are registered in AlgorithmRegistry before the
@@ -373,6 +373,37 @@ bool Daemon::init()
 
     // Wire engine cross-references (SnapEngine ↔ AutotileEngine, zone detection)
     m_windowTrackingAdaptor->setEngines(m_snapEngine.get(), m_autotileEngine.get());
+
+    // Wire autotile persistence through WTA's KConfig layer (same delegate pattern as SnapEngine).
+    // Note: engine->saveState() intentionally triggers a full WTA save (all window tracking
+    // state, not just autotile). This is heavier than a targeted save but ensures consistency
+    // — the autotile window orders are embedded in WTA's save cycle via the serialization
+    // delegates below. The engine-level delegates exist to satisfy the IWindowEngine interface.
+    // QPointer guards against late calls during shutdown if WTA is destroyed first.
+    m_autotileEngine->setPersistenceDelegate(
+        [wta = QPointer(m_windowTrackingAdaptor)]() {
+            if (wta)
+                wta->saveState();
+        },
+        [wta = QPointer(m_windowTrackingAdaptor)]() {
+            if (wta)
+                wta->loadState();
+        });
+
+    // Wire window order serialization delegates so WTA includes autotile window
+    // orders in its save/load cycle (analogous to WindowZoneAssignmentsFull for snap mode)
+    m_windowTrackingAdaptor->setTilingStateDelegates(
+        [engine = QPointer(m_autotileEngine.get())]() -> QJsonArray {
+            return engine ? engine->serializeWindowOrders() : QJsonArray{};
+        },
+        [engine = QPointer(m_autotileEngine.get())](const QJsonArray& orders) {
+            if (engine)
+                engine->deserializeWindowOrders(orders);
+        });
+
+    // Trigger WTA save on autotile state changes (window order, split ratio, master count)
+    connect(m_autotileEngine.get(), &AutotileEngine::tilingChanged, m_windowTrackingAdaptor,
+            &WindowTrackingAdaptor::scheduleSaveState);
 
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)
@@ -574,14 +605,13 @@ void Daemon::stop()
 
     m_reapplyGeometriesTimer.stop();
 
-    // Save autotile state (per-screen params, algorithm).
+    // Autotile tiling state is now included in WTA's saveStateOnShutdown() above
+    // via the tiling state serialization delegates. No separate save needed.
+    //
     // Do NOT call setAutotileScreens({}) here — it emits windowsReleasedFromTiling
     // which clears WTS floating state and restarts the save timer, potentially
     // overwriting the correct WTS state saved above. The engine is destroyed
     // immediately after, so cleanup is unnecessary.
-    if (m_autotileEngine) {
-        m_autotileEngine->saveState();
-    }
 
     // Clear adaptor engine pointers BEFORE destroying the engines.
     // Adaptors are Qt children of the daemon (destroyed later); a D-Bus call

@@ -135,6 +135,13 @@ void WindowTrackingAdaptor::setEngines(SnapEngine* snapEngine, AutotileEngine* a
     }
 }
 
+void WindowTrackingAdaptor::setTilingStateDelegates(std::function<QJsonArray()> serializeFn,
+                                                    std::function<void(const QJsonArray&)> deserializeFn)
+{
+    m_serializeTilingStatesFn = std::move(serializeFn);
+    m_deserializeTilingStatesFn = std::move(deserializeFn);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Window Snapping - Delegate to Service
 // ═══════════════════════════════════════════════════════════════════════════════
