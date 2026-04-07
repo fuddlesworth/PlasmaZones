@@ -54,10 +54,10 @@ Item {
         height: successNotificationContent.implicitHeight + Kirigami.Units.gridUnit * 2
         visible: opacity > 0
         opacity: 0
-        color: Kirigami.Theme.backgroundColor
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.95)
         border.color: Kirigami.Theme.positiveTextColor
         border.width: constants.notificationBorderWidth
-        radius: Kirigami.Units.gridUnit
+        radius: Kirigami.Units.smallSpacing * 1.5
         z: 200
         Accessible.name: i18nc("@info:accessibility", "Success notification")
         Accessible.description: successNotificationLabel.text || ""
@@ -103,6 +103,20 @@ Item {
             }
         }
 
+        // Subtle lift on appearance
+        transform: Translate {
+            y: successNotification.opacity > 0 ? 0 : Kirigami.Units.smallSpacing
+
+            Behavior on y {
+                NumberAnimation {
+                    duration: 200
+                    easing.type: Easing.OutCubic
+                }
+
+            }
+
+        }
+
         Behavior on opacity {
             NumberAnimation {
                 duration: 200
@@ -131,10 +145,10 @@ Item {
         height: errorNotificationContent.implicitHeight + Kirigami.Units.gridUnit * 2
         visible: opacity > 0
         opacity: 0
-        color: Kirigami.Theme.backgroundColor
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.95)
         border.color: Kirigami.Theme.negativeTextColor
         border.width: constants.notificationBorderWidth
-        radius: Kirigami.Units.gridUnit
+        radius: Kirigami.Units.smallSpacing * 1.5
         z: 200
         Accessible.name: i18nc("@info:accessibility", "Error notification")
         Accessible.description: errorNotificationLabel.text || ""
@@ -190,6 +204,20 @@ Item {
             onTriggered: {
                 errorNotification.opacity = 0;
             }
+        }
+
+        // Subtle lift on appearance
+        transform: Translate {
+            y: errorNotification.opacity > 0 ? 0 : Kirigami.Units.smallSpacing
+
+            Behavior on y {
+                NumberAnimation {
+                    duration: 200
+                    easing.type: Easing.OutCubic
+                }
+
+            }
+
         }
 
         Behavior on opacity {

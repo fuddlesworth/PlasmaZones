@@ -64,11 +64,12 @@ Rectangle {
     Layout.maximumWidth: visible ? 280 : 0
     Layout.minimumWidth: 0
     Layout.fillHeight: true
-    color: Kirigami.Theme.backgroundColor
+    color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.95)
+    border.width: Math.round(Kirigami.Units.devicePixelRatio)
+    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
     visible: panelMode !== "hidden"
     opacity: visible ? 1 : 0
     z: 50
-    // Reset multi-select colors to defaults when entering multi-select mode
     onPanelModeChanged: {
         if (panelMode === "multiple") {
             multiHighlightColor = Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5);
@@ -88,10 +89,20 @@ Rectangle {
             Layout.fillWidth: true
             spacing: Kirigami.Units.gridUnit
 
+            // Accent bar (matches SectionHeader style)
+            Rectangle {
+                width: Math.round(Kirigami.Units.smallSpacing * 0.75)
+                height: panelTitleLabel.height
+                color: Kirigami.Theme.highlightColor
+                radius: Math.round(Kirigami.Units.smallSpacing / 4)
+            }
+
             Label {
+                id: panelTitleLabel
+
                 Layout.fillWidth: true
                 text: panelMode === "single" ? i18nc("@title", "Zone Properties") : i18ncp("@title", "%n Zone Selected", "%n Zones Selected", selectionCount)
-                font.bold: true
+                font.weight: Font.DemiBold
                 font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.1
             }
 
@@ -915,6 +926,23 @@ Rectangle {
         }
 
     }
+
+    Behavior on opacity {
+        NumberAnimation {
+            duration: 200
+            easing.type: Easing.OutCubic
+        }
+
+    }
+
+    Behavior on Layout.preferredWidth {
+        NumberAnimation {
+            duration: 200
+            easing.type: Easing.OutCubic
+        }
+
+    }
+    // Reset multi-select colors to defaults when entering multi-select mode
 
     Behavior on opacity {
         NumberAnimation {

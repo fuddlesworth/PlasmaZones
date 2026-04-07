@@ -30,7 +30,7 @@ ToolBar {
 
     signal fullscreenToggled()
 
-    height: Kirigami.Units.gridUnit * 5 // Use theme spacing (40px - better visual balance)
+    height: Kirigami.Units.gridUnit * 5
     z: 100
 
     RowLayout {
@@ -49,17 +49,71 @@ ToolBar {
             Repeater {
                 model: availableScreens || []
 
-                delegate: Button {
-                    text: modelData ? (modelData.name || "") : ""
-                    highlighted: editorController && modelData && modelData.name === editorController.targetScreen
-                    enabled: editorController !== null
+                delegate: Rectangle {
+                    id: screenButton
+
+                    required property var modelData
+                    property bool isActive: editorController && modelData && modelData.name === editorController.targetScreen
+                    property bool isHovered: screenButtonMouse.containsMouse
+
+                    width: screenButtonLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
+                    height: Kirigami.Units.gridUnit * 3
+                    radius: Kirigami.Units.smallSpacing * 1.5
+                    color: isActive ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (isHovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent")
+                    border.width: Math.round(Kirigami.Units.devicePixelRatio)
+                    border.color: isActive ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : (isHovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15) : "transparent")
                     Accessible.name: modelData ? modelData.name : ""
                     Accessible.description: i18nc("@info", "Select screen for layout editing")
-                    onClicked: {
-                        if (editorController && modelData)
-                            editorController.targetScreen = modelData.name;
+                    Accessible.role: Accessible.Button
+
+                    Label {
+                        id: screenButtonLabel
+
+                        anchors.centerIn: parent
+                        text: modelData ? (modelData.name || "") : ""
+                        color: screenButton.isActive ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                        font.weight: screenButton.isActive ? Font.DemiBold : Font.Normal
+                        opacity: screenButton.isActive ? 1 : 0.8
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 200
+                                easing.type: Easing.OutCubic
+                            }
+
+                        }
 
                     }
+
+                    MouseArea {
+                        id: screenButtonMouse
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (editorController && modelData)
+                                editorController.targetScreen = modelData.name;
+
+                        }
+                    }
+
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 200
+                            easing.type: Easing.OutCubic
+                        }
+
+                    }
+
+                    Behavior on border.color {
+                        ColorAnimation {
+                            duration: 200
+                            easing.type: Easing.OutCubic
+                        }
+
+                    }
+
                 }
 
             }
@@ -136,8 +190,10 @@ ToolBar {
                 }
 
                 background: Rectangle {
-                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
-                    radius: Kirigami.Units.smallSpacing // Use theme spacing
+                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, layoutNameField.activeFocus ? 0.08 : 0.04)
+                    radius: Kirigami.Units.smallSpacing * 1.5
+                    border.width: Math.round(Kirigami.Units.devicePixelRatio)
+                    border.color: layoutNameField.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
 
                     // Character counter overlay (right-aligned inside field)
                     Label {
@@ -151,6 +207,22 @@ ToolBar {
                         opacity: layoutNameField.activeFocus ? 1 : 0.6
                         Accessible.name: i18nc("@info", "Character count: %1 of %2", layoutNameField.currentLength, layoutNameField.maxLength)
                         Accessible.description: i18nc("@info", "Shows how many characters are used in the layout name")
+                    }
+
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 200
+                            easing.type: Easing.OutCubic
+                        }
+
+                    }
+
+                    Behavior on border.color {
+                        ColorAnimation {
+                            duration: 200
+                            easing.type: Easing.OutCubic
+                        }
+
                     }
 
                 }
@@ -404,6 +476,19 @@ ToolBar {
                 Accessible.description: i18nc("@info", "Close the layout editor")
             }
 
+        }
+
+    }
+
+    background: Rectangle {
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.9)
+
+        // Bottom accent line
+        Rectangle {
+            anchors.bottom: parent.bottom
+            width: parent.width
+            height: Math.round(Kirigami.Units.devicePixelRatio)
+            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
         }
 
     }

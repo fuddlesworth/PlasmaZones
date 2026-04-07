@@ -382,6 +382,8 @@ ToolBar {
             visible: editorController ? (editorController.hasUnsavedChanges || false) : false
 
             Kirigami.Icon {
+                id: unsavedIcon
+
                 source: "document-save"
                 width: Kirigami.Units.iconSizes.smallMedium
                 height: Kirigami.Units.iconSizes.smallMedium
@@ -398,12 +400,31 @@ ToolBar {
                 Accessible.role: Accessible.AlertMessage
             }
 
-        }
+            // Pulsing animation for unsaved indicator (matches settings dirty badge)
+            SequentialAnimation {
+                running: statusSection.visible
+                loops: Animation.Infinite
 
-        // Visual separator
-        Kirigami.Separator {
-            Layout.fillHeight: true
-            Layout.preferredWidth: 1
+                NumberAnimation {
+                    targets: [unsavedIcon, unsavedIndicator]
+                    property: "opacity"
+                    from: 0.4
+                    to: 1
+                    duration: 500
+                    easing.type: Easing.InOutSine
+                }
+
+                NumberAnimation {
+                    targets: [unsavedIcon, unsavedIndicator]
+                    property: "opacity"
+                    from: 1
+                    to: 0.4
+                    duration: 500
+                    easing.type: Easing.InOutSine
+                }
+
+            }
+
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -445,6 +466,19 @@ ToolBar {
                 }
             }
 
+        }
+
+    }
+
+    background: Rectangle {
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.9)
+
+        // Top accent line
+        Rectangle {
+            anchors.top: parent.top
+            width: parent.width
+            height: Math.round(Kirigami.Units.devicePixelRatio)
+            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
         }
 
     }

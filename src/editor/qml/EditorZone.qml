@@ -497,14 +497,16 @@ Item {
 
         Behavior on color {
             ColorAnimation {
-                duration: 100
+                duration: 200
+                easing.type: Easing.OutCubic
             }
 
         }
 
         Behavior on border.color {
             ColorAnimation {
-                duration: 100
+                duration: 200
+                easing.type: Easing.OutCubic
             }
 
         }

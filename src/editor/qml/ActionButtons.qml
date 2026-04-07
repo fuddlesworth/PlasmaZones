@@ -42,8 +42,10 @@ Row {
 
         width: actionButtons.buttonSize
         height: actionButtons.buttonSize
-        radius: Kirigami.Units.smallSpacing // Use theme spacing
+        radius: Kirigami.Units.smallSpacing * 1.5
         color: splitHorizontalMouseArea.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+        border.width: Math.round(Kirigami.Units.devicePixelRatio)
+        border.color: splitHorizontalMouseArea.containsMouse ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
         z: 101
 
         Kirigami.Icon {
@@ -94,6 +96,22 @@ Row {
             text: i18nc("@tooltip", "Split horizontally")
         }
 
+        Behavior on color {
+            ColorAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
+        Behavior on border.color {
+            ColorAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
     }
 
     // Split vertical button
@@ -102,8 +120,10 @@ Row {
 
         width: actionButtons.buttonSize
         height: actionButtons.buttonSize
-        radius: Kirigami.Units.smallSpacing // Use theme spacing
+        radius: Kirigami.Units.smallSpacing * 1.5
         color: splitVerticalMouseArea.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+        border.width: Math.round(Kirigami.Units.devicePixelRatio)
+        border.color: splitVerticalMouseArea.containsMouse ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
         z: 101
 
         Kirigami.Icon {
@@ -154,6 +174,22 @@ Row {
             text: i18nc("@tooltip", "Split vertically")
         }
 
+        Behavior on color {
+            ColorAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
+        Behavior on border.color {
+            ColorAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
     }
 
     // Fill button
@@ -162,8 +198,10 @@ Row {
 
         width: actionButtons.buttonSize
         height: actionButtons.buttonSize
-        radius: Kirigami.Units.smallSpacing // Use theme spacing
+        radius: Kirigami.Units.smallSpacing * 1.5
         color: fillMouseArea.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+        border.width: Math.round(Kirigami.Units.devicePixelRatio)
+        border.color: fillMouseArea.containsMouse ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
         z: 101
 
         Kirigami.Icon {
@@ -214,6 +252,22 @@ Row {
             text: i18nc("@tooltip", "Fill available space")
         }
 
+        Behavior on color {
+            ColorAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
+        Behavior on border.color {
+            ColorAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
     }
 
     // Duplicate button
@@ -222,8 +276,10 @@ Row {
 
         width: actionButtons.buttonSize
         height: actionButtons.buttonSize
-        radius: Kirigami.Units.smallSpacing // Use theme spacing
+        radius: Kirigami.Units.smallSpacing * 1.5
         color: duplicateMouseArea.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+        border.width: Math.round(Kirigami.Units.devicePixelRatio)
+        border.color: duplicateMouseArea.containsMouse ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
         z: 101
 
         Kirigami.Icon {
@@ -274,6 +330,22 @@ Row {
             text: i18nc("@tooltip", "Duplicate zone")
         }
 
+        Behavior on color {
+            ColorAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
+        Behavior on border.color {
+            ColorAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
     }
 
     // Delete button
@@ -282,8 +354,10 @@ Row {
 
         width: actionButtons.buttonSize
         height: actionButtons.buttonSize
-        radius: Kirigami.Units.smallSpacing // Use theme spacing
+        radius: Kirigami.Units.smallSpacing * 1.5
         color: deleteMouseArea.containsMouse ? Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.5) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+        border.width: Math.round(Kirigami.Units.devicePixelRatio)
+        border.color: deleteMouseArea.containsMouse ? Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.5) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
         z: 101
 
         Kirigami.Icon {
@@ -332,6 +406,22 @@ Row {
         ToolTip {
             visible: deleteMouseArea.containsMouse
             text: i18nc("@tooltip", "Delete zone")
+        }
+
+        Behavior on color {
+            ColorAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
+        Behavior on border.color {
+            ColorAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
         }
 
     }
