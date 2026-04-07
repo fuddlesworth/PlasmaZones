@@ -21,6 +21,7 @@
 
 namespace PlasmaZones {
 
+// These constants are mirrored in scripts/plasmazones-report.sh — keep in sync.
 static constexpr int DefaultSinceMinutes = 30;
 static constexpr int MaxLogLines = 2000;
 static constexpr int MaxSinceMinutes = 120;
@@ -35,7 +36,13 @@ QString SupportReport::redactHomePath(const QString& input)
     // Match home path when followed by a separator (/ or end-of-string),
     // preventing partial matches (e.g., /home/user must not match /home/username).
     // Cache the compiled regex — redactHomePath is called per-line on potentially 2000+ log lines.
-    static const QRegularExpression re(QRegularExpression::escape(home) + QStringLiteral("(?=[/\\s]|$)"));
+    // Rebuild if HOME changes (unlikely in production, but correct for tests).
+    static QString cachedHome;
+    static QRegularExpression re;
+    if (cachedHome != home) {
+        cachedHome = home;
+        re = QRegularExpression(QRegularExpression::escape(home) + QStringLiteral("(?=[/\\s]|$)"));
+    }
     QString result = input;
     result.replace(re, QStringLiteral("~"));
     return result;
@@ -227,7 +234,10 @@ static QByteArray runJournalctl(const QStringList& args)
     proc.setProgram(QStringLiteral("journalctl"));
     proc.setArguments(args);
     proc.start();
-    if (!proc.waitForStarted(3000) || !proc.waitForFinished(12000))
+    if (!proc.waitForStarted(3000))
+        return {};
+    proc.closeWriteChannel();
+    if (!proc.waitForFinished(12000))
         return {};
     return proc.readAllStandardOutput();
 }

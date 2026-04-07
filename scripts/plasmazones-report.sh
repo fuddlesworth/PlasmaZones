@@ -16,15 +16,18 @@
 
 set -euo pipefail
 
-SINCE_MINUTES=30
+# These defaults mirror src/core/supportreport.cpp — keep in sync.
+SINCE_MINUTES=30       # DefaultSinceMinutes
+MAX_SINCE_MINUTES=120  # MaxSinceMinutes
+MAX_LOG_LINES=2000     # MaxLogLines
 OUTPUT_DIR=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --since)
             SINCE_MINUTES="${2:?--since requires a number of minutes}"
-            if ! [[ "$SINCE_MINUTES" =~ ^[0-9]+$ ]] || [[ "$SINCE_MINUTES" -gt 120 ]]; then
-                echo "Error: --since must be a number between 0 and 120" >&2
+            if ! [[ "$SINCE_MINUTES" =~ ^[0-9]+$ ]] || [[ "$SINCE_MINUTES" -gt "$MAX_SINCE_MINUTES" ]]; then
+                echo "Error: --since must be a number between 0 and $MAX_SINCE_MINUTES" >&2
                 exit 1
             fi
             # 0 is passed through to the daemon which applies its own default (30 min)
@@ -40,7 +43,7 @@ while [[ $# -gt 0 ]]; do
             echo "Generate a PlasmaZones support report archive for bug reports/discussions."
             echo ""
             echo "Options:"
-            echo "  --since MINUTES  Minutes of journal logs to include (0 = default 30, max: 120)"
+            echo "  --since MINUTES  Minutes of journal logs to include (0 = default $SINCE_MINUTES, max: $MAX_SINCE_MINUTES)"
             echo "  --output DIR     Directory for the archive (default: \$TMPDIR or /tmp)"
             echo "  -h, --help       Show this help"
             echo ""
@@ -82,8 +85,8 @@ call_dbus() {
                 echo "Error: D-Bus call failed: $raw" >&2
                 return 1
             }
-            # busctl plain output: 's "content..."' — extract and unescape
-            perl -e '$_=do{local $/;<STDIN>}; s/^s "//; s/"$//; s/\\"/"/g; print' <<< "$raw"
+            # busctl plain output: 's "content..."' — extract and unescape all C escapes
+            perl -e '$_=do{local $/;<STDIN>}; s/^s "//; s/"\s*$//; s/\\n/\n/g; s/\\t/\t/g; s/\\"/"/g; s/\\\\/\\/g; print' <<< "$raw"
         fi
     else
         echo "Error: No D-Bus CLI tool found (qdbus6, qdbus, or busctl required)" >&2
@@ -108,10 +111,8 @@ STAGING=$(mktemp -d "${TMPDIR:-/tmp}/plasmazones-report.XXXXXXXXXX")
 trap 'rm -rf "$STAGING"' EXIT
 
 # 1. Markdown report from daemon (already redacted)
-# Use heredoc to avoid ARG_MAX limits with very large reports.
-cat <<REPORT_EOF > "$STAGING/report.md"
-${REPORT}
-REPORT_EOF
+# Use printf to avoid heredoc delimiter collision if the report contains the delimiter.
+printf '%s\n' "$REPORT" > "$STAGING/report.md"
 
 # 2. Config file (redact home paths)
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/plasmazones"
@@ -144,7 +145,7 @@ if [[ -d "$DATA_DIR" ]]; then
     mkdir -p "$STAGING/data"
     # Copy tree structure, redacting home paths in text files.
     # Use -print0/read -d '' for filenames with newlines or special chars.
-    find -P "$DATA_DIR" -type f -print0 | while IFS= read -r -d '' f; do
+    find -P "$DATA_DIR" -maxdepth 5 -type f -print0 | while IFS= read -r -d '' f; do
         rel="${f#"$DATA_DIR"/}"
         mkdir -p "$STAGING/data/$(dirname "$rel")"
         case "$f" in
@@ -161,10 +162,10 @@ fi
 # (no Markdown wrapping) for easier grep/analysis by triagers.
 if command -v journalctl &>/dev/null; then
     # Use the script's SINCE_MINUTES for local journal collection.
-    # If 0 was passed (daemon default), use 30 here since journalctl needs a real value.
+    # If 0 was passed (daemon default), fall back since journalctl needs a real value.
     JOURNAL_SINCE="${SINCE_MINUTES}"
     if [[ "$JOURNAL_SINCE" -eq 0 ]]; then
-        JOURNAL_SINCE=30
+        JOURNAL_SINCE=30  # DefaultSinceMinutes
     fi
 
     collect_journal() {
@@ -186,14 +187,14 @@ if command -v journalctl &>/dev/null; then
     JOURNAL=$(collect_journal -t plasmazonesd)
 
     # Fallback: try --identifier if -t returned nothing
-    if [[ -z "${JOURNAL:-}" ]] || [[ "$(printf '%s' "$JOURNAL" | wc -l)" -eq 0 ]]; then
+    if [[ -z "${JOURNAL:-}" ]]; then
         JOURNAL=$(collect_journal --identifier=plasmazonesd)
     fi
 
     # Truncate to MaxLogLines, then redact via temp file to avoid SIGPIPE
     if [[ -n "${JOURNAL:-}" ]]; then
         printf '%s\n' "$JOURNAL" > "$STAGING/journal.raw"
-        head -n 2000 "$STAGING/journal.raw" | redact_home > "$STAGING/journal.log"
+        head -n "$MAX_LOG_LINES" "$STAGING/journal.raw" | redact_home > "$STAGING/journal.log"
         rm -f "$STAGING/journal.raw"
     fi
 fi

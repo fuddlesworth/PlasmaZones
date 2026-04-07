@@ -132,13 +132,9 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
 {
     qCInfo(lcDbus) << "generateSupportReport: sinceMinutes=" << sinceMinutes;
 
-    // Reject concurrent calls — journalctl is rate-limited and we only need one report at a time.
+    // Reject concurrent calls synchronously — no delayed reply needed for the error path.
     if (m_reportWatcher) {
-        message.setDelayedReply(true);
-        auto error = message.createErrorReply(QStringLiteral("org.plasmazones.Error.Busy"),
-                                              QStringLiteral("A support report is already being generated"));
-        QDBusConnection::sessionBus().send(error);
-        return {};
+        return QStringLiteral("ERROR: A support report is already being generated");
     }
 
     // Delay the D-Bus reply so we don't block the event loop while journalctl runs.
@@ -163,7 +159,8 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
     });
     // If the adaptor is destroyed while the future is running, send an error reply
     // so the D-Bus caller doesn't hang until timeout. Disconnect the finished signal
-    // first to prevent a double-reply race.
+    // first to prevent a double-reply race. Note: cancel() is a no-op on
+    // QtConcurrent::run futures but documents the intent.
     connect(this, &QObject::destroyed, watcher, [message, watcher]() {
         QObject::disconnect(watcher, &QFutureWatcher<QString>::finished, nullptr, nullptr);
         watcher->cancel();
