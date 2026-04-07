@@ -36,7 +36,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --since MINUTES  Minutes of journal logs to include (default: 30, max: 120)"
-            echo "  --output DIR     Directory for the archive (default: \$XDG_STATE_HOME/plasmazones)"
+            echo "  --output DIR     Directory for the archive (default: \$TMPDIR or /tmp)"
             echo "  -h, --help       Show this help"
             echo ""
             echo "The archive contains:"
@@ -56,7 +56,7 @@ done
 
 # Resolve output directory
 if [[ -z "$OUTPUT_DIR" ]]; then
-    OUTPUT_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/plasmazones"
+    OUTPUT_DIR="${TMPDIR:-/tmp}"
 fi
 mkdir -p "$OUTPUT_DIR"
 
@@ -64,13 +64,13 @@ mkdir -p "$OUTPUT_DIR"
 
 call_dbus() {
     if command -v qdbus6 &>/dev/null; then
-        qdbus6 org.plasmazones.daemon /Control org.plasmazones.Control.generateSupportReport "$SINCE_MINUTES"
+        qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Control.generateSupportReport "$SINCE_MINUTES"
     elif command -v qdbus &>/dev/null; then
-        qdbus org.plasmazones.daemon /Control org.plasmazones.Control.generateSupportReport "$SINCE_MINUTES"
+        qdbus org.plasmazones /PlasmaZones org.plasmazones.Control.generateSupportReport "$SINCE_MINUTES"
     elif command -v busctl &>/dev/null; then
-        busctl --user --json=short call org.plasmazones.daemon /Control org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>/dev/null \
+        busctl --user --json=short call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>/dev/null \
             | python3 -c "import sys,json; print(json.load(sys.stdin)['data'][0])" 2>/dev/null \
-            || busctl --user call org.plasmazones.daemon /Control org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" | sed 's/^s "//' | sed 's/"$//'
+            || busctl --user call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" | sed 's/^s "//' | sed 's/"$//'
     else
         echo "Error: No D-Bus CLI tool found (qdbus6, qdbus, or busctl required)" >&2
         exit 1
