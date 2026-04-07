@@ -41,6 +41,51 @@ QString SupportReport::redactHomePath(const QString& input)
     return result;
 }
 
+SupportReport::Snapshot SupportReport::collectSnapshot(ScreenManager* screenManager, LayoutManager* layoutManager,
+                                                       AutotileEngine* autotileEngine)
+{
+    Snapshot snap;
+
+    if (screenManager) {
+        snap.hasScreenManager = true;
+        const QVector<QScreen*> screens = screenManager->screens();
+        snap.screens.reserve(screens.size());
+        for (QScreen* screen : screens) {
+            Snapshot::ScreenInfo info;
+            info.name = screen->name();
+            info.geometry = screen->geometry();
+            info.available = ScreenManager::actualAvailableGeometry(screen);
+            info.refreshRate = screen->refreshRate();
+            info.devicePixelRatio = screen->devicePixelRatio();
+            snap.screens.append(info);
+        }
+    }
+
+    if (layoutManager) {
+        snap.hasLayoutManager = true;
+        const QList<Layout*> layouts = layoutManager->layouts();
+        const Layout* active = layoutManager->activeLayout();
+        snap.layouts.reserve(layouts.size());
+        for (Layout* layout : layouts) {
+            Snapshot::LayoutInfo info;
+            info.name = layout->name();
+            info.id = layout->id().toString();
+            info.zoneCount = layout->zoneCount();
+            info.isActive = (layout == active);
+            snap.layouts.append(info);
+        }
+    }
+
+    if (autotileEngine) {
+        snap.hasAutotileEngine = true;
+        snap.autotileEnabled = autotileEngine->isEnabled();
+        const auto screens = autotileEngine->autotileScreens();
+        snap.autotileScreens = QStringList(screens.begin(), screens.end());
+    }
+
+    return snap;
+}
+
 QString SupportReport::sectionVersion()
 {
     return QStringLiteral("**PlasmaZones:** %1\n").arg(VERSION_STRING);
@@ -63,7 +108,11 @@ QString SupportReport::sectionEnvironment()
     if (!waylandDisplay.isEmpty())
         out += QStringLiteral("**Wayland Display:** %1\n").arg(waylandDisplay);
 
-    // KDE Frameworks version if available
+    // KDE version info — KDE_SESSION_VERSION is set reliably by startkde/startplasma,
+    // KDE_FRAMEWORKS_VERSION is set by some distros but not all
+    const QString sessionVersion = qEnvironmentVariable("KDE_SESSION_VERSION");
+    if (!sessionVersion.isEmpty())
+        out += QStringLiteral("**KDE Session:** %1\n").arg(sessionVersion);
     const QString kfVersion = qEnvironmentVariable("KDE_FRAMEWORKS_VERSION");
     if (!kfVersion.isEmpty())
         out += QStringLiteral("**KDE Frameworks:** %1\n").arg(kfVersion);
@@ -71,33 +120,30 @@ QString SupportReport::sectionEnvironment()
     return out;
 }
 
-QString SupportReport::sectionScreens(ScreenManager* screenManager)
+QString SupportReport::sectionScreens(const Snapshot& snapshot)
 {
-    if (!screenManager)
+    if (!snapshot.hasScreenManager)
         return QStringLiteral("*(daemon not running — screen info unavailable)*\n");
 
-    const QVector<QScreen*> screens = screenManager->screens();
-    if (screens.isEmpty())
+    if (snapshot.screens.isEmpty())
         return QStringLiteral("*(no screens detected)*\n");
 
     QString out;
-    out += QStringLiteral("**Count:** %1\n\n").arg(screens.size());
+    out += QStringLiteral("**Count:** %1\n\n").arg(snapshot.screens.size());
 
-    for (QScreen* screen : screens) {
-        const QRect geo = screen->geometry();
-        const QRect avail = ScreenManager::actualAvailableGeometry(screen);
+    for (const auto& screen : snapshot.screens) {
         out += QStringLiteral("- **%1**: %2x%3 @ %4x scale %5")
-                   .arg(screen->name())
-                   .arg(geo.width())
-                   .arg(geo.height())
-                   .arg(screen->refreshRate(), 0, 'f', 1)
-                   .arg(screen->devicePixelRatio(), 0, 'f', 2);
-        if (avail != geo) {
+                   .arg(screen.name)
+                   .arg(screen.geometry.width())
+                   .arg(screen.geometry.height())
+                   .arg(screen.refreshRate, 0, 'f', 1)
+                   .arg(screen.devicePixelRatio, 0, 'f', 2);
+        if (screen.available != screen.geometry) {
             out += QStringLiteral(" (avail: %1x%2+%3+%4)")
-                       .arg(avail.width())
-                       .arg(avail.height())
-                       .arg(avail.x())
-                       .arg(avail.y());
+                       .arg(screen.available.width())
+                       .arg(screen.available.height())
+                       .arg(screen.available.x())
+                       .arg(screen.available.y());
         }
         out += QLatin1String("\n");
     }
@@ -123,42 +169,36 @@ QString SupportReport::sectionConfig()
     return readAndRedactFile(ConfigDefaults::configFilePath(), QStringLiteral("config file"));
 }
 
-QString SupportReport::sectionLayouts(LayoutManager* layoutManager)
+QString SupportReport::sectionLayouts(const Snapshot& snapshot)
 {
-    if (!layoutManager)
+    if (!snapshot.hasLayoutManager)
         return QStringLiteral("*(daemon not running — layout info unavailable)*\n");
 
-    const QList<Layout*> layouts = layoutManager->layouts();
-    if (layouts.isEmpty())
+    if (snapshot.layouts.isEmpty())
         return QStringLiteral("*(no layouts)*\n");
 
     QString out;
-    const Layout* active = layoutManager->activeLayout();
-
-    for (Layout* layout : layouts) {
-        const bool isActive = (layout == active);
+    for (const auto& layout : snapshot.layouts) {
         out += QStringLiteral("- **%1** (id: %2, zones: %3)%4\n")
-                   .arg(layout->name(), layout->id().toString())
-                   .arg(layout->zoneCount())
-                   .arg(isActive ? QStringLiteral(" **[active]**") : QString());
+                   .arg(layout.name, layout.id)
+                   .arg(layout.zoneCount)
+                   .arg(layout.isActive ? QStringLiteral(" **[active]**") : QString());
     }
 
     return out;
 }
 
-QString SupportReport::sectionAutotile(AutotileEngine* autotileEngine)
+QString SupportReport::sectionAutotile(const Snapshot& snapshot)
 {
-    if (!autotileEngine)
+    if (!snapshot.hasAutotileEngine)
         return QStringLiteral("*(autotile engine not available)*\n");
 
     QString out;
     out += QStringLiteral("**Enabled:** %1\n")
-               .arg(autotileEngine->isEnabled() ? QStringLiteral("yes") : QStringLiteral("no"));
+               .arg(snapshot.autotileEnabled ? QStringLiteral("yes") : QStringLiteral("no"));
 
-    const auto screens = autotileEngine->autotileScreens();
-    if (!screens.isEmpty()) {
-        out += QStringLiteral("**Active screens:** %1\n")
-                   .arg(QStringList(screens.begin(), screens.end()).join(QStringLiteral(", ")));
+    if (!snapshot.autotileScreens.isEmpty()) {
+        out += QStringLiteral("**Active screens:** %1\n").arg(snapshot.autotileScreens.join(QStringLiteral(", ")));
     }
 
     return out;
@@ -169,34 +209,41 @@ QString SupportReport::sectionSession()
     return readAndRedactFile(ConfigDefaults::sessionFilePath(), QStringLiteral("session file"));
 }
 
-QString SupportReport::sectionLogs(int sinceMinutes)
+static QStringList journalctlArgs(const QString& tagFlag, int sinceMinutes)
+{
+    return {QStringLiteral("--user"),
+            tagFlag,
+            QStringLiteral("plasmazonesd"),
+            QStringLiteral("--since"),
+            QStringLiteral("%1 min ago").arg(sinceMinutes),
+            QStringLiteral("--no-pager"),
+            QStringLiteral("-o"),
+            QStringLiteral("short-iso")};
+}
+
+static QByteArray runJournalctl(const QStringList& args)
 {
     QProcess proc;
     proc.setProgram(QStringLiteral("journalctl"));
-    proc.setArguments({QStringLiteral("--user"), QStringLiteral("-t"), QStringLiteral("plasmazonesd"),
-                       QStringLiteral("--since"), QStringLiteral("%1 min ago").arg(sinceMinutes),
-                       QStringLiteral("--no-pager"), QStringLiteral("-o"), QStringLiteral("short-iso")});
+    proc.setArguments(args);
     proc.start();
+    if (!proc.waitForStarted(3000) || !proc.waitForFinished(10000))
+        return {};
+    return proc.readAllStandardOutput();
+}
 
-    if (!proc.waitForStarted(3000) || !proc.waitForFinished(30000)) {
+QString SupportReport::sectionLogs(int sinceMinutes)
+{
+    QByteArray rawOutput = runJournalctl(journalctlArgs(QStringLiteral("-t"), sinceMinutes));
+
+    // Fall back to --identifier if -t returned nothing useful.
+    // Some systemd versions report the syslog tag differently.
+    if (QString::fromUtf8(rawOutput).trimmed().isEmpty()) {
+        rawOutput = runJournalctl(journalctlArgs(QStringLiteral("--identifier=plasmazonesd"), sinceMinutes));
+    }
+
+    if (rawOutput.isEmpty())
         return QStringLiteral("*(journalctl timed out or not available)*\n");
-    }
-
-    QByteArray rawOutput = proc.readAllStandardOutput();
-
-    if (proc.exitCode() != 0 && rawOutput.isEmpty()) {
-        // Try syslog identifier fallback (some systems use the binary name differently).
-        // Use a fresh QProcess to avoid stale state from the first run.
-        QProcess fallback;
-        fallback.setProgram(QStringLiteral("journalctl"));
-        fallback.setArguments({QStringLiteral("--user"), QStringLiteral("--identifier=plasmazonesd"),
-                               QStringLiteral("--since"), QStringLiteral("%1 min ago").arg(sinceMinutes),
-                               QStringLiteral("--no-pager"), QStringLiteral("-o"), QStringLiteral("short-iso")});
-        fallback.start();
-        if (!fallback.waitForStarted(3000) || !fallback.waitForFinished(30000))
-            return QStringLiteral("*(journalctl not available)*\n");
-        rawOutput = fallback.readAllStandardOutput();
-    }
 
     QString output = QString::fromUtf8(rawOutput);
     if (output.trimmed().isEmpty())
@@ -212,8 +259,7 @@ QString SupportReport::sectionLogs(int sinceMinutes)
     return QStringLiteral("```\n%1\n```\n").arg(redactHomePath(output));
 }
 
-QString SupportReport::generate(ScreenManager* screenManager, LayoutManager* layoutManager,
-                                AutotileEngine* autotileEngine, int sinceMinutes)
+QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceMinutes)
 {
     sinceMinutes = (sinceMinutes <= 0) ? DefaultSinceMinutes : qMin(sinceMinutes, MaxSinceMinutes);
 
@@ -229,7 +275,7 @@ QString SupportReport::generate(ScreenManager* screenManager, LayoutManager* lay
     report += QLatin1Char('\n');
 
     report += QStringLiteral("## Screens\n");
-    report += sectionScreens(screenManager);
+    report += sectionScreens(snapshot);
     report += QLatin1Char('\n');
 
     report += QStringLiteral("## Config\n");
@@ -237,11 +283,11 @@ QString SupportReport::generate(ScreenManager* screenManager, LayoutManager* lay
     report += QLatin1Char('\n');
 
     report += QStringLiteral("## Layouts\n");
-    report += sectionLayouts(layoutManager);
+    report += sectionLayouts(snapshot);
     report += QLatin1Char('\n');
 
     report += QStringLiteral("## Autotile\n");
-    report += sectionAutotile(autotileEngine);
+    report += sectionAutotile(snapshot);
     report += QLatin1Char('\n');
 
     report += QStringLiteral("## Session State\n");
@@ -255,6 +301,12 @@ QString SupportReport::generate(ScreenManager* screenManager, LayoutManager* lay
     report += QStringLiteral("</details>\n");
 
     return report;
+}
+
+QString SupportReport::generate(ScreenManager* screenManager, LayoutManager* layoutManager,
+                                AutotileEngine* autotileEngine, int sinceMinutes)
+{
+    return generateFromSnapshot(collectSnapshot(screenManager, layoutManager, autotileEngine), sinceMinutes);
 }
 
 } // namespace PlasmaZones

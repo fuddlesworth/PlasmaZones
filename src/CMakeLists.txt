@@ -246,6 +246,7 @@ target_link_libraries(plasmazones_core
         Qt6::DBus
     PRIVATE
         Wayland::Client
+        Qt6::Concurrent
         Qt6::WaylandClientPrivate
 )
 

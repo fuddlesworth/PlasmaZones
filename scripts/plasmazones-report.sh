@@ -8,6 +8,10 @@
 # and journal logs into a timestamped .tar.gz archive for attaching to
 # GitHub Issues or Discussions.
 #
+# The D-Bus report (report.md) already contains config/session/layout summaries,
+# but we also include the raw files (config.json, session.json, data/) so that
+# triagers can inspect exact JSON without re-serialization artefacts.
+#
 # Requires: plasmazonesd running, qdbus6 or busctl, perl
 
 set -euo pipefail
@@ -105,7 +109,7 @@ STAGING=$(mktemp -d "${TMPDIR:-/tmp}/plasmazones-report.XXXXXXXXXX")
 trap 'rm -rf "$STAGING"' EXIT
 
 # 1. Markdown report from daemon (already redacted)
-echo "$REPORT" > "$STAGING/report.md"
+printf '%s\n' "$REPORT" > "$STAGING/report.md"
 
 # 2. Config file (redact home paths)
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/plasmazones"
@@ -115,8 +119,9 @@ if [[ -z "${HOME:-}" ]]; then
 fi
 redact_home() {
     if [[ -n "${HOME:-}" ]]; then
-        # Use perl lookahead to avoid partial path matches (e.g., /home/user inside /home/username),
-        # matching the C++ SupportReport::redactHomePath() behavior
+        # Use perl \Q...\E to quote HOME as a literal — handles regex metacharacters.
+        # NOTE: if $HOME itself contains a single-quote this perl invocation breaks;
+        # that is an unsupported edge case (POSIX home dirs use [A-Za-z0-9._-]).
         perl -pe 's/\Q'"$HOME"'\E(?![\w.-])/~/g' "$@"
     else
         cat "$@"
@@ -150,24 +155,25 @@ if [[ -d "$DATA_DIR" ]]; then
 fi
 
 # 5. Journal logs
+# This duplicates the journal section in report.md but provides raw log lines
+# (no Markdown wrapping) for easier grep/analysis by triagers.
 if command -v journalctl &>/dev/null; then
-    JOURNAL=$(journalctl --user -t plasmazonesd \
-        --since "$SINCE_MINUTES min ago" \
-        --no-pager -o short-iso 2>/dev/null \
-        | head -n 2000 \
-        | redact_home) || true
+    collect_journal() {
+        journalctl --user "$@" \
+            --since "$SINCE_MINUTES min ago" \
+            --no-pager -o short-iso 2>/dev/null || true
+    }
+
+    JOURNAL=$(collect_journal -t plasmazonesd)
 
     # Fallback: try --identifier if -t returned nothing
-    if [[ -z "$JOURNAL" ]]; then
-        JOURNAL=$(journalctl --user --identifier=plasmazonesd \
-            --since "$SINCE_MINUTES min ago" \
-            --no-pager -o short-iso 2>/dev/null \
-            | head -n 2000 \
-            | redact_home) || true
+    if [[ -z "${JOURNAL:-}" ]] || [[ "$(printf '%s' "$JOURNAL" | wc -l)" -eq 0 ]]; then
+        JOURNAL=$(collect_journal --identifier=plasmazonesd)
     fi
 
-    if [[ -n "$JOURNAL" ]]; then
-        echo "$JOURNAL" > "$STAGING/journal.log"
+    # Truncate to MaxLogLines, then redact
+    if [[ -n "${JOURNAL:-}" ]]; then
+        printf '%s\n' "$JOURNAL" | head -n 2000 | redact_home > "$STAGING/journal.log"
     fi
 fi
 

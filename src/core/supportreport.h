@@ -4,7 +4,9 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <QRect>
 #include <QString>
+#include <QVector>
 
 namespace PlasmaZones {
 
@@ -27,7 +29,55 @@ class PLASMAZONES_EXPORT SupportReport
 {
 public:
     /**
-     * @brief Generate a complete support report
+     * @brief Thread-safe snapshot of QObject state for async report generation
+     *
+     * Collected on the main thread; the report is then assembled off-thread
+     * so that blocking I/O (file reads, journalctl) does not stall the event loop.
+     */
+    struct Snapshot
+    {
+        struct ScreenInfo
+        {
+            QString name;
+            QRect geometry;
+            QRect available;
+            qreal refreshRate = 0;
+            qreal devicePixelRatio = 1;
+        };
+        struct LayoutInfo
+        {
+            QString name;
+            QString id;
+            int zoneCount = 0;
+            bool isActive = false;
+        };
+
+        QVector<ScreenInfo> screens;
+        bool hasScreenManager = false;
+
+        QVector<LayoutInfo> layouts;
+        bool hasLayoutManager = false;
+
+        bool autotileEnabled = false;
+        QStringList autotileScreens;
+        bool hasAutotileEngine = false;
+    };
+
+    /**
+     * @brief Collect a thread-safe snapshot from QObject pointers (main thread only)
+     */
+    static Snapshot collectSnapshot(ScreenManager* screenManager, LayoutManager* layoutManager,
+                                    AutotileEngine* autotileEngine);
+
+    /**
+     * @brief Generate a report from a pre-collected snapshot (thread-safe)
+     *
+     * Safe to call from any thread — only accesses plain data, files, and QProcess.
+     */
+    static QString generateFromSnapshot(const Snapshot& snapshot, int sinceMinutes = 30);
+
+    /**
+     * @brief Generate a complete support report (convenience, blocks calling thread)
      * @param screenManager ScreenManager instance (nullable)
      * @param layoutManager LayoutManager instance (nullable)
      * @param autotileEngine AutotileEngine instance (nullable)
@@ -49,12 +99,12 @@ private:
 
     static QString sectionVersion();
     static QString sectionEnvironment();
-    static QString sectionScreens(ScreenManager* screenManager);
+    static QString sectionScreens(const Snapshot& snapshot);
     static QString readAndRedactFile(const QString& path, const QString& label,
-                                     const QString& lang = QStringLiteral("json"));
+                                     const QString& lang = QLatin1String("json"));
     static QString sectionConfig();
-    static QString sectionLayouts(LayoutManager* layoutManager);
-    static QString sectionAutotile(AutotileEngine* autotileEngine);
+    static QString sectionLayouts(const Snapshot& snapshot);
+    static QString sectionAutotile(const Snapshot& snapshot);
     static QString sectionSession();
     static QString sectionLogs(int sinceMinutes);
 };

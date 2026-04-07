@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 #include <QObject>
 #include <QDBusAbstractAdaptor>
+#include <QDBusMessage>
 #include <QString>
 #include <QStringList>
 
@@ -69,9 +70,9 @@ public Q_SLOTS:
     /**
      * @brief Generate a redacted support report for bug reports
      * @param sinceMinutes Minutes of journal logs to include (0 = default 30, max 120)
-     * @return Markdown-formatted support report
+     * @return Markdown-formatted support report (delivered asynchronously via delayed D-Bus reply)
      */
-    QString generateSupportReport(int sinceMinutes);
+    QString generateSupportReport(int sinceMinutes, const QDBusMessage& message);
 
 private:
     WindowTrackingAdaptor* m_wta;

@@ -13,9 +13,12 @@
 #include "../core/supportreport.h"
 #include "../autotile/AutotileEngine.h"
 
+#include <QDBusConnection>
+#include <QFutureWatcher>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QtConcurrent>
 
 namespace PlasmaZones {
 
@@ -125,10 +128,27 @@ QString ControlAdaptor::getFullState()
     return QString::fromUtf8(QJsonDocument(state).toJson(QJsonDocument::Compact));
 }
 
-QString ControlAdaptor::generateSupportReport(int sinceMinutes)
+QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessage& message)
 {
     qCInfo(lcDbus) << "generateSupportReport: sinceMinutes=" << sinceMinutes;
-    return SupportReport::generate(m_screenManager, m_layoutManager, m_autotileEngine, sinceMinutes);
+
+    // Delay the D-Bus reply so we don't block the event loop while journalctl runs.
+    message.setDelayedReply(true);
+
+    // Snapshot QObject state on the main thread (these pointers are not thread-safe).
+    auto snapshot = SupportReport::collectSnapshot(m_screenManager, m_layoutManager, m_autotileEngine);
+
+    // Run blocking work (file I/O, journalctl) off the main thread.
+    auto* watcher = new QFutureWatcher<QString>(this);
+    connect(watcher, &QFutureWatcher<QString>::finished, this, [message, watcher]() {
+        QDBusConnection::sessionBus().send(message.createReply(watcher->result()));
+        watcher->deleteLater();
+    });
+    watcher->setFuture(QtConcurrent::run([snapshot = std::move(snapshot), sinceMinutes]() {
+        return SupportReport::generateFromSnapshot(snapshot, sinceMinutes);
+    }));
+
+    return {}; // Ignored — reply sent asynchronously
 }
 
 } // namespace PlasmaZones

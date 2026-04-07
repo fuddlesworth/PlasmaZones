@@ -14,7 +14,7 @@
 #include <QFile>
 #include <QTemporaryFile>
 
-#include "../../../src/core/supportreport.h"
+#include "core/supportreport.h"
 
 using namespace PlasmaZones;
 
