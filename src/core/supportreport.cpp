@@ -30,7 +30,7 @@ static constexpr qint64 MaxFileSize = 1024 * 1024; // 1 MB
 QString SupportReport::redactHomePath(const QString& input)
 {
     const QString home = QDir::homePath();
-    if (home.isEmpty())
+    if (home.isEmpty() || home == QLatin1String("/"))
         return input;
 
     // Match home path when followed by a separator (/ or end-of-string),
@@ -218,25 +218,16 @@ QString SupportReport::sectionSession()
     return readAndRedactFile(ConfigDefaults::sessionFilePath(), QStringLiteral("session file"));
 }
 
-static QStringList journalctlArgs(const QString& identifier, int sinceMinutes)
+static QStringList journalctlArgs(const QString& identifier, int sinceMinutes, bool longForm = false)
 {
-    QStringList args{QStringLiteral("--user"),
-                     QStringLiteral("-t"),
-                     identifier,
-                     QStringLiteral("--since"),
-                     QStringLiteral("%1 min ago").arg(sinceMinutes),
-                     QStringLiteral("--no-pager"),
-                     QStringLiteral("-o"),
-                     QStringLiteral("short-iso")};
-    return args;
-}
-
-static QStringList journalctlArgsIdentifier(const QString& identifier, int sinceMinutes)
-{
-    QStringList args{QStringLiteral("--user"),     QStringLiteral("--identifier=%1").arg(identifier),
-                     QStringLiteral("--since"),    QStringLiteral("%1 min ago").arg(sinceMinutes),
-                     QStringLiteral("--no-pager"), QStringLiteral("-o"),
-                     QStringLiteral("short-iso")};
+    QStringList args{QStringLiteral("--user")};
+    if (longForm) {
+        args << QStringLiteral("--identifier=%1").arg(identifier);
+    } else {
+        args << QStringLiteral("-t") << identifier;
+    }
+    args << QStringLiteral("--since") << QStringLiteral("%1 min ago").arg(sinceMinutes) << QStringLiteral("--no-pager")
+         << QStringLiteral("-o") << QStringLiteral("short-iso");
     return args;
 }
 
@@ -262,7 +253,7 @@ QString SupportReport::sectionLogs(int sinceMinutes)
     // Fall back to --identifier if -t returned nothing useful.
     // Some systemd versions report the syslog tag differently.
     if (QString::fromUtf8(rawOutput).trimmed().isEmpty()) {
-        rawOutput = runJournalctl(journalctlArgsIdentifier(tag, sinceMinutes));
+        rawOutput = runJournalctl(journalctlArgs(tag, sinceMinutes, true));
     }
 
     if (rawOutput.isEmpty())

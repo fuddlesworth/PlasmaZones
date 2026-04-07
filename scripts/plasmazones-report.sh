@@ -43,7 +43,7 @@ while [[ $# -gt 0 ]]; do
             echo "Generate a PlasmaZones support report archive for bug reports/discussions."
             echo ""
             echo "Options:"
-            echo "  --since MINUTES  Minutes of journal logs to include (0 = default $SINCE_MINUTES, max: $MAX_SINCE_MINUTES)"
+            echo "  --since MINUTES  Minutes of journal logs to include (0 = default 30, max: $MAX_SINCE_MINUTES)"
             echo "  --output DIR     Directory for the archive (default: \$TMPDIR or /tmp)"
             echo "  -h, --help       Show this help"
             echo ""
@@ -62,11 +62,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Resolve output directory
+# Resolve output directory to an absolute path so the final message
+# remains useful regardless of later CWD changes.
 if [[ -z "$OUTPUT_DIR" ]]; then
     OUTPUT_DIR="${TMPDIR:-/tmp}"
 fi
 mkdir -p "$OUTPUT_DIR"
+OUTPUT_DIR=$(cd "$OUTPUT_DIR" && pwd)
 
 # ─── D-Bus call ───────────────────────────────────────────────────────────────
 
@@ -116,17 +118,23 @@ printf '%s\n' "$REPORT" > "$STAGING/report.md"
 
 # 2. Config file (redact home paths)
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/plasmazones"
-# Guard against empty HOME (e.g., running from a systemd service without User=)
+# Guard against empty or root HOME (e.g., running from a systemd service without User=,
+# or running as root where HOME=/ would mangle every absolute path).
 if [[ -z "${HOME:-}" ]]; then
     echo "Warning: \$HOME is not set — skipping home path redaction" >&2
+elif [[ "$HOME" = "/" ]]; then
+    echo "Warning: \$HOME is / — skipping home path redaction to avoid mangling all paths" >&2
 fi
 redact_home() {
-    if [[ -n "${HOME:-}" ]]; then
+    if [[ -n "${HOME:-}" ]] && [[ "$HOME" != "/" ]]; then
         # Pass HOME via environment to avoid shell quoting issues (e.g., HOME containing
         # single quotes). Perl reads $ENV{HOME} directly, and \Q..\E quotes it as literal.
+        # Handles both file arguments and piped stdin (perl reads stdin when no files given).
         HOME="$HOME" perl -pe 's/\Q$ENV{HOME}\E(?=[\/\s]|$)/~/g' -- "$@"
-    else
+    elif [[ $# -gt 0 ]]; then
         cat "$@"
+    else
+        cat
     fi
 }
 
@@ -168,12 +176,19 @@ if command -v journalctl &>/dev/null; then
         JOURNAL_SINCE=30  # DefaultSinceMinutes
     fi
 
+    # Use timeout if available, otherwise run journalctl directly (may hang on broken journal).
+    if command -v timeout &>/dev/null; then
+        _jctl() { timeout 15 journalctl "$@"; }
+    else
+        _jctl() { journalctl "$@"; }
+    fi
+
     collect_journal() {
         local out err exit_code=0
         # Capture stdout and stderr separately so journalctl warnings
         # (e.g., "No entries") don't pollute the log output.
         err=$(mktemp "${TMPDIR:-/tmp}/pz-journal-err.XXXXXX")
-        out=$(timeout 15 journalctl --user "$@" \
+        out=$(_jctl --user "$@" \
             --since "$JOURNAL_SINCE min ago" \
             --no-pager -o short-iso 2>"$err") || exit_code=$?
         if [[ $exit_code -ne 0 ]] && [[ $exit_code -ne 1 ]]; then

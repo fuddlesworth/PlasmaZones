@@ -198,10 +198,10 @@ private Q_SLOTS:
         const QString report = SupportReport::generate(nullptr, nullptr, nullptr);
         // Count occurrences of the real closing tag — should be exactly 1
         const QRegularExpression re(QStringLiteral("</details>"));
-        const auto matches = re.globalMatch(report);
+        auto matches = re.globalMatch(report);
         int count = 0;
         while (matches.hasNext()) {
-            const_cast<QRegularExpressionMatchIterator&>(matches).next();
+            matches.next();
             count++;
         }
         QCOMPARE(count, 1);

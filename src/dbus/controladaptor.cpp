@@ -149,7 +149,10 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
     auto snapshot = SupportReport::collectSnapshot(m_screenManager, m_layoutManager, m_autotileEngine);
 
     // Run blocking work (file I/O, journalctl) off the main thread.
-    auto* watcher = new QFutureWatcher<QString>(this);
+    // No parent — lifetime managed explicitly by the two signal handlers below.
+    // Parenting to `this` would cause Qt to auto-delete the watcher during ~QObject,
+    // racing with our destroyed handler's deleteLater.
+    auto* watcher = new QFutureWatcher<QString>();
     m_reportWatcher = watcher;
     // Use QPointer to detect adaptor destruction inside the finished handler,
     // preventing writes to dangling `this` if the adaptor is destroyed while
