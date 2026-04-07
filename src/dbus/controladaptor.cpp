@@ -169,13 +169,19 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
     // so the D-Bus caller doesn't hang until timeout. Disconnect the finished signal
     // first to prevent a double-reply race. Note: cancel() is a no-op on
     // QtConcurrent::run futures but documents the intent.
-    connect(this, &QObject::destroyed, watcher, [message, watcher]() {
-        QObject::disconnect(watcher, &QFutureWatcher<QString>::finished, nullptr, nullptr);
-        watcher->cancel();
+    // Use QPointer to guard the watcher — if the finished handler already ran and
+    // called deleteLater, the event loop may have destroyed the watcher before this
+    // destroyed handler fires, so we must check before touching it.
+    QPointer<QFutureWatcher<QString>> weakWatcher(watcher);
+    connect(this, &QObject::destroyed, watcher, [message, weakWatcher]() {
+        if (!weakWatcher)
+            return; // Already cleaned up by the finished handler
+        QObject::disconnect(weakWatcher, &QFutureWatcher<QString>::finished, nullptr, nullptr);
+        weakWatcher->cancel();
         auto error = message.createErrorReply(QStringLiteral("org.plasmazones.Error.Shutdown"),
                                               QStringLiteral("Daemon shutting down"));
         QDBusConnection::sessionBus().send(error);
-        watcher->deleteLater();
+        weakWatcher->deleteLater();
     });
     watcher->setFuture(QtConcurrent::run([snapshot = std::move(snapshot), sinceMinutes]() {
         return SupportReport::generateFromSnapshot(snapshot, sinceMinutes);

@@ -247,7 +247,9 @@ static QByteArray runJournalctl(const QStringList& args)
 
 QString SupportReport::sectionLogs(int sinceMinutes)
 {
-    static const QString tag = QStringLiteral("plasmazonesd");
+    // thread_local for consistency with redactHomePath — sectionLogs runs off the
+    // main thread via QtConcurrent::run in ControlAdaptor::generateSupportReport.
+    thread_local const QString tag = QStringLiteral("plasmazonesd");
     QByteArray rawOutput = runJournalctl(journalctlArgs(tag, sinceMinutes));
 
     // Fall back to --identifier if -t returned nothing useful.

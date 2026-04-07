@@ -87,7 +87,9 @@ call_dbus() {
                 echo "Error: D-Bus call failed: $raw" >&2
                 return 1
             }
-            # busctl plain output: 's "content..."' — extract and unescape all C escapes
+            # busctl plain output: 's "content..."' — extract and unescape C escapes.
+            # Best-effort: busctl's plain format is not formally specified, so complex
+            # embedded strings (e.g., literal backslash-n) may not round-trip perfectly.
             perl -e '$_=do{local $/;<STDIN>}; s/^s "//; s/"\s*$//; s/\\n/\n/g; s/\\t/\t/g; s/\\"/"/g; s/\\\\/\\/g; print' <<< "$raw"
         fi
     else
@@ -153,6 +155,11 @@ if [[ -d "$DATA_DIR" ]]; then
     mkdir -p "$STAGING/data"
     # Copy tree structure, redacting home paths in text files.
     # Use -print0/read -d '' for filenames with newlines or special chars.
+    # Warn if files are skipped due to depth limit so triagers know the archive is incomplete.
+    SKIPPED_DEEP=$(find -P "$DATA_DIR" -mindepth 6 -type f 2>/dev/null | head -1)
+    if [[ -n "$SKIPPED_DEEP" ]]; then
+        echo "Warning: some data files nested deeper than 5 levels were skipped" >&2
+    fi
     find -P "$DATA_DIR" -maxdepth 5 -type f -print0 | while IFS= read -r -d '' f; do
         rel="${f#"$DATA_DIR"/}"
         mkdir -p "$STAGING/data/$(dirname "$rel")"
@@ -188,6 +195,8 @@ if command -v journalctl &>/dev/null; then
         # Capture stdout and stderr separately so journalctl warnings
         # (e.g., "No entries") don't pollute the log output.
         err=$(mktemp "${TMPDIR:-/tmp}/pz-journal-err.XXXXXX")
+        # Ensure temp file is cleaned up even if the script is killed mid-function.
+        trap 'rm -f "$err"; trap - RETURN' RETURN
         out=$(_jctl --user "$@" \
             --since "$JOURNAL_SINCE min ago" \
             --no-pager -o short-iso 2>"$err") || exit_code=$?

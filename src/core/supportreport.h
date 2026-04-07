@@ -79,6 +79,14 @@ public:
 
     /**
      * @brief Generate a complete support report (convenience, blocks calling thread)
+     *
+     * @warning This performs blocking I/O (file reads + journalctl subprocess). Do not
+     * call from the main/GUI thread. Use collectSnapshot() + generateFromSnapshot()
+     * with QtConcurrent::run instead (see ControlAdaptor for the async pattern).
+     *
+     * @note Config and session data are read from disk, not from in-memory Settings,
+     * so the report reflects the persisted state (which is what matters for diagnostics).
+     *
      * @param screenManager ScreenManager instance (nullable)
      * @param layoutManager LayoutManager instance (nullable)
      * @param autotileEngine AutotileEngine instance (nullable)
