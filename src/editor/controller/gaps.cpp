@@ -622,9 +622,9 @@ void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, co
         zone.remove(QString::fromLatin1(JsonKeys::FixedHeight));
     }
 
+    // setZoneData emits ZoneManager::zonesChanged, which is connected to
+    // EditorController::zonesChanged — no need to emit again here.
     m_zoneManager->setZoneData(zoneId, zone);
-    ++m_zonesVersion;
-    Q_EMIT zonesChanged();
 }
 
 void EditorController::refreshGlobalZonePadding()

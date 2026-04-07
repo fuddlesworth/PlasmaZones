@@ -441,7 +441,7 @@ Window {
                         // Bind directly to modelData - when zones list updates, modelData updates
                         zoneData: modelData
                         zoneId: modelData.id || ""
-                        isSelected: editorWindow.isZoneSelected(modelData.id)
+                        isSelected: editorWindow.selectedZoneIds.indexOf(modelData.id) >= 0
                         isPartOfMultiSelection: isSelected && editorWindow.hasMultipleSelection
                         controller: editorWindow._editorController // Pass controller for snapping
                         zoneSpacing: editorWindow.zoneSpacing // Pass spacing for gaps between zones

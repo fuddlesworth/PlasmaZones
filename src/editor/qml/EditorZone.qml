@@ -97,6 +97,10 @@ Item {
     readonly property real topGap: effectiveRelY < edgeTolerance ? edgeGap : zoneSpacing / 2
     readonly property real rightGap: (effectiveRelX + effectiveRelWidth) > (1 - edgeTolerance) ? edgeGap : zoneSpacing / 2
     readonly property real bottomGap: (effectiveRelY + effectiveRelHeight) > (1 - edgeTolerance) ? edgeGap : zoneSpacing / 2
+    // Suppress color animations during delegate creation (Repeater recreates all
+    // delegates when the zones QVariantList changes, which would cause a visible
+    // color flash as Behaviors animate from default to target values).
+    property bool _animationsReady: false
 
     // Signals
     signal clicked(var event)
@@ -320,6 +324,7 @@ Item {
     Component.onCompleted: {
         // Delegate to geometrySync for initialization
         ensureDimensionsInitialized();
+        _animationsReady = true;
     }
     // Cleanup on destruction
     Component.onDestruction: {
@@ -497,6 +502,8 @@ Item {
         }
 
         Behavior on color {
+            enabled: root._animationsReady
+
             ColorAnimation {
                 duration: Theme.animDuration
                 easing.type: Theme.animEasing
@@ -505,6 +512,8 @@ Item {
         }
 
         Behavior on border.color {
+            enabled: root._animationsReady
+
             ColorAnimation {
                 duration: Theme.animDuration
                 easing.type: Theme.animEasing
