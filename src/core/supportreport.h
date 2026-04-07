@@ -101,7 +101,7 @@ private:
     static QString sectionEnvironment();
     static QString sectionScreens(const Snapshot& snapshot);
     static QString readAndRedactFile(const QString& path, const QString& label,
-                                     const QString& lang = QLatin1String("json"));
+                                     const QString& lang = QStringLiteral("json"));
     static QString sectionConfig();
     static QString sectionLayouts(const Snapshot& snapshot);
     static QString sectionAutotile(const Snapshot& snapshot);

@@ -7,6 +7,8 @@
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QDBusMessage>
+#include <QFutureWatcher>
+#include <QPointer>
 #include <QString>
 #include <QStringList>
 
@@ -80,6 +82,7 @@ private:
     LayoutManager* m_layoutManager;
     AutotileEngine* m_autotileEngine;
     ScreenManager* m_screenManager;
+    QPointer<QFutureWatcher<QString>> m_reportWatcher;
 };
 
 } // namespace PlasmaZones

@@ -15,6 +15,7 @@
 #include <QTemporaryFile>
 
 #include "core/supportreport.h"
+#include "version.h"
 
 using namespace PlasmaZones;
 
@@ -126,6 +127,7 @@ private Q_SLOTS:
     {
         const QString report = SupportReport::generate(nullptr, nullptr, nullptr);
         QVERIFY(report.contains(QStringLiteral("**PlasmaZones:**")));
+        QVERIFY(report.contains(VERSION_STRING));
     }
 
     void testGenerate_containsEnvironmentInfo()

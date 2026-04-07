@@ -27,10 +27,7 @@ while [[ $# -gt 0 ]]; do
                 echo "Error: --since must be a number between 0 and 120" >&2
                 exit 1
             fi
-            # 0 means "use daemon default" (30 minutes), matching D-Bus API semantics
-            if [[ "$SINCE_MINUTES" -eq 0 ]]; then
-                SINCE_MINUTES=30
-            fi
+            # 0 is passed through to the daemon which applies its own default (30 min)
             shift 2
             ;;
         --output)
@@ -84,7 +81,16 @@ call_dbus() {
                 echo "Error: D-Bus call failed: $raw" >&2
                 return 1
             }
-            printf '%s' "$raw" | sed 's/^s "//' | sed 's/"$//'
+            # busctl plain output: 's "content..."' — use python3 for reliable unescaping
+            python3 -c "
+import sys, re
+raw = sys.stdin.read()
+m = re.match(r'^s \"(.*)\"$', raw, re.DOTALL)
+if m:
+    print(m.group(1).replace(r'\"', '\"'))
+else:
+    print(raw)
+" <<< "$raw"
         fi
     else
         echo "Error: No D-Bus CLI tool found (qdbus6, qdbus, or busctl required)" >&2
@@ -119,10 +125,9 @@ if [[ -z "${HOME:-}" ]]; then
 fi
 redact_home() {
     if [[ -n "${HOME:-}" ]]; then
-        # Use perl \Q...\E to quote HOME as a literal — handles regex metacharacters.
-        # NOTE: if $HOME itself contains a single-quote this perl invocation breaks;
-        # that is an unsupported edge case (POSIX home dirs use [A-Za-z0-9._-]).
-        perl -pe 's/\Q'"$HOME"'\E(?![\w.-])/~/g' "$@"
+        # Pass HOME via environment to avoid shell quoting issues (e.g., HOME containing
+        # single quotes). Perl reads $ENV{HOME} directly, and \Q..\E quotes it as literal.
+        HOME="$HOME" perl -pe 's/\Q$ENV{HOME}\E(?=[\/\s]|$)/~/g' "$@"
     else
         cat "$@"
     fi
@@ -158,9 +163,16 @@ fi
 # This duplicates the journal section in report.md but provides raw log lines
 # (no Markdown wrapping) for easier grep/analysis by triagers.
 if command -v journalctl &>/dev/null; then
+    # Use the script's SINCE_MINUTES for local journal collection.
+    # If 0 was passed (daemon default), use 30 here since journalctl needs a real value.
+    JOURNAL_SINCE="${SINCE_MINUTES}"
+    if [[ "$JOURNAL_SINCE" -eq 0 ]]; then
+        JOURNAL_SINCE=30
+    fi
+
     collect_journal() {
-        journalctl --user "$@" \
-            --since "$SINCE_MINUTES min ago" \
+        timeout 15 journalctl --user "$@" \
+            --since "$JOURNAL_SINCE min ago" \
             --no-pager -o short-iso 2>/dev/null || true
     }
 
@@ -171,9 +183,11 @@ if command -v journalctl &>/dev/null; then
         JOURNAL=$(collect_journal --identifier=plasmazonesd)
     fi
 
-    # Truncate to MaxLogLines, then redact
+    # Truncate to MaxLogLines, then redact via temp file to avoid SIGPIPE
     if [[ -n "${JOURNAL:-}" ]]; then
-        printf '%s\n' "$JOURNAL" | head -n 2000 | redact_home > "$STAGING/journal.log"
+        printf '%s\n' "$JOURNAL" > "$STAGING/journal.raw"
+        head -n 2000 "$STAGING/journal.raw" | redact_home > "$STAGING/journal.log"
+        rm -f "$STAGING/journal.raw"
     fi
 fi
 

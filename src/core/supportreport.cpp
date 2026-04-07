@@ -32,10 +32,9 @@ QString SupportReport::redactHomePath(const QString& input)
     if (home.isEmpty())
         return input;
 
-    // Negative lookahead prevents partial matches (e.g., /home/n should not
-    // match inside /home/nate). Only replace when NOT followed by a word
-    // character, dot, or hyphen — characters valid in path components.
-    const QRegularExpression re(QRegularExpression::escape(home) + QStringLiteral("(?![\\w.-])"));
+    // Match home path when followed by a separator (/ or end-of-string),
+    // preventing partial matches (e.g., /home/user must not match /home/username).
+    const QRegularExpression re(QRegularExpression::escape(home) + QStringLiteral("(?=[/\\s]|$)"));
     QString result = input;
     result.replace(re, QStringLiteral("~"));
     return result;
@@ -157,10 +156,11 @@ QString SupportReport::readAndRedactFile(const QString& path, const QString& lab
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
         return QStringLiteral("*(%1 — %2: %3)*\n").arg(label, redactHomePath(path), file.errorString());
 
-    if (file.size() > MaxFileSize)
-        return QStringLiteral("*(%1 too large: %2 bytes)*\n").arg(label).arg(file.size());
+    const QByteArray data = file.read(MaxFileSize + 1);
+    if (data.size() > MaxFileSize)
+        return QStringLiteral("*(%1 too large: %2+ bytes)*\n").arg(label).arg(MaxFileSize);
 
-    const QString content = QString::fromUtf8(file.readAll());
+    const QString content = QString::fromUtf8(data);
     return QStringLiteral("```%1\n%2\n```\n").arg(lang, redactHomePath(content));
 }
 
@@ -209,16 +209,15 @@ QString SupportReport::sectionSession()
     return readAndRedactFile(ConfigDefaults::sessionFilePath(), QStringLiteral("session file"));
 }
 
-static QStringList journalctlArgs(const QString& tagFlag, int sinceMinutes)
+static QStringList journalctlArgs(const QString& tagFlag, const QString& tagValue, int sinceMinutes)
 {
-    return {QStringLiteral("--user"),
-            tagFlag,
-            QStringLiteral("plasmazonesd"),
-            QStringLiteral("--since"),
-            QStringLiteral("%1 min ago").arg(sinceMinutes),
-            QStringLiteral("--no-pager"),
-            QStringLiteral("-o"),
-            QStringLiteral("short-iso")};
+    QStringList args{QStringLiteral("--user")};
+    args << tagFlag;
+    if (!tagValue.isEmpty())
+        args << tagValue;
+    args << QStringLiteral("--since") << QStringLiteral("%1 min ago").arg(sinceMinutes) << QStringLiteral("--no-pager")
+         << QStringLiteral("-o") << QStringLiteral("short-iso");
+    return args;
 }
 
 static QByteArray runJournalctl(const QStringList& args)
@@ -234,12 +233,13 @@ static QByteArray runJournalctl(const QStringList& args)
 
 QString SupportReport::sectionLogs(int sinceMinutes)
 {
-    QByteArray rawOutput = runJournalctl(journalctlArgs(QStringLiteral("-t"), sinceMinutes));
+    QByteArray rawOutput =
+        runJournalctl(journalctlArgs(QStringLiteral("-t"), QStringLiteral("plasmazonesd"), sinceMinutes));
 
     // Fall back to --identifier if -t returned nothing useful.
     // Some systemd versions report the syslog tag differently.
     if (QString::fromUtf8(rawOutput).trimmed().isEmpty()) {
-        rawOutput = runJournalctl(journalctlArgs(QStringLiteral("--identifier=plasmazonesd"), sinceMinutes));
+        rawOutput = runJournalctl(journalctlArgs(QStringLiteral("--identifier=plasmazonesd"), QString(), sinceMinutes));
     }
 
     if (rawOutput.isEmpty())
