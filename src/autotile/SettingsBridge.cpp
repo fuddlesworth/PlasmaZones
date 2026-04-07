@@ -14,8 +14,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalBlocker>
-#include "config/configdefaults.h"
-#include "config/iconfigbackend.h"
 
 namespace PlasmaZones {
 
@@ -37,9 +35,8 @@ void populatePreviewSavedSettings(AlgorithmRegistry::PreviewParams& params,
 }
 } // anonymous namespace
 
-SettingsBridge::SettingsBridge(AutotileEngine* engine, IConfigBackend* configBackend)
+SettingsBridge::SettingsBridge(AutotileEngine* engine)
     : m_engine(engine)
-    , m_configBackend(configBackend)
 {
     // Configure settings retile debounce timer
     // Coalesces rapid settings changes (e.g., slider adjustments) into single retile
@@ -400,101 +397,79 @@ void SettingsBridge::syncShortcutAdjustment(qreal splitRatio, int masterCount)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Session persistence
+// Session persistence (serialization only — persistence owned by WTA)
+//
+// Only window order and floating windows are serialized here.
+// masterCount/splitRatio are persisted by Settings via AutotileScreen:<id>
+// per-screen overrides — no duplication needed.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void SettingsBridge::saveState()
+QJsonArray SettingsBridge::serializeWindowOrders() const
 {
-    std::unique_ptr<IConfigBackend> fallback;
-    IConfigBackend* backend = resolveBackend(m_configBackend, fallback);
-    auto group = backend->group(ConfigDefaults::autoTileStateGroup());
-
-    // Save global state (algorithm only — autotile screens are derived from
-    // layout assignments at startup by updateAutotileScreens(), not persisted
-    // here, to avoid stale data overriding the authoritative layout assignments)
-    group->writeString(QStringLiteral("algorithm"), m_engine->m_algorithmId);
-
-    // Save per-screen state as JSON array, including desktop/activity key
-    QJsonArray screensArray;
+    QJsonArray entries;
     for (auto it = m_engine->m_screenStates.constBegin(); it != m_engine->m_screenStates.constEnd(); ++it) {
         const TilingState* state = it.value();
-        if (!state) {
+        if (!state || state->windowCount() == 0) {
             continue;
         }
 
         const TilingStateKey& key = it.key();
-        QJsonObject screenObj;
-        screenObj[QLatin1String("screen")] = key.screenId;
-        screenObj[QLatin1String("desktop")] = key.desktop;
-        screenObj[QLatin1String("activity")] = key.activity;
-        screenObj[QLatin1String("masterCount")] = state->masterCount();
-        screenObj[QLatin1String("splitRatio")] = state->splitRatio();
+        const QStringList& order = state->windowOrder();
+        if (order.isEmpty()) {
+            continue;
+        }
 
-        screensArray.append(screenObj);
+        QJsonObject entry;
+        entry[QLatin1String("screen")] = key.screenId;
+        entry[QLatin1String("desktop")] = key.desktop;
+        entry[QLatin1String("activity")] = key.activity;
+
+        QJsonArray orderArray;
+        for (const QString& wid : order) {
+            orderArray.append(wid);
+        }
+        entry[QLatin1String("windowOrder")] = orderArray;
+
+        const QStringList floating = state->floatingWindows();
+        if (!floating.isEmpty()) {
+            QJsonArray floatArray;
+            for (const QString& wid : floating) {
+                floatArray.append(wid);
+            }
+            entry[QLatin1String("floatingWindows")] = floatArray;
+        }
+
+        entries.append(entry);
     }
 
-    group->writeString(QStringLiteral("screenStates"),
-                       QString::fromUtf8(QJsonDocument(screensArray).toJson(QJsonDocument::Compact)));
-    group.reset(); // release group before sync
-    backend->sync();
-
-    qCInfo(lcAutotile) << "Autotile state: saved," << m_engine->m_screenStates.size() << "states";
+    return entries;
 }
 
-void SettingsBridge::loadState()
+void SettingsBridge::deserializeWindowOrders(const QJsonArray& orders)
 {
-    std::unique_ptr<IConfigBackend> fallback;
-    IConfigBackend* backend = resolveBackend(m_configBackend, fallback);
-    auto group = backend->group(ConfigDefaults::autoTileStateGroup());
-
-    if (!group->hasKey(QStringLiteral("algorithm")) && !group->hasKey(QStringLiteral("screenStates"))) {
-        qCDebug(lcAutotile) << "No saved autotile state found";
+    if (orders.isEmpty()) {
+        qCDebug(lcAutotile) << "No saved autotile window orders to restore";
         return;
     }
 
-    // Restore algorithm silently — do NOT emit algorithmChanged here.
-    const QString savedAlgorithm = group->readString(QStringLiteral("algorithm"), m_engine->m_algorithmId);
-    if (AlgorithmRegistry::instance()->hasAlgorithm(savedAlgorithm)) {
-        m_engine->m_algorithmId = savedAlgorithm;
-        m_engine->m_config->algorithmId = savedAlgorithm;
-    }
-
-    // Parse per-screen state
-    const QString statesJson = group->readString(QStringLiteral("screenStates"));
-    if (statesJson.isEmpty()) {
-        return;
-    }
-
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(statesJson.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qCWarning(lcAutotile) << "Failed to parse saved autotile state:" << parseError.errorString();
-        return;
-    }
-
-    const QJsonArray screensArray = doc.array();
+    int restoredCount = 0;
     QSet<QString> processedKeys;
-    for (const QJsonValue& val : screensArray) {
-        const QJsonObject screenObj = val.toObject();
-        const QString screenId = screenObj[QLatin1String("screen")].toString();
+    for (const QJsonValue& val : orders) {
+        const QJsonObject entry = val.toObject();
+        const QString screenId = entry[QLatin1String("screen")].toString();
         if (screenId.isEmpty()) {
             continue;
         }
 
-        // Restore desktop/activity context from saved state (defaults to 0/"" for
-        // backward compatibility with pre-per-desktop save format).
-        const int desktop = screenObj[QLatin1String("desktop")].toInt(0);
-        const QString activity = screenObj[QLatin1String("activity")].toString();
+        const int desktop = entry[QLatin1String("desktop")].toInt(0);
+        const QString activity = entry[QLatin1String("activity")].toString();
 
-        // Use stateForKey() to create the state under the exact saved key
-        // without mutating the engine's current desktop/activity context.
         TilingStateKey loadKey;
         loadKey.screenId = screenId;
         loadKey.desktop = (desktop > 0) ? desktop : m_engine->m_currentDesktop;
         loadKey.activity = !activity.isEmpty() ? activity : m_engine->m_currentActivity;
 
-        // Skip duplicate resolved keys (desktop=0 backward compat can map
-        // multiple entries to the same key).
+        // Skip duplicate resolved keys
         const QString compositeKey =
             QStringLiteral("%1/%2/%3").arg(loadKey.screenId).arg(loadKey.desktop).arg(loadKey.activity);
         if (processedKeys.contains(compositeKey)) {
@@ -502,27 +477,43 @@ void SettingsBridge::loadState()
         }
         processedKeys.insert(compositeKey);
 
-        TilingState* state = m_engine->stateForKey(loadKey);
-
-        if (!state) {
-            continue;
+        // Restore window order as pre-seeded order for insertion.
+        // Windows haven't been announced yet — insertWindow() will consume
+        // m_pendingInitialOrders as windows arrive from the KWin effect.
+        const QJsonArray orderArray = entry[QLatin1String("windowOrder")].toArray();
+        if (!orderArray.isEmpty()) {
+            QStringList windowOrder;
+            windowOrder.reserve(orderArray.size());
+            for (const QJsonValue& wid : orderArray) {
+                const QString id = wid.toString();
+                if (!id.isEmpty()) {
+                    windowOrder.append(id);
+                }
+            }
+            if (!windowOrder.isEmpty()) {
+                m_engine->m_pendingInitialOrders[screenId] = windowOrder;
+                ++restoredCount;
+            }
         }
 
-        // Restore per-screen parameters (not window order — windows haven't been
-        // announced yet and stableIds may not match across sessions)
-        state->setMasterCount(screenObj[QLatin1String("masterCount")].toInt(m_engine->config()->masterCount));
-        state->setSplitRatio(screenObj[QLatin1String("splitRatio")].toDouble(m_engine->config()->splitRatio));
+        // Restore floating windows into saved floating set so they are
+        // re-floated when the windows arrive on this desktop/activity context.
+        const QJsonArray floatArray = entry[QLatin1String("floatingWindows")].toArray();
+        if (!floatArray.isEmpty()) {
+            QSet<QString> floatingSet;
+            for (const QJsonValue& wid : floatArray) {
+                const QString id = wid.toString();
+                if (!id.isEmpty()) {
+                    floatingSet.insert(id);
+                }
+            }
+            if (!floatingSet.isEmpty()) {
+                m_engine->m_savedFloatingWindows[loadKey] = floatingSet;
+            }
+        }
     }
 
-    // Note: autotile screens are NOT restored here. The authoritative source is
-    // layout assignments (persisted by LayoutManager). Daemon::connectLayoutSignals()
-    // calls updateAutotileScreens() which derives the correct set from assignments
-    // BEFORE this loadState() runs. Restoring a saved set here would overwrite the
-    // correct value with stale data (e.g., screens from a previous autotile session
-    // that the user has since toggled back to manual mode).
-
-    qCInfo(lcAutotile) << "Autotile state: loaded, algorithm=" << m_engine->m_algorithmId
-                       << "screenStates=" << screensArray.size();
+    qCInfo(lcAutotile) << "Autotile window orders: restored" << restoredCount << "screens";
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

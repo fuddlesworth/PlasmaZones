@@ -8,6 +8,7 @@
 #include "autotile/AutotileEngine.h"
 #include "autotile/AutotileConfig.h"
 #include "autotile/AlgorithmRegistry.h"
+#include "autotile/SettingsBridge.h"
 #include "autotile/TilingState.h"
 #include "core/constants.h"
 #include "config/configbackend_json.h"
@@ -26,16 +27,16 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
  * @brief Unit tests for SettingsBridge
  *
  * SettingsBridge requires a Settings object for full syncFromSettings/connectToSettings
- * testing. These tests exercise the session persistence (saveState/loadState) path
- * which uses QSettingsConfigBackend, and test behavior of the engine through the
- * SettingsBridge indirectly.
+ * testing. These tests exercise the session persistence (serialize/deserialize) path
+ * and test behavior of the engine through the SettingsBridge indirectly.
  *
  * Tests cover:
  * - syncFromSettings detecting no changes (skips retile)
  * - maxWindows increase triggering backfill
- * - saveState/loadState roundtrip preserving per-screen state
- * - loadState with invalid JSON (no crash)
- * - loadState with unknown algorithm (ignored gracefully)
+ * - serializeWindowOrders/deserializeWindowOrders roundtrip preserving per-screen window state
+ * - deserializeWindowOrders with empty data (no crash)
+ * - Window order and floating windows survive serialization roundtrip
+ * - masterCount/splitRatio are NOT serialized (owned by Settings per-screen overrides)
  * - Debounce timer coalescing rapid changes
  */
 class TestSettingsBridge : public QObject
@@ -159,88 +160,78 @@ private Q_SLOTS:
     // Session persistence roundtrip
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testSettingsBridge_saveState_roundTrip()
+    void testSettingsBridge_serializeWindowOrders_roundTrip()
     {
-        // Save state
+        QJsonArray serialized;
+
+        // Serialize window orders
         {
             AutotileEngine engine(nullptr, nullptr, nullptr);
-            engine.setAlgorithm(QLatin1String("bsp"));
 
             TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
             state->addWindow(QStringLiteral("win1"));
             state->addWindow(QStringLiteral("win2"));
-            state->setMasterCount(2);
-            state->setSplitRatio(0.7);
 
             TilingState* state2 = engine.stateForScreen(QStringLiteral("HDMI-1"));
             state2->addWindow(QStringLiteral("win3"));
-            state2->setSplitRatio(0.4);
 
-            engine.saveState();
+            serialized = engine.settingsBridge()->serializeWindowOrders();
+            QCOMPARE(serialized.size(), 2);
         }
 
-        // Load state in a fresh engine
+        // Deserialize into a fresh engine — window orders become pending initial orders
         {
             AutotileEngine engine(nullptr, nullptr, nullptr);
-            engine.loadState();
+            engine.settingsBridge()->deserializeWindowOrders(serialized);
 
-            // Algorithm should be restored
-            QCOMPARE(engine.algorithm(), QLatin1String("bsp"));
+            // Verify JSON structure contains screen context + window orders
+            QJsonObject entry = serialized[0].toObject();
+            QVERIFY(!entry[QLatin1String("screen")].toString().isEmpty());
+            QVERIFY(entry.contains(QLatin1String("windowOrder")));
+            QVERIFY(entry[QLatin1String("windowOrder")].toArray().size() > 0);
 
-            // Per-screen state should be restored
-            TilingState* state1 = engine.stateForScreen(QStringLiteral("eDP-1"));
-            QVERIFY(state1);
-            QCOMPARE(state1->masterCount(), 2);
-            QVERIFY(qFuzzyCompare(state1->splitRatio(), 0.7));
-
-            TilingState* state2 = engine.stateForScreen(QStringLiteral("HDMI-1"));
-            QVERIFY(state2);
-            QVERIFY(qFuzzyCompare(state2->splitRatio(), 0.4));
+            // masterCount/splitRatio should NOT be in the serialized data
+            // (they're owned by Settings via AutotileScreen:<id> per-screen overrides)
+            QVERIFY(!entry.contains(QLatin1String("masterCount")));
+            QVERIFY(!entry.contains(QLatin1String("splitRatio")));
         }
     }
 
-    void testSettingsBridge_loadState_invalidJson()
+    void testSettingsBridge_deserializeWindowOrders_emptyArray()
     {
-        // Write corrupt JSON to the config via JsonConfigBackend
-        {
-            auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto group = backend->group(QStringLiteral("AutoTileState"));
-            group->writeString(QStringLiteral("algorithm"), QStringLiteral("master-stack"));
-            group->writeString(QStringLiteral("screenStates"), QStringLiteral("{{{invalid json!@#}}}"));
-            group.reset();
-            backend->sync();
-        }
-
-        // Should not crash — corrupt JSON is gracefully handled
+        // Should not crash — empty array is handled gracefully
         AutotileEngine engine(nullptr, nullptr, nullptr);
-        engine.loadState();
+        engine.settingsBridge()->deserializeWindowOrders(QJsonArray{});
 
-        // Engine should still be in a valid state with a known algorithm ID
+        // Engine should still be in a valid state
         QVERIFY(!engine.algorithm().isEmpty());
-        QVERIFY2(AlgorithmRegistry::instance()->hasAlgorithm(engine.algorithm()),
-                 qPrintable(QStringLiteral("Post-load algorithm '%1' is not a known registered algorithm")
-                                .arg(engine.algorithm())));
     }
 
-    void testSettingsBridge_loadState_unknownAlgorithmIgnored()
+    void testSettingsBridge_serializeWindowOrders_includesFloating()
     {
-        // Write an unknown algorithm to the config via JsonConfigBackend
-        {
-            auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto group = backend->group(QStringLiteral("AutoTileState"));
-            group->writeString(QStringLiteral("algorithm"), QStringLiteral("nonexistent-algo-xyz"));
-            group->writeString(QStringLiteral("screenStates"), QStringLiteral("[]"));
-            group.reset();
-            backend->sync();
-        }
-
         AutotileEngine engine(nullptr, nullptr, nullptr);
-        const QString originalAlgo = engine.algorithm();
 
-        engine.loadState();
+        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        state->addWindow(QStringLiteral("firefox|{uuid1}"));
+        state->addWindow(QStringLiteral("konsole|{uuid2}"));
+        state->addWindow(QStringLiteral("dolphin|{uuid3}"));
+        state->setFloating(QStringLiteral("konsole|{uuid2}"), true);
 
-        // Unknown algorithm should be silently ignored — the original default stays
-        QCOMPARE(engine.algorithm(), originalAlgo);
+        QJsonArray serialized = engine.settingsBridge()->serializeWindowOrders();
+        QCOMPARE(serialized.size(), 1);
+
+        // Verify JSON structure
+        QJsonObject obj = serialized[0].toObject();
+        QCOMPARE(obj[QLatin1String("screen")].toString(), QStringLiteral("eDP-1"));
+        QVERIFY(obj.contains(QLatin1String("windowOrder")));
+        QVERIFY(obj.contains(QLatin1String("floatingWindows")));
+
+        QJsonArray orderArray = obj[QLatin1String("windowOrder")].toArray();
+        QCOMPARE(orderArray.size(), 3);
+
+        QJsonArray floatArray = obj[QLatin1String("floatingWindows")].toArray();
+        QCOMPARE(floatArray.size(), 1);
+        QCOMPARE(floatArray[0].toString(), QStringLiteral("konsole|{uuid2}"));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

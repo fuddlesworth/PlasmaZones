@@ -10,9 +10,11 @@
 #include <QString>
 #include <QStringList>
 #include <QHash>
+#include <QJsonArray>
 #include <QRect>
 #include <QTimer>
 #include <QPointer>
+#include <functional>
 
 namespace PlasmaZones {
 
@@ -659,6 +661,29 @@ public Q_SLOTS:
     void saveStateOnShutdown();
 
     /**
+     * @brief Schedule a debounced save of all tracked state
+     *
+     * Starts/restarts the 500ms debounce timer. After the timer fires,
+     * saveState() is called once. Used by the daemon to trigger saves
+     * when autotile state changes (tilingChanged signal).
+     */
+    void scheduleSaveState();
+
+    /**
+     * @brief Set tiling state serialization delegates
+     *
+     * These delegates are called during saveState()/loadState() to include
+     * autotile per-screen tiling state alongside window tracking state.
+     *
+     * @param serializeFn Returns JSON array of per-screen tiling states
+     * @param deserializeFn Restores tiling states from JSON array
+     */
+#ifndef Q_MOC_RUN // std::function types confuse MOC's introspection parser
+    void setTilingStateDelegates(std::function<QJsonArray()> serializeFn,
+                                 std::function<void(const QJsonArray&)> deserializeFn);
+#endif
+
+    /**
      * @brief Load window tracking state from disk
      *
      * Restores previously persisted window tracking state.
@@ -955,7 +980,10 @@ private:
     // Persistence (adaptor responsibility: KConfig save/load)
     // ═══════════════════════════════════════════════════════════════════════════════
     QTimer* m_saveTimer = nullptr;
-    void scheduleSaveState();
+
+    // Tiling state serialization delegates (autotile engine → WTA persistence)
+    std::function<QJsonArray()> m_serializeTilingStatesFn;
+    std::function<void(const QJsonArray&)> m_deserializeTilingStatesFn;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Startup timing coordination

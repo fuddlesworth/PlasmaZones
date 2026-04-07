@@ -42,7 +42,7 @@ constexpr int PendingOrderTimeoutMs = 10000;
 } // namespace
 
 AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
-                               ScreenManager* screenManager, IConfigBackend* configBackend, QObject* parent)
+                               ScreenManager* screenManager, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)
@@ -50,7 +50,7 @@ AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingServi
     , m_config(std::make_unique<AutotileConfig>())
     , m_configResolver(std::make_unique<PerScreenConfigResolver>(this))
     , m_navigation(std::make_unique<NavigationController>(this))
-    , m_settingsBridge(std::make_unique<SettingsBridge>(this, configBackend))
+    , m_settingsBridge(std::make_unique<SettingsBridge>(this))
     , m_algorithmId(AlgorithmRegistry::defaultAlgorithmId())
 {
     connectSignals();
@@ -847,12 +847,16 @@ TilingAlgorithm* AutotileEngine::effectiveAlgorithm(const QString& screenId) con
 
 void AutotileEngine::saveState()
 {
-    m_settingsBridge->saveState();
+    if (m_persistSaveFn) {
+        m_persistSaveFn();
+    }
 }
 
 void AutotileEngine::loadState()
 {
-    m_settingsBridge->loadState();
+    if (m_persistLoadFn) {
+        m_persistLoadFn();
+    }
 }
 
 void AutotileEngine::scheduleRetileForScreen(const QString& screenId)

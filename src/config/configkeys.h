@@ -91,7 +91,6 @@ public:
 
     // Unmanaged groups (not purged by save(), written independently)
     PZ_CONFIG_GROUP(tilingQuickLayoutSlotsGroup, "TilingQuickLayoutSlots")
-    PZ_CONFIG_GROUP(autoTileStateGroup, "AutoTileState")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Trigger JSON Field Names

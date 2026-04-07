@@ -164,6 +164,19 @@ void WindowTrackingAdaptor::saveState()
     tracking->writeString(QStringLiteral("UserSnappedClasses"),
                           QString::fromUtf8(QJsonDocument(userSnappedArray).toJson(QJsonDocument::Compact)));
 
+    // Save autotile per-context window orders (analogous to WindowZoneAssignmentsFull
+    // for snap mode). masterCount/splitRatio are NOT saved here — Settings owns those
+    // via AutotileScreen:<id> per-screen overrides.
+    if (m_serializeTilingStatesFn) {
+        const QJsonArray autotileOrders = m_serializeTilingStatesFn();
+        if (!autotileOrders.isEmpty()) {
+            tracking->writeString(QStringLiteral("AutotileWindowOrders"),
+                                  QString::fromUtf8(QJsonDocument(autotileOrders).toJson(QJsonDocument::Compact)));
+        } else {
+            tracking->deleteKey(QStringLiteral("AutotileWindowOrders"));
+        }
+    }
+
     tracking.reset(); // release group before sync
     backend->sync();
     qCInfo(lcDbusWindow) << "Saved state:"
@@ -504,6 +517,20 @@ void WindowTrackingAdaptor::loadState()
         }
     }
     m_service->setUserSnappedClasses(userSnappedClasses);
+
+    // Restore autotile per-context window orders (analogous to WindowZoneAssignmentsFull)
+    if (m_deserializeTilingStatesFn) {
+        const QString autotileOrdersStr = readVal(QStringLiteral("AutotileWindowOrders"), QString());
+        if (!autotileOrdersStr.isEmpty()) {
+            QJsonParseError parseError;
+            const QJsonDocument doc = QJsonDocument::fromJson(autotileOrdersStr.toUtf8(), &parseError);
+            if (parseError.error == QJsonParseError::NoError && doc.isArray()) {
+                m_deserializeTilingStatesFn(doc.array());
+            } else {
+                qCWarning(lcDbusWindow) << "Failed to parse saved autotile window orders:" << parseError.errorString();
+            }
+        }
+    }
 
     // Restore active layout from previous session so that previousLayout() is correct
     // on the next layout switch. Without this, the daemon starts with defaultLayout()

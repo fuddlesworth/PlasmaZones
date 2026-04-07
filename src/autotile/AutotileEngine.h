@@ -52,7 +52,6 @@ class NavigationController;
 class PerScreenConfigResolver;
 class ScreenManager;
 class Settings;
-class IConfigBackend;
 class SettingsBridge;
 class TilingAlgorithm;
 class TilingState;
@@ -79,8 +78,7 @@ class PLASMAZONES_EXPORT AutotileEngine : public QObject, public IWindowEngine
 
 public:
     explicit AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
-                            ScreenManager* screenManager, IConfigBackend* configBackend = nullptr,
-                            QObject* parent = nullptr);
+                            ScreenManager* screenManager, QObject* parent = nullptr);
     ~AutotileEngine() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -249,22 +247,44 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Save tiling state to KConfig for session persistence
+     * @brief Save tiling state via persistence delegate
      *
-     * Serializes per-screen TilingState (window order by stableId,
-     * masterCount, splitRatio, algorithm) to the [AutoTileState] config group.
-     * Called by Daemon::stop() before shutdown.
+     * Delegates to the save function set by setPersistenceDelegate().
+     * Typically wired to WTA's saveState() by the daemon.
      */
     void saveState() override;
 
     /**
-     * @brief Load tiling state from KConfig
+     * @brief Load tiling state via persistence delegate
      *
-     * Deserializes per-screen state from the [AutoTileState] config group.
-     * Actual retiling is deferred until windows are announced by the KWin effect.
-     * Called by Daemon::start() after initialization.
+     * Delegates to the load function set by setPersistenceDelegate().
+     * Typically wired to WTA's loadState() by the daemon.
      */
     void loadState() override;
+
+    /**
+     * @brief Set persistence callbacks for save/load
+     *
+     * KConfig persistence is owned by WindowTrackingAdaptor (engine is KConfig-free).
+     * These callbacks allow AutotileEngine to fulfill the IWindowEngine persistence
+     * contract without introducing KConfig as a dependency.
+     *
+     * @param saveFn Called by saveState() to persist tiling state
+     * @param loadFn Called by loadState() to restore tiling state
+     */
+    void setPersistenceDelegate(std::function<void()> saveFn, std::function<void()> loadFn)
+    {
+        m_persistSaveFn = std::move(saveFn);
+        m_persistLoadFn = std::move(loadFn);
+    }
+
+    /**
+     * @brief Access the settings bridge for serialization delegates
+     */
+    SettingsBridge* settingsBridge() const
+    {
+        return m_settingsBridge.get();
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings synchronization
@@ -909,6 +929,10 @@ private:
     std::unique_ptr<PerScreenConfigResolver> m_configResolver;
     std::unique_ptr<NavigationController> m_navigation;
     std::unique_ptr<SettingsBridge> m_settingsBridge;
+
+    // Persistence delegates (KConfig stays in WTA layer)
+    std::function<void()> m_persistSaveFn;
+    std::function<void()> m_persistLoadFn;
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;
