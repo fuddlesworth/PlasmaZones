@@ -492,6 +492,102 @@ private Q_SLOTS:
     }
 
     /**
+     * save() must purge unknown root-level groups that are not part of the
+     * known schema (neither managed nor explicitly unmanaged).  This catches
+     * stale groups left behind by removed features, botched migrations, or
+     * hand-editing.
+     */
+    void testSave_purgesUnknownRootLevelGroups()
+    {
+        IsolatedConfigGuard guard;
+
+        // Inject unknown root-level groups
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            {
+                auto g = backend->group(QStringLiteral("ObsoleteFeature"));
+                g->writeString(QStringLiteral("Key"), QStringLiteral("value"));
+            }
+            {
+                auto g = backend->group(QStringLiteral("OldGroupFromV0"));
+                g->writeBool(QStringLiteral("Flag"), true);
+            }
+            // Inject valid unmanaged groups to prove they survive
+            {
+                auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
+                g->writeString(QStringLiteral("1"), QStringLiteral("layout-id"));
+            }
+            {
+                auto g = backend->group(QStringLiteral("Updates"));
+                g->writeString(QStringLiteral("LastCheck"), QStringLiteral("2026-04-07"));
+            }
+            backend->sync();
+        }
+
+        Settings settings;
+        settings.save();
+
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        const QStringList groups = backend->groupList();
+
+        // Unknown groups must be gone
+        bool hasObsolete = false;
+        bool hasOldGroup = false;
+        for (const QString& g : groups) {
+            if (g == QStringLiteral("ObsoleteFeature"))
+                hasObsolete = true;
+            if (g == QStringLiteral("OldGroupFromV0"))
+                hasOldGroup = true;
+        }
+        QVERIFY2(!hasObsolete, "Unknown root-level group 'ObsoleteFeature' must be purged by save()");
+        QVERIFY2(!hasOldGroup, "Unknown root-level group 'OldGroupFromV0' must be purged by save()");
+
+        // Unmanaged groups must survive
+        {
+            auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
+            QCOMPARE(g->readString(QStringLiteral("1")), QStringLiteral("layout-id"));
+        }
+        {
+            auto g = backend->group(QStringLiteral("Updates"));
+            QCOMPARE(g->readString(QStringLiteral("LastCheck")), QStringLiteral("2026-04-07"));
+        }
+    }
+
+    /**
+     * save() must purge unknown dot-path groups (e.g. "OldFeature.SubGroup")
+     * by deleting the entire top-level parent.
+     */
+    void testSave_purgesUnknownDotPathGroups()
+    {
+        IsolatedConfigGuard guard;
+
+        // Inject an unknown nested group
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            {
+                auto g = backend->group(QStringLiteral("RemovedFeature.SubGroup"));
+                g->writeString(QStringLiteral("Key"), QStringLiteral("leftover"));
+            }
+            {
+                auto g = backend->group(QStringLiteral("RemovedFeature.SubGroup.Deeper"));
+                g->writeBool(QStringLiteral("Flag"), true);
+            }
+            backend->sync();
+        }
+
+        Settings settings;
+        settings.save();
+
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        const QStringList groups = backend->groupList();
+
+        for (const QString& g : groups) {
+            QVERIFY2(!g.startsWith(QStringLiteral("RemovedFeature")),
+                     qPrintable(QStringLiteral("Dot-path group '%1' must be purged by save()").arg(g)));
+        }
+    }
+
+    /**
      * save() round-trip must preserve all valid settings values even after
      * stale key purging (regression guard — purging must not corrupt data).
      */

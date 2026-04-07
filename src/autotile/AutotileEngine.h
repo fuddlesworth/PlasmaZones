@@ -856,7 +856,7 @@ private:
     void removeWindow(const QString& windowId);
     void pruneStaleRestores(const QString& appId);
     bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
-    void recalculateLayout(const QString& screenId);
+    bool recalculateLayout(const QString& screenId);
     void applyTiling(const QString& screenId);
     bool shouldTileWindow(const QString& windowId) const;
     QString screenForWindow(const QString& windowId) const;
@@ -921,12 +921,32 @@ private:
     /**
      * @brief Recover overflow windows and retile a single screen
      *
-     * Encapsulates the four-step retile sequence: overflow recovery,
-     * recalculate layout, apply tiling, emit tilingChanged.
+     * Encapsulates the four-step retile sequence: pre-validate screen geometry,
+     * overflow recovery, recalculate layout, apply tiling, emit tilingChanged.
+     *
+     * If screen geometry is transiently unavailable (e.g. during a virtual
+     * desktop switch on Wayland), schedules a bounded retry instead of
+     * silently dropping the retile.
      *
      * @param screenId Screen to retile
      */
     void retileScreen(const QString& screenId);
+
+    /**
+     * @brief Schedule a bounded retry for a screen whose geometry was transiently invalid
+     *
+     * Retries up to MaxRetileRetries times per screen, with RetileRetryIntervalMs
+     * between attempts. The retry counter is cleared on successful retile or when
+     * the screen is removed from autotile.
+     *
+     * @param screenId Screen to retry
+     */
+    void scheduleRetileRetry(const QString& screenId);
+
+    /**
+     * @brief Process all pending retile retries (fires via m_retileRetryTimer)
+     */
+    void processRetileRetries();
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
@@ -1075,6 +1095,17 @@ private:
     // all currently-pending events are processed — no fixed delay needed.
     QSet<QString> m_pendingRetileScreens;
     bool m_retilePending = false;
+
+    // Bounded retry for transient screen geometry failures.
+    // When QScreen is temporarily unavailable (e.g. during Wayland desktop switch),
+    // recalculateLayout cannot compute zone geometry. Rather than silently dropping
+    // the retile (leaving stale zones), we retry after a short interval.
+    // Per-screen retry counts prevent infinite loops; cleared on success or screen removal.
+    static constexpr int MaxRetileRetries = 3;
+    static constexpr int RetileRetryIntervalMs = 150;
+    QTimer m_retileRetryTimer;
+    QSet<QString> m_retileRetryScreens;
+    QHash<QString, int> m_retileRetryCount;
 
     // Deferred focus: set by onWindowAdded, emitted after applyTiling so the
     // focus request arrives at KWin AFTER windowsTiled (whose onComplete raises
