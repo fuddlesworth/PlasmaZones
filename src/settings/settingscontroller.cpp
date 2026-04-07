@@ -234,7 +234,7 @@ SettingsController::SettingsController(QObject* parent)
 
     // Load dismissed update version from app-local settings
     {
-        QSettings appSettings(QStringLiteral("plasmazones"), QStringLiteral("settings-window"));
+        QSettings appSettings;
         m_dismissedUpdateVersion = appSettings.value(QStringLiteral("dismissedUpdateVersion")).toString();
         m_lastSeenWhatsNewVersion = appSettings.value(QStringLiteral("lastSeenWhatsNewVersion")).toString();
     }
@@ -271,7 +271,7 @@ void SettingsController::setDismissedUpdateVersion(const QString& version)
 {
     if (m_dismissedUpdateVersion != version) {
         m_dismissedUpdateVersion = version;
-        QSettings appSettings(QStringLiteral("plasmazones"), QStringLiteral("settings-window"));
+        QSettings appSettings;
         appSettings.setValue(QStringLiteral("dismissedUpdateVersion"), version);
         Q_EMIT dismissedUpdateVersionChanged();
     }
@@ -293,7 +293,7 @@ void SettingsController::markWhatsNewSeen()
 {
     if (m_lastSeenWhatsNewVersion != PlasmaZones::VERSION_STRING) {
         m_lastSeenWhatsNewVersion = PlasmaZones::VERSION_STRING;
-        QSettings appSettings(QStringLiteral("plasmazones"), QStringLiteral("settings-window"));
+        QSettings appSettings;
         appSettings.setValue(QStringLiteral("lastSeenWhatsNewVersion"), PlasmaZones::VERSION_STRING);
         Q_EMIT lastSeenWhatsNewVersionChanged();
     }
@@ -2840,7 +2840,7 @@ void SettingsController::resetEditorDefaults()
 
 QVariantMap SettingsController::loadWindowGeometry() const
 {
-    QSettings settings(QStringLiteral("plasmazones"), QStringLiteral("settings-window"));
+    QSettings settings;
     QVariantMap geo;
     int w = settings.value(QStringLiteral("width"), 0).toInt();
     int h = settings.value(QStringLiteral("height"), 0).toInt();
@@ -2873,7 +2873,7 @@ QVariantMap SettingsController::loadWindowGeometry() const
 
 void SettingsController::saveWindowGeometry(int x, int y, int width, int height)
 {
-    QSettings settings(QStringLiteral("plasmazones"), QStringLiteral("settings-window"));
+    QSettings settings;
     settings.setValue(QStringLiteral("x"), x);
     settings.setValue(QStringLiteral("y"), y);
     settings.setValue(QStringLiteral("width"), width);
