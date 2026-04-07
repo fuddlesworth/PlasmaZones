@@ -1661,9 +1661,12 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                 }
             }
 
-            // Prune entries whose screen is no longer active. Uses a fresh
-            // lookup (safe after the potential erase above).
-            pruneStaleRestores(appId);
+            // Prune entries whose screen is no longer active. Only needed
+            // after consuming an entry (the erase above may have invalidated
+            // restoreIt, so pruneStaleRestores does a fresh lookup).
+            if (restoredFromPendingQueue) {
+                pruneStaleRestores(appId);
+            }
         }
     }
 
@@ -1694,7 +1697,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         auto savedIt = m_savedFloatingWindows.find(currentKey);
         if (savedIt != m_savedFloatingWindows.end() && savedIt.value().remove(windowId)) {
             state->setFloating(windowId, true);
-            qCDebug(lcAutotile) << "Restored saved floating state for window" << windowId << "on screen" << screenId;
+            qCInfo(lcAutotile) << "Restored saved floating state for window" << windowId << "on screen" << screenId;
             if (savedIt.value().isEmpty()) {
                 m_savedFloatingWindows.erase(savedIt);
             }
