@@ -478,21 +478,30 @@ void SettingsBridge::deserializeWindowOrders(const QJsonArray& orders)
         processedKeys.insert(compositeKey);
 
         // Restore window order as pre-seeded order for insertion.
-        // Windows haven't been announced yet — insertWindow() will consume
-        // m_pendingInitialOrders as windows arrive from the KWin effect.
-        const QJsonArray orderArray = entry[QLatin1String("windowOrder")].toArray();
-        if (!orderArray.isEmpty()) {
-            QStringList windowOrder;
-            windowOrder.reserve(orderArray.size());
-            for (const QJsonValue& wid : orderArray) {
-                const QString id = wid.toString();
-                if (!id.isEmpty()) {
-                    windowOrder.append(id);
+        // m_pendingInitialOrders is keyed by screenId (not TilingStateKey) because
+        // insertWindow() only knows the screen — it inserts into the current context's
+        // state. At startup, KWin only announces windows on the current desktop, so
+        // we only populate pending orders for entries matching the current context.
+        // Orders for other desktops are not restored (windows will get default ordering
+        // when the user switches to that desktop).
+        const bool isCurrentContext = loadKey.desktop == m_engine->m_currentDesktop
+            && (loadKey.activity.isEmpty() || loadKey.activity == m_engine->m_currentActivity);
+
+        if (isCurrentContext) {
+            const QJsonArray orderArray = entry[QLatin1String("windowOrder")].toArray();
+            if (!orderArray.isEmpty()) {
+                QStringList windowOrder;
+                windowOrder.reserve(orderArray.size());
+                for (const QJsonValue& wid : orderArray) {
+                    const QString id = wid.toString();
+                    if (!id.isEmpty()) {
+                        windowOrder.append(id);
+                    }
                 }
-            }
-            if (!windowOrder.isEmpty()) {
-                m_engine->m_pendingInitialOrders[screenId] = windowOrder;
-                ++restoredCount;
+                if (!windowOrder.isEmpty()) {
+                    m_engine->m_pendingInitialOrders[screenId] = windowOrder;
+                    ++restoredCount;
+                }
             }
         }
 

@@ -175,6 +175,10 @@ void WindowTrackingAdaptor::saveState()
         } else {
             tracking->deleteKey(QStringLiteral("AutotileWindowOrders"));
         }
+    } else {
+        // No serialize delegate — clean up any stale key from a prior session
+        // where autotile was enabled. Prevents restoring orphaned window orders.
+        tracking->deleteKey(QStringLiteral("AutotileWindowOrders"));
     }
 
     tracking.reset(); // release group before sync

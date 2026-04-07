@@ -21,7 +21,7 @@ class Settings;
  * - Synchronizing AutotileConfig from Settings (syncFromSettings)
  * - Connecting to Settings change signals for live updates (connectToSettings)
  * - Debouncing rapid settings changes into coalesced retiles
- * - Session persistence serialization (serializeTilingStates/deserializeTilingStates)
+ * - Session persistence serialization (serializeWindowOrders/deserializeWindowOrders)
  * - Encapsulating signal-blocked Settings writes (syncAlgorithmToSettings)
  *
  * Uses a back-pointer to AutotileEngine for access to config, algorithm,

@@ -376,6 +376,10 @@ bool Daemon::init()
     m_windowTrackingAdaptor->setEngines(m_snapEngine.get(), m_autotileEngine.get());
 
     // Wire autotile persistence through WTA's KConfig layer (same delegate pattern as SnapEngine).
+    // Note: engine->saveState() intentionally triggers a full WTA save (all window tracking
+    // state, not just autotile). This is heavier than a targeted save but ensures consistency
+    // — the autotile window orders are embedded in WTA's save cycle via the serialization
+    // delegates below. The engine-level delegates exist to satisfy the IWindowEngine interface.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.
     m_autotileEngine->setPersistenceDelegate(
         [wta = QPointer(m_windowTrackingAdaptor)]() {

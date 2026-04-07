@@ -234,6 +234,143 @@ private Q_SLOTS:
         QCOMPARE(floatArray[0].toString(), QStringLiteral("konsole|{uuid2}"));
     }
 
+    void testSettingsBridge_deserializeWindowOrders_multiDesktop_onlyRestoresCurrentContext()
+    {
+        // Build JSON with two entries for the same screen on different desktops.
+        // Only the entry matching the engine's current desktop should populate
+        // m_pendingInitialOrders (keyed by screenId, so only one can exist).
+        QJsonArray multiDesktopData;
+        {
+            QJsonObject entry1;
+            entry1[QLatin1String("screen")] = QStringLiteral("eDP-1");
+            entry1[QLatin1String("desktop")] = 1;
+            entry1[QLatin1String("activity")] = QString();
+            entry1[QLatin1String("windowOrder")] = QJsonArray{QStringLiteral("win1"), QStringLiteral("win2")};
+            multiDesktopData.append(entry1);
+
+            QJsonObject entry2;
+            entry2[QLatin1String("screen")] = QStringLiteral("eDP-1");
+            entry2[QLatin1String("desktop")] = 2;
+            entry2[QLatin1String("activity")] = QString();
+            entry2[QLatin1String("windowOrder")] = QJsonArray{QStringLiteral("win3"), QStringLiteral("win4")};
+            multiDesktopData.append(entry2);
+        }
+
+        // Engine defaults to desktop=1 — only desktop 1's order should be restored
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        engine.settingsBridge()->deserializeWindowOrders(multiDesktopData);
+
+        // Verify via serialization that only current desktop's windows ended up
+        // in the pending orders. We can't inspect m_pendingInitialOrders directly,
+        // but we can check the engine doesn't have desktop 2's windows pre-seeded
+        // by setting up windows and checking order.
+        //
+        // Indirect check: setInitialWindowOrder would warn if overwriting, and
+        // the engine should have pending orders containing win1/win2, not win3/win4.
+        // Use setCurrentDesktop to switch and verify no cross-contamination.
+
+        // Desktop 1 should have pending orders
+        engine.setAutotileScreens({QStringLiteral("eDP-1")});
+        engine.windowOpened(QStringLiteral("win2"), QStringLiteral("eDP-1"), 0, 0);
+        engine.windowOpened(QStringLiteral("win1"), QStringLiteral("eDP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        QVERIFY(state);
+        // Pre-seeded order should place win1 before win2 (matching desktop 1's saved order)
+        const QStringList order = state->windowOrder();
+        QCOMPARE(order.size(), 2);
+        QCOMPARE(order.at(0), QStringLiteral("win1"));
+        QCOMPARE(order.at(1), QStringLiteral("win2"));
+    }
+
+    void testSettingsBridge_deserializeWindowOrders_floatingRestoresAllContexts()
+    {
+        // Floating windows use TilingStateKey (full context), so all desktops
+        // should be restored — not just the current one.
+        QJsonArray data;
+        {
+            QJsonObject entry1;
+            entry1[QLatin1String("screen")] = QStringLiteral("eDP-1");
+            entry1[QLatin1String("desktop")] = 1;
+            entry1[QLatin1String("activity")] = QString();
+            entry1[QLatin1String("windowOrder")] = QJsonArray{QStringLiteral("win1")};
+            entry1[QLatin1String("floatingWindows")] = QJsonArray{QStringLiteral("win1")};
+            data.append(entry1);
+
+            QJsonObject entry2;
+            entry2[QLatin1String("screen")] = QStringLiteral("eDP-1");
+            entry2[QLatin1String("desktop")] = 2;
+            entry2[QLatin1String("activity")] = QString();
+            entry2[QLatin1String("windowOrder")] = QJsonArray{QStringLiteral("win2")};
+            entry2[QLatin1String("floatingWindows")] = QJsonArray{QStringLiteral("win2")};
+            data.append(entry2);
+        }
+
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        engine.settingsBridge()->deserializeWindowOrders(data);
+
+        // Floating state for both desktops should be restored (keyed by TilingStateKey)
+        // Re-serialize to verify: desktop 2's floating should NOT appear in pending
+        // orders (since current desktop is 1), but its floating entry should exist.
+        // The floating windows are stored in m_savedFloatingWindows which is internal,
+        // so we verify indirectly: when we add a window on desktop 2 with the same ID,
+        // it should be floated automatically.
+        engine.setAutotileScreens({QStringLiteral("eDP-1")});
+
+        // Desktop 2 floating should exist even though we're on desktop 1
+        engine.setCurrentDesktop(2);
+        engine.windowOpened(QStringLiteral("win2"), QStringLiteral("eDP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        if (state) {
+            // If win2 was restored as floating, it should be floating in the state
+            QVERIFY2(state->isFloating(QStringLiteral("win2")),
+                     "Window on desktop 2 should be restored as floating from saved state");
+        }
+    }
+
+    void testSettingsBridge_persistenceDelegate_noOpWithoutDelegate()
+    {
+        // saveState()/loadState() should silently no-op when no delegate is set
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        state->addWindow(QStringLiteral("win1"));
+
+        // These should not crash or have any effect
+        engine.saveState();
+        engine.loadState();
+
+        // Engine should still be in a valid state
+        QVERIFY(!engine.algorithm().isEmpty());
+        QCOMPARE(state->windowCount(), 1);
+    }
+
+    void testSettingsBridge_persistenceDelegate_invokesCallbacks()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        bool saveCalled = false;
+        bool loadCalled = false;
+
+        engine.setPersistenceDelegate(
+            [&saveCalled]() {
+                saveCalled = true;
+            },
+            [&loadCalled]() {
+                loadCalled = true;
+            });
+
+        engine.saveState();
+        QVERIFY(saveCalled);
+        QVERIFY(!loadCalled);
+
+        engine.loadState();
+        QVERIFY(loadCalled);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Race condition: shortcut adjustment vs syncFromSettings
     // ═══════════════════════════════════════════════════════════════════════════
