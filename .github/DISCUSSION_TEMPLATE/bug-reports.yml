@@ -75,18 +75,13 @@ body:
       required: true
 
   - type: textarea
-    id: logs
+    id: support-report
     attributes:
-      label: Relevant Logs
-      description: Check `journalctl --user -u plasmazones` for daemon logs
-      render: shell
-
-  - type: textarea
-    id: config
-    attributes:
-      label: Configuration
-      description: Any relevant settings or layout JSON
-      render: json
+      label: Support Report
+      description: |
+        Run `plasmazones-report` and attach the generated archive, or paste the D-Bus output:
+        `qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Control.generateSupportReport 0`
+      render: markdown
 
   - type: checkboxes
     id: checks

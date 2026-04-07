@@ -539,6 +539,27 @@ systemctl --user restart plasmazones.service
 3. Verify you have at least one layout with zones
 4. Check if the application is excluded in settings
 
+### Generating a support report
+
+When filing a bug report, attach a support report archive. It collects your config, layouts, screen topology, and recent daemon logs with home paths redacted:
+
+```bash
+plasmazones-report
+```
+
+The archive is saved to `/tmp` by default. Options:
+
+```bash
+plasmazones-report --since 60       # Last 60 minutes of logs (default: 30, max: 120)
+plasmazones-report --output ~/Desktop  # Save to a specific directory
+```
+
+You can also call the D-Bus method directly:
+
+```bash
+qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Control.generateSupportReport 0
+```
+
 ---
 
 ## D-Bus API
