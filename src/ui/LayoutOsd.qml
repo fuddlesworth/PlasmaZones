@@ -69,6 +69,8 @@ Window {
     property bool fontUnderline: false
     property bool fontStrikeout: false
     property bool locked: false
+    property bool disabled: false
+    property string disabledReason
 
     // Signals
     signal dismissed()
@@ -179,7 +181,7 @@ Window {
     Item {
         id: contentWrapper
 
-        Accessible.name: i18n("Layout indicator")
+        Accessible.name: root.disabled ? root.disabledReason : i18n("Layout indicator")
         anchors.fill: parent
         opacity: 0
 
@@ -253,10 +255,10 @@ Window {
 
             }
 
-            // Lock overlay (shown on top of preview when locked)
+            // Lock overlay (shown on top of preview when locked — mutually exclusive with disabled)
             Rectangle {
                 anchors.fill: previewContainer
-                visible: root.locked
+                visible: root.locked && !root.disabled
                 color: Qt.rgba(0, 0, 0, 0.5)
                 radius: Kirigami.Units.smallSpacing
 
@@ -266,6 +268,23 @@ Window {
                     width: Kirigami.Units.iconSizes.large
                     height: Kirigami.Units.iconSizes.large
                     color: Kirigami.Theme.highlightedTextColor
+                }
+
+            }
+
+            // Disabled overlay (shown when context is disabled for this desktop/screen)
+            Rectangle {
+                anchors.fill: previewContainer
+                visible: root.disabled
+                color: Qt.rgba(0, 0, 0, 0.5)
+                radius: Kirigami.Units.smallSpacing
+
+                Kirigami.Icon {
+                    anchors.centerIn: parent
+                    source: "dialog-cancel"
+                    width: Kirigami.Units.iconSizes.large
+                    height: Kirigami.Units.iconSizes.large
+                    color: Kirigami.Theme.neutralTextColor
                 }
 
             }
@@ -280,10 +299,11 @@ Window {
                 anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5
                 spacing: Kirigami.Units.smallSpacing
 
-                // Category badge (layout type)
+                // Category badge (layout type) — hidden when disabled
                 QFZCommon.CategoryBadge {
                     id: categoryBadge
 
+                    visible: !root.disabled
                     anchors.verticalCenter: parent.verticalCenter
                     category: root.category
                     autoAssign: root.autoAssign === true
@@ -293,7 +313,7 @@ Window {
                     id: nameLabel
 
                     anchors.verticalCenter: parent.verticalCenter
-                    text: root.locked ? i18n("%1 (Locked)", root.layoutName) : root.layoutName
+                    text: root.disabled ? root.disabledReason : (root.locked ? i18n("%1 (Locked)", root.layoutName) : root.layoutName)
                     font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.2
                     font.weight: Font.Medium
                     color: textColor
