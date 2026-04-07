@@ -15,6 +15,8 @@ class WindowTrackingAdaptor;
 class LayoutAdaptor;
 class AutotileEngine;
 class LayoutManager;
+class ScreenManager;
+class Settings;
 class Zone;
 
 /**
@@ -33,7 +35,8 @@ class PLASMAZONES_EXPORT ControlAdaptor : public QDBusAbstractAdaptor
 
 public:
     explicit ControlAdaptor(WindowTrackingAdaptor* wta, LayoutAdaptor* layoutAdaptor, LayoutManager* layoutManager,
-                            AutotileEngine* autotileEngine, QObject* parent = nullptr);
+                            AutotileEngine* autotileEngine, ScreenManager* screenManager, Settings* settings,
+                            QObject* parent = nullptr);
     ~ControlAdaptor() override = default;
 
 public Q_SLOTS:
@@ -65,11 +68,20 @@ public Q_SLOTS:
      */
     QString getFullState();
 
+    /**
+     * @brief Generate a redacted support report for bug reports
+     * @param sinceMinutes Minutes of journal logs to include (0 = default 30, max 120)
+     * @return Markdown-formatted support report
+     */
+    QString generateSupportReport(int sinceMinutes);
+
 private:
     WindowTrackingAdaptor* m_wta;
     LayoutAdaptor* m_layoutAdaptor;
     LayoutManager* m_layoutManager;
     AutotileEngine* m_autotileEngine;
+    ScreenManager* m_screenManager;
+    Settings* m_settings;
 };
 
 } // namespace PlasmaZones

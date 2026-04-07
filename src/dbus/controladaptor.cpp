@@ -9,6 +9,9 @@
 #include "../core/zone.h"
 #include "../core/logging.h"
 #include "../core/geometryutils.h"
+#include "../core/screenmanager.h"
+#include "../core/supportreport.h"
+#include "../config/settings.h"
 #include "../autotile/AutotileEngine.h"
 
 #include <QJsonDocument>
@@ -18,12 +21,15 @@
 namespace PlasmaZones {
 
 ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, LayoutAdaptor* layoutAdaptor, LayoutManager* layoutManager,
-                               AutotileEngine* autotileEngine, QObject* parent)
+                               AutotileEngine* autotileEngine, ScreenManager* screenManager, Settings* settings,
+                               QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_wta(wta)
     , m_layoutAdaptor(layoutAdaptor)
     , m_layoutManager(layoutManager)
     , m_autotileEngine(autotileEngine)
+    , m_screenManager(screenManager)
+    , m_settings(settings)
 {
 }
 
@@ -120,6 +126,15 @@ QString ControlAdaptor::getFullState()
     }
 
     return QString::fromUtf8(QJsonDocument(state).toJson(QJsonDocument::Compact));
+}
+
+QString ControlAdaptor::generateSupportReport(int sinceMinutes)
+{
+    if (sinceMinutes <= 0)
+        sinceMinutes = 30;
+
+    qCInfo(lcDbus) << "generateSupportReport: sinceMinutes=" << sinceMinutes;
+    return SupportReport::generate(m_settings, m_screenManager, m_layoutManager, m_autotileEngine, sinceMinutes);
 }
 
 } // namespace PlasmaZones

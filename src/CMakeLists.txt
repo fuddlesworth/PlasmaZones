@@ -86,6 +86,8 @@ set(plasmazones_core_SRCS
     core/layoutmanager.h
     core/layoututils.cpp
     core/layoututils.h
+    core/supportreport.cpp
+    core/supportreport.h
     core/shaderregistry/params.cpp
     core/layersurface.cpp
     core/layersurface.h
