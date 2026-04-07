@@ -47,6 +47,31 @@ private:
     std::unique_ptr<IsolatedConfigGuard> m_configGuard;
     PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
 
+    // Build a multi-desktop JSON array for deserialization tests.
+    // Each entry has screen=screenId, desktop=desktopN, activity="", windowOrder=[windows...].
+    // If floatingWindows is non-empty, it is included in the entry.
+    static QJsonObject buildEntry(const QString& screenId, int desktop, const QStringList& windowOrder,
+                                  const QStringList& floatingWindows = {})
+    {
+        QJsonObject entry;
+        entry[QLatin1String("screen")] = screenId;
+        entry[QLatin1String("desktop")] = desktop;
+        entry[QLatin1String("activity")] = QString();
+        QJsonArray orderArray;
+        for (const QString& w : windowOrder) {
+            orderArray.append(w);
+        }
+        entry[QLatin1String("windowOrder")] = orderArray;
+        if (!floatingWindows.isEmpty()) {
+            QJsonArray floatArray;
+            for (const QString& w : floatingWindows) {
+                floatArray.append(w);
+            }
+            entry[QLatin1String("floatingWindows")] = floatArray;
+        }
+        return entry;
+    }
+
 private Q_SLOTS:
 
     void initTestCase()
@@ -241,21 +266,10 @@ private Q_SLOTS:
         // m_pendingInitialOrders immediately. Desktop 2's orders are saved for
         // promotion when the user switches to that desktop.
         QJsonArray multiDesktopData;
-        {
-            QJsonObject entry1;
-            entry1[QLatin1String("screen")] = QStringLiteral("eDP-1");
-            entry1[QLatin1String("desktop")] = 1;
-            entry1[QLatin1String("activity")] = QString();
-            entry1[QLatin1String("windowOrder")] = QJsonArray{QStringLiteral("win1"), QStringLiteral("win2")};
-            multiDesktopData.append(entry1);
-
-            QJsonObject entry2;
-            entry2[QLatin1String("screen")] = QStringLiteral("eDP-1");
-            entry2[QLatin1String("desktop")] = 2;
-            entry2[QLatin1String("activity")] = QString();
-            entry2[QLatin1String("windowOrder")] = QJsonArray{QStringLiteral("win3"), QStringLiteral("win4")};
-            multiDesktopData.append(entry2);
-        }
+        multiDesktopData.append(
+            buildEntry(QStringLiteral("eDP-1"), 1, {QStringLiteral("win1"), QStringLiteral("win2")}));
+        multiDesktopData.append(
+            buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("win3"), QStringLiteral("win4")}));
 
         // Engine defaults to desktop=1 — only desktop 1's order should be pending immediately
         AutotileEngine engine(nullptr, nullptr, nullptr);
@@ -281,21 +295,10 @@ private Q_SLOTS:
         // Desktop 2's saved window orders should be promoted into pending orders
         // when the engine switches to desktop 2.
         QJsonArray multiDesktopData;
-        {
-            QJsonObject entry1;
-            entry1[QLatin1String("screen")] = QStringLiteral("eDP-1");
-            entry1[QLatin1String("desktop")] = 1;
-            entry1[QLatin1String("activity")] = QString();
-            entry1[QLatin1String("windowOrder")] = QJsonArray{QStringLiteral("win1"), QStringLiteral("win2")};
-            multiDesktopData.append(entry1);
-
-            QJsonObject entry2;
-            entry2[QLatin1String("screen")] = QStringLiteral("eDP-1");
-            entry2[QLatin1String("desktop")] = 2;
-            entry2[QLatin1String("activity")] = QString();
-            entry2[QLatin1String("windowOrder")] = QJsonArray{QStringLiteral("win3"), QStringLiteral("win4")};
-            multiDesktopData.append(entry2);
-        }
+        multiDesktopData.append(
+            buildEntry(QStringLiteral("eDP-1"), 1, {QStringLiteral("win1"), QStringLiteral("win2")}));
+        multiDesktopData.append(
+            buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("win3"), QStringLiteral("win4")}));
 
         AutotileEngine engine(nullptr, nullptr, nullptr);
         engine.settingsBridge()->deserializeWindowOrders(multiDesktopData);
@@ -323,23 +326,8 @@ private Q_SLOTS:
         // Floating windows use TilingStateKey (full context), so all desktops
         // should be restored — not just the current one.
         QJsonArray data;
-        {
-            QJsonObject entry1;
-            entry1[QLatin1String("screen")] = QStringLiteral("eDP-1");
-            entry1[QLatin1String("desktop")] = 1;
-            entry1[QLatin1String("activity")] = QString();
-            entry1[QLatin1String("windowOrder")] = QJsonArray{QStringLiteral("win1")};
-            entry1[QLatin1String("floatingWindows")] = QJsonArray{QStringLiteral("win1")};
-            data.append(entry1);
-
-            QJsonObject entry2;
-            entry2[QLatin1String("screen")] = QStringLiteral("eDP-1");
-            entry2[QLatin1String("desktop")] = 2;
-            entry2[QLatin1String("activity")] = QString();
-            entry2[QLatin1String("windowOrder")] = QJsonArray{QStringLiteral("win2")};
-            entry2[QLatin1String("floatingWindows")] = QJsonArray{QStringLiteral("win2")};
-            data.append(entry2);
-        }
+        data.append(buildEntry(QStringLiteral("eDP-1"), 1, {QStringLiteral("win1")}, {QStringLiteral("win1")}));
+        data.append(buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("win2")}, {QStringLiteral("win2")}));
 
         AutotileEngine engine(nullptr, nullptr, nullptr);
         engine.settingsBridge()->deserializeWindowOrders(data);
@@ -358,11 +346,10 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
-        if (state) {
-            // If win2 was restored as floating, it should be floating in the state
-            QVERIFY2(state->isFloating(QStringLiteral("win2")),
-                     "Window on desktop 2 should be restored as floating from saved state");
-        }
+        QVERIFY(state);
+        // If win2 was restored as floating, it should be floating in the state
+        QVERIFY2(state->isFloating(QStringLiteral("win2")),
+                 "Window on desktop 2 should be restored as floating from saved state");
     }
 
     void testSettingsBridge_persistenceDelegate_noOpWithoutDelegate()

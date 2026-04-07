@@ -2133,7 +2133,16 @@ void AutotileEngine::promoteSavedWindowOrders()
             m_pendingInitialOrders[key.screenId] = it.value();
             qCDebug(lcAutotile) << "Promoted saved window order for screen" << key.screenId << "desktop" << key.desktop
                                 << "(" << it.value().size() << "windows)";
-            it = m_savedWindowOrders.erase(it);
+            // Erase specific-activity entries (consumed once). Keep wildcard entries
+            // (activity="") so they can be re-promoted on future context switches —
+            // erasing them here would lose the order for other activities on the same
+            // desktop, and cause incorrect results when setCurrentDesktop() and
+            // setCurrentActivity() both call this method during a simultaneous switch.
+            if (!key.activity.isEmpty()) {
+                it = m_savedWindowOrders.erase(it);
+            } else {
+                ++it;
+            }
         } else {
             ++it;
         }
