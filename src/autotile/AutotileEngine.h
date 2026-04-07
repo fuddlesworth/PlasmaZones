@@ -58,11 +58,12 @@ inline size_t qHash(const TilingStateKey& key, size_t seed = 0)
 struct PendingAutotileRestore
 {
     int position = -1; ///< Index in window order at time of removal
-    QString screenId; ///< Screen where the window was tiled
-    int desktop = 1; ///< Virtual desktop context
-    QString activity; ///< Activity context
+    TilingStateKey context; ///< Screen/desktop/activity where the window was tiled
     bool wasFloating = false; ///< Whether the window was floating when removed
 };
+
+/// Maximum pending restore entries per appId (prevents unbounded growth).
+constexpr int MaxPendingRestoresPerApp = 16;
 
 class AutotileConfig;
 class Layout;

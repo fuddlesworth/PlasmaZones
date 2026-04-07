@@ -454,9 +454,9 @@ QJsonArray SettingsBridge::serializeWindowOrders() const
             for (const PendingAutotileRestore& restore : it.value()) {
                 QJsonObject restoreObj;
                 restoreObj[QLatin1String("position")] = restore.position;
-                restoreObj[QLatin1String("screen")] = restore.screenId;
-                restoreObj[QLatin1String("desktop")] = restore.desktop;
-                restoreObj[QLatin1String("activity")] = restore.activity;
+                restoreObj[QLatin1String("screen")] = restore.context.screenId;
+                restoreObj[QLatin1String("desktop")] = restore.context.desktop;
+                restoreObj[QLatin1String("activity")] = restore.context.activity;
                 restoreObj[QLatin1String("wasFloating")] = restore.wasFloating;
                 queueArray.append(restoreObj);
             }
@@ -495,12 +495,17 @@ void SettingsBridge::deserializeWindowOrders(const QJsonArray& orders)
                     const QJsonObject restoreObj = restoreVal.toObject();
                     PendingAutotileRestore restore;
                     restore.position = restoreObj[QLatin1String("position")].toInt(-1);
-                    restore.screenId = restoreObj[QLatin1String("screen")].toString();
-                    restore.desktop = restoreObj[QLatin1String("desktop")].toInt(1);
-                    restore.activity = restoreObj[QLatin1String("activity")].toString();
+                    restore.context.screenId = restoreObj[QLatin1String("screen")].toString();
+                    restore.context.desktop = restoreObj[QLatin1String("desktop")].toInt(1);
+                    restore.context.activity = restoreObj[QLatin1String("activity")].toString();
                     restore.wasFloating = restoreObj[QLatin1String("wasFloating")].toBool(false);
-                    if (restore.position >= 0 && !restore.screenId.isEmpty()) {
+                    if (restore.position >= 0 && !restore.context.screenId.isEmpty()) {
                         restoreList.append(restore);
+                    }
+                    // Enforce same cap as runtime to prevent corrupted/hand-edited
+                    // session.json from loading unbounded entries.
+                    if (restoreList.size() >= MaxPendingRestoresPerApp) {
+                        break;
                     }
                 }
                 if (!restoreList.isEmpty()) {
