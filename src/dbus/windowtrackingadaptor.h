@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <QPointer>
 #include <functional>
+#include <memory>
 
 namespace PlasmaZones {
 
@@ -42,8 +43,7 @@ class PLASMAZONES_EXPORT WindowTrackingAdaptor : public QDBusAbstractAdaptor
 
 public:
     explicit WindowTrackingAdaptor(LayoutManager* layoutManager, IZoneDetector* zoneDetector, ISettings* settings,
-                                   VirtualDesktopManager* virtualDesktopManager,
-                                   IConfigBackend* configBackend = nullptr, QObject* parent = nullptr);
+                                   VirtualDesktopManager* virtualDesktopManager, QObject* parent = nullptr);
     ~WindowTrackingAdaptor() override = default;
 
     /**
@@ -967,7 +967,7 @@ private:
     LayoutManager* m_layoutManager;
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;
-    IConfigBackend* m_configBackend = nullptr;
+    std::unique_ptr<IConfigBackend> m_sessionBackend; // Session state (session.json)
 
     // Engine references for per-screen routing (set via setEngines())
     // QPointer auto-nulls on engine destruction, guarding against late D-Bus calls
@@ -980,7 +980,7 @@ private:
     WindowTrackingService* m_service = nullptr;
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // Persistence (adaptor responsibility: KConfig save/load)
+    // Persistence (adaptor responsibility: session.json save/load)
     // ═══════════════════════════════════════════════════════════════════════════════
     QTimer* m_saveTimer = nullptr;
 

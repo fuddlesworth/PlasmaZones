@@ -5,6 +5,7 @@
 #include "zonedetectionadaptor.h"
 #include "../autotile/AutotileEngine.h"
 #include "../snap/SnapEngine.h"
+#include "../config/iconfigbackend.h"
 #include "../core/geometryutils.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
@@ -23,12 +24,12 @@ namespace PlasmaZones {
 
 WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZoneDetector* zoneDetector,
                                              ISettings* settings, VirtualDesktopManager* virtualDesktopManager,
-                                             IConfigBackend* configBackend, QObject* parent)
+                                             QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(layoutManager)
     , m_settings(settings)
     , m_virtualDesktopManager(virtualDesktopManager)
-    , m_configBackend(configBackend)
+    , m_sessionBackend(createSessionBackend())
 {
     Q_ASSERT(layoutManager);
     Q_ASSERT(zoneDetector);

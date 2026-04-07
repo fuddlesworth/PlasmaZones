@@ -86,17 +86,9 @@ protected:
 /// implementation (in configbackend_json.cpp) knows which class to instantiate.
 PLASMAZONES_EXPORT std::unique_ptr<IConfigBackend> createDefaultConfigBackend();
 
-/// Resolve a shared or fallback backend.  If @p shared is non-null it is
-/// returned directly; otherwise a new default backend is created into
-/// @p fallback and returned.  Eliminates repeated resolve boilerplate.
-inline IConfigBackend* resolveBackend(IConfigBackend* shared, std::unique_ptr<IConfigBackend>& fallback)
-{
-    if (shared) {
-        return shared;
-    }
-    fallback = createDefaultConfigBackend();
-    return fallback.get();
-}
+/// Create a backend for session.json (ephemeral window tracking state).
+/// Separate file from config.json to avoid write contention.
+PLASMAZONES_EXPORT std::unique_ptr<IConfigBackend> createSessionBackend();
 
 // ── Per-screen group helpers ─────────────────────────────────────────────
 // Backend-agnostic utilities for per-screen group name resolution.

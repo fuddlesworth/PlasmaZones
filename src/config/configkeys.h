@@ -94,21 +94,24 @@ public:
     PZ_CONFIG_GROUP(windowTrackingGroup, "WindowTracking")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Window Tracking (unmanaged group, written by WTA)
+    // Config Keys — Window Tracking (session.json, written by WTA)
     //
     // The WindowTracking group stores ephemeral per-session window state that is
-    // NOT part of user preferences. It is owned by WindowTrackingAdaptor and saved
-    // via its debounced save cycle. Autotile data is split across three locations:
+    // NOT part of user preferences. It lives in session.json (separate from
+    // config.json) to avoid write contention with user preference saves.
+    // Owned by WindowTrackingAdaptor and saved via its debounced save cycle.
     //
-    //   1. Tiling.Algorithm group (Settings) — global defaults: algorithm, splitRatio,
-    //      masterCount, maxWindows, splitRatioStep, perAlgorithmSettings
-    //   2. AutotileScreen:<id> groups (Settings/PerScreenConfigResolver) — per-screen
+    // Autotile data is split across three locations:
+    //   1. Tiling.Algorithm group (Settings, config.json) — global defaults:
+    //      algorithm, splitRatio, masterCount, maxWindows, splitRatioStep,
+    //      perAlgorithmSettings
+    //   2. AutotileScreen:<id> groups (Settings, config.json) — per-screen
     //      overrides for masterCount, splitRatio, algorithm
-    //   3. WindowTracking.AutotileWindowOrders (WTA) — per-context window order and
-    //      floating state, serialized by SettingsBridge via delegate pattern
+    //   3. WindowTracking.AutotileWindowOrders (WTA, session.json) — per-context
+    //      window order and floating state
     //
     // Settings (1, 2) are user preferences. WindowTracking (3) is session state.
-    // Settings::reset() deletes both the WindowTracking group and per-screen groups.
+    // Settings::reset() deletes session.json and per-screen groups.
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Snap mode — zone assignments and restore queues
