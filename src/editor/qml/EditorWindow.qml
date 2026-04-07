@@ -389,16 +389,14 @@ Window {
 
                 id: drawingArea
 
-                // usableAreaInsets: QRect(left, top, right, bottom) in pixels from C++
-                readonly property rect insets: editorWindow._editorController ? editorWindow._editorController.usableAreaInsets : Qt.rect(0, 0, 0, 0)
                 readonly property bool applyInsets: editorWindow._editorController ? !editorWindow._editorController.useFullScreenGeometry : false
 
                 objectName: "drawingArea" // Required for focus restoration from child components
                 anchors.fill: parent
-                anchors.leftMargin: applyInsets ? insets.x : 0
-                anchors.topMargin: applyInsets ? insets.y : 0
-                anchors.rightMargin: applyInsets ? insets.width : 0
-                anchors.bottomMargin: applyInsets ? insets.height : 0
+                anchors.leftMargin: applyInsets && editorWindow._editorController ? editorWindow._editorController.insetLeft : 0
+                anchors.topMargin: applyInsets && editorWindow._editorController ? editorWindow._editorController.insetTop : 0
+                anchors.rightMargin: applyInsets && editorWindow._editorController ? editorWindow._editorController.insetRight : 0
+                anchors.bottomMargin: applyInsets && editorWindow._editorController ? editorWindow._editorController.insetBottom : 0
                 focus: true
                 // Enable keyboard focus for navigation
                 // Keyboard navigation - uses extracted KeyboardNavigation component

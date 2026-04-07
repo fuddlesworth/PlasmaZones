@@ -204,6 +204,8 @@ public:
      * @brief Set complete zone data (for undo restoration)
      * @param zoneId Zone ID to update
      * @param zoneData Complete zone data including all properties
+     * @note MUST emit zonesChanged() on success — callers (e.g. applyZoneGeometryMode)
+     *       rely on this instead of emitting separately.
      */
     void setZoneData(const QString& zoneId, const QVariantMap& zoneData);
 

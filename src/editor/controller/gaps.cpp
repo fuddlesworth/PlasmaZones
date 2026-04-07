@@ -412,19 +412,42 @@ QSize EditorController::targetScreenSize() const
     return screen ? screen->geometry().size() : QSize(1920, 1080);
 }
 
-QRect EditorController::usableAreaInsets() const
+int EditorController::insetLeft() const
 {
-    return m_cachedUsableAreaInsets;
+    return m_insetLeft;
+}
+
+int EditorController::insetTop() const
+{
+    return m_insetTop;
+}
+
+int EditorController::insetRight() const
+{
+    return m_insetRight;
+}
+
+int EditorController::insetBottom() const
+{
+    return m_insetBottom;
+}
+
+void EditorController::setInsets(int left, int top, int right, int bottom)
+{
+    if (m_insetLeft == left && m_insetTop == top && m_insetRight == right && m_insetBottom == bottom)
+        return;
+    m_insetLeft = left;
+    m_insetTop = top;
+    m_insetRight = right;
+    m_insetBottom = bottom;
+    Q_EMIT usableAreaInsetsChanged();
 }
 
 void EditorController::refreshUsableAreaInsets()
 {
     QScreen* screen = findTargetScreen(m_targetScreen);
     if (!screen) {
-        if (m_cachedUsableAreaInsets != QRect(0, 0, 0, 0)) {
-            m_cachedUsableAreaInsets = QRect(0, 0, 0, 0);
-            Q_EMIT usableAreaInsetsChanged();
-        }
+        setInsets(0, 0, 0, 0);
         return;
     }
 
@@ -475,17 +498,12 @@ void EditorController::applyUsableAreaInsets(const QRect& fullGeom, const QRect&
     }
 
     // Compute insets: how much the available area is inset from each edge of the full screen
-    // Packed as QRect(left, top, right, bottom) — width/height fields hold right/bottom insets
     int left = qMax(0, availGeom.left() - fullGeom.left());
     int top = qMax(0, availGeom.top() - fullGeom.top());
     int right = qMax(0, fullGeom.right() - availGeom.right());
     int bottom = qMax(0, fullGeom.bottom() - availGeom.bottom());
 
-    QRect insets(left, top, right, bottom);
-    if (m_cachedUsableAreaInsets != insets) {
-        m_cachedUsableAreaInsets = insets;
-        Q_EMIT usableAreaInsetsChanged();
-    }
+    setInsets(left, top, right, bottom);
 }
 
 void EditorController::toggleZoneGeometryMode(const QString& zoneId)
