@@ -930,16 +930,16 @@ Rectangle {
 
     Behavior on opacity {
         NumberAnimation {
-            duration: 200
-            easing.type: Easing.OutCubic
+            duration: Theme.animDuration
+            easing.type: Theme.animEasing
         }
 
     }
 
     Behavior on Layout.preferredWidth {
         NumberAnimation {
-            duration: 200
-            easing.type: Easing.OutCubic
+            duration: Theme.animDuration
+            easing.type: Theme.animEasing
         }
 
     }

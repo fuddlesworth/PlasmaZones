@@ -84,8 +84,8 @@ ToolBar {
 
                         Behavior on color {
                             ColorAnimation {
-                                duration: 200
-                                easing.type: Easing.OutCubic
+                                duration: Theme.animDuration
+                                easing.type: Theme.animEasing
                             }
 
                         }
@@ -93,23 +93,23 @@ ToolBar {
                     }
 
                     background: Rectangle {
-                        radius: Kirigami.Units.smallSpacing * 1.5
+                        radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
                         color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.15) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.06) : "transparent")
                         border.width: Math.round(Kirigami.Units.devicePixelRatio)
                         border.color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.15) : "transparent")
 
                         Behavior on color {
                             ColorAnimation {
-                                duration: 200
-                                easing.type: Easing.OutCubic
+                                duration: Theme.animDuration
+                                easing.type: Theme.animEasing
                             }
 
                         }
 
                         Behavior on border.color {
                             ColorAnimation {
-                                duration: 200
-                                easing.type: Easing.OutCubic
+                                duration: Theme.animDuration
+                                easing.type: Theme.animEasing
                             }
 
                         }
@@ -193,7 +193,7 @@ ToolBar {
 
                 background: Rectangle {
                     color: Theme.withAlpha(Kirigami.Theme.textColor, layoutNameField.activeFocus ? 0.08 : 0.04)
-                    radius: Kirigami.Units.smallSpacing * 1.5
+                    radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
                     border.width: Math.round(Kirigami.Units.devicePixelRatio)
                     border.color: layoutNameField.activeFocus ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
 

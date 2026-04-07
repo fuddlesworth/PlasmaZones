@@ -40,7 +40,7 @@ AbstractButton {
     }
 
     background: Rectangle {
-        radius: Kirigami.Units.smallSpacing * 1.5
+        radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
         color: {
             if (actionButton.useNegativeColor && actionButton.hovered)
                 return Theme.withAlpha(Kirigami.Theme.negativeTextColor, 0.5);
@@ -60,24 +60,24 @@ AbstractButton {
 
         Behavior on border.width {
             NumberAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+                duration: Theme.animDuration
+                easing.type: Theme.animEasing
             }
 
         }
 
         Behavior on color {
             ColorAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+                duration: Theme.animDuration
+                easing.type: Theme.animEasing
             }
 
         }
 
         Behavior on border.color {
             ColorAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+                duration: Theme.animDuration
+                easing.type: Theme.animEasing
             }
 
         }

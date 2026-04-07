@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Window
+import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
 
 /**
@@ -497,16 +498,16 @@ Item {
 
         Behavior on color {
             ColorAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+                duration: Theme.animDuration
+                easing.type: Theme.animEasing
             }
 
         }
 
         Behavior on border.color {
             ColorAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+                duration: Theme.animDuration
+                easing.type: Theme.animEasing
             }
 
         }

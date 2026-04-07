@@ -60,6 +60,16 @@ Item {
             return baseY;
         }
         width: Math.min(Kirigami.Units.gridUnit * 50, notifications.windowWidth * 0.8)
+
+        // Smooth transition when success banner fades and error slides up
+        Behavior on y {
+            NumberAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
     }
 
 }

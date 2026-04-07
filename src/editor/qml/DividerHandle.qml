@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
 
 /**
@@ -330,16 +331,16 @@ Rectangle {
 
     Behavior on color {
         ColorAnimation {
-            duration: 200
-            easing.type: Easing.OutCubic
+            duration: Theme.animDuration
+            easing.type: Theme.animEasing
         }
 
     }
 
     Behavior on border.color {
         ColorAnimation {
-            duration: 200
-            easing.type: Easing.OutCubic
+            duration: Theme.animDuration
+            easing.type: Theme.animEasing
         }
 
     }

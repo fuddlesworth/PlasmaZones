@@ -120,8 +120,9 @@ class EditorController : public QObject
     Q_PROPERTY(QSize targetScreenSize READ targetScreenSize NOTIFY targetScreenSizeChanged)
 
     // Usable area insets — offset from full screen geometry to available geometry (panels/taskbars)
-    // Returns {left, top, right, bottom} pixel insets for the target screen
-    Q_PROPERTY(QRect usableAreaInsets READ usableAreaInsets NOTIFY targetScreenSizeChanged)
+    // Packed as QRect(left, top, right, bottom) — NOTE: width/height fields hold right/bottom insets,
+    // not dimensions.  QML reads: insets.x=left, insets.y=top, insets.width=right, insets.height=bottom.
+    Q_PROPERTY(QRect usableAreaInsets READ usableAreaInsets NOTIFY usableAreaInsetsChanged)
 
     // Label font settings (read-only from global Appearance config)
     Q_PROPERTY(QString labelFontFamily READ labelFontFamily CONSTANT)
@@ -223,6 +224,7 @@ public:
     int aspectRatioClass() const;
     QSize targetScreenSize() const;
     QRect usableAreaInsets() const;
+    void refreshUsableAreaInsets();
     bool canPaste() const;
     UndoController* undoController() const;
 
@@ -666,6 +668,7 @@ Q_SIGNALS:
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
     void targetScreenChanged();
+    void usableAreaInsetsChanged();
     void zonePaddingChanged();
     void outerGapChanged();
     void globalZonePaddingChanged();
@@ -723,6 +726,7 @@ Q_SIGNALS:
 private:
     QVariant audioSpectrumVariant() const;
     void markUnsaved();
+    void applyUsableAreaInsets(const QRect& fullGeom, const QRect& availGeom);
 
     /**
      * @brief Remove shader params that don't belong to the current shader
@@ -841,6 +845,7 @@ private:
 
     // Screen
     QString m_targetScreen;
+    QRect m_cachedUsableAreaInsets; // Packed as (left, top, right, bottom)
 
     // Default colors (for theme-based defaults, set from QML)
     QString m_defaultHighlightColor;

@@ -27,6 +27,7 @@ Rectangle {
     function show(message) {
         bannerLabel.text = message;
         hideAnim.stop();
+        bannerTranslate.y = Kirigami.Units.smallSpacing; // Reset slide offset so animation replays
         showAnim.start();
         dismissTimer.restart();
     }
@@ -42,8 +43,8 @@ Rectangle {
     opacity: 0
     color: Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.95)
     border.color: accentColor
-    border.width: Math.round(Kirigami.Units.smallSpacing / 2)
-    radius: Kirigami.Units.smallSpacing * 1.5
+    border.width: Math.round(Kirigami.Units.devicePixelRatio * 2)
+    radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
     z: 200
     Accessible.name: accessibleRoleName
     Accessible.description: bannerLabel.text || ""
@@ -107,16 +108,16 @@ Rectangle {
             target: banner
             property: "opacity"
             to: 1
-            duration: 200
-            easing.type: Easing.OutCubic
+            duration: Theme.animDuration
+            easing.type: Theme.animEasing
         }
 
         NumberAnimation {
             target: bannerTranslate
             property: "y"
             to: 0
-            duration: 200
-            easing.type: Easing.OutCubic
+            duration: Theme.animDuration
+            easing.type: Theme.animEasing
         }
 
     }
@@ -128,16 +129,16 @@ Rectangle {
             target: banner
             property: "opacity"
             to: 0
-            duration: 200
-            easing.type: Easing.OutCubic
+            duration: Theme.animDuration
+            easing.type: Theme.animEasing
         }
 
         NumberAnimation {
             target: bannerTranslate
             property: "y"
             to: Kirigami.Units.smallSpacing
-            duration: 200
-            easing.type: Easing.OutCubic
+            duration: Theme.animDuration
+            easing.type: Theme.animEasing
         }
 
     }

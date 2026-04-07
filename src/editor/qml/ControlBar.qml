@@ -404,8 +404,10 @@ ToolBar {
         }
 
         SequentialAnimation {
-            running: statusSection.visible
-            loops: Animation.Infinite
+            id: pulseAnim
+
+            running: statusSection.visible && statusSection.Window.visibility !== Window.Minimized
+            loops: 3
             onStopped: {
                 unsavedIcon.opacity = 1;
                 unsavedIndicator.opacity = 1;
