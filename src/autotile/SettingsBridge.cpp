@@ -456,6 +456,14 @@ void SettingsBridge::deserializeWindowOrders(const QJsonArray& orders)
     QSet<QString> processedKeys;
     for (const QJsonValue& val : orders) {
         const QJsonObject entry = val.toObject();
+
+        // Skip entries with a _type discriminator — these were used during
+        // development when pending restores were embedded in this array.
+        // Now persisted under their own AutotilePendingRestores key.
+        if (entry.contains(QLatin1String("_type"))) {
+            continue;
+        }
+
         const QString screenId = entry[QLatin1String("screen")].toString();
         if (screenId.isEmpty()) {
             continue;
@@ -523,6 +531,69 @@ void SettingsBridge::deserializeWindowOrders(const QJsonArray& orders)
     }
 
     qCInfo(lcAutotile) << "Autotile window orders: restored" << restoredCount << "screens";
+}
+
+QJsonObject SettingsBridge::serializePendingRestores() const
+{
+    QJsonObject queuesObj;
+    for (auto it = m_engine->m_pendingAutotileRestores.constBegin();
+         it != m_engine->m_pendingAutotileRestores.constEnd(); ++it) {
+        QJsonArray queueArray;
+        for (const PendingAutotileRestore& restore : it.value()) {
+            QJsonObject restoreObj;
+            restoreObj[QLatin1String("position")] = restore.position;
+            restoreObj[QLatin1String("screen")] = restore.context.screenId;
+            restoreObj[QLatin1String("desktop")] = restore.context.desktop;
+            restoreObj[QLatin1String("activity")] = restore.context.activity;
+            restoreObj[QLatin1String("wasFloating")] = restore.wasFloating;
+            queueArray.append(restoreObj);
+        }
+        queuesObj[it.key()] = queueArray;
+    }
+    return queuesObj;
+}
+
+void SettingsBridge::deserializePendingRestores(const QJsonObject& queuesObj)
+{
+    if (queuesObj.isEmpty()) {
+        return;
+    }
+
+    int restoredEntries = 0;
+    for (auto it = queuesObj.constBegin(); it != queuesObj.constEnd(); ++it) {
+        const QString appId = it.key();
+        // Skip invalid keys: empty appIds or bare windowIds (containing '|')
+        // that shouldn't appear as top-level keys.
+        if (appId.isEmpty() || appId.contains(QLatin1Char('|'))) {
+            continue;
+        }
+        const QJsonArray queueArray = it.value().toArray();
+        QList<PendingAutotileRestore> restoreList;
+        for (const QJsonValue& restoreVal : queueArray) {
+            const QJsonObject restoreObj = restoreVal.toObject();
+            const int pos = restoreObj[QLatin1String("position")].toInt(-1);
+            const QString screenId = restoreObj[QLatin1String("screen")].toString();
+            if (pos < 0 || screenId.isEmpty()) {
+                continue;
+            }
+            TilingStateKey ctx;
+            ctx.screenId = screenId;
+            ctx.desktop = qMax(1, restoreObj[QLatin1String("desktop")].toInt(1));
+            ctx.activity = restoreObj[QLatin1String("activity")].toString();
+            restoreList.append(
+                PendingAutotileRestore(pos, std::move(ctx), restoreObj[QLatin1String("wasFloating")].toBool(false)));
+            // Enforce same cap as runtime to prevent corrupted/hand-edited
+            // session.json from loading unbounded entries.
+            if (restoreList.size() >= MaxPendingRestoresPerApp) {
+                break;
+            }
+        }
+        if (!restoreList.isEmpty()) {
+            m_engine->m_pendingAutotileRestores[appId] = restoreList;
+            restoredEntries += restoreList.size();
+        }
+    }
+    qCInfo(lcAutotile) << "Autotile pending restores: loaded" << restoredEntries << "entries";
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

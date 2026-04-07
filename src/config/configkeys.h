@@ -143,6 +143,8 @@ public:
 
     // Autotile mode — per-context window order and floating state
     PZ_CONFIG_KEY(autotileWindowOrdersKey, "AutotileWindowOrders")
+    // Autotile mode — pending restore queue for close/reopen window preservation
+    PZ_CONFIG_KEY(autotilePendingRestoresKey, "AutotilePendingRestores")
 
     // Obsolete keys (cleaned up on save to prevent stale data)
     PZ_CONFIG_KEY(obsoleteFloatingWindowsKey, "FloatingWindows")

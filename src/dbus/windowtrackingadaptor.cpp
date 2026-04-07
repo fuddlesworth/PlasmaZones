@@ -143,6 +143,13 @@ void WindowTrackingAdaptor::setTilingStateDelegates(std::function<QJsonArray()> 
     m_deserializeTilingStatesFn = std::move(deserializeFn);
 }
 
+void WindowTrackingAdaptor::setTilingPendingRestoreDelegates(std::function<QJsonObject()> serializeFn,
+                                                             std::function<void(const QJsonObject&)> deserializeFn)
+{
+    m_serializePendingRestoresFn = std::move(serializeFn);
+    m_deserializePendingRestoresFn = std::move(deserializeFn);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Window Snapping - Delegate to Service
 // ═══════════════════════════════════════════════════════════════════════════════
