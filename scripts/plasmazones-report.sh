@@ -43,7 +43,7 @@ while [[ $# -gt 0 ]]; do
             echo "  report.md        Redacted Markdown report from the daemon"
             echo "  config.json      Current configuration (home paths redacted)"
             echo "  session.json     Window session state (home paths redacted)"
-            echo "  layouts/         User layout files"
+            echo "  data/            User data (layouts, algorithms, shaders, etc.)"
             echo "  journal.log      Recent plasmazonesd journal entries"
             exit 0
             ;;
@@ -109,12 +109,20 @@ if [[ -f "$CONFIG_DIR/session.json" ]]; then
     sed "s|$HOME_ESC|~|g" "$CONFIG_DIR/session.json" > "$STAGING/session.json"
 fi
 
-# 4. User layout files
-LAYOUTS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/plasmazones/layouts"
-if [[ -d "$LAYOUTS_DIR" ]] && compgen -G "$LAYOUTS_DIR/*.json" >/dev/null; then
-    mkdir -p "$STAGING/layouts"
-    for f in "$LAYOUTS_DIR"/*.json; do
-        sed "s|$HOME_ESC|~|g" "$f" > "$STAGING/layouts/$(basename "$f")"
+# 4. User data directory (layouts, custom algorithms, shaders, etc.)
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/plasmazones"
+if [[ -d "$DATA_DIR" ]]; then
+    mkdir -p "$STAGING/data"
+    # Copy tree structure, redacting home paths in text files
+    find "$DATA_DIR" -type f | while IFS= read -r f; do
+        rel="${f#"$DATA_DIR"/}"
+        mkdir -p "$STAGING/data/$(dirname "$rel")"
+        case "$f" in
+            *.json|*.js|*.glsl|*.frag|*.vert|*.conf|*.txt)
+                sed "s|$HOME_ESC|~|g" "$f" > "$STAGING/data/$rel" ;;
+            *)
+                cp "$f" "$STAGING/data/$rel" ;;
+        esac
     done
 fi
 
