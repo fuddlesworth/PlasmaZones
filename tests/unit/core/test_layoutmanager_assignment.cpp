@@ -15,6 +15,7 @@
 #include <QScopedPointer>
 #include <QUuid>
 #include "config/configbackend_json.h"
+#include "config/configdefaults.h"
 #include <memory>
 #include <vector>
 
@@ -584,6 +585,85 @@ private Q_SLOTS:
         QCOMPARE(entry2.mode, AssignmentEntry::Autotile);
         QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("wide"));
         QCOMPARE(entry2.snappingLayout, QStringLiteral("{some-uuid}")); // preserved
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // P8: Runtime config.json → assignments.json migration
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testLoadAssignments_migratesFromConfigJson()
+    {
+        // createManager() pushes its own IsolatedConfigGuard, so config.json
+        // must be written AFTER the manager's guard is active to share the
+        // same XDG_CONFIG_HOME.
+        auto* mgr = createManager();
+
+        // Write Assignment:* and QuickLayouts groups to config.json (simulating
+        // a user who was already on v2 before the assignments split).
+        {
+            auto configBackend = PlasmaZones::createDefaultConfigBackend();
+            {
+                auto g = configBackend->group(QStringLiteral("Assignment:eDP-1"));
+                g->writeInt(QLatin1String("Mode"), 0);
+                g->writeString(QLatin1String("SnappingLayout"), QStringLiteral("{aaaa-bbbb}"));
+                g->writeString(QLatin1String("TilingAlgorithm"), QStringLiteral("dwindle"));
+            }
+            {
+                auto g = configBackend->group(QStringLiteral("Assignment:HDMI-A-1:Desktop:2"));
+                g->writeInt(QLatin1String("Mode"), 1);
+                g->writeString(QLatin1String("SnappingLayout"), QStringLiteral("{cccc-dddd}"));
+                g->writeString(QLatin1String("TilingAlgorithm"), QStringLiteral("bsp"));
+            }
+            {
+                auto g = configBackend->group(ConfigDefaults::quickLayoutsGroup());
+                g->writeString(QStringLiteral("1"), QStringLiteral("{quick-1}"));
+            }
+            configBackend->sync();
+        }
+
+        // Ensure assignments.json is still empty
+        {
+            auto assignBackend = PlasmaZones::createAssignmentsBackend();
+            QVERIFY(assignBackend->groupList().isEmpty());
+        }
+
+        // loadAssignments() should detect empty assignments.json and migrate
+        // from config.json.
+        mgr->loadAssignments();
+
+        // Verify assignments were loaded
+        auto entry1 = mgr->assignmentEntryForScreen(QStringLiteral("eDP-1"));
+        QCOMPARE(entry1.mode, AssignmentEntry::Snapping);
+        QCOMPARE(entry1.snappingLayout, QStringLiteral("{aaaa-bbbb}"));
+        QCOMPARE(entry1.tilingAlgorithm, QStringLiteral("dwindle"));
+
+        auto entry2 = mgr->assignmentEntryForScreen(QStringLiteral("HDMI-A-1"), 2);
+        QCOMPARE(entry2.mode, AssignmentEntry::Autotile);
+        QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("bsp"));
+
+        // Quick layout slot should have migrated
+        QCOMPARE(mgr->quickLayoutSlots().value(1), QStringLiteral("{quick-1}"));
+
+        // Verify assignments.json was written (persisted by migration)
+        {
+            auto assignBackend = PlasmaZones::createAssignmentsBackend();
+            QStringList groups = assignBackend->groupList();
+            QVERIFY(groups.contains(QStringLiteral("Assignment:eDP-1")));
+            QVERIFY(groups.contains(QStringLiteral("Assignment:HDMI-A-1:Desktop:2")));
+        }
+
+        // Verify config.json no longer has the migrated groups
+        {
+            auto configBackend = PlasmaZones::createDefaultConfigBackend();
+            QStringList groups = configBackend->groupList();
+            for (const QString& g : groups) {
+                QVERIFY2(!g.startsWith(ConfigDefaults::assignmentGroupPrefix()),
+                         qPrintable(
+                             QStringLiteral("Assignment group '%1' should have been removed from config.json").arg(g)));
+            }
+            QVERIFY2(!groups.contains(ConfigDefaults::quickLayoutsGroup()),
+                     "QuickLayouts should have been removed from config.json");
+        }
     }
 };
 

@@ -224,49 +224,53 @@ void LayoutManager::saveLayouts()
     Q_EMIT layoutsSaved();
 }
 
-void LayoutManager::loadAssignments()
+void LayoutManager::readAssignmentGroups(IConfigBackend* backend)
 {
-    m_configBackend->reparseConfiguration();
-    const QStringList allGroups = m_configBackend->groupList();
-
-    // ── Primary path: read from [Assignment:*] groups ──────────────
+    const QStringList allGroups = backend->groupList();
     const QString assignmentPrefix = ConfigDefaults::assignmentGroupPrefix();
-    bool foundGroups = false;
 
     for (const QString& groupName : allGroups) {
         if (!groupName.startsWith(assignmentPrefix))
             continue;
 
-        foundGroups = true;
         const auto key = LayoutAssignmentKey::fromGroupName(groupName);
         if (key.screenId.isEmpty())
             continue;
 
-        auto grp = m_configBackend->group(groupName);
+        auto grp = backend->group(groupName);
         AssignmentEntry entry;
         int modeInt = grp->readInt(QLatin1String("Mode"), 0);
         entry.mode = (modeInt == AssignmentEntry::Autotile) ? AssignmentEntry::Autotile : AssignmentEntry::Snapping;
         entry.snappingLayout = grp->readString(QLatin1String("SnappingLayout"));
         entry.tilingAlgorithm = grp->readString(QLatin1String("TilingAlgorithm"));
 
-        // Accept all entries — the group's existence is the explicit flag.
         m_assignments[key] = entry;
     }
+}
 
-    // ── Quick layout shortcuts from [QuickLayouts] group ───────────────────
-    {
-        auto quickGroup = m_configBackend->group(ConfigDefaults::quickLayoutsGroup());
-        // Check if group exists by looking for any keys
-        // We read known number keys
-        for (int i = 1; i <= 9; ++i) {
-            QString key = QString::number(i);
-            if (quickGroup->hasKey(key)) {
-                QString layoutId = quickGroup->readString(key);
-                if (!layoutId.isEmpty())
-                    m_quickLayoutShortcuts[i] = layoutId;
-            }
+void LayoutManager::readQuickLayouts(IConfigBackend* backend)
+{
+    auto quickGroup = backend->group(ConfigDefaults::quickLayoutsGroup());
+    for (int i = 1; i <= 9; ++i) {
+        QString key = QString::number(i);
+        if (quickGroup->hasKey(key)) {
+            QString layoutId = quickGroup->readString(key);
+            if (!layoutId.isEmpty())
+                m_quickLayoutShortcuts[i] = layoutId;
         }
     }
+}
+
+void LayoutManager::loadAssignments()
+{
+    m_configBackend->reparseConfiguration();
+
+    // ── Primary path: read from [Assignment:*] groups ──────────────
+    readAssignmentGroups(m_configBackend);
+    const bool foundGroups = !m_assignments.isEmpty();
+
+    // ── Quick layout shortcuts from [QuickLayouts] group ───────────────────
+    readQuickLayouts(m_configBackend);
 
     // ── Migration fallback: read from assignments.json (one-time) ──────────
     if (!foundGroups) {
@@ -413,49 +417,18 @@ void LayoutManager::loadAssignments()
         // atomic-write pattern means last-writer-wins, which is acceptable for
         // a one-time migration that produces identical output from identical input.
         auto configBackend = createDefaultConfigBackend();
-        const QStringList configGroups = configBackend->groupList();
-        const QString configAssignPrefix = ConfigDefaults::assignmentGroupPrefix();
-        bool migratedFromConfig = false;
+        readAssignmentGroups(configBackend.get());
+        readQuickLayouts(configBackend.get());
 
-        for (const QString& groupName : configGroups) {
-            if (!groupName.startsWith(configAssignPrefix))
-                continue;
-
-            migratedFromConfig = true;
-            const auto key = LayoutAssignmentKey::fromGroupName(groupName);
-            if (key.screenId.isEmpty())
-                continue;
-
-            auto grp = configBackend->group(groupName);
-            AssignmentEntry entry;
-            int modeInt = grp->readInt(QLatin1String("Mode"), 0);
-            entry.mode = (modeInt == AssignmentEntry::Autotile) ? AssignmentEntry::Autotile : AssignmentEntry::Snapping;
-            entry.snappingLayout = grp->readString(QLatin1String("SnappingLayout"));
-            entry.tilingAlgorithm = grp->readString(QLatin1String("TilingAlgorithm"));
-
-            m_assignments[key] = entry;
-        }
-
-        // Migrate QuickLayouts from config.json
-        {
-            auto quickGroup = configBackend->group(ConfigDefaults::quickLayoutsGroup());
-            for (int i = 1; i <= 9; ++i) {
-                QString key = QString::number(i);
-                if (quickGroup->hasKey(key)) {
-                    QString layoutId = quickGroup->readString(key);
-                    if (!layoutId.isEmpty())
-                        m_quickLayoutShortcuts[i] = layoutId;
-                }
-            }
-        }
-
+        const bool migratedFromConfig = !m_assignments.isEmpty();
         if (migratedFromConfig || !m_quickLayoutShortcuts.isEmpty()) {
             // Write to assignments.json
             saveAssignments();
 
             // Delete migrated groups from config.json
-            for (const QString& groupName : configGroups) {
-                if (groupName.startsWith(configAssignPrefix)) {
+            const QString assignPrefix = ConfigDefaults::assignmentGroupPrefix();
+            for (const QString& groupName : configBackend->groupList()) {
+                if (groupName.startsWith(assignPrefix)) {
                     configBackend->deleteGroup(groupName);
                 }
             }

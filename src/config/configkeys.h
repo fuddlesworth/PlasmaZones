@@ -94,7 +94,7 @@ public:
     PZ_CONFIG_GROUP(windowTrackingGroup, "WindowTracking")
 
     // Assignment group prefix (used in assignments.json and migration code)
-    PZ_CONFIG_KEY(assignmentGroupPrefix, "Assignment:")
+    PZ_CONFIG_GROUP(assignmentGroupPrefix, "Assignment:")
     PZ_CONFIG_GROUP(quickLayoutsGroup, "QuickLayouts")
     PZ_CONFIG_GROUP(modeTrackingGroup, "ModeTracking")
 
