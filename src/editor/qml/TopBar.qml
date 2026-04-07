@@ -30,6 +30,10 @@ ToolBar {
 
     signal fullscreenToggled()
 
+    function withAlpha(baseColor, alpha) {
+        return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, alpha);
+    }
+
     height: Kirigami.Units.gridUnit * 5
     z: 100
 
@@ -47,6 +51,8 @@ ToolBar {
             spacing: Kirigami.Units.smallSpacing // Use theme spacing (4px - within section)
 
             Repeater {
+                id: screenRepeater
+
                 model: availableScreens || []
 
                 delegate: ToolButton {
@@ -57,12 +63,12 @@ ToolBar {
 
                     text: modelData ? (modelData.name || "") : ""
                     enabled: editorController !== null
-                    checkable: true
-                    checked: isActive
                     implicitWidth: Math.max(contentItem.implicitWidth + Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 4)
                     implicitHeight: Kirigami.Units.gridUnit * 3
                     Accessible.name: modelData ? modelData.name : ""
-                    Accessible.description: i18nc("@info", "Select screen for layout editing")
+                    Accessible.description: isActive ? i18nc("@info", "Currently selected screen for layout editing") : i18nc("@info", "Select screen for layout editing")
+                    Accessible.checkable: true
+                    Accessible.checked: isActive
                     onClicked: {
                         if (editorController && modelData)
                             editorController.targetScreen = modelData.name;
@@ -91,9 +97,9 @@ ToolBar {
 
                     background: Rectangle {
                         radius: Kirigami.Units.smallSpacing * 1.5
-                        color: screenButton.isActive ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (screenButton.hovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent")
+                        color: screenButton.isActive ? topBar.withAlpha(Kirigami.Theme.highlightColor, 0.15) : (screenButton.hovered ? topBar.withAlpha(Kirigami.Theme.textColor, 0.06) : "transparent")
                         border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                        border.color: screenButton.isActive ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : (screenButton.hovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15) : "transparent")
+                        border.color: screenButton.isActive ? topBar.withAlpha(Kirigami.Theme.highlightColor, 0.4) : (screenButton.hovered ? topBar.withAlpha(Kirigami.Theme.textColor, 0.15) : "transparent")
 
                         Behavior on color {
                             ColorAnimation {
@@ -123,7 +129,7 @@ ToolBar {
         Kirigami.Separator {
             Layout.fillHeight: true
             Layout.preferredWidth: 1
-            visible: screenSelectorSection.children.length > 0
+            visible: screenRepeater.count > 0
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -189,10 +195,10 @@ ToolBar {
                 }
 
                 background: Rectangle {
-                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, layoutNameField.activeFocus ? 0.08 : 0.04)
+                    color: topBar.withAlpha(Kirigami.Theme.textColor, layoutNameField.activeFocus ? 0.08 : 0.04)
                     radius: Kirigami.Units.smallSpacing * 1.5
                     border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                    border.color: layoutNameField.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                    border.color: layoutNameField.activeFocus ? topBar.withAlpha(Kirigami.Theme.highlightColor, 0.4) : topBar.withAlpha(Kirigami.Theme.textColor, 0.08)
 
                     // Character counter overlay (right-aligned inside field)
                     Label {
@@ -480,14 +486,14 @@ ToolBar {
     }
 
     background: Rectangle {
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.9)
+        color: topBar.withAlpha(Kirigami.Theme.backgroundColor, 0.9)
 
         // Bottom accent line
         Rectangle {
             anchors.bottom: parent.bottom
             width: parent.width
             height: Math.round(Kirigami.Units.devicePixelRatio)
-            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+            color: topBar.withAlpha(Kirigami.Theme.textColor, 0.08)
         }
 
     }

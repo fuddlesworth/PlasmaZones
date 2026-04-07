@@ -631,6 +631,7 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/SnapIndicator.qml
         editor/qml/DimensionTooltip.qml
         editor/qml/EditorNotifications.qml
+        editor/qml/NotificationBanner.qml
         editor/qml/ZoneContextMenu.qml
         editor/qml/EditorShortcuts.qml
         editor/qml/KeyboardNavigation.qml

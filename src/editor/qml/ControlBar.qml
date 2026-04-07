@@ -395,7 +395,7 @@ ToolBar {
 
                 text: i18nc("@info", "Unsaved changes")
                 color: Kirigami.Theme.negativeTextColor
-                font.weight: Font.Medium
+                font.weight: Font.DemiBold
                 Accessible.name: text
                 Accessible.role: Accessible.AlertMessage
             }
@@ -405,14 +405,9 @@ ToolBar {
         SequentialAnimation {
             running: statusSection.visible
             loops: Animation.Infinite
-
-            NumberAnimation {
-                targets: [unsavedIcon, unsavedIndicator]
-                property: "opacity"
-                from: 0.4
-                to: 1
-                duration: 500
-                easing.type: Easing.InOutSine
+            onStopped: {
+                unsavedIcon.opacity = 1;
+                unsavedIndicator.opacity = 1;
             }
 
             NumberAnimation {
@@ -420,6 +415,15 @@ ToolBar {
                 property: "opacity"
                 from: 1
                 to: 0.4
+                duration: 500
+                easing.type: Easing.InOutSine
+            }
+
+            NumberAnimation {
+                targets: [unsavedIcon, unsavedIndicator]
+                property: "opacity"
+                from: 0.4
+                to: 1
                 duration: 500
                 easing.type: Easing.InOutSine
             }

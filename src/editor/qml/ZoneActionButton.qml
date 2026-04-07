@@ -8,85 +8,76 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Reusable action button for zone operations
  *
- * Provides a themed rectangle button with icon, hover animations,
- * and accessibility support. Used by ActionButtons.qml.
+ * Provides a themed button with icon, hover animations, keyboard support,
+ * and accessibility. Used by ActionButtons.qml.
  */
-Rectangle {
+AbstractButton {
     id: actionButton
 
     required property string iconSource
     required property string accessibleName
     required property string accessibleDescription
     required property string tooltipText
+    required property real buttonSize
     property bool useNegativeColor: false
-    property real buttonSize: Kirigami.Units.gridUnit * 2.5
-    property alias containsMouse: buttonMouseArea.containsMouse
 
     signal activated()
 
+    function withAlpha(baseColor, alpha) {
+        return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, alpha);
+    }
+
     width: buttonSize
     height: buttonSize
-    radius: Kirigami.Units.smallSpacing * 1.5
-    color: {
-        if (useNegativeColor && buttonMouseArea.containsMouse)
-            return Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.5);
-
-        return buttonMouseArea.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15);
-    }
-    border.width: Math.round(Kirigami.Units.devicePixelRatio)
-    border.color: {
-        if (useNegativeColor && buttonMouseArea.containsMouse)
-            return Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.5);
-
-        return buttonMouseArea.containsMouse ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08);
-    }
+    hoverEnabled: true
+    focusPolicy: Qt.TabFocus
     z: 101
+    Accessible.role: Accessible.Button
+    Accessible.name: actionButton.accessibleName
+    Accessible.description: actionButton.accessibleDescription
+    onClicked: actionButton.activated()
+    ToolTip.text: actionButton.tooltipText
+    ToolTip.visible: hovered
 
-    Kirigami.Icon {
-        anchors.centerIn: parent
+    contentItem: Kirigami.Icon {
         source: actionButton.iconSource
         width: Kirigami.Units.iconSizes.smallMedium
         height: Kirigami.Units.iconSizes.smallMedium
     }
 
-    MouseArea {
-        id: buttonMouseArea
+    background: Rectangle {
+        radius: Kirigami.Units.smallSpacing * 1.5
+        color: {
+            if (actionButton.useNegativeColor && actionButton.hovered)
+                return actionButton.withAlpha(Kirigami.Theme.negativeTextColor, 0.5);
 
-        anchors.fill: parent
-        hoverEnabled: true
-        preventStealing: true
-        propagateComposedEvents: false
-        z: 102
-        acceptedButtons: Qt.LeftButton
-        Accessible.role: Accessible.Button
-        Accessible.name: actionButton.accessibleName
-        Accessible.description: actionButton.accessibleDescription
-        onPressed: function(mouse) {
-            mouse.accepted = true;
+            return actionButton.hovered ? actionButton.withAlpha(Kirigami.Theme.textColor, 0.4) : actionButton.withAlpha(Kirigami.Theme.textColor, 0.15);
         }
-        onClicked: function(mouse) {
-            mouse.accepted = true;
-            actionButton.activated();
-        }
-    }
+        border.width: actionButton.activeFocus ? 2 : Math.round(Kirigami.Units.devicePixelRatio)
+        border.color: {
+            if (actionButton.activeFocus)
+                return actionButton.withAlpha(Kirigami.Theme.highlightColor, 0.8);
 
-    ToolTip {
-        visible: buttonMouseArea.containsMouse
-        text: actionButton.tooltipText
-    }
+            if (actionButton.useNegativeColor && actionButton.hovered)
+                return actionButton.withAlpha(Kirigami.Theme.negativeTextColor, 0.5);
 
-    Behavior on color {
-        ColorAnimation {
-            duration: 200
-            easing.type: Easing.OutCubic
+            return actionButton.hovered ? actionButton.withAlpha(Kirigami.Theme.highlightColor, 0.4) : actionButton.withAlpha(Kirigami.Theme.textColor, 0.08);
         }
 
-    }
+        Behavior on color {
+            ColorAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
 
-    Behavior on border.color {
-        ColorAnimation {
-            duration: 200
-            easing.type: Easing.OutCubic
+        }
+
+        Behavior on border.color {
+            ColorAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
         }
 
     }
