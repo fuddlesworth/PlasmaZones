@@ -308,7 +308,7 @@ bool Daemon::init()
 
     // Window tracking adaptor - window-zone assignments
     m_windowTrackingAdaptor = new WindowTrackingAdaptor(m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
-                                                        m_virtualDesktopManager.get(), m_configBackend.get(), this);
+                                                        m_virtualDesktopManager.get(), this);
     m_windowTrackingAdaptor->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
 
     // Reapply window geometries after each geometry batch (processPendingGeometryUpdates).

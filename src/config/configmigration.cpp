@@ -694,6 +694,21 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     if (!v1Ordering.isEmpty())
         root[QLatin1String("Ordering")] = v1Ordering;
 
+    // ── Extract WindowTracking (ephemeral session state) to session.json ──
+    // In v2, session state lives in its own file to avoid write contention
+    // between user preferences (config.json) and high-frequency window
+    // tracking saves (session.json).
+    const QString wtGroup = ConfigKeys::windowTrackingGroup();
+    if (root.contains(wtGroup)) {
+        QJsonObject sessionRoot;
+        sessionRoot[wtGroup] = root.value(wtGroup);
+        const QString sessionPath = ConfigDefaults::sessionFilePath();
+        if (!JsonConfigBackend::writeJsonAtomically(sessionPath, sessionRoot)) {
+            qWarning("ConfigMigration: failed to write session state to %s", qPrintable(sessionPath));
+        }
+        root.remove(wtGroup);
+    }
+
     // ── Bump version ────────────────────────────────────────────────────────
     // Stamp literal 2, not ConfigSchemaVersion — prevents future version bumps
     // (e.g. to 3) from making this step stamp 3 and skipping a v2→v3 migration.

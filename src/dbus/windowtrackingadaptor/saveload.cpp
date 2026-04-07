@@ -51,9 +51,7 @@ static QHash<QString, QStringList> parseZoneListMap(const QString& json)
 
 void WindowTrackingAdaptor::saveState()
 {
-    std::unique_ptr<IConfigBackend> fallback;
-    IConfigBackend* backend = resolveBackend(m_configBackend, fallback);
-    auto tracking = backend->group(ConfigKeys::windowTrackingGroup());
+    auto tracking = m_sessionBackend->group(ConfigKeys::windowTrackingGroup());
 
     // Save active layout ID so we can restore it after daemon restart.
     if (m_layoutManager && m_layoutManager->activeLayout()) {
@@ -183,7 +181,7 @@ void WindowTrackingAdaptor::saveState()
     }
 
     tracking.reset(); // release group before sync
-    backend->sync();
+    m_sessionBackend->sync();
     qCInfo(lcDbusWindow) << "Saved state:"
                          << "zones=" << fullAssignments.size() << "pending=" << pendingQueuesObj.size()
                          << "preTile=" << m_service->preTileGeometries().size()
@@ -225,10 +223,8 @@ void WindowTrackingAdaptor::loadState()
     //
     // Sync the shared backend first so any in-memory writes (e.g., from a
     // concurrent saveState()) are flushed to disk before we read.
-    std::unique_ptr<IConfigBackend> fallback;
-    IConfigBackend* backend = resolveBackend(m_configBackend, fallback);
-    backend->sync();
-    auto tracking = backend->group(ConfigKeys::windowTrackingGroup());
+    m_sessionBackend->sync();
+    auto tracking = m_sessionBackend->group(ConfigKeys::windowTrackingGroup());
     auto readVal = [&](const QString& key, const QString& def = QString()) -> QString {
         return tracking->readString(key, def);
     };

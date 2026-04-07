@@ -345,7 +345,9 @@ void Settings::reset()
     }
     m_configBackend->deleteGroup(ConfigDefaults::updatesGroup());
     m_configBackend->deleteGroup(ConfigDefaults::tilingQuickLayoutSlotsGroup());
-    m_configBackend->deleteGroup(ConfigDefaults::windowTrackingGroup());
+    if (!QFile::remove(ConfigDefaults::sessionFilePath()) && QFile::exists(ConfigDefaults::sessionFilePath())) {
+        qCWarning(lcConfig) << "Failed to remove session file:" << ConfigDefaults::sessionFilePath();
+    }
     deletePerScreenGroups(m_configBackend);
     m_configBackend->sync();
     load();
