@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Window
+import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
 
 /**
@@ -96,13 +97,17 @@ Item {
     readonly property real topGap: effectiveRelY < edgeTolerance ? edgeGap : zoneSpacing / 2
     readonly property real rightGap: (effectiveRelX + effectiveRelWidth) > (1 - edgeTolerance) ? edgeGap : zoneSpacing / 2
     readonly property real bottomGap: (effectiveRelY + effectiveRelHeight) > (1 - edgeTolerance) ? edgeGap : zoneSpacing / 2
+    // Suppress color animations during delegate creation (Repeater recreates all
+    // delegates when the zones QVariantList changes, which would cause a visible
+    // color flash as Behaviors animate from default to target values).
+    property bool _animationsReady: false
 
     // Signals
     signal clicked(var event)
     // Pass mouse event for modifier key handling (Ctrl+click, Shift+click)
     signal contextMenuRequested()
     // Emitted when context menu should be shown
-    signal geometryChanged(real x, real y, real width, real height)
+    signal geometryChanged(real x, real y, real width, real height, bool skipSnapping)
     signal deleteRequested()
     signal duplicateRequested()
     signal splitHorizontalRequested()
@@ -319,6 +324,7 @@ Item {
     Component.onCompleted: {
         // Delegate to geometrySync for initialization
         ensureDimensionsInitialized();
+        _animationsReady = true;
     }
     // Cleanup on destruction
     Component.onDestruction: {
@@ -496,15 +502,21 @@ Item {
         }
 
         Behavior on color {
+            enabled: root._animationsReady
+
             ColorAnimation {
-                duration: 100
+                duration: Theme.animDuration
+                easing.type: Theme.animEasing
             }
 
         }
 
         Behavior on border.color {
+            enabled: root._animationsReady
+
             ColorAnimation {
-                duration: 100
+                duration: Theme.animDuration
+                easing.type: Theme.animEasing
             }
 
         }

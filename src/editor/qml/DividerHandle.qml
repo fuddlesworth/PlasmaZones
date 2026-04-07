@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
 
 /**
@@ -79,7 +80,6 @@ Rectangle {
     color: (dividerMouseArea.containsMouse || isDragging) ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, isDragging ? 0.4 : 0.25) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
     border.color: (dividerMouseArea.containsMouse || isDragging) ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
     border.width: isDragging ? 2 : (dividerMouseArea.containsMouse ? 1 : 0)
-    // Fully rounded ends (pill shape) - match zone border radius style
     radius: isVertical ? (width / 2) : (height / 2)
     // Dividers stay below zones (z:60) and well below resize handles (z:200+ within zones)
     // Only raise slightly when dragging to provide visual feedback
@@ -327,6 +327,22 @@ Rectangle {
                 dividerHandle.dragCancelled();
             }
         }
+    }
+
+    Behavior on color {
+        ColorAnimation {
+            duration: Theme.animDuration
+            easing.type: Theme.animEasing
+        }
+
+    }
+
+    Behavior on border.color {
+        ColorAnimation {
+            duration: Theme.animDuration
+            easing.type: Theme.animEasing
+        }
+
     }
 
 }

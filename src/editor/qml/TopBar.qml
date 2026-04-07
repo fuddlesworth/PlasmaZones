@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
 
 /**
@@ -30,7 +31,7 @@ ToolBar {
 
     signal fullscreenToggled()
 
-    height: Kirigami.Units.gridUnit * 5 // Use theme spacing (40px - better visual balance)
+    height: Kirigami.Units.gridUnit * 5
     z: 100
 
     RowLayout {
@@ -47,19 +48,74 @@ ToolBar {
             spacing: Kirigami.Units.smallSpacing // Use theme spacing (4px - within section)
 
             Repeater {
+                id: screenRepeater
+
                 model: availableScreens || []
 
-                delegate: Button {
+                delegate: ToolButton {
+                    id: screenButton
+
+                    required property var modelData
+                    property bool isActive: editorController && modelData && modelData.name === editorController.targetScreen
+
                     text: modelData ? (modelData.name || "") : ""
-                    highlighted: editorController && modelData && modelData.name === editorController.targetScreen
                     enabled: editorController !== null
+                    implicitWidth: Math.max(contentItem.implicitWidth + Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 4)
+                    implicitHeight: Kirigami.Units.gridUnit * 3
                     Accessible.name: modelData ? modelData.name : ""
-                    Accessible.description: i18nc("@info", "Select screen for layout editing")
+                    Accessible.description: isActive ? i18nc("@info", "Currently selected screen for layout editing") : i18nc("@info", "Select screen for layout editing")
+                    Accessible.checkable: true
+                    Accessible.checked: isActive
                     onClicked: {
                         if (editorController && modelData)
                             editorController.targetScreen = modelData.name;
 
                     }
+
+                    contentItem: Label {
+                        id: screenButtonLabel
+
+                        text: screenButton.text
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        color: screenButton.isActive ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                        font.weight: screenButton.isActive ? Font.DemiBold : Font.Normal
+                        opacity: screenButton.isActive ? 1 : (screenButton.enabled ? 0.8 : 0.4)
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: Theme.animDuration
+                                easing.type: Theme.animEasing
+                            }
+
+                        }
+
+                    }
+
+                    background: Rectangle {
+                        radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
+                        color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.15) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.06) : "transparent")
+                        border.width: Math.round(Kirigami.Units.devicePixelRatio)
+                        border.color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.15) : "transparent")
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: Theme.animDuration
+                                easing.type: Theme.animEasing
+                            }
+
+                        }
+
+                        Behavior on border.color {
+                            ColorAnimation {
+                                duration: Theme.animDuration
+                                easing.type: Theme.animEasing
+                            }
+
+                        }
+
+                    }
+
                 }
 
             }
@@ -70,7 +126,7 @@ ToolBar {
         Kirigami.Separator {
             Layout.fillHeight: true
             Layout.preferredWidth: 1
-            visible: screenSelectorSection.children.length > 0
+            visible: screenRepeater.count > 0
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -136,8 +192,10 @@ ToolBar {
                 }
 
                 background: Rectangle {
-                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
-                    radius: Kirigami.Units.smallSpacing // Use theme spacing
+                    color: Theme.withAlpha(Kirigami.Theme.textColor, layoutNameField.activeFocus ? 0.08 : 0.04)
+                    radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
+                    border.width: Math.round(Kirigami.Units.devicePixelRatio)
+                    border.color: layoutNameField.activeFocus ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
 
                     // Character counter overlay (right-aligned inside field)
                     Label {
@@ -151,6 +209,22 @@ ToolBar {
                         opacity: layoutNameField.activeFocus ? 1 : 0.6
                         Accessible.name: i18nc("@info", "Character count: %1 of %2", layoutNameField.currentLength, layoutNameField.maxLength)
                         Accessible.description: i18nc("@info", "Shows how many characters are used in the layout name")
+                    }
+
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: Theme.animDuration
+                            easing.type: Theme.animEasing
+                        }
+
+                    }
+
+                    Behavior on border.color {
+                        ColorAnimation {
+                            duration: Theme.animDuration
+                            easing.type: Theme.animEasing
+                        }
+
                     }
 
                 }
@@ -404,6 +478,19 @@ ToolBar {
                 Accessible.description: i18nc("@info", "Close the layout editor")
             }
 
+        }
+
+    }
+
+    background: Rectangle {
+        color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.toolbarAlpha)
+
+        // Bottom accent line
+        Rectangle {
+            anchors.bottom: parent.bottom
+            width: parent.width
+            height: Math.round(Kirigami.Units.devicePixelRatio)
+            color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
         }
 
     }

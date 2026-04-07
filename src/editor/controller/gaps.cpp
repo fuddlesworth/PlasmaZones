@@ -12,6 +12,12 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include <QDBusConnection>
+#include <QDBusInterface>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QDBusReply>
 
 #include "pz_i18n.h"
 #include <QGuiApplication>
@@ -387,19 +393,117 @@ void EditorController::setAspectRatioClass(int cls)
     }
 }
 
-QSize EditorController::targetScreenSize() const
+// Shared helper: resolve m_targetScreen to a QScreen*, falling back to primary.
+static QScreen* findTargetScreen(const QString& targetScreen)
 {
-    // Get the target screen size for fixed geometry coordinate conversion
-    if (!m_targetScreen.isEmpty()) {
+    if (!targetScreen.isEmpty()) {
         for (QScreen* screen : QGuiApplication::screens()) {
-            if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
-                return screen->geometry().size();
+            if (Utils::screenIdentifier(screen) == targetScreen || screen->name() == targetScreen) {
+                return screen;
             }
         }
     }
-    // Fallback to primary screen
-    QScreen* primary = QGuiApplication::primaryScreen();
-    return primary ? primary->geometry().size() : QSize(1920, 1080);
+    return QGuiApplication::primaryScreen();
+}
+
+QSize EditorController::targetScreenSize() const
+{
+    QScreen* screen = findTargetScreen(m_targetScreen);
+    return screen ? screen->geometry().size() : QSize(1920, 1080);
+}
+
+int EditorController::insetLeft() const
+{
+    return m_insetLeft;
+}
+
+int EditorController::insetTop() const
+{
+    return m_insetTop;
+}
+
+int EditorController::insetRight() const
+{
+    return m_insetRight;
+}
+
+int EditorController::insetBottom() const
+{
+    return m_insetBottom;
+}
+
+void EditorController::setInsets(int left, int top, int right, int bottom)
+{
+    if (m_insetLeft == left && m_insetTop == top && m_insetRight == right && m_insetBottom == bottom)
+        return;
+    m_insetLeft = left;
+    m_insetTop = top;
+    m_insetRight = right;
+    m_insetBottom = bottom;
+    Q_EMIT usableAreaInsetsChanged();
+}
+
+void EditorController::refreshUsableAreaInsets()
+{
+    QScreen* screen = findTargetScreen(m_targetScreen);
+    if (!screen) {
+        setInsets(0, 0, 0, 0);
+        return;
+    }
+
+    QRect fullGeom = screen->geometry();
+
+    // Query the daemon for available geometry via D-Bus (async to avoid blocking the GUI thread).
+    // The daemon's ScreenManager has layer-shell sensor windows that detect
+    // actual panel positions — this data is not available in the editor process.
+    QString screenId = Utils::screenIdentifier(screen);
+    QDBusInterface screenIface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+                               QString::fromLatin1(DBus::Interface::Screen), QDBusConnection::sessionBus());
+
+    if (screenIface.isValid()) {
+        QDBusPendingCall pending = screenIface.asyncCall(QStringLiteral("getAvailableGeometry"), screenId);
+        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                         [this, fullGeom](QDBusPendingCallWatcher* w) {
+                             w->deleteLater();
+                             QDBusPendingReply<QRect> reply = *w;
+                             QRect availGeom = fullGeom;
+                             if (reply.isValid() && !reply.value().isEmpty()) {
+                                 availGeom = reply.value();
+                             }
+                             applyUsableAreaInsets(fullGeom, availGeom);
+                         });
+        return;
+    }
+
+    // No daemon — Qt's availableGeometry is used as fallback in applyUsableAreaInsets,
+    // but on Wayland it often returns the full geometry (panels aren't reported).
+    qCWarning(lcEditor) << "D-Bus daemon unreachable; usable area insets may be inaccurate";
+    applyUsableAreaInsets(fullGeom, fullGeom);
+}
+
+void EditorController::applyUsableAreaInsets(const QRect& fullGeom, const QRect& daemonAvailGeom)
+{
+    QRect availGeom = daemonAvailGeom;
+
+    // Fallback: try Qt's available geometry (works on some Wayland compositors)
+    if (availGeom == fullGeom) {
+        QScreen* screen = findTargetScreen(m_targetScreen);
+        if (screen) {
+            QRect qtAvail = screen->availableGeometry();
+            if (qtAvail != fullGeom && qtAvail.isValid()) {
+                availGeom = qtAvail;
+            }
+        }
+    }
+
+    // Compute insets: how much the available area is inset from each edge of the full screen
+    int left = qMax(0, availGeom.left() - fullGeom.left());
+    int top = qMax(0, availGeom.top() - fullGeom.top());
+    int right = qMax(0, fullGeom.right() - availGeom.right());
+    int bottom = qMax(0, fullGeom.bottom() - availGeom.bottom());
+
+    setInsets(left, top, right, bottom);
 }
 
 void EditorController::toggleZoneGeometryMode(const QString& zoneId)
@@ -538,9 +642,9 @@ void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, co
         zone.remove(QString::fromLatin1(JsonKeys::FixedHeight));
     }
 
+    // setZoneData emits ZoneManager::zonesChanged, which is connected to
+    // EditorController::zonesChanged — no need to emit again here.
     m_zoneManager->setZoneData(zoneId, zone);
-    ++m_zonesVersion;
-    Q_EMIT zonesChanged();
 }
 
 void EditorController::refreshGlobalZonePadding()

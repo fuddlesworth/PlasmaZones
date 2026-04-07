@@ -193,6 +193,9 @@ Item {
 
             MouseArea {
                 // Initial zone height in canvas coordinates
+                // newX stays at startZoneX
+                // newY stays at startZoneY
+                // Idle
 
                 id: handleMouse
 
@@ -211,6 +214,7 @@ Item {
                 // Store actual canvas dimensions for use during resize
                 property real actualCanvasWidth: resizeHandles.canvasWidth
                 property real actualCanvasHeight: resizeHandles.canvasHeight
+                property int lastModifiers: 0
 
                 anchors.fill: parent
                 anchors.margins: -4 // Larger hit area for easier grabbing
@@ -306,13 +310,13 @@ Item {
                     }
                 }
                 onPositionChanged: function(mouse) {
-                    // newX stays at startZoneX
-                    // newY stays at startZoneY
+                    // South handles move bottom edge
 
                     // State 2 = Resizing
                     if (!pressed || resizeHandles.root.operationState !== 2)
                         return ;
 
+                    handleMouse.lastModifiers = mouse.modifiers;
                     var actualW = resizeHandles.actualCanvasWidth;
                     var actualH = resizeHandles.actualCanvasHeight;
                     // Fallback: Use stored values from onPressed if actualCanvas properties still invalid
@@ -437,8 +441,6 @@ Item {
                     var modifierHeld = (mouse.modifiers & overrideModifier) !== 0;
                     var shouldSnap = hasValidDimensions && (modifierHeld ? !baseSnappingEnabled : baseSnappingEnabled);
                     if (shouldSnap) {
-                        // South handles move bottom edge
-
                         // Convert to relative coordinates for snapping
                         // Guard against division by zero or NaN
                         var relX = (newX >= 0 && isFinite(newX)) ? newX / actualW : 0;
@@ -472,6 +474,8 @@ Item {
                         var snapped = resizeHandles.root.controller.snapGeometrySelective(relX, relY, relW, relH, resizeHandles.root.zoneId, snapLeft, snapRight, snapTop, snapBottom);
                         // Convert back to canvas coordinates
                         if (snapped && isFinite(snapped.x) && !isNaN(snapped.x) && isFinite(snapped.y) && !isNaN(snapped.y) && isFinite(snapped.width) && !isNaN(snapped.width) && snapped.width > 0 && isFinite(snapped.height) && !isNaN(snapped.height) && snapped.height > 0) {
+                            // threshold
+
                             var snappedX = snapped.x * actualW;
                             var snappedY = snapped.y * actualH;
                             var snappedW = snapped.width * actualW;
@@ -518,8 +522,6 @@ Item {
                             }
                             // Show snap lines for visual feedback
                             if (resizeHandles.snapIndicator && actualW > 0 && actualH > 0) {
-                                // threshold
-
                                 // Calculate original position (before snapping) in relative coords
                                 var origX = startZoneX / actualW;
                                 var origY = startZoneY / actualH;
@@ -591,8 +593,6 @@ Item {
                     resizeHandles.root.operationUpdated(resizeHandles.root.zoneId, newX, newY, newW, newH);
                 }
                 onReleased: {
-                    // Idle
-
                     // State 2 = Resizing, 0 = Idle
                     // Store references early to avoid scope issues
                     var rootItem = resizeHandles.root;
@@ -618,8 +618,13 @@ Item {
                     var relH = (actualH > 0 && isFinite(rootItem.visualHeight) && rootItem.visualHeight > 0) ? rootItem.visualHeight / actualH : 0.25;
                     // Set state to Idle BEFORE committing so onZoneGeometryChanged can process
                     rootItem.operationState = 0;
+                    // Check if snap override modifier was held — skip C++ re-snapping if so
+                    var ctrl = resizeHandles.root.controller;
+                    var baseSnap = ctrl && (ctrl.gridSnappingEnabled || ctrl.edgeSnappingEnabled);
+                    var overrideMod = ctrl ? ctrl.snapOverrideModifier : Qt.ShiftModifier;
+                    var skipSnap = (handleMouse.lastModifiers & overrideMod) !== 0 ? baseSnap : !baseSnap;
                     // Commit to model - this triggers C++ updateZoneGeometry
-                    rootItem.geometryChanged(relX, relY, relW, relH);
+                    rootItem.geometryChanged(relX, relY, relW, relH, skipSnap);
                     // Signal operation ended (state is already Idle)
                     var rootRef = rootItem;
                     var zoneIdRef = rootItem.zoneId;

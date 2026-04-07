@@ -382,14 +382,22 @@ Window {
             Layout.minimumWidth: 400
 
             // Actual drawing area (zones handle their own gaps via edgeGap and zoneSpacing)
+            // When !useFullScreenGeometry, insets shrink the canvas to match the usable area
+            // (excluding panels/taskbars) so zone positions match the daemon's rendering.
             Item {
                 // Allow Tab/Shift+Tab for standard focus navigation (accessibility requirement)
 
                 id: drawingArea
 
+                readonly property bool applyInsets: editorWindow._editorController ? !editorWindow._editorController.useFullScreenGeometry : false
+                property bool _insetsReady: false
+
                 objectName: "drawingArea" // Required for focus restoration from child components
                 anchors.fill: parent
-                // No margins here - zones apply their own gaps (edgeGap at screen edges, zoneSpacing/2 between zones)
+                anchors.leftMargin: applyInsets && editorWindow._editorController ? editorWindow._editorController.insetLeft : 0
+                anchors.topMargin: applyInsets && editorWindow._editorController ? editorWindow._editorController.insetTop : 0
+                anchors.rightMargin: applyInsets && editorWindow._editorController ? editorWindow._editorController.insetRight : 0
+                anchors.bottomMargin: applyInsets && editorWindow._editorController ? editorWindow._editorController.insetBottom : 0
                 focus: true
                 // Enable keyboard focus for navigation
                 // Keyboard navigation - uses extracted KeyboardNavigation component
@@ -399,6 +407,7 @@ Window {
                 Keys.onPressed: function(event) {
                     keyboardNav.handleKeyPress(event);
                 }
+                Component.onCompleted: _insetsReady = true
 
                 // ═══════════════════════════════════════════════════════════
                 // GRID OVERLAY - Extracted to GridOverlay.qml
@@ -445,9 +454,9 @@ Window {
                                 editorWindow.handleZoneClick(modelData.id, event.modifiers);
 
                         }
-                        onGeometryChanged: function(x, y, w, h) {
+                        onGeometryChanged: function(x, y, w, h, skipSnapping) {
                             if (editorWindow._editorController && modelData && modelData.id)
-                                editorWindow._editorController.updateZoneGeometry(modelData.id, x, y, w, h);
+                                editorWindow._editorController.updateZoneGeometry(modelData.id, x, y, w, h, skipSnapping);
 
                         }
                         onDeleteRequested: {
@@ -594,6 +603,46 @@ Window {
                     editorController: editorWindow._editorController
                     drawingArea: drawingArea
                     previewMode: editorWindow.previewMode
+                }
+
+                Behavior on anchors.leftMargin {
+                    enabled: drawingArea._insetsReady
+
+                    NumberAnimation {
+                        duration: 150
+                        easing.type: Easing.OutCubic
+                    }
+
+                }
+
+                Behavior on anchors.topMargin {
+                    enabled: drawingArea._insetsReady
+
+                    NumberAnimation {
+                        duration: 150
+                        easing.type: Easing.OutCubic
+                    }
+
+                }
+
+                Behavior on anchors.rightMargin {
+                    enabled: drawingArea._insetsReady
+
+                    NumberAnimation {
+                        duration: 150
+                        easing.type: Easing.OutCubic
+                    }
+
+                }
+
+                Behavior on anchors.bottomMargin {
+                    enabled: drawingArea._insetsReady
+
+                    NumberAnimation {
+                        duration: 150
+                        easing.type: Easing.OutCubic
+                    }
+
                 }
 
             }

@@ -4,6 +4,7 @@
 #include "screenadaptor.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
+#include "../core/screenmanager.h"
 #include "../core/utils.h"
 #include <QGuiApplication>
 #include <QScreen>
@@ -104,6 +105,21 @@ QString ScreenAdaptor::getScreenId(const QString& connectorName)
         return QString();
     }
     return Utils::screenIdForName(connectorName);
+}
+
+QRect ScreenAdaptor::getAvailableGeometry(const QString& screenId)
+{
+    QScreen* screen = nullptr;
+    if (!screenId.isEmpty()) {
+        screen = Utils::findScreenByIdOrName(screenId);
+    }
+    if (!screen) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    if (!screen) {
+        return QRect();
+    }
+    return ScreenManager::actualAvailableGeometry(screen);
 }
 
 } // namespace PlasmaZones
