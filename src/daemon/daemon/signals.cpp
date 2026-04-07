@@ -198,6 +198,13 @@ void Daemon::initializeAutotile()
             int desktop = currentDesktop();
             QString activity = currentActivity();
 
+            // Context gate: if PlasmaZones is disabled for this screen/desktop/activity,
+            // show a visual OSD explaining why instead of silently ignoring the toggle.
+            if (isContextDisabled(m_settings.get(), screenId, desktop, activity)) {
+                showContextDisabledOsd(screenId);
+                return;
+            }
+
             // Set context so ModeTracker reads from the correct per-desktop entry
             if (m_modeTracker) {
                 m_modeTracker->setContext(screenId, desktop, activity);

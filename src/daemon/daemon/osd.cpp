@@ -148,6 +148,53 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
     showLockedOsd(screenId);
 }
 
+void Daemon::showContextDisabledOsd(const QString& screenId)
+{
+    OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
+    if (style == OsdStyle::None) {
+        return;
+    }
+
+    const int desktop = currentDesktop();
+    const QString activity = currentActivity();
+
+    // Build a human-readable reason
+    QString reason;
+    if (m_settings && m_settings->isMonitorDisabled(screenId)) {
+        reason = PzI18n::tr("Disabled on this monitor");
+    } else if (desktop > 0 && m_settings && m_settings->isDesktopDisabled(screenId, desktop)) {
+        // Try to get the desktop name for a friendlier message
+        QString desktopLabel;
+        if (m_virtualDesktopManager) {
+            const QStringList names = m_virtualDesktopManager->desktopNames();
+            if (desktop > 0 && desktop <= names.size()) {
+                desktopLabel = names[desktop - 1];
+            }
+        }
+        if (desktopLabel.isEmpty()) {
+            desktopLabel = PzI18n::tr("Desktop %1").arg(desktop);
+        }
+        reason = PzI18n::tr("Disabled on %1").arg(desktopLabel);
+    } else if (!activity.isEmpty() && m_settings && m_settings->isActivityDisabled(screenId, activity)) {
+        reason = PzI18n::tr("Disabled on this activity");
+    } else {
+        reason = PzI18n::tr("Disabled");
+    }
+
+    if (style == OsdStyle::Preview && m_overlayService) {
+        m_overlayService->showDisabledOsd(reason, screenId);
+        return;
+    }
+
+    // Fall back to text OSD
+    QDBusMessage msg =
+        QDBusMessage::createMethodCall(QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
+                                       QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
+    msg << QStringLiteral("dialog-cancel") << reason;
+    QDBusConnection::sessionBus().asyncCall(msg);
+    qCInfo(lcDaemon) << "Showing disabled text OSD:" << reason << "screen=" << screenId;
+}
+
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)
 {
     auto* algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
@@ -348,8 +395,13 @@ void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
     }
     // Show OSD on ALL screens — each screen may have a different per-desktop
     // assignment (autotile vs snapping, different layouts/algorithms).
+    // Screens where PlasmaZones is disabled show a "disabled" OSD instead.
     for (QScreen* screen : m_screenManager->screens()) {
         const QString screenId = Utils::screenIdentifier(screen);
+        if (isContextDisabled(m_settings.get(), screenId, desktop, activity)) {
+            showContextDisabledOsd(screenId);
+            continue;
+        }
         const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
         if (LayoutId::isAutotile(assignmentId)) {
             const QString algoId = LayoutId::extractAlgorithmId(assignmentId);

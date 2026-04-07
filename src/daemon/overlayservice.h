@@ -135,6 +135,7 @@ public:
                        bool producesOverlappingZones = false, const QString& zoneNumberDisplay = QStringLiteral("all"),
                        int masterCount = 1);
     void showLockedLayoutOsd(Layout* layout, const QString& screenId = QString());
+    void showDisabledOsd(const QString& reason, const QString& screenId = QString());
 
     /**
      * @brief Pre-create Layout OSD QML windows for all connected screens.

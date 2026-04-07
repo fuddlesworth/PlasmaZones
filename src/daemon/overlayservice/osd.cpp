@@ -121,6 +121,8 @@ void OverlayService::showLayoutOsdImpl(Layout* layout, const QString& screenId, 
     }
 
     writeQmlProperty(window, QStringLiteral("locked"), locked);
+    writeQmlProperty(window, QStringLiteral("disabled"), false);
+    writeQmlProperty(window, QStringLiteral("disabledReason"), QString());
     writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
     writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
@@ -156,9 +158,11 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
         return;
     }
 
-    // Reset locked state — window is reused across show calls, so a prior
-    // showLockedLayoutOsd() would leave the lock overlay stuck on.
+    // Reset locked/disabled state — window is reused across show calls, so a prior
+    // showLockedLayoutOsd() or showDisabledOsd() would leave the overlay stuck on.
     writeQmlProperty(window, QStringLiteral("locked"), false);
+    writeQmlProperty(window, QStringLiteral("disabled"), false);
+    writeQmlProperty(window, QStringLiteral("disabledReason"), QString());
     writeQmlProperty(window, QStringLiteral("layoutId"), id);
     writeQmlProperty(window, QStringLiteral("layoutName"), name);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
@@ -185,6 +189,33 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     sizeAndCenterOsd(window, screenGeom, layoutAR);
     QMetaObject::invokeMethod(window, "show");
     qCInfo(lcOverlay) << "Layout OSD: name=" << name << "category=" << category << "screen=" << screenId;
+}
+
+void OverlayService::showDisabledOsd(const QString& reason, const QString& screenId)
+{
+    QQuickWindow* window = nullptr;
+    QRect screenGeom;
+    qreal aspectRatio = 0;
+    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio, screenId)) {
+        return;
+    }
+
+    writeQmlProperty(window, QStringLiteral("locked"), false);
+    writeQmlProperty(window, QStringLiteral("disabled"), true);
+    writeQmlProperty(window, QStringLiteral("disabledReason"), reason);
+    writeQmlProperty(window, QStringLiteral("layoutId"), QString());
+    writeQmlProperty(window, QStringLiteral("layoutName"), reason);
+    writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
+    writeQmlProperty(window, QStringLiteral("aspectRatioClass"), QStringLiteral("any"));
+    writeQmlProperty(window, QStringLiteral("category"), 0);
+    writeQmlProperty(window, QStringLiteral("autoAssign"), false);
+    writeAutotileMetadata(window, false, false);
+    writeQmlProperty(window, QStringLiteral("zones"), QVariantList());
+    writeFontProperties(window, m_settings);
+
+    sizeAndCenterOsd(window, screenGeom, aspectRatio);
+    QMetaObject::invokeMethod(window, "show");
+    qCInfo(lcOverlay) << "Disabled OSD: reason=" << reason << "screen=" << screenId;
 }
 
 void OverlayService::hideLayoutOsd()
