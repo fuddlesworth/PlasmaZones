@@ -185,6 +185,11 @@ target_include_directories(test_layersurface PRIVATE
 add_test(NAME test_layersurface COMMAND test_layersurface)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# core/ — Support Report Tests (redaction, generation)
+# ═══════════════════════════════════════════════════════════════════════════════
+pz_add_test(test_support_report core/test_support_report.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # core/ — Zone Detection Tests (layout, service)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_zone_detection_layout core/test_zone_detection_layout.cpp)
@@ -271,6 +276,7 @@ set(_all_tests
     test_layout_core test_layout_zones
     test_layoutmanager_persistence test_layoutmanager_cycling test_layoutmanager_assignment
     test_layersurface
+    test_support_report
     test_zone_detection_layout test_zone_detector_overlap test_zone_detection_service
     test_per_screen_config test_navigation_controller test_settings_bridge
     test_zone_shader_item test_overlay_helpers

@@ -122,7 +122,7 @@ private Q_SLOTS:
         m_layoutManager->setActiveLayout(layout);
 
         m_controlParent = new QObject(nullptr);
-        m_controlAdaptor = new ControlAdaptor(m_wta, nullptr, m_layoutManager, nullptr, m_controlParent);
+        m_controlAdaptor = new ControlAdaptor(m_wta, nullptr, m_layoutManager, nullptr, nullptr, m_controlParent);
     }
 
     void cleanup()
