@@ -429,62 +429,136 @@ void LayoutManager::loadAssignments()
         }
     }
 
-    // ── Migrate [ModeTracking] into base screen entries ──────────────────────
-    {
-        auto modeGroup = m_configBackend->group(QStringLiteral("ModeTracking"));
-        // Check if ModeTracking group has any content
-        if (modeGroup->hasKey(QStringLiteral("LastManualLayoutId"))
-            || modeGroup->hasKey(QStringLiteral("LastAutotileAlgorithm"))
-            || modeGroup->hasKey(QStringLiteral("LastTilingMode"))) {
-            const QString lastManualId = modeGroup->readString(QStringLiteral("LastManualLayoutId"));
-            const QString lastAlgorithm = modeGroup->readString(QStringLiteral("LastAutotileAlgorithm"));
-            bool migrated = false;
+    // ── One-time migration: config.json → assignments.json ────────────────
+    // Prior to this split, Assignment:* and QuickLayouts groups lived in
+    // config.json alongside Settings-owned groups.  If assignments.json is
+    // still empty, check config.json for legacy groups and migrate them.
+    if (!foundGroups && m_quickLayoutShortcuts.isEmpty()) {
+        auto configBackend = createDefaultConfigBackend();
+        const QStringList configGroups = configBackend->groupList();
+        const QString assignmentPrefix2 = QStringLiteral("Assignment:");
+        bool migratedFromConfig = false;
 
-            for (auto it = m_assignments.begin(); it != m_assignments.end(); ++it) {
-                if (it.key().virtualDesktop != 0 || !it.key().activity.isEmpty())
-                    continue; // Only base screen entries
-                AssignmentEntry& entry = it.value();
-                if (entry.snappingLayout.isEmpty() && !lastManualId.isEmpty()) {
-                    entry.snappingLayout = lastManualId;
-                    migrated = true;
-                }
-                if (entry.tilingAlgorithm.isEmpty() && !lastAlgorithm.isEmpty()) {
-                    entry.tilingAlgorithm = lastAlgorithm;
-                    migrated = true;
-                }
+        for (const QString& groupName : configGroups) {
+            if (!groupName.startsWith(assignmentPrefix2))
+                continue;
+
+            migratedFromConfig = true;
+            QString remainder = groupName.mid(assignmentPrefix2.size());
+            if (remainder.isEmpty())
+                continue;
+
+            QString screenId;
+            int virtualDesktop = 0;
+            QString activity;
+
+            int actIdx = remainder.indexOf(QLatin1String(":Activity:"));
+            if (actIdx >= 0) {
+                activity = remainder.mid(actIdx + 10);
+                remainder = remainder.left(actIdx);
             }
+            int deskIdx = remainder.indexOf(QLatin1String(":Desktop:"));
+            if (deskIdx >= 0) {
+                bool ok = false;
+                virtualDesktop = remainder.mid(deskIdx + 9).toInt(&ok);
+                if (!ok)
+                    virtualDesktop = 0;
+                remainder = remainder.left(deskIdx);
+            }
+            screenId = remainder;
+            if (screenId.isEmpty())
+                continue;
 
-            // Release group before deleting (QSettings requires endGroup before remove)
-            modeGroup.reset();
+            auto grp = configBackend->group(groupName);
+            AssignmentEntry entry;
+            int modeInt = grp->readInt(QStringLiteral("Mode"), 0);
+            entry.mode = (modeInt == AssignmentEntry::Autotile) ? AssignmentEntry::Autotile : AssignmentEntry::Snapping;
+            entry.snappingLayout = grp->readString(QStringLiteral("SnappingLayout"));
+            entry.tilingAlgorithm = grp->readString(QStringLiteral("TilingAlgorithm"));
 
-            // Delete the old group
-            m_configBackend->deleteGroup(QStringLiteral("ModeTracking"));
-            m_configBackend->sync();
+            LayoutAssignmentKey key{screenId, virtualDesktop, activity};
+            m_assignments[key] = entry;
+        }
 
-            if (migrated) {
-                saveAssignments();
-                qCInfo(lcLayout) << "Migrated [ModeTracking] into base screen entries";
-            } else {
-                qCInfo(lcLayout) << "Cleaned up obsolete [ModeTracking] group";
+        // Migrate QuickLayouts from config.json
+        {
+            auto quickGroup = configBackend->group(QStringLiteral("QuickLayouts"));
+            for (int i = 1; i <= 9; ++i) {
+                QString key = QString::number(i);
+                if (quickGroup->hasKey(key)) {
+                    QString layoutId = quickGroup->readString(key);
+                    if (!layoutId.isEmpty())
+                        m_quickLayoutShortcuts[i] = layoutId;
+                }
             }
         }
-    }
 
-    // ── Clean up other obsolete groups ──────────────────────────────
-    {
-        bool cleaned = false;
-        const QStringList currentGroups = m_configBackend->groupList();
-        for (const QString& groupName : currentGroups) {
-            if (groupName.startsWith(QLatin1String("TilingScreen:"))
-                || groupName.startsWith(QLatin1String("TilingActivity:"))
-                || groupName.startsWith(QLatin1String("TilingDesktop:"))) {
-                m_configBackend->deleteGroup(groupName);
-                cleaned = true;
+        if (migratedFromConfig || !m_quickLayoutShortcuts.isEmpty()) {
+            // Write to assignments.json
+            saveAssignments();
+
+            // Delete from config.json
+            for (const QString& groupName : configGroups) {
+                if (groupName.startsWith(assignmentPrefix2)) {
+                    configBackend->deleteGroup(groupName);
+                }
+            }
+            configBackend->deleteGroup(QStringLiteral("QuickLayouts"));
+            configBackend->sync();
+            qCInfo(lcLayout) << "Migrated Assignment/QuickLayouts from config.json to assignments.json";
+        }
+
+        // Also clean up legacy groups from config.json while we have it open
+        {
+            auto modeGroup = configBackend->group(QStringLiteral("ModeTracking"));
+            if (modeGroup->hasKey(QStringLiteral("LastManualLayoutId"))
+                || modeGroup->hasKey(QStringLiteral("LastAutotileAlgorithm"))
+                || modeGroup->hasKey(QStringLiteral("LastTilingMode"))) {
+                const QString lastManualId = modeGroup->readString(QStringLiteral("LastManualLayoutId"));
+                const QString lastAlgorithm = modeGroup->readString(QStringLiteral("LastAutotileAlgorithm"));
+                bool migrated = false;
+
+                for (auto it = m_assignments.begin(); it != m_assignments.end(); ++it) {
+                    if (it.key().virtualDesktop != 0 || !it.key().activity.isEmpty())
+                        continue;
+                    AssignmentEntry& entry = it.value();
+                    if (entry.snappingLayout.isEmpty() && !lastManualId.isEmpty()) {
+                        entry.snappingLayout = lastManualId;
+                        migrated = true;
+                    }
+                    if (entry.tilingAlgorithm.isEmpty() && !lastAlgorithm.isEmpty()) {
+                        entry.tilingAlgorithm = lastAlgorithm;
+                        migrated = true;
+                    }
+                }
+                modeGroup.reset();
+                configBackend->deleteGroup(QStringLiteral("ModeTracking"));
+                configBackend->sync();
+                if (migrated) {
+                    saveAssignments();
+                    qCInfo(lcLayout) << "Migrated [ModeTracking] into base screen entries";
+                } else {
+                    qCInfo(lcLayout) << "Cleaned up obsolete [ModeTracking] group";
+                }
             }
         }
-        if (cleaned) {
-            m_configBackend->sync();
-            qCInfo(lcLayout) << "Cleaned up obsolete TilingScreen/TilingActivity/TilingDesktop groups";
+
+        // Clean up obsolete TilingScreen/TilingActivity/TilingDesktop from config.json
+        {
+            bool cleaned = false;
+            const QStringList currentGroups = configBackend->groupList();
+            for (const QString& groupName : currentGroups) {
+                if (groupName.startsWith(QLatin1String("TilingScreen:"))
+                    || groupName.startsWith(QLatin1String("TilingActivity:"))
+                    || groupName.startsWith(QLatin1String("TilingDesktop:"))) {
+                    configBackend->deleteGroup(groupName);
+                    cleaned = true;
+                }
+            }
+            if (cleaned) {
+                configBackend->sync();
+                qCInfo(lcLayout) << "Cleaned up obsolete TilingScreen/TilingActivity/TilingDesktop groups";
+            }
         }
     }
 

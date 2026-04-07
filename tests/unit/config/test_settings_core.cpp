@@ -512,7 +512,7 @@ private Q_SLOTS:
                 auto g = backend->group(QStringLiteral("OldGroupFromV0"));
                 g->writeBool(QStringLiteral("Flag"), true);
             }
-            // Also inject a valid unmanaged group to prove it survives
+            // Inject a valid unmanaged group to prove it survives
             {
                 auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
                 g->writeString(QStringLiteral("1"), QStringLiteral("layout-id"));

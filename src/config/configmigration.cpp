@@ -709,6 +709,37 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         root.remove(wtGroup);
     }
 
+    // ── Extract Assignment/QuickLayouts to assignments.json ─────────────────
+    // LayoutManager owns its own persistence file, separate from config.json.
+    {
+        QJsonObject assignRoot;
+        const QLatin1String assignPrefix("Assignment:");
+        QStringList keysToRemove;
+        for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
+            if (it.key().startsWith(assignPrefix)) {
+                assignRoot[it.key()] = it.value();
+                keysToRemove.append(it.key());
+            }
+        }
+        if (root.contains(QLatin1String("QuickLayouts"))) {
+            assignRoot[QLatin1String("QuickLayouts")] = root.value(QLatin1String("QuickLayouts"));
+            keysToRemove.append(QLatin1String("QuickLayouts"));
+        }
+        if (root.contains(QLatin1String("ModeTracking"))) {
+            assignRoot[QLatin1String("ModeTracking")] = root.value(QLatin1String("ModeTracking"));
+            keysToRemove.append(QLatin1String("ModeTracking"));
+        }
+        if (!assignRoot.isEmpty()) {
+            const QString assignPath = ConfigDefaults::assignmentsFilePath();
+            if (!JsonConfigBackend::writeJsonAtomically(assignPath, assignRoot)) {
+                qWarning("ConfigMigration: failed to write assignments to %s", qPrintable(assignPath));
+            }
+            for (const QString& key : keysToRemove) {
+                root.remove(key);
+            }
+        }
+    }
+
     // ── Bump version ────────────────────────────────────────────────────────
     // Stamp literal 2, not ConfigSchemaVersion — prevents future version bumps
     // (e.g. to 3) from making this step stamp 3 and skipping a v2→v3 migration.

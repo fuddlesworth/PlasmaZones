@@ -290,6 +290,8 @@ void Settings::purgeStaleKeys()
 {
     // Root-level groups that must survive a save() cycle.
     // Everything else at the JSON root is considered stale and is deleted.
+    // Assignment:* and QuickLayouts now live in assignments.json, so they
+    // no longer need to be preserved here.
     static const QStringList preservedGroups = {
         ConfigDefaults::tilingQuickLayoutSlotsGroup(), // written independently
         ConfigDefaults::updatesGroup(), // written independently

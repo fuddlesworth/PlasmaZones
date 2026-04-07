@@ -551,6 +551,11 @@ public:
     // and high-frequency session state saves.
     PLASMAZONES_EXPORT static QString sessionFilePath();
 
+    // Returns the absolute path to assignments.json (layout assignments and
+    // quick layout shortcuts).  Separate from config.json so that Settings
+    // and LayoutManager have independent ownership of their files.
+    PLASMAZONES_EXPORT static QString assignmentsFilePath();
+
     // Returns the absolute path to the legacy plasmazonesrc file (INI format).
     // Used only by the one-time migration module.
     PLASMAZONES_EXPORT static QString legacyConfigFilePath();
