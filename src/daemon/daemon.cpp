@@ -412,7 +412,7 @@ bool Daemon::init()
 
     // Control adaptor - high-level convenience API for third-party integrations
     new ControlAdaptor(m_windowTrackingAdaptor, m_layoutAdaptor, m_layoutManager.get(), m_autotileEngine.get(),
-                       m_screenManager.get(), m_settings.get(), this);
+                       m_screenManager.get(), this);
 
     // Handle KCM assignment change resnap/OSD. This runs AFTER the KCM's batch
     // save completes (all setAssignmentEntry + notifyReload finished), so all

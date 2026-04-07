@@ -182,7 +182,7 @@ QString SupportReport::sectionLayouts(LayoutManager* layoutManager)
     for (Layout* layout : layouts) {
         const bool isActive = (layout == active);
         out += QStringLiteral("- **%1** (id: %2, zones: %3)%4\n")
-                   .arg(layout->name(), layout->id().toString(QUuid::WithoutBraces))
+                   .arg(layout->name(), layout->id().toString())
                    .arg(layout->zoneCount())
                    .arg(isActive ? QStringLiteral(" **[active]**") : QString());
     }
@@ -237,7 +237,9 @@ QString SupportReport::sectionLogs(int sinceMinutes)
         return QStringLiteral("*(journalctl timed out or not available)*\n");
     }
 
-    if (proc.exitCode() != 0 && proc.readAllStandardOutput().isEmpty()) {
+    QByteArray rawOutput = proc.readAllStandardOutput();
+
+    if (proc.exitCode() != 0 && rawOutput.isEmpty()) {
         // Try syslog identifier fallback (some systems use the binary name differently)
         proc.setArguments({QStringLiteral("--user"), QStringLiteral("--identifier=plasmazonesd"),
                            QStringLiteral("--since"), QStringLiteral("%1 min ago").arg(sinceMinutes),
@@ -245,9 +247,10 @@ QString SupportReport::sectionLogs(int sinceMinutes)
         proc.start();
         if (!proc.waitForFinished(10000))
             return QStringLiteral("*(journalctl not available)*\n");
+        rawOutput = proc.readAllStandardOutput();
     }
 
-    QString output = QString::fromUtf8(proc.readAllStandardOutput());
+    QString output = QString::fromUtf8(rawOutput);
     if (output.trimmed().isEmpty())
         return QStringLiteral("*(no log entries in the last %1 minutes)*\n").arg(sinceMinutes);
 
@@ -261,11 +264,9 @@ QString SupportReport::sectionLogs(int sinceMinutes)
     return QStringLiteral("```\n%1\n```\n").arg(redactHomePath(output));
 }
 
-QString SupportReport::generate(Settings* settings, ScreenManager* screenManager, LayoutManager* layoutManager,
+QString SupportReport::generate(ScreenManager* screenManager, LayoutManager* layoutManager,
                                 AutotileEngine* autotileEngine, int sinceMinutes)
 {
-    Q_UNUSED(settings) // Config read from disk directly — no dependency on runtime Settings object
-
     QString report;
     report += QStringLiteral("<details>\n<summary>PlasmaZones Support Report</summary>\n\n");
 

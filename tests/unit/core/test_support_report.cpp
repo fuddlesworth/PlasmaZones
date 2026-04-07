@@ -129,7 +129,7 @@ private Q_SLOTS:
     void testGenerate_returnsMarkdown()
     {
         // Generate with all nulls — should still produce valid structure
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, nullptr, 30);
+        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
         QVERIFY(report.contains(QStringLiteral("<details>")));
         QVERIFY(report.contains(QStringLiteral("</details>")));
         QVERIFY(report.contains(QStringLiteral("## Version")));
@@ -145,7 +145,7 @@ private Q_SLOTS:
     void testGenerate_sinceMinutesCapped()
     {
         // sinceMinutes > 120 should be capped
-        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, nullptr, 999);
+        const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 999);
         QVERIFY(report.contains(QStringLiteral("last 120 minutes")));
     }
 };

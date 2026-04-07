@@ -16,6 +16,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --since)
             SINCE_MINUTES="${2:?--since requires a number of minutes}"
+            if ! [[ "$SINCE_MINUTES" =~ ^[0-9]+$ ]] || [[ "$SINCE_MINUTES" -lt 1 ]] || [[ "$SINCE_MINUTES" -gt 120 ]]; then
+                echo "Error: --since must be a number between 1 and 120" >&2
+                exit 1
+            fi
             shift 2
             ;;
         --no-copy)
@@ -47,7 +51,9 @@ call_dbus() {
     elif command -v qdbus &>/dev/null; then
         qdbus org.plasmazones.daemon /Control org.plasmazones.Control.generateSupportReport "$SINCE_MINUTES"
     elif command -v busctl &>/dev/null; then
-        busctl --user call org.plasmazones.daemon /Control org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" | sed 's/^s "//' | sed 's/"$//'
+        busctl --user --json=short call org.plasmazones.daemon /Control org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>/dev/null \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['data'][0])" 2>/dev/null \
+            || busctl --user call org.plasmazones.daemon /Control org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" | sed 's/^s "//' | sed 's/"$//'
     else
         echo "Error: No D-Bus CLI tool found (qdbus6, qdbus, or busctl required)" >&2
         exit 1

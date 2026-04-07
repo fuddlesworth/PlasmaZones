@@ -16,7 +16,6 @@ class LayoutAdaptor;
 class AutotileEngine;
 class LayoutManager;
 class ScreenManager;
-class Settings;
 class Zone;
 
 /**
@@ -35,8 +34,7 @@ class PLASMAZONES_EXPORT ControlAdaptor : public QDBusAbstractAdaptor
 
 public:
     explicit ControlAdaptor(WindowTrackingAdaptor* wta, LayoutAdaptor* layoutAdaptor, LayoutManager* layoutManager,
-                            AutotileEngine* autotileEngine, ScreenManager* screenManager, Settings* settings,
-                            QObject* parent = nullptr);
+                            AutotileEngine* autotileEngine, ScreenManager* screenManager, QObject* parent = nullptr);
     ~ControlAdaptor() override = default;
 
 public Q_SLOTS:
@@ -81,7 +79,6 @@ private:
     LayoutManager* m_layoutManager;
     AutotileEngine* m_autotileEngine;
     ScreenManager* m_screenManager;
-    Settings* m_settings;
 };
 
 } // namespace PlasmaZones

@@ -13,7 +13,6 @@ namespace PlasmaZones {
 class ScreenManager;
 class LayoutManager;
 class AutotileEngine;
-class Settings;
 
 /**
  * @brief Generates a redacted support report for bug reports and discussions
@@ -32,15 +31,14 @@ class PLASMAZONES_EXPORT SupportReport
 public:
     /**
      * @brief Generate a complete support report
-     * @param settings Settings instance (nullable — section skipped if null)
      * @param screenManager ScreenManager instance (nullable)
      * @param layoutManager LayoutManager instance (nullable)
      * @param autotileEngine AutotileEngine instance (nullable)
      * @param sinceMinutes How many minutes of journal logs to include (default 30, capped at 120)
      * @return Markdown-formatted support report
      */
-    static QString generate(Settings* settings, ScreenManager* screenManager, LayoutManager* layoutManager,
-                            AutotileEngine* autotileEngine, int sinceMinutes = 30);
+    static QString generate(ScreenManager* screenManager, LayoutManager* layoutManager, AutotileEngine* autotileEngine,
+                            int sinceMinutes = 30);
 
     /**
      * @brief Redact home directory paths from a string
