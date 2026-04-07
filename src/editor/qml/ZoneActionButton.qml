@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
 
 /**
@@ -21,12 +22,6 @@ AbstractButton {
     required property real buttonSize
     property bool useNegativeColor: false
 
-    signal activated()
-
-    function withAlpha(baseColor, alpha) {
-        return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, alpha);
-    }
-
     width: buttonSize
     height: buttonSize
     hoverEnabled: true
@@ -35,7 +30,6 @@ AbstractButton {
     Accessible.role: Accessible.Button
     Accessible.name: actionButton.accessibleName
     Accessible.description: actionButton.accessibleDescription
-    onClicked: actionButton.activated()
     ToolTip.text: actionButton.tooltipText
     ToolTip.visible: hovered
 
@@ -49,19 +43,27 @@ AbstractButton {
         radius: Kirigami.Units.smallSpacing * 1.5
         color: {
             if (actionButton.useNegativeColor && actionButton.hovered)
-                return actionButton.withAlpha(Kirigami.Theme.negativeTextColor, 0.5);
+                return Theme.withAlpha(Kirigami.Theme.negativeTextColor, 0.5);
 
-            return actionButton.hovered ? actionButton.withAlpha(Kirigami.Theme.textColor, 0.4) : actionButton.withAlpha(Kirigami.Theme.textColor, 0.15);
+            return actionButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.15);
         }
         border.width: actionButton.activeFocus ? 2 : Math.round(Kirigami.Units.devicePixelRatio)
         border.color: {
             if (actionButton.activeFocus)
-                return actionButton.withAlpha(Kirigami.Theme.highlightColor, 0.8);
+                return Theme.withAlpha(Kirigami.Theme.highlightColor, 0.8);
 
             if (actionButton.useNegativeColor && actionButton.hovered)
-                return actionButton.withAlpha(Kirigami.Theme.negativeTextColor, 0.5);
+                return Theme.withAlpha(Kirigami.Theme.negativeTextColor, 0.5);
 
-            return actionButton.hovered ? actionButton.withAlpha(Kirigami.Theme.highlightColor, 0.4) : actionButton.withAlpha(Kirigami.Theme.textColor, 0.08);
+            return actionButton.hovered ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.08);
+        }
+
+        Behavior on border.width {
+            NumberAnimation {
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
+
         }
 
         Behavior on color {

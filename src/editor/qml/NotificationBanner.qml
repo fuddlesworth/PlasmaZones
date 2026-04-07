@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
 
 /**
@@ -23,28 +24,24 @@ Rectangle {
     property string accessibleRoleName: ""
     readonly property alias text: bannerLabel.text
 
-    function withAlpha(baseColor, alpha) {
-        return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, alpha);
-    }
-
     function show(message) {
         bannerLabel.text = message;
         hideAnim.stop();
-        if (banner.opacity < 1)
-            showAnim.start();
-
+        bannerTranslate.y = 0;
+        showAnim.start();
         dismissTimer.restart();
     }
 
     function hide() {
         showAnim.stop();
+        dismissTimer.stop();
         hideAnim.start();
     }
 
     height: bannerContent.implicitHeight + Kirigami.Units.gridUnit * 2
     visible: opacity > 0
     opacity: 0
-    color: withAlpha(Kirigami.Theme.backgroundColor, 0.95)
+    color: Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.95)
     border.color: accentColor
     border.width: Kirigami.Units.smallSpacing / 2
     radius: Kirigami.Units.smallSpacing * 1.5

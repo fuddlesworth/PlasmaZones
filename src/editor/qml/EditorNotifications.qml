@@ -42,7 +42,7 @@ Item {
         width: Math.min(Kirigami.Units.gridUnit * 50, notifications.windowWidth * 0.8)
     }
 
-    // Error notification
+    // Error notification — offset below success banner when both are visible
     NotificationBanner {
         id: errorNotification
 
@@ -52,7 +52,13 @@ Item {
         showCloseButton: true
         accessibleRoleName: i18nc("@info:accessibility", "Error notification")
         anchors.horizontalCenter: parent.horizontalCenter
-        y: notifications.anchorItem ? (notifications.anchorItem.y + notifications.anchorItem.height + Kirigami.Units.gridUnit * 2) : Kirigami.Units.gridUnit * 2
+        y: {
+            let baseY = notifications.anchorItem ? (notifications.anchorItem.y + notifications.anchorItem.height + Kirigami.Units.gridUnit * 2) : Kirigami.Units.gridUnit * 2;
+            if (successNotification.visible)
+                return baseY + successNotification.height + Kirigami.Units.smallSpacing;
+
+            return baseY;
+        }
         width: Math.min(Kirigami.Units.gridUnit * 50, notifications.windowWidth * 0.8)
     }
 

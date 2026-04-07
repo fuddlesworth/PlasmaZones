@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
 
 /**
@@ -29,10 +30,6 @@ ToolBar {
     required property bool previewMode
 
     signal fullscreenToggled()
-
-    function withAlpha(baseColor, alpha) {
-        return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, alpha);
-    }
 
     height: Kirigami.Units.gridUnit * 5
     z: 100
@@ -97,9 +94,9 @@ ToolBar {
 
                     background: Rectangle {
                         radius: Kirigami.Units.smallSpacing * 1.5
-                        color: screenButton.isActive ? topBar.withAlpha(Kirigami.Theme.highlightColor, 0.15) : (screenButton.hovered ? topBar.withAlpha(Kirigami.Theme.textColor, 0.06) : "transparent")
+                        color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.15) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.06) : "transparent")
                         border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                        border.color: screenButton.isActive ? topBar.withAlpha(Kirigami.Theme.highlightColor, 0.4) : (screenButton.hovered ? topBar.withAlpha(Kirigami.Theme.textColor, 0.15) : "transparent")
+                        border.color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.15) : "transparent")
 
                         Behavior on color {
                             ColorAnimation {
@@ -195,10 +192,10 @@ ToolBar {
                 }
 
                 background: Rectangle {
-                    color: topBar.withAlpha(Kirigami.Theme.textColor, layoutNameField.activeFocus ? 0.08 : 0.04)
+                    color: Theme.withAlpha(Kirigami.Theme.textColor, layoutNameField.activeFocus ? 0.08 : 0.04)
                     radius: Kirigami.Units.smallSpacing * 1.5
                     border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                    border.color: layoutNameField.activeFocus ? topBar.withAlpha(Kirigami.Theme.highlightColor, 0.4) : topBar.withAlpha(Kirigami.Theme.textColor, 0.08)
+                    border.color: layoutNameField.activeFocus ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
 
                     // Character counter overlay (right-aligned inside field)
                     Label {
@@ -486,14 +483,14 @@ ToolBar {
     }
 
     background: Rectangle {
-        color: topBar.withAlpha(Kirigami.Theme.backgroundColor, 0.9)
+        color: Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.9)
 
         // Bottom accent line
         Rectangle {
             anchors.bottom: parent.bottom
             width: parent.width
             height: Math.round(Kirigami.Units.devicePixelRatio)
-            color: topBar.withAlpha(Kirigami.Theme.textColor, 0.08)
+            color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
         }
 
     }

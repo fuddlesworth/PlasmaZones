@@ -25,7 +25,7 @@ Row {
     readonly property bool buttonsFit: root.visualWidth >= requiredWidth && root.visualHeight >= requiredHeight
 
     function updateHoverState() {
-        var anyHovered = splitHorizontalButton.hovered || splitVerticalButton.hovered || fillButton.hovered || duplicateButton.hovered || deleteButton.hovered;
+        let anyHovered = splitHorizontalButton.hovered || splitVerticalButton.hovered || fillButton.hovered || duplicateButton.hovered || deleteButton.hovered;
         actionButtons.anyButtonHovered = anyHovered;
         actionButtons.root.anyButtonHovered = anyHovered;
     }
@@ -46,7 +46,7 @@ Row {
         accessibleDescription: i18nc("@info:tooltip", "Split this zone into two horizontal sections")
         tooltipText: i18nc("@tooltip", "Split horizontally")
         onHoveredChanged: actionButtons.updateHoverState()
-        onActivated: actionButtons.root.splitHorizontalRequested()
+        onClicked: actionButtons.root.splitHorizontalRequested()
     }
 
     ZoneActionButton {
@@ -58,7 +58,7 @@ Row {
         accessibleDescription: i18nc("@info:tooltip", "Split this zone into two vertical sections")
         tooltipText: i18nc("@tooltip", "Split vertically")
         onHoveredChanged: actionButtons.updateHoverState()
-        onActivated: actionButtons.root.splitVerticalRequested()
+        onClicked: actionButtons.root.splitVerticalRequested()
     }
 
     ZoneActionButton {
@@ -70,7 +70,7 @@ Row {
         accessibleDescription: i18nc("@info:tooltip", "Expand zone to fill available empty space")
         tooltipText: i18nc("@tooltip", "Fill available space")
         onHoveredChanged: actionButtons.updateHoverState()
-        onActivated: actionButtons.root.animatedExpandToFill()
+        onClicked: actionButtons.root.animatedExpandToFill()
     }
 
     ZoneActionButton {
@@ -82,7 +82,7 @@ Row {
         accessibleDescription: i18nc("@info:tooltip", "Create a copy of this zone")
         tooltipText: i18nc("@tooltip", "Duplicate zone")
         onHoveredChanged: actionButtons.updateHoverState()
-        onActivated: actionButtons.root.duplicateRequested()
+        onClicked: actionButtons.root.duplicateRequested()
     }
 
     ZoneActionButton {
@@ -95,7 +95,7 @@ Row {
         tooltipText: i18nc("@tooltip", "Delete zone")
         useNegativeColor: true
         onHoveredChanged: actionButtons.updateHoverState()
-        onActivated: actionButtons.root.deleteRequested()
+        onClicked: actionButtons.root.deleteRequested()
     }
 
 }

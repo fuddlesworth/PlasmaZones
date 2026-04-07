@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
 
 /**
@@ -474,14 +475,14 @@ ToolBar {
     }
 
     background: Rectangle {
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.9)
+        color: Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.9)
 
         // Top accent line
         Rectangle {
             anchors.top: parent.top
             width: parent.width
             height: Math.round(Kirigami.Units.devicePixelRatio)
-            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+            color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
         }
 
     }
