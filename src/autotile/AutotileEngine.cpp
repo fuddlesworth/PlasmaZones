@@ -53,6 +53,13 @@ AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingServi
     , m_settingsBridge(std::make_unique<SettingsBridge>(this))
     , m_algorithmId(AlgorithmRegistry::defaultAlgorithmId())
 {
+    // Zero-delay timer to coalesce promoteSavedWindowOrders() calls during
+    // simultaneous desktop+activity switches. Fires on the next event loop
+    // pass after both m_currentDesktop and m_currentActivity are updated.
+    m_promoteOrdersTimer.setSingleShot(true);
+    m_promoteOrdersTimer.setInterval(0);
+    connect(&m_promoteOrdersTimer, &QTimer::timeout, this, &AutotileEngine::promoteSavedWindowOrders);
+
     connectSignals();
 }
 
@@ -174,7 +181,7 @@ void AutotileEngine::setCurrentDesktop(int desktop)
     // desktop AND activity change simultaneously (e.g., activity-per-desktop).
     m_isDesktopContextSwitch |= (m_currentDesktop > 0);
     m_currentDesktop = desktop;
-    promoteSavedWindowOrders();
+    schedulePromoteSavedWindowOrders();
 }
 
 void AutotileEngine::setCurrentActivity(const QString& activity)
@@ -189,7 +196,7 @@ void AutotileEngine::setCurrentActivity(const QString& activity)
     // desktop AND activity change simultaneously.
     m_isDesktopContextSwitch |= !m_currentActivity.isEmpty();
     m_currentActivity = activity;
-    promoteSavedWindowOrders();
+    schedulePromoteSavedWindowOrders();
 }
 
 void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky)
@@ -859,6 +866,16 @@ void AutotileEngine::loadState()
     if (m_persistLoadFn) {
         m_persistLoadFn();
     }
+}
+
+QJsonArray AutotileEngine::serializeWindowOrders() const
+{
+    return m_settingsBridge->serializeWindowOrders();
+}
+
+void AutotileEngine::deserializeWindowOrders(const QJsonArray& orders)
+{
+    m_settingsBridge->deserializeWindowOrders(orders);
 }
 
 void AutotileEngine::scheduleRetileForScreen(const QString& screenId)
@@ -2111,6 +2128,13 @@ bool AutotileEngine::cleanupPendingOrderIfResolved(const QString& screenId)
     qCDebug(lcAutotile) << "All pre-seeded windows resolved for screen" << screenId;
     m_pendingInitialOrders.erase(pit);
     return true;
+}
+
+void AutotileEngine::schedulePromoteSavedWindowOrders()
+{
+    if (!m_savedWindowOrders.isEmpty()) {
+        m_promoteOrdersTimer.start();
+    }
 }
 
 void AutotileEngine::promoteSavedWindowOrders()

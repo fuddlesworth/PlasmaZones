@@ -43,7 +43,6 @@
 #include "../dbus/autotileadaptor.h"
 #include "../dbus/snapadaptor.h"
 #include "../autotile/AutotileEngine.h"
-#include "../autotile/SettingsBridge.h"
 #include "../autotile/algorithms/ScriptedAlgorithmLoader.h"
 #include "../autotile/AlgorithmRegistry.h"
 #include "../snap/SnapEngine.h"
@@ -395,12 +394,11 @@ bool Daemon::init()
     // orders in its save/load cycle (analogous to WindowZoneAssignmentsFull for snap mode)
     m_windowTrackingAdaptor->setTilingStateDelegates(
         [engine = QPointer(m_autotileEngine.get())]() -> QJsonArray {
-            return engine && engine->settingsBridge() ? engine->settingsBridge()->serializeWindowOrders()
-                                                      : QJsonArray{};
+            return engine ? engine->serializeWindowOrders() : QJsonArray{};
         },
         [engine = QPointer(m_autotileEngine.get())](const QJsonArray& orders) {
-            if (engine && engine->settingsBridge())
-                engine->settingsBridge()->deserializeWindowOrders(orders);
+            if (engine)
+                engine->deserializeWindowOrders(orders);
         });
 
     // Trigger WTA save on autotile state changes (window order, split ratio, master count)
