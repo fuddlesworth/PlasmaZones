@@ -8,7 +8,7 @@
 # and journal logs into a timestamped .tar.gz archive for attaching to
 # GitHub Issues or Discussions.
 #
-# Requires: plasmazonesd running, qdbus6 or busctl
+# Requires: plasmazonesd running, qdbus6 or busctl, perl
 
 set -euo pipefail
 
@@ -19,9 +19,13 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --since)
             SINCE_MINUTES="${2:?--since requires a number of minutes}"
-            if ! [[ "$SINCE_MINUTES" =~ ^[0-9]+$ ]] || [[ "$SINCE_MINUTES" -lt 1 ]] || [[ "$SINCE_MINUTES" -gt 120 ]]; then
-                echo "Error: --since must be a number between 1 and 120" >&2
+            if ! [[ "$SINCE_MINUTES" =~ ^[0-9]+$ ]] || [[ "$SINCE_MINUTES" -gt 120 ]]; then
+                echo "Error: --since must be a number between 0 and 120" >&2
                 exit 1
+            fi
+            # 0 means "use daemon default" (30 minutes), matching D-Bus API semantics
+            if [[ "$SINCE_MINUTES" -eq 0 ]]; then
+                SINCE_MINUTES=30
             fi
             shift 2
             ;;
@@ -35,7 +39,7 @@ while [[ $# -gt 0 ]]; do
             echo "Generate a PlasmaZones support report archive for bug reports/discussions."
             echo ""
             echo "Options:"
-            echo "  --since MINUTES  Minutes of journal logs to include (default: 30, max: 120)"
+            echo "  --since MINUTES  Minutes of journal logs to include (0 = default 30, max: 120)"
             echo "  --output DIR     Directory for the archive (default: \$TMPDIR or /tmp)"
             echo "  -h, --help       Show this help"
             echo ""
@@ -68,18 +72,23 @@ call_dbus() {
     elif command -v qdbus &>/dev/null; then
         qdbus org.plasmazones /PlasmaZones org.plasmazones.Control.generateSupportReport "$SINCE_MINUTES"
     elif command -v busctl &>/dev/null; then
-        local busctl_err
-        busctl_err=$(busctl --user --json=short call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>&1) \
-            && python3 -c "import sys,json; print(json.load(sys.stdin)['data'][0])" <<< "$busctl_err" 2>/dev/null \
-            || busctl --user call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>&1 \
-            | sed 's/^s "//' | sed 's/"$//'
+        local raw
+        if raw=$(busctl --user --json=short call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>/dev/null); then
+            python3 -c "import sys,json; print(json.load(sys.stdin)['data'][0])" <<< "$raw"
+        else
+            raw=$(busctl --user call org.plasmazones /PlasmaZones org.plasmazones.Control generateSupportReport i "$SINCE_MINUTES" 2>&1) || {
+                echo "Error: D-Bus call failed: $raw" >&2
+                return 1
+            }
+            printf '%s' "$raw" | sed 's/^s "//' | sed 's/"$//'
+        fi
     else
         echo "Error: No D-Bus CLI tool found (qdbus6, qdbus, or busctl required)" >&2
         exit 1
     fi
 }
 
-REPORT=$(call_dbus 2>/dev/null) || {
+REPORT=$(call_dbus) || {
     echo "Error: Could not connect to PlasmaZones daemon." >&2
     echo "Make sure plasmazonesd is running." >&2
     exit 1
@@ -103,14 +112,12 @@ CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/plasmazones"
 # Guard against empty HOME (e.g., running from a systemd service without User=)
 if [[ -z "${HOME:-}" ]]; then
     echo "Warning: \$HOME is not set — skipping home path redaction" >&2
-    HOME_ESC=""
-else
-    # Escape all sed metacharacters in HOME for safe use in sed patterns (| delimiter)
-    HOME_ESC=$(printf '%s' "$HOME" | sed 's/[][\\.^$*+?{}()|]/\\&/g')
 fi
 redact_home() {
-    if [[ -n "$HOME_ESC" ]]; then
-        sed "s|$HOME_ESC|~|g" "$@"
+    if [[ -n "${HOME:-}" ]]; then
+        # Use perl lookahead to avoid partial path matches (e.g., /home/user inside /home/username),
+        # matching the C++ SupportReport::redactHomePath() behavior
+        perl -pe 's/\Q'"$HOME"'\E(?![\w.-])/~/g' "$@"
     else
         cat "$@"
     fi
@@ -130,7 +137,7 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/plasmazones"
 if [[ -d "$DATA_DIR" ]]; then
     mkdir -p "$STAGING/data"
     # Copy tree structure, redacting home paths in text files
-    find "$DATA_DIR" -type f | while IFS= read -r f; do
+    find -P "$DATA_DIR" -type f | while IFS= read -r f; do
         rel="${f#"$DATA_DIR"/}"
         mkdir -p "$STAGING/data/$(dirname "$rel")"
         case "$f" in

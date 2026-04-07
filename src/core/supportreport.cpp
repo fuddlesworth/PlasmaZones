@@ -105,20 +105,17 @@ QString SupportReport::sectionScreens(ScreenManager* screenManager)
     return out;
 }
 
-QString SupportReport::readAndRedactFile(const QString& path, const QString& label)
+QString SupportReport::readAndRedactFile(const QString& path, const QString& label, const QString& lang)
 {
     QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        if (!QFile::exists(path))
-            return QStringLiteral("*(%1 not found: %2)*\n").arg(label, redactHomePath(path));
-        return QStringLiteral("*(could not read %1)*\n").arg(label);
-    }
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return QStringLiteral("*(%1 — %2: %3)*\n").arg(label, redactHomePath(path), file.errorString());
 
     if (file.size() > MaxFileSize)
         return QStringLiteral("*(%1 too large: %2 bytes)*\n").arg(label).arg(file.size());
 
     const QString content = QString::fromUtf8(file.readAll());
-    return QStringLiteral("```json\n%1\n```\n").arg(redactHomePath(content));
+    return QStringLiteral("```%1\n%2\n```\n").arg(lang, redactHomePath(content));
 }
 
 QString SupportReport::sectionConfig()
@@ -174,8 +171,6 @@ QString SupportReport::sectionSession()
 
 QString SupportReport::sectionLogs(int sinceMinutes)
 {
-    sinceMinutes = qBound(1, sinceMinutes, MaxSinceMinutes);
-
     QProcess proc;
     proc.setProgram(QStringLiteral("journalctl"));
     proc.setArguments({QStringLiteral("--user"), QStringLiteral("-t"), QStringLiteral("plasmazonesd"),
@@ -183,7 +178,7 @@ QString SupportReport::sectionLogs(int sinceMinutes)
                        QStringLiteral("--no-pager"), QStringLiteral("-o"), QStringLiteral("short-iso")});
     proc.start();
 
-    if (!proc.waitForStarted(3000) || !proc.waitForFinished(10000)) {
+    if (!proc.waitForStarted(3000) || !proc.waitForFinished(30000)) {
         return QStringLiteral("*(journalctl timed out or not available)*\n");
     }
 
@@ -198,7 +193,7 @@ QString SupportReport::sectionLogs(int sinceMinutes)
                                QStringLiteral("--since"), QStringLiteral("%1 min ago").arg(sinceMinutes),
                                QStringLiteral("--no-pager"), QStringLiteral("-o"), QStringLiteral("short-iso")});
         fallback.start();
-        if (!fallback.waitForStarted(3000) || !fallback.waitForFinished(10000))
+        if (!fallback.waitForStarted(3000) || !fallback.waitForFinished(30000))
             return QStringLiteral("*(journalctl not available)*\n");
         rawOutput = fallback.readAllStandardOutput();
     }
@@ -220,8 +215,7 @@ QString SupportReport::sectionLogs(int sinceMinutes)
 QString SupportReport::generate(ScreenManager* screenManager, LayoutManager* layoutManager,
                                 AutotileEngine* autotileEngine, int sinceMinutes)
 {
-    if (sinceMinutes <= 0)
-        sinceMinutes = DefaultSinceMinutes;
+    sinceMinutes = (sinceMinutes <= 0) ? DefaultSinceMinutes : qMin(sinceMinutes, MaxSinceMinutes);
 
     QString report;
     report += QStringLiteral("<details>\n<summary>PlasmaZones Support Report</summary>\n\n");
@@ -254,7 +248,7 @@ QString SupportReport::generate(ScreenManager* screenManager, LayoutManager* lay
     report += sectionSession();
     report += QLatin1Char('\n');
 
-    report += QStringLiteral("## Recent Logs (last %1 minutes)\n").arg(qBound(1, sinceMinutes, MaxSinceMinutes));
+    report += QStringLiteral("## Recent Logs (last %1 minutes)\n").arg(sinceMinutes);
     report += sectionLogs(sinceMinutes);
     report += QLatin1Char('\n');
 

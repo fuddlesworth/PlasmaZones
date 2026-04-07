@@ -121,6 +121,25 @@ private Q_SLOTS:
         const QString report = SupportReport::generate(nullptr, nullptr, nullptr, 30);
         QVERIFY(report.contains(QStringLiteral("autotile engine not available")));
     }
+
+    void testGenerate_containsVersionInfo()
+    {
+        const QString report = SupportReport::generate(nullptr, nullptr, nullptr);
+        QVERIFY(report.contains(QStringLiteral("**PlasmaZones:**")));
+    }
+
+    void testGenerate_containsEnvironmentInfo()
+    {
+        const QString report = SupportReport::generate(nullptr, nullptr, nullptr);
+        QVERIFY(report.contains(QStringLiteral("**Qt:**")));
+        QVERIFY(report.contains(QStringLiteral("**OS:**")));
+        QVERIFY(report.contains(QStringLiteral("**Kernel:**")));
+    }
+
+    void testRedactHomePath_emptyInput()
+    {
+        QCOMPARE(SupportReport::redactHomePath(QString()), QString());
+    }
 };
 
 QTEST_MAIN(TestSupportReport)
