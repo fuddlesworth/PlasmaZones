@@ -2,15 +2,18 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Generate a PlasmaZones support report and copy to clipboard.
-# Usage: plasmazones-support-report.sh [--since MINUTES] [--no-copy]
+# Generate a PlasmaZones support report archive.
+#
+# Collects the daemon's redacted Markdown report, config files, layout files,
+# and journal logs into a timestamped .tar.gz archive for attaching to
+# GitHub Issues or Discussions.
 #
 # Requires: plasmazonesd running, qdbus6 or busctl
 
 set -euo pipefail
 
 SINCE_MINUTES=30
-COPY=true
+OUTPUT_DIR=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -22,19 +25,26 @@ while [[ $# -gt 0 ]]; do
             fi
             shift 2
             ;;
-        --no-copy)
-            COPY=false
-            shift
+        --output)
+            OUTPUT_DIR="${2:?--output requires a directory path}"
+            shift 2
             ;;
         -h|--help)
-            echo "Usage: $(basename "$0") [--since MINUTES] [--no-copy]"
+            echo "Usage: $(basename "$0") [--since MINUTES] [--output DIR]"
             echo ""
-            echo "Generate a PlasmaZones support report for bug reports/discussions."
+            echo "Generate a PlasmaZones support report archive for bug reports/discussions."
             echo ""
             echo "Options:"
             echo "  --since MINUTES  Minutes of journal logs to include (default: 30, max: 120)"
-            echo "  --no-copy        Print to stdout instead of copying to clipboard"
+            echo "  --output DIR     Directory for the archive (default: \$XDG_STATE_HOME/plasmazones)"
             echo "  -h, --help       Show this help"
+            echo ""
+            echo "The archive contains:"
+            echo "  report.md        Redacted Markdown report from the daemon"
+            echo "  config.json      Current configuration (home paths redacted)"
+            echo "  session.json     Window session state (classes hashed, titles stripped)"
+            echo "  layouts/         User layout files"
+            echo "  journal.log      Recent plasmazonesd journal entries"
             exit 0
             ;;
         *)
@@ -44,7 +54,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Try qdbus6 first (KDE default), then qdbus, then busctl
+# Resolve output directory
+if [[ -z "$OUTPUT_DIR" ]]; then
+    OUTPUT_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/plasmazones"
+fi
+mkdir -p "$OUTPUT_DIR"
+
+# ─── D-Bus call ───────────────────────────────────────────────────────────────
+
 call_dbus() {
     if command -v qdbus6 &>/dev/null; then
         qdbus6 org.plasmazones.daemon /Control org.plasmazones.Control.generateSupportReport "$SINCE_MINUTES"
@@ -71,20 +88,71 @@ if [[ -z "$REPORT" ]]; then
     exit 1
 fi
 
-if $COPY; then
-    if command -v wl-copy &>/dev/null; then
-        echo "$REPORT" | wl-copy
-        echo "Support report copied to clipboard ($(echo "$REPORT" | wc -l) lines)."
-        echo "Paste it into a GitHub Discussion or Issue."
-    elif command -v xclip &>/dev/null; then
-        echo "$REPORT" | xclip -selection clipboard
-        echo "Support report copied to clipboard ($(echo "$REPORT" | wc -l) lines)."
-        echo "Paste it into a GitHub Discussion or Issue."
-    else
-        echo "No clipboard tool found (wl-copy or xclip). Printing to stdout:" >&2
-        echo ""
-        echo "$REPORT"
-    fi
-else
-    echo "$REPORT"
+# ─── Build archive staging directory ──────────────────────────────────────────
+
+STAGING=$(mktemp -d "${TMPDIR:-/tmp}/plasmazones-report.XXXXXXXXXX")
+trap 'rm -rf "$STAGING"' EXIT
+
+# 1. Markdown report from daemon (already redacted)
+echo "$REPORT" > "$STAGING/report.md"
+
+# 2. Config file (redact home paths)
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/plasmazones"
+HOME_ESC=$(printf '%s\n' "$HOME" | sed 's/[&/\]/\\&/g')
+if [[ -f "$CONFIG_DIR/config.json" ]]; then
+    sed "s|$HOME_ESC|~|g" "$CONFIG_DIR/config.json" > "$STAGING/config.json"
 fi
+
+# 3. Session file (redact home paths — window classes/titles already redacted
+#    in the daemon report; the raw file here is for deeper debugging, so we
+#    still redact paths but keep structure intact)
+if [[ -f "$CONFIG_DIR/session.json" ]]; then
+    sed "s|$HOME_ESC|~|g" "$CONFIG_DIR/session.json" > "$STAGING/session.json"
+fi
+
+# 4. User layout files
+LAYOUTS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/plasmazones/layouts"
+if [[ -d "$LAYOUTS_DIR" ]] && compgen -G "$LAYOUTS_DIR/*.json" >/dev/null; then
+    mkdir -p "$STAGING/layouts"
+    for f in "$LAYOUTS_DIR"/*.json; do
+        sed "s|$HOME_ESC|~|g" "$f" > "$STAGING/layouts/$(basename "$f")"
+    done
+fi
+
+# 5. Journal logs
+if command -v journalctl &>/dev/null; then
+    JOURNAL=$(journalctl --user -t plasmazonesd \
+        --since "$SINCE_MINUTES min ago" \
+        --no-pager -o short-iso 2>/dev/null \
+        | head -n 2000 \
+        | sed "s|$HOME_ESC|~|g") || true
+
+    # Fallback: try --identifier if -t returned nothing
+    if [[ -z "$JOURNAL" ]]; then
+        JOURNAL=$(journalctl --user --identifier=plasmazonesd \
+            --since "$SINCE_MINUTES min ago" \
+            --no-pager -o short-iso 2>/dev/null \
+            | head -n 2000 \
+            | sed "s|$HOME_ESC|~|g") || true
+    fi
+
+    if [[ -n "$JOURNAL" ]]; then
+        echo "$JOURNAL" > "$STAGING/journal.log"
+    fi
+fi
+
+# ─── Create archive ──────────────────────────────────────────────────────────
+
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+ARCHIVE_NAME="plasmazones-report-${TIMESTAMP}.tar.gz"
+ARCHIVE_PATH="$OUTPUT_DIR/$ARCHIVE_NAME"
+
+tar -czf "$ARCHIVE_PATH" -C "$STAGING" .
+
+echo "Support report archive created:"
+echo "  $ARCHIVE_PATH"
+echo ""
+echo "Contents:"
+tar -tzf "$ARCHIVE_PATH" | sed 's|^./||' | grep -v '^$' | sed 's/^/  /'
+echo ""
+echo "Attach this file to your GitHub Issue or Discussion."

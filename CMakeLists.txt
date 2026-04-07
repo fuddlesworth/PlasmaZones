@@ -354,6 +354,12 @@ install(DIRECTORY data/algorithms/
     PATTERN "*.js"
 )
 
+# Install support report script
+install(PROGRAMS scripts/plasmazones-support-report.sh
+    DESTINATION ${KDE_INSTALL_BINDIR}
+    RENAME plasmazones-support-report
+)
+
 # Install icons (hicolor for dark themes, hicolor-light for light themes)
 install(FILES
     icons/hicolor/scalable/apps/plasmazones.svg
