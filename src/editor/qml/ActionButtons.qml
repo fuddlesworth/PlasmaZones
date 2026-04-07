@@ -18,7 +18,6 @@ Row {
     property bool anyButtonHovered: false
     // Button dimensions
     readonly property real buttonSize: Kirigami.Units.gridUnit * 2.5
-    readonly property real iconSize: Kirigami.Units.iconSizes.smallMedium
     // Calculate if buttons fit in zone
     readonly property real requiredWidth: 5 * buttonSize + 4 * spacing + 2 * anchors.margins
     readonly property real requiredHeight: buttonSize + 2 * anchors.margins

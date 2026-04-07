@@ -27,7 +27,6 @@ Rectangle {
     function show(message) {
         bannerLabel.text = message;
         hideAnim.stop();
-        bannerTranslate.y = 0;
         showAnim.start();
         dismissTimer.restart();
     }
@@ -43,7 +42,7 @@ Rectangle {
     opacity: 0
     color: Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.95)
     border.color: accentColor
-    border.width: Kirigami.Units.smallSpacing / 2
+    border.width: Math.round(Kirigami.Units.smallSpacing / 2)
     radius: Kirigami.Units.smallSpacing * 1.5
     z: 200
     Accessible.name: accessibleRoleName

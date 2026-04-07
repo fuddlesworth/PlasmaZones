@@ -119,6 +119,10 @@ class EditorController : public QObject
     // Target screen size (for fixed geometry coordinate conversion)
     Q_PROPERTY(QSize targetScreenSize READ targetScreenSize NOTIFY targetScreenSizeChanged)
 
+    // Usable area insets — offset from full screen geometry to available geometry (panels/taskbars)
+    // Returns {left, top, right, bottom} pixel insets for the target screen
+    Q_PROPERTY(QRect usableAreaInsets READ usableAreaInsets NOTIFY targetScreenSizeChanged)
+
     // Label font settings (read-only from global Appearance config)
     Q_PROPERTY(QString labelFontFamily READ labelFontFamily CONSTANT)
     Q_PROPERTY(qreal labelFontSizeScale READ labelFontSizeScale CONSTANT)
@@ -218,6 +222,7 @@ public:
     bool useFullScreenGeometry() const;
     int aspectRatioClass() const;
     QSize targetScreenSize() const;
+    QRect usableAreaInsets() const;
     bool canPaste() const;
     UndoController* undoController() const;
 

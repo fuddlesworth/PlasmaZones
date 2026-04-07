@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 #include <QObject>
 #include <QDBusAbstractAdaptor>
+#include <QRect>
 #include <QStringList>
 
 namespace PlasmaZones {
@@ -35,6 +36,7 @@ public Q_SLOTS:
     QString getPrimaryScreen();
     QString getScreenId(const QString& connectorName);
     void setPrimaryScreenFromKWin(const QString& connectorName);
+    QRect getAvailableGeometry(const QString& screenId);
 
 Q_SIGNALS:
     void screenAdded(const QString& screenId);

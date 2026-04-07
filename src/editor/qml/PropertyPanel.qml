@@ -7,6 +7,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Templates as T
 import QtQuick.Window
+import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
 
 /**
@@ -64,9 +65,9 @@ Rectangle {
     Layout.maximumWidth: visible ? 280 : 0
     Layout.minimumWidth: 0
     Layout.fillHeight: true
-    color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.95)
+    color: Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.95)
     border.width: Math.round(Kirigami.Units.devicePixelRatio)
-    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+    border.color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
     visible: panelMode !== "hidden"
     opacity: visible ? 1 : 0
     z: 50

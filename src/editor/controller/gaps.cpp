@@ -12,6 +12,9 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include <QDBusConnection>
+#include <QDBusInterface>
+#include <QDBusReply>
 
 #include "pz_i18n.h"
 #include <QGuiApplication>
@@ -400,6 +403,60 @@ QSize EditorController::targetScreenSize() const
     // Fallback to primary screen
     QScreen* primary = QGuiApplication::primaryScreen();
     return primary ? primary->geometry().size() : QSize(1920, 1080);
+}
+
+QRect EditorController::usableAreaInsets() const
+{
+    // Find the target screen's full geometry
+    QScreen* targetScreen = nullptr;
+    if (!m_targetScreen.isEmpty()) {
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
+                targetScreen = screen;
+                break;
+            }
+        }
+    }
+    if (!targetScreen) {
+        targetScreen = QGuiApplication::primaryScreen();
+    }
+    if (!targetScreen) {
+        return QRect(0, 0, 0, 0);
+    }
+
+    QRect fullGeom = targetScreen->geometry();
+
+    // Query the daemon for available geometry via D-Bus.
+    // The daemon's ScreenManager has layer-shell sensor windows that detect
+    // actual panel positions — this data is not available in the editor process.
+    QString screenId = Utils::screenIdentifier(targetScreen);
+    QDBusInterface screenIface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+                               QString::fromLatin1(DBus::Interface::Screen), QDBusConnection::sessionBus());
+
+    QRect availGeom = fullGeom; // Default: no insets
+    if (screenIface.isValid()) {
+        QDBusReply<QRect> reply = screenIface.call(QStringLiteral("getAvailableGeometry"), screenId);
+        if (reply.isValid() && !reply.value().isEmpty()) {
+            availGeom = reply.value();
+        }
+    }
+
+    // Fallback: try Qt's available geometry (works on some Wayland compositors)
+    if (availGeom == fullGeom) {
+        QRect qtAvail = targetScreen->availableGeometry();
+        if (qtAvail != fullGeom && qtAvail.isValid()) {
+            availGeom = qtAvail;
+        }
+    }
+
+    // Compute insets: how much the available area is inset from each edge of the full screen
+    int left = availGeom.left() - fullGeom.left();
+    int top = availGeom.top() - fullGeom.top();
+    int right = fullGeom.right() - availGeom.right();
+    int bottom = fullGeom.bottom() - availGeom.bottom();
+
+    // Clamp to non-negative (defensive)
+    return QRect(qMax(0, left), qMax(0, top), qMax(0, right), qMax(0, bottom));
 }
 
 void EditorController::toggleZoneGeometryMode(const QString& zoneId)
