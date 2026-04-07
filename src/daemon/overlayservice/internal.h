@@ -29,6 +29,9 @@ inline void resetOsdOverlayState(QObject* window)
     if (!window) {
         return;
     }
+    // Clear both overlay states — callers set the one they need afterwards.
+    // locked is explicitly set by every call site, but reset here for safety
+    // when a caller forgets (e.g. showDisabledOsd doesn't set locked at all).
     writeQmlProperty(window, QStringLiteral("locked"), false);
     writeQmlProperty(window, QStringLiteral("disabled"), false);
     writeQmlProperty(window, QStringLiteral("disabledReason"), QString());

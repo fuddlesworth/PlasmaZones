@@ -147,7 +147,8 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
     showLockedOsd(screenId);
 }
 
-void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, DisabledReason reason)
+void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const QString& activity,
+                                    DisabledReason reason)
 {
     OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
     if (style == OsdStyle::None) {
@@ -179,15 +180,25 @@ void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, Disabl
         reasonText = PzI18n::tr("Disabled on %1").arg(desktopLabel);
         break;
     }
-    case DisabledReason::ActivityDisabled:
-        reasonText = PzI18n::tr("Disabled on this activity");
+    case DisabledReason::ActivityDisabled: {
+        QString activityLabel;
+        if (m_activityManager && !activity.isEmpty()) {
+            activityLabel = m_activityManager->activityName(activity);
+        }
+        if (activityLabel.isEmpty()) {
+            reasonText = PzI18n::tr("Disabled on this activity");
+        } else {
+            reasonText = PzI18n::tr("Disabled on %1").arg(activityLabel);
+        }
         break;
+    }
     case DisabledReason::NotDisabled:
         Q_UNREACHABLE();
     }
 
     if (style == OsdStyle::Preview && m_overlayService) {
         m_overlayService->showDisabledOsd(reasonText, screenId);
+        qCInfo(lcDaemon) << "Showing disabled preview OSD:" << reasonText << "screen=" << screenId;
         return;
     }
 
@@ -395,7 +406,7 @@ void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
         const QString screenId = Utils::screenIdentifier(screen);
         const DisabledReason why = contextDisabledReason(m_settings.get(), screenId, desktop, activity);
         if (why != DisabledReason::NotDisabled) {
-            showContextDisabledOsd(screenId, desktop, why);
+            showContextDisabledOsd(screenId, desktop, activity, why);
             continue;
         }
         const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);

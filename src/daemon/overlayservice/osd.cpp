@@ -199,11 +199,12 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
 
     // Reset overlay state then set disabled — locked is intentionally false
     // (mutually exclusive with disabled, also enforced in QML).
+    // Clear all layout-specific properties so stale data from a prior showLayoutOsd()
+    // doesn't leak through the semi-transparent disabled overlay.
     resetOsdOverlayState(window);
     writeQmlProperty(window, QStringLiteral("disabled"), true);
     writeQmlProperty(window, QStringLiteral("disabledReason"), reason);
     writeQmlProperty(window, QStringLiteral("layoutId"), QString());
-    // layoutName set to reason as fallback for accessibility / text-mode OSD label
     writeQmlProperty(window, QStringLiteral("layoutName"), reason);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("aspectRatioClass"), QStringLiteral("any"));

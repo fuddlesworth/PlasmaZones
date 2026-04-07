@@ -276,7 +276,7 @@ Window {
             Rectangle {
                 anchors.fill: previewContainer
                 visible: root.disabled
-                color: Qt.rgba(0, 0, 0, 0.55)
+                color: Qt.rgba(0, 0, 0, 0.5)
                 radius: Kirigami.Units.smallSpacing
 
                 Kirigami.Icon {
@@ -299,10 +299,11 @@ Window {
                 anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5
                 spacing: Kirigami.Units.smallSpacing
 
-                // Category badge (layout type)
+                // Category badge (layout type) — hidden when disabled
                 QFZCommon.CategoryBadge {
                     id: categoryBadge
 
+                    visible: !root.disabled
                     anchors.verticalCenter: parent.verticalCenter
                     category: root.category
                     autoAssign: root.autoAssign === true

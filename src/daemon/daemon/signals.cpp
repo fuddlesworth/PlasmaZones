@@ -204,7 +204,7 @@ void Daemon::initializeAutotile()
             // direct feedback to an explicit user action, not a passive layout-switch OSD.
             const DisabledReason why = contextDisabledReason(m_settings.get(), screenId, desktop, activity);
             if (why != DisabledReason::NotDisabled) {
-                showContextDisabledOsd(screenId, desktop, why);
+                showContextDisabledOsd(screenId, desktop, activity, why);
                 return;
             }
 
