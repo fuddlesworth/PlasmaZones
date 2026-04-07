@@ -390,6 +390,7 @@ Window {
                 id: drawingArea
 
                 readonly property bool applyInsets: editorWindow._editorController ? !editorWindow._editorController.useFullScreenGeometry : false
+                property bool _insetsReady: false
 
                 objectName: "drawingArea" // Required for focus restoration from child components
                 anchors.fill: parent
@@ -406,6 +407,7 @@ Window {
                 Keys.onPressed: function(event) {
                     keyboardNav.handleKeyPress(event);
                 }
+                Component.onCompleted: _insetsReady = true
 
                 // ═══════════════════════════════════════════════════════════
                 // GRID OVERLAY - Extracted to GridOverlay.qml
@@ -439,7 +441,7 @@ Window {
                         // Bind directly to modelData - when zones list updates, modelData updates
                         zoneData: modelData
                         zoneId: modelData.id || ""
-                        isSelected: editorWindow.selectedZoneIds.indexOf(modelData.id) >= 0
+                        isSelected: editorWindow.isZoneSelected(modelData.id)
                         isPartOfMultiSelection: isSelected && editorWindow.hasMultipleSelection
                         controller: editorWindow._editorController // Pass controller for snapping
                         zoneSpacing: editorWindow.zoneSpacing // Pass spacing for gaps between zones
@@ -452,9 +454,9 @@ Window {
                                 editorWindow.handleZoneClick(modelData.id, event.modifiers);
 
                         }
-                        onGeometryChanged: function(x, y, w, h) {
+                        onGeometryChanged: function(x, y, w, h, skipSnapping) {
                             if (editorWindow._editorController && modelData && modelData.id)
-                                editorWindow._editorController.updateZoneGeometry(modelData.id, x, y, w, h);
+                                editorWindow._editorController.updateZoneGeometry(modelData.id, x, y, w, h, skipSnapping);
 
                         }
                         onDeleteRequested: {
@@ -604,6 +606,8 @@ Window {
                 }
 
                 Behavior on anchors.leftMargin {
+                    enabled: drawingArea._insetsReady
+
                     NumberAnimation {
                         duration: 150
                         easing.type: Easing.OutCubic
@@ -612,6 +616,8 @@ Window {
                 }
 
                 Behavior on anchors.topMargin {
+                    enabled: drawingArea._insetsReady
+
                     NumberAnimation {
                         duration: 150
                         easing.type: Easing.OutCubic
@@ -620,6 +626,8 @@ Window {
                 }
 
                 Behavior on anchors.rightMargin {
+                    enabled: drawingArea._insetsReady
+
                     NumberAnimation {
                         duration: 150
                         easing.type: Easing.OutCubic
@@ -628,6 +636,8 @@ Window {
                 }
 
                 Behavior on anchors.bottomMargin {
+                    enabled: drawingArea._insetsReady
+
                     NumberAnimation {
                         duration: 150
                         easing.type: Easing.OutCubic

@@ -300,7 +300,11 @@ MouseArea {
                     relW = zoneRoot.toRelativeW(originalSize.width);
                     relH = zoneRoot.toRelativeH(originalSize.height);
                 }
-                zoneRoot.geometryChanged(relX, relY, relW, relH);
+                // If snap override modifier was held during drag, skip C++ snapping on commit
+                var overrideModifier = controller ? controller.snapOverrideModifier : Qt.ShiftModifier;
+                var baseSnappingEnabled = controller && (controller.gridSnappingEnabled || controller.edgeSnappingEnabled);
+                var shouldSkipSnap = (mouse.modifiers & overrideModifier) !== 0 ? baseSnappingEnabled : !baseSnappingEnabled;
+                zoneRoot.geometryChanged(relX, relY, relW, relH, shouldSkipSnap);
                 // End multi-zone drag with commit
                 if (controller && controller.isMultiZoneDragActive())
                     controller.endMultiZoneDrag(true);

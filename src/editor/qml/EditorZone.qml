@@ -107,7 +107,7 @@ Item {
     // Pass mouse event for modifier key handling (Ctrl+click, Shift+click)
     signal contextMenuRequested()
     // Emitted when context menu should be shown
-    signal geometryChanged(real x, real y, real width, real height)
+    signal geometryChanged(real x, real y, real width, real height, bool skipSnapping)
     signal deleteRequested()
     signal duplicateRequested()
     signal splitHorizontalRequested()

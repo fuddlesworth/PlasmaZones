@@ -382,9 +382,13 @@ ToolBar {
             spacing: Kirigami.Units.smallSpacing
             visible: editorController ? (editorController.hasUnsavedChanges || false) : false
             onVisibleChanged: {
-                if (visible)
+                if (visible) {
                     pulseAnim.restart();
-
+                } else {
+                    pulseAnim.stop();
+                    unsavedIcon.opacity = 1;
+                    unsavedIndicator.opacity = 1;
+                }
             }
 
             Kirigami.Icon {
