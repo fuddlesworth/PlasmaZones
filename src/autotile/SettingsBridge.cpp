@@ -457,10 +457,9 @@ void SettingsBridge::deserializeWindowOrders(const QJsonArray& orders)
     for (const QJsonValue& val : orders) {
         const QJsonObject entry = val.toObject();
 
-        // Skip legacy _type entries (migrated to AutotilePendingRestores key).
-        // Old session.json files embedded pending restores inside this array;
-        // they are now persisted separately. Safe to ignore — the data was
-        // already loaded from the new key by deserializePendingRestores().
+        // Skip entries with a _type discriminator — these were used during
+        // development when pending restores were embedded in this array.
+        // Now persisted under their own AutotilePendingRestores key.
         if (entry.contains(QLatin1String("_type"))) {
             continue;
         }
@@ -563,19 +562,26 @@ void SettingsBridge::deserializePendingRestores(const QJsonObject& queuesObj)
     int restoredEntries = 0;
     for (auto it = queuesObj.constBegin(); it != queuesObj.constEnd(); ++it) {
         const QString appId = it.key();
+        // Skip invalid keys: empty appIds or bare windowIds (containing '|')
+        // that shouldn't appear as top-level keys.
+        if (appId.isEmpty() || appId.contains(QLatin1Char('|'))) {
+            continue;
+        }
         const QJsonArray queueArray = it.value().toArray();
         QList<PendingAutotileRestore> restoreList;
         for (const QJsonValue& restoreVal : queueArray) {
             const QJsonObject restoreObj = restoreVal.toObject();
-            PendingAutotileRestore restore;
-            restore.position = restoreObj[QLatin1String("position")].toInt(-1);
-            restore.context.screenId = restoreObj[QLatin1String("screen")].toString();
-            restore.context.desktop = qMax(1, restoreObj[QLatin1String("desktop")].toInt(1));
-            restore.context.activity = restoreObj[QLatin1String("activity")].toString();
-            restore.wasFloating = restoreObj[QLatin1String("wasFloating")].toBool(false);
-            if (restore.position >= 0 && !restore.context.screenId.isEmpty()) {
-                restoreList.append(restore);
+            const int pos = restoreObj[QLatin1String("position")].toInt(-1);
+            const QString screenId = restoreObj[QLatin1String("screen")].toString();
+            if (pos < 0 || screenId.isEmpty()) {
+                continue;
             }
+            TilingStateKey ctx;
+            ctx.screenId = screenId;
+            ctx.desktop = qMax(1, restoreObj[QLatin1String("desktop")].toInt(1));
+            ctx.activity = restoreObj[QLatin1String("activity")].toString();
+            restoreList.append(
+                PendingAutotileRestore(pos, std::move(ctx), restoreObj[QLatin1String("wasFloating")].toBool(false)));
             // Enforce same cap as runtime to prevent corrupted/hand-edited
             // session.json from loading unbounded entries.
             if (restoreList.size() >= MaxPendingRestoresPerApp) {

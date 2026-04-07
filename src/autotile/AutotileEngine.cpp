@@ -388,15 +388,9 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     // Clear pending restore entries for removed screens. Stale entries would
     // restore windows to positions from the old layout if autotile is re-enabled.
     if (!m_pendingAutotileRestores.isEmpty() && !removed.isEmpty()) {
-        for (auto rit = m_pendingAutotileRestores.begin(); rit != m_pendingAutotileRestores.end();) {
-            rit.value().removeIf([&removed](const PendingAutotileRestore& r) {
-                return removed.contains(r.context.screenId);
-            });
-            if (rit.value().isEmpty()) {
-                rit = m_pendingAutotileRestores.erase(rit);
-            } else {
-                ++rit;
-            }
+        const auto keys = m_pendingAutotileRestores.keys();
+        for (const QString& appId : keys) {
+            pruneStaleRestores(appId);
         }
     }
 
@@ -1656,7 +1650,9 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                                         << "from pending queue at position=" << clampedPos
                                         << "(saved=" << entry.position << ")";
 
-                    // Consume this entry (FIFO)
+                    // Consume this entry (FIFO). After removeAt/erase, restoreIt
+                    // is potentially invalid — use the safe pruneStaleRestores()
+                    // helper below instead of continuing to use it.
                     restoreIt.value().removeAt(i);
                     if (restoreIt.value().isEmpty()) {
                         m_pendingAutotileRestores.erase(restoreIt);
@@ -1665,19 +1661,9 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                 }
             }
 
-            // Prune entries whose screen is no longer active. Without this,
-            // entries for disconnected monitors accumulate until the 16-cap
-            // evicts them (desktop/activity mismatches are bounded by the cap
-            // and will match when the user switches back, so leave those).
-            if (m_pendingAutotileRestores.contains(appId)) {
-                auto& queue = m_pendingAutotileRestores[appId];
-                queue.removeIf([this](const PendingAutotileRestore& r) {
-                    return !m_autotileScreens.contains(r.context.screenId);
-                });
-                if (queue.isEmpty()) {
-                    m_pendingAutotileRestores.remove(appId);
-                }
-            }
+            // Prune entries whose screen is no longer active. Uses a fresh
+            // lookup (safe after the potential erase above).
+            pruneStaleRestores(appId);
         }
     }
 
@@ -1708,7 +1694,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         auto savedIt = m_savedFloatingWindows.find(currentKey);
         if (savedIt != m_savedFloatingWindows.end() && savedIt.value().remove(windowId)) {
             state->setFloating(windowId, true);
-            qCInfo(lcAutotile) << "Restored saved floating state for window" << windowId << "on screen" << screenId;
+            qCDebug(lcAutotile) << "Restored saved floating state for window" << windowId << "on screen" << screenId;
             if (savedIt.value().isEmpty()) {
                 m_savedFloatingWindows.erase(savedIt);
             }
@@ -1717,6 +1703,20 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
 
     m_windowToStateKey.insert(windowId, currentKey);
     return true;
+}
+
+void AutotileEngine::pruneStaleRestores(const QString& appId)
+{
+    auto it = m_pendingAutotileRestores.find(appId);
+    if (it == m_pendingAutotileRestores.end()) {
+        return;
+    }
+    it.value().removeIf([this](const PendingAutotileRestore& r) {
+        return !m_autotileScreens.contains(r.context.screenId);
+    });
+    if (it.value().isEmpty()) {
+        m_pendingAutotileRestores.erase(it);
+    }
 }
 
 void AutotileEngine::removeWindow(const QString& windowId)
@@ -1737,10 +1737,7 @@ void AutotileEngine::removeWindow(const QString& windowId)
         if (pos >= 0) {
             const QString appId = Utils::extractAppId(windowId);
             if (appId != windowId) {
-                PendingAutotileRestore entry;
-                entry.position = pos;
-                entry.context = key;
-                entry.wasFloating = state->isFloating(windowId);
+                PendingAutotileRestore entry(pos, key, state->isFloating(windowId));
                 auto& queue = m_pendingAutotileRestores[appId];
                 // Cap per-appId queue to prevent unbounded growth from windows
                 // that are closed repeatedly without reopening.

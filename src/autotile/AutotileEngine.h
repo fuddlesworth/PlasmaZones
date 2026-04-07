@@ -57,6 +57,14 @@ inline size_t qHash(const TilingStateKey& key, size_t seed = 0)
  */
 struct PendingAutotileRestore
 {
+    PendingAutotileRestore() = default;
+    PendingAutotileRestore(int pos, TilingStateKey ctx, bool floating)
+        : position(pos)
+        , context(std::move(ctx))
+        , wasFloating(floating)
+    {
+    }
+
     int position = -1; ///< Index in window order at time of removal
     TilingStateKey context; ///< Screen/desktop/activity where the window was tiled
     bool wasFloating = false; ///< Whether the window was floating when removed
@@ -846,6 +854,7 @@ private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
     void removeWindow(const QString& windowId);
+    void pruneStaleRestores(const QString& appId);
     bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
     void recalculateLayout(const QString& screenId);
     void applyTiling(const QString& screenId);
