@@ -6,8 +6,6 @@
 #include "plasmazones_export.h"
 #include <QString>
 
-class QScreen;
-
 namespace PlasmaZones {
 
 class ScreenManager;
@@ -46,15 +44,6 @@ public:
      * @return String with home path replaced by ~
      */
     static QString redactHomePath(const QString& input);
-
-    /**
-     * @brief Redact sensitive fields from a JSON config string
-     *
-     * Replaces filesystem paths containing the home directory with ~ equivalents.
-     * @param json Raw JSON string
-     * @return Redacted JSON string
-     */
-    static QString redactConfigJson(const QString& json);
 
     /**
      * @brief Redact window class/title info from session JSON

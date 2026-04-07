@@ -98,16 +98,45 @@ echo "$REPORT" > "$STAGING/report.md"
 
 # 2. Config file (redact home paths)
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/plasmazones"
-HOME_ESC=$(printf '%s\n' "$HOME" | sed 's/[&/\]/\\&/g')
+# Escape BRE metacharacters in HOME for safe use in sed patterns (| delimiter)
+HOME_ESC=$(printf '%s' "$HOME" | sed 's/\./\\./g')
 if [[ -f "$CONFIG_DIR/config.json" ]]; then
     sed "s|$HOME_ESC|~|g" "$CONFIG_DIR/config.json" > "$STAGING/config.json"
 fi
 
-# 3. Session file (redact home paths — window classes/titles already redacted
-#    in the daemon report; the raw file here is for deeper debugging, so we
-#    still redact paths but keep structure intact)
+# 3. Session file (redact window classes via SHA-256 hash, strip titles, redact paths)
 if [[ -f "$CONFIG_DIR/session.json" ]]; then
-    sed "s|$HOME_ESC|~|g" "$CONFIG_DIR/session.json" > "$STAGING/session.json"
+    if command -v python3 &>/dev/null; then
+        python3 -c "
+import json, hashlib, os, sys
+try:
+    with open(sys.argv[1]) as f:
+        data = json.load(f)
+except (json.JSONDecodeError, OSError):
+    sys.exit(1)
+def redact(obj):
+    if isinstance(obj, dict):
+        if 'windowClass' in obj:
+            obj['windowClass'] = hashlib.sha256(obj['windowClass'].encode()).hexdigest()[:8]
+        obj.pop('windowTitle', None)
+        obj.pop('title', None)
+        for v in list(obj.values()):
+            redact(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            redact(item)
+redact(data)
+out = json.dumps(data, indent=2)
+home = os.environ.get('HOME', '')
+if home:
+    out = out.replace(home, '~')
+print(out)
+" "$CONFIG_DIR/session.json" > "$STAGING/session.json" 2>/dev/null || \
+            sed "s|$HOME_ESC|~|g" "$CONFIG_DIR/session.json" > "$STAGING/session.json"
+    else
+        echo "Warning: python3 not found — session.json window classes/titles not redacted" >&2
+        sed "s|$HOME_ESC|~|g" "$CONFIG_DIR/session.json" > "$STAGING/session.json"
+    fi
 fi
 
 # 4. User layout files

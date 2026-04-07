@@ -15,11 +15,11 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
-#include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QScreen>
 #include <QSysInfo>
 
@@ -27,6 +27,7 @@ namespace PlasmaZones {
 
 static constexpr int MaxLogLines = 2000;
 static constexpr int MaxSinceMinutes = 120;
+static constexpr qint64 MaxFileSize = 1024 * 1024; // 1 MB
 
 QString SupportReport::redactHomePath(const QString& input)
 {
@@ -34,14 +35,13 @@ QString SupportReport::redactHomePath(const QString& input)
     if (home.isEmpty())
         return input;
 
+    // Negative lookahead prevents partial matches (e.g., /home/n should not
+    // match inside /home/nate). Only replace when NOT followed by a word
+    // character, dot, or hyphen — characters valid in path components.
+    const QRegularExpression re(QRegularExpression::escape(home) + QStringLiteral("(?![\\w.-])"));
     QString result = input;
-    result.replace(home, QStringLiteral("~"));
+    result.replace(re, QStringLiteral("~"));
     return result;
-}
-
-QString SupportReport::redactConfigJson(const QString& json)
-{
-    return redactHomePath(json);
 }
 
 QString SupportReport::redactSessionJson(const QString& json)
@@ -163,8 +163,11 @@ QString SupportReport::sectionConfig()
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
         return QStringLiteral("*(could not read config file)*\n");
 
+    if (file.size() > MaxFileSize)
+        return QStringLiteral("*(config file too large: %1 bytes)*\n").arg(file.size());
+
     const QString content = QString::fromUtf8(file.readAll());
-    return QStringLiteral("```json\n%1\n```\n").arg(redactConfigJson(content));
+    return QStringLiteral("```json\n%1\n```\n").arg(redactHomePath(content));
 }
 
 QString SupportReport::sectionLayouts(LayoutManager* layoutManager)
@@ -218,6 +221,9 @@ QString SupportReport::sectionSession()
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
         return QStringLiteral("*(could not read session file)*\n");
 
+    if (file.size() > MaxFileSize)
+        return QStringLiteral("*(session file too large: %1 bytes)*\n").arg(file.size());
+
     const QString content = QString::fromUtf8(file.readAll());
     return QStringLiteral("```json\n%1\n```\n").arg(redactSessionJson(content));
 }
@@ -240,14 +246,17 @@ QString SupportReport::sectionLogs(int sinceMinutes)
     QByteArray rawOutput = proc.readAllStandardOutput();
 
     if (proc.exitCode() != 0 && rawOutput.isEmpty()) {
-        // Try syslog identifier fallback (some systems use the binary name differently)
-        proc.setArguments({QStringLiteral("--user"), QStringLiteral("--identifier=plasmazonesd"),
-                           QStringLiteral("--since"), QStringLiteral("%1 min ago").arg(sinceMinutes),
-                           QStringLiteral("--no-pager"), QStringLiteral("-o"), QStringLiteral("short-iso")});
-        proc.start();
-        if (!proc.waitForFinished(10000))
+        // Try syslog identifier fallback (some systems use the binary name differently).
+        // Use a fresh QProcess to avoid stale state from the first run.
+        QProcess fallback;
+        fallback.setProgram(QStringLiteral("journalctl"));
+        fallback.setArguments({QStringLiteral("--user"), QStringLiteral("--identifier=plasmazonesd"),
+                               QStringLiteral("--since"), QStringLiteral("%1 min ago").arg(sinceMinutes),
+                               QStringLiteral("--no-pager"), QStringLiteral("-o"), QStringLiteral("short-iso")});
+        fallback.start();
+        if (!fallback.waitForFinished(10000))
             return QStringLiteral("*(journalctl not available)*\n");
-        rawOutput = proc.readAllStandardOutput();
+        rawOutput = fallback.readAllStandardOutput();
     }
 
     QString output = QString::fromUtf8(rawOutput);

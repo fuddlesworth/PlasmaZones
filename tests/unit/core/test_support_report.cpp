@@ -117,15 +117,6 @@ private Q_SLOTS:
         QVERIFY(result.contains(QStringLiteral("~/test")));
     }
 
-    void testRedactConfigJson_redactsHomePaths()
-    {
-        const QString home = QDir::homePath();
-        const QString input = QStringLiteral("{\"path\": \"") + home + QStringLiteral("/config\"}");
-        const QString result = SupportReport::redactConfigJson(input);
-        QVERIFY(!result.contains(home));
-        QVERIFY(result.contains(QStringLiteral("~/config")));
-    }
-
     void testGenerate_returnsMarkdown()
     {
         // Generate with all nulls — should still produce valid structure
