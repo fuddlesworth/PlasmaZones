@@ -21,7 +21,6 @@ class AutotileEngine;
  *
  * Privacy:
  * - Home directory paths replaced with ~
- * - Window titles and classes redacted from session data
  * - No network calls — report is generated locally
  */
 class PLASMAZONES_EXPORT SupportReport
@@ -44,16 +43,6 @@ public:
      * @return String with home path replaced by ~
      */
     static QString redactHomePath(const QString& input);
-
-    /**
-     * @brief Redact window class/title info from session JSON
-     *
-     * Hashes windowClass values (first 8 hex chars of SHA-256) and removes
-     * window titles entirely.
-     * @param json Raw session JSON string
-     * @return Redacted session JSON string
-     */
-    static QString redactSessionJson(const QString& json);
 
 private:
     SupportReport() = delete;

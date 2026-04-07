@@ -42,7 +42,7 @@ while [[ $# -gt 0 ]]; do
             echo "The archive contains:"
             echo "  report.md        Redacted Markdown report from the daemon"
             echo "  config.json      Current configuration (home paths redacted)"
-            echo "  session.json     Window session state (classes hashed, titles stripped)"
+            echo "  session.json     Window session state (home paths redacted)"
             echo "  layouts/         User layout files"
             echo "  journal.log      Recent plasmazonesd journal entries"
             exit 0
@@ -104,39 +104,9 @@ if [[ -f "$CONFIG_DIR/config.json" ]]; then
     sed "s|$HOME_ESC|~|g" "$CONFIG_DIR/config.json" > "$STAGING/config.json"
 fi
 
-# 3. Session file (redact window classes via SHA-256 hash, strip titles, redact paths)
+# 3. Session file (redact home paths — window classes/titles kept for diagnostic value)
 if [[ -f "$CONFIG_DIR/session.json" ]]; then
-    if command -v python3 &>/dev/null; then
-        python3 -c "
-import json, hashlib, os, sys
-try:
-    with open(sys.argv[1]) as f:
-        data = json.load(f)
-except (json.JSONDecodeError, OSError):
-    sys.exit(1)
-def redact(obj):
-    if isinstance(obj, dict):
-        if 'windowClass' in obj:
-            obj['windowClass'] = hashlib.sha256(obj['windowClass'].encode()).hexdigest()[:8]
-        obj.pop('windowTitle', None)
-        obj.pop('title', None)
-        for v in list(obj.values()):
-            redact(v)
-    elif isinstance(obj, list):
-        for item in obj:
-            redact(item)
-redact(data)
-out = json.dumps(data, indent=2)
-home = os.environ.get('HOME', '')
-if home:
-    out = out.replace(home, '~')
-print(out)
-" "$CONFIG_DIR/session.json" > "$STAGING/session.json" 2>/dev/null || \
-            sed "s|$HOME_ESC|~|g" "$CONFIG_DIR/session.json" > "$STAGING/session.json"
-    else
-        echo "Warning: python3 not found — session.json window classes/titles not redacted" >&2
-        sed "s|$HOME_ESC|~|g" "$CONFIG_DIR/session.json" > "$STAGING/session.json"
-    fi
+    sed "s|$HOME_ESC|~|g" "$CONFIG_DIR/session.json" > "$STAGING/session.json"
 fi
 
 # 4. User layout files

@@ -12,12 +12,8 @@
 #include "../autotile/AutotileEngine.h"
 
 #include <QCoreApplication>
-#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QScreen>
@@ -42,51 +38,6 @@ QString SupportReport::redactHomePath(const QString& input)
     QString result = input;
     result.replace(re, QStringLiteral("~"));
     return result;
-}
-
-QString SupportReport::redactSessionJson(const QString& json)
-{
-    QJsonParseError err;
-    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &err);
-    if (err.error != QJsonParseError::NoError)
-        return redactHomePath(json);
-
-    // Walk the JSON and redact windowClass/windowTitle fields
-    QJsonObject root = doc.object();
-    const auto redactObject = [](QJsonObject& obj) {
-        if (obj.contains(QLatin1String("windowClass"))) {
-            const QString cls = obj.value(QLatin1String("windowClass")).toString();
-            const QByteArray hash = QCryptographicHash::hash(cls.toUtf8(), QCryptographicHash::Sha256).toHex().left(8);
-            obj[QLatin1String("windowClass")] = QString::fromLatin1(hash);
-        }
-        if (obj.contains(QLatin1String("windowTitle"))) {
-            obj.remove(QLatin1String("windowTitle"));
-        }
-        if (obj.contains(QLatin1String("title"))) {
-            obj.remove(QLatin1String("title"));
-        }
-    };
-
-    // Process top-level arrays that may contain window entries
-    for (auto it = root.begin(); it != root.end(); ++it) {
-        if (it.value().isArray()) {
-            QJsonArray arr = it.value().toArray();
-            for (int i = 0; i < arr.size(); ++i) {
-                if (arr[i].isObject()) {
-                    QJsonObject obj = arr[i].toObject();
-                    redactObject(obj);
-                    arr[i] = obj;
-                }
-            }
-            root[it.key()] = arr;
-        } else if (it.value().isObject()) {
-            QJsonObject obj = it.value().toObject();
-            redactObject(obj);
-            root[it.key()] = obj;
-        }
-    }
-
-    return redactHomePath(QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Indented)));
 }
 
 QString SupportReport::sectionVersion()
@@ -225,7 +176,7 @@ QString SupportReport::sectionSession()
         return QStringLiteral("*(session file too large: %1 bytes)*\n").arg(file.size());
 
     const QString content = QString::fromUtf8(file.readAll());
-    return QStringLiteral("```json\n%1\n```\n").arg(redactSessionJson(content));
+    return QStringLiteral("```json\n%1\n```\n").arg(redactHomePath(content));
 }
 
 QString SupportReport::sectionLogs(int sinceMinutes)
