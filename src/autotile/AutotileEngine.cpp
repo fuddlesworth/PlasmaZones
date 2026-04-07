@@ -385,6 +385,21 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         m_screenDesktopOverride.remove(screenId);
     }
 
+    // Clear pending restore entries for removed screens. Stale entries would
+    // restore windows to positions from the old layout if autotile is re-enabled.
+    if (!m_pendingAutotileRestores.isEmpty() && !removed.isEmpty()) {
+        for (auto rit = m_pendingAutotileRestores.begin(); rit != m_pendingAutotileRestores.end();) {
+            rit.value().removeIf([&removed](const PendingAutotileRestore& r) {
+                return removed.contains(r.screenId);
+            });
+            if (rit.value().isEmpty()) {
+                rit = m_pendingAutotileRestores.erase(rit);
+            } else {
+                ++rit;
+            }
+        }
+    }
+
     // Clear any pending deferred retiles for removed screens
     for (auto pit = m_pendingRetileScreens.begin(); pit != m_pendingRetileScreens.end();) {
         if (!m_autotileScreens.contains(*pit)) {
@@ -1597,37 +1612,41 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // Fallback: check pending restore queue (close/reopen restore).
     // When a window was removed from autotile and the same app reopens,
     // restore it to the saved position. FIFO consumption per appId.
+    bool restoredFromPendingQueue = false;
     if (!inserted) {
         const QString appId = Utils::extractAppId(windowId);
-        auto restoreIt = m_pendingAutotileRestores.find(appId);
-        if (restoreIt != m_pendingAutotileRestores.end() && !restoreIt.value().isEmpty()) {
-            // Find the first entry matching the current context
-            const TilingStateKey currentKey = currentKeyForScreen(screenId);
-            for (int i = 0; i < restoreIt.value().size(); ++i) {
-                const PendingAutotileRestore& entry = restoreIt.value().at(i);
-                if (entry.screenId == currentKey.screenId && entry.desktop == currentKey.desktop
-                    && entry.activity == currentKey.activity) {
-                    // Clamp position to current window count (windows may have been
-                    // added/removed since the position was saved)
-                    const int clampedPos = qMin(entry.position, state->windowCount());
-                    state->addWindow(windowId, clampedPos);
-                    inserted = true;
+        if (!appId.isEmpty()) {
+            auto restoreIt = m_pendingAutotileRestores.find(appId);
+            if (restoreIt != m_pendingAutotileRestores.end() && !restoreIt.value().isEmpty()) {
+                // Find the first entry matching the current context
+                const TilingStateKey currentKey = currentKeyForScreen(screenId);
+                for (int i = 0; i < restoreIt.value().size(); ++i) {
+                    const PendingAutotileRestore& entry = restoreIt.value().at(i);
+                    const TilingStateKey entryKey{entry.screenId, entry.desktop, entry.activity};
+                    if (entryKey == currentKey) {
+                        // Clamp position to current window count (windows may have been
+                        // added/removed since the position was saved)
+                        const int clampedPos = qMin(entry.position, state->windowCount());
+                        state->addWindow(windowId, clampedPos);
+                        inserted = true;
+                        restoredFromPendingQueue = true;
 
-                    // Restore floating state if the window was floating when removed
-                    if (entry.wasFloating) {
-                        state->setFloating(windowId, true);
+                        // Restore floating state if the window was floating when removed
+                        if (entry.wasFloating) {
+                            state->setFloating(windowId, true);
+                        }
+
+                        qCInfo(lcAutotile)
+                            << "Restored window" << windowId << "from pending queue at position=" << clampedPos
+                            << "(saved=" << entry.position << ")";
+
+                        // Consume this entry (FIFO)
+                        restoreIt.value().removeAt(i);
+                        if (restoreIt.value().isEmpty()) {
+                            m_pendingAutotileRestores.erase(restoreIt);
+                        }
+                        break;
                     }
-
-                    qCInfo(lcAutotile) << "Restored window" << windowId
-                                       << "from pending queue at position=" << clampedPos << "(saved=" << entry.position
-                                       << ")";
-
-                    // Consume this entry (FIFO)
-                    restoreIt.value().removeAt(i);
-                    if (restoreIt.value().isEmpty()) {
-                        m_pendingAutotileRestores.erase(restoreIt);
-                    }
-                    break;
                 }
             }
         }
@@ -1653,13 +1672,18 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // previously deactivated). Float state is per-mode: snap-mode floats don't
     // carry into autotile and vice versa. Only m_savedFloatingWindows (the
     // engine's own memory, keyed by screen+desktop+activity) is authoritative.
+    // Skip when the pending restore queue already handled floating — the queue's
+    // wasFloating reflects the state at close time, which is more recent than
+    // m_savedFloatingWindows (set at mode-toggle time).
     const TilingStateKey stateKey = currentKeyForScreen(screenId);
-    auto savedIt = m_savedFloatingWindows.find(stateKey);
-    if (savedIt != m_savedFloatingWindows.end() && savedIt.value().remove(windowId)) {
-        state->setFloating(windowId, true);
-        qCInfo(lcAutotile) << "Restored saved floating state for window" << windowId << "on screen" << screenId;
-        if (savedIt.value().isEmpty()) {
-            m_savedFloatingWindows.erase(savedIt);
+    if (!restoredFromPendingQueue) {
+        auto savedIt = m_savedFloatingWindows.find(stateKey);
+        if (savedIt != m_savedFloatingWindows.end() && savedIt.value().remove(windowId)) {
+            state->setFloating(windowId, true);
+            qCInfo(lcAutotile) << "Restored saved floating state for window" << windowId << "on screen" << screenId;
+            if (savedIt.value().isEmpty()) {
+                m_savedFloatingWindows.erase(savedIt);
+            }
         }
     }
 
@@ -1691,9 +1715,16 @@ void AutotileEngine::removeWindow(const QString& windowId)
                 entry.desktop = key.desktop;
                 entry.activity = key.activity;
                 entry.wasFloating = state->isFloating(windowId);
-                m_pendingAutotileRestores[appId].append(entry);
-                qCDebug(lcAutotile) << "Saved pending restore for" << appId << "position=" << pos
-                                    << "screen=" << key.screenId;
+                auto& queue = m_pendingAutotileRestores[appId];
+                // Cap per-appId queue to prevent unbounded growth from windows
+                // that are closed repeatedly without reopening.
+                constexpr int MaxPendingRestoresPerApp = 16;
+                if (queue.size() >= MaxPendingRestoresPerApp) {
+                    queue.removeFirst();
+                }
+                queue.append(entry);
+                qCInfo(lcAutotile) << "Saved pending restore for" << appId << "position=" << pos
+                                   << "screen=" << key.screenId;
             }
         }
         state->removeWindow(windowId);
