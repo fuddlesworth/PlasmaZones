@@ -942,22 +942,5 @@ Rectangle {
         }
 
     }
-    // Reset multi-select colors to defaults when entering multi-select mode
-
-    Behavior on opacity {
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
-        }
-
-    }
-
-    Behavior on Layout.preferredWidth {
-        NumberAnimation {
-            duration: 150
-            easing.type: Easing.OutCubic
-        }
-
-    }
 
 }

@@ -62,6 +62,12 @@ Item {
         Accessible.name: i18nc("@info:accessibility", "Success notification")
         Accessible.description: successNotificationLabel.text || ""
         Accessible.role: Accessible.AlertMessage
+        onOpacityChanged: {
+            if (opacity === 1)
+                successTranslate.y = 0;
+            else if (opacity === 0)
+                successTranslate.y = Kirigami.Units.smallSpacing;
+        }
 
         ColumnLayout {
             id: successNotificationContent
@@ -103,9 +109,10 @@ Item {
             }
         }
 
-        // Subtle lift on appearance
         transform: Translate {
-            y: successNotification.opacity > 0 ? 0 : Kirigami.Units.smallSpacing
+            id: successTranslate
+
+            y: Kirigami.Units.smallSpacing
 
             Behavior on y {
                 NumberAnimation {
@@ -153,6 +160,12 @@ Item {
         Accessible.name: i18nc("@info:accessibility", "Error notification")
         Accessible.description: errorNotificationLabel.text || ""
         Accessible.role: Accessible.AlertMessage
+        onOpacityChanged: {
+            if (opacity === 1)
+                errorTranslate.y = 0;
+            else if (opacity === 0)
+                errorTranslate.y = Kirigami.Units.smallSpacing;
+        }
 
         ColumnLayout {
             id: errorNotificationContent
@@ -206,9 +219,10 @@ Item {
             }
         }
 
-        // Subtle lift on appearance
         transform: Translate {
-            y: errorNotification.opacity > 0 ? 0 : Kirigami.Units.smallSpacing
+            id: errorTranslate
+
+            y: Kirigami.Units.smallSpacing
 
             Behavior on y {
                 NumberAnimation {

@@ -54,7 +54,7 @@ ToolBar {
 
                     required property var modelData
                     property bool isActive: editorController && modelData && modelData.name === editorController.targetScreen
-                    property bool isHovered: screenButtonMouse.containsMouse
+                    property bool isHovered: screenButtonMouse.containsMouse || activeFocus
 
                     width: screenButtonLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
                     height: Kirigami.Units.gridUnit * 3
@@ -65,6 +65,17 @@ ToolBar {
                     Accessible.name: modelData ? modelData.name : ""
                     Accessible.description: i18nc("@info", "Select screen for layout editing")
                     Accessible.role: Accessible.Button
+                    activeFocusOnTab: true
+                    Keys.onReturnPressed: {
+                        if (editorController && modelData)
+                            editorController.targetScreen = modelData.name;
+
+                    }
+                    Keys.onSpacePressed: {
+                        if (editorController && modelData)
+                            editorController.targetScreen = modelData.name;
+
+                    }
 
                     Label {
                         id: screenButtonLabel

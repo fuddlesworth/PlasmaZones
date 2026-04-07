@@ -343,6 +343,5 @@ Rectangle {
         }
 
     }
-    // Fully rounded ends (pill shape) - match zone border radius style
 
 }

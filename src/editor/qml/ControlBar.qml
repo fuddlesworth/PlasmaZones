@@ -400,7 +400,6 @@ ToolBar {
                 Accessible.role: Accessible.AlertMessage
             }
 
-            // Pulsing animation for unsaved indicator (matches settings dirty badge)
             SequentialAnimation {
                 running: statusSection.visible
                 loops: Animation.Infinite

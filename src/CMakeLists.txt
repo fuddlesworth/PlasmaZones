@@ -627,6 +627,7 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/ResizeHandles.qml
         editor/qml/ZoneContent.qml
         editor/qml/ActionButtons.qml
+        editor/qml/ZoneActionButton.qml
         editor/qml/SnapIndicator.qml
         editor/qml/DimensionTooltip.qml
         editor/qml/EditorNotifications.qml
