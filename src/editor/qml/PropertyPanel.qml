@@ -65,7 +65,7 @@ Rectangle {
     Layout.maximumWidth: visible ? 280 : 0
     Layout.minimumWidth: 0
     Layout.fillHeight: true
-    color: Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.95)
+    color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.panelAlpha)
     border.width: Math.round(Kirigami.Units.devicePixelRatio)
     border.color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
     visible: panelMode !== "hidden"

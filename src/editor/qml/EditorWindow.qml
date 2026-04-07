@@ -605,6 +605,38 @@ Window {
                     previewMode: editorWindow.previewMode
                 }
 
+                Behavior on anchors.leftMargin {
+                    NumberAnimation {
+                        duration: 150
+                        easing.type: Easing.OutCubic
+                    }
+
+                }
+
+                Behavior on anchors.topMargin {
+                    NumberAnimation {
+                        duration: 150
+                        easing.type: Easing.OutCubic
+                    }
+
+                }
+
+                Behavior on anchors.rightMargin {
+                    NumberAnimation {
+                        duration: 150
+                        easing.type: Easing.OutCubic
+                    }
+
+                }
+
+                Behavior on anchors.bottomMargin {
+                    NumberAnimation {
+                        duration: 150
+                        easing.type: Easing.OutCubic
+                    }
+
+                }
+
             }
 
         }

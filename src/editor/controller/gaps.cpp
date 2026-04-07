@@ -439,8 +439,8 @@ void EditorController::refreshUsableAreaInsets()
 
     if (screenIface.isValid()) {
         QDBusPendingCall pending = screenIface.asyncCall(QStringLiteral("getAvailableGeometry"), screenId);
-        auto* watcher = new QDBusPendingCallWatcher(pending, const_cast<EditorController*>(this));
-        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, const_cast<EditorController*>(this),
+        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
                          [this, fullGeom](QDBusPendingCallWatcher* w) {
                              w->deleteLater();
                              QDBusPendingReply<QRect> reply = *w;
@@ -453,7 +453,9 @@ void EditorController::refreshUsableAreaInsets()
         return;
     }
 
-    // No daemon — use Qt fallback directly
+    // No daemon — Qt's availableGeometry is used as fallback in applyUsableAreaInsets,
+    // but on Wayland it often returns the full geometry (panels aren't reported).
+    qCWarning(lcEditor) << "D-Bus daemon unreachable; usable area insets may be inaccurate";
     applyUsableAreaInsets(fullGeom, fullGeom);
 }
 

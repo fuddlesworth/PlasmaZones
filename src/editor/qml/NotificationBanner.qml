@@ -27,6 +27,7 @@ Rectangle {
     function show(message) {
         bannerLabel.text = message;
         hideAnim.stop();
+        showAnim.stop();
         bannerTranslate.y = Kirigami.Units.smallSpacing; // Reset slide offset so animation replays
         showAnim.start();
         dismissTimer.restart();
@@ -41,9 +42,9 @@ Rectangle {
     height: bannerContent.implicitHeight + Kirigami.Units.gridUnit * 2
     visible: opacity > 0
     opacity: 0
-    color: Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.95)
+    color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.panelAlpha)
     border.color: accentColor
-    border.width: Math.round(Kirigami.Units.devicePixelRatio * 2)
+    border.width: Math.round(Kirigami.Units.devicePixelRatio * Theme.focusBorderWidth)
     radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
     z: 200
     Accessible.name: accessibleRoleName

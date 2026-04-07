@@ -9,13 +9,17 @@
 
 // Standard animation duration and easing for all editor transitions
 var animDuration = 200;
-var animEasing = Easing.OutCubic;
-
-// Standard border width for subtle separators (1 device pixel)
-var borderWidth = 1; // Use Math.round(Kirigami.Units.devicePixelRatio) at call site when needed
+var animEasing = 3; // Easing.OutCubic (literal — .pragma library has no QML context)
 
 // Standard corner radius multiplier (smallSpacing * this)
 var radiusMultiplier = 1.5;
+
+// Background alpha levels
+var panelAlpha = 0.95;   // PropertyPanel, NotificationBanner — more opaque, content-heavy
+var toolbarAlpha = 0.90; // TopBar, ControlBar — lighter, chrome-level
+
+// Focus ring border width (device-pixel-aware)
+var focusBorderWidth = 2; // Use Math.round(devicePixelRatio * focusBorderWidth) at call site
 
 function withAlpha(baseColor, alpha) {
     return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, alpha);

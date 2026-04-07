@@ -381,6 +381,11 @@ ToolBar {
 
             spacing: Kirigami.Units.smallSpacing
             visible: editorController ? (editorController.hasUnsavedChanges || false) : false
+            onVisibleChanged: {
+                if (visible)
+                    pulseAnim.restart();
+
+            }
 
             Kirigami.Icon {
                 id: unsavedIcon
@@ -406,7 +411,7 @@ ToolBar {
         SequentialAnimation {
             id: pulseAnim
 
-            running: statusSection.visible && statusSection.Window.visibility !== Window.Minimized
+            running: false
             loops: 3
             onStopped: {
                 unsavedIcon.opacity = 1;
@@ -477,7 +482,7 @@ ToolBar {
     }
 
     background: Rectangle {
-        color: Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.9)
+        color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.toolbarAlpha)
 
         // Top accent line
         Rectangle {

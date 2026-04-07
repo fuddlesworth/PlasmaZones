@@ -47,7 +47,7 @@ AbstractButton {
 
             return actionButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.15);
         }
-        border.width: actionButton.activeFocus ? 2 : Math.round(Kirigami.Units.devicePixelRatio)
+        border.width: actionButton.activeFocus ? Math.round(Kirigami.Units.devicePixelRatio * Theme.focusBorderWidth) : Math.round(Kirigami.Units.devicePixelRatio)
         border.color: {
             if (actionButton.activeFocus)
                 return Theme.withAlpha(Kirigami.Theme.highlightColor, 0.8);

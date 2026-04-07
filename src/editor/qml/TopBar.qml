@@ -213,16 +213,16 @@ ToolBar {
 
                     Behavior on color {
                         ColorAnimation {
-                            duration: 200
-                            easing.type: Easing.OutCubic
+                            duration: Theme.animDuration
+                            easing.type: Theme.animEasing
                         }
 
                     }
 
                     Behavior on border.color {
                         ColorAnimation {
-                            duration: 200
-                            easing.type: Easing.OutCubic
+                            duration: Theme.animDuration
+                            easing.type: Theme.animEasing
                         }
 
                     }
@@ -483,7 +483,7 @@ ToolBar {
     }
 
     background: Rectangle {
-        color: Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.9)
+        color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.toolbarAlpha)
 
         // Bottom accent line
         Rectangle {
