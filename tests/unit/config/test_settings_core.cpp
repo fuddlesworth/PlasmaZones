@@ -492,6 +492,60 @@ private Q_SLOTS:
     }
 
     /**
+     * save() must purge unknown root-level groups that are not part of the
+     * known schema (neither managed nor explicitly unmanaged).  This catches
+     * stale groups left behind by removed features, botched migrations, or
+     * hand-editing.
+     */
+    void testSave_purgesUnknownRootLevelGroups()
+    {
+        IsolatedConfigGuard guard;
+
+        // Inject unknown root-level groups
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            {
+                auto g = backend->group(QStringLiteral("ObsoleteFeature"));
+                g->writeString(QStringLiteral("Key"), QStringLiteral("value"));
+            }
+            {
+                auto g = backend->group(QStringLiteral("OldGroupFromV0"));
+                g->writeBool(QStringLiteral("Flag"), true);
+            }
+            // Also inject a valid unmanaged group to prove it survives
+            {
+                auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
+                g->writeString(QStringLiteral("1"), QStringLiteral("layout-id"));
+            }
+            backend->sync();
+        }
+
+        Settings settings;
+        settings.save();
+
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        const QStringList groups = backend->groupList();
+
+        // Unknown groups must be gone
+        bool hasObsolete = false;
+        bool hasOldGroup = false;
+        for (const QString& g : groups) {
+            if (g == QStringLiteral("ObsoleteFeature"))
+                hasObsolete = true;
+            if (g == QStringLiteral("OldGroupFromV0"))
+                hasOldGroup = true;
+        }
+        QVERIFY2(!hasObsolete, "Unknown root-level group 'ObsoleteFeature' must be purged by save()");
+        QVERIFY2(!hasOldGroup, "Unknown root-level group 'OldGroupFromV0' must be purged by save()");
+
+        // Unmanaged group must survive
+        {
+            auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
+            QCOMPARE(g->readString(QStringLiteral("1")), QStringLiteral("layout-id"));
+        }
+    }
+
+    /**
      * save() round-trip must preserve all valid settings values even after
      * stale key purging (regression guard — purging must not corrupt data).
      */
