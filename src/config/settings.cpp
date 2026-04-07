@@ -345,7 +345,7 @@ void Settings::reset()
     }
     m_configBackend->deleteGroup(ConfigDefaults::updatesGroup());
     m_configBackend->deleteGroup(ConfigDefaults::tilingQuickLayoutSlotsGroup());
-    m_configBackend->deleteGroup(ConfigDefaults::autoTileStateGroup());
+    m_configBackend->deleteGroup(ConfigDefaults::windowTrackingGroup());
     deletePerScreenGroups(m_configBackend);
     m_configBackend->sync();
     load();

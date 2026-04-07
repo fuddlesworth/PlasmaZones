@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <QJsonArray>
 #include <QPointer>
 #include <QString>
 #include <QTimer>
@@ -11,7 +12,6 @@
 namespace PlasmaZones {
 
 class AutotileEngine;
-class IConfigBackend;
 class Settings;
 
 /**
@@ -21,7 +21,7 @@ class Settings;
  * - Synchronizing AutotileConfig from Settings (syncFromSettings)
  * - Connecting to Settings change signals for live updates (connectToSettings)
  * - Debouncing rapid settings changes into coalesced retiles
- * - Session persistence via KConfig (saveState/loadState)
+ * - Session persistence serialization (serializeWindowOrders/deserializeWindowOrders)
  * - Encapsulating signal-blocked Settings writes (syncAlgorithmToSettings)
  *
  * Uses a back-pointer to AutotileEngine for access to config, algorithm,
@@ -33,7 +33,7 @@ class Settings;
 class PLASMAZONES_EXPORT SettingsBridge
 {
 public:
-    explicit SettingsBridge(AutotileEngine* engine, IConfigBackend* configBackend = nullptr);
+    explicit SettingsBridge(AutotileEngine* engine);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings synchronization
@@ -86,18 +86,29 @@ public:
     void syncShortcutAdjustment(qreal splitRatio, int masterCount);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Session persistence
+    // Session persistence (serialization only — persistence owned by WTA)
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Save tiling state to KConfig for session persistence
+     * @brief Serialize per-context autotile window orders to JSON
+     *
+     * Returns a JSON array of per-(screen, desktop, activity) entries with
+     * window order and floating state. masterCount/splitRatio are NOT included
+     * — they are persisted by Settings via AutotileScreen:<id> per-screen overrides.
+     *
+     * Called by WTA's save cycle via persistence delegate.
      */
-    void saveState();
+    QJsonArray serializeWindowOrders() const;
 
     /**
-     * @brief Load tiling state from KConfig
+     * @brief Deserialize per-context autotile window orders from JSON
+     *
+     * Restores window order as pre-seeded insertion order and floating
+     * windows into the saved-floating set for re-floating on arrival.
+     *
+     * @param orders JSON array produced by serializeWindowOrders()
      */
-    void loadState();
+    void deserializeWindowOrders(const QJsonArray& orders);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings access
@@ -116,7 +127,6 @@ private:
     void processSettingsRetile();
 
     AutotileEngine* m_engine = nullptr;
-    IConfigBackend* m_configBackend = nullptr; // non-owned, from daemon
     QPointer<Settings> m_settings;
     QTimer m_settingsRetileTimer;
     QTimer m_shortcutSaveTimer; // debounced save after shortcut adjustments

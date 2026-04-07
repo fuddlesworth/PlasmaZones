@@ -7,12 +7,14 @@
 #include "core/constants.h"
 #include "core/iwindowengine.h"
 #include <QHash>
+#include <QJsonArray>
 #include <QObject>
 #include <QRect>
 #include <QSet>
 #include <QSize>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <functional>
 #include <memory>
 
@@ -52,7 +54,6 @@ class NavigationController;
 class PerScreenConfigResolver;
 class ScreenManager;
 class Settings;
-class IConfigBackend;
 class SettingsBridge;
 class TilingAlgorithm;
 class TilingState;
@@ -79,8 +80,7 @@ class PLASMAZONES_EXPORT AutotileEngine : public QObject, public IWindowEngine
 
 public:
     explicit AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
-                            ScreenManager* screenManager, IConfigBackend* configBackend = nullptr,
-                            QObject* parent = nullptr);
+                            ScreenManager* screenManager, QObject* parent = nullptr);
     ~AutotileEngine() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -249,22 +249,59 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Save tiling state to KConfig for session persistence
+     * @brief Save tiling state via persistence delegate (IWindowEngine contract)
      *
-     * Serializes per-screen TilingState (window order by stableId,
-     * masterCount, splitRatio, algorithm) to the [AutoTileState] config group.
-     * Called by Daemon::stop() before shutdown.
+     * Delegates to the save function set by setPersistenceDelegate().
+     * Wired by the daemon to WTA's saveState(), which triggers a full WTA save
+     * including both snap and autotile state. Autotile window orders are embedded
+     * in WTA's save cycle via setTilingStateDelegates — this method exists to
+     * satisfy the IWindowEngine interface. For autotile-only persistence,
+     * the tilingChanged signal → WTA::scheduleSaveState() connection is the
+     * primary path.
      */
     void saveState() override;
 
     /**
-     * @brief Load tiling state from KConfig
+     * @brief Load tiling state via persistence delegate (IWindowEngine contract)
      *
-     * Deserializes per-screen state from the [AutoTileState] config group.
-     * Actual retiling is deferred until windows are announced by the KWin effect.
-     * Called by Daemon::start() after initialization.
+     * Delegates to the load function set by setPersistenceDelegate().
+     * Wired by the daemon to WTA's loadState(), which triggers a full WTA load
+     * including autotile window order restoration via setTilingStateDelegates.
      */
     void loadState() override;
+
+    /**
+     * @brief Set persistence callbacks for save/load
+     *
+     * KConfig persistence is owned by WindowTrackingAdaptor (engine is KConfig-free).
+     * These callbacks allow AutotileEngine to fulfill the IWindowEngine persistence
+     * contract without introducing KConfig as a dependency.
+     *
+     * @param saveFn Called by saveState() to persist tiling state
+     * @param loadFn Called by loadState() to restore tiling state
+     */
+    void setPersistenceDelegate(std::function<void()> saveFn, std::function<void()> loadFn)
+    {
+        m_persistSaveFn = std::move(saveFn);
+        m_persistLoadFn = std::move(loadFn);
+    }
+
+    /**
+     * @brief Serialize per-context autotile window orders to JSON
+     *
+     * Forwarded to SettingsBridge. Called by WTA's save cycle via persistence delegate.
+     * masterCount/splitRatio are NOT included — Settings owns those.
+     */
+    QJsonArray serializeWindowOrders() const;
+
+    /**
+     * @brief Deserialize per-context autotile window orders from JSON
+     *
+     * Forwarded to SettingsBridge. Restores window order and floating state.
+     *
+     * @param orders JSON array produced by serializeWindowOrders()
+     */
+    void deserializeWindowOrders(const QJsonArray& orders);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings synchronization
@@ -867,6 +904,24 @@ private:
     bool cleanupPendingOrderIfResolved(const QString& screenId);
 
     /**
+     * @brief Schedule promotion of saved window orders for the current context
+     *
+     * Coalesced via zero-delay timer so that simultaneous desktop+activity switches
+     * (both calling this method) result in a single promotion after both
+     * m_currentDesktop and m_currentActivity are set to their final values.
+     */
+    void schedulePromoteSavedWindowOrders();
+
+    /**
+     * @brief Promote saved window orders for the current context into pending orders
+     *
+     * Moves orders from m_savedWindowOrders (populated by deserializeWindowOrders
+     * for all contexts) into m_pendingInitialOrders so windows arriving on the
+     * new desktop get their saved ordering.
+     */
+    void promoteSavedWindowOrders();
+
+    /**
      * @brief Validate that a windowId is not empty, logging a warning if it is
      * @param windowId Window ID to validate
      * @param operation Operation name for the warning message
@@ -910,6 +965,10 @@ private:
     std::unique_ptr<NavigationController> m_navigation;
     std::unique_ptr<SettingsBridge> m_settingsBridge;
 
+    // Persistence delegates (KConfig stays in WTA layer)
+    std::function<void()> m_persistSaveFn;
+    std::function<void()> m_persistLoadFn;
+
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;
     bool m_algorithmEverSet = false; ///< True after first successful setAlgorithm() call
@@ -945,6 +1004,18 @@ private:
     // removeWindow() if a pre-seeded window closes before arriving.
     QHash<QString, QStringList> m_pendingInitialOrders;
     QHash<QString, uint64_t> m_pendingOrderGeneration;
+
+    // Saved window orders from session persistence, keyed by full context.
+    // On desktop/activity switch, orders for the new context are promoted into
+    // m_pendingInitialOrders so windows arriving on the new desktop get their
+    // saved ordering. Consumed once per context (removed after promotion).
+    QHash<TilingStateKey, QStringList> m_savedWindowOrders;
+
+    // Zero-delay timer to coalesce promoteSavedWindowOrders() calls during
+    // simultaneous desktop+activity switches. Without coalescing, the first
+    // call (after setCurrentDesktop) would promote using the stale activity,
+    // potentially consuming the wrong specific-activity entry.
+    QTimer m_promoteOrdersTimer;
 
     // Per-screen overflow tracking with O(1) reverse-index lookups.
     OverflowManager m_overflow;

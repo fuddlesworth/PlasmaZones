@@ -42,7 +42,7 @@ constexpr int PendingOrderTimeoutMs = 10000;
 } // namespace
 
 AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
-                               ScreenManager* screenManager, IConfigBackend* configBackend, QObject* parent)
+                               ScreenManager* screenManager, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)
@@ -50,9 +50,16 @@ AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingServi
     , m_config(std::make_unique<AutotileConfig>())
     , m_configResolver(std::make_unique<PerScreenConfigResolver>(this))
     , m_navigation(std::make_unique<NavigationController>(this))
-    , m_settingsBridge(std::make_unique<SettingsBridge>(this, configBackend))
+    , m_settingsBridge(std::make_unique<SettingsBridge>(this))
     , m_algorithmId(AlgorithmRegistry::defaultAlgorithmId())
 {
+    // Zero-delay timer to coalesce promoteSavedWindowOrders() calls during
+    // simultaneous desktop+activity switches. Fires on the next event loop
+    // pass after both m_currentDesktop and m_currentActivity are updated.
+    m_promoteOrdersTimer.setSingleShot(true);
+    m_promoteOrdersTimer.setInterval(0);
+    connect(&m_promoteOrdersTimer, &QTimer::timeout, this, &AutotileEngine::promoteSavedWindowOrders);
+
     connectSignals();
 }
 
@@ -174,6 +181,7 @@ void AutotileEngine::setCurrentDesktop(int desktop)
     // desktop AND activity change simultaneously (e.g., activity-per-desktop).
     m_isDesktopContextSwitch |= (m_currentDesktop > 0);
     m_currentDesktop = desktop;
+    schedulePromoteSavedWindowOrders();
 }
 
 void AutotileEngine::setCurrentActivity(const QString& activity)
@@ -188,6 +196,7 @@ void AutotileEngine::setCurrentActivity(const QString& activity)
     // desktop AND activity change simultaneously.
     m_isDesktopContextSwitch |= !m_currentActivity.isEmpty();
     m_currentActivity = activity;
+    schedulePromoteSavedWindowOrders();
 }
 
 void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky)
@@ -847,12 +856,26 @@ TilingAlgorithm* AutotileEngine::effectiveAlgorithm(const QString& screenId) con
 
 void AutotileEngine::saveState()
 {
-    m_settingsBridge->saveState();
+    if (m_persistSaveFn) {
+        m_persistSaveFn();
+    }
 }
 
 void AutotileEngine::loadState()
 {
-    m_settingsBridge->loadState();
+    if (m_persistLoadFn) {
+        m_persistLoadFn();
+    }
+}
+
+QJsonArray AutotileEngine::serializeWindowOrders() const
+{
+    return m_settingsBridge->serializeWindowOrders();
+}
+
+void AutotileEngine::deserializeWindowOrders(const QJsonArray& orders)
+{
+    m_settingsBridge->deserializeWindowOrders(orders);
 }
 
 void AutotileEngine::scheduleRetileForScreen(const QString& screenId)
@@ -2105,6 +2128,49 @@ bool AutotileEngine::cleanupPendingOrderIfResolved(const QString& screenId)
     qCDebug(lcAutotile) << "All pre-seeded windows resolved for screen" << screenId;
     m_pendingInitialOrders.erase(pit);
     return true;
+}
+
+void AutotileEngine::schedulePromoteSavedWindowOrders()
+{
+    if (!m_savedWindowOrders.isEmpty()) {
+        m_promoteOrdersTimer.start();
+    }
+}
+
+void AutotileEngine::promoteSavedWindowOrders()
+{
+    if (m_savedWindowOrders.isEmpty()) {
+        return;
+    }
+
+    // Promote saved window orders matching the new desktop/activity context
+    // into m_pendingInitialOrders so that windows arriving on this desktop
+    // get their saved ordering restored. Replaces any stale pending order
+    // from the previous context (e.g., desktop 1's unconsumed pending order
+    // is replaced by desktop 2's order when switching to desktop 2).
+    for (auto it = m_savedWindowOrders.begin(); it != m_savedWindowOrders.end();) {
+        const TilingStateKey& key = it.key();
+        const bool matchesContext =
+            key.desktop == m_currentDesktop && (key.activity.isEmpty() || key.activity == m_currentActivity);
+
+        if (matchesContext) {
+            m_pendingInitialOrders[key.screenId] = it.value();
+            qCDebug(lcAutotile) << "Promoted saved window order for screen" << key.screenId << "desktop" << key.desktop
+                                << "(" << it.value().size() << "windows)";
+            // Erase specific-activity entries (consumed once). Keep wildcard entries
+            // (activity="") so they can be re-promoted on future context switches —
+            // erasing them here would lose the order for other activities on the same
+            // desktop, and cause incorrect results when setCurrentDesktop() and
+            // setCurrentActivity() both call this method during a simultaneous switch.
+            if (!key.activity.isEmpty()) {
+                it = m_savedWindowOrders.erase(it);
+            } else {
+                ++it;
+            }
+        } else {
+            ++it;
+        }
+    }
 }
 
 TilingState* AutotileEngine::stateForWindow(const QString& windowId, QString* outScreenId)
