@@ -7,6 +7,29 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-04-07
+
+### Added
+- **Support report generator** ([#302]): `plasmazones-report` script collects daemon logs, config, and data directory into a tar.gz archive for bug reports and discussions.
+- **Autotile window preservation** ([#301]): Autotiled windows now survive layout switches, mode toggles, and daemon restarts — matching the preservation behavior that snapped windows already had.
+- **Disabled-context OSD** ([#297]): Visual feedback when toggling PlasmaZones on a disabled desktop, activity, or screen — shows why nothing happened and where to change it.
+- **Config v2 nested schema** ([#295]): `config.json` restructured from flat keys to a nested hierarchy mirroring the settings UI. Existing v1 configs are migrated automatically.
+- **Systemd service autostart**: Enabling the daemon toggle now also enables the systemd user service so PlasmaZones starts on login.
+
+### Changed
+- **Assignments split to `assignments.json`** ([#300]): Layout-to-screen assignments moved out of the main config into a dedicated file, reducing config churn and merge conflicts.
+- **Session state split to `session.json`** ([#298]): Ephemeral session data (window positions, floating state) moved to its own file so it doesn't dirty the user config.
+- **Autotile persistence refactor** ([#296]): Session persistence moved from `AutoTileState` to `WindowTrackingAdaptor` for cleaner separation between tiling logic and state serialization.
+- **Settings consolidation**: `settings-window.conf` merged into `plasmazones-settings.conf`.
+
+### Fixed
+- **Assignment persistence across restart** ([#303]): Layout assignments and tiling window order now survive daemon restarts and mode-cycle toggling.
+- **Autotile ratio retry** ([#299]): Bounded retry for transient geometry failures during autotile layout; stale min-size overrides are cleared after resize settles.
+- **Config purge unknown keys** ([#300]): Unknown root-level groups are removed on save, preventing config pollution from obsolete or misspelled keys.
+- **Window restore after config v2 migration** ([#295]): `loadState` was bypassing `IConfigBackend` group API after the schema change, breaking window restore on first launch.
+- **Watcher double-delete guard** ([#302]): Fixed a use-after-free race in the file watcher teardown path.
+- **Format warning in `splitDotPath`**: Fixed `qsizetype` vs `%d` printf mismatch.
+
 ## [2.7.1] - 2026-04-06
 
 ### Added
@@ -1158,13 +1181,26 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.7.0...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.0...HEAD
+[2.8.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.7.1...v2.8.0
+[2.7.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.7.0...v2.7.1
 [2.7.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.3...v2.6.0
 [#286]: https://github.com/fuddlesworth/PlasmaZones/pull/286
 [#288]: https://github.com/fuddlesworth/PlasmaZones/pull/288
 [#289]: https://github.com/fuddlesworth/PlasmaZones/pull/289
 [#290]: https://github.com/fuddlesworth/PlasmaZones/pull/290
+[#292]: https://github.com/fuddlesworth/PlasmaZones/pull/292
+[#294]: https://github.com/fuddlesworth/PlasmaZones/pull/294
+[#295]: https://github.com/fuddlesworth/PlasmaZones/pull/295
+[#296]: https://github.com/fuddlesworth/PlasmaZones/pull/296
+[#297]: https://github.com/fuddlesworth/PlasmaZones/pull/297
+[#298]: https://github.com/fuddlesworth/PlasmaZones/pull/298
+[#299]: https://github.com/fuddlesworth/PlasmaZones/pull/299
+[#300]: https://github.com/fuddlesworth/PlasmaZones/pull/300
+[#301]: https://github.com/fuddlesworth/PlasmaZones/pull/301
+[#302]: https://github.com/fuddlesworth/PlasmaZones/pull/302
+[#303]: https://github.com/fuddlesworth/PlasmaZones/pull/303
 [2.5.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.2...v2.5.3
 [2.5.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.1...v2.5.2
 [2.5.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.5.0...v2.5.1
