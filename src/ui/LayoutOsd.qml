@@ -255,10 +255,10 @@ Window {
 
             }
 
-            // Lock overlay (shown on top of preview when locked)
+            // Lock overlay (shown on top of preview when locked — mutually exclusive with disabled)
             Rectangle {
                 anchors.fill: previewContainer
-                visible: root.locked
+                visible: root.locked && !root.disabled
                 color: Qt.rgba(0, 0, 0, 0.5)
                 radius: Kirigami.Units.smallSpacing
 
@@ -312,7 +312,7 @@ Window {
                     id: nameLabel
 
                     anchors.verticalCenter: parent.verticalCenter
-                    text: root.disabled ? root.disabledReason : root.locked ? i18n("%1 (Locked)", root.layoutName) : root.layoutName
+                    text: root.disabled ? root.disabledReason : (root.locked ? i18n("%1 (Locked)", root.layoutName) : root.layoutName)
                     font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.2
                     font.weight: Font.Medium
                     color: textColor

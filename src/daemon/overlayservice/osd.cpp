@@ -204,6 +204,7 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     writeQmlProperty(window, QStringLiteral("disabled"), true);
     writeQmlProperty(window, QStringLiteral("disabledReason"), reason);
     writeQmlProperty(window, QStringLiteral("layoutId"), QString());
+    // layoutName set to reason as fallback for accessibility / text-mode OSD label
     writeQmlProperty(window, QStringLiteral("layoutName"), reason);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("aspectRatioClass"), QStringLiteral("any"));

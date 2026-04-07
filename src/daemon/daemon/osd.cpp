@@ -148,22 +148,22 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
     showLockedOsd(screenId);
 }
 
-void Daemon::showContextDisabledOsd(const QString& screenId)
+void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const QString& activity)
 {
     OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
     if (style == OsdStyle::None) {
         return;
     }
 
-    const int desktop = currentDesktop();
-    const QString activity = currentActivity();
+    // Use the shared enum so the reason priority stays in sync with isContextDisabled().
+    const DisabledReason why = contextDisabledReason(m_settings.get(), screenId, desktop, activity);
 
-    // Build a human-readable reason
     QString reason;
-    if (m_settings && m_settings->isMonitorDisabled(screenId)) {
+    switch (why) {
+    case DisabledReason::MonitorDisabled:
         reason = PzI18n::tr("Disabled on this monitor");
-    } else if (desktop > 0 && m_settings && m_settings->isDesktopDisabled(screenId, desktop)) {
-        // Try to get the desktop name for a friendlier message
+        break;
+    case DisabledReason::DesktopDisabled: {
         QString desktopLabel;
         if (m_virtualDesktopManager) {
             const QStringList names = m_virtualDesktopManager->desktopNames();
@@ -175,10 +175,14 @@ void Daemon::showContextDisabledOsd(const QString& screenId)
             desktopLabel = PzI18n::tr("Desktop %1").arg(desktop);
         }
         reason = PzI18n::tr("Disabled on %1").arg(desktopLabel);
-    } else if (!activity.isEmpty() && m_settings && m_settings->isActivityDisabled(screenId, activity)) {
+        break;
+    }
+    case DisabledReason::ActivityDisabled:
         reason = PzI18n::tr("Disabled on this activity");
-    } else {
+        break;
+    case DisabledReason::NotDisabled:
         reason = PzI18n::tr("Disabled");
+        break;
     }
 
     if (style == OsdStyle::Preview && m_overlayService) {
@@ -399,7 +403,7 @@ void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
     for (QScreen* screen : m_screenManager->screens()) {
         const QString screenId = Utils::screenIdentifier(screen);
         if (isContextDisabled(m_settings.get(), screenId, desktop, activity)) {
-            showContextDisabledOsd(screenId);
+            showContextDisabledOsd(screenId, desktop, activity);
             continue;
         }
         const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
