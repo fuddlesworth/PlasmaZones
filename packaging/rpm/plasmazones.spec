@@ -160,7 +160,7 @@ echo ""
 %{_bindir}/plasmazonesd
 %{_bindir}/plasmazones-editor
 %{_bindir}/plasmazones-settings
-%{_bindir}/plasmazones-support-report
+%{_bindir}/plasmazones-report
 
 # Libraries
 %{_libdir}/libplasmazones_core.so*

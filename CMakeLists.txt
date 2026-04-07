@@ -355,9 +355,9 @@ install(DIRECTORY data/algorithms/
 )
 
 # Install support report script
-install(PROGRAMS scripts/plasmazones-support-report.sh
+install(PROGRAMS scripts/plasmazones-report.sh
     DESTINATION ${KDE_INSTALL_BINDIR}
-    RENAME plasmazones-support-report
+    RENAME plasmazones-report
 )
 
 # Install icons (hicolor for dark themes, hicolor-light for light themes)
