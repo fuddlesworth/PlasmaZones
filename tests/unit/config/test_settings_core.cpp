@@ -554,6 +554,40 @@ private Q_SLOTS:
     }
 
     /**
+     * save() must purge unknown dot-path groups (e.g. "OldFeature.SubGroup")
+     * by deleting the entire top-level parent.
+     */
+    void testSave_purgesUnknownDotPathGroups()
+    {
+        IsolatedConfigGuard guard;
+
+        // Inject an unknown nested group
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            {
+                auto g = backend->group(QStringLiteral("RemovedFeature.SubGroup"));
+                g->writeString(QStringLiteral("Key"), QStringLiteral("leftover"));
+            }
+            {
+                auto g = backend->group(QStringLiteral("RemovedFeature.SubGroup.Deeper"));
+                g->writeBool(QStringLiteral("Flag"), true);
+            }
+            backend->sync();
+        }
+
+        Settings settings;
+        settings.save();
+
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        const QStringList groups = backend->groupList();
+
+        for (const QString& g : groups) {
+            QVERIFY2(!g.startsWith(QStringLiteral("RemovedFeature")),
+                     qPrintable(QStringLiteral("Dot-path group '%1' must be purged by save()").arg(g)));
+        }
+    }
+
+    /**
      * save() round-trip must preserve all valid settings values even after
      * stale key purging (regression guard — purging must not corrupt data).
      */

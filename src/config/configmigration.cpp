@@ -716,7 +716,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // by this path (e.g. upgraded between the v2 stamp and this split).
     {
         QJsonObject assignRoot;
-        const QLatin1String assignPrefix("Assignment:");
+        const QString assignPrefix = ConfigDefaults::assignmentGroupPrefix();
         QStringList keysToRemove;
         for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
             if (it.key().startsWith(assignPrefix)) {
@@ -724,16 +724,18 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
                 keysToRemove.append(it.key());
             }
         }
-        if (root.contains(QLatin1String("QuickLayouts"))) {
-            assignRoot[QLatin1String("QuickLayouts")] = root.value(QLatin1String("QuickLayouts"));
-            keysToRemove.append(QLatin1String("QuickLayouts"));
+        const QString quickLayoutsKey = ConfigDefaults::quickLayoutsGroup();
+        if (root.contains(quickLayoutsKey)) {
+            assignRoot[quickLayoutsKey] = root.value(quickLayoutsKey);
+            keysToRemove.append(quickLayoutsKey);
         }
         // ModeTracking is NOT extracted to assignments.json — it is consumed
         // by LayoutManager::loadAssignments() directly from config.json and
         // deleted after application.  Extracting it here would leave dead data
         // in assignments.json that nothing reads.
-        if (root.contains(QLatin1String("ModeTracking"))) {
-            keysToRemove.append(QLatin1String("ModeTracking"));
+        const QString modeTrackingKey = ConfigDefaults::modeTrackingGroup();
+        if (root.contains(modeTrackingKey)) {
+            keysToRemove.append(modeTrackingKey);
         }
         if (!assignRoot.isEmpty()) {
             const QString assignPath = ConfigDefaults::assignmentsFilePath();

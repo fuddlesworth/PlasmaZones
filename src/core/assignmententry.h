@@ -38,15 +38,17 @@ struct LayoutAssignmentKey
 
         int actIdx = remainder.indexOf(QLatin1String(":Activity:"));
         if (actIdx >= 0) {
-            result.activity = remainder.mid(actIdx + 10);
+            const QString activity = remainder.mid(actIdx + 10);
+            if (!activity.isEmpty())
+                result.activity = activity;
             remainder = remainder.left(actIdx);
         }
         int deskIdx = remainder.indexOf(QLatin1String(":Desktop:"));
         if (deskIdx >= 0) {
             bool ok = false;
-            result.virtualDesktop = remainder.mid(deskIdx + 9).toInt(&ok);
-            if (!ok)
-                result.virtualDesktop = 0;
+            int desktop = remainder.mid(deskIdx + 9).toInt(&ok);
+            if (ok && desktop > 0)
+                result.virtualDesktop = desktop;
             remainder = remainder.left(deskIdx);
         }
         result.screenId = remainder;

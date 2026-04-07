@@ -13,6 +13,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QStandardPaths>
+#include "../../config/configdefaults.h"
 #include "../../config/iconfigbackend.h"
 #include <algorithm>
 
@@ -229,7 +230,7 @@ void LayoutManager::loadAssignments()
     const QStringList allGroups = m_configBackend->groupList();
 
     // ── Primary path: read from [Assignment:*] groups ──────────────
-    const QString assignmentPrefix = QStringLiteral("Assignment:");
+    const QString assignmentPrefix = ConfigDefaults::assignmentGroupPrefix();
     bool foundGroups = false;
 
     for (const QString& groupName : allGroups) {
@@ -237,51 +238,24 @@ void LayoutManager::loadAssignments()
             continue;
 
         foundGroups = true;
-        // Parse group name: Assignment:screenId[:Desktop:N][:Activity:id]
-        QString remainder = groupName.mid(assignmentPrefix.size());
-        if (remainder.isEmpty())
-            continue;
-
-        QString screenId;
-        int virtualDesktop = 0;
-        QString activity;
-
-        // Extract :Activity:id suffix first (activity IDs contain colons in UUIDs)
-        int actIdx = remainder.indexOf(QLatin1String(":Activity:"));
-        if (actIdx >= 0) {
-            activity = remainder.mid(actIdx + 10); // len(":Activity:") = 10
-            remainder = remainder.left(actIdx);
-        }
-
-        // Extract :Desktop:N suffix
-        int deskIdx = remainder.indexOf(QLatin1String(":Desktop:"));
-        if (deskIdx >= 0) {
-            bool ok = false;
-            virtualDesktop = remainder.mid(deskIdx + 9).toInt(&ok); // len(":Desktop:") = 9
-            if (!ok)
-                virtualDesktop = 0;
-            remainder = remainder.left(deskIdx);
-        }
-
-        screenId = remainder;
-        if (screenId.isEmpty())
+        const auto key = LayoutAssignmentKey::fromGroupName(groupName);
+        if (key.screenId.isEmpty())
             continue;
 
         auto grp = m_configBackend->group(groupName);
         AssignmentEntry entry;
-        int modeInt = grp->readInt(QStringLiteral("Mode"), 0);
+        int modeInt = grp->readInt(QLatin1String("Mode"), 0);
         entry.mode = (modeInt == AssignmentEntry::Autotile) ? AssignmentEntry::Autotile : AssignmentEntry::Snapping;
-        entry.snappingLayout = grp->readString(QStringLiteral("SnappingLayout"));
-        entry.tilingAlgorithm = grp->readString(QStringLiteral("TilingAlgorithm"));
+        entry.snappingLayout = grp->readString(QLatin1String("SnappingLayout"));
+        entry.tilingAlgorithm = grp->readString(QLatin1String("TilingAlgorithm"));
 
         // Accept all entries — the group's existence is the explicit flag.
-        LayoutAssignmentKey key{screenId, virtualDesktop, activity};
         m_assignments[key] = entry;
     }
 
     // ── Quick layout shortcuts from [QuickLayouts] group ───────────────────
     {
-        auto quickGroup = m_configBackend->group(QStringLiteral("QuickLayouts"));
+        auto quickGroup = m_configBackend->group(ConfigDefaults::quickLayoutsGroup());
         // Check if group exists by looking for any keys
         // We read known number keys
         for (int i = 1; i <= 9; ++i) {
@@ -440,7 +414,7 @@ void LayoutManager::loadAssignments()
         // a one-time migration that produces identical output from identical input.
         auto configBackend = createDefaultConfigBackend();
         const QStringList configGroups = configBackend->groupList();
-        const QLatin1String configAssignPrefix("Assignment:");
+        const QString configAssignPrefix = ConfigDefaults::assignmentGroupPrefix();
         bool migratedFromConfig = false;
 
         for (const QString& groupName : configGroups) {
@@ -454,17 +428,17 @@ void LayoutManager::loadAssignments()
 
             auto grp = configBackend->group(groupName);
             AssignmentEntry entry;
-            int modeInt = grp->readInt(QStringLiteral("Mode"), 0);
+            int modeInt = grp->readInt(QLatin1String("Mode"), 0);
             entry.mode = (modeInt == AssignmentEntry::Autotile) ? AssignmentEntry::Autotile : AssignmentEntry::Snapping;
-            entry.snappingLayout = grp->readString(QStringLiteral("SnappingLayout"));
-            entry.tilingAlgorithm = grp->readString(QStringLiteral("TilingAlgorithm"));
+            entry.snappingLayout = grp->readString(QLatin1String("SnappingLayout"));
+            entry.tilingAlgorithm = grp->readString(QLatin1String("TilingAlgorithm"));
 
             m_assignments[key] = entry;
         }
 
         // Migrate QuickLayouts from config.json
         {
-            auto quickGroup = configBackend->group(QStringLiteral("QuickLayouts"));
+            auto quickGroup = configBackend->group(ConfigDefaults::quickLayoutsGroup());
             for (int i = 1; i <= 9; ++i) {
                 QString key = QString::number(i);
                 if (quickGroup->hasKey(key)) {
@@ -485,18 +459,18 @@ void LayoutManager::loadAssignments()
                     configBackend->deleteGroup(groupName);
                 }
             }
-            configBackend->deleteGroup(QStringLiteral("QuickLayouts"));
+            configBackend->deleteGroup(ConfigDefaults::quickLayoutsGroup());
             qCInfo(lcLayout) << "Migrated Assignment/QuickLayouts from config.json to assignments.json";
         }
 
         // Also clean up legacy groups from config.json while we have it open
         {
-            auto modeGroup = configBackend->group(QStringLiteral("ModeTracking"));
-            if (modeGroup->hasKey(QStringLiteral("LastManualLayoutId"))
-                || modeGroup->hasKey(QStringLiteral("LastAutotileAlgorithm"))
-                || modeGroup->hasKey(QStringLiteral("LastTilingMode"))) {
-                const QString lastManualId = modeGroup->readString(QStringLiteral("LastManualLayoutId"));
-                const QString lastAlgorithm = modeGroup->readString(QStringLiteral("LastAutotileAlgorithm"));
+            auto modeGroup = configBackend->group(ConfigDefaults::modeTrackingGroup());
+            if (modeGroup->hasKey(QLatin1String("LastManualLayoutId"))
+                || modeGroup->hasKey(QLatin1String("LastAutotileAlgorithm"))
+                || modeGroup->hasKey(QLatin1String("LastTilingMode"))) {
+                const QString lastManualId = modeGroup->readString(QLatin1String("LastManualLayoutId"));
+                const QString lastAlgorithm = modeGroup->readString(QLatin1String("LastAutotileAlgorithm"));
                 bool migrated = false;
 
                 for (auto it = m_assignments.begin(); it != m_assignments.end(); ++it) {
@@ -513,7 +487,7 @@ void LayoutManager::loadAssignments()
                     }
                 }
                 modeGroup.reset();
-                configBackend->deleteGroup(QStringLiteral("ModeTracking"));
+                configBackend->deleteGroup(ConfigDefaults::modeTrackingGroup());
                 if (migrated) {
                     saveAssignments();
                     qCInfo(lcLayout) << "Migrated [ModeTracking] into base screen entries";
@@ -580,15 +554,15 @@ void LayoutManager::saveAssignments()
         }
 
         auto group = m_configBackend->group(groupName);
-        group->writeInt(QStringLiteral("Mode"), static_cast<int>(entry.mode));
-        group->writeString(QStringLiteral("SnappingLayout"), entry.snappingLayout);
-        group->writeString(QStringLiteral("TilingAlgorithm"), entry.tilingAlgorithm);
+        group->writeInt(QLatin1String("Mode"), static_cast<int>(entry.mode));
+        group->writeString(QLatin1String("SnappingLayout"), entry.snappingLayout);
+        group->writeString(QLatin1String("TilingAlgorithm"), entry.tilingAlgorithm);
     }
 
     // Write [QuickLayouts] group
     {
-        m_configBackend->deleteGroup(QStringLiteral("QuickLayouts"));
-        auto quickGroup = m_configBackend->group(QStringLiteral("QuickLayouts"));
+        m_configBackend->deleteGroup(ConfigDefaults::quickLayoutsGroup());
+        auto quickGroup = m_configBackend->group(ConfigDefaults::quickLayoutsGroup());
         for (auto it = m_quickLayoutShortcuts.constBegin(); it != m_quickLayoutShortcuts.constEnd(); ++it) {
             quickGroup->writeString(QString::number(it.key()), it.value());
         }
