@@ -90,18 +90,6 @@ PLASMAZONES_EXPORT std::unique_ptr<IConfigBackend> createDefaultConfigBackend();
 /// Separate file from config.json to avoid write contention.
 PLASMAZONES_EXPORT std::unique_ptr<IConfigBackend> createSessionBackend();
 
-/// Resolve a shared or fallback backend.  If @p shared is non-null it is
-/// returned directly; otherwise a new default backend is created into
-/// @p fallback and returned.  Eliminates repeated resolve boilerplate.
-inline IConfigBackend* resolveBackend(IConfigBackend* shared, std::unique_ptr<IConfigBackend>& fallback)
-{
-    if (shared) {
-        return shared;
-    }
-    fallback = createDefaultConfigBackend();
-    return fallback.get();
-}
-
 // ── Per-screen group helpers ─────────────────────────────────────────────
 // Backend-agnostic utilities for per-screen group name resolution.
 // Used by Settings, ConfigMigration, and config backend implementations.

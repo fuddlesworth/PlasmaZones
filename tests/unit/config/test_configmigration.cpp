@@ -580,6 +580,63 @@ private Q_SLOTS:
         QVERIFY(!migrated.contains(QStringLiteral("Activation")));
     }
 
+    void testMigrateV1ToV2_windowTrackingExtractedToSessionJson()
+    {
+        IsolatedConfigGuard guard;
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        // Simulate a v1 config with WindowTracking data (ephemeral session state)
+        QJsonObject windowTracking;
+        windowTracking[QStringLiteral("ActiveLayoutId")] = QStringLiteral("test-layout-id");
+        QJsonObject assignments;
+        assignments[QStringLiteral("0x12345")] = QStringLiteral("zone-uuid-1");
+        windowTracking[QStringLiteral("WindowZoneAssignmentsFull")] = assignments;
+        root[ConfigDefaults::windowTrackingGroup()] = windowTracking;
+
+        // Also add a normal settings group to ensure it stays in config.json
+        QJsonObject activation;
+        activation[QStringLiteral("SnappingEnabled")] = true;
+        root[QStringLiteral("Activation")] = activation;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        // WindowTracking should be removed from config.json
+        QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
+        QVERIFY(!migrated.contains(ConfigDefaults::windowTrackingGroup()));
+
+        // session.json should exist with the WindowTracking group
+        QVERIFY(QFile::exists(ConfigDefaults::sessionFilePath()));
+        QJsonObject session = readJsonConfig(ConfigDefaults::sessionFilePath());
+        QVERIFY(session.contains(ConfigDefaults::windowTrackingGroup()));
+        QJsonObject sessionWt = session.value(ConfigDefaults::windowTrackingGroup()).toObject();
+        QCOMPARE(sessionWt.value(QStringLiteral("ActiveLayoutId")).toString(), QStringLiteral("test-layout-id"));
+        QJsonObject sessionAssignments = sessionWt.value(QStringLiteral("WindowZoneAssignmentsFull")).toObject();
+        QCOMPARE(sessionAssignments.value(QStringLiteral("0x12345")).toString(), QStringLiteral("zone-uuid-1"));
+    }
+
+    void testMigrateV1ToV2_noWindowTracking_noSessionJson()
+    {
+        IsolatedConfigGuard guard;
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        // v1 config without WindowTracking — session.json should NOT be created
+        QJsonObject activation;
+        activation[QStringLiteral("SnappingEnabled")] = true;
+        root[QStringLiteral("Activation")] = activation;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QVERIFY(!QFile::exists(ConfigDefaults::sessionFilePath()));
+    }
+
     void testMigratedConfigReadableByBackend()
     {
         IsolatedConfigGuard guard;

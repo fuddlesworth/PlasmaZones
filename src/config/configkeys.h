@@ -103,7 +103,8 @@ public:
     //
     // Autotile data is split across three locations:
     //   1. Tiling.Algorithm group (Settings, config.json) — global defaults:
-    //      algorithm, splitRatio, masterCount, maxWindows, splitRatioStep
+    //      algorithm, splitRatio, masterCount, maxWindows, splitRatioStep,
+    //      perAlgorithmSettings
     //   2. AutotileScreen:<id> groups (Settings, config.json) — per-screen
     //      overrides for masterCount, splitRatio, algorithm
     //   3. WindowTracking.AutotileWindowOrders (WTA, session.json) — per-context
