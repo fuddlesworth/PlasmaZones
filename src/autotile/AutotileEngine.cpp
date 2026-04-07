@@ -893,6 +893,16 @@ void AutotileEngine::deserializeWindowOrders(const QJsonArray& orders)
     m_settingsBridge->deserializeWindowOrders(orders);
 }
 
+QJsonObject AutotileEngine::serializePendingRestores() const
+{
+    return m_settingsBridge->serializePendingRestores();
+}
+
+void AutotileEngine::deserializePendingRestores(const QJsonObject& obj)
+{
+    m_settingsBridge->deserializePendingRestores(obj);
+}
+
 void AutotileEngine::scheduleRetileForScreen(const QString& screenId)
 {
     m_pendingRetileScreens.insert(screenId);
@@ -1564,8 +1574,11 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     }
 
     // Extract appId once — used by both the initial-order fallback and the
-    // pending restore queue below.
+    // pending restore queue below. Only valid when the windowId contains
+    // the "appId|internalId" separator — bare IDs without a separator
+    // aren't stable across restarts, so skip appId-based matching for them.
     const QString appId = Utils::extractAppId(windowId);
+    const bool hasStableAppId = (appId != windowId);
 
     // Check if this window has a pre-seeded position from zone-ordered transition.
     // Take a value copy of the pending list — the erase below invalidates iterators/refs.
@@ -1578,13 +1591,13 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         // Fallback: match by appId when exact windowId not found (KWin restart
         // changes UUIDs, so saved windowIds have stale suffixes). FIFO consumption
         // prevents multi-instance apps from all matching the first entry.
-        if (desiredPos < 0) {
+        if (desiredPos < 0 && hasStableAppId) {
             for (int i = 0; i < pendingOrder.size(); ++i) {
                 if (Utils::extractAppId(pendingOrder.at(i)) == appId && !state->containsWindow(pendingOrder.at(i))) {
                     desiredPos = i;
                     // Replace stale UUID in the live map so it won't match again
                     m_pendingInitialOrders[screenId][i] = windowId;
-                    qCInfo(lcAutotile) << "AppId fallback matched" << windowId << "to pending position" << i;
+                    qCDebug(lcAutotile) << "AppId fallback matched" << windowId << "to pending position" << i;
                     break;
                 }
             }
@@ -1615,12 +1628,15 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // Fallback: check pending restore queue (close/reopen restore).
     // When a window was removed from autotile and the same app reopens,
     // restore it to the saved position. FIFO consumption per appId.
+    // Note: position is index-based, so if other windows were reordered after
+    // the close, the restored position is best-effort (correct index, but
+    // neighbours may have changed). This matches snapping's behavior.
     bool restoredFromPendingQueue = false;
-    if (!inserted && !appId.isEmpty()) {
+    const TilingStateKey currentKey = currentKeyForScreen(screenId);
+    if (!inserted && hasStableAppId) {
         auto restoreIt = m_pendingAutotileRestores.find(appId);
         if (restoreIt != m_pendingAutotileRestores.end() && !restoreIt.value().isEmpty()) {
             // Find the first entry matching the current context
-            const TilingStateKey currentKey = currentKeyForScreen(screenId);
             for (int i = 0; i < restoreIt.value().size(); ++i) {
                 const PendingAutotileRestore& entry = restoreIt.value().at(i);
                 if (entry.context == currentKey) {
@@ -1646,6 +1662,20 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                         m_pendingAutotileRestores.erase(restoreIt);
                     }
                     break;
+                }
+            }
+
+            // Prune entries whose screen is no longer active. Without this,
+            // entries for disconnected monitors accumulate until the 16-cap
+            // evicts them (desktop/activity mismatches are bounded by the cap
+            // and will match when the user switches back, so leave those).
+            if (m_pendingAutotileRestores.contains(appId)) {
+                auto& queue = m_pendingAutotileRestores[appId];
+                queue.removeIf([this](const PendingAutotileRestore& r) {
+                    return !m_autotileScreens.contains(r.context.screenId);
+                });
+                if (queue.isEmpty()) {
+                    m_pendingAutotileRestores.remove(appId);
                 }
             }
         }
@@ -1674,9 +1704,8 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // Skip when the pending restore queue already handled floating — the queue's
     // wasFloating reflects the state at close time, which is more recent than
     // m_savedFloatingWindows (set at mode-toggle time).
-    const TilingStateKey stateKey = currentKeyForScreen(screenId);
     if (!restoredFromPendingQueue) {
-        auto savedIt = m_savedFloatingWindows.find(stateKey);
+        auto savedIt = m_savedFloatingWindows.find(currentKey);
         if (savedIt != m_savedFloatingWindows.end() && savedIt.value().remove(windowId)) {
             state->setFloating(windowId, true);
             qCInfo(lcAutotile) << "Restored saved floating state for window" << windowId << "on screen" << screenId;
@@ -1686,7 +1715,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         }
     }
 
-    m_windowToStateKey.insert(windowId, stateKey);
+    m_windowToStateKey.insert(windowId, currentKey);
     return true;
 }
 
@@ -1707,7 +1736,7 @@ void AutotileEngine::removeWindow(const QString& windowId)
         const int pos = state->windowOrder().indexOf(windowId);
         if (pos >= 0) {
             const QString appId = Utils::extractAppId(windowId);
-            if (!appId.isEmpty()) {
+            if (appId != windowId) {
                 PendingAutotileRestore entry;
                 entry.position = pos;
                 entry.context = key;

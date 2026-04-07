@@ -684,6 +684,15 @@ public Q_SLOTS:
 #ifndef Q_MOC_RUN
     void setTilingStateDelegates(std::function<QJsonArray()> serializeFn,
                                  std::function<void(const QJsonArray&)> deserializeFn);
+
+    /**
+     * @brief Set delegates for autotile pending restore queue persistence
+     *
+     * Separate from tiling state delegates — pending restores have their own
+     * config key to keep the window-orders array homogeneous.
+     */
+    void setTilingPendingRestoreDelegates(std::function<QJsonObject()> serializeFn,
+                                          std::function<void(const QJsonObject&)> deserializeFn);
 #endif
 
     /**
@@ -987,6 +996,8 @@ private:
     // Tiling state serialization delegates (autotile engine → WTA persistence)
     std::function<QJsonArray()> m_serializeTilingStatesFn;
     std::function<void(const QJsonArray&)> m_deserializeTilingStatesFn;
+    std::function<QJsonObject()> m_serializePendingRestoresFn;
+    std::function<void(const QJsonObject&)> m_deserializePendingRestoresFn;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Startup timing coordination

@@ -321,6 +321,20 @@ public:
      */
     void deserializeWindowOrders(const QJsonArray& orders);
 
+    /**
+     * @brief Serialize pending autotile restore queues to JSON
+     *
+     * Forwarded to SettingsBridge. Returns appId-keyed pending restore entries.
+     */
+    QJsonObject serializePendingRestores() const;
+
+    /**
+     * @brief Deserialize pending autotile restore queues from JSON
+     *
+     * Forwarded to SettingsBridge. Restores close/reopen queue.
+     */
+    void deserializePendingRestores(const QJsonObject& obj);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings synchronization
     // ═══════════════════════════════════════════════════════════════════════════
