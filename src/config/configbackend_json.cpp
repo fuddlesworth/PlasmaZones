@@ -641,4 +641,9 @@ std::unique_ptr<IConfigBackend> createDefaultConfigBackend()
     return std::make_unique<JsonConfigBackend>(ConfigDefaults::configFilePath());
 }
 
+std::unique_ptr<IConfigBackend> createSessionBackend()
+{
+    return std::make_unique<JsonConfigBackend>(ConfigDefaults::sessionFilePath());
+}
+
 } // namespace PlasmaZones

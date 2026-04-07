@@ -25,6 +25,11 @@ QString ConfigDefaults::configFilePath()
     return configDir() + QStringLiteral("/plasmazones/config.json");
 }
 
+QString ConfigDefaults::sessionFilePath()
+{
+    return configDir() + QStringLiteral("/plasmazones/session.json");
+}
+
 QString ConfigDefaults::legacyConfigFilePath()
 {
     return configDir() + QStringLiteral("/plasmazonesrc");
