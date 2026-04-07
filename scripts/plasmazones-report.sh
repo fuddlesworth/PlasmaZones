@@ -108,7 +108,10 @@ STAGING=$(mktemp -d "${TMPDIR:-/tmp}/plasmazones-report.XXXXXXXXXX")
 trap 'rm -rf "$STAGING"' EXIT
 
 # 1. Markdown report from daemon (already redacted)
-printf '%s\n' "$REPORT" > "$STAGING/report.md"
+# Use heredoc to avoid ARG_MAX limits with very large reports.
+cat <<REPORT_EOF > "$STAGING/report.md"
+${REPORT}
+REPORT_EOF
 
 # 2. Config file (redact home paths)
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/plasmazones"
@@ -165,14 +168,18 @@ if command -v journalctl &>/dev/null; then
     fi
 
     collect_journal() {
-        local out exit_code=0
+        local out err exit_code=0
+        # Capture stdout and stderr separately so journalctl warnings
+        # (e.g., "No entries") don't pollute the log output.
+        err=$(mktemp "${TMPDIR:-/tmp}/pz-journal-err.XXXXXX")
         out=$(timeout 15 journalctl --user "$@" \
             --since "$JOURNAL_SINCE min ago" \
-            --no-pager -o short-iso 2>&1) || exit_code=$?
+            --no-pager -o short-iso 2>"$err") || exit_code=$?
         if [[ $exit_code -ne 0 ]] && [[ $exit_code -ne 1 ]]; then
             # exit 1 = no entries matched; anything else is an actual error
-            echo "Warning: journalctl failed (exit $exit_code): $out" >&2
+            echo "Warning: journalctl failed (exit $exit_code): $(cat "$err")" >&2
         fi
+        rm -f "$err"
         printf '%s' "$out"
     }
 

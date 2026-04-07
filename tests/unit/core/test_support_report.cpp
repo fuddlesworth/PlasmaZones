@@ -142,6 +142,51 @@ private Q_SLOTS:
     {
         QCOMPARE(SupportReport::redactHomePath(QString()), QString());
     }
+
+    void testReadAndRedactFile_redactsAndWrapsInCodeFence()
+    {
+        QTemporaryFile tmp;
+        QVERIFY(tmp.open());
+        const QString home = QDir::homePath();
+        tmp.write(QStringLiteral("{\n  \"path\": \"%1/layouts\"\n}").arg(home).toUtf8());
+        tmp.close();
+
+        const QString result = SupportReport::readAndRedactFile(tmp.fileName(), QStringLiteral("test file"));
+        QVERIFY(result.startsWith(QStringLiteral("```json\n")));
+        QVERIFY(result.endsWith(QStringLiteral("\n```\n")));
+        QVERIFY(result.contains(QStringLiteral("~/layouts")));
+        QVERIFY(!result.contains(home));
+    }
+
+    void testReadAndRedactFile_customLang()
+    {
+        QTemporaryFile tmp;
+        QVERIFY(tmp.open());
+        tmp.write("some text content");
+        tmp.close();
+
+        const QString result =
+            SupportReport::readAndRedactFile(tmp.fileName(), QStringLiteral("test"), QStringLiteral("text"));
+        QVERIFY(result.startsWith(QStringLiteral("```text\n")));
+    }
+
+    void testReadAndRedactFile_missingFile()
+    {
+        const QString result =
+            SupportReport::readAndRedactFile(QStringLiteral("/nonexistent/path.json"), QStringLiteral("config file"));
+        QVERIFY(result.contains(QStringLiteral("config file")));
+        QVERIFY(result.startsWith(QStringLiteral("*(")));
+    }
+
+    void testReadAndRedactFile_emptyFile()
+    {
+        QTemporaryFile tmp;
+        QVERIFY(tmp.open());
+        tmp.close();
+
+        const QString result = SupportReport::readAndRedactFile(tmp.fileName(), QStringLiteral("empty file"));
+        QVERIFY(result.contains(QStringLiteral("```json\n")));
+    }
 };
 
 QTEST_MAIN(TestSupportReport)

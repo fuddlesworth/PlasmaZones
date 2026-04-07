@@ -94,14 +94,22 @@ public:
      */
     static QString redactHomePath(const QString& input);
 
+    /**
+     * @brief Read a file, redact home paths, and wrap in a Markdown code fence
+     * @param path File path to read
+     * @param label Human-readable label for error messages
+     * @param lang Code fence language tag (default: "json")
+     * @return Markdown code block with redacted content, or error message if unreadable
+     */
+    static QString readAndRedactFile(const QString& path, const QString& label,
+                                     const QString& lang = QLatin1String("json"));
+
 private:
     SupportReport() = delete;
 
     static QString sectionVersion();
     static QString sectionEnvironment();
     static QString sectionScreens(const Snapshot& snapshot);
-    static QString readAndRedactFile(const QString& path, const QString& label,
-                                     const QString& lang = QLatin1String("json"));
     static QString sectionConfig();
     static QString sectionLayouts(const Snapshot& snapshot);
     static QString sectionAutotile(const Snapshot& snapshot);

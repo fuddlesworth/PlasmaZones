@@ -34,7 +34,8 @@ QString SupportReport::redactHomePath(const QString& input)
 
     // Match home path when followed by a separator (/ or end-of-string),
     // preventing partial matches (e.g., /home/user must not match /home/username).
-    const QRegularExpression re(QRegularExpression::escape(home) + QStringLiteral("(?=[/\\s]|$)"));
+    // Cache the compiled regex — redactHomePath is called per-line on potentially 2000+ log lines.
+    static const QRegularExpression re(QRegularExpression::escape(home) + QStringLiteral("(?=[/\\s]|$)"));
     QString result = input;
     result.replace(re, QStringLiteral("~"));
     return result;
@@ -131,7 +132,7 @@ QString SupportReport::sectionScreens(const Snapshot& snapshot)
     out += QStringLiteral("**Count:** %1\n\n").arg(snapshot.screens.size());
 
     for (const auto& screen : snapshot.screens) {
-        out += QStringLiteral("- **%1**: %2x%3 @ %4x scale %5")
+        out += QStringLiteral("- **%1**: %2x%3 @ %4 Hz, scale %5")
                    .arg(screen.name)
                    .arg(screen.geometry.width())
                    .arg(screen.geometry.height())
@@ -158,7 +159,7 @@ QString SupportReport::readAndRedactFile(const QString& path, const QString& lab
 
     const QByteArray data = file.read(MaxFileSize + 1);
     if (data.size() > MaxFileSize)
-        return QStringLiteral("*(%1 too large: %2+ bytes)*\n").arg(label).arg(MaxFileSize);
+        return QStringLiteral("*(%1 exceeds 1 MB limit)*\n").arg(label);
 
     const QString content = QString::fromUtf8(data);
     return QStringLiteral("```%1\n%2\n```\n").arg(lang, redactHomePath(content));
@@ -226,7 +227,7 @@ static QByteArray runJournalctl(const QStringList& args)
     proc.setProgram(QStringLiteral("journalctl"));
     proc.setArguments(args);
     proc.start();
-    if (!proc.waitForStarted(3000) || !proc.waitForFinished(15000))
+    if (!proc.waitForStarted(3000) || !proc.waitForFinished(12000))
         return {};
     return proc.readAllStandardOutput();
 }
