@@ -1731,6 +1731,21 @@ void AutotileEngine::onScreenGeometryChanged(const QString& screenId)
         return;
     }
 
+    // Clear discovered min-sizes for windows on this screen. The min-sizes were
+    // calculated for the previous screen geometry and may no longer be accurate.
+    // Without this, a stale min-size (e.g., from a browser that transiently refused
+    // to shrink during a Wayland configure round-trip) can override the user's
+    // split ratio — the enforceWindowMinSizes post-processing expands the zone
+    // to honor the stale min, making the ratio appear stuck. The KWin effect's
+    // centering code will re-discover and report the actual min-size if the window
+    // still can't fill its assigned zone after the fresh retile.
+    const TilingStateKey key = currentKeyForScreen(screenId);
+    for (auto it = m_windowToStateKey.constBegin(); it != m_windowToStateKey.constEnd(); ++it) {
+        if (it.value() == key) {
+            m_windowMinSizes.remove(it.key());
+        }
+    }
+
     retileAfterOperation(screenId, true);
 }
 

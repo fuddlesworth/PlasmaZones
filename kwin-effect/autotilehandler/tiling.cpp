@@ -425,26 +425,34 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // minimum to the daemon so future retiles can account for it. Only report
     // when the window is larger than the zone (negative delta = oversized).
     //
-    // IMPORTANT: Use the window's declared minSize() from the compositor, NOT
-    // the actual frame geometry. The frame geometry is the current size, which
-    // may be transiently larger during resize animations (Wayland configure
-    // round-trips) or media player loading. Reporting the frame geometry as
-    // the min-size creates a feedback loop: inflated min → expanded zone →
-    // window fills expanded zone → inflated min confirmed → ratio stuck.
+    // IMPORTANT: Only use the window's declared minSize() from the compositor.
+    // The frame geometry is the current size, which may be transiently larger
+    // during resize animations (Wayland configure round-trips) or media player
+    // loading. Reporting the frame geometry as the min-size creates a feedback
+    // loop: inflated min → expanded zone → window fills expanded zone →
+    // inflated min confirmed → ratio stuck.
     //
-    // When the window doesn't declare a min-size (common for XWayland apps),
-    // fall back to the target zone size as a bounded hint — the window didn't
-    // fit THIS zone, so at minimum it needs this much space. The daemon caps
-    // all received min-sizes against MaxSplitRatio as a secondary safety net.
+    // Previously, windows without a declared min-size fell back to
+    // targetZone.width() as a bounded hint. This caused the same feedback
+    // loop: the zone width became the stored min-size, which then prevented
+    // the algorithm from reducing the zone on subsequent retiles — even when
+    // the user adjusted the split ratio or a screen geometry change required
+    // reflow. The stale min-size persisted until the window was removed or
+    // unfloated (minimize+restore), making the ratio appear "stuck."
+    //
+    // Without the fallback, apps that don't declare a min-size simply won't
+    // get min-size enforcement from this path. They still get the initial
+    // min-size from the windowOpened D-Bus call (kw->minSize() at open time),
+    // and the centering code handles the visual placement correctly.
     if (dw < -MinCenteringDelta || dh < -MinCenteringDelta) {
         const QSizeF declaredMin = kw->minSize();
         int discoveredMinW = 0;
         int discoveredMinH = 0;
-        if (dw < -MinCenteringDelta) {
-            discoveredMinW = (declaredMin.width() > 0) ? qCeil(declaredMin.width()) : targetZone.width();
+        if (dw < -MinCenteringDelta && declaredMin.width() > 0) {
+            discoveredMinW = qCeil(declaredMin.width());
         }
-        if (dh < -MinCenteringDelta) {
-            discoveredMinH = (declaredMin.height() > 0) ? qCeil(declaredMin.height()) : targetZone.height();
+        if (dh < -MinCenteringDelta && declaredMin.height() > 0) {
+            discoveredMinH = qCeil(declaredMin.height());
         }
         if (discoveredMinW > 0 || discoveredMinH > 0) {
             reportDiscoveredMinSize(windowId, discoveredMinW, discoveredMinH);
