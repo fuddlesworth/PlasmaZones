@@ -10,8 +10,8 @@ import org.kde.kirigami as Kirigami
  * @brief Visual preview of virtual screen subdivisions with draggable dividers.
  *
  * Displays a scaled representation of the physical monitor with colored
- * rectangles for each virtual screen region and draggable divider handles
- * between adjacent regions.
+ * rectangles for each virtual screen region. Supports both column (vertical)
+ * and row (horizontal) dividers for grid layouts.
  */
 Rectangle {
     id: previewRoot
@@ -20,6 +20,8 @@ Rectangle {
     required property var pendingScreens
     required property int screenWidth
     required property int screenHeight
+    required property int columns
+    required property int rows
     // ── Font sizing ratios for region labels ────────────────────────────
     // Fraction of region width used to scale the label font (0.125 = 1/8).
     readonly property real titleFontScaleFraction: 0.125
@@ -27,7 +29,8 @@ Rectangle {
     readonly property real detailFontScaleFraction: 0.1
 
     // ── Signals ─────────────────────────────────────────────────────────
-    signal dividerMoved(int dividerIndex, real newFraction)
+    signal columnDividerMoved(int colIndex, real newFraction)
+    signal rowDividerMoved(int rowIndex, real newFraction)
 
     color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
     border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
@@ -80,7 +83,15 @@ Rectangle {
 
                 Label {
                     Layout.alignment: Qt.AlignHCenter
-                    text: Math.round(modelData.width * previewRoot.screenWidth) + "px \u00b7 " + Math.round(modelData.width * 100) + "%"
+                    text: {
+                        var wpx = Math.round(modelData.width * previewRoot.screenWidth);
+                        var hpx = Math.round(modelData.height * previewRoot.screenHeight);
+                        var pct = Math.round(modelData.width * 100);
+                        if (previewRoot.rows > 1)
+                            return wpx + "\u00d7" + hpx + "px";
+
+                        return wpx + "px \u00b7 " + pct + "%";
+                    }
                     font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.65, Math.min(Kirigami.Theme.defaultFont.pixelSize * 0.85, regionRect.width * previewRoot.detailFontScaleFraction))
                     color: Kirigami.Theme.disabledTextColor
                 }
@@ -91,18 +102,20 @@ Rectangle {
 
     }
 
-    // Draggable divider handles between regions
+    // ── Column dividers (vertical lines between adjacent columns) ────────
     Repeater {
-        model: (previewRoot.pendingScreens || []).length > 1 ? previewRoot.pendingScreens.length - 1 : 0
+        model: previewRoot.columns > 1 ? previewRoot.columns - 1 : 0
 
         Item {
-            id: dividerHandle
+            id: colDividerHandle
 
             required property int index
             readonly property real dividerX: {
-                if (index < previewRoot.pendingScreens.length - 1)
-                    return (previewRoot.pendingScreens[index].x + previewRoot.pendingScreens[index].width) * previewRoot.width;
-
+                // Column boundary: right edge of column `index` in the first row
+                if (index < previewRoot.pendingScreens.length - 1) {
+                    var cell = previewRoot.pendingScreens[index];
+                    return (cell.x + cell.width) * previewRoot.width;
+                }
                 return 0;
             }
 
@@ -110,16 +123,16 @@ Rectangle {
             x: dividerX - Math.round(width / 2)
             y: 0
             height: previewRoot.height
-            Accessible.name: i18n("Virtual screen divider %1", index + 1)
+            Accessible.name: i18n("Column divider %1", index + 1)
             Accessible.role: Accessible.Separator
 
             // Visual divider line
             Rectangle {
                 anchors.centerIn: parent
-                width: dividerDragArea.containsMouse || dividerDragArea.pressed ? 3 : 1
+                width: colDragArea.containsMouse || colDragArea.pressed ? 3 : 1
                 height: parent.height - 4
                 radius: 1
-                color: dividerDragArea.containsMouse || dividerDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
+                color: colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
 
                 Behavior on width {
                     NumberAnimation {
@@ -143,12 +156,12 @@ Rectangle {
                 width: Math.round(Kirigami.Units.gridUnit * 0.75)
                 height: Math.round(Kirigami.Units.gridUnit * 1.5)
                 radius: 4
-                color: dividerDragArea.containsMouse || dividerDragArea.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+                color: colDragArea.containsMouse || colDragArea.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
                 border.width: 1
-                border.color: dividerDragArea.containsMouse || dividerDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                border.color: colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
                 visible: previewRoot.height > Math.round(Kirigami.Units.gridUnit * 2.5)
 
-                // Grip dots
+                // Grip dots (vertical)
                 Column {
                     anchors.centerIn: parent
                     spacing: Math.round(Kirigami.Units.smallSpacing / 2)
@@ -171,7 +184,7 @@ Rectangle {
             }
 
             MouseArea {
-                id: dividerDragArea
+                id: colDragArea
 
                 property real dragStartX: 0
                 property real dragStartFraction: 0
@@ -181,17 +194,128 @@ Rectangle {
                 cursorShape: Qt.SplitHCursor
                 hoverEnabled: true
                 onPressed: function(mouse) {
-                    dragStartX = mouse.x + dividerHandle.x;
-                    dragStartFraction = dividerHandle.dividerX / previewRoot.width;
+                    dragStartX = mouse.x + colDividerHandle.x;
+                    dragStartFraction = colDividerHandle.dividerX / previewRoot.width;
                 }
                 onPositionChanged: function(mouse) {
                     if (!pressed)
                         return ;
 
-                    var globalX = mouse.x + dividerHandle.x;
+                    var globalX = mouse.x + colDividerHandle.x;
                     var deltaFraction = (globalX - dragStartX) / previewRoot.width;
                     var newFraction = dragStartFraction + deltaFraction;
-                    previewRoot.dividerMoved(dividerHandle.index, newFraction);
+                    previewRoot.columnDividerMoved(colDividerHandle.index, newFraction);
+                }
+            }
+
+        }
+
+    }
+
+    // ── Row dividers (horizontal lines between adjacent rows) ────────────
+    Repeater {
+        model: previewRoot.rows > 1 ? previewRoot.rows - 1 : 0
+
+        Item {
+            id: rowDividerHandle
+
+            required property int index
+            readonly property real dividerY: {
+                // Row boundary: bottom edge of row `index` in the first column
+                var cellIndex = index * previewRoot.columns;
+                if (cellIndex < previewRoot.pendingScreens.length) {
+                    var cell = previewRoot.pendingScreens[cellIndex];
+                    return (cell.y + cell.height) * previewRoot.height;
+                }
+                return 0;
+            }
+
+            x: 0
+            y: dividerY - Math.round(height / 2)
+            width: previewRoot.width
+            height: Kirigami.Units.smallSpacing * 2
+            Accessible.name: i18n("Row divider %1", index + 1)
+            Accessible.role: Accessible.Separator
+
+            // Visual divider line
+            Rectangle {
+                anchors.centerIn: parent
+                width: parent.width - 4
+                height: rowDragArea.containsMouse || rowDragArea.pressed ? 3 : 1
+                radius: 1
+                color: rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
+
+                Behavior on height {
+                    NumberAnimation {
+                        duration: Kirigami.Units.shortDuration
+                    }
+
+                }
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: Kirigami.Units.shortDuration
+                    }
+
+                }
+
+            }
+
+            // Drag grip indicator (horizontal orientation)
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.round(Kirigami.Units.gridUnit * 1.5)
+                height: Math.round(Kirigami.Units.gridUnit * 0.75)
+                radius: 4
+                color: rowDragArea.containsMouse || rowDragArea.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+                border.width: 1
+                border.color: rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                visible: previewRoot.width > Math.round(Kirigami.Units.gridUnit * 2.5)
+
+                // Grip dots (horizontal)
+                Row {
+                    anchors.centerIn: parent
+                    spacing: Math.round(Kirigami.Units.smallSpacing / 2)
+
+                    Repeater {
+                        model: 3
+
+                        Rectangle {
+                            width: Math.max(2, Math.round(Kirigami.Units.devicePixelRatio * 2))
+                            height: Math.max(2, Math.round(Kirigami.Units.devicePixelRatio * 2))
+                            radius: 1
+                            color: Kirigami.Theme.textColor
+                            opacity: 0.5
+                        }
+
+                    }
+
+                }
+
+            }
+
+            MouseArea {
+                id: rowDragArea
+
+                property real dragStartY: 0
+                property real dragStartFraction: 0
+
+                anchors.fill: parent
+                anchors.margins: -4
+                cursorShape: Qt.SplitVCursor
+                hoverEnabled: true
+                onPressed: function(mouse) {
+                    dragStartY = mouse.y + rowDividerHandle.y;
+                    dragStartFraction = rowDividerHandle.dividerY / previewRoot.height;
+                }
+                onPositionChanged: function(mouse) {
+                    if (!pressed)
+                        return ;
+
+                    var globalY = mouse.y + rowDividerHandle.y;
+                    var deltaFraction = (globalY - dragStartY) / previewRoot.height;
+                    var newFraction = dragStartFraction + deltaFraction;
+                    previewRoot.rowDividerMoved(rowDividerHandle.index, newFraction);
                 }
             }
 

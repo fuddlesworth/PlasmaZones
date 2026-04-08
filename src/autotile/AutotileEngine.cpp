@@ -1481,9 +1481,33 @@ void AutotileEngine::windowOpened(const QString& windowId, const QString& screen
         return;
     }
 
-    // Store screen mapping first so storeWindowMinSize can resolve the screen.
+    // If the window is already tracked on a DIFFERENT screen (e.g., dragged from
+    // VS2 to VS1), remove it from the old screen's TilingState first. Without this,
+    // the window remains in the old TilingState as a ghost entry — the old screen
+    // retiles around a window that's no longer there, and zone assignments stay stale.
     if (!screenId.isEmpty()) {
-        m_windowToStateKey[windowId] = currentKeyForScreen(screenId);
+        const TilingStateKey newKey = currentKeyForScreen(screenId);
+        auto existingIt = m_windowToStateKey.constFind(windowId);
+        if (existingIt != m_windowToStateKey.constEnd() && existingIt.value() != newKey) {
+            const TilingStateKey oldKey = existingIt.value();
+            TilingState* oldState = m_screenStates.value(oldKey);
+            if (oldState && oldState->containsWindow(windowId)) {
+                // Use the algorithm's lifecycle hook for clean removal
+                // (e.g., dwindle-memory needs to update its split tree).
+                TilingAlgorithm* oldAlgo = effectiveAlgorithm(oldKey.screenId);
+                if (oldAlgo && oldAlgo->supportsLifecycleHooks()) {
+                    const int idx = oldState->tiledWindows().indexOf(windowId);
+                    if (idx >= 0) {
+                        oldAlgo->onWindowRemoved(oldState, idx);
+                    }
+                }
+                oldState->removeWindow(windowId);
+                qCInfo(lcAutotile) << "windowOpened: removed" << windowId << "from old screen" << oldKey.screenId
+                                   << "before adding to" << screenId;
+                scheduleRetileForScreen(oldKey.screenId);
+            }
+        }
+        m_windowToStateKey[windowId] = newKey;
     }
 
     // Store window minimum size from KWin (used by enforceWindowMinSizes)

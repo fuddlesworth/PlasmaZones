@@ -10,35 +10,37 @@ import org.kde.kirigami as Kirigami
  * @brief Settings page for virtual screen configuration.
  *
  * Allows splitting a physical monitor into multiple virtual screens
- * with preset layouts or custom split ratios. Changes are staged via
- * settingsController and flushed to the daemon when the global Apply
- * button is clicked.
+ * using a columns-by-rows grid model. Supports horizontal-only splits,
+ * vertical-only splits, and full grids (e.g. 2x2). Changes are staged
+ * via settingsController and flushed to the daemon when Apply is clicked.
  */
 Flickable {
     id: root
 
     // ── Internal state ───────────────────────────────────────────────────
     // UX cap — C++ maximum is ConfigDefaults::maxVirtualScreensPerPhysical() (10).
-    // Capped lower here for usability: more than 5 splits is impractical on most ultrawides.
-    readonly property int _maxVirtualScreens: 5
+    readonly property int _maxVirtualScreens: 10
     property string _selectedScreen: ""
-    // Array of {x: real, y: real, width: real, height: real, displayName: string} — staged virtual screen definitions
+    // Array of {x, y, width, height, displayName} — staged virtual screen definitions (row-major order)
     property var _pendingScreens: []
-    // Array of {x: real, y: real, width: real, height: real, displayName: string} — last-saved virtual screen definitions
+    // Array of {x, y, width, height, displayName} — last-saved virtual screen definitions
     property var _savedScreens: []
-    property int _screenWidth: 1920 // Actual pixel width of selected screen
-    property int _screenHeight: 1080 // Actual pixel height of selected screen
+    property int _screenWidth: 1920
+    property int _screenHeight: 1080
+    // Grid dimensions inferred from pending screens
+    property int _columns: 1
+    property int _rows: 1
 
     function _refreshConfig() {
         if (_selectedScreen === "")
             return ;
 
-        // Check for staged config first
         if (settingsController.hasUnsavedVirtualScreenConfig(_selectedScreen))
             _pendingScreens = settingsController.getStagedVirtualScreenConfig(_selectedScreen);
         else
             _pendingScreens = settingsController.getVirtualScreenConfig(_selectedScreen);
         _savedScreens = settingsController.getVirtualScreenConfig(_selectedScreen);
+        _detectGrid();
     }
 
     function _deepCopy(arr) {
@@ -52,12 +54,58 @@ Flickable {
         settingsController.stageVirtualScreenConfig(_selectedScreen, _pendingScreens);
     }
 
-    function _loadPreset(ratios, names) {
-        var screens = [];
+    // Detect grid dimensions from the flat pendingScreens array by
+    // extracting unique x-start and y-start positions.
+    function _detectGrid() {
+        if (_pendingScreens.length <= 1) {
+            _columns = 1;
+            _rows = 1;
+            return ;
+        }
+        var tol = 0.01;
+        var xStarts = [];
+        var yStarts = [];
+        for (var i = 0; i < _pendingScreens.length; i++) {
+            var s = _pendingScreens[i];
+            var foundX = false;
+            for (var j = 0; j < xStarts.length; j++) {
+                if (Math.abs(xStarts[j] - s.x) < tol) {
+                    foundX = true;
+                    break;
+                }
+            }
+            if (!foundX)
+                xStarts.push(s.x);
+
+            var foundY = false;
+            for (var k = 0; k < yStarts.length; k++) {
+                if (Math.abs(yStarts[k] - s.y) < tol) {
+                    foundY = true;
+                    break;
+                }
+            }
+            if (!foundY)
+                yStarts.push(s.y);
+
+        }
+        var detectedCols = xStarts.length;
+        var detectedRows = yStarts.length;
+        if (detectedCols * detectedRows === _pendingScreens.length) {
+            _columns = detectedCols;
+            _rows = detectedRows;
+        } else {
+            _columns = _pendingScreens.length;
+            _rows = 1;
+        }
+    }
+
+    // Build horizontal split regions from percentage ratios.
+    function _horizontalRegions(ratios, names) {
+        var regions = [];
         var xPos = 0;
         for (var i = 0; i < ratios.length; i++) {
             var w = (i === ratios.length - 1) ? (1 - xPos) : (ratios[i] / 100);
-            screens.push({
+            regions.push({
                 "x": xPos,
                 "y": 0,
                 "width": w,
@@ -66,7 +114,33 @@ Flickable {
             });
             xPos += w;
         }
-        _pendingScreens = screens;
+        return regions;
+    }
+
+    // Build a uniform grid of regions (row-major order).
+    function _gridRegions(cols, rows, names) {
+        var regions = [];
+        var cw = 1 / cols;
+        var rh = 1 / rows;
+        for (var r = 0; r < rows; r++) {
+            for (var c = 0; c < cols; c++) {
+                var idx = r * cols + c;
+                regions.push({
+                    "x": c * cw,
+                    "y": r * rh,
+                    "width": (c === cols - 1) ? (1 - c * cw) : cw,
+                    "height": (r === rows - 1) ? (1 - r * rh) : rh,
+                    "displayName": (names && idx < names.length) ? names[idx] : ""
+                });
+            }
+        }
+        return regions;
+    }
+
+    // Load a preset by replacing pending screens with the given regions.
+    function _loadPreset(regions) {
+        _pendingScreens = regions;
+        _detectGrid();
         _stageCurrentConfig();
     }
 
@@ -85,96 +159,140 @@ Flickable {
                 break;
             }
         }
-        // Second pass: if width/height weren't found (e.g. physicalOnly dedup
-        // deleted them), reconstruct from virtual screen children.
-        // Children are horizontal sub-regions so summing their widths gives
-        // the physical width; the physical height equals any child's height
-        // (all children span the full vertical extent).
+        // Second pass: reconstruct from virtual screen children.
+        // Group children by pixel height to identify rows, then take one
+        // row's total width as the physical width and sum distinct row
+        // heights for the physical height.
         var prefix = _selectedScreen + "/vs:";
-        var totalW = 0;
-        var maxH = 0;
+        var children = [];
         for (var j = 0; j < screens.length; j++) {
             var name = screens[j].name || "";
-            if (name.indexOf(prefix) === 0 && screens[j].width && screens[j].height) {
-                totalW += screens[j].width;
-                if (screens[j].height > maxH)
-                    maxH = screens[j].height;
+            if (name.indexOf(prefix) === 0 && screens[j].width && screens[j].height)
+                children.push({
+                "w": screens[j].width,
+                "h": screens[j].height
+            });
 
+        }
+        if (children.length === 0) {
+            _screenWidth = 1920;
+            _screenHeight = 1080;
+            return ;
+        }
+        // Group by pixel height (2px tolerance) to separate rows
+        var rowHeights = [];
+        var rowWidths = [];
+        for (var ci = 0; ci < children.length; ci++) {
+            var ch = children[ci].h;
+            var found = false;
+            for (var ri = 0; ri < rowHeights.length; ri++) {
+                if (Math.abs(rowHeights[ri] - ch) < 2) {
+                    rowWidths[ri] += children[ci].w;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                rowHeights.push(ch);
+                rowWidths.push(children[ci].w);
             }
         }
-        if (totalW > 0 && maxH > 0) {
-            _screenWidth = totalW;
-            _screenHeight = maxH;
+        // Uniform grid fallback: when all cells have the same height (e.g. 2x2),
+        // grouping merges everything into one "row". Use the grid dimensions
+        // (cols/rows) to split the summed width and infer the correct height.
+        if (rowHeights.length === 1 && _rows > 1 && _columns > 0) {
+            _screenWidth = Math.round(rowWidths[0] / _rows);
+            _screenHeight = rowHeights[0] * _rows;
             return ;
         }
-        _screenWidth = 1920;
-        _screenHeight = 1080;
+        // Physical width: any row's total width (should be the same for all rows)
+        var maxRowW = 0;
+        for (var rw = 0; rw < rowWidths.length; rw++) {
+            if (rowWidths[rw] > maxRowW)
+                maxRowW = rowWidths[rw];
+
+        }
+        // Physical height: sum of all distinct row heights
+        var totalH = 0;
+        for (var rhi = 0; rhi < rowHeights.length; rhi++) {
+            totalH += rowHeights[rhi];
+        }
+        if (maxRowW > 0 && totalH > 0) {
+            _screenWidth = maxRowW;
+            _screenHeight = totalH;
+        } else {
+            _screenWidth = 1920;
+            _screenHeight = 1080;
+        }
     }
 
-    // Redistribute splits equally for a given count
-    function _redistributeEqual(count) {
-        if (count <= 1) {
+    // Redistribute to equal grid cells at given dimensions.
+    function _redistributeGrid(cols, rows) {
+        if (cols <= 0 || rows <= 0)
+            return ;
+
+        var total = cols * rows;
+        if (total <= 1) {
             settingsController.stageVirtualScreenRemoval(_selectedScreen);
             _pendingScreens = [];
+            _columns = 1;
+            _rows = 1;
             return ;
         }
-        if (count > _maxVirtualScreens)
-            count = _maxVirtualScreens;
+        if (total > _maxVirtualScreens)
+            return ;
 
         var screens = [];
-        var w = 1 / count;
-        for (var i = 0; i < count; i++) {
-            var existingName = "";
-            if (i < _pendingScreens.length)
-                existingName = _pendingScreens[i].displayName || "";
+        var cw = 1 / cols;
+        var rh = 1 / rows;
+        for (var r = 0; r < rows; r++) {
+            for (var c = 0; c < cols; c++) {
+                var idx = r * cols + c;
+                var existingName = "";
+                if (idx < _pendingScreens.length)
+                    existingName = _pendingScreens[idx].displayName || "";
 
-            screens.push({
-                "x": i * w,
-                "y": 0,
-                "width": w,
-                "height": 1,
-                "displayName": existingName
-            });
+                screens.push({
+                    "x": c * cw,
+                    "y": r * rh,
+                    "width": (c === cols - 1) ? (1 - c * cw) : cw,
+                    "height": (r === rows - 1) ? (1 - r * rh) : rh,
+                    "displayName": existingName
+                });
+            }
         }
         _pendingScreens = screens;
+        _columns = cols;
+        _rows = rows;
         _stageCurrentConfig();
     }
 
-    // Clamp divider move: ensure all regions have at least 5% width
-    function _moveDivider(dividerIndex, newFraction) {
-        if (dividerIndex < 0 || dividerIndex >= _pendingScreens.length - 1)
+    // Move a column divider (vertical boundary between adjacent columns).
+    // Adjusts x/width of all cells straddling that column boundary.
+    function _moveColumnDivider(colIndex, newXFraction) {
+        if (colIndex < 0 || colIndex >= _columns - 1)
             return ;
 
         var screens = _deepCopy(_pendingScreens);
-        var leftIdx = dividerIndex;
-        var rightIdx = dividerIndex + 1;
-        var leftStart = screens[leftIdx].x;
-        var rightEnd = screens[rightIdx].x + screens[rightIdx].width;
-        var minW = 0.05; // 5% minimum
-        // Clamp the new divider position
+        var minW = 0.05;
+        // Use first row to read column positions
+        var leftStart = screens[colIndex].x;
+        var rightEnd = screens[colIndex + 1].x + screens[colIndex + 1].width;
         var minX = leftStart + minW;
         var maxX = rightEnd - minW;
-        var newDivPos = Math.max(minX, Math.min(maxX, newFraction));
-        // Update left screen width
-        screens[leftIdx].width = newDivPos - leftStart;
-        // Update right screen x and width
-        screens[rightIdx].x = newDivPos;
-        screens[rightIdx].width = rightEnd - newDivPos;
-        // Cascade x positions for all screens after rightIdx
-        for (var k = rightIdx + 1; k < screens.length; k++) {
-            screens[k].x = screens[k - 1].x + screens[k - 1].width;
+        var newDivPos = Math.max(minX, Math.min(maxX, newXFraction));
+        var newLeftWidth = newDivPos - leftStart;
+        var newRightWidth = rightEnd - newDivPos;
+        // Update all cells in columns colIndex and colIndex+1 across all rows
+        for (var r = 0; r < _rows; r++) {
+            var leftIdx = r * _columns + colIndex;
+            var rightIdx = r * _columns + colIndex + 1;
+            screens[leftIdx].width = newLeftWidth;
+            screens[rightIdx].x = newDivPos;
+            screens[rightIdx].width = newRightWidth;
         }
-        // Normalize: ensure last screen extends to 1.0
-        var total = 0;
-        for (var m = 0; m < screens.length - 1; m++) {
-            total += screens[m].width;
-        }
-        var lastIdx = screens.length - 1;
-        screens[lastIdx].x = total;
-        screens[lastIdx].width = Math.max(minW, 1 - total);
-        // Validate ALL screens against minimum width — reject the move if any violates
-        for (var j = 0; j < screens.length; j++) {
-            if (screens[j].width < minW)
+        for (var i = 0; i < screens.length; i++) {
+            if (screens[i].width < minW)
                 return ;
 
         }
@@ -182,21 +300,62 @@ Flickable {
         _stageCurrentConfig();
     }
 
-    // Check if current config matches a preset (by ratio count and approximate widths)
-    function _matchesPreset(ratios) {
-        if (_pendingScreens.length !== ratios.length)
+    // Move a row divider (horizontal boundary between adjacent rows).
+    // Adjusts y/height of all cells straddling that row boundary.
+    function _moveRowDivider(rowIndex, newYFraction) {
+        if (rowIndex < 0 || rowIndex >= _rows - 1)
+            return ;
+
+        var screens = _deepCopy(_pendingScreens);
+        var minH = 0.05;
+        // Use first column to read row positions
+        var topStart = screens[rowIndex * _columns].y;
+        var bottomEnd = screens[(rowIndex + 1) * _columns].y + screens[(rowIndex + 1) * _columns].height;
+        var minY = topStart + minH;
+        var maxY = bottomEnd - minH;
+        var newDivPos = Math.max(minY, Math.min(maxY, newYFraction));
+        var newTopHeight = newDivPos - topStart;
+        var newBottomHeight = bottomEnd - newDivPos;
+        // Update all cells in rows rowIndex and rowIndex+1 across all columns
+        for (var c = 0; c < _columns; c++) {
+            var topIdx = rowIndex * _columns + c;
+            var bottomIdx = (rowIndex + 1) * _columns + c;
+            screens[topIdx].height = newTopHeight;
+            screens[bottomIdx].y = newDivPos;
+            screens[bottomIdx].height = newBottomHeight;
+        }
+        for (var i = 0; i < screens.length; i++) {
+            if (screens[i].height < minH)
+                return ;
+
+        }
+        _pendingScreens = screens;
+        _stageCurrentConfig();
+    }
+
+    // Check if current config matches a preset (comparing regions).
+    function _matchesPreset(regions) {
+        if (_pendingScreens.length !== regions.length)
             return false;
 
-        for (var i = 0; i < ratios.length; i++) {
-            if (Math.abs(_pendingScreens[i].width - ratios[i] / 100) > 0.01)
+        for (var i = 0; i < regions.length; i++) {
+            if (Math.abs(_pendingScreens[i].x - regions[i].x) > 0.01)
+                return false;
+
+            if (Math.abs(_pendingScreens[i].y - regions[i].y) > 0.01)
+                return false;
+
+            if (Math.abs(_pendingScreens[i].width - regions[i].width) > 0.01)
+                return false;
+
+            if (Math.abs(_pendingScreens[i].height - regions[i].height) > 0.01)
                 return false;
 
         }
         return true;
     }
 
-    // Strip "/vs:N" suffix to get physical screen ID (MonitorSelectorSection
-    // uses physicalOnly:true which deduplicates to physical IDs)
+    // Strip "/vs:N" suffix to get physical screen ID
     function _toPhysicalId(name) {
         var vsIdx = name.indexOf("/vs:");
         return vsIdx >= 0 ? name.substring(0, vsIdx) : name;
@@ -282,16 +441,20 @@ Flickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
-                // Resolution and split count
+                // Resolution and split info
                 Label {
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     text: {
                         let res = root._screenWidth + " \u00d7 " + root._screenHeight;
                         let count = root._pendingScreens.length;
-                        if (count > 1)
-                            return res + " · " + i18n("%1-Way Split", count);
-                        else if (count === 1)
-                            return res + " · " + i18n("Single Region");
+                        if (count > 1) {
+                            if (root._rows > 1)
+                                return res + " \u00b7 " + i18n("%1\u00d7%2 Grid (%3 screens)", root._columns, root._rows, count);
+
+                            return res + " \u00b7 " + i18n("%1-Way Split", count);
+                        } else if (count === 1) {
+                            return res + " \u00b7 " + i18n("Single Region");
+                        }
                         return res;
                     }
                     font: Kirigami.Theme.smallFont
@@ -314,8 +477,13 @@ Flickable {
                     pendingScreens: root._pendingScreens
                     screenWidth: root._screenWidth
                     screenHeight: root._screenHeight
-                    onDividerMoved: function(dividerIndex, newFraction) {
-                        root._moveDivider(dividerIndex, newFraction);
+                    columns: root._columns
+                    rows: root._rows
+                    onColumnDividerMoved: function(colIndex, newFraction) {
+                        root._moveColumnDivider(colIndex, newFraction);
+                    }
+                    onRowDividerMoved: function(rowIndex, newFraction) {
+                        root._moveRowDivider(rowIndex, newFraction);
                     }
                 }
 
@@ -323,19 +491,28 @@ Flickable {
 
         }
 
-        // Presets (populate local state, do NOT apply)
+        // Presets
         SettingsCard {
             headerText: i18n("Presets")
+            collapsible: true
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.largeSpacing
+
+                // Horizontal split presets
+                Label {
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    text: i18n("Horizontal Splits")
+                    font: Kirigami.Theme.smallFont
+                    color: Kirigami.Theme.disabledTextColor
+                }
 
                 GridLayout {
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
-                    Layout.bottomMargin: Kirigami.Units.largeSpacing
                     columns: 2
+                    uniformCellWidths: true
                     columnSpacing: Kirigami.Units.smallSpacing
                     rowSpacing: Kirigami.Units.smallSpacing
 
@@ -343,8 +520,8 @@ Flickable {
                         Layout.fillWidth: true
                         text: i18n("50 / 50")
                         enabled: root._selectedScreen !== ""
-                        highlighted: root._matchesPreset([50, 50])
-                        onClicked: root._loadPreset([50, 50], [i18n("Left"), i18n("Right")])
+                        highlighted: root._matchesPreset(root._horizontalRegions([50, 50], ["", ""]))
+                        onClicked: root._loadPreset(root._horizontalRegions([50, 50], [i18n("Left"), i18n("Right")]))
                         Accessible.name: i18n("Preset: %1", text)
                     }
 
@@ -352,8 +529,8 @@ Flickable {
                         Layout.fillWidth: true
                         text: i18n("60 / 40")
                         enabled: root._selectedScreen !== ""
-                        highlighted: root._matchesPreset([60, 40])
-                        onClicked: root._loadPreset([60, 40], [i18n("Main"), i18n("Side")])
+                        highlighted: root._matchesPreset(root._horizontalRegions([60, 40], ["", ""]))
+                        onClicked: root._loadPreset(root._horizontalRegions([60, 40], [i18n("Main"), i18n("Side")]))
                         Accessible.name: i18n("Preset: %1", text)
                     }
 
@@ -361,8 +538,8 @@ Flickable {
                         Layout.fillWidth: true
                         text: i18n("33 / 33 / 33")
                         enabled: root._selectedScreen !== ""
-                        highlighted: root._matchesPreset([33.3, 33.4, 33.3])
-                        onClicked: root._loadPreset([33.3, 33.4, 33.3], [i18n("Left"), i18n("Center"), i18n("Right")])
+                        highlighted: root._matchesPreset(root._horizontalRegions([33.3, 33.4, 33.3], ["", "", ""]))
+                        onClicked: root._loadPreset(root._horizontalRegions([33.3, 33.4, 33.3], [i18n("Left"), i18n("Center"), i18n("Right")]))
                         Accessible.name: i18n("Preset: %1", text)
                     }
 
@@ -370,8 +547,112 @@ Flickable {
                         Layout.fillWidth: true
                         text: i18n("40 / 20 / 40")
                         enabled: root._selectedScreen !== ""
-                        highlighted: root._matchesPreset([40, 20, 40])
-                        onClicked: root._loadPreset([40, 20, 40], [i18n("Left"), i18n("Center"), i18n("Right")])
+                        highlighted: root._matchesPreset(root._horizontalRegions([40, 20, 40], ["", "", ""]))
+                        onClicked: root._loadPreset(root._horizontalRegions([40, 20, 40], [i18n("Left"), i18n("Center"), i18n("Right")]))
+                        Accessible.name: i18n("Preset: %1", text)
+                    }
+
+                }
+
+                // Vertical and grid presets
+                Label {
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    text: i18n("Vertical & Grid")
+                    font: Kirigami.Theme.smallFont
+                    color: Kirigami.Theme.disabledTextColor
+                }
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    Layout.bottomMargin: Kirigami.Units.largeSpacing
+                    columns: 2
+                    uniformCellWidths: true
+                    columnSpacing: Kirigami.Units.smallSpacing
+                    rowSpacing: Kirigami.Units.smallSpacing
+
+                    Button {
+                        Layout.fillWidth: true
+                        text: i18n("50 / 50 Vertical")
+                        enabled: root._selectedScreen !== ""
+                        highlighted: root._matchesPreset(root._gridRegions(1, 2, []))
+                        onClicked: root._loadPreset(root._gridRegions(1, 2, [i18n("Top"), i18n("Bottom")]))
+                        Accessible.name: i18n("Preset: %1", text)
+                    }
+
+                    Button {
+                        Layout.fillWidth: true
+                        text: i18n("50 / 50 Grid")
+                        enabled: root._selectedScreen !== ""
+                        highlighted: root._matchesPreset(root._gridRegions(2, 2, []))
+                        onClicked: root._loadPreset(root._gridRegions(2, 2, [i18n("Top-Left"), i18n("Top-Right"), i18n("Bottom-Left"), i18n("Bottom-Right")]))
+                        Accessible.name: i18n("Preset: %1", text)
+                    }
+
+                    Button {
+                        Layout.fillWidth: true
+                        text: i18n("33 / 33 / 33 Grid")
+                        enabled: root._selectedScreen !== ""
+                        highlighted: root._matchesPreset(root._gridRegions(3, 2, []))
+                        onClicked: root._loadPreset(root._gridRegions(3, 2, [i18n("Top-Left"), i18n("Top-Center"), i18n("Top-Right"), i18n("Bottom-Left"), i18n("Bottom-Center"), i18n("Bottom-Right")]))
+                        Accessible.name: i18n("Preset: %1", text)
+                    }
+
+                    Button {
+                        Layout.fillWidth: true
+                        text: i18n("60 / 40 Grid")
+                        enabled: root._selectedScreen !== ""
+                        highlighted: root._matchesPreset([{
+                            "x": 0,
+                            "y": 0,
+                            "width": 0.6,
+                            "height": 0.5,
+                            "displayName": ""
+                        }, {
+                            "x": 0.6,
+                            "y": 0,
+                            "width": 0.4,
+                            "height": 0.5,
+                            "displayName": ""
+                        }, {
+                            "x": 0,
+                            "y": 0.5,
+                            "width": 0.6,
+                            "height": 0.5,
+                            "displayName": ""
+                        }, {
+                            "x": 0.6,
+                            "y": 0.5,
+                            "width": 0.4,
+                            "height": 0.5,
+                            "displayName": ""
+                        }])
+                        onClicked: root._loadPreset([{
+                            "x": 0,
+                            "y": 0,
+                            "width": 0.6,
+                            "height": 0.5,
+                            "displayName": i18n("Top-Main")
+                        }, {
+                            "x": 0.6,
+                            "y": 0,
+                            "width": 0.4,
+                            "height": 0.5,
+                            "displayName": i18n("Top-Side")
+                        }, {
+                            "x": 0,
+                            "y": 0.5,
+                            "width": 0.6,
+                            "height": 0.5,
+                            "displayName": i18n("Bottom-Main")
+                        }, {
+                            "x": 0.6,
+                            "y": 0.5,
+                            "width": 0.4,
+                            "height": 0.5,
+                            "displayName": i18n("Bottom-Side")
+                        }])
                         Accessible.name: i18n("Preset: %1", text)
                     }
 
@@ -384,48 +665,82 @@ Flickable {
         // Custom split editor
         SettingsCard {
             headerText: i18n("Custom Split")
+            collapsible: true
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.largeSpacing
 
-                // Number of columns
+                // Columns and Rows spinboxes
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
-                    spacing: Kirigami.Units.smallSpacing
+                    spacing: Kirigami.Units.largeSpacing
 
-                    Label {
-                        text: i18n("Number of splits:")
-                    }
+                    RowLayout {
+                        spacing: Kirigami.Units.smallSpacing
 
-                    SpinBox {
-                        id: splitCountSpinBox
+                        Label {
+                            text: i18n("Columns:")
+                        }
 
-                        from: 1
-                        to: root._maxVirtualScreens
-                        // No value: binding — set imperatively to avoid binding breakage
-                        editable: true
-                        enabled: root._selectedScreen !== ""
-                        Component.onCompleted: value = root._pendingScreens.length > 1 ? root._pendingScreens.length : 1
-                        onValueModified: {
-                            if (value <= 1) {
-                                // Treat 1 as "no split" — clear pending and stage removal
-                                settingsController.stageVirtualScreenRemoval(root._selectedScreen);
-                                root._pendingScreens = [];
-                            } else {
-                                root._redistributeEqual(value);
+                        SpinBox {
+                            id: columnsSpinBox
+
+                            from: 1
+                            to: Math.max(1, Math.floor(root._maxVirtualScreens / Math.max(1, root._rows)))
+                            editable: true
+                            enabled: root._selectedScreen !== ""
+                            Component.onCompleted: value = root._columns
+                            onValueModified: {
+                                var newCols = value;
+                                var maxRows = Math.max(1, Math.floor(root._maxVirtualScreens / newCols));
+                                var newRows = Math.min(root._rows, maxRows);
+                                if (newCols * newRows <= 1) {
+                                    settingsController.stageVirtualScreenRemoval(root._selectedScreen);
+                                    root._pendingScreens = [];
+                                    root._columns = 1;
+                                    root._rows = 1;
+                                } else {
+                                    root._redistributeGrid(newCols, newRows);
+                                }
                             }
+                            Accessible.name: i18n("Number of columns")
                         }
-                        Accessible.name: i18n("Number of virtual screens")
+
                     }
 
-                    Connections {
-                        function onPendingScreensChanged() {
-                            splitCountSpinBox.value = root._pendingScreens.length > 1 ? root._pendingScreens.length : 1;
+                    RowLayout {
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Label {
+                            text: i18n("Rows:")
                         }
 
-                        target: root
+                        SpinBox {
+                            id: rowsSpinBox
+
+                            from: 1
+                            to: Math.max(1, Math.floor(root._maxVirtualScreens / Math.max(1, root._columns)))
+                            editable: true
+                            enabled: root._selectedScreen !== ""
+                            Component.onCompleted: value = root._rows
+                            onValueModified: {
+                                var newRows = value;
+                                var maxCols = Math.max(1, Math.floor(root._maxVirtualScreens / newRows));
+                                var newCols = Math.min(root._columns, maxCols);
+                                if (newCols * newRows <= 1) {
+                                    settingsController.stageVirtualScreenRemoval(root._selectedScreen);
+                                    root._pendingScreens = [];
+                                    root._columns = 1;
+                                    root._rows = 1;
+                                } else {
+                                    root._redistributeGrid(newCols, newRows);
+                                }
+                            }
+                            Accessible.name: i18n("Number of rows")
+                        }
+
                     }
 
                     Item {
@@ -437,15 +752,28 @@ Flickable {
                         icon.name: "distribute-horizontal-equal"
                         flat: true
                         enabled: root._selectedScreen !== "" && root._pendingScreens.length > 1
-                        onClicked: root._redistributeEqual(root._pendingScreens.length)
-                        ToolTip.text: i18n("Reset all splits to equal widths")
+                        onClicked: root._redistributeGrid(root._columns, root._rows)
+                        ToolTip.text: i18n("Reset all splits to equal sizes")
                         ToolTip.visible: hovered
                         Accessible.name: i18n("Equalize virtual screen sizes")
                     }
 
                 }
 
-                // Per-split name and width editing
+                // Sync spinboxes when grid dimensions change
+                Connections {
+                    function on_ColumnsChanged() {
+                        columnsSpinBox.value = root._columns;
+                    }
+
+                    function on_RowsChanged() {
+                        rowsSpinBox.value = root._rows;
+                    }
+
+                    target: root
+                }
+
+                // Per-split name and dimensions
                 Repeater {
                     model: root._pendingScreens
 
@@ -481,16 +809,28 @@ Flickable {
                         }
 
                         Label {
-                            text: Math.round(modelData.width * 100) + "%"
-                            Layout.preferredWidth: Kirigami.Units.gridUnit * 3
+                            text: {
+                                var wp = Math.round(modelData.width * 100);
+                                if (root._rows > 1)
+                                    return wp + "% \u00d7 " + Math.round(modelData.height * 100) + "%";
+
+                                return wp + "%";
+                            }
+                            Layout.preferredWidth: root._rows > 1 ? Kirigami.Units.gridUnit * 5 : Kirigami.Units.gridUnit * 3
                             horizontalAlignment: Text.AlignRight
                             color: Kirigami.Theme.disabledTextColor
                             font: Kirigami.Theme.smallFont
                         }
 
                         Label {
-                            text: Math.round(modelData.width * root._screenWidth) + "px"
-                            Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                            text: {
+                                var wpx = Math.round(modelData.width * root._screenWidth);
+                                if (root._rows > 1)
+                                    return wpx + "\u00d7" + Math.round(modelData.height * root._screenHeight) + "px";
+
+                                return wpx + "px";
+                            }
+                            Layout.preferredWidth: root._rows > 1 ? Kirigami.Units.gridUnit * 5.5 : Kirigami.Units.gridUnit * 4
                             horizontalAlignment: Text.AlignRight
                             color: Kirigami.Theme.disabledTextColor
                             font: Kirigami.Theme.smallFont
@@ -500,26 +840,13 @@ Flickable {
 
                 }
 
-                // Bottom margin
-                Item {
-                    Layout.preferredHeight: Kirigami.Units.smallSpacing
+                SettingsSeparator {
                 }
-
-            }
-
-        }
-
-        // Actions
-        SettingsCard {
-            headerText: i18n("Actions")
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
 
                 Button {
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
-                    Layout.bottomMargin: Kirigami.Units.largeSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
                     text: i18n("Remove Subdivisions")
                     icon.name: "edit-delete"
                     palette.buttonText: Kirigami.Theme.negativeTextColor
@@ -528,6 +855,8 @@ Flickable {
                         settingsController.stageVirtualScreenRemoval(root._selectedScreen);
                         root._pendingScreens = [];
                         root._savedScreens = [];
+                        root._columns = 1;
+                        root._rows = 1;
                     }
                     ToolTip.text: i18n("Remove all virtual screen subdivisions from this monitor")
                     ToolTip.visible: hovered

@@ -3,6 +3,7 @@
 
 #include "snapassisthandler.h"
 #include "plasmazoneseffect.h"
+#include "autotilehandler.h"
 #include "dbus_constants.h"
 
 #include <effect/effecthandler.h>
@@ -129,12 +130,18 @@ QJsonArray SnapAssistHandler::buildCandidates(const QString& excludeWindowId, co
         }
 
         // Filter candidates to same screen. For virtual screens, include windows
-        // from any virtual screen on the same physical monitor (user may want to
-        // snap a window from the other half of their ultrawide).
+        // from any virtual screen on the same physical monitor — UNLESS the
+        // window is autotile-managed on that other VS (actively tiled, not a
+        // candidate for snapping elsewhere).
         if (!screenId.isEmpty()) {
             QString winScreen = m_effect->getWindowScreenId(w);
-            if (winScreen != screenId && !VirtualScreenId::samePhysical(screenId, winScreen)) {
-                continue;
+            if (winScreen != screenId) {
+                if (!VirtualScreenId::samePhysical(screenId, winScreen)) {
+                    continue; // Different physical monitor entirely
+                }
+                if (m_effect->autotileHandler()->isTrackedWindow(windowId)) {
+                    continue; // Tiled on a sibling VS — not a candidate
+                }
             }
         }
 

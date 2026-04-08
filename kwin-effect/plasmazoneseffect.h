@@ -255,6 +255,10 @@ private:
      */
     QString outputScreenId(const KWin::LogicalOutput* output) const;
     QString getWindowScreenId(KWin::EffectWindow* w) const;
+    AutotileHandler* autotileHandler() const
+    {
+        return m_autotileHandler.get();
+    }
 
     /**
      * @brief Emit navigationFeedback D-Bus signal
