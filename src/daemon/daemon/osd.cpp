@@ -404,11 +404,13 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
     if (!m_layoutManager || !m_screenManager) {
         return;
     }
-    // Show OSD on ALL screens — each screen may have a different per-desktop
-    // assignment (autotile vs snapping, different layouts/algorithms).
+    // Show OSD on ALL effective screens — each screen may have a different
+    // per-desktop assignment (autotile vs snapping, different layouts/algorithms).
+    // Uses effectiveScreenIds() so virtual screens each get their own OSD
+    // showing the correct per-VS layout/algorithm assignment.
     // Screens where PlasmaZones is disabled show a "disabled" OSD instead.
-    for (QScreen* screen : m_screenManager->screens()) {
-        const QString screenId = Utils::screenIdentifier(screen);
+    const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+    for (const QString& screenId : effectiveIds) {
         const DisabledReason why = contextDisabledReason(m_settings.get(), screenId, desktop, activity);
         if (why != DisabledReason::NotDisabled) {
             showContextDisabledOsd(screenId, desktop, activity, why);
