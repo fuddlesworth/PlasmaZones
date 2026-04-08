@@ -1,6 +1,14 @@
 {
     "releases": [
         {
+            "version": "2.8.1",
+            "date": "2026-04-08",
+            "highlights": [
+                "Fixed autotile ratio getting stuck after notification auto-dismiss (e.g., media player notifications)",
+                "Stale window min-sizes are now cleared on screen geometry changes to prevent split ratio override"
+            ]
+        },
+        {
             "version": "2.8.0",
             "date": "2026-04-07",
             "highlights": [

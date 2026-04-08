@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-04-08
+
+### Fixed
+- **Autotile ratio stuck after notification dismiss** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): Eliminated a min-size feedback loop where the KWin effect's Wayland centering code fell back to reporting the target zone width as a discovered minimum size for apps without a declared `minSize()`. This self-reinforcing constraint locked the master/stack split ratio until the user minimized and restored a window. Only the compositor's declared minimum is now reported.
+- **Stale min-sizes after screen geometry change**: Discovered min-sizes for windows on a screen are now cleared when the available geometry changes (e.g., panel/systray resize), preventing stale constraints from overriding the user's split ratio on geometry-triggered retiles.
+
 ## [2.8.0] - 2026-04-07
 
 ### Added
@@ -1181,7 +1187,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.0...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.1...HEAD
+[2.8.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.0...v2.8.1
 [2.8.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.7.1...v2.8.0
 [2.7.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.7.0...v2.7.1
 [2.7.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.6.0...v2.7.0
