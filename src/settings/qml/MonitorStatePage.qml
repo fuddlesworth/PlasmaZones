@@ -40,10 +40,10 @@ Flickable {
         var target = _selectedScreen;
         // If no screen selected, use first screen
         if (!target && _screenStates.length > 0)
-            target = _screenStates[0].screenName || "";
+            target = _screenStates[0].screenId || "";
 
         for (var i = 0; i < _screenStates.length; i++) {
-            if (_screenStates[i].screenName === target)
+            if (_screenStates[i].screenId === target)
                 return _screenStates[i];
 
         }
