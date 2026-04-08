@@ -388,6 +388,39 @@ public:
 };
 
 /**
+ * @brief Why PlasmaZones is disabled in a given context.
+ *
+ * Priority order: Monitor > Desktop > Activity (matches isContextDisabled check order).
+ */
+enum class DisabledReason {
+    NotDisabled,
+    MonitorDisabled,
+    DesktopDisabled,
+    ActivityDisabled
+};
+
+/**
+ * @brief Determine *why* PlasmaZones is disabled for a given screen/desktop/activity.
+ *
+ * Returns the highest-priority reason, or NotDisabled if the context is active.
+ * Use this when you need the reason (e.g. for OSD messages); use isContextDisabled()
+ * for simple gate checks.
+ */
+inline DisabledReason contextDisabledReason(const IZoneVisualizationSettings* s, const QString& screenId, int desktop,
+                                            const QString& activity)
+{
+    if (!s)
+        return DisabledReason::NotDisabled;
+    if (s->isMonitorDisabled(screenId))
+        return DisabledReason::MonitorDisabled;
+    if (desktop > 0 && s->isDesktopDisabled(screenId, desktop))
+        return DisabledReason::DesktopDisabled;
+    if (!activity.isEmpty() && s->isActivityDisabled(screenId, activity))
+        return DisabledReason::ActivityDisabled;
+    return DisabledReason::NotDisabled;
+}
+
+/**
  * @brief Check if PlasmaZones is disabled for a given screen/desktop/activity context.
  *
  * Returns true if the screen is disabled, OR the desktop is disabled, OR the activity
@@ -396,15 +429,7 @@ public:
 inline bool isContextDisabled(const IZoneVisualizationSettings* s, const QString& screenId, int desktop,
                               const QString& activity)
 {
-    if (!s)
-        return false;
-    if (s->isMonitorDisabled(screenId))
-        return true;
-    if (desktop > 0 && s->isDesktopDisabled(screenId, desktop))
-        return true;
-    if (!activity.isEmpty() && s->isActivityDisabled(screenId, activity))
-        return true;
-    return false;
+    return contextDisabledReason(s, screenId, desktop, activity) != DisabledReason::NotDisabled;
 }
 
 /**

@@ -49,9 +49,7 @@ static QHash<QString, QStringList> parseZoneListMap(const QString& json)
 
 void WindowTrackingAdaptor::saveState()
 {
-    std::unique_ptr<IConfigBackend> fallback;
-    IConfigBackend* backend = resolveBackend(m_configBackend, fallback);
-    auto tracking = backend->group(ConfigKeys::windowTrackingGroup());
+    auto tracking = m_sessionBackend->group(ConfigKeys::windowTrackingGroup());
 
     // Save active layout ID so we can restore it after daemon restart.
     if (m_layoutManager && m_layoutManager->activeLayout()) {
@@ -111,6 +109,15 @@ void WindowTrackingAdaptor::saveState()
     tracking->writeString(ConfigKeys::pendingRestoreQueuesKey(),
                           QString::fromUtf8(QJsonDocument(pendingQueuesObj).toJson(QJsonDocument::Compact)));
 
+    // Clean up obsolete keys from old formats
+    tracking->deleteKey(ConfigKeys::obsoletePendingWindowScreenAssignmentsKey());
+    tracking->deleteKey(ConfigKeys::obsoletePendingWindowDesktopAssignmentsKey());
+    tracking->deleteKey(ConfigKeys::obsoletePendingWindowLayoutAssignmentsKey());
+    tracking->deleteKey(ConfigKeys::obsoletePendingWindowZoneNumbersKey());
+    tracking->deleteKey(ConfigKeys::obsoleteWindowZoneAssignmentsKey());
+    tracking->deleteKey(ConfigKeys::obsoleteWindowScreenAssignmentsKey());
+    tracking->deleteKey(ConfigKeys::obsoleteWindowDesktopAssignmentsKey());
+
     // Save pre-tile geometries so float-toggle restores to the correct position
     // even after daemon restart (windows stay at their zone positions across restarts).
     // Save full windowId format for daemon-only restarts (UUIDs stable, multi-instance distinction).
@@ -125,7 +132,7 @@ void WindowTrackingAdaptor::saveState()
 
     // Float state is ephemeral (session-only) — do NOT persist across restarts.
     // Clear any stale entry from older versions so restored sessions start clean.
-    tracking->deleteKey(ConfigKeys::floatingWindowsKey());
+    tracking->deleteKey(ConfigKeys::obsoleteFloatingWindowsKey());
 
     // Save pre-float zone assignments (for unfloating after session restore).
     // Runtime keys may be full window IDs; convert to
@@ -159,8 +166,39 @@ void WindowTrackingAdaptor::saveState()
     tracking->writeString(ConfigKeys::userSnappedClassesKey(),
                           QString::fromUtf8(QJsonDocument(userSnappedArray).toJson(QJsonDocument::Compact)));
 
+    // Save autotile per-context window orders (analogous to WindowZoneAssignmentsFull
+    // for snap mode). masterCount/splitRatio are NOT saved here — Settings owns those
+    // via AutotileScreen:<id> per-screen overrides.
+    if (m_serializeTilingStatesFn) {
+        const QJsonArray autotileOrders = m_serializeTilingStatesFn();
+        if (!autotileOrders.isEmpty()) {
+            tracking->writeString(ConfigKeys::autotileWindowOrdersKey(),
+                                  QString::fromUtf8(QJsonDocument(autotileOrders).toJson(QJsonDocument::Compact)));
+        } else {
+            tracking->deleteKey(ConfigKeys::autotileWindowOrdersKey());
+        }
+    } else {
+        // No serialize delegate — clean up any stale key from a prior session
+        // where autotile was enabled. Prevents restoring orphaned window orders.
+        tracking->deleteKey(ConfigKeys::autotileWindowOrdersKey());
+    }
+
+    // Save autotile pending restore queues (close/reopen window preservation).
+    // Separate key from window orders to keep the orders array homogeneous.
+    if (m_serializePendingRestoresFn) {
+        const QJsonObject pendingRestores = m_serializePendingRestoresFn();
+        if (!pendingRestores.isEmpty()) {
+            tracking->writeString(ConfigKeys::autotilePendingRestoresKey(),
+                                  QString::fromUtf8(QJsonDocument(pendingRestores).toJson(QJsonDocument::Compact)));
+        } else {
+            tracking->deleteKey(ConfigKeys::autotilePendingRestoresKey());
+        }
+    } else {
+        tracking->deleteKey(ConfigKeys::autotilePendingRestoresKey());
+    }
+
     tracking.reset(); // release group before sync
-    backend->sync();
+    m_sessionBackend->sync();
     qCInfo(lcDbusWindow) << "Saved state:"
                          << "zones=" << fullAssignments.size() << "pending=" << pendingQueuesObj.size()
                          << "preTile=" << m_service->preTileGeometries().size()
@@ -189,28 +227,26 @@ void WindowTrackingAdaptor::saveStateOnShutdown()
 
 void WindowTrackingAdaptor::loadState()
 {
-    // Read config as a flat key map for structured parsing below.
-    // readJsonConfigFromDisk() reads the file directly, bypassing QSettings cache.
-    // QSettingsConfigGroup doesn't expose key enumeration, and the flat map is
-    // convenient for this function's parsing pattern.
+    // Read config via the IConfigBackend group API (readString/readInt).
+    // This correctly handles values stored as native JSON objects/arrays
+    // (e.g. PendingRestoreQueues, PreTileGeometries) — the group's readString()
+    // serializes them back to compact JSON strings.
+    //
+    // The previous approach used readJsonConfigFromDisk() which flattened the
+    // entire config into a QMap. Its flattener recursed into native JSON objects
+    // as if they were config groups, making object-type values like
+    // PendingRestoreQueues invisible to key lookups — the root cause of the
+    // window restore bug after v2 config migration.
     //
     // Sync the shared backend first so any in-memory writes (e.g., from a
-    // concurrent saveState()) are flushed to disk before we read the file.
-    if (m_configBackend) {
-        m_configBackend->sync();
-    }
-    const auto configMap = PlasmaZones::readJsonConfigFromDisk();
-    const QString wt = ConfigKeys::windowTrackingGroup();
+    // concurrent saveState()) are flushed to disk before we read.
+    m_sessionBackend->sync();
+    auto tracking = m_sessionBackend->group(ConfigKeys::windowTrackingGroup());
     auto readVal = [&](const QString& key, const QString& def = QString()) -> QString {
-        return configMap.value(wt + QLatin1Char('/') + key, def).toString();
+        return tracking->readString(key, def);
     };
     auto readIntVal = [&](const QString& key, int def = 0) -> int {
-        QVariant v = configMap.value(wt + QLatin1Char('/') + key);
-        if (!v.isValid())
-            return def;
-        bool ok = false;
-        int result = v.toInt(&ok);
-        return ok ? result : def;
+        return tracking->readInt(key, def);
     };
 
     // Build pending restore queues from:
@@ -495,6 +531,35 @@ void WindowTrackingAdaptor::loadState()
         }
     }
     m_service->setUserSnappedClasses(userSnappedClasses);
+
+    // Restore autotile per-context window orders (analogous to WindowZoneAssignmentsFull)
+    if (m_deserializeTilingStatesFn) {
+        const QString autotileOrdersStr = readVal(ConfigKeys::autotileWindowOrdersKey(), QString());
+        if (!autotileOrdersStr.isEmpty()) {
+            QJsonParseError parseError;
+            const QJsonDocument doc = QJsonDocument::fromJson(autotileOrdersStr.toUtf8(), &parseError);
+            if (parseError.error == QJsonParseError::NoError && doc.isArray()) {
+                m_deserializeTilingStatesFn(doc.array());
+            } else {
+                qCWarning(lcDbusWindow) << "Failed to parse saved autotile window orders:" << parseError.errorString();
+            }
+        }
+    }
+
+    // Restore autotile pending restore queues (close/reopen window preservation)
+    if (m_deserializePendingRestoresFn) {
+        const QString pendingRestoresStr = readVal(ConfigKeys::autotilePendingRestoresKey(), QString());
+        if (!pendingRestoresStr.isEmpty()) {
+            QJsonParseError parseError;
+            const QJsonDocument doc = QJsonDocument::fromJson(pendingRestoresStr.toUtf8(), &parseError);
+            if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+                m_deserializePendingRestoresFn(doc.object());
+            } else {
+                qCWarning(lcDbusWindow) << "Failed to parse saved autotile pending restores:"
+                                        << parseError.errorString();
+            }
+        }
+    }
 
     // Restore active layout from previous session so that previousLayout() is correct
     // on the next layout switch. Without this, the daemon starts with defaultLayout()

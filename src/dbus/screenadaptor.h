@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 #include <QObject>
 #include <QDBusAbstractAdaptor>
+#include <QRect>
 #include <QStringList>
 #include <functional>
 
@@ -38,6 +39,7 @@ public Q_SLOTS:
     QString getPrimaryScreen();
     QString getScreenId(const QString& connectorName);
     void setPrimaryScreenFromKWin(const QString& connectorName);
+    QRect getAvailableGeometry(const QString& screenId);
 
     // Virtual screen management
     QString getVirtualScreenConfig(const QString& physicalScreenId);

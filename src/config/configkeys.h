@@ -91,7 +91,70 @@ public:
 
     // Unmanaged groups (not purged by save(), written independently)
     PZ_CONFIG_GROUP(tilingQuickLayoutSlotsGroup, "TilingQuickLayoutSlots")
-    PZ_CONFIG_GROUP(autoTileStateGroup, "AutoTileState")
+    PZ_CONFIG_GROUP(windowTrackingGroup, "WindowTracking")
+
+    // Assignment group prefix (used in assignments.json and migration code)
+    PZ_CONFIG_GROUP(assignmentGroupPrefix, "Assignment:")
+    PZ_CONFIG_GROUP(quickLayoutsGroup, "QuickLayouts")
+    PZ_CONFIG_GROUP(modeTrackingGroup, "ModeTracking")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Window Tracking (session.json, written by WTA)
+    //
+    // The WindowTracking group stores ephemeral per-session window state that is
+    // NOT part of user preferences. It lives in session.json (separate from
+    // config.json) to avoid write contention with user preference saves.
+    // Owned by WindowTrackingAdaptor and saved via its debounced save cycle.
+    //
+    // Autotile data is split across three locations:
+    //   1. Tiling.Algorithm group (Settings, config.json) — global defaults:
+    //      algorithm, splitRatio, masterCount, maxWindows, splitRatioStep,
+    //      perAlgorithmSettings
+    //   2. AutotileScreen:<id> groups (Settings, config.json) — per-screen
+    //      overrides for masterCount, splitRatio, algorithm
+    //   3. WindowTracking.AutotileWindowOrders (WTA, session.json) — per-context
+    //      window order and floating state
+    //
+    // Settings (1, 2) are user preferences. WindowTracking (3) is session state.
+    // Settings::reset() deletes session.json and per-screen groups.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Snap mode — zone assignments and restore queues
+    PZ_CONFIG_KEY(activeLayoutIdKey, "ActiveLayoutId")
+    PZ_CONFIG_KEY(windowZoneAssignmentsFullKey, "WindowZoneAssignmentsFull")
+    PZ_CONFIG_KEY(pendingRestoreQueuesKey, "PendingRestoreQueues")
+
+    // Snap mode — pre-tile geometry (for float-toggle restore)
+    PZ_CONFIG_KEY(preTileGeometriesFullKey, "PreTileGeometriesFull")
+    PZ_CONFIG_KEY(preTileGeometriesKey, "PreTileGeometries")
+
+    // Snap mode — last used zone info
+    PZ_CONFIG_KEY(lastUsedZoneIdKey, "LastUsedZoneId")
+    PZ_CONFIG_KEY(lastUsedScreenNameKey, "LastUsedScreenName")
+    PZ_CONFIG_KEY(lastUsedZoneClassKey, "LastUsedZoneClass")
+    PZ_CONFIG_KEY(lastUsedDesktopKey, "LastUsedDesktop")
+
+    // Snap mode — pre-float state (for unfloating after session restore)
+    PZ_CONFIG_KEY(preFloatZoneAssignmentsKey, "PreFloatZoneAssignments")
+    PZ_CONFIG_KEY(preFloatScreenAssignmentsKey, "PreFloatScreenAssignments")
+
+    // Snap mode — user-snapped classes
+    PZ_CONFIG_KEY(userSnappedClassesKey, "UserSnappedClasses")
+
+    // Autotile mode — per-context window order and floating state
+    PZ_CONFIG_KEY(autotileWindowOrdersKey, "AutotileWindowOrders")
+    // Autotile mode — pending restore queue for close/reopen window preservation
+    PZ_CONFIG_KEY(autotilePendingRestoresKey, "AutotilePendingRestores")
+
+    // Obsolete keys (cleaned up on save to prevent stale data)
+    PZ_CONFIG_KEY(obsoleteFloatingWindowsKey, "FloatingWindows")
+    PZ_CONFIG_KEY(obsoletePendingWindowScreenAssignmentsKey, "PendingWindowScreenAssignments")
+    PZ_CONFIG_KEY(obsoletePendingWindowDesktopAssignmentsKey, "PendingWindowDesktopAssignments")
+    PZ_CONFIG_KEY(obsoletePendingWindowLayoutAssignmentsKey, "PendingWindowLayoutAssignments")
+    PZ_CONFIG_KEY(obsoletePendingWindowZoneNumbersKey, "PendingWindowZoneNumbers")
+    PZ_CONFIG_KEY(obsoleteWindowZoneAssignmentsKey, "WindowZoneAssignments")
+    PZ_CONFIG_KEY(obsoleteWindowScreenAssignmentsKey, "WindowScreenAssignments")
+    PZ_CONFIG_KEY(obsoleteWindowDesktopAssignmentsKey, "WindowDesktopAssignments")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Trigger JSON Field Names

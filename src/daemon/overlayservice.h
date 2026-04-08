@@ -153,7 +153,8 @@ public:
                        bool autoAssign = false, const QString& screenId = QString(), bool showMasterDot = false,
                        bool producesOverlappingZones = false, const QString& zoneNumberDisplay = QStringLiteral("all"),
                        int masterCount = 1);
-    void showLayoutOsd(Layout* layout, bool locked, const QString& screenId = QString());
+    void showLockedLayoutOsd(Layout* layout, const QString& screenId = QString());
+    void showDisabledOsd(const QString& reason, const QString& screenId = QString());
 
     /**
      * @brief Pre-create Layout OSD QML windows for all connected screens.

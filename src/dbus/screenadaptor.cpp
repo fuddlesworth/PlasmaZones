@@ -274,151 +274,19 @@ QString ScreenAdaptor::getScreenId(const QString& connectorName)
     return Utils::screenIdForName(connectorName);
 }
 
-QString ScreenAdaptor::getVirtualScreenConfig(const QString& physicalScreenId)
+QRect ScreenAdaptor::getAvailableGeometry(const QString& screenId)
 {
-    if (physicalScreenId.isEmpty()) {
-        qCWarning(lcDbus) << "getVirtualScreenConfig: empty physicalScreenId";
-        return QString();
+    QScreen* screen = nullptr;
+    if (!screenId.isEmpty()) {
+        screen = Utils::findScreenByIdOrName(screenId);
     }
-    if (VirtualScreenId::isVirtual(physicalScreenId)) {
-        qCWarning(lcDbus) << "getVirtualScreenConfig: expected physical screen ID, got virtual:" << physicalScreenId;
-        return QString();
+    if (!screen) {
+        screen = QGuiApplication::primaryScreen();
     }
-
-    auto* mgr = ScreenManager::instance();
-    if (!mgr) {
-        qCWarning(lcDbus) << "getVirtualScreenConfig: no ScreenManager instance";
-        return QString();
+    if (!screen) {
+        return QRect();
     }
-
-    VirtualScreenConfig config = mgr->virtualScreenConfig(physicalScreenId);
-
-    QJsonObject root;
-    root[JsonKeys::PhysicalScreenId] = physicalScreenId;
-
-    QJsonArray screensArr;
-    for (const auto& vs : config.screens) {
-        QJsonObject screenObj;
-        screenObj[JsonKeys::Id] = vs.id;
-        screenObj[JsonKeys::Index] = vs.index;
-        screenObj[JsonKeys::DisplayName] = vs.displayName;
-        screenObj[JsonKeys::Region] = QJsonObject{{JsonKeys::X, vs.region.x()},
-                                                  {JsonKeys::Y, vs.region.y()},
-                                                  {JsonKeys::Width, vs.region.width()},
-                                                  {JsonKeys::Height, vs.region.height()}};
-        screensArr.append(screenObj);
-    }
-    root[JsonKeys::Screens] = screensArr;
-
-    return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
-}
-
-void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, const QString& configJson)
-{
-    if (physicalScreenId.isEmpty()) {
-        qCWarning(lcDbus) << "setVirtualScreenConfig: empty physicalScreenId";
-        return;
-    }
-    if (VirtualScreenId::isVirtual(physicalScreenId)) {
-        qCWarning(lcDbus) << "setVirtualScreenConfig: expected physical screen ID, got virtual:" << physicalScreenId;
-        return;
-    }
-
-    auto* mgr = ScreenManager::instance();
-    if (!mgr) {
-        qCWarning(lcDbus) << "setVirtualScreenConfig: no ScreenManager instance";
-        return;
-    }
-
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(configJson.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qCWarning(lcDbus) << "setVirtualScreenConfig: invalid JSON:" << parseError.errorString();
-        return;
-    }
-
-    QJsonObject root = doc.object();
-    QJsonArray screensArr = root[JsonKeys::Screens].toArray();
-
-    VirtualScreenConfig config;
-    config.physicalScreenId = physicalScreenId;
-    QSet<int> seenIndices;
-
-    for (const auto& entry : screensArr) {
-        QJsonObject screenObj = entry.toObject();
-        QJsonObject regionObj = screenObj[JsonKeys::Region].toObject();
-
-        VirtualScreenDef def;
-        def.index = screenObj[JsonKeys::Index].toInt();
-        def.id = VirtualScreenId::make(physicalScreenId, def.index);
-        def.physicalScreenId = physicalScreenId;
-        def.displayName = screenObj[JsonKeys::DisplayName].toString();
-        def.region = QRectF(regionObj[JsonKeys::X].toDouble(), regionObj[JsonKeys::Y].toDouble(),
-                            regionObj[JsonKeys::Width].toDouble(), regionObj[JsonKeys::Height].toDouble());
-
-        // Validate region coordinates are within [0.0, 1.0] bounds (relative geometry)
-        constexpr qreal tolerance = 1e-6;
-        const qreal rx = def.region.x();
-        const qreal ry = def.region.y();
-        const qreal rw = def.region.width();
-        const qreal rh = def.region.height();
-        constexpr qreal minSize = 0.01;
-        if (rx < -tolerance || ry < -tolerance || rw < minSize || rh < minSize || rx + rw > 1.0 + tolerance
-            || ry + rh > 1.0 + tolerance) {
-            qCWarning(lcDbus) << "setVirtualScreenConfig: dropping virtual screen" << def.index << "for"
-                              << physicalScreenId << "- invalid region: x=" << rx << "y=" << ry << "w=" << rw
-                              << "h=" << rh << "(all coordinates must be within [0.0, 1.0])";
-            continue;
-        }
-
-        // Skip duplicate indices — two entries with the same index would
-        // generate the same virtual screen ID, silently clobbering one.
-        if (seenIndices.contains(def.index)) {
-            qCWarning(lcDbus) << "setVirtualScreenConfig: skipping duplicate virtual screen index" << def.index << "for"
-                              << physicalScreenId;
-            continue;
-        }
-        seenIndices.insert(def.index);
-
-        config.screens.append(def);
-    }
-
-    // Basic sanity: must have at least 2 screens (full validation in ScreenManager)
-    if (config.screens.size() < 2) {
-        qCWarning(lcDbus) << "setVirtualScreenConfig: need at least 2 screens for subdivision";
-        return;
-    }
-
-    // Enforce upper bound from ConfigDefaults
-    if (config.screens.size() > ConfigDefaults::maxVirtualScreensPerPhysical()) {
-        qCWarning(lcDbus) << "setVirtualScreenConfig: too many virtual screens" << config.screens.size() << "(max"
-                          << ConfigDefaults::maxVirtualScreensPerPhysical() << ")";
-        return;
-    }
-
-    mgr->setVirtualScreenConfig(physicalScreenId, config);
-}
-
-QStringList ScreenAdaptor::getPhysicalScreens()
-{
-    QStringList result;
-    auto* mgr = ScreenManager::instance();
-    if (!mgr) {
-        return result;
-    }
-    for (const auto* screen : mgr->screens()) {
-        result.append(Utils::screenIdentifier(screen));
-    }
-    return result;
-}
-
-QString ScreenAdaptor::getEffectiveScreenAt(int x, int y)
-{
-    auto* mgr = ScreenManager::instance();
-    if (!mgr) {
-        return QString();
-    }
-    return mgr->effectiveScreenAt(QPoint(x, y));
+    return ScreenManager::actualAvailableGeometry(screen);
 }
 
 } // namespace PlasmaZones

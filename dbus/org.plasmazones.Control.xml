@@ -28,5 +28,14 @@
                 <annotation name="org.gtk.GDBus.DocString" value="JSON with layouts, windows, autotile state."/>
             </arg>
         </method>
+        <method name="generateSupportReport">
+            <annotation name="org.gtk.GDBus.DocString" value="Generate a redacted support report for bug reports and discussions."/>
+            <arg name="sinceMinutes" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Minutes of journal logs to include (0 = default 30, max 120)."/>
+            </arg>
+            <arg name="report" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Markdown-formatted support report with config, screens, and logs."/>
+            </arg>
+        </method>
     </interface>
 </node>

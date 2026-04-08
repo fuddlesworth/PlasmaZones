@@ -17,6 +17,7 @@
 
 namespace PlasmaZones {
 
+enum class DisabledReason;
 class Layout;
 class LayoutManager;
 class ZoneDetector;
@@ -108,6 +109,7 @@ public:
     void showLayoutOsd(Layout* layout, const QString& screenId = QString());
     void showLockedOsd(const QString& screenId);
     void showLockedPreviewOsd(const QString& screenId);
+    void showContextDisabledOsd(const QString& screenId, int desktop, const QString& activity, DisabledReason reason);
 
 private:
     /**

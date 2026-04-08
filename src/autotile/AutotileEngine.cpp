@@ -44,7 +44,7 @@ constexpr int PendingOrderTimeoutMs = 10000;
 } // namespace
 
 AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
-                               ScreenManager* screenManager, IConfigBackend* configBackend, QObject* parent)
+                               ScreenManager* screenManager, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)
@@ -52,9 +52,23 @@ AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingServi
     , m_config(std::make_unique<AutotileConfig>())
     , m_configResolver(std::make_unique<PerScreenConfigResolver>(this))
     , m_navigation(std::make_unique<NavigationController>(this))
-    , m_settingsBridge(std::make_unique<SettingsBridge>(this, configBackend))
+    , m_settingsBridge(std::make_unique<SettingsBridge>(this))
     , m_algorithmId(AlgorithmRegistry::defaultAlgorithmId())
 {
+    // Zero-delay timer to coalesce promoteSavedWindowOrders() calls during
+    // simultaneous desktop+activity switches. Fires on the next event loop
+    // pass after both m_currentDesktop and m_currentActivity are updated.
+    m_promoteOrdersTimer.setSingleShot(true);
+    m_promoteOrdersTimer.setInterval(0);
+    connect(&m_promoteOrdersTimer, &QTimer::timeout, this, &AutotileEngine::promoteSavedWindowOrders);
+
+    // Bounded retry timer for transient screen geometry failures.
+    // When QScreen is unavailable during desktop switch, retileScreen defers
+    // to this timer rather than silently dropping the retile.
+    m_retileRetryTimer.setSingleShot(true);
+    m_retileRetryTimer.setInterval(RetileRetryIntervalMs);
+    connect(&m_retileRetryTimer, &QTimer::timeout, this, &AutotileEngine::processRetileRetries);
+
     connectSignals();
 }
 
@@ -251,6 +265,7 @@ void AutotileEngine::setCurrentDesktop(int desktop)
     // desktop AND activity change simultaneously (e.g., activity-per-desktop).
     m_isDesktopContextSwitch |= (m_currentDesktop > 0);
     m_currentDesktop = desktop;
+    schedulePromoteSavedWindowOrders();
 }
 
 void AutotileEngine::setCurrentActivity(const QString& activity)
@@ -265,6 +280,7 @@ void AutotileEngine::setCurrentActivity(const QString& activity)
     // desktop AND activity change simultaneously.
     m_isDesktopContextSwitch |= !m_currentActivity.isEmpty();
     m_currentActivity = activity;
+    schedulePromoteSavedWindowOrders();
 }
 
 void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky)
@@ -470,13 +486,26 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         m_screenDesktopOverride.remove(screenId);
     }
 
-    // Clear any pending deferred retiles for removed screens
+    // Clear pending restore entries for removed screens. Stale entries would
+    // restore windows to positions from the old layout if autotile is re-enabled.
+    if (!m_pendingAutotileRestores.isEmpty() && !removed.isEmpty()) {
+        const auto keys = m_pendingAutotileRestores.keys();
+        for (const QString& appId : keys) {
+            pruneStaleRestores(appId);
+        }
+    }
+
+    // Clear any pending deferred retiles and retry state for removed screens
     for (auto pit = m_pendingRetileScreens.begin(); pit != m_pendingRetileScreens.end();) {
         if (!m_autotileScreens.contains(*pit)) {
             pit = m_pendingRetileScreens.erase(pit);
         } else {
             ++pit;
         }
+    }
+    for (const QString& screenId : removed) {
+        m_retileRetryScreens.remove(screenId);
+        m_retileRetryCount.remove(screenId);
     }
 
     const bool nowEnabled = !m_autotileScreens.isEmpty();
@@ -939,12 +968,36 @@ TilingAlgorithm* AutotileEngine::effectiveAlgorithm(const QString& screenId) con
 
 void AutotileEngine::saveState()
 {
-    m_settingsBridge->saveState();
+    if (m_persistSaveFn) {
+        m_persistSaveFn();
+    }
 }
 
 void AutotileEngine::loadState()
 {
-    m_settingsBridge->loadState();
+    if (m_persistLoadFn) {
+        m_persistLoadFn();
+    }
+}
+
+QJsonArray AutotileEngine::serializeWindowOrders() const
+{
+    return m_settingsBridge->serializeWindowOrders();
+}
+
+void AutotileEngine::deserializeWindowOrders(const QJsonArray& orders)
+{
+    m_settingsBridge->deserializeWindowOrders(orders);
+}
+
+QJsonObject AutotileEngine::serializePendingRestores() const
+{
+    return m_settingsBridge->serializePendingRestores();
+}
+
+void AutotileEngine::deserializePendingRestores(const QJsonObject& obj)
+{
+    m_settingsBridge->deserializePendingRestores(obj);
 }
 
 void AutotileEngine::scheduleRetileForScreen(const QString& screenId)
@@ -985,6 +1038,47 @@ void AutotileEngine::processPendingRetiles()
             qCWarning(lcAutotile) << "processPendingRetiles: skipping screen" << screenId << "isAutotile=" << isAt
                                   << "hasState=" << hasState;
         }
+    }
+}
+
+void AutotileEngine::scheduleRetileRetry(const QString& screenId)
+{
+    int& count = m_retileRetryCount[screenId];
+    if (count >= MaxRetileRetries) {
+        qCWarning(lcAutotile) << "scheduleRetileRetry: exhausted" << MaxRetileRetries << "retries for screen"
+                              << screenId << "- screen geometry may be permanently unavailable";
+        m_retileRetryCount.remove(screenId);
+        m_retileRetryScreens.remove(screenId);
+        return;
+    }
+    ++count;
+    m_retileRetryScreens.insert(screenId);
+    qCInfo(lcAutotile) << "scheduleRetileRetry: attempt" << count << "/" << MaxRetileRetries << "for screen" << screenId
+                       << "in" << RetileRetryIntervalMs << "ms";
+    // Single shared timer across all screens — a screen queued later in the
+    // same interval gets a shorter effective wait, which is harmless (it just
+    // retries sooner and re-schedules if geometry is still unavailable).
+    if (!m_retileRetryTimer.isActive()) {
+        m_retileRetryTimer.start();
+    }
+}
+
+void AutotileEngine::processRetileRetries()
+{
+    if (m_retileRetryScreens.isEmpty()) {
+        return;
+    }
+
+    const QSet<QString> screens = m_retileRetryScreens;
+    m_retileRetryScreens.clear();
+
+    for (const QString& screenId : screens) {
+        if (!isAutotileScreen(screenId)) {
+            m_retileRetryCount.remove(screenId);
+            continue;
+        }
+        qCInfo(lcAutotile) << "processRetileRetries: retrying screen" << screenId;
+        retileAfterOperation(screenId, true);
     }
 }
 
@@ -1335,6 +1429,17 @@ void AutotileEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
 
     state->setFloating(windowId, shouldFloat);
     m_overflow.clearOverflow(windowId);
+
+    // Clear cached min-size when unfloating so the next retile starts fresh.
+    // The window's minimum size may have changed while floating/minimized
+    // (e.g. browser finished loading media, terminal resized). Stale min-sizes
+    // can override the user's split ratio by inflating enforceWindowMinSizes
+    // constraints. The centering code in the KWin effect will re-discover and
+    // report the actual min-size if the window can't fill its assigned zone.
+    if (!shouldFloat) {
+        m_windowMinSizes.remove(windowId);
+    }
+
     const QString screenId = m_windowToStateKey.value(windowId).screenId;
     retileAfterOperation(screenId, true);
 
@@ -1619,6 +1724,13 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         return false;
     }
 
+    // Extract appId once — used by both the initial-order fallback and the
+    // pending restore queue below. Only valid when the windowId contains
+    // the "appId|internalId" separator — bare IDs without a separator
+    // aren't stable across restarts, so skip appId-based matching for them.
+    const QString appId = Utils::extractAppId(windowId);
+    const bool hasStableAppId = (appId != windowId);
+
     // Check if this window has a pre-seeded position from zone-ordered transition.
     // Take a value copy of the pending list — the erase below invalidates iterators/refs.
     bool inserted = false;
@@ -1626,6 +1738,22 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     if (pendingIt != m_pendingInitialOrders.end()) {
         const QStringList pendingOrder = pendingIt.value(); // copy, not reference (BUG-1 fix)
         int desiredPos = pendingOrder.indexOf(windowId);
+
+        // Fallback: match by appId when exact windowId not found (KWin restart
+        // changes UUIDs, so saved windowIds have stale suffixes). FIFO consumption
+        // prevents multi-instance apps from all matching the first entry.
+        if (desiredPos < 0 && hasStableAppId) {
+            for (int i = 0; i < pendingOrder.size(); ++i) {
+                if (Utils::extractAppId(pendingOrder.at(i)) == appId && !state->containsWindow(pendingOrder.at(i))) {
+                    desiredPos = i;
+                    // Replace stale UUID in the live map so it won't match again
+                    m_pendingInitialOrders[screenId][i] = windowId;
+                    qCDebug(lcAutotile) << "AppId fallback matched" << windowId << "to pending position" << i;
+                    break;
+                }
+            }
+        }
+
         if (desiredPos >= 0) {
             // Count ALL pre-seeded windows (including floating) with lower desired position
             // already in state. addWindow() inserts into m_windowOrder which includes both
@@ -1645,6 +1773,57 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         // Clean up pending order when all pre-seeded windows have been inserted (or closed)
         if (inserted) {
             cleanupPendingOrderIfResolved(screenId);
+        }
+    }
+
+    // Fallback: check pending restore queue (close/reopen restore).
+    // When a window was removed from autotile and the same app reopens,
+    // restore it to the saved position. FIFO consumption per appId.
+    // Note: position is index-based, so if other windows were reordered after
+    // the close, the restored position is best-effort (correct index, but
+    // neighbours may have changed). This matches snapping's behavior.
+    bool restoredFromPendingQueue = false;
+    const TilingStateKey currentKey = currentKeyForScreen(screenId);
+    if (!inserted && hasStableAppId) {
+        auto restoreIt = m_pendingAutotileRestores.find(appId);
+        if (restoreIt != m_pendingAutotileRestores.end() && !restoreIt.value().isEmpty()) {
+            // Find the first entry matching the current context
+            for (int i = 0; i < restoreIt.value().size(); ++i) {
+                const PendingAutotileRestore& entry = restoreIt.value().at(i);
+                if (entry.context == currentKey) {
+                    // Clamp position to current window count (windows may have been
+                    // added/removed since the position was saved)
+                    const int clampedPos = qMin(entry.position, state->windowCount());
+                    state->addWindow(windowId, clampedPos);
+                    inserted = true;
+                    restoredFromPendingQueue = true;
+
+                    // Restore floating state if the window was floating when removed
+                    if (entry.wasFloating) {
+                        state->setFloating(windowId, true);
+                    }
+
+                    qCDebug(lcAutotile) << "Restored window" << windowId
+                                        << "from pending queue at position=" << clampedPos
+                                        << "(saved=" << entry.position << ")";
+
+                    // Consume this entry (FIFO). After removeAt/erase, restoreIt
+                    // is potentially invalid — use the safe pruneStaleRestores()
+                    // helper below instead of continuing to use it.
+                    restoreIt.value().removeAt(i);
+                    if (restoreIt.value().isEmpty()) {
+                        m_pendingAutotileRestores.erase(restoreIt);
+                    }
+                    break;
+                }
+            }
+
+            // Prune entries whose screen is no longer active. Only needed
+            // after consuming an entry (the erase above may have invalidated
+            // restoreIt, so pruneStaleRestores does a fresh lookup).
+            if (restoredFromPendingQueue) {
+                pruneStaleRestores(appId);
+            }
         }
     }
 
@@ -1668,18 +1847,36 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // previously deactivated). Float state is per-mode: snap-mode floats don't
     // carry into autotile and vice versa. Only m_savedFloatingWindows (the
     // engine's own memory, keyed by screen+desktop+activity) is authoritative.
-    const TilingStateKey stateKey = currentKeyForScreen(screenId);
-    auto savedIt = m_savedFloatingWindows.find(stateKey);
-    if (savedIt != m_savedFloatingWindows.end() && savedIt.value().remove(windowId)) {
-        state->setFloating(windowId, true);
-        qCInfo(lcAutotile) << "Restored saved floating state for window" << windowId << "on screen" << screenId;
-        if (savedIt.value().isEmpty()) {
-            m_savedFloatingWindows.erase(savedIt);
+    // Skip when the pending restore queue already handled floating — the queue's
+    // wasFloating reflects the state at close time, which is more recent than
+    // m_savedFloatingWindows (set at mode-toggle time).
+    if (!restoredFromPendingQueue) {
+        auto savedIt = m_savedFloatingWindows.find(currentKey);
+        if (savedIt != m_savedFloatingWindows.end() && savedIt.value().remove(windowId)) {
+            state->setFloating(windowId, true);
+            qCInfo(lcAutotile) << "Restored saved floating state for window" << windowId << "on screen" << screenId;
+            if (savedIt.value().isEmpty()) {
+                m_savedFloatingWindows.erase(savedIt);
+            }
         }
     }
 
-    m_windowToStateKey.insert(windowId, stateKey);
+    m_windowToStateKey.insert(windowId, currentKey);
     return true;
+}
+
+void AutotileEngine::pruneStaleRestores(const QString& appId)
+{
+    auto it = m_pendingAutotileRestores.find(appId);
+    if (it == m_pendingAutotileRestores.end()) {
+        return;
+    }
+    it.value().removeIf([this](const PendingAutotileRestore& r) {
+        return !m_autotileScreens.contains(r.context.screenId);
+    });
+    if (it.value().isEmpty()) {
+        m_pendingAutotileRestores.erase(it);
+    }
 }
 
 void AutotileEngine::removeWindow(const QString& windowId)
@@ -1693,6 +1890,25 @@ void AutotileEngine::removeWindow(const QString& windowId)
 
     TilingState* state = m_screenStates.value(key);
     if (state) {
+        // Save position to pending restore queue before removal.
+        // This enables close/reopen restore: when the same app reopens,
+        // insertWindow() restores it to the saved position (FIFO per appId).
+        const int pos = state->windowOrder().indexOf(windowId);
+        if (pos >= 0) {
+            const QString appId = Utils::extractAppId(windowId);
+            if (appId != windowId) {
+                PendingAutotileRestore entry(pos, key, state->isFloating(windowId));
+                auto& queue = m_pendingAutotileRestores[appId];
+                // Cap per-appId queue to prevent unbounded growth from windows
+                // that are closed repeatedly without reopening.
+                if (queue.size() >= MaxPendingRestoresPerApp) {
+                    queue.removeFirst();
+                }
+                queue.append(entry);
+                qCDebug(lcAutotile) << "Saved pending restore for" << appId << "position=" << pos
+                                    << "screen=" << key.screenId;
+            }
+        }
         state->removeWindow(windowId);
     }
 
@@ -1715,28 +1931,28 @@ void AutotileEngine::removeWindow(const QString& windowId)
     }
 }
 
-void AutotileEngine::recalculateLayout(const QString& screenId)
+bool AutotileEngine::recalculateLayout(const QString& screenId)
 {
     if (screenId.isEmpty()) {
         qCWarning(lcAutotile) << "AutotileEngine::recalculateLayout: empty screen name";
-        return;
+        return false;
     }
 
     TilingState* state = stateForScreen(screenId);
     if (!state) {
-        return;
+        return false;
     }
 
     TilingAlgorithm* algo = effectiveAlgorithm(screenId);
     if (!algo) {
         qCWarning(lcAutotile) << "AutotileEngine::recalculateLayout: no algorithm set";
-        return;
+        return false;
     }
 
     const int tiledCount = state->tiledWindowCount();
     if (tiledCount == 0) {
         state->setCalculatedZones({}); // Clear zones when no windows
-        return;
+        return true; // Successfully computed (empty) layout
     }
 
     // Cap to user's max windows setting — excess windows are not tiled
@@ -1744,8 +1960,8 @@ void AutotileEngine::recalculateLayout(const QString& screenId)
 
     const QRect screen = screenGeometry(screenId);
     if (!screen.isValid()) {
-        qCWarning(lcAutotile) << "AutotileEngine::recalculateLayout: invalid screen geometry";
-        return;
+        qCWarning(lcAutotile) << "AutotileEngine::recalculateLayout: invalid screen geometry for" << screenId;
+        return false;
     }
 
     const QString algoId = effectiveAlgorithmId(screenId);
@@ -1838,7 +2054,7 @@ void AutotileEngine::recalculateLayout(const QString& screenId)
     if (zones.size() != windowCount) {
         qCWarning(lcAutotile) << "AutotileEngine::recalculateLayout: algorithm returned" << zones.size() << "zones for"
                               << windowCount << "windows";
-        return;
+        return false;
     }
 
     // Lightweight safety net: the algorithm handles min sizes directly, but
@@ -1864,6 +2080,7 @@ void AutotileEngine::recalculateLayout(const QString& screenId)
 
     // Store calculated zones in the state for later application
     state->setCalculatedZones(zones);
+    return true;
 }
 
 void AutotileEngine::applyTiling(const QString& screenId)
@@ -2130,6 +2347,29 @@ void AutotileEngine::retileScreen(const QString& screenId)
         return;
     }
 
+    // Pre-validate screen geometry BEFORE mutating state (overflow recovery).
+    // QScreen can be transiently unavailable during Wayland desktop switches
+    // (Plasma rebuilds the output list). If invalid, schedule a bounded retry
+    // rather than proceeding — without this, the ratio change / window add
+    // that triggered this retile is silently dropped, leaving stale zones.
+    //
+    // Only gate on geometry when a ScreenManager exists (production). Without
+    // one (unit tests), the existing recalculateLayout gracefully handles
+    // the empty geometry as a structural no-op, not a transient failure.
+    if (m_screenManager) {
+        const QRect preValidatedGeometry = screenGeometry(screenId);
+        if (!preValidatedGeometry.isValid()) {
+            qCWarning(lcAutotile) << "retileScreen: screen geometry transiently invalid for" << screenId
+                                  << "- deferring retile";
+            scheduleRetileRetry(screenId);
+            return;
+        }
+
+        // Geometry valid — clear any pending retry state for this screen.
+        m_retileRetryCount.remove(screenId);
+        m_retileRetryScreens.remove(screenId);
+    }
+
     // Step 1: Recover overflow windows when room is available.
     // Collect recovery list first, mutate state, then defer signal emission
     // until after the entire retile cycle completes (prevents re-entrant
@@ -2146,12 +2386,18 @@ void AutotileEngine::retileScreen(const QString& screenId)
             });
         for (const QString& wid : unfloated) {
             state->setFloating(wid, false);
+            m_windowMinSizes.remove(wid);
         }
     }
 
     // Step 2-3: Recalculate layout and apply tiling (applyTiling also handles
     // new overflow detection and collects overflow signals internally).
-    recalculateLayout(screenId);
+    // On failure, zones are unchanged from the last successful recalc —
+    // applyTiling must still run to handle overflow recovery from step 1.
+    if (!recalculateLayout(screenId)) {
+        qCWarning(lcAutotile) << "retileScreen: recalculateLayout failed for" << screenId
+                              << "- applying previous zone layout";
+    }
     applyTiling(screenId);
 
     // Step 4: Emit all deferred signals after state is fully consistent.
@@ -2224,6 +2470,49 @@ bool AutotileEngine::cleanupPendingOrderIfResolved(const QString& screenId)
     m_pendingInitialOrders.erase(pit);
     m_pendingOrderGeneration.remove(screenId);
     return true;
+}
+
+void AutotileEngine::schedulePromoteSavedWindowOrders()
+{
+    if (!m_savedWindowOrders.isEmpty()) {
+        m_promoteOrdersTimer.start();
+    }
+}
+
+void AutotileEngine::promoteSavedWindowOrders()
+{
+    if (m_savedWindowOrders.isEmpty()) {
+        return;
+    }
+
+    // Promote saved window orders matching the new desktop/activity context
+    // into m_pendingInitialOrders so that windows arriving on this desktop
+    // get their saved ordering restored. Replaces any stale pending order
+    // from the previous context (e.g., desktop 1's unconsumed pending order
+    // is replaced by desktop 2's order when switching to desktop 2).
+    for (auto it = m_savedWindowOrders.begin(); it != m_savedWindowOrders.end();) {
+        const TilingStateKey& key = it.key();
+        const bool matchesContext =
+            key.desktop == m_currentDesktop && (key.activity.isEmpty() || key.activity == m_currentActivity);
+
+        if (matchesContext) {
+            m_pendingInitialOrders[key.screenId] = it.value();
+            qCDebug(lcAutotile) << "Promoted saved window order for screen" << key.screenId << "desktop" << key.desktop
+                                << "(" << it.value().size() << "windows)";
+            // Erase specific-activity entries (consumed once). Keep wildcard entries
+            // (activity="") so they can be re-promoted on future context switches —
+            // erasing them here would lose the order for other activities on the same
+            // desktop, and cause incorrect results when setCurrentDesktop() and
+            // setCurrentActivity() both call this method during a simultaneous switch.
+            if (!key.activity.isEmpty()) {
+                it = m_savedWindowOrders.erase(it);
+            } else {
+                ++it;
+            }
+        } else {
+            ++it;
+        }
+    }
 }
 
 TilingState* AutotileEngine::stateForWindow(const QString& windowId, QString* outScreenId)

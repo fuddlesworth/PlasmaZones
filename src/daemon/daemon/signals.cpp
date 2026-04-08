@@ -203,6 +203,16 @@ void Daemon::initializeAutotile()
             qCInfo(lcDaemon) << "Mode toggle: screenId=" << screenId << "desktop=" << desktop
                              << "activity=" << activity;
 
+            // Context gate: if PlasmaZones is disabled for this screen/desktop/activity,
+            // show a visual OSD explaining why instead of silently ignoring the toggle.
+            // Note: intentionally shown regardless of showOsdOnLayoutSwitch — this is
+            // direct feedback to an explicit user action, not a passive layout-switch OSD.
+            const DisabledReason why = contextDisabledReason(m_settings.get(), screenId, desktop, activity);
+            if (why != DisabledReason::NotDisabled) {
+                showContextDisabledOsd(screenId, desktop, activity, why);
+                return;
+            }
+
             // Set context so ModeTracker reads from the correct per-desktop entry
             if (m_modeTracker) {
                 m_modeTracker->setContext(screenId, desktop, activity);

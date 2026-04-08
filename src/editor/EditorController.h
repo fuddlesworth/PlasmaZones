@@ -119,6 +119,12 @@ class EditorController : public QObject
     // Target screen size (for fixed geometry coordinate conversion)
     Q_PROPERTY(QSize targetScreenSize READ targetScreenSize NOTIFY targetScreenSizeChanged)
 
+    // Usable area insets — offset from full screen geometry to available geometry (panels/taskbars)
+    Q_PROPERTY(int insetLeft READ insetLeft NOTIFY usableAreaInsetsChanged)
+    Q_PROPERTY(int insetTop READ insetTop NOTIFY usableAreaInsetsChanged)
+    Q_PROPERTY(int insetRight READ insetRight NOTIFY usableAreaInsetsChanged)
+    Q_PROPERTY(int insetBottom READ insetBottom NOTIFY usableAreaInsetsChanged)
+
     // Label font settings (read-only from global Appearance config)
     Q_PROPERTY(QString labelFontFamily READ labelFontFamily CONSTANT)
     Q_PROPERTY(qreal labelFontSizeScale READ labelFontSizeScale CONSTANT)
@@ -218,6 +224,11 @@ public:
     bool useFullScreenGeometry() const;
     int aspectRatioClass() const;
     QSize targetScreenSize() const;
+    int insetLeft() const;
+    int insetTop() const;
+    int insetRight() const;
+    int insetBottom() const;
+    void refreshUsableAreaInsets();
     bool canPaste() const;
     UndoController* undoController() const;
 
@@ -661,6 +672,7 @@ Q_SIGNALS:
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
     void targetScreenChanged();
+    void usableAreaInsetsChanged();
     void zonePaddingChanged();
     void outerGapChanged();
     void globalZonePaddingChanged();
@@ -718,6 +730,8 @@ Q_SIGNALS:
 private:
     QVariant audioSpectrumVariant() const;
     void markUnsaved();
+    void applyUsableAreaInsets(const QRect& fullGeom, const QRect& availGeom);
+    void setInsets(int left, int top, int right, int bottom);
 
     /**
      * @brief Remove shader params that don't belong to the current shader
@@ -836,6 +850,10 @@ private:
 
     // Screen
     QString m_targetScreen;
+    int m_insetLeft = 0;
+    int m_insetTop = 0;
+    int m_insetRight = 0;
+    int m_insetBottom = 0;
 
     // Default colors (for theme-based defaults, set from QML)
     QString m_defaultHighlightColor;

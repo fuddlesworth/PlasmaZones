@@ -5,6 +5,7 @@
 #include "zonedetectionadaptor.h"
 #include "../autotile/AutotileEngine.h"
 #include "../snap/SnapEngine.h"
+#include "../config/iconfigbackend.h"
 #include "../core/geometryutils.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
@@ -24,12 +25,12 @@ namespace PlasmaZones {
 
 WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZoneDetector* zoneDetector,
                                              ISettings* settings, VirtualDesktopManager* virtualDesktopManager,
-                                             IConfigBackend* configBackend, QObject* parent)
+                                             QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(layoutManager)
     , m_settings(settings)
     , m_virtualDesktopManager(virtualDesktopManager)
-    , m_configBackend(configBackend)
+    , m_sessionBackend(createSessionBackend())
 {
     Q_ASSERT(layoutManager);
     Q_ASSERT(zoneDetector);
@@ -135,6 +136,20 @@ void WindowTrackingAdaptor::setEngines(SnapEngine* snapEngine, AutotileEngine* a
         connect(m_autotileEngine, &AutotileEngine::navigationFeedbackRequested, this,
                 &WindowTrackingAdaptor::navigationFeedback);
     }
+}
+
+void WindowTrackingAdaptor::setTilingStateDelegates(std::function<QJsonArray()> serializeFn,
+                                                    std::function<void(const QJsonArray&)> deserializeFn)
+{
+    m_serializeTilingStatesFn = std::move(serializeFn);
+    m_deserializeTilingStatesFn = std::move(deserializeFn);
+}
+
+void WindowTrackingAdaptor::setTilingPendingRestoreDelegates(std::function<QJsonObject()> serializeFn,
+                                                             std::function<void(const QJsonObject&)> deserializeFn)
+{
+    m_serializePendingRestoresFn = std::move(serializeFn);
+    m_deserializePendingRestoresFn = std::move(deserializeFn);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

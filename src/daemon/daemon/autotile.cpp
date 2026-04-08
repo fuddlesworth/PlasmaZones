@@ -60,6 +60,26 @@ void Daemon::updateAutotileScreens()
         }
     }
 
+    // Capture window order for screens LEAVING autotile before TilingState is destroyed.
+    // This preserves the tiling arrangement so re-entering autotile (e.g. cycling back)
+    // restores the same window positions. Without this, only the settingsChanged path
+    // (handleAutotileDisabled) captured orders — layout cycling lost them.
+    const QSet<QString>& currentAutotileScreens = m_autotileEngine->autotileScreens();
+    const QSet<QString> removedScreens = currentAutotileScreens - autotileScreens;
+    for (const QString& screenId : removedScreens) {
+        QStringList order = m_autotileEngine->tiledWindowOrder(screenId);
+        if (!order.isEmpty()) {
+            m_lastAutotileOrders[DesktopContextKey{screenId, desktop, activity}] = order;
+        }
+    }
+
+    // Seed window order for screens ENTERING autotile from saved state.
+    // Must happen before setAutotileScreens() which retiles added screens.
+    const QSet<QString> addedScreens = autotileScreens - currentAutotileScreens;
+    for (const QString& screenId : addedScreens) {
+        seedAutotileOrderForScreen(screenId);
+    }
+
     // Apply per-screen overrides BEFORE setAutotileScreens so that newly added
     // screens are retiled with the correct per-screen algorithm (not the global
     // fallback).  applyPerScreenConfig lazily creates TilingStates via

@@ -86,6 +86,8 @@ set(plasmazones_core_SRCS
     core/layoutmanager.h
     core/layoututils.cpp
     core/layoututils.h
+    core/supportreport.cpp
+    core/supportreport.h
     core/shaderregistry/params.cpp
     core/layersurface.cpp
     core/layersurface.h
@@ -251,6 +253,7 @@ target_link_libraries(plasmazones_core
         Qt6::DBus
     PRIVATE
         Wayland::Client
+        Qt6::Concurrent
         Qt6::WaylandClientPrivate
 )
 
@@ -635,9 +638,12 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/ResizeHandles.qml
         editor/qml/ZoneContent.qml
         editor/qml/ActionButtons.qml
+        editor/qml/ZoneActionButton.qml
+        editor/qml/ThemeHelpers.js
         editor/qml/SnapIndicator.qml
         editor/qml/DimensionTooltip.qml
         editor/qml/EditorNotifications.qml
+        editor/qml/NotificationBanner.qml
         editor/qml/ZoneContextMenu.qml
         editor/qml/EditorShortcuts.qml
         editor/qml/KeyboardNavigation.qml

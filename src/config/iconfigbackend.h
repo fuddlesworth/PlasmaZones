@@ -5,10 +5,8 @@
 
 #include "plasmazones_export.h"
 #include <QColor>
-#include <QMap>
 #include <QString>
 #include <QStringList>
-#include <QVariant>
 #include <memory>
 
 namespace PlasmaZones {
@@ -88,24 +86,13 @@ protected:
 /// implementation (in configbackend_json.cpp) knows which class to instantiate.
 PLASMAZONES_EXPORT std::unique_ptr<IConfigBackend> createDefaultConfigBackend();
 
-/// Read JSON config file directly from disk as a flat QMap.
-/// Flattens nested JSON into "Group/Key" format matching QSettings convention.
-/// If @p filePath is empty, reads from the default config path.
-/// Not to be confused with QSettingsConfigBackend::readConfigFromDisk() which reads INI.
-/// Implemented in configbackend_json.cpp.
-PLASMAZONES_EXPORT QMap<QString, QVariant> readJsonConfigFromDisk(const QString& filePath = {});
+/// Create a backend for session.json (ephemeral window tracking state).
+/// Separate file from config.json to avoid write contention.
+PLASMAZONES_EXPORT std::unique_ptr<IConfigBackend> createSessionBackend();
 
-/// Resolve a shared or fallback backend.  If @p shared is non-null it is
-/// returned directly; otherwise a new default backend is created into
-/// @p fallback and returned.  Eliminates repeated resolve boilerplate.
-inline IConfigBackend* resolveBackend(IConfigBackend* shared, std::unique_ptr<IConfigBackend>& fallback)
-{
-    if (shared) {
-        return shared;
-    }
-    fallback = createDefaultConfigBackend();
-    return fallback.get();
-}
+/// Create a backend for assignments.json (layout assignments and quick shortcuts).
+/// Separate file from config.json so LayoutManager owns its persistence independently.
+PLASMAZONES_EXPORT std::unique_ptr<IConfigBackend> createAssignmentsBackend();
 
 // ── Per-screen group helpers ─────────────────────────────────────────────
 // Backend-agnostic utilities for per-screen group name resolution.

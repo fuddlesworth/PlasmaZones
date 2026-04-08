@@ -348,21 +348,63 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // readJsonConfigFromDisk (flat map for WindowTrackingAdaptor)
+    // JSON object roundtrip via group API (regression test for v2 config bug)
+    //
+    // writeString() promotes JSON object strings to native JSON objects on disk.
+    // readString() must serialize them back — this validates the roundtrip that
+    // loadState() depends on for PendingRestoreQueues, PreTileGeometries, etc.
     // =========================================================================
 
-    void testReadJsonConfigFromDisk_flatMap()
+    void testReadStringRoundtripsJsonObject()
     {
         IsolatedConfigGuard guard;
         auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Simulate what saveState() does for PendingRestoreQueues:
+        // writes a JSON object string via writeString()
+        const QString original = QStringLiteral(R"({"firefox":[{"zoneIds":["{abc}"],"screen":"DP-2","desktop":1}]})");
         {
-            auto g = backend->group(QStringLiteral("Behavior"));
-            g->writeString(QStringLiteral("DefaultLayoutId"), QStringLiteral("abc-123"));
+            auto g = backend->group(QStringLiteral("WindowTracking"));
+            g->writeString(QStringLiteral("PendingRestoreQueues"), original);
         }
         backend->sync();
 
-        auto map = PlasmaZones::readJsonConfigFromDisk();
-        QCOMPARE(map.value(QStringLiteral("Behavior/DefaultLayoutId")).toString(), QStringLiteral("abc-123"));
+        // Read it back via the group API (what loadState() now uses)
+        {
+            auto g = backend->group(QStringLiteral("WindowTracking"));
+            QString readBack = g->readString(QStringLiteral("PendingRestoreQueues"));
+
+            // Parse both to compare structurally (key order may differ)
+            QJsonDocument origDoc = QJsonDocument::fromJson(original.toUtf8());
+            QJsonDocument readDoc = QJsonDocument::fromJson(readBack.toUtf8());
+            QVERIFY2(!readDoc.isNull(), "readString returned invalid JSON for promoted object");
+            QCOMPARE(readDoc.object(), origDoc.object());
+        }
+    }
+
+    void testReadStringRoundtripsJsonArray()
+    {
+        IsolatedConfigGuard guard;
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+
+        // Simulate WindowZoneAssignmentsFull: a JSON array written via writeString()
+        const QString original =
+            QStringLiteral(R"([{"windowId":"firefox|abc","zoneIds":["{z1}"],"screen":"DP-2","desktop":1}])");
+        {
+            auto g = backend->group(QStringLiteral("WindowTracking"));
+            g->writeString(QStringLiteral("WindowZoneAssignmentsFull"), original);
+        }
+        backend->sync();
+
+        {
+            auto g = backend->group(QStringLiteral("WindowTracking"));
+            QString readBack = g->readString(QStringLiteral("WindowZoneAssignmentsFull"));
+
+            QJsonDocument origDoc = QJsonDocument::fromJson(original.toUtf8());
+            QJsonDocument readDoc = QJsonDocument::fromJson(readBack.toUtf8());
+            QVERIFY2(!readDoc.isNull(), "readString returned invalid JSON for promoted array");
+            QCOMPARE(readDoc.array(), origDoc.array());
+        }
     }
 
     // =========================================================================

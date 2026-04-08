@@ -45,6 +45,7 @@ void EditorController::setTargetScreen(const QString& screenName)
         m_targetScreen = screenName;
         Q_EMIT targetScreenChanged();
         Q_EMIT targetScreenSizeChanged();
+        refreshUsableAreaInsets();
         m_zoneManager->setReferenceScreenSize(targetScreenSize());
 
         // Load the layout assigned to this screen
@@ -128,6 +129,7 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
         m_targetScreen = screenName;
         Q_EMIT targetScreenChanged();
         Q_EMIT targetScreenSizeChanged();
+        refreshUsableAreaInsets();
         m_zoneManager->setReferenceScreenSize(targetScreenSize());
     }
 }

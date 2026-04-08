@@ -101,6 +101,9 @@ pz_add_test(test_autotile_engine_master autotile/test_autotile_engine_master.cpp
 target_compile_definitions(test_autotile_engine_master PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_autotile_engine_minsize autotile/test_autotile_engine_minsize.cpp)
 pz_add_test(test_autotile_engine_overflow autotile/test_autotile_engine_overflow.cpp)
+pz_add_test(test_autotile_engine_retry autotile/test_autotile_engine_retry.cpp)
+pz_add_test(test_autotile_engine_order_cycling autotile/test_autotile_engine_order_cycling.cpp)
+target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Autotile + Virtual Screen Integration Tests
@@ -214,6 +217,11 @@ target_include_directories(test_layersurface PRIVATE
 add_test(NAME test_layersurface COMMAND test_layersurface)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# core/ — Support Report Tests (redaction, generation)
+# ═══════════════════════════════════════════════════════════════════════════════
+pz_add_test(test_support_report core/test_support_report.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # core/ — Zone Detection Tests (layout, service)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_zone_detection_layout core/test_zone_detection_layout.cpp)
@@ -287,7 +295,8 @@ set(_all_tests
     test_scripted_algorithm test_split_tree test_scripted_algorithm_loader
     test_autotile_engine_core test_autotile_engine_master
     test_autotile_engine_minsize test_autotile_engine_overflow
-    test_autotile_virtual
+    test_autotile_engine_retry
+    test_autotile_engine_order_cycling
     test_autotile_ext_startup_float test_autotile_ext_algoswitch
     test_autotile_ext_overflow
     test_tiling_state_windows test_tiling_state_config test_tiling_state_serial
@@ -301,6 +310,7 @@ set(_all_tests
     test_layoutmanager_persistence test_layoutmanager_cycling test_layoutmanager_assignment
     test_virtual_screen test_virtual_screen_manager test_snap_assist_virtual
     test_layersurface
+    test_support_report
     test_zone_detection_layout test_zone_detector_overlap test_zone_detection_service
     test_per_screen_config test_navigation_controller test_settings_bridge
     test_zone_shader_item test_overlay_helpers

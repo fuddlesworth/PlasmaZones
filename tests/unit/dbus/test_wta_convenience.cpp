@@ -128,7 +128,7 @@ private Q_SLOTS:
 
         // WTA needs a parent QObject for QDBusAbstractAdaptor
         m_parent = new QObject(nullptr);
-        m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, m_settings, nullptr, nullptr, m_parent);
+        m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, m_settings, nullptr, m_parent);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);

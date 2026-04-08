@@ -33,7 +33,7 @@ public:
 
     bool isRunning() const;
     bool isEnabled() const;
-    void setEnabled(bool enabled);
+    Q_INVOKABLE void setEnabled(bool enabled);
 
     Q_INVOKABLE void startDaemon();
     Q_INVOKABLE void stopDaemon();

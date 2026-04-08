@@ -220,16 +220,17 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
-
-        // Assignment groups must NOT end up under PerScreen
-        QVERIFY2(!root.contains(QStringLiteral("PerScreen")), "Assignment groups should not be under PerScreen");
-
-        // They should be a regular top-level group
+        // Assignment groups must NOT be in config.json (they're extracted to assignments.json)
+        QJsonObject configRoot = readJsonConfig(ConfigDefaults::configFilePath());
+        QVERIFY2(!configRoot.contains(QStringLiteral("PerScreen")), "Assignment groups should not be under PerScreen");
         const QString groupName = QStringLiteral("Assignment:eDP-1:Desktop:1:Activity:abc-123");
-        QVERIFY2(root.contains(groupName), "Assignment group should be at root level");
+        QVERIFY2(!configRoot.contains(groupName), "Assignment group should not remain in config.json");
 
-        QJsonObject assignment = root.value(groupName).toObject();
+        // They should be in assignments.json
+        QJsonObject assignRoot = readJsonConfig(ConfigDefaults::assignmentsFilePath());
+        QVERIFY2(assignRoot.contains(groupName), "Assignment group should be in assignments.json");
+
+        QJsonObject assignment = assignRoot.value(groupName).toObject();
         QCOMPARE(assignment.value(QStringLiteral("Mode")).toInt(), 0);
         QCOMPARE(assignment.value(QStringLiteral("TilingAlgorithm")).toString(), QStringLiteral("bsp"));
     }
@@ -244,8 +245,8 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        auto backend = PlasmaZones::createDefaultConfigBackend();
-        // groupList should contain the assignment group
+        // Assignment groups are now in assignments.json, not config.json
+        auto backend = PlasmaZones::createAssignmentsBackend();
         QStringList groups = backend->groupList();
         QVERIFY(groups.contains(QStringLiteral("Assignment:eDP-1:Desktop:1")));
 
@@ -578,6 +579,63 @@ private Q_SLOTS:
         QJsonObject snapping = migrated.value(QStringLiteral("Snapping")).toObject();
         QCOMPARE(snapping.value(QStringLiteral("Enabled")).toBool(), true);
         QVERIFY(!migrated.contains(QStringLiteral("Activation")));
+    }
+
+    void testMigrateV1ToV2_windowTrackingExtractedToSessionJson()
+    {
+        IsolatedConfigGuard guard;
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        // Simulate a v1 config with WindowTracking data (ephemeral session state)
+        QJsonObject windowTracking;
+        windowTracking[QStringLiteral("ActiveLayoutId")] = QStringLiteral("test-layout-id");
+        QJsonObject assignments;
+        assignments[QStringLiteral("0x12345")] = QStringLiteral("zone-uuid-1");
+        windowTracking[QStringLiteral("WindowZoneAssignmentsFull")] = assignments;
+        root[ConfigDefaults::windowTrackingGroup()] = windowTracking;
+
+        // Also add a normal settings group to ensure it stays in config.json
+        QJsonObject activation;
+        activation[QStringLiteral("SnappingEnabled")] = true;
+        root[QStringLiteral("Activation")] = activation;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        // WindowTracking should be removed from config.json
+        QJsonObject migrated = readJsonConfig(ConfigDefaults::configFilePath());
+        QVERIFY(!migrated.contains(ConfigDefaults::windowTrackingGroup()));
+
+        // session.json should exist with the WindowTracking group
+        QVERIFY(QFile::exists(ConfigDefaults::sessionFilePath()));
+        QJsonObject session = readJsonConfig(ConfigDefaults::sessionFilePath());
+        QVERIFY(session.contains(ConfigDefaults::windowTrackingGroup()));
+        QJsonObject sessionWt = session.value(ConfigDefaults::windowTrackingGroup()).toObject();
+        QCOMPARE(sessionWt.value(QStringLiteral("ActiveLayoutId")).toString(), QStringLiteral("test-layout-id"));
+        QJsonObject sessionAssignments = sessionWt.value(QStringLiteral("WindowZoneAssignmentsFull")).toObject();
+        QCOMPARE(sessionAssignments.value(QStringLiteral("0x12345")).toString(), QStringLiteral("zone-uuid-1"));
+    }
+
+    void testMigrateV1ToV2_noWindowTracking_noSessionJson()
+    {
+        IsolatedConfigGuard guard;
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        // v1 config without WindowTracking — session.json should NOT be created
+        QJsonObject activation;
+        activation[QStringLiteral("SnappingEnabled")] = true;
+        root[QStringLiteral("Activation")] = activation;
+
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QVERIFY(!QFile::exists(ConfigDefaults::sessionFilePath()));
     }
 
     void testMigratedConfigReadableByBackend()

@@ -110,7 +110,7 @@ private Q_SLOTS:
         m_zoneDetector = new StubZoneDetectorBridge(nullptr);
 
         m_wtaParent = new QObject(nullptr);
-        m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, m_settings, nullptr, nullptr, m_wtaParent);
+        m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, m_settings, nullptr, m_wtaParent);
 
         // Create a test layout so getFullState has data
         auto* layout = new Layout(QStringLiteral("TestLayout"), m_layoutManager);
@@ -122,7 +122,7 @@ private Q_SLOTS:
         m_layoutManager->setActiveLayout(layout);
 
         m_controlParent = new QObject(nullptr);
-        m_controlAdaptor = new ControlAdaptor(m_wta, nullptr, m_layoutManager, nullptr, m_controlParent);
+        m_controlAdaptor = new ControlAdaptor(m_wta, nullptr, m_layoutManager, nullptr, nullptr, m_controlParent);
     }
 
     void cleanup()

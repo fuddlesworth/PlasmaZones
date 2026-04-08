@@ -45,10 +45,7 @@ Flickable {
                 SettingsSwitch {
                     checked: settingsController.daemonRunning
                     onToggled: function(newValue) {
-                        if (newValue)
-                            settingsController.daemonController.startDaemon();
-                        else
-                            settingsController.daemonController.stopDaemon();
+                        settingsController.daemonController.setEnabled(newValue);
                     }
                     accessibleName: i18n("Enable PlasmaZones")
                 }

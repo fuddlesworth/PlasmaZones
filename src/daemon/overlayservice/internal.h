@@ -29,36 +29,17 @@ namespace PlasmaZones {
 // so tests can include them without pulling in ConfigDefaults/ShaderRegistry.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Extracted label font/color settings from IZoneVisualizationSettings with fallback defaults.
-/// Used by both updateLabelsTextureForWindow (overlay_data.cpp) and
-/// buildLabelsImageForPreviewZones (shader.cpp) to avoid duplicating the 8+ settings reads.
-struct LabelFontSettings
+inline void resetOsdOverlayState(QObject* window)
 {
-    QColor fontColor = Qt::white;
-    QColor backgroundColor = Qt::black;
-    QString fontFamily;
-    qreal fontSizeScale = 1.0;
-    int fontWeight = QFont::Bold;
-    bool fontItalic = false;
-    bool fontUnderline = false;
-    bool fontStrikeout = false;
-};
-
-inline LabelFontSettings extractLabelFontSettings(const IZoneVisualizationSettings* settings)
-{
-    LabelFontSettings s;
-    if (!settings) {
-        return s;
+    if (!window) {
+        return;
     }
-    s.fontColor = settings->labelFontColor();
-    s.backgroundColor = QGuiApplication::palette().color(QPalette::Active, QPalette::Base);
-    s.fontFamily = settings->labelFontFamily();
-    s.fontSizeScale = settings->labelFontSizeScale();
-    s.fontWeight = settings->labelFontWeight();
-    s.fontItalic = settings->labelFontItalic();
-    s.fontUnderline = settings->labelFontUnderline();
-    s.fontStrikeout = settings->labelFontStrikeout();
-    return s;
+    // Clear both overlay states — callers set the one they need afterwards.
+    // locked is explicitly set by every call site, but reset here for safety
+    // when a caller forgets (e.g. showDisabledOsd doesn't set locked at all).
+    writeQmlProperty(window, QStringLiteral("locked"), false);
+    writeQmlProperty(window, QStringLiteral("disabled"), false);
+    writeQmlProperty(window, QStringLiteral("disabledReason"), QString());
 }
 
 inline void writeFontProperties(QObject* window, const IZoneVisualizationSettings* settings)

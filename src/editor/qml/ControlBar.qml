@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
 
 /**
@@ -380,8 +381,19 @@ ToolBar {
 
             spacing: Kirigami.Units.smallSpacing
             visible: editorController ? (editorController.hasUnsavedChanges || false) : false
+            onVisibleChanged: {
+                if (visible) {
+                    pulseAnim.restart();
+                } else {
+                    pulseAnim.stop();
+                    unsavedIcon.opacity = 1;
+                    unsavedIndicator.opacity = 1;
+                }
+            }
 
             Kirigami.Icon {
+                id: unsavedIcon
+
                 source: "document-save"
                 width: Kirigami.Units.iconSizes.smallMedium
                 height: Kirigami.Units.iconSizes.smallMedium
@@ -393,17 +405,41 @@ ToolBar {
 
                 text: i18nc("@info", "Unsaved changes")
                 color: Kirigami.Theme.negativeTextColor
-                font.weight: Font.Medium
+                font.weight: Font.DemiBold
                 Accessible.name: text
                 Accessible.role: Accessible.AlertMessage
             }
 
         }
 
-        // Visual separator
-        Kirigami.Separator {
-            Layout.fillHeight: true
-            Layout.preferredWidth: 1
+        SequentialAnimation {
+            id: pulseAnim
+
+            running: false
+            loops: 3
+            onStopped: {
+                unsavedIcon.opacity = 1;
+                unsavedIndicator.opacity = 1;
+            }
+
+            NumberAnimation {
+                targets: [unsavedIcon, unsavedIndicator]
+                property: "opacity"
+                from: 1
+                to: 0.4
+                duration: 500
+                easing.type: Easing.InOutSine
+            }
+
+            NumberAnimation {
+                targets: [unsavedIcon, unsavedIndicator]
+                property: "opacity"
+                from: 0.4
+                to: 1
+                duration: 500
+                easing.type: Easing.InOutSine
+            }
+
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -445,6 +481,19 @@ ToolBar {
                 }
             }
 
+        }
+
+    }
+
+    background: Rectangle {
+        color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.toolbarAlpha)
+
+        // Top accent line
+        Rectangle {
+            anchors.top: parent.top
+            width: parent.width
+            height: Math.round(Kirigami.Units.devicePixelRatio)
+            color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
         }
 
     }

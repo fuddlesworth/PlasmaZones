@@ -11,10 +11,14 @@
 #include "autotile/TilingState.h"
 #include "core/constants.h"
 #include "config/configbackend_json.h"
+#include "config/configdefaults.h"
+#include "config/configkeys.h"
 #include "config/settings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/ScriptedAlgoTestSetup.h"
 
+#include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -26,16 +30,16 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
  * @brief Unit tests for SettingsBridge
  *
  * SettingsBridge requires a Settings object for full syncFromSettings/connectToSettings
- * testing. These tests exercise the session persistence (saveState/loadState) path
- * which uses QSettingsConfigBackend, and test behavior of the engine through the
- * SettingsBridge indirectly.
+ * testing. These tests exercise the session persistence (serialize/deserialize) path
+ * and test behavior of the engine through the SettingsBridge indirectly.
  *
  * Tests cover:
  * - syncFromSettings detecting no changes (skips retile)
  * - maxWindows increase triggering backfill
- * - saveState/loadState roundtrip preserving per-screen state
- * - loadState with invalid JSON (no crash)
- * - loadState with unknown algorithm (ignored gracefully)
+ * - serializeWindowOrders/deserializeWindowOrders roundtrip preserving per-screen window state
+ * - deserializeWindowOrders with empty data (no crash)
+ * - Window order and floating windows survive serialization roundtrip
+ * - masterCount/splitRatio are NOT serialized (owned by Settings per-screen overrides)
  * - Debounce timer coalescing rapid changes
  */
 class TestSettingsBridge : public QObject
@@ -45,6 +49,31 @@ class TestSettingsBridge : public QObject
 private:
     std::unique_ptr<IsolatedConfigGuard> m_configGuard;
     PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
+
+    // Build a multi-desktop JSON array for deserialization tests.
+    // Each entry has screen=screenId, desktop=desktopN, activity="", windowOrder=[windows...].
+    // If floatingWindows is non-empty, it is included in the entry.
+    static QJsonObject buildEntry(const QString& screenId, int desktop, const QStringList& windowOrder,
+                                  const QStringList& floatingWindows = {})
+    {
+        QJsonObject entry;
+        entry[QLatin1String("screen")] = screenId;
+        entry[QLatin1String("desktop")] = desktop;
+        entry[QLatin1String("activity")] = QString();
+        QJsonArray orderArray;
+        for (const QString& w : windowOrder) {
+            orderArray.append(w);
+        }
+        entry[QLatin1String("windowOrder")] = orderArray;
+        if (!floatingWindows.isEmpty()) {
+            QJsonArray floatArray;
+            for (const QString& w : floatingWindows) {
+                floatArray.append(w);
+            }
+            entry[QLatin1String("floatingWindows")] = floatArray;
+        }
+        return entry;
+    }
 
 private Q_SLOTS:
 
@@ -159,88 +188,213 @@ private Q_SLOTS:
     // Session persistence roundtrip
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testSettingsBridge_saveState_roundTrip()
+    void testSettingsBridge_serializeWindowOrders_roundTrip()
     {
-        // Save state
+        QJsonArray serialized;
+
+        // Serialize window orders
         {
             AutotileEngine engine(nullptr, nullptr, nullptr);
-            engine.setAlgorithm(QLatin1String("bsp"));
 
             TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
             state->addWindow(QStringLiteral("win1"));
             state->addWindow(QStringLiteral("win2"));
-            state->setMasterCount(2);
-            state->setSplitRatio(0.7);
 
             TilingState* state2 = engine.stateForScreen(QStringLiteral("HDMI-1"));
             state2->addWindow(QStringLiteral("win3"));
-            state2->setSplitRatio(0.4);
 
-            engine.saveState();
+            serialized = engine.serializeWindowOrders();
+            QCOMPARE(serialized.size(), 2);
         }
 
-        // Load state in a fresh engine
+        // Deserialize into a fresh engine — window orders become pending initial orders
         {
             AutotileEngine engine(nullptr, nullptr, nullptr);
-            engine.loadState();
+            engine.deserializeWindowOrders(serialized);
 
-            // Algorithm should be restored
-            QCOMPARE(engine.algorithm(), QLatin1String("bsp"));
+            // Verify JSON structure contains screen context + window orders
+            QJsonObject entry = serialized[0].toObject();
+            QVERIFY(!entry[QLatin1String("screen")].toString().isEmpty());
+            QVERIFY(entry.contains(QLatin1String("windowOrder")));
+            QVERIFY(entry[QLatin1String("windowOrder")].toArray().size() > 0);
 
-            // Per-screen state should be restored
-            TilingState* state1 = engine.stateForScreen(QStringLiteral("eDP-1"));
-            QVERIFY(state1);
-            QCOMPARE(state1->masterCount(), 2);
-            QVERIFY(qFuzzyCompare(state1->splitRatio(), 0.7));
-
-            TilingState* state2 = engine.stateForScreen(QStringLiteral("HDMI-1"));
-            QVERIFY(state2);
-            QVERIFY(qFuzzyCompare(state2->splitRatio(), 0.4));
+            // masterCount/splitRatio should NOT be in the serialized data
+            // (they're owned by Settings via AutotileScreen:<id> per-screen overrides)
+            QVERIFY(!entry.contains(QLatin1String("masterCount")));
+            QVERIFY(!entry.contains(QLatin1String("splitRatio")));
         }
     }
 
-    void testSettingsBridge_loadState_invalidJson()
+    void testSettingsBridge_deserializeWindowOrders_emptyArray()
     {
-        // Write corrupt JSON to the config via JsonConfigBackend
-        {
-            auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto group = backend->group(QStringLiteral("AutoTileState"));
-            group->writeString(QStringLiteral("algorithm"), QStringLiteral("master-stack"));
-            group->writeString(QStringLiteral("screenStates"), QStringLiteral("{{{invalid json!@#}}}"));
-            group.reset();
-            backend->sync();
-        }
-
-        // Should not crash — corrupt JSON is gracefully handled
+        // Should not crash — empty array is handled gracefully
         AutotileEngine engine(nullptr, nullptr, nullptr);
-        engine.loadState();
+        engine.deserializeWindowOrders(QJsonArray{});
 
-        // Engine should still be in a valid state with a known algorithm ID
+        // Engine should still be in a valid state
         QVERIFY(!engine.algorithm().isEmpty());
-        QVERIFY2(AlgorithmRegistry::instance()->hasAlgorithm(engine.algorithm()),
-                 qPrintable(QStringLiteral("Post-load algorithm '%1' is not a known registered algorithm")
-                                .arg(engine.algorithm())));
     }
 
-    void testSettingsBridge_loadState_unknownAlgorithmIgnored()
+    void testSettingsBridge_serializeWindowOrders_includesFloating()
     {
-        // Write an unknown algorithm to the config via JsonConfigBackend
-        {
-            auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto group = backend->group(QStringLiteral("AutoTileState"));
-            group->writeString(QStringLiteral("algorithm"), QStringLiteral("nonexistent-algo-xyz"));
-            group->writeString(QStringLiteral("screenStates"), QStringLiteral("[]"));
-            group.reset();
-            backend->sync();
-        }
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        state->addWindow(QStringLiteral("firefox|{uuid1}"));
+        state->addWindow(QStringLiteral("konsole|{uuid2}"));
+        state->addWindow(QStringLiteral("dolphin|{uuid3}"));
+        state->setFloating(QStringLiteral("konsole|{uuid2}"), true);
+
+        QJsonArray serialized = engine.serializeWindowOrders();
+        QCOMPARE(serialized.size(), 1);
+
+        // Verify JSON structure
+        QJsonObject obj = serialized[0].toObject();
+        QCOMPARE(obj[QLatin1String("screen")].toString(), QStringLiteral("eDP-1"));
+        QVERIFY(obj.contains(QLatin1String("windowOrder")));
+        QVERIFY(obj.contains(QLatin1String("floatingWindows")));
+
+        QJsonArray orderArray = obj[QLatin1String("windowOrder")].toArray();
+        QCOMPARE(orderArray.size(), 3);
+
+        QJsonArray floatArray = obj[QLatin1String("floatingWindows")].toArray();
+        QCOMPARE(floatArray.size(), 1);
+        QCOMPARE(floatArray[0].toString(), QStringLiteral("konsole|{uuid2}"));
+    }
+
+    void testSettingsBridge_deserializeWindowOrders_multiDesktop_onlyRestoresCurrentContext()
+    {
+        // Build JSON with two entries for the same screen on different desktops.
+        // Only the entry matching the engine's current desktop should populate
+        // m_pendingInitialOrders immediately. Desktop 2's orders are saved for
+        // promotion when the user switches to that desktop.
+        QJsonArray multiDesktopData;
+        multiDesktopData.append(
+            buildEntry(QStringLiteral("eDP-1"), 1, {QStringLiteral("win1"), QStringLiteral("win2")}));
+        multiDesktopData.append(
+            buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("win3"), QStringLiteral("win4")}));
+
+        // Engine defaults to desktop=1 — only desktop 1's order should be pending immediately
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        engine.deserializeWindowOrders(multiDesktopData);
+
+        // Desktop 1 should have pending orders
+        engine.setAutotileScreens({QStringLiteral("eDP-1")});
+        engine.windowOpened(QStringLiteral("win2"), QStringLiteral("eDP-1"), 0, 0);
+        engine.windowOpened(QStringLiteral("win1"), QStringLiteral("eDP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        QVERIFY(state);
+        // Pre-seeded order should place win1 before win2 (matching desktop 1's saved order)
+        const QStringList order = state->windowOrder();
+        QCOMPARE(order.size(), 2);
+        QCOMPARE(order.at(0), QStringLiteral("win1"));
+        QCOMPARE(order.at(1), QStringLiteral("win2"));
+    }
+
+    void testSettingsBridge_deserializeWindowOrders_multiDesktop_promotesOnSwitch()
+    {
+        // Desktop 2's saved window orders should be promoted into pending orders
+        // when the engine switches to desktop 2.
+        QJsonArray multiDesktopData;
+        multiDesktopData.append(
+            buildEntry(QStringLiteral("eDP-1"), 1, {QStringLiteral("win1"), QStringLiteral("win2")}));
+        multiDesktopData.append(
+            buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("win3"), QStringLiteral("win4")}));
 
         AutotileEngine engine(nullptr, nullptr, nullptr);
-        const QString originalAlgo = engine.algorithm();
+        engine.deserializeWindowOrders(multiDesktopData);
 
+        // Switch to desktop 2 — should promote saved orders for desktop 2
+        engine.setAutotileScreens({QStringLiteral("eDP-1")});
+        engine.setCurrentDesktop(2);
+        QCoreApplication::processEvents(); // flush coalesced promotion timer
+
+        // Open desktop 2's windows in reverse order
+        engine.windowOpened(QStringLiteral("win4"), QStringLiteral("eDP-1"), 0, 0);
+        engine.windowOpened(QStringLiteral("win3"), QStringLiteral("eDP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        QVERIFY(state);
+        // Pre-seeded order should place win3 before win4 (matching desktop 2's saved order)
+        const QStringList order = state->windowOrder();
+        QCOMPARE(order.size(), 2);
+        QCOMPARE(order.at(0), QStringLiteral("win3"));
+        QCOMPARE(order.at(1), QStringLiteral("win4"));
+    }
+
+    void testSettingsBridge_deserializeWindowOrders_floatingRestoresAllContexts()
+    {
+        // Floating windows use TilingStateKey (full context), so all desktops
+        // should be restored — not just the current one.
+        QJsonArray data;
+        data.append(buildEntry(QStringLiteral("eDP-1"), 1, {QStringLiteral("win1")}, {QStringLiteral("win1")}));
+        data.append(buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("win2")}, {QStringLiteral("win2")}));
+
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        engine.deserializeWindowOrders(data);
+
+        // Floating state for both desktops should be restored (keyed by TilingStateKey)
+        // Re-serialize to verify: desktop 2's floating should NOT appear in pending
+        // orders (since current desktop is 1), but its floating entry should exist.
+        // The floating windows are stored in m_savedFloatingWindows which is internal,
+        // so we verify indirectly: when we add a window on desktop 2 with the same ID,
+        // it should be floated automatically.
+        engine.setAutotileScreens({QStringLiteral("eDP-1")});
+
+        // Desktop 2 floating should exist even though we're on desktop 1
+        engine.setCurrentDesktop(2);
+        QCoreApplication::processEvents(); // flush coalesced promotion timer
+        engine.windowOpened(QStringLiteral("win2"), QStringLiteral("eDP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        QVERIFY(state);
+        // If win2 was restored as floating, it should be floating in the state
+        QVERIFY2(state->isFloating(QStringLiteral("win2")),
+                 "Window on desktop 2 should be restored as floating from saved state");
+    }
+
+    void testSettingsBridge_persistenceDelegate_noOpWithoutDelegate()
+    {
+        // saveState()/loadState() should silently no-op when no delegate is set
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        state->addWindow(QStringLiteral("win1"));
+
+        // These should not crash or have any effect
+        engine.saveState();
         engine.loadState();
 
-        // Unknown algorithm should be silently ignored — the original default stays
-        QCOMPARE(engine.algorithm(), originalAlgo);
+        // Engine should still be in a valid state
+        QVERIFY(!engine.algorithm().isEmpty());
+        QCOMPARE(state->windowCount(), 1);
+    }
+
+    void testSettingsBridge_persistenceDelegate_invokesCallbacks()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        bool saveCalled = false;
+        bool loadCalled = false;
+
+        engine.setPersistenceDelegate(
+            [&saveCalled]() {
+                saveCalled = true;
+            },
+            [&loadCalled]() {
+                loadCalled = true;
+            });
+
+        engine.saveState();
+        QVERIFY(saveCalled);
+        QVERIFY(!loadCalled);
+
+        engine.loadState();
+        QVERIFY(loadCalled);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -368,6 +522,179 @@ private Q_SLOTS:
         engine.retile();
         // Process events for deferred retile
         QCoreApplication::processEvents();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Simultaneous desktop+activity switch (coalesced promotion)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testSettingsBridge_simultaneousDesktopActivitySwitch_promotesCorrectContext()
+    {
+        // Setup: entries for (desktop=2, activityA) and (desktop=2, activityB).
+        // Switch from (1, activityA) to (2, activityB). The intermediate state
+        // (2, activityA) should NOT consume activityA's entry — the coalesced
+        // promotion should only run after both desktop and activity are set.
+        const QString activityA = QStringLiteral("activity-aaaa");
+        const QString activityB = QStringLiteral("activity-bbbb");
+
+        QJsonArray data;
+        // Entry for (desktop=2, activityA) — should NOT be consumed
+        data.append(buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("winA1"), QStringLiteral("winA2")}));
+        // Manually add activity to the entry
+        {
+            QJsonObject entry = data[0].toObject();
+            entry[QLatin1String("activity")] = activityA;
+            data[0] = entry;
+        }
+        // Entry for (desktop=2, activityB) — this is the target
+        {
+            QJsonObject entry =
+                buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("winB1"), QStringLiteral("winB2")});
+            entry[QLatin1String("activity")] = activityB;
+            data.append(entry);
+        }
+
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        // Set initial context to (desktop=1, activityA)
+        engine.setCurrentDesktop(1);
+        engine.setCurrentActivity(activityA);
+        QCoreApplication::processEvents(); // flush any pending promotions
+
+        engine.deserializeWindowOrders(data);
+
+        // Simulate simultaneous switch: both calls happen before event loop runs
+        engine.setCurrentDesktop(2);
+        engine.setCurrentActivity(activityB);
+
+        // Process the coalesced timer — promotion should use (desktop=2, activityB)
+        QCoreApplication::processEvents();
+
+        // Open desktop 2 / activityB's windows in reverse order
+        engine.setAutotileScreens({QStringLiteral("eDP-1")});
+        engine.windowOpened(QStringLiteral("winB2"), QStringLiteral("eDP-1"), 0, 0);
+        engine.windowOpened(QStringLiteral("winB1"), QStringLiteral("eDP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        QVERIFY(state);
+        const QStringList order = state->windowOrder();
+        QCOMPARE(order.size(), 2);
+        // Pre-seeded order should match activityB's saved order, not activityA's
+        QCOMPARE(order.at(0), QStringLiteral("winB1"));
+        QCOMPARE(order.at(1), QStringLiteral("winB2"));
+    }
+
+    void testSettingsBridge_simultaneousSwitch_doesNotConsumeWrongActivityEntry()
+    {
+        // Verify that after switching from (1, activityA) to (2, activityB),
+        // the entry for (desktop=2, activityA) is still available for future use.
+        const QString activityA = QStringLiteral("activity-aaaa");
+        const QString activityB = QStringLiteral("activity-bbbb");
+
+        QJsonArray data;
+        {
+            QJsonObject entry =
+                buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("winA1"), QStringLiteral("winA2")});
+            entry[QLatin1String("activity")] = activityA;
+            data.append(entry);
+        }
+        {
+            QJsonObject entry =
+                buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("winB1"), QStringLiteral("winB2")});
+            entry[QLatin1String("activity")] = activityB;
+            data.append(entry);
+        }
+
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        engine.setCurrentDesktop(1);
+        engine.setCurrentActivity(activityA);
+        QCoreApplication::processEvents();
+
+        engine.deserializeWindowOrders(data);
+
+        // Switch to (2, activityB) — coalesced
+        engine.setCurrentDesktop(2);
+        engine.setCurrentActivity(activityB);
+        QCoreApplication::processEvents();
+
+        // Now switch to (2, activityA) — the entry should still be available
+        engine.setCurrentActivity(activityA);
+        QCoreApplication::processEvents();
+
+        engine.setAutotileScreens({QStringLiteral("eDP-1")});
+        engine.windowOpened(QStringLiteral("winA2"), QStringLiteral("eDP-1"), 0, 0);
+        engine.windowOpened(QStringLiteral("winA1"), QStringLiteral("eDP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        QVERIFY(state);
+        const QStringList order = state->windowOrder();
+        QCOMPARE(order.size(), 2);
+        // activityA's order should be restored correctly
+        QCOMPARE(order.at(0), QStringLiteral("winA1"));
+        QCOMPARE(order.at(1), QStringLiteral("winA2"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // WTA integration: save/load roundtrip through config backend
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testSettingsBridge_wtaRoundtrip_autotileOrdersSurviveSaveLoad()
+    {
+        // Verify that autotile window orders survive a full WTA save→load cycle
+        // through the config backend, testing the delegate wiring end-to-end.
+        // IsolatedConfigGuard redirects XDG_CONFIG_HOME so ConfigDefaults::configFilePath()
+        // resolves inside the temp directory. Ensure the parent dir exists.
+        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
+        auto backend = std::make_unique<JsonConfigBackend>(ConfigDefaults::configFilePath());
+
+        // Create engine with windows
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        state->addWindow(QStringLiteral("firefox|{uuid1}"));
+        state->addWindow(QStringLiteral("konsole|{uuid2}"));
+        state->setFloating(QStringLiteral("konsole|{uuid2}"), true);
+
+        // Manually serialize and write to config backend (simulating WTA save)
+        QJsonArray serialized = engine.serializeWindowOrders();
+        QCOMPARE(serialized.size(), 1);
+
+        auto tracking = backend->group(ConfigKeys::windowTrackingGroup());
+        tracking->writeString(ConfigKeys::autotileWindowOrdersKey(),
+                              QString::fromUtf8(QJsonDocument(serialized).toJson(QJsonDocument::Compact)));
+        tracking.reset();
+        backend->sync();
+
+        // Read back and deserialize into a fresh engine (simulating WTA load)
+        auto backend2 = std::make_unique<JsonConfigBackend>(ConfigDefaults::configFilePath());
+        backend2->sync();
+        auto tracking2 = backend2->group(ConfigKeys::windowTrackingGroup());
+        QString readBack = tracking2->readString(ConfigKeys::autotileWindowOrdersKey(), QString());
+        QVERIFY(!readBack.isEmpty());
+
+        QJsonDocument doc = QJsonDocument::fromJson(readBack.toUtf8());
+        QVERIFY(doc.isArray());
+
+        AutotileEngine engine2(nullptr, nullptr, nullptr);
+        engine2.deserializeWindowOrders(doc.array());
+
+        // Re-serialize from the restored engine and verify structure matches
+        engine2.setAutotileScreens({QStringLiteral("eDP-1")});
+        engine2.windowOpened(QStringLiteral("konsole|{uuid2}"), QStringLiteral("eDP-1"), 0, 0);
+        engine2.windowOpened(QStringLiteral("firefox|{uuid1}"), QStringLiteral("eDP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        TilingState* state2 = engine2.stateForScreen(QStringLiteral("eDP-1"));
+        QVERIFY(state2);
+
+        // Window order should be restored (firefox first, as in original)
+        const QStringList order = state2->windowOrder();
+        QCOMPARE(order.size(), 2);
+        QCOMPARE(order.at(0), QStringLiteral("firefox|{uuid1}"));
+        QCOMPARE(order.at(1), QStringLiteral("konsole|{uuid2}"));
+
+        // Floating state should be restored
+        QVERIFY(state2->isFloating(QStringLiteral("konsole|{uuid2}")));
     }
 };
 

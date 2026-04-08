@@ -7,16 +7,19 @@
 #include "core/constants.h"
 #include "core/iwindowengine.h"
 #include <QHash>
+#include <QJsonArray>
 #include <QObject>
 #include <QRect>
 #include <QSet>
 #include <QSize>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <functional>
 #include <memory>
 
 #include "OverflowManager.h"
+#include "core/utils.h"
 
 #include <QHashFunctions>
 
@@ -45,6 +48,31 @@ inline size_t qHash(const TilingStateKey& key, size_t seed = 0)
     return qHashMulti(seed, key.screenId, key.desktop, key.activity);
 }
 
+/**
+ * @brief Saved position for a window removed from autotile, keyed by appId.
+ *
+ * When a window closes while autotiled, its position is captured so that
+ * reopening the same app restores it to the same tiling position. Analogous
+ * to snapping's PendingRestoreQueues but for autotile's order-based model.
+ */
+struct PendingAutotileRestore
+{
+    PendingAutotileRestore() = default;
+    PendingAutotileRestore(int pos, TilingStateKey ctx, bool floating)
+        : position(pos)
+        , context(std::move(ctx))
+        , wasFloating(floating)
+    {
+    }
+
+    int position = -1; ///< Index in window order at time of removal
+    TilingStateKey context; ///< Screen/desktop/activity where the window was tiled
+    bool wasFloating = false; ///< Whether the window was floating when removed
+};
+
+/// Maximum pending restore entries per appId (prevents unbounded growth).
+constexpr int MaxPendingRestoresPerApp = 16;
+
 class AutotileConfig;
 class Layout;
 class LayoutManager;
@@ -52,7 +80,6 @@ class NavigationController;
 class PerScreenConfigResolver;
 class ScreenManager;
 class Settings;
-class IConfigBackend;
 class SettingsBridge;
 class TilingAlgorithm;
 class TilingState;
@@ -79,8 +106,7 @@ class PLASMAZONES_EXPORT AutotileEngine : public QObject, public IWindowEngine
 
 public:
     explicit AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
-                            ScreenManager* screenManager, IConfigBackend* configBackend = nullptr,
-                            QObject* parent = nullptr);
+                            ScreenManager* screenManager, QObject* parent = nullptr);
     ~AutotileEngine() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -258,22 +284,73 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Save tiling state to KConfig for session persistence
+     * @brief Save tiling state via persistence delegate (IWindowEngine contract)
      *
-     * Serializes per-screen TilingState (window order by stableId,
-     * masterCount, splitRatio, algorithm) to the [AutoTileState] config group.
-     * Called by Daemon::stop() before shutdown.
+     * Delegates to the save function set by setPersistenceDelegate().
+     * Wired by the daemon to WTA's saveState(), which triggers a full WTA save
+     * including both snap and autotile state. Autotile window orders are embedded
+     * in WTA's save cycle via setTilingStateDelegates — this method exists to
+     * satisfy the IWindowEngine interface. For autotile-only persistence,
+     * the tilingChanged signal → WTA::scheduleSaveState() connection is the
+     * primary path.
      */
     void saveState() override;
 
     /**
-     * @brief Load tiling state from KConfig
+     * @brief Load tiling state via persistence delegate (IWindowEngine contract)
      *
-     * Deserializes per-screen state from the [AutoTileState] config group.
-     * Actual retiling is deferred until windows are announced by the KWin effect.
-     * Called by Daemon::start() after initialization.
+     * Delegates to the load function set by setPersistenceDelegate().
+     * Wired by the daemon to WTA's loadState(), which triggers a full WTA load
+     * including autotile window order restoration via setTilingStateDelegates.
      */
     void loadState() override;
+
+    /**
+     * @brief Set persistence callbacks for save/load
+     *
+     * KConfig persistence is owned by WindowTrackingAdaptor (engine is KConfig-free).
+     * These callbacks allow AutotileEngine to fulfill the IWindowEngine persistence
+     * contract without introducing KConfig as a dependency.
+     *
+     * @param saveFn Called by saveState() to persist tiling state
+     * @param loadFn Called by loadState() to restore tiling state
+     */
+    void setPersistenceDelegate(std::function<void()> saveFn, std::function<void()> loadFn)
+    {
+        m_persistSaveFn = std::move(saveFn);
+        m_persistLoadFn = std::move(loadFn);
+    }
+
+    /**
+     * @brief Serialize per-context autotile window orders to JSON
+     *
+     * Forwarded to SettingsBridge. Called by WTA's save cycle via persistence delegate.
+     * masterCount/splitRatio are NOT included — Settings owns those.
+     */
+    QJsonArray serializeWindowOrders() const;
+
+    /**
+     * @brief Deserialize per-context autotile window orders from JSON
+     *
+     * Forwarded to SettingsBridge. Restores window order and floating state.
+     *
+     * @param orders JSON array produced by serializeWindowOrders()
+     */
+    void deserializeWindowOrders(const QJsonArray& orders);
+
+    /**
+     * @brief Serialize pending autotile restore queues to JSON
+     *
+     * Forwarded to SettingsBridge. Returns appId-keyed pending restore entries.
+     */
+    QJsonObject serializePendingRestores() const;
+
+    /**
+     * @brief Deserialize pending autotile restore queues from JSON
+     *
+     * Forwarded to SettingsBridge. Restores close/reopen queue.
+     */
+    void deserializePendingRestores(const QJsonObject& obj);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings synchronization
@@ -797,9 +874,9 @@ private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
     void removeWindow(const QString& windowId);
-    void removeSavedFloatingEntry(const QString& windowId);
+    void pruneStaleRestores(const QString& appId);
     bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
-    void recalculateLayout(const QString& screenId);
+    bool recalculateLayout(const QString& screenId);
     void applyTiling(const QString& screenId);
     bool shouldTileWindow(const QString& windowId) const;
     QString screenForWindow(const QString& windowId) const;
@@ -869,12 +946,32 @@ private:
     /**
      * @brief Recover overflow windows and retile a single screen
      *
-     * Encapsulates the four-step retile sequence: overflow recovery,
-     * recalculate layout, apply tiling, emit tilingChanged.
+     * Encapsulates the four-step retile sequence: pre-validate screen geometry,
+     * overflow recovery, recalculate layout, apply tiling, emit tilingChanged.
+     *
+     * If screen geometry is transiently unavailable (e.g. during a virtual
+     * desktop switch on Wayland), schedules a bounded retry instead of
+     * silently dropping the retile.
      *
      * @param screenId Screen to retile
      */
     void retileScreen(const QString& screenId);
+
+    /**
+     * @brief Schedule a bounded retry for a screen whose geometry was transiently invalid
+     *
+     * Retries up to MaxRetileRetries times per screen, with RetileRetryIntervalMs
+     * between attempts. The retry counter is cleared on successful retile or when
+     * the screen is removed from autotile.
+     *
+     * @param screenId Screen to retry
+     */
+    void scheduleRetileRetry(const QString& screenId);
+
+    /**
+     * @brief Process all pending retile retries (fires via m_retileRetryTimer)
+     */
+    void processRetileRetries();
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
@@ -891,6 +988,24 @@ private:
      * @return true if the pending order was fully resolved and removed
      */
     bool cleanupPendingOrderIfResolved(const QString& screenId);
+
+    /**
+     * @brief Schedule promotion of saved window orders for the current context
+     *
+     * Coalesced via zero-delay timer so that simultaneous desktop+activity switches
+     * (both calling this method) result in a single promotion after both
+     * m_currentDesktop and m_currentActivity are set to their final values.
+     */
+    void schedulePromoteSavedWindowOrders();
+
+    /**
+     * @brief Promote saved window orders for the current context into pending orders
+     *
+     * Moves orders from m_savedWindowOrders (populated by deserializeWindowOrders
+     * for all contexts) into m_pendingInitialOrders so windows arriving on the
+     * new desktop get their saved ordering.
+     */
+    void promoteSavedWindowOrders();
 
     /**
      * @brief Validate that a windowId is not empty, logging a warning if it is
@@ -936,6 +1051,10 @@ private:
     std::unique_ptr<NavigationController> m_navigation;
     std::unique_ptr<SettingsBridge> m_settingsBridge;
 
+    // Persistence delegates (KConfig stays in WTA layer)
+    std::function<void()> m_persistSaveFn;
+    std::function<void()> m_persistLoadFn;
+
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;
     bool m_algorithmEverSet = false; ///< True after first successful setAlgorithm() call
@@ -972,6 +1091,24 @@ private:
     QHash<QString, QStringList> m_pendingInitialOrders;
     QHash<QString, uint64_t> m_pendingOrderGeneration;
 
+    // Saved window orders from session persistence, keyed by full context.
+    // On desktop/activity switch, orders for the new context are promoted into
+    // m_pendingInitialOrders so windows arriving on the new desktop get their
+    // saved ordering. Consumed once per context (removed after promotion).
+    QHash<TilingStateKey, QStringList> m_savedWindowOrders;
+
+    // Pending restore queue for windows removed from autotile (close/reopen).
+    // Keyed by appId (stable across KWin restarts). Multiple entries per appId
+    // support multi-instance apps; consumed FIFO by insertWindow().
+    // Analogous to snapping's PendingRestoreQueues.
+    QHash<QString, QList<PendingAutotileRestore>> m_pendingAutotileRestores;
+
+    // Zero-delay timer to coalesce promoteSavedWindowOrders() calls during
+    // simultaneous desktop+activity switches. Without coalescing, the first
+    // call (after setCurrentDesktop) would promote using the stale activity,
+    // potentially consuming the wrong specific-activity entry.
+    QTimer m_promoteOrdersTimer;
+
     // Per-screen overflow tracking with O(1) reverse-index lookups.
     OverflowManager m_overflow;
 
@@ -983,6 +1120,17 @@ private:
     // all currently-pending events are processed — no fixed delay needed.
     QSet<QString> m_pendingRetileScreens;
     bool m_retilePending = false;
+
+    // Bounded retry for transient screen geometry failures.
+    // When QScreen is temporarily unavailable (e.g. during Wayland desktop switch),
+    // recalculateLayout cannot compute zone geometry. Rather than silently dropping
+    // the retile (leaving stale zones), we retry after a short interval.
+    // Per-screen retry counts prevent infinite loops; cleared on success or screen removal.
+    static constexpr int MaxRetileRetries = 3;
+    static constexpr int RetileRetryIntervalMs = 150;
+    QTimer m_retileRetryTimer;
+    QSet<QString> m_retileRetryScreens;
+    QHash<QString, int> m_retileRetryCount;
 
     // Deferred focus: set by onWindowAdded, emitted after applyTiling so the
     // focus request arrives at KWin AFTER windowsTiled (whose onComplete raises

@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 2.7.1 LANGUAGES C CXX)
+project(PlasmaZones VERSION 2.8.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -352,6 +352,12 @@ install(DIRECTORY data/algorithms/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/algorithms
     FILES_MATCHING
     PATTERN "*.js"
+)
+
+# Install support report script
+install(PROGRAMS scripts/plasmazones-report.sh
+    DESTINATION ${KDE_INSTALL_BINDIR}
+    RENAME plasmazones-report
 )
 
 # Install icons (hicolor for dark themes, hicolor-light for light themes)

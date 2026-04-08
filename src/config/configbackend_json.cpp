@@ -9,7 +9,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSaveFile>
-#include <functional>
 #include <limits>
 
 namespace PlasmaZones {
@@ -51,20 +50,6 @@ QList<QJsonObject> buildDotPathChain(const QJsonObject& root, const QStringList&
     return chain;
 }
 
-/// Convert a QJsonValue to a QVariant suitable for flat-map consumption.
-/// Arrays and objects are serialized to compact JSON strings so that
-/// callers using QVariant::toString() get the expected JSON text.
-/// Mirrors the logic in JsonConfigGroup::readString().
-QVariant jsonValueToFlatVariant(const QJsonValue& val)
-{
-    if (val.isArray()) {
-        return QString::fromUtf8(QJsonDocument(val.toArray()).toJson(QJsonDocument::Compact));
-    }
-    if (val.isObject()) {
-        return QString::fromUtf8(QJsonDocument(val.toObject()).toJson(QJsonDocument::Compact));
-    }
-    return val.toVariant();
-}
 } // anonymous namespace
 
 // ── JsonConfigGroup ─────────────────────────────────────────────────────────
@@ -649,78 +634,21 @@ QStringList JsonConfigBackend::groupList() const
     return groups;
 }
 
-QMap<QString, QVariant> readJsonConfigFromDisk(const QString& filePath)
-{
-    QMap<QString, QVariant> map;
-
-    QFile f(filePath.isEmpty() ? ConfigDefaults::configFilePath() : filePath);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return map;
-    }
-
-    QJsonParseError err;
-    QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
-    if (err.error != QJsonParseError::NoError) {
-        return map;
-    }
-
-    const QJsonObject root = doc.object();
-
-    // Flatten nested JSON into "Group/Key" format
-    for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
-        if (it.key() == ConfigDefaults::versionKey()) {
-            continue;
-        }
-        if (it.value().isObject()) {
-            if (it.key() == PerScreenKeyStr) {
-                // Flatten per-screen: PerScreen/Category/ScreenId/Key → Category:ScreenId/Key
-                const QJsonObject perScreen = it.value().toObject();
-                for (auto catIt = perScreen.constBegin(); catIt != perScreen.constEnd(); ++catIt) {
-                    const QString prefix = PlasmaZones::categoryToPrefix(catIt.key());
-                    const QJsonObject category = catIt.value().toObject();
-                    for (auto sIt = category.constBegin(); sIt != category.constEnd(); ++sIt) {
-                        const QJsonObject screenObj = sIt.value().toObject();
-                        const QString groupKey = prefix + QLatin1Char(':') + sIt.key();
-                        for (auto kIt = screenObj.constBegin(); kIt != screenObj.constEnd(); ++kIt) {
-                            map.insert(groupKey + QLatin1Char('/') + kIt.key(), jsonValueToFlatVariant(kIt.value()));
-                        }
-                    }
-                }
-            } else {
-                // Recursively flatten nested groups into dot-path "Group/Key" format.
-                // v2 nesting like {"Snapping": {"Behavior": {"Triggers": [...]}}}
-                // produces "Snapping.Behavior/Triggers" → [...].
-                std::function<void(const QJsonObject&, const QString&, int)> flattenGroup =
-                    [&](const QJsonObject& obj, const QString& groupPath, int depth) {
-                        if (depth >= MaxDotPathDepth) {
-                            return;
-                        }
-                        for (auto kIt = obj.constBegin(); kIt != obj.constEnd(); ++kIt) {
-                            if (kIt.value().isObject()) {
-                                const QString childPath = groupPath + QLatin1Char('.') + kIt.key();
-                                flattenGroup(kIt.value().toObject(), childPath, depth + 1);
-                            } else {
-                                map.insert(groupPath + QLatin1Char('/') + kIt.key(),
-                                           jsonValueToFlatVariant(kIt.value()));
-                            }
-                        }
-                    };
-                flattenGroup(it.value().toObject(), it.key(), 0);
-            }
-        } else {
-            // Root-level non-object key
-            map.insert(it.key(), jsonValueToFlatVariant(it.value()));
-        }
-    }
-
-    return map;
-}
-
 // ── Default backend factory ──────────────────────────────────────────────
 
 std::unique_ptr<IConfigBackend> createDefaultConfigBackend()
 {
     return std::make_unique<JsonConfigBackend>(ConfigDefaults::configFilePath());
+}
+
+std::unique_ptr<IConfigBackend> createSessionBackend()
+{
+    return std::make_unique<JsonConfigBackend>(ConfigDefaults::sessionFilePath());
+}
+
+std::unique_ptr<IConfigBackend> createAssignmentsBackend()
+{
+    return std::make_unique<JsonConfigBackend>(ConfigDefaults::assignmentsFilePath());
 }
 
 } // namespace PlasmaZones
