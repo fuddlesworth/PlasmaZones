@@ -308,6 +308,17 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                             m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
                             if (w && dropIsAutotile) {
                                 m_autotileHandler->notifyWindowAdded(w);
+                                // The window was floating (being dragged) — keep it floating
+                                // on the destination VS. notifyWindowAdded tiles the window,
+                                // so immediately restore its floating state and size.
+                                m_autotileHandler->handleDragToFloat(w, windowId, dropScreenId);
+                                m_dragFloatedWindowIds.insert(windowId);
+                                fireAndForgetDBusCall(DBus::Interface::WindowTracking,
+                                                      QStringLiteral("setWindowFloatingForScreen"),
+                                                      {windowId, dropScreenId, true},
+                                                      QStringLiteral("setWindowFloatingForScreen - cross-VS drag"));
+                                qCInfo(lcEffect) << "Autotile cross-VS drag-to-float:" << windowId
+                                                 << m_dragBypassScreenId << "->" << dropScreenId;
                             }
                             // Non-autotile drop: handleDragToFloat already restored
                             // border and size locally. onWindowClosed sent D-Bus
@@ -3054,6 +3065,17 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
                         !m_dragBypassScreenId.isEmpty() ? m_dragBypassScreenId : snapDragStartScreenId;
                     if (!oldScreenId.isEmpty() && VirtualScreenId::samePhysical(releaseScreenId, oldScreenId)) {
                         m_autotileHandler->notifyWindowAdded(safeWindow);
+                        // The window was floating (snap-dragged from a non-autotile VS) —
+                        // keep it floating on the destination. notifyWindowAdded tiles the
+                        // window, so immediately restore its floating state and size.
+                        m_autotileHandler->handleDragToFloat(safeWindow, windowId, releaseScreenId);
+                        m_dragFloatedWindowIds.insert(windowId);
+                        fireAndForgetDBusCall(DBus::Interface::WindowTracking,
+                                              QStringLiteral("setWindowFloatingForScreen"),
+                                              {windowId, releaseScreenId, true},
+                                              QStringLiteral("setWindowFloatingForScreen - snap→autotile VS crossing"));
+                        qCInfo(lcEffect) << "Snap→autotile cross-VS drag-to-float:" << windowId << oldScreenId << "->"
+                                         << releaseScreenId;
                     }
                 }
             });
