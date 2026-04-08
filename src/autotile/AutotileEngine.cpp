@@ -420,10 +420,24 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
             m_pendingOrderGeneration.remove(screenId);
             TilingState* ts = stateForScreen(screenId);
             if (ts) {
+                const TilingStateKey key = currentKeyForScreen(screenId);
+                const auto savedIt = m_savedFloatingWindows.constFind(key);
                 for (const QString& windowId : order) {
                     if (!ts->containsWindow(windowId)) {
                         ts->addWindow(windowId);
+                        // Restore floating state from saved set (populated by
+                        // deserializeWindowOrders). Without this, windows added
+                        // from pending orders lose their floating state because
+                        // windowOpened's floating restore is skipped when the
+                        // window already exists in the TilingState.
+                        if (savedIt != m_savedFloatingWindows.constEnd() && savedIt.value().contains(windowId)) {
+                            ts->setFloating(windowId, true);
+                        }
                     }
+                }
+                // Remove consumed floating entries so windowOpened doesn't double-apply
+                if (savedIt != m_savedFloatingWindows.constEnd()) {
+                    m_savedFloatingWindows.erase(m_savedFloatingWindows.find(key));
                 }
             }
         }

@@ -29,6 +29,36 @@ namespace PlasmaZones {
 // so tests can include them without pulling in ConfigDefaults/ShaderRegistry.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// Extracted label font/color settings from IZoneVisualizationSettings with fallback defaults.
+struct LabelFontSettings
+{
+    QColor fontColor = Qt::white;
+    QColor backgroundColor = Qt::black;
+    QString fontFamily;
+    qreal fontSizeScale = 1.0;
+    int fontWeight = QFont::Bold;
+    bool fontItalic = false;
+    bool fontUnderline = false;
+    bool fontStrikeout = false;
+};
+
+inline LabelFontSettings extractLabelFontSettings(const IZoneVisualizationSettings* settings)
+{
+    LabelFontSettings s;
+    if (!settings) {
+        return s;
+    }
+    s.fontColor = settings->labelFontColor();
+    s.backgroundColor = QGuiApplication::palette().color(QPalette::Active, QPalette::Base);
+    s.fontFamily = settings->labelFontFamily();
+    s.fontSizeScale = settings->labelFontSizeScale();
+    s.fontWeight = settings->labelFontWeight();
+    s.fontItalic = settings->labelFontItalic();
+    s.fontUnderline = settings->labelFontUnderline();
+    s.fontStrikeout = settings->labelFontStrikeout();
+    return s;
+}
+
 inline void resetOsdOverlayState(QObject* window)
 {
     if (!window) {

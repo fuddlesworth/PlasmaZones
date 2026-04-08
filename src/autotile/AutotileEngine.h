@@ -874,6 +874,7 @@ private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
     void removeWindow(const QString& windowId);
+    void removeSavedFloatingEntry(const QString& windowId);
     void pruneStaleRestores(const QString& appId);
     bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
     bool recalculateLayout(const QString& screenId);

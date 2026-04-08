@@ -154,7 +154,6 @@ private:
     void handleCycleLayout(const QString& screenId, bool forward);
 
     // Start-up sub-methods (defined in start.cpp)
-    void createDbusAdaptors();
     void connectScreenSignals();
     void connectDesktopActivity();
     void connectShortcutSignals();

@@ -118,10 +118,15 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QScreen*& out
 
 void OverlayService::showLayoutOsd(Layout* layout, const QString& screenId)
 {
-    showLayoutOsd(layout, false, screenId);
+    showLayoutOsdImpl(layout, screenId, false);
 }
 
-void OverlayService::showLayoutOsd(Layout* layout, bool locked, const QString& screenId)
+void OverlayService::showLockedLayoutOsd(Layout* layout, const QString& screenId)
+{
+    showLayoutOsdImpl(layout, screenId, true);
+}
+
+void OverlayService::showLayoutOsdImpl(Layout* layout, const QString& screenId, bool locked)
 {
     if (!layout) {
         qCDebug(lcOverlay) << "No layout provided for OSD";
@@ -132,12 +137,6 @@ void OverlayService::showLayoutOsd(Layout* layout, bool locked, const QString& s
         qCDebug(lcOverlay) << "Skipping OSD for empty layout=" << layout->name();
         return;
     }
-
-    showLayoutOsdImpl(layout, screenId, locked);
-}
-
-void OverlayService::showLayoutOsdImpl(Layout* layout, const QString& screenId, bool locked)
-{
     QQuickWindow* window = nullptr;
     QScreen* physScreen = nullptr;
     QRect screenGeom;
@@ -218,9 +217,10 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
 void OverlayService::showDisabledOsd(const QString& reason, const QString& screenId)
 {
     QQuickWindow* window = nullptr;
+    QScreen* physScreen = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio, screenId)) {
+    if (!prepareLayoutOsdWindow(window, physScreen, screenGeom, aspectRatio, screenId)) {
         return;
     }
 
@@ -241,7 +241,7 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     writeQmlProperty(window, QStringLiteral("zones"), QVariantList());
     writeFontProperties(window, m_settings);
 
-    sizeAndCenterOsd(window, screenGeom, aspectRatio);
+    sizeAndCenterOsd(window, physScreen, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
     qCInfo(lcOverlay) << "Disabled OSD: reason=" << reason << "screen=" << screenId;
 }
