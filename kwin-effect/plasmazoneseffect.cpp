@@ -399,6 +399,8 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                         }
                     }
                     m_snapDragStartScreenId.clear();
+                    m_dragBypassedForAutotile = false;
+                    m_dragBypassScreenId.clear();
                     return;
                 }
                 m_dragActivationDetected = false;
@@ -410,7 +412,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 if (!cancelled && w && !m_snapDragStartScreenId.isEmpty()) {
                     const QString dropScreenId = getWindowScreenId(w);
                     if (dropScreenId != m_snapDragStartScreenId && !dropScreenId.isEmpty()
-                        && VirtualScreenId::samePhysical(dropScreenId, m_snapDragStartScreenId)) {
+                        && VirtualScreenId::samePhysical(dropScreenId, m_snapDragStartScreenId)
+                        && !m_autotileHandler->isAutotileScreen(dropScreenId)) {
+                        // Only send windowScreenChanged for snap-to-snap VS crossings.
+                        // Snap-to-autotile crossings are handled by callDragStopped's callback
+                        // which does notifyWindowAdded + setWindowFloatingForScreen.
                         qCInfo(lcEffect) << "Snap drag: virtual screen changed" << m_snapDragStartScreenId << "->"
                                          << dropScreenId;
                         fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("windowScreenChanged"),
@@ -2290,6 +2296,15 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 }
 
                 countdownVsGate();
+
+                // For live VS config changes (generation=0), re-enable VS crossing
+                // detection now that boundary definitions are updated.
+                // countdownVsGate skips for generation=0, so m_virtualScreensReady
+                // must be restored here. For startup fetches (generation>0),
+                // countdownVsGate already sets it when all screens are processed.
+                if (generation == 0) {
+                    self->m_virtualScreensReady = true;
+                }
             });
 }
 
@@ -2345,6 +2360,10 @@ void PlasmaZonesEffect::onVirtualScreensChanged(const QString& physicalScreenId)
     qCInfo(lcEffect) << "Virtual screens changed for" << physicalScreenId;
     m_screenIdCache.clear();
     m_lastEffectiveScreenId.clear();
+    // Temporarily disable VS-aware crossing detection while the async fetch is in-flight.
+    // Without this, slotWindowFrameGeometryChanged uses stale boundary definitions from the
+    // old config, potentially causing spurious VS crossing events during the D-Bus round-trip.
+    m_virtualScreensReady = false;
     fetchVirtualScreenConfig(physicalScreenId); // generation=0, won't participate in startup gate
 }
 

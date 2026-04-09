@@ -398,7 +398,10 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
                 if (!screenPtr) {
                     return;
                 }
-                auto& st = m_screenStates[sid];
+                auto stateIt = m_screenStates.find(sid);
+                if (stateIt == m_screenStates.end())
+                    return; // State was cleaned up, ignore stale geometry signal
+                auto& st = stateIt.value();
                 if (auto* w = st.overlayWindow) {
                     if (isVS) {
                         // Virtual screen: recalculate geometry from ScreenManager since

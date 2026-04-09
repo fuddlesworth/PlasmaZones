@@ -137,14 +137,14 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
     for (const auto& def : config.screens) {
         totalArea += def.region.width() * def.region.height();
     }
-    if (totalArea < 0.99) {
+    if (totalArea < (1.0 - VirtualScreenDef::Tolerance)) {
         qCWarning(lcScreen) << "setVirtualScreenConfig: insufficient coverage for" << physicalScreenId << "- total area"
-                            << totalArea << "< 0.99, rejecting config";
+                            << totalArea << "<" << (1.0 - VirtualScreenDef::Tolerance) << ", rejecting config";
         return false;
     }
-    if (totalArea > 1.01) {
+    if (totalArea > (1.0 + VirtualScreenDef::Tolerance)) {
         qCWarning(lcScreen) << "setVirtualScreenConfig: excessive coverage for" << physicalScreenId << "- total area"
-                            << totalArea << "> 1.01, rejecting config";
+                            << totalArea << ">" << (1.0 + VirtualScreenDef::Tolerance) << ", rejecting config";
         return false;
     }
 

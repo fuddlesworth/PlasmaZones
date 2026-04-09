@@ -213,7 +213,7 @@ QColor QSettingsConfigGroup::readColor(const QString& key, const QColor& default
             bool okA = false;
             a = qBound(0, parts[3].trimmed().toInt(&okA), 255);
             if (!okA) {
-                a = 255;
+                return defaultValue; // Consistent with RGB parse failure
             }
         }
         return QColor(r, g, b, a);

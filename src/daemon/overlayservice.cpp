@@ -128,6 +128,14 @@ OverlayService::OverlayService(QObject* parent)
                 // Physical screen removed -- destroy windows and clean up stale virtual screen entries
                 const QString prefix = physicalScreenId + VirtualScreenId::Separator;
                 cleanupScreenStatesByPrefix(m_screenStates, prefix);
+                // Also clean up the bare physical-ID entry (no /vs:N suffix) —
+                // cleanupScreenStatesByPrefix only matches entries starting with "physId/",
+                // not the bare "physId" key itself.
+                destroyOverlayWindow(physicalScreenId);
+                destroyZoneSelectorWindow(physicalScreenId);
+                destroyLayoutOsdWindow(physicalScreenId);
+                destroyNavigationOsdWindow(physicalScreenId);
+                m_screenStates.remove(physicalScreenId);
                 return;
             }
 

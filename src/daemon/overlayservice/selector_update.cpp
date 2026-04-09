@@ -246,7 +246,8 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
             margins = QMargins(vsLeftOff + 0, vsTopOff + vMargin, vsRightOff + 0, vsBottomOff + vMargin);
             break;
         case ZoneSelectorPosition::Right:
-            margins = QMargins(vsLeftOff + 0, vsTopOff + vMargin, vsRightOff + 0, vsBottomOff + vMargin);
+            margins = QMargins(vsLeftOff + screenW - layout.barWidth, vsTopOff + vMargin, vsRightOff + 0,
+                               vsBottomOff + vMargin);
             break;
         case ZoneSelectorPosition::BottomLeft:
             margins = QMargins(vsLeftOff + 0, vsTopOff + screenH - layout.barHeight,

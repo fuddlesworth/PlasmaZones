@@ -286,8 +286,10 @@ QScreen* findScreenByIdOrName(const QString& identifier)
     // if the identifier contains '/', try matching the connector suffix directly,
     // then fall back to the base ID (for when a previously-duplicate monitor is
     // now the only one connected, so its ID no longer has the suffix).
-    int slashPos = identifier.lastIndexOf(QLatin1Char('/'));
-    if (slashPos > 0) {
+    // Skip this for virtual screen IDs (physId/vs:N) — the slash in those is
+    // the VirtualScreenId separator, not a connector disambiguator.
+    int slashPos = physId.lastIndexOf(QLatin1Char('/'));
+    if (slashPos > 0 && physId == identifier) {
         const QString connectorPart = identifier.mid(slashPos + 1);
         const QString basePart = identifier.left(slashPos);
         // Try connector name from the suffix, but verify the EDID base matches

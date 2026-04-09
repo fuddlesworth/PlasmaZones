@@ -148,23 +148,24 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
 
 QVariant readPerScreenAutotileEntry(IConfigGroup& group, const QString& key)
 {
-    if (key == QLatin1String("AutotileSplitRatio"))
+    if (key == QLatin1String(PerScreenAutotileKey::SplitRatio))
         return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatio()));
-    if (key == QLatin1String("AutotileAlgorithm") || key == QLatin1String("AnimationEasingCurve"))
+    if (key == QLatin1String(PerScreenAutotileKey::Algorithm)
+        || key == QLatin1String(PerScreenAutotileKey::AnimationEasingCurve))
         return QVariant(group.readString(key));
-    if (key == QLatin1String("AutotileUsePerSideOuterGap"))
+    if (key == QLatin1String(PerScreenAutotileKey::UsePerSideOuterGap))
         return QVariant(group.readBool(key, ConfigDefaults::autotileUsePerSideOuterGap()));
-    if (key == QLatin1String("AutotileFocusNewWindows"))
+    if (key == QLatin1String(PerScreenAutotileKey::FocusNewWindows))
         return QVariant(group.readBool(key, ConfigDefaults::autotileFocusNewWindows()));
-    if (key == QLatin1String("AutotileSmartGaps"))
+    if (key == QLatin1String(PerScreenAutotileKey::SmartGaps))
         return QVariant(group.readBool(key, ConfigDefaults::autotileSmartGaps()));
-    if (key == QLatin1String("AutotileFocusFollowsMouse"))
+    if (key == QLatin1String(PerScreenAutotileKey::FocusFollowsMouse))
         return QVariant(group.readBool(key, ConfigDefaults::autotileFocusFollowsMouse()));
-    if (key == QLatin1String("AutotileRespectMinimumSize"))
+    if (key == QLatin1String(PerScreenAutotileKey::RespectMinimumSize))
         return QVariant(group.readBool(key, ConfigDefaults::autotileRespectMinimumSize()));
-    if (key == QLatin1String("AutotileHideTitleBars"))
+    if (key == QLatin1String(PerScreenAutotileKey::HideTitleBars))
         return QVariant(group.readBool(key, ConfigDefaults::autotileHideTitleBars()));
-    if (key == QLatin1String("AnimationsEnabled"))
+    if (key == QLatin1String(PerScreenAutotileKey::AnimationsEnabled))
         return QVariant(group.readBool(key, ConfigDefaults::animationsEnabled()));
     return QVariant(group.readInt(key, 0));
 }

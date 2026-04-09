@@ -44,22 +44,27 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
         // Clamp to physical screen bounds to prevent tolerance overshoot
         right = qMin(right, physicalGeometry.x() + physicalGeometry.width());
         bottom = qMin(bottom, physicalGeometry.y() + physicalGeometry.height());
-        left = qMax(left, physicalGeometry.x());
-        top = qMax(top, physicalGeometry.y());
-        // Prevent degenerate geometry when tolerance overshoot pushes left/top past right/bottom
+        // Prevent degenerate geometry when tolerance overshoot pushes left/top past right/bottom.
+        // Apply BEFORE floor clamp so the floor clamp has the final word on minimum origin.
         left = qMin(left, right - 1);
         top = qMin(top, bottom - 1);
+        left = qMax(left, physicalGeometry.x());
+        top = qMax(top, physicalGeometry.y());
         int w = qMax(1, right - left);
         int h = qMax(1, bottom - top);
         return QRect(left, top, w, h);
     }
 
-    /// Exact (bitwise) equality — transitive and safe for QHash/QSet.
-    /// Use this for change detection (skip-if-unchanged guards).
+    /// Tolerance-aware equality for change detection (skip-if-unchanged guards).
+    /// Uses Tolerance for region comparison to avoid spurious change signals
+    /// when a config round-trips through JSON serialization.
     bool operator==(const VirtualScreenDef& other) const
     {
         return id == other.id && physicalScreenId == other.physicalScreenId && displayName == other.displayName
-            && region == other.region && index == other.index;
+            && index == other.index && qAbs(region.x() - other.region.x()) < Tolerance
+            && qAbs(region.y() - other.region.y()) < Tolerance
+            && qAbs(region.width() - other.region.width()) < Tolerance
+            && qAbs(region.height() - other.region.height()) < Tolerance;
     }
 
     /// Check if the definition is valid: non-empty id, non-empty physicalScreenId,

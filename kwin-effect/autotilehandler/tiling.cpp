@@ -360,19 +360,21 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
         // (callDragStopped / autotile drag end) owns state transitions.
         // Detecting mid-drag would transfer the window before the user drops it.
         // Other windows (e.g., a terminal reflowing) should still get VS crossing checks.
-        if (m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId()) {
-            return;
+        const bool isDraggedWindow =
+            m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId();
+        if (!isDraggedWindow) {
+            const QString newScreenId = m_effect->getWindowScreenId(w);
+            const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
+            if (VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {
+                // Virtual screen changed on the same physical monitor — delegate to
+                // the same handler used by outputChanged. The re-entrancy guard
+                // inside handleWindowOutputChanged prevents infinite loops from
+                // geometry changes caused by tiling.
+                handleWindowOutputChanged(w);
+                return;
+            }
         }
-        const QString newScreenId = m_effect->getWindowScreenId(w);
-        const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
-        if (VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {
-            // Virtual screen changed on the same physical monitor — delegate to
-            // the same handler used by outputChanged. The re-entrancy guard
-            // inside handleWindowOutputChanged prevents infinite loops from
-            // geometry changes caused by tiling.
-            handleWindowOutputChanged(w);
-            return;
-        }
+        // Fall through to centering logic below for all windows (including dragged)
     }
 
     if (m_autotileTargetZones.isEmpty()) {

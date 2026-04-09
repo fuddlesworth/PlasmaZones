@@ -172,10 +172,14 @@ void AutotileEngine::connectSignals()
                 Q_EMIT windowsReleasedFromTiling(releasedWindows);
             }
 
-            // Clean up desktop overrides for removed virtual screens
+            // Clean up desktop overrides for removed virtual screens on this physical screen.
+            // Use newVsSet (freshly-computed from ScreenManager) rather than m_autotileScreens
+            // which reflects mode assignments and may not yet be updated for the new config.
             auto overrideIt = m_screenDesktopOverride.begin();
             while (overrideIt != m_screenDesktopOverride.end()) {
-                if (VirtualScreenId::isVirtual(overrideIt.key()) && !m_autotileScreens.contains(overrideIt.key()))
+                if (VirtualScreenId::isVirtual(overrideIt.key())
+                    && VirtualScreenId::extractPhysicalId(overrideIt.key()) == physicalScreenId
+                    && !newVsSet.contains(overrideIt.key()))
                     overrideIt = m_screenDesktopOverride.erase(overrideIt);
                 else
                     ++overrideIt;

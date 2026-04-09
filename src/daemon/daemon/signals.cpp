@@ -609,12 +609,15 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
         if (floating) {
             m_windowTrackingAdaptor->setWindowFloating(windowId, true);
             wts->markAutotileFloated(windowId);
-            // Clear stale snap-mode pre-float state for THIS window only.
-            // When a window transitions snap→float→autotile→float, the old
-            // preFloatZone/Screen from the snap session must not bleed through
-            // to a later snap-mode unfloat. Scope to windowId (not appId) so
-            // sibling instances of the same app keep their own pre-float data.
-            wts->clearPreFloatZoneForWindow(windowId);
+            // Clear stale snap-mode pre-float state ONLY when the pre-float data
+            // is for the SAME screen (autotile re-float on the same screen).
+            // When the window crosses from a snap VS (e.g. vs:0) to an autotile VS
+            // (e.g. vs:1), the pre-float data for vs:0 must be preserved — it's
+            // needed to restore the snap zone when the window returns to vs:0.
+            const QString preFloatScreen = wts->preFloatScreen(windowId);
+            if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
+                wts->clearPreFloatZoneForWindow(windowId);
+            }
         } else {
             // If the window was snap-mode-floated (not autotile-floated)
             // and autotile is clearing it, save for snap-mode restoration.
@@ -663,8 +666,11 @@ void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QSt
         // the float from the windowsTileRequested batch).
         wts->setWindowFloating(windowId, true);
         wts->markAutotileFloated(windowId);
-        // Clear stale snap-mode pre-float state for this window only (same as single-window handler)
-        wts->clearPreFloatZoneForWindow(windowId);
+        // Same cross-VS preservation logic as the single-window handler
+        const QString preFloatScreen = wts->preFloatScreen(windowId);
+        if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
+            wts->clearPreFloatZoneForWindow(windowId);
+        }
     }
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService && !windowIds.isEmpty()) {
         m_overlayService->showNavigationOsd(true, QStringLiteral("float"), QStringLiteral("overflow"), QString(),
