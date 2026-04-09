@@ -255,6 +255,60 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             });
     connect(m_dragTracker.get(), &DragTracker::dragMoved, this,
             [this](const QString& windowId, const QPointF& cursorPos) {
+                // Cross-VS drag mode transitions: when the cursor crosses between
+                // autotile and snap screens mid-drag, switch the drag handling mode
+                // so zone overlay and snap activation match the screen under the cursor.
+                if (!m_virtualScreenDefs.isEmpty()) {
+                    QPoint cursorPt(qRound(cursorPos.x()), qRound(cursorPos.y()));
+                    const KWin::LogicalOutput* cursorOutput = nullptr;
+                    for (const auto* output : KWin::effects->screens()) {
+                        if (output->geometry().contains(cursorPt)) {
+                            cursorOutput = output;
+                            break;
+                        }
+                    }
+                    if (cursorOutput) {
+                        QString cursorScreenId = resolveEffectiveScreenId(cursorPt, cursorOutput);
+                        bool cursorOnAutotile = m_autotileHandler->isAutotileScreen(cursorScreenId);
+
+                        if (m_dragBypassedForAutotile && !cursorOnAutotile) {
+                            // Autotile→snap: exit bypass mode and initialize snap-drag
+                            // state as if the drag started on this snap screen.
+                            m_dragBypassedForAutotile = false;
+                            m_dragActivationDetected = false;
+                            m_dragStartedSent = false;
+                            m_pendingDragWindowId = windowId;
+                            KWin::EffectWindow* dragW = m_dragTracker->draggedWindow();
+                            m_pendingDragGeometry = dragW ? dragW->frameGeometry() : QRectF();
+                            m_snapDragStartScreenId = cursorScreenId;
+                            qCInfo(lcEffect) << "Drag crossed from autotile" << m_dragBypassScreenId << "to snap screen"
+                                             << cursorScreenId << "- activating zones";
+                            if (!m_keyboardGrabbed) {
+                                KWin::effects->grabKeyboard(this);
+                                m_keyboardGrabbed = true;
+                            }
+                        } else if (!m_dragBypassedForAutotile && cursorOnAutotile && m_dragStartedSent) {
+                            // Snap→autotile: re-enter bypass mode. Cancel the active
+                            // snap overlay so zones disappear while cursor is on the
+                            // autotile screen. If the user drags back to snap, the
+                            // autotile→snap path above re-initializes snap state.
+                            callCancelSnap();
+                            m_dragBypassedForAutotile = true;
+                            m_dragStartedSent = false;
+                            m_pendingDragWindowId.clear();
+                            m_pendingDragGeometry = QRectF();
+                            m_snapDragStartScreenId.clear();
+                            qCInfo(lcEffect)
+                                << "Drag crossed from snap to autotile" << cursorScreenId << "- deactivating zones";
+                        }
+                    }
+                }
+
+                // In autotile bypass — skip snap zone processing
+                if (m_dragBypassedForAutotile) {
+                    return;
+                }
+
                 // Gate D-Bus calls: if no activation trigger is held, toggle mode is off,
                 // and zone selector is disabled, skip the D-Bus call entirely. This
                 // eliminates 60Hz D-Bus traffic during non-zone drags.
