@@ -131,7 +131,15 @@ int main(int argc, char* argv[])
                                      PzI18n::tr("Replace existing daemon instance"));
     parser.addOption(replaceOption);
 
+    QCommandLineOption debugOption(QStringList{QStringLiteral("d"), QStringLiteral("debug")},
+                                   PzI18n::tr("Enable debug logging for all PlasmaZones categories"));
+    parser.addOption(debugOption);
+
     parser.process(app);
+
+    if (parser.isSet(debugOption)) {
+        QLoggingCategory::setFilterRules(QStringLiteral("plasmazones.*=true"));
+    }
 
     // Ensure single instance via D-Bus service name registration
     const QString serviceName = QStringLiteral("org.plasmazones.daemon");
