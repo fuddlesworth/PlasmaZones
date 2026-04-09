@@ -207,6 +207,7 @@ public:
     {
         return m_screenHelper.screens();
     }
+    Q_INVOKABLE QVariantMap physicalScreenResolution(const QString& screenId) const;
 
     // Virtual desktops / activities (reactive via D-Bus signals)
     Q_PROPERTY(int virtualDesktopCount READ virtualDesktopCount NOTIFY virtualDesktopsChanged)

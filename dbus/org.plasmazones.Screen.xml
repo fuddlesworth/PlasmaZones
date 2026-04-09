@@ -41,12 +41,21 @@
             </arg>
         </method>
         <method name="getAvailableGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Return the available geometry (excluding panels/taskbars) for a screen. Uses layer-shell sensor data when available, falls back to Qt's availableGeometry."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return the available geometry (excluding panels/taskbars) for a screen. Handles virtual screen IDs (e.g. physId/vs:0). Uses layer-shell sensor data when available, falls back to Qt's availableGeometry."/>
             <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen identifier (EDID-based or connector name)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Screen identifier (EDID-based, connector name, or virtual screen ID)."/>
             </arg>
             <arg name="geometry" type="(iiii)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Available geometry as (x, y, width, height)."/>
+            </arg>
+        </method>
+        <method name="getScreenGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the full geometry for a screen. Handles virtual screen IDs. Used by the editor to determine drawing area dimensions for VS-aware zone editing."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen identifier (EDID-based, connector name, or virtual screen ID)."/>
+            </arg>
+            <arg name="geometry" type="(iiii)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Full screen geometry as (x, y, width, height)."/>
             </arg>
         </method>
         <signal name="screenAdded">

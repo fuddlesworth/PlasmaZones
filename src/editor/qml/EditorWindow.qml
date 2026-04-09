@@ -22,7 +22,6 @@ Window {
 
     // Context properties (set in main.cpp)
     property var _editorController: editorController
-    property var _availableScreens: availableScreens
     // State properties
     property string selectedZoneId: editorWindow._editorController ? (editorWindow._editorController.selectedZoneId || "") : ""
     property var selectedZoneIds: editorWindow._editorController ? editorWindow._editorController.selectedZoneIds : []
@@ -334,7 +333,7 @@ Window {
         visible: !editorWindow.fullscreenMode
         // Pass stored context properties to avoid scoping issues
         editorController: editorWindow._editorController
-        availableScreens: editorWindow._availableScreens
+        availableScreens: editorWindow._editorController ? editorWindow._editorController.screenModel : []
         confirmCloseDialog: confirmCloseDialog
         helpDialog: helpDialog
         shaderDialog: shaderDialog
@@ -393,6 +392,8 @@ Window {
                 property bool _insetsReady: false
 
                 objectName: "drawingArea" // Required for focus restoration from child components
+                // For virtual screens, the window itself is sized to the VS region,
+                // so the drawing area fills the entire window (no VS offset needed).
                 anchors.fill: parent
                 anchors.leftMargin: applyInsets && editorWindow._editorController ? editorWindow._editorController.insetLeft : 0
                 anchors.topMargin: applyInsets && editorWindow._editorController ? editorWindow._editorController.insetTop : 0

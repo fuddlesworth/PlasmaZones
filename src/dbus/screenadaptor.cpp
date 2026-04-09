@@ -276,6 +276,12 @@ QString ScreenAdaptor::getScreenId(const QString& connectorName)
 
 QRect ScreenAdaptor::getAvailableGeometry(const QString& screenId)
 {
+    // Virtual screens: use ScreenManager's VS-aware available geometry
+    auto* mgr = ScreenManager::instance();
+    if (mgr && VirtualScreenId::isVirtual(screenId)) {
+        return mgr->screenAvailableGeometry(screenId);
+    }
+
     QScreen* screen = nullptr;
     if (!screenId.isEmpty()) {
         screen = Utils::findScreenByIdOrName(screenId);
@@ -287,6 +293,20 @@ QRect ScreenAdaptor::getAvailableGeometry(const QString& screenId)
         return QRect();
     }
     return ScreenManager::actualAvailableGeometry(screen);
+}
+
+QRect ScreenAdaptor::getScreenGeometry(const QString& screenId)
+{
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        QRect geo = mgr->screenGeometry(screenId);
+        if (geo.isValid()) {
+            return geo;
+        }
+    }
+    // Fallback for physical screens when ScreenManager is unavailable
+    QScreen* screen = screenId.isEmpty() ? QGuiApplication::primaryScreen() : Utils::findScreenByIdOrName(screenId);
+    return screen ? screen->geometry() : QRect();
 }
 
 QString ScreenAdaptor::getVirtualScreenConfig(const QString& physicalScreenId)

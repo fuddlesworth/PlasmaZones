@@ -696,6 +696,17 @@ void SettingsController::duplicateLayout(const QString& layoutId)
     scheduleLayoutLoad();
 }
 
+QVariantMap SettingsController::physicalScreenResolution(const QString& screenId) const
+{
+    QVariantMap result;
+    QScreen* screen = Utils::findScreenByIdOrName(screenId);
+    if (screen) {
+        result[QStringLiteral("width")] = screen->geometry().width();
+        result[QStringLiteral("height")] = screen->geometry().height();
+    }
+    return result;
+}
+
 void SettingsController::editLayout(const QString& layoutId)
 {
     QDBusMessage msg = QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),

@@ -12,7 +12,9 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include "../../../shared/virtualscreenid.h"
 #include <QDBusConnection>
+#include <QDBusMessage>
 #include <QDBusInterface>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
@@ -408,6 +410,10 @@ static QScreen* findTargetScreen(const QString& targetScreen)
 
 QSize EditorController::targetScreenSize() const
 {
+    // Virtual screens: use cached geometry from daemon (set in setTargetScreen)
+    if (m_virtualScreenSize.isValid()) {
+        return m_virtualScreenSize;
+    }
     QScreen* screen = findTargetScreen(m_targetScreen);
     return screen ? screen->geometry().size() : QSize(1920, 1080);
 }
@@ -445,41 +451,81 @@ void EditorController::setInsets(int left, int top, int right, int bottom)
 
 void EditorController::refreshUsableAreaInsets()
 {
-    QScreen* screen = findTargetScreen(m_targetScreen);
-    if (!screen) {
-        setInsets(0, 0, 0, 0);
-        return;
+    // For virtual screens, use the daemon's geometry (QScreen doesn't know about VS).
+    // The daemon's getScreenGeometry and getAvailableGeometry handle VS IDs.
+    QString screenId = m_targetScreen;
+    bool isVirtual = VirtualScreenId::isVirtual(screenId);
+
+    // For physical screens, pre-populate fullGeom from Qt as a fallback in case the
+    // daemon D-Bus call fails. For virtual screens, fullGeom stays empty — the daemon
+    // is the only source of VS geometry and the getScreenGeometry callback will set it.
+    QRect fullGeom;
+    if (!isVirtual) {
+        QScreen* screen = findTargetScreen(m_targetScreen);
+        if (!screen) {
+            setInsets(0, 0, 0, 0);
+            return;
+        }
+        fullGeom = screen->geometry();
+        screenId = Utils::screenIdentifier(screen);
     }
 
-    QRect fullGeom = screen->geometry();
+    // Query the daemon for both full and available geometry via D-Bus.
+    // The daemon's ScreenManager handles VS IDs natively.
+    QDBusMessage geoMsg = QDBusMessage::createMethodCall(
+        QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+        QString::fromLatin1(DBus::Interface::Screen), QStringLiteral("getScreenGeometry"));
+    geoMsg << screenId;
+    QDBusMessage availMsg = QDBusMessage::createMethodCall(
+        QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+        QString::fromLatin1(DBus::Interface::Screen), QStringLiteral("getAvailableGeometry"));
+    availMsg << screenId;
 
-    // Query the daemon for available geometry via D-Bus (async to avoid blocking the GUI thread).
-    // The daemon's ScreenManager has layer-shell sensor windows that detect
-    // actual panel positions — this data is not available in the editor process.
-    QString screenId = Utils::screenIdentifier(screen);
-    QDBusInterface screenIface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                               QString::fromLatin1(DBus::Interface::Screen), QDBusConnection::sessionBus());
+    auto* geoWatcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(geoMsg), this);
+    auto* availWatcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(availMsg), this);
 
-    if (screenIface.isValid()) {
-        QDBusPendingCall pending = screenIface.asyncCall(QStringLiteral("getAvailableGeometry"), screenId);
-        auto* watcher = new QDBusPendingCallWatcher(pending, this);
-        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
-                         [this, fullGeom](QDBusPendingCallWatcher* w) {
-                             w->deleteLater();
-                             QDBusPendingReply<QRect> reply = *w;
-                             QRect availGeom = fullGeom;
-                             if (reply.isValid() && !reply.value().isEmpty()) {
-                                 availGeom = reply.value();
-                             }
-                             applyUsableAreaInsets(fullGeom, availGeom);
-                         });
-        return;
-    }
+    // Use shared state to wait for both replies.
+    // QPointer guards against EditorController being destroyed before callbacks fire
+    // (e.g., rapid screen switches that destroy and recreate the editor window).
+    auto fullGeomResult = std::make_shared<QRect>(fullGeom);
+    auto availGeomResult = std::make_shared<QRect>();
+    auto pending = std::make_shared<int>(2);
+    QPointer<EditorController> self(this);
 
-    // No daemon — Qt's availableGeometry is used as fallback in applyUsableAreaInsets,
-    // but on Wayland it often returns the full geometry (panels aren't reported).
-    qCWarning(lcEditor) << "D-Bus daemon unreachable; usable area insets may be inaccurate";
-    applyUsableAreaInsets(fullGeom, fullGeom);
+    auto applyWhenReady = [self, fullGeomResult, availGeomResult, pending]() {
+        if (--(*pending) > 0) {
+            return;
+        }
+        if (!self) {
+            return;
+        }
+        QRect fg = *fullGeomResult;
+        QRect ag = availGeomResult->isValid() ? *availGeomResult : fg;
+        if (fg.isValid()) {
+            self->applyUsableAreaInsets(fg, ag);
+        } else {
+            self->setInsets(0, 0, 0, 0);
+        }
+    };
+
+    connect(geoWatcher, &QDBusPendingCallWatcher::finished, this,
+            [fullGeomResult, applyWhenReady](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QRect> reply = *w;
+                if (reply.isValid() && !reply.value().isEmpty()) {
+                    *fullGeomResult = reply.value();
+                }
+                applyWhenReady();
+            });
+    connect(availWatcher, &QDBusPendingCallWatcher::finished, this,
+            [availGeomResult, applyWhenReady](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QRect> reply = *w;
+                if (reply.isValid() && !reply.value().isEmpty()) {
+                    *availGeomResult = reply.value();
+                }
+                applyWhenReady();
+            });
 }
 
 void EditorController::applyUsableAreaInsets(const QRect& fullGeom, const QRect& daemonAvailGeom)

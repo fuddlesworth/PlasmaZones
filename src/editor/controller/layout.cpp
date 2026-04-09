@@ -11,10 +11,12 @@
 #include "../../core/shaderregistry.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include "../../../shared/virtualscreenid.h"
 
 #include "pz_i18n.h"
 #include <QDBusConnection>
 #include <QDBusInterface>
+#include <QDBusMessage>
 #include <QDBusReply>
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -32,6 +34,66 @@ namespace PlasmaZones {
 // Group 1 - Screen targeting
 // ---------------------------------------------------------------------------
 
+void EditorController::cacheVirtualScreenGeometry(const QString& screenName)
+{
+    m_virtualScreenSize = QSize();
+    m_virtualScreenRect = QRect();
+    if (!VirtualScreenId::isVirtual(screenName)) {
+        return;
+    }
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+        QString::fromLatin1(DBus::Interface::Screen), QStringLiteral("getScreenGeometry"));
+    msg << screenName;
+    QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 2000);
+    if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() >= 1) {
+        QRect geo = qdbus_cast<QRect>(reply.arguments().at(0));
+        if (geo.isValid()) {
+            m_virtualScreenSize = geo.size();
+            QString physId = VirtualScreenId::extractPhysicalId(screenName);
+            QScreen* physScreen = Utils::findScreenByIdOrName(physId);
+            QPoint physOrigin = physScreen ? physScreen->geometry().topLeft() : QPoint();
+            m_virtualScreenRect = QRect(geo.topLeft() - physOrigin, geo.size());
+            qCDebug(lcEditor) << "Virtual screen" << screenName << "geometry:" << geo
+                              << "relative rect:" << m_virtualScreenRect;
+        }
+    }
+}
+
+QVariantList EditorController::screenModel() const
+{
+    QVariantList model;
+
+    if (m_availableScreenIds.isEmpty()) {
+        // Fallback: use Qt's physical screens (editor opened before daemon responded)
+        for (QScreen* screen : QGuiApplication::screens()) {
+            QVariantMap entry;
+            entry[QStringLiteral("name")] = Utils::screenIdentifier(screen);
+            entry[QStringLiteral("displayName")] = screen->name();
+            model.append(entry);
+        }
+        return model;
+    }
+
+    // Build from daemon's effective screen IDs (includes virtual screens)
+    for (const QString& screenId : m_availableScreenIds) {
+        QVariantMap entry;
+        entry[QStringLiteral("name")] = screenId;
+        if (VirtualScreenId::isVirtual(screenId)) {
+            // Short display label: "VS1", "VS2", etc. (1-indexed for user-facing text)
+            int idx = VirtualScreenId::extractIndex(screenId);
+            entry[QStringLiteral("displayName")] = QStringLiteral("VS%1").arg(idx + 1);
+        } else {
+            // Physical screen: use connector name for brevity
+            QScreen* screen = Utils::findScreenByIdOrName(screenId);
+            entry[QStringLiteral("displayName")] = screen ? screen->name() : screenId;
+        }
+        model.append(entry);
+    }
+
+    return model;
+}
+
 void EditorController::setTargetScreen(const QString& screenName)
 {
     if (m_targetScreen != screenName) {
@@ -43,6 +105,9 @@ void EditorController::setTargetScreen(const QString& screenName)
 
         QString previousLayout = m_layoutId;
         m_targetScreen = screenName;
+
+        cacheVirtualScreenGeometry(screenName);
+
         Q_EMIT targetScreenChanged();
         Q_EMIT targetScreenSizeChanged();
         refreshUsableAreaInsets();
@@ -71,50 +136,81 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
         return;
     }
 
-    if (!m_targetScreen.isEmpty()) {
-        const auto screens = QGuiApplication::screens();
-        for (auto* screen : screens) {
-            if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
-                // Already on the correct screen — nothing to do
-                if (window->screen() == screen && window->isVisible()) {
-                    return;
-                }
+    if (m_targetScreen.isEmpty()) {
+        window->showFullScreen();
+        return;
+    }
 
-                qCDebug(lcEditor) << "Setting editor window to screen:" << screen->name()
-                                  << "geometry:" << screen->geometry();
+    // For virtual screens: size the editor to the VS region, not fullscreen.
+    // The VS rect is in absolute screen coordinates (set in setTargetScreen).
+    if (m_virtualScreenRect.isValid()) {
+        QString physId = VirtualScreenId::extractPhysicalId(m_targetScreen);
+        QScreen* physScreen = Utils::findScreenByIdOrName(physId);
+        if (physScreen) {
+            auto applyVsGeometry = [](QQuickWindow* win, QScreen* screen, const QRect& vsRect) {
+                win->setScreen(screen);
+                // Absolute VS coordinates (physical screen origin + VS offset)
+                QRect absRect(screen->geometry().topLeft() + vsRect.topLeft(), vsRect.size());
+                win->setGeometry(absRect);
+                // Show as frameless normal window covering just the VS region.
+                // showFullScreen() would expand to the entire physical monitor.
+                win->setFlag(Qt::FramelessWindowHint, true);
+                win->show();
+            };
 
-                // On Wayland, the wl_output for an xdg-shell surface is bound at
-                // surface creation time. setScreen()/setGeometry() cannot move an
-                // already-mapped surface to a different output. To switch screens we
-                // must destroy the native window (wl_surface) and let Qt recreate it
-                // so the new surface gets mapped to the correct output.
-                // When the window is already visible (mid-session screen switch), defer
-                // the destroy+recreate to avoid tearing down the surface inside the
-                // current render frame or signal handler (QTBUG-88997).
-                if (window->isVisible()) {
-                    QPointer<QQuickWindow> safeWindow(window);
-                    QScreen* targetScreen = screen;
-                    QTimer::singleShot(0, window, [safeWindow, targetScreen]() {
-                        if (!safeWindow || !targetScreen) {
-                            return;
-                        }
-                        safeWindow->destroy();
-                        safeWindow->setScreen(targetScreen);
-                        // Physical QScreen::geometry() is intentional here: the editor
-                        // is a standalone full-screen window that always covers the
-                        // entire physical monitor, not a per-virtual-screen surface.
-                        safeWindow->setGeometry(targetScreen->geometry());
-                        safeWindow->showFullScreen();
-                    });
-                    return;
-                }
-
-                // Physical QScreen::geometry() is intentional: the editor window
-                // covers the full physical monitor (see comment above).
-                window->setScreen(screen);
-                window->setGeometry(screen->geometry());
-                break;
+            if (window->isVisible()) {
+                QPointer<QQuickWindow> safeWindow(window);
+                QScreen* targetScreen = physScreen;
+                QRect vsRect = m_virtualScreenRect;
+                QTimer::singleShot(0, window, [safeWindow, targetScreen, vsRect, applyVsGeometry]() {
+                    if (!safeWindow || !targetScreen) {
+                        return;
+                    }
+                    safeWindow->destroy();
+                    applyVsGeometry(safeWindow, targetScreen, vsRect);
+                });
+                return;
             }
+
+            applyVsGeometry(window, physScreen, m_virtualScreenRect);
+            return;
+        }
+    }
+
+    // Physical screen: fullscreen on the matching monitor
+    const auto screens = QGuiApplication::screens();
+    for (auto* screen : screens) {
+        if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
+            if (window->screen() == screen && window->isVisible()) {
+                return;
+            }
+
+            qCDebug(lcEditor) << "Setting editor window to screen:" << screen->name()
+                              << "geometry:" << screen->geometry();
+
+            // On Wayland, the wl_output for an xdg-shell surface is bound at
+            // surface creation time. setScreen()/setGeometry() cannot move an
+            // already-mapped surface to a different output. To switch screens we
+            // must destroy the native window (wl_surface) and let Qt recreate it
+            // so the new surface gets mapped to the correct output.
+            if (window->isVisible()) {
+                QPointer<QQuickWindow> safeWindow(window);
+                QScreen* targetScreen = screen;
+                QTimer::singleShot(0, window, [safeWindow, targetScreen]() {
+                    if (!safeWindow || !targetScreen) {
+                        return;
+                    }
+                    safeWindow->destroy();
+                    safeWindow->setScreen(targetScreen);
+                    safeWindow->setGeometry(targetScreen->geometry());
+                    safeWindow->showFullScreen();
+                });
+                return;
+            }
+
+            window->setScreen(screen);
+            window->setGeometry(screen->geometry());
+            break;
         }
     }
 
@@ -127,6 +223,9 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
     // when a layout is explicitly specified via command line
     if (m_targetScreen != screenName) {
         m_targetScreen = screenName;
+
+        cacheVirtualScreenGeometry(screenName);
+
         Q_EMIT targetScreenChanged();
         Q_EMIT targetScreenSizeChanged();
         refreshUsableAreaInsets();

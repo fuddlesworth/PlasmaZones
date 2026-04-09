@@ -119,6 +119,12 @@ class EditorController : public QObject
     // Target screen size (for fixed geometry coordinate conversion)
     Q_PROPERTY(QSize targetScreenSize READ targetScreenSize NOTIFY targetScreenSizeChanged)
 
+    // Virtual screen offset within the physical monitor.
+    // When editing a VS, the drawing area must be positioned at this offset so zones
+    // align with the VS region, not the full physical monitor.
+    Q_PROPERTY(QRect virtualScreenRect READ virtualScreenRect NOTIFY targetScreenSizeChanged)
+    Q_PROPERTY(bool isVirtualScreen READ isVirtualScreen NOTIFY targetScreenSizeChanged)
+
     // Usable area insets — offset from full screen geometry to available geometry (panels/taskbars)
     Q_PROPERTY(int insetLeft READ insetLeft NOTIFY usableAreaInsetsChanged)
     Q_PROPERTY(int insetTop READ insetTop NOTIFY usableAreaInsetsChanged)
@@ -150,6 +156,9 @@ class EditorController : public QObject
     Q_PROPERTY(QVariantList allowedDesktops READ allowedDesktops WRITE setAllowedDesktops NOTIFY allowedDesktopsChanged)
     Q_PROPERTY(
         QStringList allowedActivities READ allowedActivities WRITE setAllowedActivities NOTIFY allowedActivitiesChanged)
+
+    // Screen model for the TopBar screen selector (includes virtual screens)
+    Q_PROPERTY(QVariantList screenModel READ screenModel NOTIFY availableScreenIdsChanged)
 
     // Context info for visibility UI
     Q_PROPERTY(QStringList availableScreenIds READ availableScreenIds NOTIFY availableScreenIdsChanged)
@@ -224,6 +233,14 @@ public:
     bool useFullScreenGeometry() const;
     int aspectRatioClass() const;
     QSize targetScreenSize() const;
+    QRect virtualScreenRect() const
+    {
+        return m_virtualScreenRect;
+    }
+    bool isVirtualScreen() const
+    {
+        return m_virtualScreenRect.isValid();
+    }
     int insetLeft() const;
     int insetTop() const;
     int insetRight() const;
@@ -272,6 +289,7 @@ public:
     {
         return m_availableScreenIds;
     }
+    QVariantList screenModel() const;
     int virtualDesktopCount() const
     {
         return m_virtualDesktopCount;
@@ -730,6 +748,7 @@ Q_SIGNALS:
 private:
     QVariant audioSpectrumVariant() const;
     void markUnsaved();
+    void cacheVirtualScreenGeometry(const QString& screenName);
     void applyUsableAreaInsets(const QRect& fullGeom, const QRect& availGeom);
     void setInsets(int left, int top, int right, int bottom);
 
@@ -850,6 +869,8 @@ private:
 
     // Screen
     QString m_targetScreen;
+    QSize m_virtualScreenSize; ///< Cached VS geometry size (valid when m_targetScreen is virtual)
+    QRect m_virtualScreenRect; ///< Cached VS absolute geometry (position within physical monitor)
     int m_insetLeft = 0;
     int m_insetTop = 0;
     int m_insetRight = 0;

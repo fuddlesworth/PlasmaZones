@@ -1296,15 +1296,8 @@ ApplicationWindow {
                     if (screens.length > 1) {
                         for (let i = 0; i < screens.length; i++) {
                             let s = screens[i];
-                            let parts = [s.manufacturer || "", s.model || ""].filter((p) => {
-                                return p !== "";
-                            });
-                            let label = parts.length > 0 ? parts.join(" ") : (s.name || "");
-                            if (s.resolution)
-                                label += " (" + s.resolution + ")";
-
                             let item = screenMenuItemComponent.createObject(layoutContextMenu, {
-                                "text": i18n("Edit on %1", label),
+                                "text": i18n("Edit on %1", s.displayLabel || s.name || ""),
                                 "icon.name": s.isPrimary ? "starred-symbolic" : "monitor"
                             });
                             item._screenName = s.name;

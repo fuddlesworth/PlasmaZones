@@ -45,12 +45,36 @@ ColumnLayout {
                 };
                 for (var key in all[i]) entry[key] = all[i][key]
                 entry["name"] = physId; // Override name to physical ID
-                // Virtual screen entries have sub-geometry (e.g. 960x1080 for a 50/50 split);
-                // clear resolution fields so the monitor selector doesn't show misleading values.
+                // Virtual screen entries have sub-geometry and VS-specific labels;
+                // replace with the physical monitor's info.
                 if (all[i].isVirtualScreen) {
-                    delete entry["resolution"];
-                    delete entry["width"];
-                    delete entry["height"];
+                    delete entry["isVirtualScreen"];
+                    delete entry["virtualIndex"];
+                    delete entry["virtualDisplayName"];
+                    // Find the physical screen's full resolution from Qt
+                    var physRes = appSettings.physicalScreenResolution(physId);
+                    if (physRes.width > 0 && physRes.height > 0) {
+                        entry["width"] = physRes.width;
+                        entry["height"] = physRes.height;
+                        entry["resolution"] = physRes.width + "\u00d7" + physRes.height;
+                    } else {
+                        delete entry["resolution"];
+                        delete entry["width"];
+                        delete entry["height"];
+                    }
+                    // Rebuild displayLabel for the physical monitor
+                    var parts = [];
+                    if (entry.manufacturer)
+                        parts.push(entry.manufacturer);
+
+                    if (entry.model)
+                        parts.push(entry.model);
+
+                    var label = parts.length > 0 ? parts.join(" ") : physId;
+                    if (entry.resolution)
+                        label += " (" + entry.resolution + ")";
+
+                    entry["displayLabel"] = label;
                 }
                 result.push(entry);
             }
@@ -195,22 +219,8 @@ ColumnLayout {
 
                             text: {
                                 let s = modelData;
-                                let parts = [];
-                                if (s.manufacturer)
-                                    parts.push(s.manufacturer);
-
-                                if (s.model)
-                                    parts.push(s.model);
-
-                                if (parts.length === 0)
-                                    parts.push(screenName);
-
-                                let label = parts.join(" ");
-                                // Virtual screen: append display name (skip in physicalOnly mode)
-                                if (s.isVirtualScreen && !root.physicalOnly) {
-                                    let vsName = s.virtualDisplayName || i18n("VS %1", s.virtualIndex + 1);
-                                    label += " (" + vsName + ")";
-                                }
+                                // Use pre-computed displayLabel, append connector name for detail
+                                let label = s.displayLabel || s.name || screenName;
                                 if (s.connectorName)
                                     label += " · " + s.connectorName;
 

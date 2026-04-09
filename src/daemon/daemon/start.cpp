@@ -338,13 +338,9 @@ void Daemon::connectShortcutSignals()
             screenId = m_unifiedLayoutController->currentScreenName();
         }
         if (!screenId.isEmpty()) {
-            // openEditorForScreen expects the connector name, resolve from screen ID
-            QScreen* screen = Utils::findScreenByIdOrName(screenId);
-            if (screen) {
-                m_layoutAdaptor->openEditorForScreen(screen->name());
-            } else {
-                m_layoutAdaptor->openEditor();
-            }
+            // Pass the effective screen ID directly — the editor handles both
+            // physical and virtual screen IDs (VS-aware since v2.9).
+            m_layoutAdaptor->openEditorForScreen(screenId);
         } else {
             m_layoutAdaptor->openEditor();
         }

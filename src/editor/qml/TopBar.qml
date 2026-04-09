@@ -58,11 +58,11 @@ ToolBar {
                     required property var modelData
                     property bool isActive: editorController && modelData && modelData.name === editorController.targetScreen
 
-                    text: modelData ? (modelData.name || "") : ""
+                    text: modelData ? (modelData.displayName || modelData.name || "") : ""
                     enabled: editorController !== null
                     implicitWidth: Math.max(contentItem.implicitWidth + Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 4)
                     implicitHeight: Kirigami.Units.gridUnit * 3
-                    Accessible.name: modelData ? modelData.name : ""
+                    Accessible.name: modelData ? (modelData.displayName || modelData.name || "") : ""
                     Accessible.description: isActive ? i18nc("@info", "Currently selected screen for layout editing") : i18nc("@info", "Select screen for layout editing")
                     Accessible.checkable: true
                     Accessible.checked: isActive

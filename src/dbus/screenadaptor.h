@@ -40,6 +40,7 @@ public Q_SLOTS:
     QString getScreenId(const QString& connectorName);
     void setPrimaryScreenFromKWin(const QString& connectorName);
     QRect getAvailableGeometry(const QString& screenId);
+    QRect getScreenGeometry(const QString& screenId);
 
     // Virtual screen management
     QString getVirtualScreenConfig(const QString& physicalScreenId);
