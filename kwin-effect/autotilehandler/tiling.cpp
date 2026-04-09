@@ -356,14 +356,20 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
 
     // Window fills the zone (or close enough) — no centering needed; consume entry
     if (qAbs(dw) <= MinCenteringDelta && qAbs(dh) <= MinCenteringDelta) {
+        qCDebug(lcEffect) << "Autotile centering: matched" << windowId << "dw=" << dw << "dh=" << dh;
         m_autotileTargetZones.erase(it);
         return;
     }
 
     // Window doesn't match zone — center it within the zone so it's visually
     // balanced rather than stuck at the zone origin.
-    const qreal dx = dw / 2.0;
-    const qreal dy = dh / 2.0;
+    // Clamp offsets to non-negative: when the window is LARGER than the zone
+    // (oversized, dx < 0), left/top-align instead of centering. Centering an
+    // oversized window pushes it to a negative position (off-screen left/top),
+    // which is worse than a slight overflow to the right/bottom. The daemon
+    // receives the min-size report below and will retile with adjusted zones.
+    const qreal dx = qMax(0.0, dw / 2.0);
+    const qreal dy = qMax(0.0, dh / 2.0);
     const QRectF centered(targetZone.x() + dx, targetZone.y() + dy, actual.width(), actual.height());
 
     // Already at the centered position — record and consume

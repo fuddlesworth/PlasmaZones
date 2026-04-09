@@ -1368,6 +1368,9 @@ void AutotileEngine::windowOpened(const QString& windowId, const QString& screen
         return;
     }
 
+    qCInfo(lcAutotile) << "windowOpened:" << windowId << "screen=" << screenId << "minSize=" << minWidth << "x"
+                       << minHeight;
+
     // Store screen mapping first so storeWindowMinSize can resolve the screen.
     if (!screenId.isEmpty()) {
         m_windowToStateKey[windowId] = currentKeyForScreen(screenId);
@@ -1386,6 +1389,8 @@ void AutotileEngine::windowMinSizeUpdated(const QString& windowId, int minWidth,
     if (!warnIfEmptyWindowId(windowId, "windowMinSizeUpdated")) {
         return;
     }
+
+    qCDebug(lcAutotile) << "windowMinSizeUpdated:" << windowId << "minSize=" << minWidth << "x" << minHeight;
 
     if (!storeWindowMinSize(windowId, minWidth, minHeight)) {
         return; // No change
@@ -1426,6 +1431,7 @@ bool AutotileEngine::storeWindowMinSize(const QString& windowId, int minWidth, i
 
     if (newMin.width() > 0 || newMin.height() > 0) {
         m_windowMinSizes[windowId] = newMin;
+        qCInfo(lcAutotile) << "storeWindowMinSize:" << windowId << "min=" << newMin << "old=" << oldMin;
     } else {
         m_windowMinSizes.remove(windowId);
     }
@@ -1501,6 +1507,8 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
 {
     const QString screenId = screenForWindow(windowId);
     if (!isAutotileScreen(screenId) || !shouldTileWindow(windowId)) {
+        qCDebug(lcAutotile) << "onWindowAdded: skipping" << windowId << "screen=" << screenId
+                            << "isAutotile=" << isAutotileScreen(screenId);
         return;
     }
 
@@ -1556,6 +1564,8 @@ void AutotileEngine::onWindowRemoved(const QString& windowId)
         return;
     }
 
+    qCInfo(lcAutotile) << "onWindowRemoved:" << windowId << "screen=" << screenId;
+
     // Notify algorithm via lifecycle hook before removal
     TilingState* state = stateForScreen(screenId);
     TilingAlgorithm* algo = effectiveAlgorithm(screenId);
@@ -1599,20 +1609,17 @@ void AutotileEngine::onScreenGeometryChanged(const QString& screenId)
         return;
     }
 
-    // Clear discovered min-sizes for windows on this screen. The min-sizes were
-    // calculated for the previous screen geometry and may no longer be accurate.
-    // Without this, a stale min-size (e.g., from a browser that transiently refused
-    // to shrink during a Wayland configure round-trip) can override the user's
-    // split ratio — the enforceWindowMinSizes post-processing expands the zone
-    // to honor the stale min, making the ratio appear stuck. The KWin effect's
-    // centering code will re-discover and report the actual min-size if the window
-    // still can't fill its assigned zone after the fresh retile.
-    const TilingStateKey key = currentKeyForScreen(screenId);
-    for (auto it = m_windowToStateKey.constBegin(); it != m_windowToStateKey.constEnd(); ++it) {
-        if (it.value() == key) {
-            m_windowMinSizes.remove(it.key());
-        }
-    }
+    qCInfo(lcAutotile) << "onScreenGeometryChanged:" << screenId << "geometry=" << screenGeometry(screenId);
+
+    // Min-sizes are NOT cleared here. Stored min-sizes represent the window's
+    // actual compositor-declared minimum (from windowOpened or the centering
+    // code's reportDiscoveredMinSize), not stale zone widths. Clearing them
+    // forces a retile with zero constraints, which produces zones that oversized
+    // windows can't fill — the centering code then pushes them off-screen.
+    // The old feedback loop (zone width → stored min → expanded zone) was
+    // eliminated by removing the targetZone.width() fallback in
+    // reportDiscoveredMinSize (commit c1d0ea16). Without that feedback loop,
+    // indiscriminate clearing does more harm than good.
 
     retileAfterOperation(screenId, true);
 }
@@ -1968,6 +1975,9 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     tilingParams.screenInfo = screenInfo;
     tilingParams.customParams = customParams;
     QVector<QRect> zones = algo->calculateZones(tilingParams);
+
+    qCInfo(lcAutotile) << "recalculateLayout: screen=" << screenId << "tiledCount=" << tiledCount
+                       << "windowCount=" << windowCount << "splitRatio=" << state->splitRatio() << "zones=" << zones;
 
     // Validate algorithm returned correct number of zones
     if (zones.size() != windowCount) {

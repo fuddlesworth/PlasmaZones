@@ -707,15 +707,21 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
 bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
 {
     if (!w || !m_effect->shouldHandleWindow(w)) {
+        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (not handleable)"
+                          << (w ? m_effect->getWindowId(w) : QStringLiteral("null"));
         return false;
     }
     if (!m_effect->isTileableWindow(w)) {
+        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (not tileable)" << m_effect->getWindowId(w);
         return false;
     }
     if (w->isMinimized()) {
+        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (minimized)" << m_effect->getWindowId(w);
         return false;
     }
     if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (wrong desktop/activity)"
+                          << m_effect->getWindowId(w);
         return false;
     }
     // Reject windows smaller than the user-configured minimum size.
@@ -724,6 +730,8 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
     const QRectF frame = w->frameGeometry();
     if ((m_effect->m_cachedMinWindowWidth > 0 && frame.width() < m_effect->m_cachedMinWindowWidth)
         || (m_effect->m_cachedMinWindowHeight > 0 && frame.height() < m_effect->m_cachedMinWindowHeight)) {
+        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (too small)" << m_effect->getWindowId(w)
+                          << "size=" << frame.size();
         return false;
     }
     return true;
