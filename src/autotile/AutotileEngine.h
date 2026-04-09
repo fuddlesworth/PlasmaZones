@@ -332,6 +332,16 @@ public:
     }
 
     /**
+     * @brief Adopt an untracked window as floating on an autotile screen
+     *
+     * Used when a window is dragged from a snap screen to an autotile screen.
+     * Adds the window to the TilingState as floating so subsequent
+     * toggleWindowFloat/setWindowFloat calls can find and manage it.
+     * No-op if the window is already tracked or the screen isn't autotile.
+     */
+    void adoptWindowAsFloating(const QString& windowId, const QString& screenId);
+
+    /**
      * @brief Serialize per-context autotile window orders to JSON
      *
      * Forwarded to SettingsBridge. Called by WTA's save cycle via persistence delegate.

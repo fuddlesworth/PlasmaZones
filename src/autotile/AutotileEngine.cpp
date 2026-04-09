@@ -1435,6 +1435,25 @@ void AutotileEngine::performToggleFloat(TilingState* state, const QString& windo
     Q_EMIT windowFloatingChanged(windowId, isNowFloating, screenId);
 }
 
+void AutotileEngine::adoptWindowAsFloating(const QString& windowId, const QString& screenId)
+{
+    if (windowId.isEmpty() || screenId.isEmpty() || !isAutotileScreen(screenId)) {
+        return;
+    }
+    // Already tracked — nothing to adopt
+    if (m_windowToStateKey.contains(windowId)) {
+        return;
+    }
+    TilingState* state = stateForScreen(screenId);
+    if (!state || state->containsWindow(windowId)) {
+        return;
+    }
+    state->addWindow(windowId);
+    state->setFloating(windowId, true);
+    m_windowToStateKey[windowId] = currentKeyForScreen(screenId);
+    qCInfo(lcAutotile) << "adoptWindowAsFloating:" << windowId << "on" << screenId;
+}
+
 void AutotileEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
 {
     if (!warnIfEmptyWindowId(windowId, shouldFloat ? "floatWindow" : "unfloatWindow")) {

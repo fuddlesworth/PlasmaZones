@@ -222,6 +222,12 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
 
     // Route to the correct engine based on screen mode
     if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
+        // If the window isn't tracked by autotile yet (e.g., dragged from a snap screen),
+        // adopt it as floating before setting state. adoptWindowAsFloating handles the
+        // addWindow + setFloating + key tracking internally.
+        if (floating) {
+            m_autotileEngine->adoptWindowAsFloating(windowId, screenId);
+        }
         m_autotileEngine->setWindowFloat(windowId, floating);
     } else if (m_snapEngine) {
         m_snapEngine->setWindowFloat(windowId, floating);

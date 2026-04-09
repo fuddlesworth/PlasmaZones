@@ -294,6 +294,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                             // autotile→snap path above re-initializes snap state.
                             callCancelSnap();
                             m_dragBypassedForAutotile = true;
+                            m_dragBypassScreenId = cursorScreenId; // Track the autotile VS we entered
                             m_dragStartedSent = false;
                             m_pendingDragWindowId.clear();
                             m_pendingDragGeometry = QRectF();
@@ -2869,6 +2870,12 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
     // Uses full windowId for per-instance tracking (appId fallback in isWindowFloating).
     qCInfo(lcEffect) << "Floating state changed for" << windowId << "- isFloating:" << isFloating;
     m_navigationHandler->setWindowFloating(windowId, isFloating);
+    // When a window is unfloated (tiled/snapped), clear the drag-float skip flag.
+    // Without this, a subsequent float toggle's geometry restore would be skipped
+    // because m_dragFloatedWindowIds still has the entry from the original drag.
+    if (!isFloating) {
+        m_dragFloatedWindowIds.remove(windowId);
+    }
 }
 
 void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
