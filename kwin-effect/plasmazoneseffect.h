@@ -444,8 +444,15 @@ private:
     // Minimum window size for autotile eligibility. Windows smaller than this
     // are rejected by isEligibleForAutotileNotify() to prevent small utility
     // windows (emoji picker, color picker, etc.) from entering the tiling tree.
-    int m_cachedMinWindowWidth = 0;
-    int m_cachedMinWindowHeight = 0;
+    // Defaults match ConfigDefaults::minimumWindowWidth/Height() (200/150).
+    // The async loadSettingAsync() call in loadCachedSettings() overrides
+    // with the user's actual setting once daemon settings arrive via D-Bus.
+    // Until then, these defaults keep the min-size filter active from
+    // effect load — preventing small ephemeral windows (Steam splash,
+    // Electron notification popups) from entering the autotile tree during
+    // the startup race window.
+    int m_cachedMinWindowWidth = 200;
+    int m_cachedMinWindowHeight = 150;
 
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end
