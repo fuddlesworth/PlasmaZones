@@ -223,7 +223,7 @@ vec3 hexCircuitTraces(vec2 uv, float time, float bassEnv, float midsEnv, float t
         float pulse = (pulseHead * 0.4 + headBright * 0.6);
 
         // Treble triggers additional flash pulses
-        float trebleFlash = trebleEnv * step(0.55, hash21(id + floor(time * 6.0) + float(axis) * 31.0));
+        float trebleFlash = trebleEnv * step(0.8, hash21(id + floor(time * 0.8) + float(axis) * 31.0));
         pulse += trebleFlash * 0.8;
 
         // Color: mids shift through palette
@@ -296,7 +296,7 @@ vec3 constellationNetwork(vec2 uv, float time, float bassEnv, float midsEnv, flo
         float fi = float(i);
 
         // Dot glow: treble makes dots brighter
-        float dotBright = 0.6 + bassEnv * 0.3 + trebleEnv * 1.2 * step(0.4, hash21(vec2(fi, floor(time * 4.0))));
+        float dotBright = 0.6 + bassEnv * 0.3 + trebleEnv * 0.4 * step(0.75, hash21(vec2(fi, floor(time * 0.6))));
         float dotRadius = 0.006 + bassEnv * 0.002;
         float dotMask = smoothstep(dotRadius, dotRadius * 0.1, dist);
         float dotHalo = exp(-dist * 60.0) * (0.15 + bassEnv * 0.15);
@@ -393,7 +393,7 @@ float armEdgeTrace(vec2 p, float time, int armIdx, float trebleEnv, float bassEn
     for (int pkt = 0; pkt < 3; pkt++) {
         float seed = float(armIdx) * 7.0 + float(pkt) * 13.0;
         float h = hash21(vec2(seed, 3.17));
-        float speed = 0.8 + h * 1.2 + trebleEnv * 0.5;
+        float speed = 0.8 + h * 1.2 + trebleEnv * 0.08;
         float phase = fract(time * speed * 0.15 + h);
 
         // Interpolate along the ARM polygon edges
@@ -669,7 +669,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             cellBright += bassEnv * 0.15;
             cellBright += bassEnv * 0.3 * step(0.6, cellHash);
             // Treble sparks random cells
-            cellBright += trebleEnv * 0.4 * step(0.85, hash21(closestId + floor(time * 6.0)));
+            cellBright += trebleEnv * 0.4 * step(0.85, hash21(closestId + floor(time * 0.7)));
 
             col += cellCol * cellBright * brightness;
 
@@ -899,8 +899,8 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
                 segCol = mix(segCol, palGlow * 2.0, isVerified * 0.6);
 
                 // Treble: random segment "bit flip" flash
-                float flipSeg = floor(mod(floor(time * 8.0), segsPerRing));
-                float flipRing = floor(mod(floor(time * 3.0 + float(li)), ringCount));
+                float flipSeg = floor(mod(floor(time * 1.5), segsPerRing));
+                float flipRing = floor(mod(floor(time * 0.8 + float(li)), ringCount));
                 if (segIdx == flipSeg && ringIdx == flipRing && trebleEnv > 0.1) {
                     segCol = mix(segCol, vec3(1.0), trebleEnv * 0.6);
                 }
@@ -1065,7 +1065,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             float cellBright = waveActivation * 0.5;
 
             // Bass triggers random additional cell flashes
-            float bassFlash = bassEnv * 0.7 * step(0.6, hash21(hid + floor(time * 3.0)));
+            float bassFlash = bassEnv * 0.35 * step(0.7, hash21(hid + floor(time * 0.7)));
             cellBright += bassFlash;
 
             // Only show in border region, fading inward
@@ -1270,7 +1270,7 @@ vec4 compositeNixosLabels(vec4 color, vec2 fragCoord,
             vec2 bitCoord = floor(uv * vec2(40.0, 12.0));
             float bitHash = hash21(bitCoord);
             // Treble flips random bits
-            float bitFlip = step(0.7, hash21(bitCoord + floor(time * 8.0))) * trebleEnv;
+            float bitFlip = step(0.85, hash21(bitCoord + floor(time * 0.8))) * trebleEnv;
             float bit = step(0.5, fract(bitHash + bitFlip * 0.5));
             // Checker: alternating ON/OFF cells
             float checker = mod(bitCoord.x + bitCoord.y, 2.0);
@@ -1327,7 +1327,7 @@ vec4 compositeNixosLabels(vec4 color, vec2 fragCoord,
         textCol *= charPulse;
 
         // Treble: random hash cells flash bright
-        float cellFlash = hash21(hashCoord + floor(time * 5.0) * 0.1);
+        float cellFlash = hash21(hashCoord + floor(time * 0.7) * 0.1);
         if (trebleEnv > 0.1 && cellFlash > 0.6) {
             textCol = mix(textCol, palGlow * 3.0, trebleEnv * 0.35);
         }

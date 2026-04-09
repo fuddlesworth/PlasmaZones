@@ -579,7 +579,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 float dist = length(diff);
                 float particle = exp(-dist * dist * 3000.0);
                 float twinkle = 0.5 + 0.5 * sin(time * 3.0 + fi * 2.3);
-                float burst = 1.0 + trebleEnv * 2.0 * step(0.7, hash11(fi * 3.1 + floor(time * 4.0)));
+                float burst = 1.0 + trebleEnv * 0.6 * step(0.85, hash11(fi * 3.1 + floor(time * 0.7)));
 
                 dustCol += mix(palGlow, palAccent, hash11(fi * 5.7)) * particle * twinkle * burst;
             }
@@ -832,7 +832,7 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
             // ── Scanning beam (slow sweep across logo) ────────
             {
-                float scanSpeed = 0.2 + trebleEnv * 0.8;
+                float scanSpeed = 0.2 + trebleEnv * 0.15;
                 float scanPos = fract(time * scanSpeed * 0.1 + float(li) * 0.23);
                 float beamDist = abs(iLogoUV.y - scanPos);
                 float beam = smoothstep(0.02, 0.0, beamDist);

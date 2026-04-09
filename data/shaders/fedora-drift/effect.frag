@@ -60,10 +60,10 @@ float sdSegment(vec2 p, vec2 a, vec2 b) {
 }
 
 float neonFlicker(float time, float seed, float trebleEnv) {
-    float base = 0.92 + 0.08 * sin(time * 60.0 + seed * 100.0);
-    float buzz = step(0.97, noise2D(vec2(time * 30.0, seed * 7.0))) * 0.4;
-    float trebleBuzz = trebleEnv * step(0.9, noise2D(vec2(time * 50.0, seed * 13.0))) * 0.5;
-    return clamp(base - buzz - trebleBuzz, 0.4, 1.0);
+    float base = 0.94 + 0.06 * sin(time * 8.0 + seed * 100.0);
+    float buzz = step(0.97, noise2D(vec2(time * 4.0, seed * 7.0))) * 0.2;
+    float trebleBuzz = trebleEnv * step(0.93, noise2D(vec2(time * 5.0, seed * 13.0))) * 0.25;
+    return clamp(base - buzz - trebleBuzz, 0.6, 1.0);
 }
 
 
@@ -265,7 +265,7 @@ vec3 dataStreams(vec2 uv, float time, float aspect, float bassEnv, float midsEnv
         float glow = smoothstep(width * 6.0, 0.0, dist) * 0.15;
 
         // Bright pulse traveling along each stream
-        float pulse = smoothstep(0.4, 0.5, sin(uv.x * 12.0 * aspect - time * (4.0 + trebleEnv * 2.0) + fi * 3.0));
+        float pulse = smoothstep(0.4, 0.5, sin(uv.x * 12.0 * aspect - time * (1.5 + trebleEnv * 0.5) + fi * 3.0));
         core *= 0.6 + pulse * 0.4;
 
         vec3 streamCol = mix(palPrimary, palAccent, fi / 6.0);
@@ -312,7 +312,7 @@ vec3 networkNodes(vec2 uv, float time, float bassEnv, float midsEnv, float trebl
             float dotGlow = exp(-dist * 4.0) * 0.08;
 
             // Treble flash on random nodes
-            float flash = trebleEnv * 0.6 * step(0.75, hash21(nid + floor(time * 3.0)));
+            float flash = trebleEnv * 0.3 * step(0.85, hash21(nid + floor(time * 0.7)));
             dot *= 0.7 + flash;
 
             vec3 nodeCol = mix(palPrimary, palAccent, h);
@@ -370,7 +370,7 @@ vec3 dotMatrix(vec2 uv, float scale, float time, float bassEnv, float midsEnv, f
     // Diagonal brightness wave — mids modulate amplitude
     float wave = 0.4 + (0.3 + midsEnv * 0.2) * sin(id.x * 0.4 + id.y * 0.3 + time * 0.6);
     // Treble makes random dots flash
-    wave += trebleEnv * 0.3 * step(0.7, hash21(id + floor(time * 4.0)));
+    wave += trebleEnv * 0.15 * step(0.85, hash21(id + floor(time * 0.6)));
 
     float glow = exp(-dist * 8.0) * 0.06;
 
@@ -394,7 +394,7 @@ vec3 flowLines(vec2 p, float fDist, float time, float bassEnv, float midsEnv,
     for (int i = 0; i < lineCount && i < 10; i++) {
         float fi = float(i);
         float orbitDist = 0.02 + fi * 0.012;
-        float speed = 0.4 + fi * 0.1 + trebleEnv * 0.3;
+        float speed = 0.4 + fi * 0.1 + trebleEnv * 0.06;
         float dir = (i % 2 == 0) ? 1.0 : -1.0;
 
         // Distance from the SDF iso-surface at this orbit distance
@@ -701,7 +701,7 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
             // ── Treble sparkle near logo surface ────────────────
             if (trebleEnv > 0.01 && abs(fDist) < 0.03) {
-                float sparkN = noise2D(iLogoUV * 40.0 + time * 6.0 + float(li) * 29.0);
+                float sparkN = noise2D(iLogoUV * 40.0 + time * 2.0 + float(li) * 29.0);
                 sparkN = smoothstep(0.55, 0.95, sparkN);
                 float edgeMask = smoothstep(0.03, 0.0, abs(fDist));
                 logoCol += palGlow * sparkN * edgeMask * trebleEnv * sparkleStr * 0.3 * depthFactor;
@@ -894,8 +894,8 @@ vec4 compositeFedoraLabels(vec4 color, vec2 fragCoord,
 
         // Treble sparks along halo edge
         if (trebleEnv > 0.04) {
-            float sparkNoise = noise2D(uv * 50.0 + time * 5.0);
-            float spark = smoothstep(0.6, 0.92, sparkNoise) * trebleEnv * 2.0;
+            float sparkNoise = noise2D(uv * 50.0 + time * 1.5);
+            float spark = smoothstep(0.7, 0.95, sparkNoise) * trebleEnv * 1.2;
             color.rgb += palGlow * haloEdge * spark * pulse;
         }
 
